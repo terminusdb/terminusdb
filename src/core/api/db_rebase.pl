@@ -582,7 +582,8 @@ test(rebase_fast_forward_from_nothing,
     atomic_list_concat(['admin/foo/local/commit/',Commit_Id2], Commit_Path),
 
     rebase_on_branch(system_descriptor{}, Auth, Main_Path, Commit_Path, "rebaser",  [], Optional_Common_Commit_Id, Their_Applied_Commit_Ids, []),
-    Optional_Common_Commit_Id = some(_Schema_Commit),
+
+    Optional_Common_Commit_Id = some(_),
     [Commit_Id1,Commit_Id2] = Their_Applied_Commit_Ids.
 
 :- end_tests(rebase).

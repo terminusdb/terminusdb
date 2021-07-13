@@ -295,7 +295,6 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     ->  replace_initial_commit_on_branch(Parent_Transaction,
                                          (Validation_Object.commit_info),
                                          Branch_Name,
-                                         Old_Commit_Uri,
                                          Instance_Object,
                                          Schema_Object)
     ;   exists(validation_object_changed, [Instance_Object, Schema_Object])
@@ -320,15 +319,15 @@ attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, 
     insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
     attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri).
 
-replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Commit_Uri, Instance_Object, Schema_Object) :-
-    delete_document(Parent_Transaction, Commit_Uri),
+replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Instance_Object, Schema_Object) :-
+    % delete_document(Parent_Transaction, Commit_Uri),
     insert_base_commit_object(Parent_Transaction, Commit_Info, _, New_Commit_Uri),
     Schema_Layer = (Schema_Object.read),
     (   parent(Schema_Layer, _)
     ->  squash(Schema_Layer, Final_Schema_Layer),
         Final_Schema_Object = (Schema_Object.put(read, Final_Schema_Layer))
     ;   Final_Schema_Object = Schema_Object),
-    
+
     attach_schema_instance_to_commit(Parent_Transaction, New_Commit_Uri, Final_Schema_Object, Instance_Object),
 
     branch_name_uri(Parent_Transaction, Branch_Name, Branch_Uri),

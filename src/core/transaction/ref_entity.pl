@@ -958,12 +958,28 @@ most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id
     ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
     ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
 
-    Final_Commit_Id = Final_Commit_Id_2,
+    (   Final_Commit_Id = Final_Commit_Id_2,
+        reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
+        reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path])
+    ;   ask(Repo1_Context,
+            (   t(Commit_URI, identifier, Final_Commit_Id^^xsd:string),
+                isa(Commit_URI, 'InitialCommit'))),
+        ask(Repo2_Context,
+            (   t(Other_Commit_URI, identifier, Final_Commit_Id_2^^xsd:string),
+                not(t(Other_Commit_URI, parent, _)))),
+        reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
+        reverse(Commit2_Edge_Path_Reversed, Commit2_Edge_Path)
+    ;   ask(Repo2_Context,
+            (   t(Commit_URI, identifier, Final_Commit_Id_2^^xsd:string),
+                isa(Commit_URI, 'InitialCommit'))),
+        ask(Repo1_Context,
+            (   t(Other_Commit_URI, identifier, Final_Commit_Id^^xsd:string),
+                not(t(Other_Commit_URI, parent, _)))),
+        reverse(Commit1_Edge_Path_Reversed, Commit1_Edge_Path),
+        reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path])
+    ),
 
     !, % we're only interested in one solution!
-
-    reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
-    reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
 
     maplist({Repo1_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
                 get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
@@ -1053,14 +1069,14 @@ test(common_ancestor_after_branch_and_some_commits,
 commit_is_valid(Context, Commit_Id) :-
     commit_id_uri(Context, Commit_Id, Commit_Uri),
     once(ask(Context,
-             t(Commit_Uri, rdf:type, ref:'ValidCommit'))).
+             t(Commit_Uri, rdf:type, '@schema':'ValidCommit'))).
 
 invalidate_commit(Context, Commit_Id) :-
     (   commit_is_valid(Context, Commit_Id)
     ->  commit_id_uri(Context, Commit_Id, Commit_Uri),
         once(ask(Context,
-                 (   delete(Commit_Uri, rdf:type, ref:'ValidCommit'),
-                     insert(Commit_Uri, rdf:type, ref:'InvalidCommit'))))
+                 (   delete(Commit_Uri, rdf:type, '@schema':'ValidCommit'),
+                     insert(Commit_Uri, rdf:type, '@schema':'InvalidCommit'))))
     ;   true).
 
 commit_uri_to_history_commit_uris_(Context, Commit_Uri, [Commit_Uri|History_Commit_Uris]) :-

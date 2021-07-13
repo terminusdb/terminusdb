@@ -114,7 +114,7 @@ test(fast_forward_empty_branch_from_same_repo,
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
 
-    History = [_Schema_Commit, Commit_A, Commit_B],
+    History = [Commit_A, Commit_B],
     Applied_Commit_Ids = [Commit_A,Commit_B],
 
     commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
@@ -164,7 +164,7 @@ test(fast_forward_nonempty_branch_from_same_repo,
     Repo_Descriptor = (Master_Descriptor.repository_descriptor),
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
-    History = [_Schema_Commit, Commit_A, Commit_B, Commit_C],
+    History = [Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids = [Commit_B, Commit_C],
 
     commit_id_to_metadata(Repo_Descriptor, Commit_A, _, "commit a", _),
@@ -382,7 +382,7 @@ test(fast_forward_branch_from_other_repo,
     % check history
     branch_head_commit(Repo_Descriptor, "main", Head_Commit_Uri),
     commit_uri_to_history_commit_ids(Repo_Descriptor, Head_Commit_Uri, History),
-    History = [_Schema_Commit, Commit_A, Commit_B, Commit_C],
+    History = [Commit_A, Commit_B, Commit_C],
     Applied_Commit_Ids == [Commit_B, Commit_C],
 
 
