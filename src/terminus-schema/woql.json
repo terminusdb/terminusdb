@@ -368,6 +368,7 @@
 { "@id" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
+  "@subdocument" : [],
   "@abstract" : [] }
 
 { "@id" : "Plus",
