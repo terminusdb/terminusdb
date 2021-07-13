@@ -1716,6 +1716,11 @@ insert_context_document(Transaction, Document) :-
     database_schema(Transaction, [Schema]),
     read_write_obj_builder(Schema, Builder),
     insert_into_builder_context_document(Builder, Document).
+insert_context_document(Query_Context, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_context_document(TO, Document).
 
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),

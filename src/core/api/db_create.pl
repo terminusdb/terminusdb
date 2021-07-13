@@ -137,10 +137,7 @@ create_schema(Branch_Desc, Schema, Prefixes) :-
 
     with_transaction(
         Query_Context,
-        (   forall(
-                context_triple(Prefix_Obj, t(S,P,O)),
-                ask(Query_Context,
-                    insert(S,P,O,schema))),
+        (   insert_context_document(Query_Context, Prefix_Obj),
 
             (   Schema = true
             ->  true
