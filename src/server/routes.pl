@@ -914,7 +914,9 @@ test(get_frame, [
                authorization(basic(admin,Key)),
                request_header('X-HTTP-Method-Override'='GET')
               ]),
+
     JSON = _{
+               '@key':_{'@fields':["name"],'@type':"Lexical"},
                capability:_{
                               '@class':"Capability",
                               '@type':"Set"},

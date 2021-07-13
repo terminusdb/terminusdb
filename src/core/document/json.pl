@@ -1689,7 +1689,21 @@ class_frame(Transaction, Class, Frame) :-
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
         Pairs),
-    sort(Pairs, Sorted_Pairs),
+    % Subdocument
+    (   is_subdocument(Transaction, Class_Ex)
+    ->  Pairs2 = ['@subdocument'-[]|Pairs]
+    ;   Pairs2 = Pairs),
+    % abstract
+    (   is_abstract(Transaction, Class_Ex)
+    ->  Pairs3 = ['@abstract'-[]|Pairs2]
+    ;   Pairs3 = Pairs2),
+    % key
+    (   key_descriptor(Transaction, Class_Ex, Key_Desc),
+        key_descriptor_json(Key_Desc,Prefixes,Key_JSON)
+    ->  Pairs4 = ['@key'-Key_JSON|Pairs3]
+    ;   Pairs4 = Pairs3),
+
+    sort(Pairs4, Sorted_Pairs),
     catch(
         dict_create(Frame,json,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -1700,6 +1714,11 @@ class_frame(Query_Context, Class, Frame) :-
     !,
     query_default_collection(Query_Context, TO),
     class_frame(TO, Class, Frame).
+class_frame(Desc, Class, Frame) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc, Trans),
+    class_frame(Trans, Class, Frame).
 
 insert_into_builder_context_document(Builder, Document) :-
     forall(
@@ -4887,6 +4906,24 @@ test(subdocument_deletes_lists, [
     open_descriptor(Desc, Trans),
     database_instance(Trans, Inst),
     \+ xrdf(Inst, _, _, _).
+
+
+test(arithmetic_frame, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc, 'Plus2', JSON),
+    JSON = json{'@key':json{'@type':"Random"},
+                '@subdocument':[],
+                left:'ArithmeticExpression2',
+                right:'ArithmeticExpression2'}.
 
 :- end_tests(arithmetic_document).
 
