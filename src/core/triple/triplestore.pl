@@ -1,5 +1,6 @@
 :- module(triplestore, [
               safe_create_named_graph/3,
+              safe_named_graph_exists/2,
               safe_open_named_graph/3,
               safe_delete_named_graph/2,
               xrdf/4,
@@ -185,7 +186,15 @@ safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
     terminus_store:create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /*
- * safe_open_named_graph(+Store,+Graph_ID,-Graph_Obj) is det.
+ * safe_named_graph_exists(+Store,+Graph_ID) is semidet.
+ *
+ * succeeds if the graph exists, and fails otherwise
+ */
+safe_named_graph_exists(Store, Graph_ID) :-
+    safe_open_named_graph(Store, Graph_ID, _).
+
+/*
+ * safe_open_named_graph(+Store,+Graph_ID,-Graph_Obj) is semidet.
  *
  * open the named graph, encoded for file-name safety
  */
@@ -194,7 +203,7 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     terminus_store:open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /*
- * safe_delete_named_graph(+Store, +Graph_ID) is det.
+ * safe_delete_named_graph(+Store, +Graph_ID) is semidet.
  *
  * delete the named graph, encoded for file-name safety
  */

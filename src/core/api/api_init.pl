@@ -148,35 +148,58 @@ initialize_storage_version(DB_Path) :-
     writeq(FileStream, 1),
     close(FileStream).
 
-initialize_database_with_store(Key, Store) :-
-    crypto_password_hash(Key,Hash, [cost(15)]),
+initialize_schema_graph(Simple_Graph_Name, Store, Graph_Name, Graph_String, Force, Layer) :-
+    (   Force = true
+    ->  ignore(safe_delete_named_graph(Store, Graph_Name))
+    ;   safe_named_graph_exists(Store, Graph_Name)
+    ->  throw(error(schema_graph_already_exists(Simple_Graph_Name), _))
+    ;   true),
 
-    system_schema(System_Schema_String),
-    open_string(System_Schema_String, System_Schema_Stream),
+    open_string(Graph_String, Graph_Stream),
+    create_graph_from_json(Store, Graph_Name, Graph_Stream, schema, Layer).
+
+initialize_system_schema(Store, Force, Layer) :-
     system_schema_name(Schema_Name),
-    create_graph_from_json(Store,Schema_Name,System_Schema_Stream,schema,Schema),
+    system_schema(System_Schema_String),
+    initialize_schema_graph(system, Store, Schema_Name, System_Schema_String, Force, Layer).
 
-    Descriptor = layer_descriptor{ schema: Schema, variety: system_descriptor},
+initialize_ref_schema(Store, Force) :-
+    ref_ontology(Ref_Name),
+    ref_schema(Ref_Schema_String),
+    initialize_schema_graph(ref, Store, Ref_Name, Ref_Schema_String, Force, _).
+
+initialize_repo_schema(Store, Force) :-
+    repository_ontology(Repo_Name),
+    repo_schema(Repo_Schema_String),
+    initialize_schema_graph(repo, Store, Repo_Name, Repo_Schema_String, Force, _).
+
+initialize_woql_schema(Store, Force) :-
+    woql_ontology(WOQL_Name),
+    woql_schema(WOQL_Schema_String),
+    initialize_schema_graph(woql, Store, WOQL_Name, WOQL_Schema_String, Force, _).
+
+initialize_system_instance(Store, Schema_Layer, Key, Force) :-
+    system_instance_name(Instance_Name),
+    (   Force = true
+    ->  safe_delete_named_graph(Store, Instance_Name)
+    ;   throw(error(instance_graph_already_exists(system), _))),
+
+    Descriptor = layer_descriptor{ schema: Schema_Layer, variety: system_descriptor},
     open_descriptor(Descriptor, Transaction_Object),
+
     template_system_instance(Template_Instance_String),
+    crypto_password_hash(Key,Hash, [cost(15)]),
     format(string(Instance_String), Template_Instance_String, [Hash]),
     open_string(Instance_String, Instance_Stream),
-    system_instance_name(Instance_Name),
     create_graph_from_json(Store,Instance_Name,Instance_Stream,
-                           instance(Transaction_Object),_),
+                           instance(Transaction_Object),_).
 
-    ref_schema(Ref_Schema_String),
-    open_string(Ref_Schema_String, Ref_Schema_Stream),
-    ref_ontology(Ref_Name),
-    create_graph_from_json(Store,Ref_Name,Ref_Schema_Stream,schema,_),
+initialize_database_with_store(Key, Store) :-
+    initialize_database_with_store(Key, Store, false).
+initialize_database_with_store(Key, Store, Force) :-
+    initialize_system_schema(Store, Force, System_Schema),
+    initialize_ref_schema(Store, Force),
+    initialize_repo_schema(Store, Force),
+    initialize_woql_schema(Store, Force),
 
-    repo_schema(Repo_Schema_String),
-    open_string(Repo_Schema_String, Repo_Schema_Stream),
-    repository_ontology(Repository_Name),
-    create_graph_from_json(Store,Repository_Name,Repo_Schema_Stream,schema,_),
-
-    woql_schema(WOQL_Schema_String),
-    open_string(WOQL_Schema_String, WOQL_Schema_Stream),
-    woql_ontology(WOQL_Name),
-    create_graph_from_json(Store,WOQL_Name,WOQL_Schema_Stream,schema,_).
-
+    initialize_system_instance(Store, System_Schema, Key, Force).
