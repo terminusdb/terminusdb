@@ -90,6 +90,7 @@
               % triplestore
               safe_create_named_graph/3,
               safe_open_named_graph/3,
+              safe_delete_named_graph/2,
               xrdf/4,
               xquad/5,
               xrdf_db/4,
