@@ -33,6 +33,12 @@
   "parent" : { "@type" : "Optional",
                "@class" : "Commit" } }
 
+{ "@id" : "InitialCommit",
+  "@type" : "Class",
+  "@inherits" : "Commit",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "identifier" ] } }
+
 { "@id" : "ValidCommit",
   "@type" : "Class",
   "@inherits" : "Commit",

@@ -1411,8 +1411,8 @@ replace_json_schema(Transaction, Stream) :-
     !,
     database_schema(Transaction, [Schema]),
     delete_all(Schema),
-    read_write_obj_builder(Schema, RWO),
-    write_json_stream_to_builder(Stream, RWO, schema).
+    read_write_obj_builder(Schema, Builder),
+    write_json_stream_to_builder(Stream, Builder, schema).
 replace_json_schema(Query_Context, Stream) :-
     is_query_context(Query_Context),
     !,

@@ -201,7 +201,8 @@ open_read_write_obj(Layer, Read_Write_Obj, Map, New_Map) :-
     ;   graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj),
         New_Map = [Descriptor=Read_Write_Obj|Map]).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, Map) :-
-    memberchk(Descriptor=Read_Write_Obj, Map),
+    member(Found_Descriptor=Read_Write_Obj, Map),
+    Descriptor :< Found_Descriptor,
     !.
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = system_graph{ type: Type},
@@ -307,12 +308,16 @@ open_read_write_obj(Descriptor,
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
     (   branch_head_commit(Repo, Branch_Name, Commit_Uri)
-    ->  ignore((layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
+    ->  ignore((commit_type(Repo, Commit_Uri, Commit_Type),
+                layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
                 layer_id_uri(Repo, Layer_Id, Layer_Uri),
                 storage(Store),
                 store_id_layer(Store, Layer_Id, Layer)))
     ;   Layer = _),
-    graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
+
+    Augmented_Descriptor = (Descriptor.put('commit_type', Commit_Type)),
+    graph_descriptor_layer_to_read_write_obj(Augmented_Descriptor, Layer, Read_Write_Obj).
+    
 open_read_write_obj(Descriptor,
                     Read_Write_Obj,
                     Map,
@@ -364,12 +369,24 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     var(Read_Write_Obj.read),
     !,
 
-    storage(Store),
+    triple_store(Store),
     open_write(Store, Layer_Builder),
     nb_set_dict(write,Read_Write_Obj,Layer_Builder).
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     open_write(Read_Write_Obj.read, Layer_Builder),
     nb_set_dict(write,Read_Write_Obj,Layer_Builder).
+/*
+read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
+    (   get_dict(commit_type, (Read_Write_Obj.descriptor), 'http://terminusdb.com/schema/ref#InitialCommit')
+    ->  triple_store(Store),
+        open_write(Store, Layer_Builder),
+        Layer = (Read_Write_Obj.read),
+        nb_apply_delta(Layer_Builder, Layer),
+        http_log("applied delta!~n", [])
+    ;   open_write(Read_Write_Obj.read, Layer_Builder)),
+
+    nb_set_dict(write,Read_Write_Obj,Layer_Builder).
+*/
 
 /**
  * open_descriptor(Descriptor, Read_Graph_Descriptors, Write_Graph_Descriptors, Map, New_Map) is det.
@@ -639,7 +656,7 @@ graph_descriptor_find_read_write_object(_, [], _) :-
         !,
         fail.
 graph_descriptor_find_read_write_object(Graph_Descriptor, [Read_Write_Obj|_Read_Write_Objs], Read_Write_Obj) :-
-        Read_Write_Obj.descriptor = Graph_Descriptor,
+        Graph_Descriptor :< Read_Write_Obj.descriptor,
         !.
 graph_descriptor_find_read_write_object(Graph_Descriptor, [_|Read_Write_Objs], Read_Write_Obj) :-
         graph_descriptor_find_read_write_object(Graph_Descriptor, Read_Write_Objs, Read_Write_Obj).
@@ -672,9 +689,9 @@ graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, [_|Tran
 instance_graph_descriptor_transaction_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
     RW_Objects = Transaction_Object.instance_objects,
     exists({Graph_Descriptor}/[
-               read_write_obj{ descriptor : Graph_Descriptor,
+               read_write_obj{ descriptor : Found_Graph_Descriptor,
                                read : _,
-                               write : _ }]>>true,
+                               write : _ }]>>(Graph_Descriptor :< Found_Graph_Descriptor),
            RW_Objects),
     !.
 instance_graph_descriptor_transaction_object(Graph_Descriptor, [_Transaction_Object|Transaction_Objects], Transaction_Object) :-

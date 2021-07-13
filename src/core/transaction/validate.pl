@@ -27,7 +27,8 @@
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(document), [
-                  refute_validation_objects/2
+                  refute_validation_objects/2,
+                  delete_document/2
               ]).
 
 :- use_module(library(semweb/turtle)).
@@ -288,23 +289,50 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
 
-    (   exists(validation_object_changed, [Instance_Object, Schema_Object])
+    (   branch_head_commit(Parent_Transaction, Branch_Name, Old_Commit_Uri),
+        commit_type(Parent_Transaction, Old_Commit_Uri, Commit_Type),
+        Commit_Type = 'http://terminusdb.com/schema/ref#InitialCommit'
+    ->  replace_initial_commit_on_branch(Parent_Transaction,
+                                         (Validation_Object.commit_info),
+                                         Branch_Name,
+                                         Old_Commit_Uri,
+                                         Instance_Object,
+                                         Schema_Object)
+    ;   exists(validation_object_changed, [Instance_Object, Schema_Object])
     ->  insert_commit_object_on_branch(Parent_Transaction,
                                        Validation_Object.commit_info,
-                                       Branch_Name,
-                                       _Commit_Id,
-                                       Commit_Uri),
-        % instance graph may not exist, so check for that
-        (   var(Instance_Object.read)
-        ->  true
-        ;   layer_to_id(Instance_Object.read, Instance_Layer_Id),
-            insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri),
-            attach_layer_to_commit(Parent_Transaction, Commit_Uri, instance, Instance_Layer_Uri)),
+                                                         Branch_Name,
+                                                         _Commit_Id,
+                                                         Commit_Uri),
+        attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, Instance_Object)
 
-        layer_to_id(Schema_Object.read, Schema_Layer_Id),
-        insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
-        attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri)
     ;   true).
+
+attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, Instance_Object) :-
+    % instance graph may not exist, so check for that
+    (   var(Instance_Object.read)
+    ->  true
+    ;   layer_to_id(Instance_Object.read, Instance_Layer_Id),
+        insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri),
+        attach_layer_to_commit(Parent_Transaction, Commit_Uri, instance, Instance_Layer_Uri)),
+
+    layer_to_id(Schema_Object.read, Schema_Layer_Id),
+    insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
+    attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri).
+
+replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Commit_Uri, Instance_Object, Schema_Object) :-
+    delete_document(Parent_Transaction, Commit_Uri),
+    insert_base_commit_object(Parent_Transaction, Commit_Info, _, New_Commit_Uri),
+    Schema_Layer = (Schema_Object.read),
+    (   parent(Schema_Layer, _)
+    ->  squash(Schema_Layer, Final_Schema_Layer),
+        Final_Schema_Object = (Schema_Object.put(read, Final_Schema_Layer))
+    ;   Final_Schema_Object = Schema_Object),
+    
+    attach_schema_instance_to_commit(Parent_Transaction, New_Commit_Uri, Final_Schema_Object, Instance_Object),
+
+    branch_name_uri(Parent_Transaction, Branch_Name, Branch_Uri),
+    reset_branch_head(Parent_Transaction, Branch_Uri, New_Commit_Uri).
 
 commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], New_Commit_Id, New_Commit_Uri) :-
     validation_object{

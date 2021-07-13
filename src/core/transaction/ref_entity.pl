@@ -3,6 +3,7 @@
               branch_name_uri/3,
               branch_head_commit/3,
               has_commit/2,
+              commit_type/3,
               commit_id_uri/3,
               commit_id_to_metadata/5,
               commit_uri_to_metadata/5,
@@ -79,6 +80,9 @@ has_commit(Askable, Commit_Id) :-
     ask(Askable,
         t(_, identifier, Commit_Id^^xsd:string)).
 
+commit_type(Askable, Commit_Uri, Commit_Type) :-
+    once(ask(Askable, t(Commit_Uri, rdf:type, Commit_Type))).
+
 descriptor_commit_id_uri(Askable, Descriptor, Commit_Id, Commit_Uri) :-
     commit_descriptor{ commit_id : Commit_Id} :< Descriptor,
     !,
@@ -134,9 +138,13 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ->  random_string(Commit_Id)
     ;   true),
 
+    (   get_dict(commit_type, Commit_Info, Commit_Type)
+    ->  true
+    ;   Commit_Type = 'ValidCommit'),
+
     insert_document(
         Context,
-        _{ '@type' : 'ValidCommit',
+        _{ '@type' : Commit_Type,
            'identifier' : Commit_Id,
            'author' : (Commit_Info.author),
            'message' : (Commit_Info.message),

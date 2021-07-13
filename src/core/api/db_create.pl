@@ -132,7 +132,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
     create_schema(Branch_Descriptor, Schema, Prefixes).
 
 create_schema(Branch_Desc, Schema, Prefixes) :-
-    create_context(Branch_Desc, commit_info{author: "system", message: "create initial schema"}, Query_Context),
+    create_context(Branch_Desc, commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'}, Query_Context),
     Prefix_Obj = (Prefixes.put('@type', "@context")),
 
     with_transaction(

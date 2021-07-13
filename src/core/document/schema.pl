@@ -140,6 +140,10 @@ refute_schema_context_prefix(Schema, Prefix, Witness) :-
 refute_schema_context(Validation_Object, Witness) :-
     database_schema(Validation_Object, Schema),
     \+ xrdf(Schema, 'terminusdb://context', rdf:type,sys:'Context'),
+    [Argh] = (Validation_Object.schema_objects),
+    Layer = (Argh.read),
+    forall(terminus_store:triple(Layer, S, P, O),
+           format("t(~q,~q,~q)~n", [S, P, O])),
     Witness = witness{
                   '@type': context_not_found
               }.
