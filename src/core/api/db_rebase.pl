@@ -156,7 +156,7 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         ;   commit_descriptor{} :< Their_Ref_Descriptor),
         error(rebase_requires_source_branch(Their_Ref_Descriptor),_)),
 
-    check_descriptor_auth(System_DB, Their_Ref_Descriptor, system:commit_read_access, Auth),
+    check_descriptor_auth(System_DB, Their_Ref_Descriptor, '@schema':'Action_commit_read_access', Auth),
 
     Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repo_Descriptor = (Their_Ref_Descriptor.repository_descriptor),

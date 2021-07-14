@@ -1560,8 +1560,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
 
 test(rebase_divergent_history, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     add_user("TERMINUSQA",some('password'),User_ID),
@@ -1607,7 +1606,7 @@ test(rebase_divergent_history, [
                authorization(basic('TERMINUSQA','password')),
                status_code(_Status_Code)]),
 
-    json_write_dict(current_output, JSON, []),
+    * json_write_dict(current_output, JSON, []),
 
     _{  '@type' : "api:RebaseResponse",
         'api:forwarded_commits' : [_Thing, _Another_Thing ],
