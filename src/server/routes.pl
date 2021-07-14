@@ -1139,8 +1139,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
 test(clone_local, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ])
 :-
     add_user("TERMINUSQA1",some('password1'),_User_ID1),
@@ -1167,7 +1166,7 @@ test(clone_local, [
               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
                request_header('Authorization-Remote'=Authorization_Remote)]),
 
-    json_write_dict(current_output, JSON, []),
+    * json_write_dict(current_output, JSON, []),
 
     _{
         'api:status' : "api:success"
@@ -1186,8 +1185,7 @@ test(clone_remote, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         fixme(document_refactor)
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
     with_triple_store(
@@ -1277,8 +1275,7 @@ test(fetch_first_time, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         fixme(document_refactor)
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
 
@@ -1346,8 +1343,7 @@ test(fetch_second_time_no_change, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         fixme(document_refactor)
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
 
@@ -1427,8 +1423,7 @@ test(fetch_second_time_with_change, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         fixme(document_refactor)
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
 
@@ -1497,7 +1492,7 @@ test(fetch_second_time_with_change, [
 
             repository_head(Foo_Database_Desc,"local",New_Head)
         )),
-            
+
 
     http_post(URL,
               json(_{}),
@@ -1612,7 +1607,7 @@ test(rebase_divergent_history, [
                authorization(basic('TERMINUSQA','password')),
                status_code(_Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
+    json_write_dict(current_output, JSON, []),
 
     _{  '@type' : "api:RebaseResponse",
         'api:forwarded_commits' : [_Thing, _Another_Thing ],
@@ -2850,8 +2845,7 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
 test(squash_a_branch, [
          setup((setup_temp_server(State, Server),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_server(State)),
-         fixme(document_refactor)
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     Path = "admin/test",
