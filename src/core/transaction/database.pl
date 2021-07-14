@@ -128,6 +128,10 @@ compute_backoff(Count, Time) :-
 reset_read_write_obj(Read_Write_Obj, Map, New_Map) :-
     nb_set_dict(read, Read_Write_Obj, _),
     nb_set_dict(write, Read_Write_Obj, _),
+    Descriptor = (Read_Write_Obj.descriptor),
+    (   get_dict(commit_type, Descriptor, _)
+    ->  nb_set_dict(commit_type, Descriptor, _)
+    ;   true),
 
     open_read_write_obj(Read_Write_Obj.descriptor,Read_Write_Obj, Map, New_Map).
 

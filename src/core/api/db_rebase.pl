@@ -177,7 +177,8 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     descriptor_commit_id_uri(Their_Repo_Context, Their_Ref_Descriptor, Their_Commit_Id, Their_Commit_Uri),
 
     (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
-        commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri)
+        commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
+        commit_type(Our_Repo_Context, Our_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit')
     ->  (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History),
             benchmark(after_ancestor_lookup)
         ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
@@ -583,7 +584,7 @@ test(rebase_fast_forward_from_nothing,
 
     rebase_on_branch(system_descriptor{}, Auth, Main_Path, Commit_Path, "rebaser",  [], Optional_Common_Commit_Id, Their_Applied_Commit_Ids, []),
 
-    Optional_Common_Commit_Id = some(_),
+    Optional_Common_Commit_Id = none,
     [Commit_Id1,Commit_Id2] = Their_Applied_Commit_Ids.
 
 :- end_tests(rebase).

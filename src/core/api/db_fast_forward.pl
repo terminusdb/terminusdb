@@ -13,12 +13,14 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
     create_context(Their_Repo_Descriptor, Their_Repo_Context),
     with_transaction(Our_Repo_Context,
                      (
-                         (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri)
+                         (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
+                             commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
+                             commit_type(Our_Repo_Context, Our_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit')
                          % our branch has a previous commit, so we have to find the common ancestor with their branch
                          % This common ancestor should be our own head, so we need to check for divergent history and error in that case.
-                         ->  commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
-                             (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
+                         ->  (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
                                  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
+                                 commit_type(Their_Repo_Context, Their_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit'),
                                  most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)
                              ->  (   Our_Branch_Path = []
                                  ->  true
@@ -28,9 +30,10 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                                  ->  Next = nothing
                                  ;   Next = copy_commit(Their_Commit_Id))
                              ;   throw(error(no_common_history,_)))
-                         ;   (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri)
-                             ->  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
-                                 commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Applied_Commit_Ids),
+                         ;   (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
+                                 commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
+                                 commit_type(Their_Repo_Context, Their_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit')
+                             ->  commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Applied_Commit_Ids),
                                  Next = copy_commit(Their_Commit_Id)
                              ;   Next = nothing,
                                  Applied_Commit_Ids = [])),

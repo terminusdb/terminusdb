@@ -74,6 +74,7 @@
               apply_commit_on_commit/7,
               apply_commit_on_commit/8,
               commit_is_valid/2,
+              commit_type/3,
               invalidate_commit/2,
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,

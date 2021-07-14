@@ -490,6 +490,7 @@ test(commit_two_transactions_on_empty, [
         insert(e,f,g)),
 
     run_transactions(Transactions2,(Context2.all_witnesses),_),
+
     !,
 
     findall(t(X,Y,Z),

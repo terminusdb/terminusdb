@@ -958,28 +958,11 @@ most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id
     ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
     ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
 
-    (   Final_Commit_Id = Final_Commit_Id_2,
-        reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
-        reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path])
-    ;   ask(Repo1_Context,
-            (   t(Commit_URI, identifier, Final_Commit_Id^^xsd:string),
-                isa(Commit_URI, 'InitialCommit'))),
-        ask(Repo2_Context,
-            (   t(Other_Commit_URI, identifier, Final_Commit_Id_2^^xsd:string),
-                not(t(Other_Commit_URI, parent, _)))),
-        reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
-        reverse(Commit2_Edge_Path_Reversed, Commit2_Edge_Path)
-    ;   ask(Repo2_Context,
-            (   t(Commit_URI, identifier, Final_Commit_Id_2^^xsd:string),
-                isa(Commit_URI, 'InitialCommit'))),
-        ask(Repo1_Context,
-            (   t(Other_Commit_URI, identifier, Final_Commit_Id^^xsd:string),
-                not(t(Other_Commit_URI, parent, _)))),
-        reverse(Commit1_Edge_Path_Reversed, Commit1_Edge_Path),
-        reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path])
-    ),
-
+    Final_Commit_Id = Final_Commit_Id_2,
     !, % we're only interested in one solution!
+
+    reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
+    reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
 
     maplist({Repo1_Context}/[Commit_Edge, Intermediate_Commit_Id]>>(
                 get_dict('http://terminusdb.com/schema/woql#subject',Commit_Edge, Intermediate_Commit_Uri),
@@ -1126,7 +1109,7 @@ test(commit_history_ids,
     branch_head_commit(Repository_Descriptor,
                        "main",
                        Commit_Uri),
-    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [_Schema_Commit, Commit_A_Id, Commit_B_Id]),
+    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A_Id, Commit_B_Id]),
 
     commit_id_to_metadata(Repository_Descriptor, Commit_A_Id, _, "commit a", _),
     commit_id_to_metadata(Repository_Descriptor, Commit_B_Id, _, "commit b", _),
@@ -1157,7 +1140,7 @@ test(commit_history_uris,
                        "main",
                        Commit_Uri),
 
-    commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, [_Schema_Commit, Commit_A_Uri, Commit_B_Uri]),
+    commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, [Commit_A_Uri, Commit_B_Uri]),
 
     commit_uri_to_metadata(Repository_Descriptor, Commit_A_Uri, _, "commit a", _),
     commit_uri_to_metadata(Repository_Descriptor, Commit_B_Uri, _, "commit b", _),
