@@ -417,7 +417,6 @@ spawn_server_1(Path, URL, PID, Options) :-
 
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_HTTPS_ENABLED'='false',
         'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
     ],
 

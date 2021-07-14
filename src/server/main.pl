@@ -42,14 +42,8 @@ terminus_server(Argv,Wait) :-
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),
-    config:ssl_cert(CertFile),
-    config:ssl_cert_key(CertKeyFile),
     load_jwt_conditionally,
-    (   config:https_enabled
-    ->  HTTPOptions = [ssl([certificate_file(CertFile), key_file(CertKeyFile)]),
-                        port(Port), workers(Workers)]
-    ;   HTTPOptions = [port(Port), workers(Workers)]
-    ),
+    HTTPOptions = [port(Port), workers(Workers)],
     catch(http_server(http_dispatch, HTTPOptions),
           E,
           (

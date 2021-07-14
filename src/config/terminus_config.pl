@@ -12,10 +12,7 @@
               jwt_enabled/0,
               registry_path/1,
               console_base_url/1,
-              ssl_cert/1,
-              ssl_cert_key/1,
               pack_dir/1,
-              https_enabled/0,
               autologin_enabled/0,
               tmp_path/1,
               server_worker_options/1,
@@ -28,16 +25,8 @@
 
 version('4.2.2').
 
-:- dynamic https_cert/1.
-:- dynamic https_certkey/1.
 bootstrap_config_files :-
-    expand_file_search_path(terminus_home('config/localhost.crt'), DefaultCert),
-    getenv_default('TERMINUSDB_SSL_CERT', DefaultCert, Cert),
-    expand_file_search_path(terminus_home('config/localhost.key'), DefaultKey),
-    getenv_default('TERMINUSDB_SSL_CERT_KEY', DefaultKey, Key),
-    initialize_system_ssl_certs,
-    file_to_predicate(Cert, https_cert),
-    file_to_predicate(Key, https_certkey).
+    initialize_system_ssl_certs.
 
 initialize_system_ssl_certs :-
     (   getenv('TERMINUSDB_SYSTEM_SSL_CERTS', Value)
@@ -45,9 +34,7 @@ initialize_system_ssl_certs :-
     ;   true).
 
 server_protocol(Value) :-
-    (   https_enabled
-    ->  Value = https
-    ;   Value = http).
+    Value = http.
 
 server_name(Value) :-
     getenv_default('TERMINUSDB_SERVER_NAME', '127.0.0.1', Value).
@@ -99,35 +86,9 @@ jwt_jwks_endpoint(Value) :-
 console_base_url(Value) :-
     getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://cdn.terminusdb.com/js_libs/terminusdb_console/canary', Value).
 
-https_enabled :-
-    getenv_default('TERMINUSDB_HTTPS_ENABLED', 'true', Value),
-    Value = 'true'.
-
 autologin_enabled :-
     getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', 'false', Value),
     Value = 'true'.
-
-ssl_cert(Filename) :-
-    (   getenv('TERMINUSDB_SSL_CERT', Filename)
-    ->  true
-    ;   https_cert(Value),
-        open_string(Value, Stream),
-        tmp_file_stream(text, File, TmpStream),
-        copy_stream_data(Stream, TmpStream),
-        close(TmpStream),
-        close(Stream),
-        Filename = File).
-
-ssl_cert_key(Filename) :-
-    (   getenv('TERMINUSDB_SSL_CERT_KEY', Filename)
-    ->  true
-    ;   https_certkey(Value),
-        open_string(Value, Stream),
-        tmp_file_stream(text, File, TmpStream),
-        copy_stream_data(Stream, TmpStream),
-        close(TmpStream),
-        close(Stream),
-        Filename = File).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).

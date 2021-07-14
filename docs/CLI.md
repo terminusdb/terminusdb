@@ -530,15 +530,6 @@ requires the use of an appropriate descriptor path.
   Set the console javascript load URL. Default is
   `https://cdn.terminusdb.com/js_libs/terminusdb_hub_console/dev`.
 
-  * `TERMINUSDB_HTTPS_ENABLED`:
-  If `true` then use HTTPS for all API operations. Default is `true`.
-
-  * `TERMINUSDB_SSL_CERT`:
-  Path to SSL certificate if using HTTPS.
-
-  * `TERMINUSDB_SSL_CERT_KEY`:
-  Path to SSL certificate key if using HTTPS.
-
   * `TERMINUSDB_AUTOLOGIN_ENABLED`:
   If `true` then attempt to login automatically with default
   password. Default is `true`.
