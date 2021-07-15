@@ -3,7 +3,7 @@ ENV TUS_VERSION v0.0.5
 WORKDIR /app/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
-        && git clone --single-branch --branch v0.0.4 https://github.com/terminusdb-labs/jwt_io.git jwt_io \
+        && git clone --single-branch --branch v0.0.5 https://github.com/terminusdb-labs/jwt_io.git jwt_io \
         && git clone --single-branch --branch $TUS_VERSION https://github.com/terminusdb/tus.git tus \
         && swipl -g "pack_install('file:///app/pack/jwt_io', [interactive(false)])" \
         && swipl -g "pack_install('file:///app/pack/tus', [interactive(false)])"
