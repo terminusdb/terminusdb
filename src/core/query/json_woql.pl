@@ -17,7 +17,7 @@
 :- use_module(library(sort)).
 :- use_module(core(triple)).
 :- use_module(core(util)).
-:- use_module(core(query)).
+:- use_module(global_prefixes).
 :- reexport(core(util/syntax)).
 
 :- use_module(library(http/json)).

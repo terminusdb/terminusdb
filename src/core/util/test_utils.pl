@@ -390,6 +390,13 @@ inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
     inherit_env_var(Env_List_In, Var, Env_List_Out),
     inherit_env_vars(Env_List_Out, Vars, Env_List).
 
+read_line_until_start_line(Error) :-
+    read_line_to_string(Error, Line),
+    re_match("% You can view your server in a browser at ",Line),
+    !.
+read_line_until_start_line(Error) :-
+    read_line_until_start_line(Error).
+
 % spawn_server(+Path, -URL, -PID, +Options) is det.
 spawn_server_1(Path, URL, PID, Options) :-
     (   memberchk(port(Port), Options)
@@ -447,9 +454,8 @@ spawn_server_1(Path, URL, PID, Options) :-
     % this very much depends on something being written on startup
     % we read 2 lines, because the first line will report start. the second line will be printed after load is done.
     % This is very fragile though.
-    read_line_to_string(Error, _First_Line),
-    read_line_to_string(Error, _Second_Line),
-    %read_line_to_string(Error, _Third_Line),
+
+    read_line_until_start_line(Error),
 
     ignore(memberchk(error(Error), Options)),
     ignore(memberchk(input(Input), Options)),
