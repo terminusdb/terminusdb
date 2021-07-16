@@ -1013,12 +1013,15 @@ test(branch_db, [
 
     % TODO: We need branches to pull in the correct 'doc:' prefix.
     Query0 =
-    _{'@context' : _{ doc: "http://terminushub.com/admin/test/document/"},
-      '@type' : "woql:AddTriple",
-      'woql:subject' : "doc:test_subject",
-      'woql:predicate' : "doc:test_predicate",
-      'woql:object' : "doc:test_object"
+    _{'@type' : "AddTriple",
+      subject: _{ '@type' : "NodeValue",
+                  node: "test_subject"},
+      'predicate' : _{ '@type' : "NodeValue",
+                       node: "test_predicate"},
+      'object' : _{ '@type' : "Value",
+                    node: "test_object"}
      },
+    * json_write_dict(current_output,Query0,[]),
     Commit = commit_info{ author : 'The Gavinator',
                           message : 'Peace and goodwill' },
 
@@ -1033,16 +1036,13 @@ test(branch_db, [
 
     % Now query the insert...
     Query1 =
-    _{'@type' : "woql:Triple",
-      'woql:subject' : _{'@type' : "woql:Variable",
-                         'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                   '@value' : "Subject"}},
-      'woql:predicate' : _{'@type' : "woql:Variable",
-                           'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                     '@value' : "Predicate"}},
-      'woql:object' : _{'@type' : "woql:Variable",
-                        'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                  '@value' : "Object"}}},
+    _{'@type' : "Triple",
+      subject: _{'@type' : "NodeValue",
+                 variable: "Subject"},
+      predicate: _{'@type' : "NodeValue",
+                   variable: "Predicate"},
+      object: _{'@type' : "Value",
+                variable: "Object"}},
 
     http_post(URI,
               json(_{query : Query1}),
@@ -1050,9 +1050,9 @@ test(branch_db, [
               [json_object(dict),authorization(basic(admin,Key))]),
 
     (   _{'bindings' : L} :< JSON1
-    ->  L = [_{'Object':"http://terminushub.com/admin/test/document/test_object",
-               'Predicate':"http://terminushub.com/admin/test/document/test_predicate",
-               'Subject':"http://terminushub.com/admin/test/document/test_subject"}]
+    ->  L = [_{'Object':"test_object",
+               'Predicate':"@schema:test_predicate",
+               'Subject':"test_subject"}]
     ).
 
 test(bad_cast, [
@@ -1063,29 +1063,29 @@ test(bad_cast, [
 :-
 
     Query0 =
-    _{'@type' : 'woql:And',
-      'woql:query_list' : [
-          _{'@type' : 'woql:QueryListElement',
-            'woql:index' : _{'@type' : "xsd:integer",
-                            '@value' : 0},
-            'woql:query' : First_Insert},
-          _{'@type' : 'QueryListElement',
-            'woql:index' : _{'@type' : "xsd:integer",
-                             '@value' : 1},
-            'woql:query' : Second_Insert}]},
+    _{'@type' : 'And',
+      and : [First_Insert,
+             Second_Insert]},
+
     First_Insert =
-    _{ '@type' : "woql:AddTriple",
-       'woql:subject' : "test_subject",
-       'woql:predicate' : "rdf:type",
-       'woql:object' : "BS"
+    _{ '@type' : "AddTriple",
+       subject: _{ '@type' : "NodeValue",
+                   node: "test_subject"},
+       predicate: _{ '@type' : "NodeValue",
+                     node: "rdf:type"},
+       object: _{ '@type' : "Value",
+                  node: "BS"}
      },
 
     Second_Insert =
-    _{ '@type' : "woql:AddTriple",
-       'woql:subject' : "test_subject",
-       'woql:predicate' : "rdf:label",
-       'woql:object' : _{ '@type' : "xsd:integer",
-                          '@value' : "asdf"}},
+    _{ '@type' : "AddTriple",
+       subject: _{ '@type' : "NodeValue",
+                   node: "test_subject"},
+       predicate: _{ '@type' : "NodeValue",
+                     node: "rdf:label"},
+       object: _{ '@type' : "Value",
+                  data: _{ '@type' : "xsd:integer",
+                           '@value' : "asdf"}}},
 
     admin_pass(Key),
     atomic_list_concat([Server, '/api/woql/admin/test'], URI),
