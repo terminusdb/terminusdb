@@ -2,7 +2,6 @@
               woql_context/1,
               initialise_woql_contexts/0,
               json_woql/2,
-              json_woql/3,
               json_woql_path_element_error_message/4
           ]).
 
@@ -18,6 +17,7 @@
 :- use_module(library(sort)).
 :- use_module(core(triple)).
 :- use_module(core(util)).
+:- use_module(core(query)).
 :- reexport(core(util/syntax)).
 
 :- use_module(library(http/json)).
@@ -42,28 +42,61 @@ initialise_woql_contexts :-
     ).
 
 json_woql(JSON,WOQL) :-
-    json_woql(JSON,_{},WOQL).
+    once(json_to_woql_ast(JSON,WOQL,[])).
 
-json_woql(JSON,Ctx,WOQL) :-
-    expand(JSON,Ctx,JSON_Ex),
-    json_to_woql_ast(JSON_Ex,WOQL,[]).
+prefix_split(Node, Term) :-
+    (   uri_has_protocol(Node)
+    ->  atom_string(Term,Node)
+    ;   uri_has_prefix(Node)
+    ->  split_atom(Node,':',[Prefix,Suffix]),
+        atom_string(Prefix_Atom,Prefix),
+        atom_string(Suffix_Atom,Suffix),
+        Term = Prefix_Atom:Suffix_Atom
+    ;   atom_string(Term,Node)).
 
-/*
- * deindex_list(Key,List,List) is det.
- *
- * Remove the indexing from a list so that it is by order.
- *
- * TODO:
- * Currently we are assuming the list is in order and that the indexes
- * are for ordering during database retrieval. This is not great, it should
- * instead order according to the key using predsort/3 first.
- */
-deindex_list(Key,List,Flatten) :-
-    maplist({Key}/[Elt,Sub_Elt]>>(
-                get_dict(Key, Elt, Sub_Elt)
-            ), List, Flatten),
-    !.
-deindex_list(_Key,List,List). % maybe the list is already flattened?
+json_data_to_woql_ast(JSON,WOQL) :-
+    is_dict(JSON),
+    !,
+    (   _{'@value' : V, '@type' : T } :< JSON
+    ->  default_prefixes(Default_Prefixes),
+        prefix_expand(T, Default_Prefixes, TE),
+        (   string(V)
+        ->  typecast(V^^xsd:string,
+                     TE, [], Val)
+        ;   atom(V),
+            atom_string(V,String)
+        ->  typecast(String^^xsd:string,
+                     TE, [], Val)
+        ;   number(V)
+        ->  typecast(V^^xsd:decimal,
+                     TE, [], Val)
+        ;   member(V,[false,true])
+        ->  typecast(V^^xsd:boolean,
+                     TE, [], Val)
+        ;   throw(error(null_unsupported, JSON))
+        ),
+        WOQL = Val
+    ;   _{'@value' : V, '@language' : L } :< JSON
+    ->  atom_string(LE,L),
+        WOQL = '@'(V,LE)
+    ;   true = JSON
+    ->  WOQL = true
+    ).
+json_data_to_woql_ast(JSON,WOQL) :-
+    (   atom(JSON)
+    ;   string(JSON)
+    ),
+    !,
+    atom_string(A,JSON),
+    (   member(A,[true,false])
+    ->  WOQL = A^^xsd:boolean
+    ;   WOQL = A^^xsd:string
+    ).
+json_data_to_woql_ast(JSON,WOQL) :-
+    number(JSON),
+    !,
+    WOQL = JSON^^xsd:decimal.
+
 
 /*
  * json_to_woql_ast(+JSON:dict,-AST:any) is det.
@@ -72,271 +105,198 @@ deindex_list(_Key,List,List). % maybe the list is already flattened?
  */
 json_to_woql_ast(JSON,WOQL,Path) :-
     is_dict(JSON),
-    !,
-    (   _{'@value' : V, '@type' : T } :< JSON
-    ->  atom_string(TE,T),
-        (   string(V)
-        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
-                     TE, [], Val)
-        ;   atom(V),
-            atom_string(V,String)
-        ->  typecast(String^^'http://www.w3.org/2001/XMLSchema#string',
-                     TE, [], Val)
-        ;   number(V)
-        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#decimal',
-                     TE, [], Val)
-        ;   member(V,[false,true])
-        ->  typecast(V^^'http://www.w3.org/2001/XMLSchema#boolean',
-                     TE, [], Val)
-        ;   throw(error(null_unsupported, JSON))
-        ),
-        WOQL = Val
-    ;   _{'@type' : Type} :< JSON,
-        json_type_to_woql_ast(Type,JSON,WOQL,Path)
-    ->  true
-    ;   _{'@value' : V, '@language' : L } :< JSON
-    ->  atom_string(LE,L),
-        WOQL = '@'(V,LE)
-    ;   _{'http://terminusdb.com/schema/woql#value' : V, '@type' : T } :< JSON
-    ->  json_to_woql_ast(V,VE,['http://terminusdb.com/schema/woql#value'
-                               |Path]),
-        atom_string(TE,T),
-        WOQL = '^^'(VE,TE)
-    ;   _{'http://terminusdb.com/schema/woql#value' : V, '@language' : L } :< JSON
-    ->  json_to_woql_ast(V,VE,['http://terminusdb.com/schema/woql#value'
-                               |Path]),
-        atom_string(LE,L),
-        WOQL = '@'(VE,LE)
-    ;   _{'@id' : ID } :< JSON
-    ->  json_to_woql_ast(ID,WOQL,['@id'
-                                  |Path])
-    ;   true = JSON
-    ->  WOQL = true
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
-    ).
+    _{'@type' : Pre_Type} :< JSON,
+    atom_string(Type,Pre_Type),
+    json_type_to_woql_ast(Type,JSON,WOQL,Path).
 json_to_woql_ast(JSON,WOQL,Path) :-
     is_list(JSON),
-    !,
-    predsort(woql_index_sort, JSON, JSON_Sorted),
-    length(JSON, Len),
-    End is Len - 1,
-    (   End = -1
-    ->  Indexes = []
-    ;   numlist(0,End,Indexes)),
-    maplist({Path}/[Q,I,W]>>(
-                json_to_woql_ast(Q,W,[I|Path])
-            ), JSON_Sorted, Indexes, WOQL).
-json_to_woql_ast(JSON,WOQL,_Path) :-
-    number(JSON),
-    !,
-    WOQL = '^^'(JSON,'http://www.w3.org/2001/XMLSchema#decimal').
-json_to_woql_ast(JSON,WOQL,_Path) :-
-    atom(JSON),
-    memberchk(JSON,[true,false]),
-    !,
-    WOQL = '^^'(JSON,'http://www.w3.org/2001/XMLSchema#boolean').
-json_to_woql_ast(JSON,WOQL,_Path) :-
-    coerce_atom(JSON,WOQL),
-    !.
+    json_list_to_woql_ast(JSON,WOQL,Path).
 json_to_woql_ast(JSON,_,Path) :-
     reverse(Path, Director),
-    throw(error(unparsable_query(JSON,Director), _)).
+    throw(error(woql_syntax_error(JSON,Director,JSON), _)).
 
+
+json_list_to_woql_ast(JSON,WOQL,Path) :-
+    json_list_to_woql_ast(JSON,0,WOQL,Path).
+
+json_list_to_woql_ast([],_,[],_).
+json_list_to_woql_ast([JSON|J_Rest],N,[WOQL|W_Rest],Path) :-
+    json_to_woql_ast(JSON,WOQL,[N|Path]),
+    M is N+1,
+    json_list_to_woql_ast(J_Rest,M,W_Rest,Path).
+
+variable_list([],[]).
+variable_list([X|List],[v(VA)|V_List]) :-
+    (   is_dict(X)
+    ->  get_dict('@value', X, V),
+        atom_string(VA,V)
+    ;   atom_string(VA,X)),
+    variable_list(List,V_List).
 
 % Convert specific types to the WOQL AST, should be expanded to
 % make the predicate json_to_woql_ast less verbose and big
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Comment',_,WOQL,_) :-
-    WOQL = true.
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#TripleCount',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#resource' : Resource,
-      'http://terminusdb.com/schema/woql#triple_count' : Count
+json_type_to_woql_ast('TripleCount',JSON,WOQL,Path) :-
+    _{resource : Resource,
+      count : Count
      } :< JSON,
-    json_to_woql_ast(Resource,WOQL_Resource,
-                     ['http://terminusdb.com/schema/woql#resource'
-                      |Path]),
+    json_data_to_woql_ast(Resource,Resource_String^^_),
+    atom_string(Resource_Atom, Resource_String),
     json_to_woql_ast(Count,WOQL_Count,
-                     ['http://terminusdb.com/schema/woql#triple_count'
+                     [count
                       |Path]),
-    do_or_die(
-        (WOQL_Resource = Resource_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#resource'|Path],
-                                Resource), _)),
-    WOQL = triple_count(Resource_String,WOQL_Count).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Size',JSON,WOQL,Path) :-
-    _{  'http://terminusdb.com/schema/woql#resource' : Resource,
-        'http://terminusdb.com/schema/woql#size' : Size
+    WOQL = triple_count(Resource_Atom,WOQL_Count).
+json_type_to_woql_ast('Size',JSON,WOQL,Path) :-
+    _{  resource : Resource,
+        size : Size
     } :< JSON,
-    json_to_woql_ast(Resource,WOQL_Resource,
-                     ['http://terminusdb.com/schema/woql#resource'
-                      |Path]),
+    json_data_to_woql_ast(Resource,Resource_String^^_),
+    atom_string(WResource,Resource_String),
     json_to_woql_ast(Size,WOQL_Size,
-                     ['http://terminusdb.com/schema/woql#size'
+                     [size
                       |Path]),
-    do_or_die(
-        (WOQL_Resource = Resource_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#resource'|Path],
-                                Resource), _)),
-    WOQL = size(Resource_String,WOQL_Size).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Select',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
-      'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON,
-    json_to_woql_ast(Indexed_Variables,WOQL_Args,
-                     ['http://terminusdb.com/schema/woql#variable_list'
-                      |Path]),
-    json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
+    WOQL = size(WResource,WOQL_Size).
+json_type_to_woql_ast('Select',JSON,WOQL,Path) :-
+    _{variables : Variables,
+      query : Sub_Query } :< JSON,
+    variable_list(Variables,WOQL_Args),
+    json_to_woql_ast(Sub_Query,Sub_WOQL,[query
                                          |Path]),
     WOQL = select(WOQL_Args,Sub_WOQL).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Distinct',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_list' : Indexed_Variables,
-      'http://terminusdb.com/schema/woql#query' : Sub_Query } :< JSON,
-    json_to_woql_ast(Indexed_Variables,WOQL_Args,
-                     ['http://terminusdb.com/schema/woql#variable_list'
-                      |Path]),
-    json_to_woql_ast(Sub_Query,Sub_WOQL,['http://terminusdb.com/schema/woql#query'
+json_type_to_woql_ast('Distinct',JSON,WOQL,Path) :-
+    _{variables : Variables,
+      query : Sub_Query } :< JSON,
+    variable_list(Variables,WOQL_Args),
+    json_to_woql_ast(Sub_Query,Sub_WOQL,[query
                                          |Path]),
     WOQL = distinct(WOQL_Args,Sub_WOQL).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#And',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON,
-    deindex_list('http://terminusdb.com/schema/woql#query',
-                 Indexed_Query_List, Query_List),
+json_type_to_woql_ast('And',JSON,WOQL,Path) :-
+    _{and : Query_List} :< JSON,
     maplist({Path}/[Q,W]>>(
-                json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#query',
-                                      'http://terminusdb.com/schema/woql#query_list'
+                json_to_woql_ast(Q,W,[and
                                       |Path])
             ), Query_List, WOQL_Queries),
     xfy_list(',',WOQL,WOQL_Queries).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Or',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query_list' : Indexed_Query_List} :< JSON,
-    deindex_list('http://terminusdb.com/schema/woql#query',
-                 Indexed_Query_List, Query_List),
+json_type_to_woql_ast('Or',JSON,WOQL,Path) :-
+    _{or : Query_List} :< JSON,
     maplist({Path}/[Q,W]>>(
-                json_to_woql_ast(Q,W,['http://terminusdb.com/schema/woql#query',
-                                      'http://terminusdb.com/schema/woql#query_list'
+                json_to_woql_ast(Q,W,[or
                                       |Path])
             ), Query_List, WOQL_Queries),
     xfy_list(';',WOQL,WOQL_Queries).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Using',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#collection' : Collection,
-      'http://terminusdb.com/schema/woql#query' : Query } :< JSON,
-    json_to_woql_ast(Collection,WC,['http://terminusdb.com/schema/woql#collection'
-                                    |Path]),
-    json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
+json_type_to_woql_ast('Using',JSON,WOQL,Path) :-
+    _{collection : Collection,
+      query : Query } :< JSON,
+    atom_string(WC,Collection),
+    json_to_woql_ast(Query,WQ,[query
                                |Path]),
-    do_or_die(
-        (WC = Collection_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#collection'|Path],
-                                Collection), _)),
-    WOQL = using(Collection_String,WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#From',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#graph_filter' : Graph_Filter,
-      'http://terminusdb.com/schema/woql#query' : Query } :< JSON,
-    json_to_woql_ast(Graph_Filter,WG,['http://terminusdb.com/schema/woql#graph_filter'
+    WOQL = using(WC,WQ).
+json_type_to_woql_ast('From',JSON,WOQL,Path) :-
+    _{graph_filter : Graph_Filter,
+      query : Query } :< JSON,
+    json_to_woql_ast(Graph_Filter,WG,[graph_filter
                                       |Path]),
-    json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Query,WQ,[query
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
+                                [graph_filter|Path],
                                 Graph_Filter), _)),
     WOQL = from(Graph_String,WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Into',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#graph' : Graph,
-      'http://terminusdb.com/schema/woql#query' : Query } :< JSON,
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+json_type_to_woql_ast('Into',JSON,WOQL,Path) :-
+    _{graph : Graph,
+      query : Query } :< JSON,
+    json_to_woql_ast(Graph,WG,[graph
                                |Path]),
-    json_to_woql_ast(Query,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Query,WQ,[query
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                [graph|Path],
                                 Graph), _)),
     WOQL = into(Graph_String,WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Quad',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph_filter' : Graph
+json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph_filter : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+    json_to_woql_ast(Graph,WG,[graph
                                |Path]),
 
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
+                                [graph_filter|Path],
                                 Graph), _)),
 
     WOQL = t(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Triple',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object
+json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
     WOQL = t(WQA,WQB,WQC).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Subsumption',JSON,WOQL,Path) :-
-    _{ 'http://terminusdb.com/schema/woql#child' : Class_A,
-       'http://terminusdb.com/schema/woql#parent' : Class_B
+json_type_to_woql_ast('Subsumption',JSON,WOQL,Path) :-
+    _{ child : Class_A,
+       parent : Class_B
      } :< JSON,
-    json_to_woql_ast(Class_A,WQA,['http://terminusdb.com/schema/woql#child'
+    json_to_woql_ast(Class_A,WQA,[child
                                   |Path]),
-    json_to_woql_ast(Class_B,WQB,['http://terminusdb.com/schema/woql#parent'
+    json_to_woql_ast(Class_B,WQB,[parent
                                   |Path]),
     WOQL = '<<'(WQA,WQB).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Equals',JSON,WOQL,Path) :-
-    _{ 'http://terminusdb.com/schema/woql#left': A,
-       'http://terminusdb.com/schema/woql#right' : B
+json_type_to_woql_ast('Equals',JSON,WOQL,Path) :-
+    _{ left: A,
+       right : B
      } :< JSON,
-    json_to_woql_ast(A,WQA,['http://terminusdb.com/schema/woql#left'
+    json_to_woql_ast(A,WQA,[left
                             |Path]),
-    json_to_woql_ast(B,WQB,['http://terminusdb.com/schema/woql#right'
+    json_to_woql_ast(B,WQB,[right
                             |Path]),
     WOQL = '='(WQA,WQB).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Substring',JSON,WOQL,Path) :-
-    _{  'http://terminusdb.com/schema/woql#string' : String,
-        'http://terminusdb.com/schema/woql#before' : Before,
-        'http://terminusdb.com/schema/woql#length' : Length,
-        'http://terminusdb.com/schema/woql#after' : After,
-        'http://terminusdb.com/schema/woql#substring' : Substring
+json_type_to_woql_ast('Substring',JSON,WOQL,Path) :-
+    _{  string : String,
+        before : Before,
+        length : Length,
+        after : After,
+        substring : Substring
      } :< JSON,
-    json_to_woql_ast(String, WString,['http://terminusdb.com/schema/woql#string'
+    json_to_woql_ast(String, WString,[string
                                       |Path]),
-    json_to_woql_ast(Before, WBefore,['http://terminusdb.com/schema/woql#before'
+    json_to_woql_ast(Before, WBefore,[before
                                       |Path]),
-    json_to_woql_ast(Length, WLength,['http://terminusdb.com/schema/woql#length'
+    json_to_woql_ast(Length, WLength,[length
                                       |Path]),
-    json_to_woql_ast(After, WAfter,['http://terminusdb.com/schema/woql#after'
+    json_to_woql_ast(After, WAfter,[after
                                     |Path]),
-    json_to_woql_ast(Substring, WSubstring,['http://terminusdb.com/schema/woql#substring'
+    json_to_woql_ast(Substring, WSubstring,[substring
                                             |Path]),
     WOQL = sub_string(WString,WBefore,WLength,WAfter,WSubstring).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#ReadObject',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#document_uri' : Doc_ID,
-      'http://terminusdb.com/schema/woql#document' : Doc
+json_type_to_woql_ast('ReadObject',JSON,WOQL,Path) :-
+    _{document_uri : Doc_ID,
+      document : Doc
      } :< JSON,
-    json_to_woql_ast(Doc_ID, WID, ['http://terminusdb.com/schema/woql#document_id'
+    json_to_woql_ast(Doc_ID, WID, [document_id
                                    |Path]),
-    json_to_woql_ast(Doc, WDoc, ['http://terminusdb.com/schema/woql#document'
+    json_to_woql_ast(Doc, WDoc, [document
                                  |Path]),
     WOQL = get_document(WID,WDoc).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL,_) :-
-    _{'http://terminusdb.com/schema/woql#document' : Doc
+json_type_to_woql_ast('UpdateObject',JSON,WOQL,_) :-
+    _{document : Doc
      } :< JSON,
     /*
     do_or_die(
@@ -345,680 +305,571 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#UpdateObject',JSON,WOQL
                                 ['@id'|Path],
                                 Doc), _)),
     */
-    WOQL = replace_document(Doc).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteObject',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#document_uri' : Doc
+    WOQL = update_document(Doc).
+json_type_to_woql_ast('DeleteObject',JSON,WOQL,Path) :-
+    _{document_uri : Doc
      } :< JSON,
     do_or_die(
         (   _{'@id' : ID} :< Doc
         ->  true
-        ;   json_to_woql_ast(Doc,ID,['http://terminusdb.com/schema/woql#document_uri'|Path])),
+        ;   json_to_woql_ast(Doc,ID,[document_uri|Path])),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#document_uri'|Path],
+                                [document_uri|Path],
                                 Doc), _)),
     WOQL = delete_document(ID).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddTriple',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object
+json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
     WOQL = insert(WQA,WQB,WQC).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddedTriple',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object
+json_type_to_woql_ast('AddedTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
     WOQL = addition(WQA,WQB,WQC).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemovedTriple',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object
+json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
     WOQL = removal(WQA,WQB,WQC).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddQuad',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph' : Graph
+json_type_to_woql_ast('AddQuad',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+    json_to_woql_ast(Graph,WG,[graph
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                [graph|Path],
                                 Graph), _)),
     WOQL = insert(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#AddedQuad',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph_filter' : Graph
+json_type_to_woql_ast('AddedQuad',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph_filter : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph_filter'
+    json_to_woql_ast(Graph,WG,[graph_filter
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
+                                [graph_filter|Path],
                                 Graph), _)),
     WOQL = addition(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemovedQuad',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph_filter' : Graph
+json_type_to_woql_ast('RemovedQuad',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph_filter : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph_filter'
+    json_to_woql_ast(Graph,WG,[graph_filter
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph_filter'|Path],
+                                [graph_filter|Path],
                                 Graph), _)),
     WOQL = removal(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteTriple',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object
+json_type_to_woql_ast('DeleteTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
     WOQL = delete(WQA,WQB,WQC).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#DeleteQuad',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#predicate' : Predicate,
-      'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#graph' : Graph
+json_type_to_woql_ast('DeleteQuad',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
-    json_to_woql_ast(Predicate,WQB,['http://terminusdb.com/schema/woql#predicate'
+    json_to_woql_ast(Predicate,WQB,[predicate
                                     |Path]),
-    json_to_woql_ast(Object,WQC,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,['http://terminusdb.com/schema/woql#graph'
+    json_to_woql_ast(Graph,WG,[graph
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph'|Path],
+                                [graph|Path],
                                 Graph), _)),
     WOQL = delete(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#When',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query' : Q,
-      'http://terminusdb.com/schema/woql#consequent' : U
+json_type_to_woql_ast('When',JSON,WOQL,Path) :-
+    _{query : Q,
+      consequent : U
      } :< JSON,
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
-    json_to_woql_ast(U,WU,['http://terminusdb.com/schema/woql#consequent'
+    json_to_woql_ast(U,WU,[consequent
                            |Path]),
     WOQL = when(WQ,WU).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Trim',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#untrimmed' :  A,
-      'http://terminusdb.com/schema/woql#trimmed' : T
+json_type_to_woql_ast('Trim',JSON,WOQL,Path) :-
+    _{untrimmed :  A,
+      trimmed : T
      } :< JSON,
-    json_to_woql_ast(A,WA,['http://terminusdb.com/schema/woql#untrimmed'
+    json_to_woql_ast(A,WA,[untrimmed
                            |Path]),
-    json_to_woql_ast(T,WT,['http://terminusdb.com/schema/woql#trimmed'
+    json_to_woql_ast(T,WT,[trimmed
                            |Path]),
     WOQL = trim(WA,WT).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Eval',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#expression' : A,
-      'http://terminusdb.com/schema/woql#result' : X
+json_type_to_woql_ast('Eval',JSON,WOQL,Path) :-
+    _{expression : A,
+      result : X
      } :< JSON,
-    json_to_woql_arith(X, V, ['http://terminusdb.com/schema/woql#result'
-                              |Path]),
-    json_to_woql_arith(A, Arith, ['http://terminusdb.com/schema/woql#expression'
+    json_to_woql_arith(A, Arith, [expression
                                   |Path]),
-    WOQL = 'is'(V,Arith).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#IsA',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#element' : X,
-      'http://terminusdb.com/schema/woql#of_type' : T
+    json_to_woql_arith(X, V, [result
+                              |Path]),
+    WOQL = is(V,Arith).
+json_type_to_woql_ast('IsA',JSON,WOQL,Path) :-
+    _{element : X,
+      of_type : T
      } :< JSON,
-    json_to_woql_ast(X, V, ['http://terminusdb.com/schema/woql#element'
+    json_to_woql_ast(X, V, [element
                             |Path]),
-    json_to_woql_ast(T, Class,['http://terminusdb.com/schema/woql#of_type'
+    json_to_woql_ast(T, Class,[of_type
                                |Path]),
     WOQL = isa(V,Class).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Like',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#left' :  A,
-      'http://terminusdb.com/schema/woql#right' : B,
-      'http://terminusdb.com/schema/woql#like_similarity' : F
+json_type_to_woql_ast('Like',JSON,WOQL,Path) :-
+    _{left :  A,
+      right : B,
+      similarity : F
      } :< JSON,
-    json_to_woql_ast(A,WA,['http://terminusdb.com/schema/woql#left'
+    json_to_woql_ast(A,WA,[left
                            |Path]),
-    json_to_woql_ast(B,WB,['http://terminusdb.com/schema/woql#right'
+    json_to_woql_ast(B,WB,[right
                            |Path]),
-    json_to_woql_ast(F,WF,['http://terminusdb.com/schema/woql#like_similarity'
+    json_to_woql_ast(F,WF,[like_similarity
                            |Path]),
     WOQL = like(WA,WB,WF).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Less',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#left' : A,
-      'http://terminusdb.com/schema/woql#right' : B
+json_type_to_woql_ast('Less',JSON,WOQL,Path) :-
+    _{left : A,
+      right : B
      } :< JSON,
-    json_to_woql_ast(A,WA,['http://terminusdb.com/schema/woql#left'
+    json_to_woql_ast(A,WA,[left
                            |Path]),
-    json_to_woql_ast(B,WB,['http://terminusdb.com/schema/woql#right'
+    json_to_woql_ast(B,WB,[right
                            |Path]),
     WOQL = '<'(WA,WB).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Greater',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#left' : A,
-      'http://terminusdb.com/schema/woql#right' : B
+json_type_to_woql_ast('Greater',JSON,WOQL,Path) :-
+    _{left : A,
+      right : B
      } :< JSON,
-    json_to_woql_ast(A,WA,['http://terminusdb.com/schema/woql#left'
+    json_to_woql_ast(A,WA,[left
                            |Path]),
-    json_to_woql_ast(B,WB,['http://terminusdb.com/schema/woql#right'
+    json_to_woql_ast(B,WB,[right
                            |Path]),
     WOQL = '>'(WA,WB).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Optional',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query' : Q
+json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
+    _{query : Q
      } :< JSON,
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
-    WOQL = 'opt'(WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Get',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#as_vars' : AsVars,
-      'http://terminusdb.com/schema/woql#query_resource' : Resource
+    WOQL = opt(WQ).
+json_type_to_woql_ast('Get',JSON,WOQL,Path) :-
+    _{columns : AsVars,
+      resource : Resource
      } :< JSON,
-    json_to_woql_ast(AsVars,WAsVars,['http://terminusdb.com/schema/woql#as_vars'
+    json_to_woql_ast(AsVars,WAsVars,[columns
                                      |Path]),
-    json_to_woql_ast(Resource,WResource, ['http://terminusdb.com/schema/woql#query_resource'
-                                          |Path]),
-    WOQL = get(WAsVars,WResource).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#With',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#graph' : Graph,
-      'http://terminusdb.com/schema/woql#query_resource' : Resource,
-      'http://terminusdb.com/schema/woql#query' : Query
+    json_to_woql_ast(Resource,WResource,[resource
+                                         |Path]),
+    (   _{ has_header : Bool } :< JSON
+    ->  Header = Bool
+    ;   Header = true),
+    WOQL = get(WAsVars,WResource,Header).
+json_type_to_woql_ast('Column',JSON,WOQL,Path) :-
+    _{indicator : Indicator,
+      variable: Variable
      } :< JSON,
-    json_to_woql_ast(Graph,WGraph, ['http://terminusdb.com/schema/woql#graph'
-                                    |Path]),
-    json_to_woql_ast(Resource,WResource, ['http://terminusdb.com/schema/woql#query_resource'
-                                          |Path]),
-    json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
-                                   |Path]),
-    do_or_die(
-        (WGraph = Graph_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#graph'|Path],
-                                Graph), _)),
-
-    WOQL = with(Graph_String,WResource,WQuery).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#NamedAsVar',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_name' : Var_Name,
-      'http://terminusdb.com/schema/woql#identifier' : Identifier
-     } :< JSON,
-    json_to_woql_ast(_{'@type' : 'http://terminusdb.com/schema/woql#Variable',
-                       'http://terminusdb.com/schema/woql#variable_name' : Var_Name},
-                     WOQL_Var, Path),
-    json_to_woql_ast(Identifier, WIdentifier, ['http://terminusdb.com/schema/woql#identifier'
-                                               |Path]),
-    do_or_die(
-        (WIdentifier = ID_String^^_,
-         atom_string(ID,ID_String)),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#identifier'|Path],
-                                Identifier), _)),
-    (   get_dict('http://terminusdb.com/schema/woql#var_type',
-                 JSON,
-                 Type),
-        json_to_woql_ast(Type, WType, ['http://terminusdb.com/schema/woql#var_type'
-                                       |Path]),
-        atom_string(Type_Atom,WType)
-    ->  WOQL = as(ID, WOQL_Var, Type_Atom)
-    ;   WOQL = as(ID, WOQL_Var)).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#IndexedAsVar',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_name' : Var_Name
-     } :< JSON,
-    json_to_woql_ast(
-        _{'@type' : 'http://terminusdb.com/schema/woql#Variable',
-          'http://terminusdb.com/schema/woql#variable_name' : Var_Name},
-        WOQL,Path).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Put',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#as_vars' : Header,
-      'http://terminusdb.com/schema/woql#query' : Query,
-      'http://terminusdb.com/schema/woql#query_resource' : Resource
-     } :< JSON,
-    json_to_woql_ast(Header,WHeader,['http://terminusdb.com/schema/woql#as_vars'
+    json_to_woql_ast(Indicator,WIndicator,[indicator
+                                           |Path]),
+    atom_string(WVariable,Variable),
+    (   _{ type: Type} :< JSON
+    ->  atom_string(WType, Type),
+        WOQL = as(WIndicator,v(WVariable), WType)
+    ;   WOQL = as(WIndicator,v(WVariable))).
+json_type_to_woql_ast('Indicator',JSON,WOQL,_Path) :-
+    (   _{name: Name} :< JSON
+    ->  atom_string(WOQL,Name)
+    ;   _{index: N} :< JSON
+    ->  number_string(WOQL, N)
+    ).
+json_type_to_woql_ast('QueryResource',JSON,WOQL,Path) :-
+    _{source: Source,
+      format: Format} :< JSON,
+    json_to_woql_ast(Source,WSource,[source
                                      |Path]),
-    json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
+    atom_string(WFormat,Format),
+    (   _{options: Options} :< JSON
+    ->  true
+    ;   Options = _{}),
+    WOQL = resource(WSource,WFormat,Options).
+json_type_to_woql_ast('Source',JSON,WOQL,_Path) :-
+    (   _{post: Resource} :< JSON
+    ->  atom_string(R,Resource),
+        WOQL = post(R)
+    ;   _{file: Resource} :< JSON
+    ->  atom_string(R,Resource),
+        WOQL = file(R)
+    ;   _{url: Resource} :< JSON
+    ->  atom_string(R,Resource),
+        WOQL = remote(R)
+    ).
+json_type_to_woql_ast('Put',JSON,WOQL,Path) :-
+    _{columns : Header,
+      query : Query,
+      resource : Resource
+     } :< JSON,
+    json_to_woql_ast(Header,WHeader,[columns
+                                     |Path]),
+    json_to_woql_ast(Query,WQuery,[query
                                    |Path]),
-    json_to_woql_ast(Resource,WResource,['http://terminusdb.com/schema/woql#query_resource'
+    json_to_woql_ast(Resource,WResource,[resource
                                          |Path]),
     WOQL = put(WHeader,WQuery,WResource).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#RemoteResource',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#remote_uri' : URI
+json_type_to_woql_ast('LexicalKey',JSON,WOQL,Path) :-
+    _{base : Base,
+      key_list : Key,
+      uri : URI
      } :< JSON,
-    json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#remote_uri'
-                               |Path]),
-    do_or_die(
-        (WURI = URI_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#remote_uri'
-                                 |Path],
-                                WURI), _)),
-
-    (   _{'http://terminusdb.com/schema/woql#format' : Format} :< JSON
-    ->  json_to_woql_ast(Format,WFormat,
-                         ['http://terminusdb.com/schema/woql#format'
-                          |Path])
-    ;   WFormat = _{}),
-
-    WOQL = remote(URI_String,WFormat).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#FileResource',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#file' : File
-     } :< JSON,
-    json_to_woql_ast(File,WFile,['http://terminusdb.com/schema/woql#file'
+    json_to_woql_ast(Base,WBase,[base
                                  |Path]),
-    do_or_die(
-        (WFile = File_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#file'|Path],
-                                WFile), _)),
-    (   _{'http://terminusdb.com/schema/woql#format' : Format} :< JSON
-    ->  json_to_woql_ast(Format,WFormat,
-                         ['http://terminusdb.com/schema/woql#format'
-                          |Path])
-    ;   WFormat = _{}),
-
-    WOQL = file(File_String,WFormat).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#PostResource',JSON,WOQL,Path) :-
-    _{
-        'http://terminusdb.com/schema/woql#file' : File
-    } :< JSON,
-    json_to_woql_ast(File, WFile, ['http://terminusdb.com/schema/woql#file'
-                                   |Path]),
-    do_or_die(
-        (WFile = File_String^^_),
-        error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#file'|Path],
-                                WFile), _)),
-    (   _{'http://terminusdb.com/schema/woql#format' : Format} :< JSON
-    ->  json_to_woql_ast(Format,WFormat,
-                         ['http://terminusdb.com/schema/woql#format'
-                          |Path])
-    ;   WFormat = _{}),
-
-    WOQL = post(File_String,WFormat).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Format',JSON,WOQL,_) :-
-    json_extract_format(JSON,WOQL).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Unique',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#base' : Base,
-      'http://terminusdb.com/schema/woql#key_list' : Key,
-      'http://terminusdb.com/schema/woql#uri' : URI
-     } :< JSON,
-    json_to_woql_ast(Base,WBase,['http://terminusdb.com/schema/woql#base'
-                                 |Path]),
-    json_to_woql_ast(Key,WKey,['http://terminusdb.com/schema/woql#key_list'
+    json_to_woql_ast(Key,WKey,[key_list
                                |Path]),
-    json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
-                               |Path]),
-    WOQL = hash(WBase,WKey,WURI).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#IDGenerator',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#base' : Base,
-      'http://terminusdb.com/schema/woql#key_list' : Key,
-      'http://terminusdb.com/schema/woql#uri' : URI
-     } :< JSON,
-    json_to_woql_ast(Base,WBase,['http://terminusdb.com/schema/woql#base'
-                                 |Path]),
-    json_to_woql_ast(Key,WKey,['http://terminusdb.com/schema/woql#key_list'
-                               |Path]),
-    json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
+    json_to_woql_ast(URI,WURI,[uri
                                |Path]),
     WOQL = idgen(WBase,WKey,WURI).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#RandomIDGenerator',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#base' : Base,
-      'http://terminusdb.com/schema/woql#key_list' : Key,
-      'http://terminusdb.com/schema/woql#uri' : URI
+json_type_to_woql_ast('HashKey',JSON,WOQL,Path) :-
+    _{base : Base,
+      key_list : Key,
+      uri : URI
      } :< JSON,
-    json_to_woql_ast(Base,WBase,['http://terminusdb.com/schema/woql#base'
+    json_to_woql_ast(Base,WBase,[base
                                  |Path]),
-    json_to_woql_ast(Key,WKey,['http://terminusdb.com/schema/woql#key_list'
+    json_to_woql_ast(Key,WKey,[key_list
                                |Path]),
-    json_to_woql_ast(URI,WURI,['http://terminusdb.com/schema/woql#uri'
+    json_to_woql_ast(URI,WURI,[uri
                                |Path]),
-    WOQL = random_idgen(WBase,WKey,WURI).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Upper',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#left' :  S,
-      'http://terminusdb.com/schema/woql#right' : V
+    WOQL = hash(WBase,WKey,WURI).
+json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
+    _{left :  S,
+      right : V
      } :< JSON,
-    json_to_woql_ast(S,WS,['http://terminusdb.com/schema/woql#left'
+    json_to_woql_ast(S,WS,[left
                            |Path]),
-    json_to_woql_ast(V,WV,['http://terminusdb.com/schema/woql#right'
+    json_to_woql_ast(V,WV,[right
                            |Path]),
     WOQL = upper(WS,WV).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Lower',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#left' : S,
-      'http://terminusdb.com/schema/woql#right' : V
+json_type_to_woql_ast('Lower',JSON,WOQL,Path) :-
+    _{left : S,
+      right : V
      } :< JSON,
-    json_to_woql_ast(S,WS,['http://terminusdb.com/schema/woql#left'
+    json_to_woql_ast(S,WS,[left
                            |Path]),
-    json_to_woql_ast(V,WV,['http://terminusdb.com/schema/woql#right'
+    json_to_woql_ast(V,WV,[right
                            |Path]),
     WOQL = lower(WS,WV).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Pad',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#pad_string' : S,
-      'http://terminusdb.com/schema/woql#pad_char' : C,
-      'http://terminusdb.com/schema/woql#pad_times' : N,
-      'http://terminusdb.com/schema/woql#pad_result' : V
+json_type_to_woql_ast('Pad',JSON,WOQL,Path) :-
+    _{string : S,
+      char : C,
+      times : N,
+      result : V
      } :< JSON,
-    json_to_woql_ast(S,WS,['http://terminusdb.com/schema/woql#pad_string'
+    json_to_woql_ast(S,WS,[string
                            |Path]),
-    json_to_woql_ast(C,WC,['http://terminusdb.com/schema/woql#pad_char'
+    json_to_woql_ast(C,WC,[char
                            |Path]),
-    json_to_woql_ast(N,WN,['http://terminusdb.com/schema/woql#pad_times'
+    json_to_woql_ast(N,WN,[times
                            |Path]),
-    json_to_woql_ast(V,WV,['http://terminusdb.com/schema/woql#pad_result'
+    json_to_woql_ast(V,WV,[result
                            |Path]),
     WOQL = pad(WS,WC,WN,WV).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Split',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#split_string' : S,
-      'http://terminusdb.com/schema/woql#split_pattern' : P,
-      'http://terminusdb.com/schema/woql#split_list' : L
+json_type_to_woql_ast('Split',JSON,WOQL,Path) :-
+    _{string : S,
+      pattern : P,
+      list : L
      } :< JSON,
-    json_to_woql_ast(S,WS,['http://terminusdb.com/schema/woql#split_string'
+    json_to_woql_ast(S,WS,[string
                            |Path]),
-    json_to_woql_ast(P,WP,['http://terminusdb.com/schema/woql#split_pattern'
+    json_to_woql_ast(P,WP,[pattern
                            |Path]),
-    json_to_woql_ast(L,WL,['http://terminusdb.com/schema/woql#split_list'
+    json_to_woql_ast(L,WL,[list
                            |Path]),
     WOQL = split(WS,WP,WL).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Member',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#member' : S,
-      'http://terminusdb.com/schema/woql#member_list' : L
+json_type_to_woql_ast('Member',JSON,WOQL,Path) :-
+    _{member : S,
+      list : L
      } :< JSON,
-    json_to_woql_ast(S,WS,['http://terminusdb.com/schema/woql#member'
+    json_to_woql_ast(S,WS,[member
                            |Path]),
-    json_to_woql_ast(L,WL,['http://terminusdb.com/schema/woql#member_list'
+    json_to_woql_ast(L,WL,[list
                            |Path]),
     WOQL = member(WS,WL).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Concatenate',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#concat_list' :  List,
-      'http://terminusdb.com/schema/woql#concatenated' : Value
+json_type_to_woql_ast('Concatenate',JSON,WOQL,Path) :-
+    _{list :  List,
+      result : Value
      } :< JSON,
-    json_to_woql_ast(List,WList,['http://terminusdb.com/schema/woql#concat_list'
+    json_to_woql_ast(List,WList,[list
                                  |Path]),
-    json_to_woql_ast(Value,WValue,['http://terminusdb.com/schema/woql#concatenated'
+    json_to_woql_ast(Value,WValue,[result
                                    |Path]),
     WOQL = concat(WList,WValue).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Join',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#join_list' : List,
-      'http://terminusdb.com/schema/woql#join_separator' : Sep,
-      'http://terminusdb.com/schema/woql#join' : Value
+json_type_to_woql_ast('Join',JSON,WOQL,Path) :-
+    _{list : List,
+      separator : Sep,
+      result : Value
      } :< JSON,
-    json_to_woql_ast(List,WList,['http://terminusdb.com/schema/woql#join_list'
+    json_to_woql_ast(List,WList,[list
                                  |Path]),
-    json_to_woql_ast(Sep,WSep,['http://terminusdb.com/schema/woql#join_separator'
+    json_to_woql_ast(Sep,WSep,[separator
                                |Path]),
-    json_to_woql_ast(Value,WValue,['http://terminusdb.com/schema/woql#join'
+    json_to_woql_ast(Value,WValue,[result
                                    |Path]),
     WOQL = join(WList,WSep,WValue).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Sum',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#sum_list' : List,
-      'http://terminusdb.com/schema/woql#sum' : Value
+json_type_to_woql_ast('Sum',JSON,WOQL,Path) :-
+    _{list : List,
+      result : Value
      } :< JSON,
-    json_to_woql_ast(List,WList,['http://terminusdb.com/schema/woql#sum_list'
+    json_to_woql_ast(List,WList,[list
                                  |Path]),
-    json_to_woql_ast(Value,WValue,['http://terminusdb.com/schema/woql#sum'
+    json_to_woql_ast(Value,WValue,[result
                                    |Path]),
     WOQL = sum(WList,WValue).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Count',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query' : Query,
-      'http://terminusdb.com/schema/woql#count' : Count
+json_type_to_woql_ast('Count',JSON,WOQL,Path) :-
+    _{query : Query,
+      count : Count
      } :< JSON,
-    json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Query,WQuery,[query
                                   |Path]),
-    json_to_woql_ast(Count,WCount,['http://terminusdb.com/schema/woql#count'
+    json_to_woql_ast(Count,WCount,[count
                                    |Path]),
     WOQL = count(WQuery,WCount).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Start',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#start' : N,
-      'http://terminusdb.com/schema/woql#query' : Q
+json_type_to_woql_ast('Start',JSON,WOQL,Path) :-
+    _{start : N,
+      query : Q
      } :< JSON,
-    json_to_woql_ast(N,WN,['http://terminusdb.com/schema/woql#start'
+    json_to_woql_ast(N,WN,[start
                            |Path]),
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
     do_or_die(
         (WN = Num^^_),
         error(woql_syntax_error(JSON,
-                                ['http://terminusdb.com/schema/woql#start'|Path],
+                                [start|Path],
                                 N), _)),
     WOQL = start(Num, WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Limit',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#limit' :  N,
-      'http://terminusdb.com/schema/woql#query' : Q
+json_type_to_woql_ast('Limit',JSON,WOQL,Path) :-
+    _{limit :  N,
+      query : Q
      } :< JSON,
-    json_to_woql_ast(N,WN,['http://terminusdb.com/schema/woql#limit'
-                           |Path]),
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_data_to_woql_ast(N,WN),
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
     WOQL = limit(WN, WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Regexp',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#pattern' : Pat,
-      'http://terminusdb.com/schema/woql#regexp_string' : String,
-      'http://terminusdb.com/schema/woql#regexp_list' : List
+json_type_to_woql_ast('Regexp',JSON,WOQL,Path) :-
+    _{pattern : Pat,
+      string : String,
+      result : List
      } :< JSON,
-    json_to_woql_ast(Pat,WPat,['http://terminusdb.com/schema/woql#pattern'
+    json_to_woql_ast(Pat,WPat,[pattern
                                |Path]),
-    json_to_woql_ast(String,WString,['http://terminusdb.com/schema/woql#regexp_string'
+    json_to_woql_ast(String,WString,[string
                                      |Path]),
-    json_to_woql_ast(List,WList,['http://terminusdb.com/schema/woql#regexp_list'
+    json_to_woql_ast(List,WList,[result
                                  |Path]),
     WOQL = re(WPat, WString, WList).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#OrderBy',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_ordering' : Templates,
-      'http://terminusdb.com/schema/woql#query' : Query
+json_type_to_woql_ast('OrderBy',JSON,WOQL,Path) :-
+    _{ordering : Templates,
+      query : Query
      } :< JSON,
-    json_to_woql_ast(Templates,WTemplates,['http://terminusdb.com/schema/woql#variable_list'
+    json_to_woql_ast(Templates,WTemplates,[ordering
                                            |Path]),
-    json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Query,WQuery,[query
                                    |Path]),
     WOQL = order_by(WTemplates,WQuery).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#VariableOrdering',JSON,WOQL,Path) :-
-    _{  'http://terminusdb.com/schema/woql#variable' : Var
+json_type_to_woql_ast('OrderTemplate',JSON,WOQL,_Path) :-
+    _{  variable : Var,
+        order : Order
      } :< JSON,
-    (   get_dict('http://terminusdb.com/schema/woql#ascending', JSON, Bool)
-    ->  json_to_woql_ast(Bool,Boolean^^_,['http://terminusdb.com/schema/woql#ascending'
-                                          |Path])
-    ;   Boolean = true),
-    json_to_woql_ast(Var,WVar,['http://terminusdb.com/schema/woql#ascending'
-                               |Path]),
-    (   Boolean = true
-    ->  Order = asc
-    ;   Order = desc),
-    WOQL =.. [Order,WVar].
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#GroupBy',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#group_by' : Spec,
-      'http://terminusdb.com/schema/woql#group_template' : Obj,
-      'http://terminusdb.com/schema/woql#query' : Query,
-      'http://terminusdb.com/schema/woql#grouped' : Collector
+    atom_string(V, Var),
+    atom_string(Order_Atom,Order),
+    (   Order_Atom = asc
+    ->  WOQL = asc(v(V))
+    ;   Order_Atom = desc
+    ->  WOQL = desc(v(V))
+    ).
+json_type_to_woql_ast('GroupBy',JSON,WOQL,Path) :-
+    _{group_by : Spec,
+      template : Obj,
+      query : Query,
+      grouped : Collector
      } :< JSON,
-    json_to_woql_ast(Spec,WSpec,['http://terminusdb.com/schema/woql#group_by'
-                                 |Path]),
-    json_to_woql_ast(Obj,WObj,['http://terminusdb.com/schema/woql#group_template'
-                               |Path]),
-    json_to_woql_ast(Query,WQuery,['http://terminusdb.com/schema/woql#query'
+    variable_list(Spec,WSpec),
+    variable_list(Obj,Template),
+    % Add only one variable if only one in template
+    (   Template = [V]
+    ->  WObj = V
+    ;   WObj = Template),
+    json_to_woql_ast(Query,WQuery,[query
                                    |Path]),
-    json_to_woql_ast(Collector,WCollector,['http://terminusdb.com/schema/woql#grouped'
+    json_to_woql_ast(Collector,WCollector,[grouped
                                            |Path]),
     WOQL = group_by(WSpec,WObj,WQuery,WCollector).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Length',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#length_list' : A,
-      'http://terminusdb.com/schema/woql#length' : B
+json_type_to_woql_ast('Length',JSON,WOQL,Path) :-
+    _{list : A,
+      length : B
      } :< JSON,
-    json_to_woql_ast(A,WA,['http://terminusdb.com/schema/woql#length_list'
+    json_to_woql_ast(A,WA,[list
                            |Path]),
-    json_to_woql_ast(B,WB,['http://terminusdb.com/schema/woql#length'
+    json_to_woql_ast(B,WB,[length
                            |Path]),
     WOQL = length(WA,WB).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Typecast',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#typecast_value' : Val,
-      'http://terminusdb.com/schema/woql#typecast_type' : Type,
-      'http://terminusdb.com/schema/woql#typecast_result' : Var
+json_type_to_woql_ast('Typecast',JSON,WOQL,Path) :-
+    _{value : Val,
+      type : Type,
+      result : Var
      } :< JSON,
-    json_to_woql_ast(Val,WVal,['http://terminusdb.com/schema/woql#typecast_value'
+    json_to_woql_ast(Val,WVal,[typecast_value
                                |Path]),
-    json_to_woql_ast(Type,WType,['http://terminusdb.com/schema/woql#typecast_type'
+    json_to_woql_ast(Type,WType,[typecast_type
                                  |Path]),
-    json_to_woql_ast(Var,WVar,['http://terminusdb.com/schema/woql#typecast_result'
+    json_to_woql_ast(Var,WVar,[typecast_result
                                |Path]),
     WOQL = typecast(WVal,WType,[],WVar).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Not',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query' : Q
+json_type_to_woql_ast('Not',JSON,WOQL,Path) :-
+    _{query : Q
      } :< JSON,
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
     WOQL = not(WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Once',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query' : Q
+json_type_to_woql_ast('Once',JSON,WOQL,Path) :-
+    _{query : Q
      } :< JSON,
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
     WOQL = once(WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Immediately',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#query' : Q
+json_type_to_woql_ast('Immediately',JSON,WOQL,Path) :-
+    _{query : Q
      } :< JSON,
-    json_to_woql_ast(Q,WQ,['http://terminusdb.com/schema/woql#query'
+    json_to_woql_ast(Q,WQ,[query
                            |Path]),
     WOQL = immediately(WQ).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Dot',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#dictionary' : Dictionary,
-      'http://terminusdb.com/schema/woql#dictionary_key' : Key,
-      'http://terminusdb.com/schema/woql#dictionary_value' : Value
+json_type_to_woql_ast('Dot',JSON,WOQL,Path) :-
+    _{dictionary : Dictionary,
+      dictionary_key : Key,
+      dictionary_value : Value
      } :< JSON,
-    json_to_woql_ast(Dictionary, WDictionary, ['http://terminusdb.com/schema/woql#dictionary_key'
+    json_to_woql_ast(Dictionary, WDictionary, [dictionary_key
                                                |Path]),
-    json_to_woql_ast(Key, WKey, ['http://terminusdb.com/schema/woql#dictionary_key'
+    json_to_woql_ast(Key, WKey, [dictionary_key
                                  |Path]),
-    json_to_woql_ast(Value,WValue,['http://terminusdb.com/schema/woql#dictionary_value'
+    json_to_woql_ast(Value,WValue,[dictionary_value
                                    |Path]),
     WOQL = dot(WDictionary,WKey,WValue).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Path',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#subject' : Subject,
-      'http://terminusdb.com/schema/woql#path_pattern' : Pattern,
-      'http://terminusdb.com/schema/woql#object' : Object,
-      'http://terminusdb.com/schema/woql#path' : Edge_Path
+json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      path_pattern : Pattern,
+      object : Object,
+      path : Edge_Path
      } :< JSON,
-    json_to_woql_ast(Subject,WSubject,['http://terminusdb.com/schema/woql#subject'
+    json_to_woql_ast(Subject,WSubject,[subject
                                        |Path]),
-    json_to_woql_path_pattern(Pattern,WPattern,['http://terminusdb.com/schema/woql#path_pattern'
+    json_to_woql_path_pattern(Pattern,WPattern,[path_pattern
                                                 |Path]),
-    json_to_woql_ast(Object,WObject,['http://terminusdb.com/schema/woql#object'
+    json_to_woql_ast(Object,WObject,[object
                                      |Path]),
-    json_to_woql_ast(Edge_Path,WEdge_Path,['http://terminusdb.com/schema/woql#path'
+    json_to_woql_ast(Edge_Path,WEdge_Path,[path
                                            |Path]),
     WOQL = path(WSubject,WPattern,WObject,WEdge_Path).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#True',_,WOQL,_) :-
+json_type_to_woql_ast('True',_,WOQL,_) :-
     WOQL = true.
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Array',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#array_element' : List} :< JSON,
-    % Unbox values
-    json_to_woql_ast(List, WOQL, ['http://terminusdb.com/schema/woql#array_element'
-                                  |Path]).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#ArrayElement',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_name' : Value} :< JSON,
-    % Unbox values
-    json_to_woql_ast(Value, Result, ['http://terminusdb.com/schema/woql#variable_name'
-                                     |Path]),
-    Result = String_or_Atom_Name^^_,
-    coerce_atom(String_or_Atom_Name, Atom_Name),
-    WOQL = v(Atom_Name).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#ArrayElement',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#node' : Node} :< JSON,
-    % Unbox values
-    json_to_woql_ast(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
-                                  |Path]).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#ArrayElement',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#datatype' : DT} :< JSON,
-    % Unbox values
-    json_to_woql_ast(DT, WOQL, ['http://terminusdb.com/schema/woql#datatype'
-                                |Path]).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#VariableListElement',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_name' : Value} :< JSON,
-    % Unbox values
-    json_to_woql_ast(Value, Result, ['http://terminusdb.com/schema/woql#variable_name'
-                                     |Path]),
-    Result = String_or_Atom_Name^^_,
-    coerce_atom(String_or_Atom_Name, Atom_Name),
-    WOQL = v(Atom_Name).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#IndexedAsVars',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#indexed_as_var' : List} :< JSON,
-    % Unbox values
-    json_to_woql_ast(List, WOQL, ['http://terminusdb.com/schema/woql#indexed_as_var'
-                                  |Path]).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#AsVars',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#named_as_var' : List} :< JSON,
-    % Unbox values
-    json_to_woql_ast(List, WOQL, ['http://terminusdb.com/schema/woql#named_as_var'
-                                  |Path]).
-
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Datatype',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#datatype': Value} :< JSON,
-    % Unbox values
-    json_to_woql_ast(Value, WOQL, ['http://terminusdb.com/schema/woql#datatype'
-                                   |Path]).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Node',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#node': Node} :< JSON,
-    % Unbox values
-    json_to_woql_ast(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
-                                  |Path]).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#Variable',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#variable_name' : Name} :< JSON,
-    json_to_woql_ast(Name, Result, ['http://terminusdb.com/schema/woql#variable_name'
-                                    |Path]),
-    Result = String_or_Atom_Name^^_,
-    coerce_atom(String_or_Atom_Name, Atom_Name),
-    WOQL = v(Atom_Name).
-json_type_to_woql_ast('http://terminusdb.com/schema/woql#TypeOf',JSON,WOQL,Path) :-
-    _{'http://terminusdb.com/schema/woql#value' : Value,
-      'http://terminusdb.com/schema/woql#type' : Type
+json_type_to_woql_ast('NodeValue',JSON,WOQL,_) :-
+    (   _{node: Node} :< JSON
+    ->  prefix_split(Node, WOQL)
+    ;   _{variable: Var} :< JSON
+    ->  json_data_to_woql_ast(Var,Var_String^^_),
+        atom_string(Var_Atom, Var_String),
+        WOQL = v(Var_Atom)
+    ).
+json_type_to_woql_ast('DataValue',JSON,WOQL,_) :-
+    (   _{data: Data} :< JSON
+    ->  json_data_to_woql_ast(Data,WOQL)
+    ;   _{variable: Var} :< JSON
+    ->  json_data_to_woql_ast(Var,Var_String^^_),
+        atom_string(Var_Atom, Var_String),
+        WOQL = v(Var_Atom)
+    ).
+json_type_to_woql_ast('Value',JSON,WOQL,_) :-
+    (   _{node: Node} :< JSON
+    ->  prefix_split(Node, WOQL)
+    ;   _{variable: Var} :< JSON
+    ->  json_data_to_woql_ast(Var,Var_String^^_),
+        atom_string(Var_Atom, Var_String),
+        WOQL = v(Var_Atom)
+    ;   _{data: Data} :< JSON
+    ->  json_data_to_woql_ast(Data,WOQL)
+    ).
+json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
+    _{value : Value,
+      type : Type
      } :< JSON,
     json_to_woql_ast(Value,WOQL_Value,
-                     ['http://terminusdb.com/schema/woql#value'
+                     [value
                       |Path]),
     json_to_woql_ast(Type,WOQL_Type,
-                     ['http://terminusdb.com/schema/woql#type'
+                     [type
                       |Path]),
 
     WOQL = typeof(WOQL_Value,WOQL_Type).
@@ -1026,68 +877,68 @@ json_type_to_woql_ast('http://terminusdb.com/schema/woql#TypeOf',JSON,WOQL,Path)
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
     !,
-    (   _{'@type' : 'http://terminusdb.com/schema/woql#PathPredicate',
-          'http://terminusdb.com/schema/woql#path_predicate' : Node} :< JSON
-    ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
+    (   _{'@type' : 'PathPredicate',
+          path_predicate : Node} :< JSON
+    ->   json_to_woql_ast(Node,WNode,[path_predicate
                                       |Path]),
          Pattern = p(WNode)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#InvertedPathPredicate',
-          'http://terminusdb.com/schema/woql#path_predicate' : Node} :< JSON
-    ->   json_to_woql_ast(Node,WNode,['http://terminusdb.com/schema/woql#path_predicate'
+    ;   _{'@type' : 'InvertedPathPredicate',
+          path_predicate : Node} :< JSON
+    ->   json_to_woql_ast(Node,WNode,[path_predicate
                                       |Path]),
          Pattern = n(WNode)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathSequence',
-          'http://terminusdb.com/schema/woql#path_first' : First,
-          'http://terminusdb.com/schema/woql#path_second' : Second} :< JSON
-        ->  json_to_woql_path_pattern(First,PFirst,['http://terminusdb.com/schema/woql#path_first'
+    ;   _{'@type' : 'PathSequence',
+          path_first : First,
+          path_second : Second} :< JSON
+        ->  json_to_woql_path_pattern(First,PFirst,[path_first
                                                     |Path]),
-            json_to_woql_path_pattern(Second,PSecond,['http://terminusdb.com/schema/woql#path_second'
+            json_to_woql_path_pattern(Second,PSecond,[path_second
                                                       |Path]),
             Pattern = (PFirst,PSecond)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathOr',
-          'http://terminusdb.com/schema/woql#path_left' : Left,
-          'http://terminusdb.com/schema/woql#path_right' : Right} :< JSON
-        ->  json_to_woql_path_pattern(Left,PLeft,['http://terminusdb.com/schema/woql#path_left'
+    ;   _{'@type' : 'PathOr',
+          path_left : Left,
+          path_right : Right} :< JSON
+        ->  json_to_woql_path_pattern(Left,PLeft,[path_left
                                                   |Path]),
-            json_to_woql_path_pattern(Right,PRight,['http://terminusdb.com/schema/woql#path_right'
+            json_to_woql_path_pattern(Right,PRight,[path_right
                                                     |Path]),
             Pattern = (PLeft;PRight)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathPlus',
-          'http://terminusdb.com/schema/woql#path_pattern' : SubPattern} :< JSON
+    ;   _{'@type' : 'PathPlus',
+          path_pattern : SubPattern} :< JSON
         ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                      ['http://terminusdb.com/schema/woql#path_pattern'
+                                      [path_pattern
                                        |Path]),
             Pattern = plus(PSubPattern)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathStar',
-          'http://terminusdb.com/schema/woql#path_pattern' : SubPattern} :< JSON
+    ;   _{'@type' : 'PathStar',
+          path_pattern : SubPattern} :< JSON
         ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                      ['http://terminusdb.com/schema/woql#path_pattern'
+                                      [path_pattern
                                        |Path]),
             Pattern = star(PSubPattern)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#PathTimes',
-          'http://terminusdb.com/schema/woql#path_pattern' : SubPattern,
-          'http://terminusdb.com/schema/woql#path_minimum' : N,
-          'http://terminusdb.com/schema/woql#path_maximum' : M
+    ;   _{'@type' : 'PathTimes',
+          path_pattern : SubPattern,
+          path_minimum : N,
+          path_maximum : M
          } :< JSON
         ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                      ['http://terminusdb.com/schema/woql#path_left'
+                                      [path_left
                                        |Path]),
             json_to_woql_ast(N,WN,
-                             ['http://terminusdb.com/schema/woql#path_minimum'
+                             [path_minimum
                               |Path]),
             json_to_woql_ast(M,WM,
-                             ['http://terminusdb.com/schema/woql#path_maximum'
+                             [path_maximum
                               |Path]),
             do_or_die(
                 (WN = N_int ^^ _),
                 error(woql_syntax_error(JSON,
-                                        ['http://terminusdb.com/schema/woql#path_minimum'|Path],
+                                        [path_minimum|Path],
                                         N), _)),
 
             do_or_die(
                 (WM = M_int ^^ _),
                 error(woql_syntax_error(JSON,
-                                        ['http://terminusdb.com/schema/woql#path_maximum'|Path],
+                                        [path_maximum|Path],
                                         M), _)),
             Pattern = times(PSubPattern,N_int,M_int)
     ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
@@ -1100,9 +951,9 @@ is_json_var(A) :-
 woql_index_sort(Comp,Left,Right) :-
     (   is_dict(Left),
         is_dict(Right),
-        get_dict('http://terminusdb.com/schema/woql#index', Left, Left_Lit),
+        get_dict(index, Left, Left_Lit),
         get_dict('@value', Left_Lit, I),
-        get_dict('http://terminusdb.com/schema/woql#index', Right, Right_Lit),
+        get_dict(index, Right, Right_Lit),
         get_dict('@value', Right_Lit, J)
     ->  compare(Comp, I, J)
     ;   compare(Comp, Left, Right)).
@@ -1110,130 +961,85 @@ woql_index_sort(Comp,Left,Right) :-
 json_to_woql_arith(JSON,WOQL,Path) :-
     is_dict(JSON),
     !,
-    (   _{'@type' : 'http://terminusdb.com/schema/woql#Plus',
-          'http://terminusdb.com/schema/woql#first' : First,
-          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First,
-                           ['http://terminusdb.com/schema/woql#first'
-                           |Path]),
-        json_to_woql_arith(Second, WOQL_Second,
-                           ['http://terminusdb.com/schema/woql#second'
-                           |Path]),
-        WOQL = '+'(WOQL_First,WOQL_Second)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Minus',
-          'http://terminusdb.com/schema/woql#first' : First,
-          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First,
-                           ['http://terminusdb.com/schema/woql#first'
-                            |Path]),
-        json_to_woql_arith(Second, WOQL_Second,
-                           ['http://terminusdb.com/schema/woql#second'
-                            |Path]),
-        WOQL = '-'(WOQL_First,WOQL_Second)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Times',
-          'http://terminusdb.com/schema/woql#first' : First,
-          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First,
-                           ['http://terminusdb.com/schema/woql#first'
-                            |Path]),
-        json_to_woql_arith(Second, WOQL_Second,
-                           ['http://terminusdb.com/schema/woql#second'
-                            |Path]),
-        WOQL = '*'(WOQL_First,WOQL_Second)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Divide',
-          'http://terminusdb.com/schema/woql#first' : First,
-          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First,
-                           ['http://terminusdb.com/schema/woql#first'
-                            |Path]),
-        json_to_woql_arith(Second, WOQL_Second,
-                           ['http://terminusdb.com/schema/woql#second'
-                            |Path]),
-        WOQL = '/'(WOQL_First,WOQL_Second)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Div',
-          'http://terminusdb.com/schema/woql#first' : First,
-          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First,
-                           ['http://terminusdb.com/schema/woql#first'
-                            |Path]),
-        json_to_woql_arith(Second, WOQL_Second,
-                           ['http://terminusdb.com/schema/woql#second'
-                            |Path]),
-        WOQL = 'div'(WOQL_First,WOQL_Second)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Exp',
-          'http://terminusdb.com/schema/woql#first' : First,
-          'http://terminusdb.com/schema/woql#second' : Second} :< JSON
-    ->  json_to_woql_arith(First, WOQL_First,
-                           ['http://terminusdb.com/schema/woql#first'
-                            |Path]),
-        json_to_woql_arith(Second, WOQL_Second,
-                           ['http://terminusdb.com/schema/woql#second'
-                            |Path]),
-        WOQL = '**'(WOQL_First,WOQL_Second)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Floor',
-          'http://terminusdb.com/schema/woql#argument' : Argument} :< JSON
-    ->  json_to_woql_arith(Argument,WOQL_Argument,
-                           ['http://terminusdb.com/schema/woql#argument'
-                            |Path]),
-        WOQL=floor(WOQL_Argument)
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Datatype',
-          'http://terminusdb.com/schema/woql#datatype': Value} :< JSON
-        % Unbox values
-    ->  json_to_woql_arith(Value, WOQL, ['http://terminusdb.com/schema/woql#value'
-                                         |Path])
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Node',
-          'http://terminusdb.com/schema/woql#node': Node} :< JSON
-        % Unbox values
-    ->  json_to_woql_arith(Node, WOQL, ['http://terminusdb.com/schema/woql#node'
-                                        |Path])
-    ;   _{'@type' : 'http://terminusdb.com/schema/woql#Variable',
-          'http://terminusdb.com/schema/woql#variable_name' : Name} :< JSON
-    ->  json_to_woql_arith(Name, Result, ['http://terminusdb.com/schema/woql#variable_name'
-                                          |Path]),
-        Result = String_or_Atom_Name^^_,
-        coerce_atom(String_or_Atom_Name, Atom_Name),
-        WOQL = v(Atom_Name)
-    ;   _{'@value' : V, '@type' : T } :< JSON
-    ->  atom_string(TE,T),
-        once(typecast(V^^'http://www.w3.org/2001/XMLSchema#string',
-                      TE, [], Val)),
-        WOQL = Val
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
-    ).
+    _{'@type' : Type_String} :< JSON,
+    atom_string(Type,Type_String),
+    json_type_to_woql_arith(Type,JSON,WOQL,Path).
 json_to_woql_arith(JSON,_,Path) :-
     throw(error(woql_syntax_error(JSON,Path,JSON), _)).
 
-
-json_extract_format(JSON,WOQL) :-
-    (   _{'http://terminusdb.com/schema/woql#format_type' : Format_Type}
-        :< JSON
-    ->  json_to_woql_ast(Format_Type,WFormat_Type,
-                         ['http://terminusdb.com/schema/woql#format_type'
-                          |Path]),
-        do_or_die(
-            (WFormat_Type = Format_Type_String^^_),
-            error(woql_syntax_error(JSON,
-                                    ['http://terminusdb.com/schema/woql#format_type'|Path],
-                                    WFile), _))
-    ;   Format_Type_String = "csv"),
-
-    (   _{'http://terminusdb.com/schema/woql#format_header' : Format_Header}
-        :< JSON
-    ->  json_to_woql_ast(Format_Header,WFormat_Header,
-                         ['http://terminusdb.com/schema/woql#format_type'
-                          |Path]),
-        do_or_die(
-            (WFormat_Header = Format_Header_Bool^^_),
-            error(woql_syntax_error(
-                      JSON,
-                      ['http://terminusdb.com/schema/woql#format_header'|Path],
-                      WFile),
-                      _))
-    ;   Format_Header_Bool = true),
-
-    WOQL = _{ 'format_type' : Format_Type_String ,
-              'format_header' : Format_Header_Bool }.
-
+json_type_to_woql_arith('Plus',JSON,WOQL,Path) :-
+    _{left : Left,
+      right : Right} :< JSON,
+    json_to_woql_arith(Left, WOQL_Left,
+                       [left
+                        |Path]),
+    json_to_woql_arith(Right, WOQL_Right,
+                       [right
+                        |Path]),
+    WOQL = '+'(WOQL_Left,WOQL_Right).
+json_type_to_woql_arith('Minus',JSON,WOQL,Path) :-
+    _{left : Left,
+      right : Right} :< JSON,
+    json_to_woql_arith(Left, WOQL_Left,
+                       [left
+                        |Path]),
+    json_to_woql_arith(Right, WOQL_Right,
+                       [right
+                        |Path]),
+    WOQL = '-'(WOQL_Left,WOQL_Right).
+json_type_to_woql_arith('Times',JSON,WOQL,Path) :-
+    _{left : Left,
+      right : Right} :< JSON,
+    json_to_woql_arith(Left, WOQL_Left,
+                       [left
+                        |Path]),
+    json_to_woql_arith(Right, WOQL_Right,
+                       [right
+                        |Path]),
+    WOQL = '*'(WOQL_Left,WOQL_Right).
+json_type_to_woql_arith('Divide',JSON,WOQL,Path) :-
+    _{left : Left,
+      right : Right} :< JSON,
+    json_to_woql_arith(Left, WOQL_Left,
+                       [left
+                        |Path]),
+    json_to_woql_arith(Right, WOQL_Right,
+                       [right
+                        |Path]),
+    WOQL = '/'(WOQL_Left,WOQL_Right).
+json_type_to_woql_arith('Div',JSON,WOQL,Path) :-
+    _{left : Left,
+      right : Right} :< JSON,
+    json_to_woql_arith(Left, WOQL_Left,
+                       [left
+                        |Path]),
+    json_to_woql_arith(Right, WOQL_Right,
+                       [right
+                        |Path]),
+    WOQL = div(WOQL_Left,WOQL_Right).
+json_type_to_woql_arith('Exp',JSON,WOQL,Path) :-
+    _{left : Left,
+      right : Right} :< JSON,
+    json_to_woql_arith(Left, WOQL_Left,
+                       [left
+                        |Path]),
+    json_to_woql_arith(Right, WOQL_Right,
+                       [right
+                        |Path]),
+    WOQL = '**'(WOQL_Left,WOQL_Right).
+json_type_to_woql_arith('Floor',JSON,WOQL,Path) :-
+    _{argument : Argument} :< JSON,
+    json_to_woql_arith(Argument,WOQL_Argument,
+                       [argument
+                        |Path]),
+    WOQL=floor(WOQL_Argument).
+json_type_to_woql_arith('ArithmeticValue',JSON,WOQL,_) :-
+    (   _{data : Data} :< JSON
+    ->  json_data_to_woql_ast(Data,WOQL)
+    ;   _{variable : Var} :< JSON
+    ->   atom_string(Var_Atom, Var),
+         WOQL = v(Var_Atom)
+    ).
 
 json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     (   Path = [Head|_Path],
@@ -1242,27 +1048,27 @@ json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     ;   format(string(Message),'Not well formed WOQL JSON-LD', [])).
 
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#resource',
+    resource,
     Element,
     Message) :-
     format(string(Message),'Poorly formed resource descriptor: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#collection',
+    collection,
     Element,
     Message) :-
     format(string(Message),'Poorly formed collection descriptor: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#collection',
+    collection,
     Element,
     Message) :-
     format(string(Message),'Poorly formed collection descriptor: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#graph_filter',
+    graph_filter,
     Element,
     Message) :-
     format(string(Message),'Poorly formed graph filter: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#graph',
+    graph,
     Element,
     Message) :-
     format(string(Message),'Poorly formed graph resource: ~q',Element).
@@ -1272,32 +1078,32 @@ woql_element_error_message(
     Message) :-
     format(string(Message),'Document has no id: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#identifier',
+    identifier,
     Element,
     Message) :-
     format(string(Message),'Not a well formed variable identifier: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#start',
+    start,
     Element,
     Message) :-
     format(string(Message),'Poorly formed start: ~q, should be a positive integer',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#path_minimum',
+    path_minimum,
     Element,
     Message) :-
     format(string(Message),'Poorly formed path min: ~q, should be a positive integer',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#path_maximum',
+    path_maximum,
     Element,
     Message) :-
     format(string(Message),'Poorly formed path max: ~q, should be a positive integer',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#result',
+    result,
     Element,
     Message) :-
     format(string(Message),'Not a well formed arithmetic result: ~q',Element).
 woql_element_error_message(
-    'http://terminusdb.com/schema/woql#expression',
+    expression,
     Element,
     Message) :-
     format(string(Message),'Not a well formed arithmetic expression: ~q',Element).
@@ -1306,120 +1112,33 @@ woql_element_error_message(
 
 test(not_a_query, []) :-
     JSON = _{'@type' : "And",
-             query_list :
-             [_{'@type' : "QueryListElement",
-                index : _{'@type' : "xsd:integer",
-                          '@value' : 0},
-                query : _{'@type' : "Frob"}}]},
+             and:
+             [_{'@type' : "Frob"}]},
 
-    woql_context(Prefixes),
     catch(
-        json_woql(JSON,Prefixes,_WOQL),
+        json_woql(JSON,_WOQL),
         error(woql_syntax_error(Q,P,E), _),
         json_woql_path_element_error_message(Q,P,E,Message)),
+
     Message = "Not well formed WOQL JSON-LD".
 
 test(post_marshalling, []) :-
     JSON = _{'@type' : "Get",
-             as_vars : [_{'@type': "NamedAsVar",
-                          identifier:
-                          _{'@type': "xsd:string",
-                            '@value': "Start station"},
-                          variable_name:
-                          _{'@type': "xsd:string",
-                            '@value': "Start_Station"}}
+             columns : [_{'@type': "Column",
+                          indicator: _{'@type' : 'Indicator',
+                                       name: "Start station"},
+                          variable: "Start_Station"}
                        ],
-             query_resource:
-             _{'@type': "PostResource",
-               file: _{'@type': "xsd:string",
-                       '@value': "bike_csv"}}},
+             resource: _{'@type': "QueryResource",
+                         source : _{ '@type' : 'Source',
+                                     post : "bike_csv"},
+                         format : "csv"}},
 
-    woql_context(Prefixes),
-    json_woql(JSON,Prefixes,WOQL),
-    WOQL = get(['Start station'as v('Start_Station')],
-               post("bike_csv",_)).
+    json_woql(JSON,WOQL),
 
+    WOQL = get(['Start station' as v('Start_Station')],
+               resource(post(bike_csv), csv, _{}), true).
 
-
-test(var_simplification, []) :-
-    JSON = _{'@type' : "Get",
-             as_vars : [_{'@type': "NamedAsVar",
-                          identifier: "Start station",
-                          variable_name: "Start_Station"}
-                       ],
-             query_resource:
-             _{'@type': "PostResource",
-               file: "bike_csv"}},
-    * json_write_dict(current_output,JSON,[]),
-    woql_context(Prefixes),
-    json_woql(JSON,Prefixes,WOQL),
-    WOQL = get(['Start station'as v('Start_Station')],
-               post("bike_csv",_)).
-
-
-test(id_simplification, []) :-
-
-    JSON_Atom = '{
-  "@type": "IDGenerator",
-  "base": {
-      "@type": "Node",
-      "node": "Journey"
-   },
-  "key_list": {
-    "@type": "Array",
-    "array_element": [
-      {
-        "@type": "ArrayElement",
-        "datatype": {
-          "@type": "xsd:string",
-          "@value": "test"
-        },
-        "index": 0
-      }
-    ]
-  },
-  "uri": {
-    "@type": "Variable",
-    "variable_name": "Journey_ID"
-  }
-}',
-    atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON,Prefixes,WOQL),
-    WOQL = idgen('http://terminusdb.com/schema/woql#Journey',
-                 ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
-                 v('Journey_ID')).
-
-test(id_simplification_2, []) :-
-
-    JSON_Atom = '{
-  "@type": "IDGenerator",
-  "base": {
-      "@type": "Node",
-      "node": "Journey"
-   },
-  "key_list": {
-    "@type": "Array",
-    "array_element": [
-       {"@type": "Datatype",
-        "datatype": {
-          "@type": "xsd:string",
-          "@value": "test"
-        }
-       }
-    ]
-  },
-  "uri": {
-    "@type": "Variable",
-    "variable_name": "Journey_ID"
-  }
-}',
-    atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON,Prefixes,WOQL),
-    WOQL = idgen('http://terminusdb.com/schema/woql#Journey',
-                 ["test"^^'http://www.w3.org/2001/XMLSchema#string'],
-                 v('Journey_ID')).
 :- end_tests(woql_jsonld).
 
 :- begin_tests(jsonld_ast).
@@ -1427,408 +1146,376 @@ test(id_simplification_2, []) :-
 test(anySimpleType, []) :-
 
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "Something",
-                                          "@type": "xsd:anySimpleType"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "Something",
+                                      "@type": "xsd:anySimpleType"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, _WOQL).
+    json_woql(JSON, WOQL),
+    WOQL = (v('X')="Something"^^'http://www.w3.org/2001/XMLSchema#anySimpleType').
 
 test(string, []) :-
 
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "Something",
-                                          "@type": "xsd:string"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "Something",
+                                      "@type": "xsd:string"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON, WOQL),
     WOQL = (v('X')="Something"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(boolean_true, []) :-
 
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "true",
-                                          "@type": "xsd:boolean"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "true",
+                                      "@type": "xsd:boolean"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON, WOQL),
     WOQL = (v('X')=true^^'http://www.w3.org/2001/XMLSchema#boolean').
 
 test(boolean_true_concrete, []) :-
 
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": true,
-                                          "@type": "xsd:boolean"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": true,
+                                      "@type": "xsd:boolean"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON, WOQL),
     WOQL = (v('X')=true^^'http://www.w3.org/2001/XMLSchema#boolean').
 
 test(boolean_true_bare, []) :-
 
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": true}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": true}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
-    WOQL = (v('X')=true^^'http://www.w3.org/2001/XMLSchema#boolean').
+    json_woql(JSON, WOQL),
+    WOQL = (v('X')=true^^xsd:boolean).
 
 
 test(decimal_bare, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": 1.3}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": 1.3}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
-    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+    json_woql(JSON,WOQL),
+    WOQL = (v('X')=1.3^^xsd:decimal).
 
 test(decimal_typed, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 1.3,
-                                          "@type": "xsd:decimal"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 1.3,
+                                      "@type": "xsd:decimal"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
 
 test(decimal, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "1.3",
-                                          "@type": "xsd:decimal"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "1.3",
+                                      "@type": "xsd:decimal"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
 
 test(date, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "1066-09-18",
-                                          "@type": "xsd:date"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "1066-09-18",
+                                      "@type": "xsd:date"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=date(1066,9,18,Z)^^'http://www.w3.org/2001/XMLSchema#date'),
     Z == 0.
 
 test(time, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "15:29:44",
-                                          "@type": "xsd:time"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "15:29:44",
+                                      "@type": "xsd:time"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=time(15,29,44)^^'http://www.w3.org/2001/XMLSchema#time').
 
 test(dateTime, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "2004-04-12T13:20:00",
-                                          "@type": "xsd:dateTime"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "2004-04-12T13:20:00",
+                                      "@type": "xsd:dateTime"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
 
     WOQL = (v('X')=date_time(2004,04,12,13,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
 
 test(dateTimeStamp, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "2004-04-12T13:20:00-05:00",
-                                          "@type": "xsd:dateTimeStamp"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "2004-04-12T13:20:00-05:00",
+                                      "@type": "xsd:dateTimeStamp"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=date_time(2004,4,12,8,20,0.0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
 
 test(gyear, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "2004",
-                                          "@type": "xsd:gYear"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "2004",
+                                      "@type": "xsd:gYear"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gyear(2004,Z)^^'http://www.w3.org/2001/XMLSchema#gYear'),
     Z == 0.
 
 test(gyear_range, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "[2004,2014]",
-                                          "@type": "xdd:gYearRange"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "[2004,2014]",
+                                      "@type": "xdd:gYearRange"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gyear_range(gyear(2004,Z),gyear(2014,Z))^^'http://terminusdb.com/schema/xdd#gYearRange'),
     Z == 0.
 
 test(gyear_int, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 2004,
-                                          "@type": "xsd:gYear"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 2004,
+                                      "@type": "xsd:gYear"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gyear(2004,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear').
 
 test(gyear_month, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "2004-12",
-                                          "@type": "xsd:gYearMonth"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "2004-12",
+                                      "@type": "xsd:gYearMonth"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gyear_month(2004,12,Z)^^'http://www.w3.org/2001/XMLSchema#gYearMonth'),
     Z == 0.
 
 test(gmonth, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "--12",
-                                          "@type": "xsd:gMonth"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "--12",
+                                      "@type": "xsd:gMonth"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gmonth(12,Z)^^'http://www.w3.org/2001/XMLSchema#gMonth'),
     Z == 0.
 
 test(gmonth_day, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "-05-24",
-                                          "@type": "xsd:gMonthDay"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "-05-24",
+                                      "@type": "xsd:gMonthDay"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gmonth_day(5,24,Z)^^'http://www.w3.org/2001/XMLSchema#gMonthDay'),
     Z == 0.
 
 test(gday, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "---24",
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "---24",
                                           "@type": "xsd:gDay"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=gday(24,Z)^^'http://www.w3.org/2001/XMLSchema#gDay'),
     Z == 0.
 
 test(byte, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:byte"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#byte').
 
 test(short, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:short"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#short').
 
 test(integer, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:integer"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#integer').
 
 test(long, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:long"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#long').
 
 test(unsignedByte, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:unsignedByte"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedByte').
 
 test(unsignedShort, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:unsignedShort"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedShort').
 
 test(unsignedInt, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:unsignedInt"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedInt').
 
 test(unsignedLong, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:unsignedLong"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#unsignedLong').
 
 test(positiveInteger, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:positiveInteger"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#positiveInteger').
 
 test(nonNegativeInteger, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": 120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": 120,
                                           "@type": "xsd:nonNegativeInteger"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=120^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger').
 
 test(negativeInteger, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": -120,
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": -120,
                                           "@type": "xsd:negativeInteger"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=(-120)^^'http://www.w3.org/2001/XMLSchema#negativeInteger').
 
 test(nonPositiveInteger, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": -120,
-                                          "@type": "xsd:nonPositiveInteger"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": -120,
+                                      "@type": "xsd:nonPositiveInteger"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')=(-120)^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
 
 test(hexBinary, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "a03bc23",
-                                          "@type": "xsd:hexBinary"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right":  { "@type": "DataValue",
+                             "data": { "@value": "a03bc23",
+                                       "@type": "xsd:hexBinary"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')="a03bc23"^^'http://www.w3.org/2001/XMLSchema#hexBinary').
 
 test(base64binary, []) :-
     JSON_Atom= '{"@type": "Equals",
-                 "left": { "@type": "Variable",
-                           "variable_name": "X"},
-                 "right": { "@type": "Datatype",
-                            "datatype": { "@value": "YXNkZg==",
-                                          "@type": "xsd:base64Binary"}}}',
+                 "left": { "@type": "DataValue",
+                           "variable": "X"},
+                 "right": { "@type": "DataValue",
+                            "data": { "@value": "YXNkZg==",
+                                      "@type": "xsd:base64Binary"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
-    woql_context(Prefixes),
-    json_woql(JSON, Prefixes, WOQL),
+    json_woql(JSON,WOQL),
     WOQL = (v('X')="YXNkZg=="^^'http://www.w3.org/2001/XMLSchema#base64Binary').
 
 :- end_tests(jsonld_ast).

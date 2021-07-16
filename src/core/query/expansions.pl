@@ -111,3 +111,17 @@ user:goal_expansion(prefix_list(Input,List),List=Output) :-
     !,
     maplist(global_prefixes:global_prefix_expand, Input, Output).
 
+% typecast/4
+user:goal_expansion(typecast(Val,Type,Hint,Cast),typecast(X^^Expanded, Type, Hint, Cast)) :-
+    nonvar(Val),
+    Val = X^^Source_Type,
+    ground(Source_Type),
+    Source_Type = Prefix:Suffix,
+    !,
+    global_prefix_expand(Prefix:Suffix,Expanded).
+user:goal_expansion(typecast(Val,Type,Hint,Cast),typecast(Val, TypeEx, Hint, Cast)) :-
+    ground(Type),
+    !,
+    Type = Prefix:Suffix,
+    !,
+    global_prefix_expand(Prefix:Suffix,TypeEx).

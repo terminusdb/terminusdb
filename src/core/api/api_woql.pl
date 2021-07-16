@@ -5,7 +5,7 @@
 :- use_module(core(account)).
 
 woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, JSON) :-
-    woql_context(Woql_Prefixes),
+
     % No descriptor to work with until the query sets one up
     (   some(Path) = Path_Option
     ->  do_or_die(resolve_absolute_string_descriptor(Path, Descriptor),
@@ -25,8 +25,6 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Wit
     ;   throw(error(unknown_path_option(Path_Option), _))
     ),
 
-    context_extend_prefixes(Context,Woql_Prefixes,Final_Context),
-
-    json_woql(Query, Final_Context.prefixes, AST),
-    run_context_ast_jsonld_response(Final_Context,AST,JSON).
+    json_woql(Query, AST),
+    run_context_ast_jsonld_response(Context,AST,JSON).
 

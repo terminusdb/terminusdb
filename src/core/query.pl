@@ -44,7 +44,6 @@
               woql_context/1,
               initialise_woql_contexts/0,
               json_woql/2,
-              json_woql/3,
               json_woql_path_element_error_message/4,
 
               % query_response.pl

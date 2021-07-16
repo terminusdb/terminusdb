@@ -146,6 +146,16 @@
   "graph" : {"@type" : "Optional",
              "@class" : "xsd:string" } }
 
+{ "@id" : "AddTriple",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "Value",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
 { "@id" : "Link",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
@@ -222,13 +232,14 @@
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "indicator" : "Indicator",
-  "identifier" : "xsd:string",
+  "variable" : "xsd:string",
   "type" : { "@type" : "Optional",
              "@class" : "xsd:string" } }
 
 { "@id" : "Source",
   "@type" : "TaggedUnion",
   "@key" : { "@type" : "ValueHash" },
+  "post" : "xsd:string",
   "file" : "xsd:string",
   "url" : "xsd:string" }
 
@@ -238,10 +249,12 @@
   "@value" : [ "csv" ] }
 
 { "@id" : "QueryResource",
-  "@type" : "Class",
+  "@type" : "TaggedUnion",
   "@key" : { "@type" : "ValueHash" },
   "source" : "Source",
-  "format" : "FormatType" }
+  "format" : "FormatType",
+  "options" : { "@type" : "Optional",
+                "@class" : "xdd:json" } }
 
 { "@id" : "Get",
   "@type" : "Class",
@@ -371,43 +384,53 @@
   "@subdocument" : [],
   "@abstract" : [] }
 
+{ "@id" : "ArithmeticValue",
+  "@inherits" : ["ArithmeticExpression","DataValue"] }
+
 { "@id" : "Plus",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
 { "@id" : "Minus",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
 { "@id" : "Times",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
 { "@id" : "Divide",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
- { "@id" : "Div",
+{ "@id" : "Div",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
    "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
 { "@id" : "Exp",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
 { "@id" : "Floor",
+  "@inherits" : "ArithmeticExpression",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "argument" : "ArithmeticExpression" }
@@ -514,7 +537,6 @@
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
-  "member" : "DataValue",
   "list" : "DataValue",
   "result" : "DataValue" }
 
@@ -562,14 +584,22 @@
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query"}
 
+{ "@id" : "Order",
+  "@type" : "Enum",
+  "@key" : { "@type" : "ValueHash" },
+  "@value" : [ "asc", "desc" ] }
+
+{ "@id" : "OrderTemplate",
+  "@type" : "Class",
+  "order" : "Order",
+  "variable" : "xsd:string" }
+
 { "@id" : "OrderBy",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
   "ordering" : { "@type" : "List",
-                 "@class" : "xsd:string" },
-  "ascending" : { "@type" : "Optional",
-                  "@class" : "Unit" } }
+                 "@class" : "OrderTemplate" } }
 
 { "@id" : "GroupBy",
   "@type" : "Class",

@@ -868,12 +868,12 @@ bool_convert(0,false).
  * by converting from URI terms to proper CSV library terms.
  */
 convert_csv_options(Options,CSV_Options) :-
-    (   memberchk('http://terminusdb.com/woql#separator'(A),Options)
+    (   memberchk(separator(A),Options)
     ->  atom_codes(A,[C]),
         CSV_Options1 = [separator(C)]
     ;   CSV_Options1 = []),
 
-    (   memberchk('http://terminusdb.com/woql#convert'(Bool_Str),Options)
+    (   memberchk(convert(Bool_Str),Options)
     ->  bool_convert(Bool_Str,Bool),
         CSV_Options2 = [convert(Bool)|CSV_Options1]
     ;   CSV_Options2 = [convert(false)|CSV_Options1]),
@@ -1179,15 +1179,11 @@ compile_wf(with(GN,GS,Q), (Program, Sub_Query)) -->
     },
     compile_wf(Q,Sub_Query),
     update(default_collection,_,Old_Default_Collection).
-compile_wf(get(Spec,File_Spec), Prog) -->
+compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
     {
-        Default = _{  format_header : true,
-                      format_type : "csv"},
-
-        (   as_vars(Spec,Vars),
-            Has_Header = true
-        ;   position_vars(Spec,Vars),
-            Has_Header = false
+        (   as_vars(Spec,Vars)
+        ->  true
+        ;   position_vars(Spec,Vars)
         )
     },
 
@@ -1196,22 +1192,22 @@ compile_wf(get(Spec,File_Spec), Prog) -->
     view(bindings,Bindings),
     view(files,Files),
     {
-        file_spec_path_options(File_Spec, Files, Path, Default, New_Options),
+        file_spec_path_options(Resource, Files, Path, Options, New_Options),
         convert_csv_options(New_Options,CSV_Options),
 
-        (   memberchk(format_type("csv"),New_Options)
+        (   Format = csv
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
             csv_term(Path,Has_Header,Header,Values,Indexing_Term,Prog,CSV_Options)
-        ;   memberchk(format_type("turtle"),New_Options),
+        ;   Format = turtle,
             Has_Header = false
         ->  turtle_term(Path,BVars,Prog,CSV_Options)
-        ;   memberchk(format_type("panda_json"),New_Options)
+        ;   Format = panda
         ->  indexing_term(Spec,Header,Values,Bindings,Indexing_Term),
             json_term(Path,Header,Values,Indexing_Term,Prog,New_Options)
-        ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [File_Spec]),
+        ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [Resource]),
             throw(error(M)))
     }.
-compile_wf(put(Spec,Query,File_Spec), Prog) -->
+compile_wf(put(Spec,Query,resource(File_Spec,_Format,_Opts)), Prog) -->
     {
         maplist([Name as Var,Var,Name]>>(true), Spec, Vars, Names)
     },
@@ -1797,36 +1793,23 @@ query_test_response_test_branch(Query, Response) :-
 query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
-    woql_context(WOQL_Prefixes),
-    Prefixes = ((WOQL_Prefixes).put(Context.prefixes)),
-    context_extend_prefixes(Context,Prefixes,Context0),
-    json_woql(Query, Prefixes, AST),
-    context_extend_prefixes(Context0,Prefixes,Context1),
-    query_response:run_context_ast_jsonld_response(Context1, AST, Response).
+    json_woql(Query, AST),
+    query_response:run_context_ast_jsonld_response(Context, AST, Response).
 
 test(subsumption, [setup(setup_temp_store(State)),
                    cleanup(teardown_temp_store(State))
                   ])
 :-
-    Query = _{'@type' : "woql:Subsumption",
-              'woql:child' : _{ '@type' : "woql:Node",
-                                'woql:node' : "system:Organization"},
-              'woql:parent' : _{'@type' : "woql:Variable",
-                                'woql:variable_name' :
-                                _{'@type' : "xsd:string",
-                                  '@value' : "Parent"}}},
+    Query = _{'@type' : "Subsumption",
+              'child' : _{ '@type' : "NodeValue",
+                           'node' : "Organization"},
+              'parent' : _{'@type' : "NodeValue",
+                           'variable' : "Parent"}},
 
     query_test_response(system_descriptor{}, Query, JSON),
-
     % Tag the dicts so we can sort them
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-    list_to_ord_set(Orderable,Bindings_Set),
-
-    list_to_ord_set([json{'Parent':'@schema:Organization'},
-                     json{'Parent':'@schema:Resource'}],
-                    Expected),
-    ord_seteq(Bindings_Set,Expected).
-
+    Orderable = [json{'Parent':'Organization'}].
 
 test(substring, [
          setup((setup_temp_store(State),
@@ -1834,24 +1817,20 @@ test(substring, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Query = _{'@type' : "woql:Substring",
-              'woql:string' : _{ '@type' : "woql:Datatype",
-                                 'woql:datatype' : _{'@type' : "xsd:string",
-                                                     '@value' : "Test"}},
-              'woql:before' : _{ '@type' : "woql:Datatype",
-                                 'woql:datatype' : _{'@type' : "xsd:integer",
-                                                     '@value' : 1}},
-              'woql:length' : _{'@type' : "woql:Variable",
-                                'woql:variable_name' :
-                                _{'@type' : "xsd:string",
-                                  '@value' : "Length"}},
-              'woql:after' : _{ '@type' : "woql:Datatype",
-                                'woql:datatype' : _{'@type' : "xsd:integer",
-                                                    '@value' : 1}},
-              'woql:substring' : _{'@type' : "woql:Variable",
-                                   'woql:variable_name' :
-                                   _{'@type' : "xsd:string",
-                                     '@value' : "Substring"}}
+    Query = _{'@type' : "Substring",
+              'string' : _{ '@type' : "DataValue",
+                            data : _{'@type' : "xsd:string",
+                                     '@value' : "Test"}},
+              'before' : _{ '@type' : "DataValue",
+                            data : _{'@type' : "xsd:integer",
+                                     '@value' : 1}},
+              'length' : _{'@type' : "DataValue",
+                           variable : "Length"},
+              'after' : _{ '@type' : "DataValue",
+                           data : _{'@type' : "xsd:integer",
+                                    '@value' : 1}},
+              'substring' : _{'@type' : "DataValue",
+                              variable : "Substring"}
              },
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -1865,16 +1844,14 @@ test(typecast_string_integer, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Query = _{'@type' : "woql:Typecast",
-              'woql:typecast_value' : _{ '@type' : "woql:Datatype",
-                                         'woql:datatype' : _{'@type' : "xsd:string",
-                                                             '@value' : "202"}},
-              'woql:typecast_type' : _{ '@type' : "woql:Node",
-                                        'woql:node' : "xsd:integer"},
-              'woql:typecast_result' : _{'@type' : "woql:Variable",
-                                         'woql:variable_name' :
-                                         _{'@type' : "xsd:string",
-                                           '@value' : "Casted"}}},
+    Query = _{'@type' : "Typecast",
+              value : _{ '@type' : "DataValue",
+                         data : _{'@type' : "xsd:string",
+                                  '@value' : "202"}},
+              type : _{ '@type' : "NodeValue",
+                        node : "xsd:integer"},
+              result : _{'@type' : "DataValue",
+                         variable : "Casted"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -1887,21 +1864,20 @@ test(eval, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Query = _{'@type' : "woql:Eval",
-              'woql:expression' :
-              _{ '@type' : "woql:Plus",
-                 'woql:first' : _{ '@type' : "woql:Datatype",
-                                   'woql:datatype' : _{'@type' : "xsd:integer",
-                                                       '@value' : 2}},
-                 'woql:second' : _{ '@type' : "woql:Datatype",
-                                    'woql:datatype' : _{'@type' : "xsd:integer",
-                                                        '@value' : 2}}},
-              'woql:result' : _{'@type' : "woql:Variable",
-                                'woql:variable_name' :
-                                _{'@type' : "xsd:string",
-                                  '@value' : "Sum"}}},
+    Query = _{'@type' : "Eval",
+              expression :
+              _{ '@type' : "Plus",
+                 left : _{ '@type' : "ArithmeticValue",
+                           data : _{'@type' : "xsd:integer",
+                                    '@value' : 2}},
+                 right : _{ '@type' : "ArithmeticValue",
+                            data : _{'@type' : "xsd:integer",
+                                     '@value' : 2}}},
+              result : _{'@type' : "ArithmeticValue",
+                         variable : "Sum"}},
 
     query_test_response_test_branch(Query, JSON),
+
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'xsd:decimal',
               '@value':4}} :< Res.
@@ -1913,13 +1889,13 @@ test(add_triple, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Query = _{'@type' : "woql:AddTriple",
-              'woql:subject' : _{ '@type' : "woql:Node",
-                                  'woql:node' : "DBadmin"},
-              'woql:predicate' : _{ '@type' : "woql:Node",
-                                    'woql:node' : "rdfs:label"},
-              'woql:object' : _{ '@type' : "woql:Node",
-                                 'woql:node' : "xxx"}},
+    Query = _{'@type' : "AddTriple",
+              'subject' : _{ '@type' : "NodeValue",
+                             'node' : "DBadmin"},
+              'predicate' : _{ '@type' : "NodeValue",
+                               'node' : "rdfs:label"},
+              'object' : _{ '@type' : "Value",
+                            'node' : "xxx"}},
 
     make_branch_descriptor('admin', 'test', Descriptor),
     query_test_response(Descriptor, Query, JSON),
@@ -1931,17 +1907,15 @@ test(add_quad, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Query = _{'@type' : "woql:AddQuad",
-              'woql:subject' : _{ '@type' : "woql:Node",
-                                  'woql:node' : "DBadmin"},
-              'woql:predicate' : _{ '@type' : "woql:Node",
-                                    'woql:node' : "rdfs:label"},
-              'woql:object' : _{ '@type' : "woql:Node",
-                                 'woql:node' : "xxx"},
-              'woql:graph' : _{ '@type' : "woql:Datatype",
-                                'woql:datatype' : _{'@type' : "xsd:string",
-                                                    '@value' : "instance"}
-                       }},
+    Query = _{'@type' : "AddTriple",
+              'subject' : _{ '@type' : "NodeValue",
+                             'node' : "DBadmin"},
+              'predicate' : _{ '@type' : "NodeValue",
+                               'node' : "rdfs:label"},
+              'object' : _{ '@type' : "NodeValue",
+                                 'node' : "xxx"},
+              'graph' : "instance"
+             },
 
     make_branch_descriptor('admin', 'test', Descriptor),
     query_test_response(Descriptor, Query, JSON),
@@ -1952,14 +1926,12 @@ test(upper, [
                 create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Query = _{'@type' : "woql:Upper",
-              'woql:left' : _{ '@type' : "woql:Datatype",
-                               'woql:datatype' : _{ '@type' : "xsd:string",
-                                                    '@value' : "Aaaa"}},
-              'woql:right' : _{'@type' : "woql:Variable",
-                               'woql:variable_name' :
-                               _{'@type' : "xsd:string",
-                                 '@value' : "Upcased"}}},
+    Query = _{'@type' : "Upper",
+              'left' : _{ '@type' : "DataValue",
+                          data : _{ '@type' : "xsd:string",
+                                    '@value' : "Aaaa"}},
+              'right' : _{'@type' : "DataValue",
+                          variable : "Upcased"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -1972,28 +1944,21 @@ test(unique, [
                 create_db_without_schema(admin,test))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Query = _{'@type' : "woql:Unique",
-              'woql:base' : _{ '@type' : "woql:Datatype",
-                               'woql:datatype' : _{ '@type' : "xsd:string",
-                                                    '@value' : "http://foo.com/"}},
-              'woql:key_list' : _{ '@type' : "woql:Array",
-                                   'woql:array_element' :
-                              [_{ '@type' : "woql:ArrayElement",
-                                  'woql:index' : _{ '@type' : "xsd:integer", '@value' : 0},
-                                  'woql:datatype' : _{ '@type' : "xsd:string",
-                                                       '@value' : "a"}},
-                               _{ '@type' : "woql:ArrayElement",
-                                  'woql:index' : _{ '@type' : "xsd:integer", '@value' : 1},
-                                  'woql:datatype' : _{ '@type' : "xsd:string",
-                                                       '@value' : "b"}},
-                               _{ '@type' : "woql:ArrayElement",
-                                  'woql:index' : _{ '@type' : "xsd:integer", '@value' : 2},
-                                  'woql:datatype' : _{ '@type' : "xsd:string",
-                                                       '@value' : "c"}}]},
-              'woql:uri' : _{'@type' : "woql:Variable",
-                             'woql:variable_name' :
-                             _{'@type' : "xsd:string",
-                               '@value' : "URI"}}},
+    Query = _{'@type' : "HashKey",
+              'base' : _{ '@type' : "DataValue",
+                          data : _{ '@type' : "xsd:string",
+                                    '@value' : "http://foo.com/"}},
+              'key_list' : [_{ '@type' : "DataValue",
+                               data : _{ '@type' : "xsd:string",
+                                         '@value' : "a"}},
+                            _{ '@type' : "DataValue",
+                               data : _{ '@type' : "xsd:string",
+                                         '@value' : "b"}},
+                            _{ '@type' : "DataValue",
+                               data : _{ '@type' : "xsd:string",
+                                         '@value' : "c"}}],
+              'uri' : _{'@type' : "NodeValue",
+                        variable : "URI"}},
 
     query_test_response_test_branch(Query, JSON),
 
@@ -2005,17 +1970,15 @@ test(split, [
                 create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Query = _{'@type' : "woql:Split",
-              'woql:split_string' : _{ '@type' : "woql:Datatype",
-                                       'woql:datatype' : _{ '@type' : "xsd:string",
-                                                            '@value' : "you_should_be_split"}},
-              'woql:split_pattern' : _{ '@type' : "woql:Datatype",
-                                        'woql:datatype' : _{ '@type' : "xsd:string",
-                                                             '@value' : "_"}},
-              'woql:split_list' : _{'@type' : "woql:Variable",
-                                    'woql:variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Split"}}},
+    Query = _{'@type' : "Split",
+              'string' : _{ '@type' : "DataValue",
+                            data : _{ '@type' : "xsd:string",
+                                      '@value' : "you_should_be_split"}},
+              'pattern' : _{ '@type' : "DataValue",
+                             data : _{ '@type' : "xsd:string",
+                                       '@value' : "_"}},
+              'list' : _{'@type' : "DataValue",
+                         variable : "Split"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -2031,36 +1994,24 @@ test(join, [
                 create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Query = _{'@type' : "woql:Join",
-              'woql:join_list' : _{ '@type' : 'woql:Array',
-                                    'woql:array_element' :
-                             [_{ '@type' : "woql:ArrayElement",
-                                 'woql:index' : _{ '@type' : "xsd:integer",
-                                                   '@value' : 0},
-                                 'woql:datatype' : _{ '@type' : "xsd:string",
-                                                      '@value' : "you"}},
-                              _{ '@type' : "woql:ArrayElement",
-                                 'woql:index' : _{ '@type' : "xsd:integer",
-                                                   '@value' : 1},
-                                 'woql:datatype' : _{ '@type' : "xsd:string",
-                                                      '@value' : "should"}},
-                              _{ '@type' : "woql:ArrayElement",
-                                 'woql:index' : _{ '@type' : "xsd:integer",
-                                                  '@value' : 2},
-                                 'woql:datatype' : _{ '@type' : "xsd:string",
-                                                      '@value' : "be"}},
-                              _{ '@type' : "woql:ArrayElement",
-                                 'woql:index' : _{ '@type' : "xsd:integer",
-                                                  '@value' : 3},
-                                 'woql:datatype' : _{ '@type' : "xsd:string",
-                                                      '@value' : "joined"}}]},
-              'woql:join_separator' : _{ '@type' : "woql:Datatype",
-                                         'woql:datatype' : _{ '@type' : "xsd:string",
-                                                              '@value' : "_"}},
-              'woql:join' : _{'@type' : "woql:Variable",
-                              'woql:variable_name' :
-                              _{'@type' : "xsd:string",
-                                '@value' : "Join"}}},
+    Query = _{'@type' : "Join",
+              'list' : [_{ '@type' : "DataValue",
+                           data : _{ '@type' : "xsd:string",
+                                     '@value' : "you"}},
+                        _{ '@type' : "DataValue",
+                           data : _{ '@type' : "xsd:string",
+                                     '@value' : "should"}},
+                        _{ '@type' : "DataValue",
+                           data : _{ '@type' : "xsd:string",
+                                     '@value' : "be"}},
+                        _{ '@type' : "DataValue",
+                           data : _{ '@type' : "xsd:string",
+                                     '@value' : "joined"}}],
+              'separator' : _{ '@type' : "DataValue",
+                               data : _{ '@type' : "xsd:string",
+                                         '@value' : "_"}},
+              'result' : _{'@type' : "DataValue",
+                           variable : "Join"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -2072,17 +2023,15 @@ test(like, [
                 create_db_without_schema("admin", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    Query = _{'@type' : "woql:Like",
-              'woql:left' : _{ '@type' : "woql:Datatype",
-                               'woql:datatype' : _{ '@type' : "xsd:string",
-                                                    '@value' : "joined"}},
-              'woql:right' : _{ '@type' : "woql:Datatype",
-                                'woql:datatype' : _{ '@type' : "xsd:string",
-                                                     '@value' : "joined"}},
-              'woql:like_similarity' : _{'@type' : "woql:Variable",
-                                         'woql:variable_name' :
-                                         _{'@type' : "xsd:string",
-                                           '@value' : "Similarity"}}},
+    Query = _{'@type' : "Like",
+              'left' : _{ '@type' : "DataValue",
+                          data : _{ '@type' : "xsd:string",
+                                    '@value' : "joined"}},
+              'right' : _{ '@type' : "DataValue",
+                           data : _{ '@type' : "xsd:string",
+                                     '@value' : "joined"}},
+              'similarity' : _{'@type' : "DataValue",
+                               variable : "Similarity"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -2095,19 +2044,17 @@ test(exp, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{'@type' : "woql:Eval",
-              'woql:expression' :
-              _{ '@type' : "woql:Exp",
-                 'woql:first' : _{ '@type' : "woql:Datatype",
-                                   'woql:datatype' : _{'@type' : "xsd:integer",
-                                                       '@value' : 2}},
-                 'woql:second' : _{ '@type' : "woql:Datatype",
-                                    'woql:datatype' : _{'@type' : "xsd:integer",
-                                                        '@value' : 2}}},
-              'woql:result' : _{'@type' : "woql:Variable",
-                                'woql:variable_name' :
-                                _{'@type' : "xsd:string",
-                                  '@value' : "Exp"}}},
+    Query = _{'@type' : "Eval",
+              expression :
+              _{ '@type' : "Exp",
+                 left : _{ '@type' : "ArithmeticValue",
+                           data : _{'@type' : "xsd:integer",
+                                    '@value' : 2}},
+                 right : _{ '@type' : "ArithmeticValue",
+                            data : _{'@type' : "xsd:integer",
+                                     '@value' : 2}}},
+              result : _{'@type' : "ArithmeticValue",
+                         variable : "Exp"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -2131,23 +2078,15 @@ test(limit, [
                       insert('x','y','q'))),
         _Meta),
 
-    Query = _{'@type' : "woql:Limit",
-              'woql:limit' : _{ '@type' : "woql:Datatype",
-                                'woql:datatype' : _{ '@type' : "xsd:integer",
-                                                     '@value' : 2}},
-              'woql:query' : _{ '@type' : "woql:Triple",
-                                'woql:subject' : _{'@type' : "woql:Variable",
-                                                   'woql:variable_name' :
-                                                   _{'@type' : "xsd:string",
-                                                     '@value' : "Subject"}},
-                         'woql:predicate' : _{'@type' : "woql:Variable",
-                                              'woql:variable_name' :
-                                              _{'@type' : "xsd:string",
-                                                '@value' : "Predicate"}},
-                         'woql:object' : _{'@type' : "woql:Variable",
-                                           'woql:variable_name' :
-                                           _{'@type' : "xsd:string",
-                                             '@value' : "Object"}}
+    Query = _{'@type' : "Limit",
+              limit :  2,
+              query : _{ '@type' : "Triple",
+                         'subject' : _{'@type' : "NodeValue",
+                                       variable : "Subject"},
+                         'predicate' : _{'@type' : "NodeValue",
+                                         variable : "Predicate"},
+                         'object' : _{'@type' : "Value",
+                                      variable : "Object"}
                        }},
 
     query_test_response(Descriptor, Query, JSON),
@@ -2166,22 +2105,21 @@ test(indexed_get,
     )
 :-
     Query =
-    _{'@type' : 'woql:Get',
-      'woql:as_vars' : [
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{ '@type' : "xsd:integer",
-                              '@value' : 0},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "First"}},
-          _{'@type' : 'woql:IndexedAsVar',
-            'woql:index' : _{ '@type' : "xsd:integer",
-                              '@value' : 1},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Second"}}],
-      'woql:query_resource' :
-      _{'@type' : 'woql:RemoteResource',
-        'woql:remote_uri' : _{ '@type' : "xsd:anyURI",
-                               '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
+    _{'@type' : 'Get',
+      columns : [
+          _{'@type' : 'Column',
+            indicator : _{ '@type' : "Indicator",
+                           index: 0},
+            variable: "First"},
+          _{'@type' : 'Column',
+            indicator : _{ '@type' : "Indicator",
+                           index: 1},
+            variable : "Second"}],
+      resource :
+      _{'@type' : 'QueryResource',
+        format : "csv",
+        source : _{ '@type' : "Source",
+                    url : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     query_test_response_test_branch(Query, JSON),
     [Res|_] = JSON.bindings,
@@ -2196,23 +2134,22 @@ test(named_get, [
      ])
 :-
     Query =
-    _{'@type' : 'woql:Get',
-      'woql:as_vars' : [
-          _{'@type' : 'woql:NamedAsVar',
-            'woql:identifier' : _{ '@type' : "xsd:string",
-                                   '@value' : "Duration"},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Duration"}},
-          _{'@type' : 'woql:NamedAsVar',
-            'woql:identifier' : _{ '@type' : "xsd:string",
-                                   '@value' : "Bike number"},
-            'woql:variable_name' : _{ '@type' : "xsd:string",
-                                      '@value' : "Bike_Number"}}
+    _{'@type' : 'Get',
+      columns : [
+          _{'@type' : 'Column',
+            indicator : _{ '@type' : "Indicator",
+                           name : "Duration"},
+            variable : "Duration"},
+          _{'@type' : 'Column',
+            indicator : _{ '@type' : "Indicator",
+                           name : "Bike number"},
+            variable : "Bike_Number"}
       ],
-      'woql:query_resource' :
-      _{'@type' : 'woql:RemoteResource',
-        'woql:remote_uri' : _{ '@type' : "xsd:anyURI",
-                               '@value' : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
+      resource :
+      _{'@type' : 'QueryResource',
+        format: "csv",
+        source: _{ '@type' : "Source",
+                   url: "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
     query_test_response_test_branch(Query, JSON),
     [First|_] = JSON.bindings,
@@ -2231,81 +2168,60 @@ test(named_get_two, [
 :-
     Query =
     _{
-        '@type': "woql:Get",
-        'woql:as_vars': [
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "Start station"
-                                   },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "Start_Station"}
+        '@type': "Get",
+        columns: [
+            _{ '@type': "Column",
+               indicator: _{ '@type' : "Indicator",
+                           name : "Start station" },
+               variable: "Start_Station"
              },
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "End station"
-                                   },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "End_Station"
-                                      }
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "End station" },
+               variable: "End_Station"
              },
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "Start date"
-                                   },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "Start_Time"
-                                      }
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "Start date" },
+               variable: "Start_Time"
              },
-            _{
-                '@type': "woql:NamedAsVar",
-                'woql:identifier': _{ '@type': "xsd:string",
-                                      '@value': "End date"
-                                    },
-                'woql:variable_name': _{ '@type': "xsd:string",
-                                         '@value': "End_Time"
-                                       }
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "End date" },
+               variable: "End_Time"
             },
-            _{
-                '@type': "woql:NamedAsVar",
-                'woql:identifier': _{ '@type': "xsd:string",
-                                      '@value': "Duration"
-                                    },
-                'woql:variable_name': _{ '@type': "xsd:string",
-                                         '@value': "Duration"}
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "Duration" },
+                variable: "Duration"
             },
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "Start station number"
-                                   },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "Start_ID" }
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "Start station number" },
+               variable: "Start_ID"
              },
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "End station number"
-                                   },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "End_ID"
-                                      }
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "End station number" },
+               variable: "End_ID"
              },
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "Bike number"
-                                   },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "Bike"
-                                      }},
-            _{ '@type': "woql:NamedAsVar",
-               'woql:identifier': _{ '@type': "xsd:string",
-                                     '@value': "Member type" },
-               'woql:variable_name': _{ '@type': "xsd:string",
-                                        '@value': "Member_Type" }}
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "Bike number"},
+               variable: "Bike"
+             },
+            _{ '@type': "Column",
+               indicator: _{ '@type': "Indicator",
+                             name: "Member type" },
+               variable: "Member_Type"
+             }
         ],
-        'woql:query_resource':
-        _{ '@type': "woql:RemoteResource",
-           'woql:remote_uri': _{'@type': "xsd:anyURI",
-                                '@value': "https://terminusdb.com/t/data/bikeshare/2011-capitalbikeshare-tripdata.csv"
-                               }
+        resource:
+        _{ '@type': "QueryResource",
+           format : "csv",
+           source : _{'@type': "Source",
+                      url: "https://terminusdb.com/t/data/bikeshare/2011-capitalbikeshare-tripdata.csv"
+                     }
          }
     },
 
@@ -2338,25 +2254,18 @@ test(concat, [
      ])
 :-
     Query =
-    _{'@type' : 'woql:Concatenate',
-      'woql:concat_list' :
-      _{'@type' : 'woql:Array',
-        'woql:array_element' : [
-            _{'@type' : 'woql:ArrayElement',
-              'woql:index' : _{ '@type' : "xsd:integer",
-                                '@value' : 0},
-              'woql:datatype' : _{ '@type' : "xsd:string",
-                                   '@value' : "First"}},
-            _{'@type' : 'woql:ArrayElement',
-              'woql:index' : _{ '@type' : "xsd:integer",
-                                '@value' : 1},
-              'woql:datatype' : _{ '@type' : "xsd:string",
-                                   '@value' : "Second"}}
-        ]},
-      'woql:concatenated' :
-      _{'@type' : 'woql:Variable',
-        'woql:variable_name' : _{ '@type' : "xsd:string",
-                                  '@value' : "Concatenated" }}},
+    _{'@type' : 'Concatenate',
+      list : [
+          _{'@type' : 'DataValue',
+            data : _{ '@type' : "xsd:string",
+                      '@value' : "First"}},
+          _{'@type' : 'DataValue',
+            data : _{ '@type' : "xsd:string",
+                      '@value' : "Second"}}
+      ],
+      result :
+      _{'@type' : 'DataValue',
+        variable : "Concatenated" }},
 
     query_test_response(system_descriptor{}, Query, JSON),
     [Res] = JSON.bindings,
@@ -2370,25 +2279,18 @@ test(sum, [
      ])
 :-
     Query =
-    _{'@type' : 'woql:Sum',
-      'woql:sum_list' :
-      _{'@type' : 'woql:Array',
-        'woql:array_element' : [
-            _{'@type' : 'woql:ArrayElement',
-              'woql:index' : _{ '@type' : "xsd:integer",
-                                '@value' : 0},
-              'woql:datatype' : _{ '@type' : "xsd:integer",
-                                   '@value' : 1}},
-            _{'@type' : 'woql:ArrayElement',
-              'woql:index' : _{ '@type' : "xsd:integer",
-                                '@value' : 1},
-              'woql:datatype' : _{ '@type' : "xsd:integer",
-                                   '@value' : 2}}
-        ]},
-      'woql:sum' :
-      _{'@type' : 'woql:Variable',
-        'woql:variable_name' : _{ '@type' : "xsd:string",
-                                  '@value' : "Sum" }}},
+    _{'@type' : 'Sum',
+      list: [
+          _{'@type' : 'DataValue',
+            data : _{ '@type' : "xsd:integer",
+                      '@value' : 1}},
+          _{'@type' : 'DataValue',
+            data : _{ '@type' : "xsd:integer",
+                      '@value' : 2}}
+      ],
+      result :
+      _{'@type' : 'DataValue',
+        variable : "Sum" }},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -2401,24 +2303,17 @@ test(length, [
          cleanup(teardown_temp_store(State))
      ])
 :-
-    Query = _{'@type' : "woql:Length",
-              'woql:length_list' :
-              _{'@type' : 'woql:Array',
-                'woql:array_element' : [
-                    _{'@type' : 'woql:ArrayElement',
-                      'woql:index' : _{ '@type' : "xsd:integer",
-                                        '@value' : 0},
-                      'woql:datatype' : _{ '@type' : "xsd:integer",
-                                           '@value' : 1}},
-                    _{'@type' : 'woql:ArrayElement',
-                      'woql:index' : _{ '@type' : "xsd:integer",
-                                        '@value' : 1},
-                      'woql:datatype' : _{ '@type' : "xsd:integer",
-                                           '@value' : 2}}
-                ]},
-              'woql:length' : _{ '@type' : "woql:Variable",
-                                 'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                           '@value'  : "Length"}}},
+    Query = _{'@type' : "Length",
+              list : [
+                  _{'@type' : 'DataValue',
+                    data : _{ '@type' : "xsd:integer",
+                              '@value' : 1}},
+                  _{'@type' : 'DataValue',
+                    data : _{ '@type' : "xsd:integer",
+                              '@value' : 2}}
+                ],
+              length : _{ '@type' : "DataValue",
+                          variable : "Length"}},
 
     query_test_response_test_branch(Query, JSON),
     [Res] = JSON.bindings,
@@ -2453,40 +2348,28 @@ test(order_by, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{'@type' : "woql:OrderBy",
-              'woql:variable_ordering' : [
-                  _{ '@type' : "woql:VariableOrdering",
-                     'woql:index' : _{'@type' : "xsd:integer",
-                                      '@value' : 0},
-                     'woql:ascending' : _{'@type' : "xsd:boolean",
-                                          '@value' : true},
-                     'woql:variable' : _{'@type' : "woql:Variable",
-                                         'woql:variable_name' :
-                                         _{ '@type' : "xsd:string",
-                                            '@value' : "X"}}}],
-              'woql:query' :
-              _{ '@type' : 'woql:Or',
-                 'woql:query_list' :
-                 [_{'@type' : "woql:QueryListElement",
-                    'woql:index' : _{'@type' : "xsd:integer",
-                                     '@value' : 0},
-                    'woql:query' : _{ '@type' : "woql:Equals",
-                                              'woql:left' : _{'@type' : "woql:Variable",
-                                                              'woql:variable_name' :
-                                                              _{'@type' : "xsd:string",
-                                                                '@value' : "X"}},
-                                              'woql:right' : _{'@type' : "xsd:integer",
-                                                               '@value' : 10}}},
-                  _{'@type' : "woql:QueryListElement",
-                    'woql:index' : _{'@type' : "xsd:integer",
-                                    '@value' : 0},
-                    'woql:query' : _{ '@type' : "woql:Equals",
-                                      'woql:left' : _{'@type' : "woql:Variable",
-                                                      'woql:variable_name' :
-                                                      _{'@type' : "xsd:string",
-                                                        '@value' : "X"}},
-                                      'woql:right' : _{'@type' : "xsd:integer",
-                                                       '@value' : 20}}}]}},
+    Query = _{'@type' : "OrderBy",
+              ordering: [
+                  _{ '@type' : "OrderTemplate",
+                     order : "asc",
+                     variable : "X"}
+              ],
+              query :
+              _{ '@type' : 'Or',
+                 or :
+                 [_{ '@type' : "Equals",
+                     left: _{'@type' : "DataValue",
+                             variable : "X"},
+                     right: _{'@type' : "DataValue",
+                              data:_{'@type' : "xsd:integer",
+                                     '@value' : 10}}},
+                  _{ '@type' : "Equals",
+                     left : _{'@type' : "DataValue",
+                              variable : "X"},
+                     right : _{'@type' : "DataValue",
+                               data:_{'@type' : "xsd:integer",
+                                      '@value' : 20}}}
+                 ]}},
 
     query_test_response_test_branch(Query, JSON),
 
@@ -2501,39 +2384,28 @@ test(order_by_desc, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{'@type' : "woql:OrderBy",
-              'woql:variable_ordering' : [_{ '@type' : "woql:VariableOrdering",
-                                             'woql:index' : _{'@type' : "xsd:integer",
-                                                              '@value' : 0},
-                                             'woql:ascending' : _{'@type' : "xsd:boolean",
-                                                                  '@value' : false},
-                                             'woql:variable' : _{'@type' : "woql:Variable",
-                                                                 'woql:variable_name'
-                                                                 : _{ '@type' : "xsd:string",
-                                                                      '@value' : "X"}}}],
-              'woql:query' :
-              _{ '@type' : 'woql:Or',
-                 'woql:query_list' :
-                 [_{'@type' : "woql:QueryListElement",
-                    'woql:index' : _{'@type' : "xsd:integer",
-                                     '@value' : 0},
-                    'woql:query' : _{ '@type' : "woql:Equals",
-                                     'woql:left' : _{'@type' : "woql:Variable",
-                                                     'woql:variable_name' :
-                                                     _{'@type' : "xsd:string",
-                                                       '@value' : "X"}},
-                                     'woql:right' : _{'@type' : "xsd:integer",
-                                                      '@value' : 10}}},
-                          _{'@type' : "woql:QueryListElement",
-                            'woql:index' : _{'@type' : "xsd:integer",
-                                             '@value' : 0},
-                            'woql:query' : _{ '@type' : "woql:Equals",
-                                              'woql:left' : _{'@type' : "woql:Variable",
-                                                              'woql:variable_name' :
-                                                              _{'@type' : "xsd:string",
-                                                                '@value' : "X"}},
-                                       'woql:right' : _{'@type' : "xsd:integer",
-                                                 '@value' : 20}}}]}},
+    Query = _{'@type' : "OrderBy",
+              ordering : [_{ '@type' : "OrderTemplate",
+                             order : "desc",
+                             variable : "X"
+                           }],
+              query :
+              _{ '@type' : 'Or',
+                 or :
+                 [_{ '@type' : "Equals",
+                     left : _{'@type' : "DataValue",
+                              variable: "X"},
+                     right: _{'@type' : "DataValue",
+                              data: _{'@type' : "xsd:integer",
+                                      '@value' : 10}}
+                   },
+                  _{ '@type' : "Equals",
+                     left : _{'@type' : "DataValue",
+                              variable : "X"},
+                     right : _{'@type' : "DataValue",
+                               data:_{'@type' : "xsd:integer",
+                                      '@value' : 20}}}
+                 ]}},
 
     query_test_response(system_descriptor{}, Query, JSON),
     JSON.bindings = [_{'X':_{'@type':'xsd:integer',
@@ -2666,40 +2538,20 @@ test(group_by, [
                       insert(y,p,w))),
         _Meta),
 
-    Query = _{'@type' : "woql:GroupBy",
-              'woql:group_by' : [_{ '@type' : "woql:VariableListElement",
-                             'woql:index' : _{'@type' : "xsd:integer",
-                                       '@value' : 0},
-                             'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                '@value' : "Subject"}}],
-              'woql:group_template' :  [_{ '@type' : "woql:VariableListElement",
-                                    'woql:index' : _{'@type' : "xsd:integer",
-                                              '@value' : 0},
-                                    'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                       '@value' : "Predicate"}},
-                                 _{ '@type' : "woql:VariableListElement",
-                                    'woql:index' : _{'@type' : "xsd:integer",
-                                              '@value' : 1},
-                                    'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                       '@value' : "Object"}}],
-              'woql:query' : _{ '@type' : "woql:Triple",
-                         'woql:subject' : _{'@type' : "woql:Variable",
-                                     'woql:variable_name' :
-                                     _{'@type' : "xsd:string",
-                                       '@value' : "Subject"}},
-                         'woql:predicate' : _{'@type' : "woql:Variable",
-                                       'woql:variable_name' :
-                                       _{'@type' : "xsd:string",
-                                         '@value' : "Predicate"}},
-                         'woql:object' : _{'@type' : "woql:Variable",
-                                    'woql:variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Object"}}
+    Query = _{'@type' : "GroupBy",
+              group_by : ["Subject"],
+              template:  ["Predicate",
+                          "Object"],
+              query : _{ '@type' : "Triple",
+                         subject: _{'@type' : "NodeValue",
+                                    variable : "Subject"},
+                         predicate: _{'@type' : "NodeValue",
+                                      variable : "Predicate"},
+                         object: _{'@type' : "Value",
+                                      variable : "Object"}
                        },
-              'woql:grouped' : _{'@type' : "woql:Variable",
-                          'woql:variable_name' :
-                          _{'@type' : "xsd:string",
-                            '@value' : "Grouped"}}},
+              grouped : _{'@type' : "Value",
+                          variable : "Grouped"}},
 
     query_test_response(Descriptor, Query, JSON),
 
@@ -2730,33 +2582,19 @@ test(group_by_simple_template, [
                       insert(y,p,w))),
         _Meta),
 
-    Query = _{'@type' : "woql:GroupBy",
-              'woql:group_by' : [_{ '@type' : "woql:VariableListElement",
-                             'woql:index' : _{'@type' : "xsd:integer",
-                                       '@value' : 0},
-                             'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                '@value' : "Subject"}}],
-              'woql:group_template' :  _{ '@type' : "woql:Variable",
-                                          'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                      '@value' : "Predicate"}},
-              'woql:query' : _{ '@type' : "woql:Triple",
-                         'woql:subject' : _{'@type' : "woql:Variable",
-                                     'woql:variable_name' :
-                                     _{'@type' : "xsd:string",
-                                       '@value' : "Subject"}},
-                         'woql:predicate' : _{'@type' : "woql:Variable",
-                                       'woql:variable_name' :
-                                       _{'@type' : "xsd:string",
-                                         '@value' : "Predicate"}},
-                         'woql:object' : _{'@type' : "woql:Variable",
-                                    'woql:variable_name' :
-                                    _{'@type' : "xsd:string",
-                                      '@value' : "Object"}}
+    Query = _{'@type' : "GroupBy",
+              group_by : ["Subject"],
+              template:  ["Predicate"],
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
                        },
-              'woql:grouped' : _{'@type' : "woql:Variable",
-                          'woql:variable_name' :
-                          _{'@type' : "xsd:string",
-                            '@value' : "Grouped"}}},
+              grouped: _{'@type' : "Value",
+                         variable : "Grouped"}},
 
     query_test_response(Descriptor, Query, JSON),
 
@@ -2769,29 +2607,18 @@ test(select, [setup(setup_temp_store(State)),
               cleanup(teardown_temp_store(State))
              ]) :-
 
-    Query = _{'@type' : "woql:Limit",
-              'woql:limit' : _{'@type' : "xsd:integer",
-                               '@value' : 1},
-              'woql:query' : _{'@type' : "woql:Select",
-                        'woql:variable_list' : [_{ '@type' : "woql:VariableListElement",
-                                                   'woql:index' : _{'@type' : "xsd:integer",
-                                                                    '@value' : 0},
-                                                   'woql:variable_name' : _{ '@type' : "xsd:string",
-                                                                             '@value' : "Subject"}}],
-                        'woql:query' : _{ '@type' : "woql:Triple",
-                                   'woql:subject' : _{'@type' : "woql:Variable",
-                                               'woql:variable_name' :
-                                               _{'@type' : "xsd:string",
-                                                 '@value' : "Subject"}},
-                                   'woql:predicate' : _{'@type' : "woql:Variable",
-                                                 'woql:variable_name' :
-                                                 _{'@type' : "xsd:string",
-                                                   '@value' : "Predicate"}},
-                                   'woql:object' : _{'@type' : "woql:Variable",
-                                              'woql:variable_name' :
-                                              _{'@type' : "xsd:string",
-                                                '@value' : "Object"}}
-                                 }}},
+    Query = _{'@type' : "Limit",
+              limit : 1,
+              query: _{'@type' : "Select",
+                       variables : ["Subject"],
+                       query : _{ '@type' : "Triple",
+                                  subject: _{'@type' : "NodeValue",
+                                             variable : "Subject"},
+                                  predicate: _{'@type' : "NodeValue",
+                                               variable : "Predicate"},
+                                  object: _{'@type' : "Value",
+                                            variable : "Object"}
+                                }}},
 
     query_test_response(system_descriptor{}, Query, JSON),
 
@@ -2804,100 +2631,51 @@ test(double_select, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{ '@type': "woql:Using",
-               'woql:collection': _{ '@type': "xsd:string",
-                                     '@value': "_system" },
-               'woql:query':
-               _{ '@type': "woql:And",
-                  'woql:query_list':
-                  [_{'@type': "woql:QueryListElement",
-                     'woql:index':
-                     _{ '@type': "xsd:nonNegativeInteger",
-                        '@value': 0 },
-                     'woql:query':
-                     _{ '@type': "woql:Select",
-                        'woql:variable_list': [
-                            _{ '@type': "woql:VariableListElement",
-                               'woql:variable_name':
-                               _{ '@value': "X",
-                                  '@type': "xsd:string"
-                                },
-                               'woql:index':
-                               _{ '@type': "xsd:nonNegativeInteger",
-                                  '@value': 0}
-                             }
-                        ],
-                        'woql:query':
-                        _{ '@type': "woql:Triple",
-                           'woql:subject':
-                           _{ '@type': "woql:Variable",
-                              'woql:variable_name':
-                              _{ '@value': "X",
-                                 '@type': "xsd:string"
-                               }
-                            },
-                           'woql:predicate':
-                           _{ '@type': "woql:Variable",
-                              'woql:variable_name':
-                              _{ '@value': "P",
-                                 '@type': "xsd:string"
-                               }
-                            },
-                           'woql:object':
-                           _{ '@type': "woql:Datatype",
-                              'woql:datatype':
-                              _{ '@type': "xsd:string",
-                                 '@value': "admin"
-                               }
-                            }
-                         }
-                      }
-                    },
-                   _{ '@type': "woql:QueryListElement",
-                      'woql:index':
-                      _{ '@type': "xsd:nonNegativeInteger",
-                         '@value': 1
-                       },
-                      'woql:query':
-                      _{ '@type': "woql:Select",
-                         'woql:variable_list': [
-                             _{ '@type': "woql:VariableListElement",
-                                'woql:variable_name':
-                                _{ '@value': "Y",
-                                   '@type': "xsd:string"
-                                 },
-                                'woql:index':
-                                _{ '@type': "xsd:nonNegativeInteger",
-                                   '@value': 0
-                                 }
-                              }
-                         ],
-                         'woql:query':
-                         _{
-                             '@type': "woql:Triple",
-                             'woql:subject':
-                             _{ '@type': "woql:Variable",
-                                'woql:variable_name':
-                                _{ '@value': "Y",
-                                   '@type': "xsd:string"
-                                 }
-                              },
-                             'woql:predicate':
-                             _{ '@type': "woql:Variable",
-                                'woql:variable_name':
-                                _{ '@value': "P",
-                                   '@type': "xsd:string"
-                                 }
-                              },
-                             'woql:object':
-                             _{ '@type': "woql:Datatype",
-                                'woql:datatype':
-                                _{ '@type': "xsd:string",
-                                   '@value': "admin"
-                                 }
-                              }
-                         }
+    Query = _{ '@type': "Using",
+               collection: "_system",
+               query:
+               _{ '@type': "And",
+                  and:
+                  [_{ '@type': "Select",
+                      variables: ["X"],
+                      query:
+                      _{ '@type': "Triple",
+                         subject:
+                         _{ '@type': "NodeValue",
+                            variable: "X"
+                          },
+                         predicate:
+                         _{ '@type': "NodeValue",
+                            variable: "P"
+                          },
+                         object:
+                         _{ '@type': "Value",
+                            data: _{ '@type': "xsd:string",
+                                     '@value': "admin"
+                                   }
+                          }
                        }
+                    },
+                   _{ '@type': "Select",
+                      variables: ["Y"],
+                      query:
+                         _{
+                             '@type': "Triple",
+                             subject:
+                             _{ '@type': "NodeValue",
+                                variable: "Y"
+                              },
+                             predicate:
+                             _{ '@type': "NodeValue",
+                                variable: "P"
+                              },
+                             object:
+                             _{ '@type': "Value",
+                                data: _{ '@type': "xsd:string",
+                                         '@value': "admin"
+                                       }
+                              }
+                         }
                     }
                   ]
                 }
@@ -2909,21 +2687,6 @@ test(double_select, [
         (   get_dict('X',Elt, _),
             get_dict('Y',Elt, _))
     ).
-
-
-test(when, [
-         setup((setup_temp_store(State),
-                create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    Query = _{'@type' : "woql:When",
-              'woql:query' : _{'@type' : "woql:True"},
-              'woql:consequent' : _{'@type' : "woql:True"}},
-    
-    query_test_response_test_branch(Query, JSON),
-    [_{}] = JSON.bindings.
-
 
 test(transaction_semantics_after, [
          setup((setup_temp_store(State),
@@ -3134,13 +2897,10 @@ test(metadata_triple_count_json, [
         _Meta_Data
     ),
 
-    Query = _{'@type' : "woql:TripleCount",
-              'woql:resource' : _{'@type' : "xsd:string",
-                                  '@value' : "admin/test"},
-              'woql:triple_count' : _{'@type' : "woql:Variable",
-                                      'woql:variable_name' :
-                                      _{'@type' : "xsd:string",
-                                        '@value' : "Count"}}},
+    Query = _{'@type' : "TripleCount",
+              resource : "admin/test",
+              count : _{'@type' : "DataValue",
+                        variable : "Count"}},
 
     query_test_response(Descriptor, Query, JSON),
     [Binding] = (JSON.bindings),
@@ -3148,7 +2908,7 @@ test(metadata_triple_count_json, [
     (Binding.'Count'.'@value' = 13).
 
 
-test(metadata_triple_count_json, [
+test(metadata_size_count_json, [
          setup((setup_temp_store(State),
                 State = _-Path,
                 metadata:set_current_db_path(Path),
@@ -3170,13 +2930,10 @@ test(metadata_triple_count_json, [
         _Meta_Data
     ),
 
-    Query = _{'@type' : "woql:Size",
-              'woql:resource' : _{'@type' : "xsd:string",
-                                  '@value' : "admin/test"},
-              'woql:size' : _{'@type' : "woql:Variable",
-                              'woql:variable_name' :
-                              _{'@type' : "xsd:string",
-                                '@value' : "Size"}}},
+    Query = _{'@type' : "Size",
+              resource: "admin/test",
+              size: _{'@type' : "DataValue",
+                      variable : "Size"}},
 
     query_test_response(Descriptor, Query, JSON),
     [Binding] = (JSON.bindings),
@@ -3207,13 +2964,10 @@ test(metadata_size_commits_json, [
         _Meta_Data
     ),
 
-    Query = _{'@type' : "woql:Size",
-              'woql:resource' : _{'@type' : "xsd:string",
-                                  '@value' : "admin/test/local/_commits"},
-              'woql:size' : _{'@type' : "woql:Variable",
-                              'woql:variable_name' :
-                              _{'@type' : "xsd:string",
-                                '@value' : "Size"}}},
+    Query = _{'@type' : "Size",
+              resource: "admin/test/local/_commits",
+              size : _{'@type' : "DataValue",
+                       variable : "Size"}},
 
     query_test_response(Descriptor, Query, JSON),
     [Binding] = (JSON.bindings),
@@ -3269,108 +3023,63 @@ test(json_disjunction_test, [
         _Meta_Data
     ),
 
-    Query = _{'@type' : "woql:And",
-              'woql:query_list' :
-              [_{'@type' : "woql:QueryListElement",
-                 'woql:index' : _{'@type' : "xsd:integer",
-                           '@value' : 0},
-                 'woql:query' :
-                 _{'@type' : "woql:Triple",
-                   'woql:subject' : _{'@type' : "woql:Variable",
-                               'woql:variable_name' :
-                               _{ '@type' : "xsd:string",
-                                  '@value' : "AID"}},
-                   'woql:predicate' : _{'@type' : "woql:Node",
-                                 'woql:node' : _{ '@id' : "@schema:account_owner"}},
-                   'woql:object' : _{'@type' : "woql:Variable",
-                              'woql:variable_name' :
-                              _{'@type' : "xsd:string",
-                                '@value' : "UID"}}}},
-               _{'@type' : "woql:QueryListElement",
-                 'woql:index' : _{'@type' : "xsd:integer",
-                           '@value' : 1},
-                 'woql:query' :
-                 _{'@type' : "woql:Or",
-                   'woql:query_list' :
-                   [_{'@type' : "woql:QueryListElement",
-                      'woql:index' : _{'@type' : "xsd:integer",
-                                '@value' : 0},
-                      'woql:query' :
-                      _{'@type' : "woql:And",
-                        'woql:query_list' :
-                        [_{'@type' : "woql:QueryListElement",
-                           'woql:index' : _{'@type' : "xsd:integer",
-                                     '@value' : 0},
-                           'woql:query' :
-                           _{'@type' : "woql:Triple",
-                             'woql:subject' : _{'@type' : "woql:Variable",
-                                         'woql:variable_name' :
-                                         _{ '@type' : "xsd:string",
-                                            '@value' : "AID"}},
-                             'woql:predicate' : _{'@type' : "woql:Node",
-                                           'woql:node' : _{ '@id' : "@schema:public_databases"}},
-                             'woql:object' : _{'@type' : "woql:Variable",
-                                        'woql:variable_name' :
-                                        _{'@type' : "xsd:string",
-                                          '@value' : "DBID"}}}},
-                         _{'@type' : "woql:QueryListElement",
-                           'woql:index' : _{'@type' : "xsd:integer",
-                                     '@value' : 0},
-                           'woql:query' : _{'@type' : "woql:Equals",
-                                     'woql:left' : _{'@type' : "woql:Variable",
-                                              'woql:variable_name' :
-                                              _{'@type' : "xsd:string",
-                                                '@value' : "Public_Or_Private"}},
-                                     'woql:right' : _{'@type' : "woql:Datatype",
-                                                      'woql:datatype' : _{'@type' : "xsd:string",
-                                                            '@value' : "public"}}}}]}},
-                    _{'@type' : "woql:QueryListElement",
-                      'woql:index' : _{'@type' : "xsd:integer",
-                                '@value' : 0},
-                      'woql:query' :
-                      _{'@type' : "woql:And",
-                        'woql:query_list' :
-                        [_{'@type' : "woql:QueryListElement",
-                           'woql:index' : _{'@type' : "xsd:integer",
-                                     '@value' : 0},
-                           'woql:query' :
-                           _{'@type' : "woql:Triple",
-                             'woql:subject' : _{'@type' : "woql:Variable",
-                                         'woql:variable_name' :
-                                         _{ '@type' : "xsd:string",
-                                            '@value' : "AID"}},
-                             'woql:predicate' : _{'@type' : "woql:Node",
-                                                  'woql:node' : _{'@id' : "@schema:private_databases"}},
-                             'woql:object' : _{'@type' : "woql:Variable",
-                                        'woql:variable_name' :
-                                        _{'@type' : "xsd:string",
-                                          '@value' : "DBID"}}}},
-                         _{'@type' : "woql:QueryListElement",
-                           'woql:index' : _{'@type' : "xsd:integer",
-                                     '@value' : 0},
-                           'woql:query' : _{'@type' : "woql:Equals",
-                                     'woql:left' : _{'@type' : "woql:Variable",
-                                              'woql:variable_name' :
-                                              _{'@type' : "xsd:string",
-                                                '@value' : "Public_Or_Private"}},
-                                     'woql:right' : _{'@type' : "woql:Datatype",
-                                                      'woql:datatype' : _{'@type' : "xsd:string",
-                                                                          '@value' : "private"}}}}]}}
-                   ]}}]},
+    Query = _{'@type' : "And",
+              and:
+              [_{'@type' : "Triple",
+                 subject : _{'@type' : "NodeValue",
+                             variable : "AID"},
+                 predicate : _{'@type' : "NodeValue",
+                               'node' : "@schema:account_owner"},
+                 object : _{'@type' : "Value",
+                            variable : "UID"}},
+               _{'@type' : "Or",
+                 or:
+                   [_{'@type' : "And",
+                      and:
+                      [_{'@type' : "Triple",
+                         subject: _{'@type' : "NodeValue",
+                                    variable : "AID"},
+                         predicate: _{'@type' : "NodeValue",
+                                      node : "@schema:public_databases"},
+                         object: _{'@type' : "Value",
+                                   variable : "DBID"}},
+                       _{'@type' : "Equals",
+                         left: _{'@type' : "DataValue",
+                                 variable: "Public_Or_Private"},
+                         right: _{'@type' : "DataValue",
+                                  data : _{'@type' : "xsd:string",
+                                           '@value' : "public"}}
+                        }
+                      ]},
+                    _{'@type' : "And",
+                      and :
+                      [_{'@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable: "AID"},
+                         predicate : _{'@type' : "NodeValue",
+                                       node: "@schema:private_databases"},
+                         object : _{'@type' : "Value",
+                                    variable : "DBID"}},
+                       _{'@type' : "Equals",
+                         left : _{'@type' : "DataValue",
+                                  variable : "Public_Or_Private"},
+                         right : _{'@type' : "DataValue",
+                                   data : _{'@type' : "xsd:string",
+                                            '@value' : "private"}}}
+                      ]
+                     }
+                   ]
+                }
+              ]
+             },
 
-    woql_context(Prefixes),
-    Schema = (Context.prefixes.'@schema'),
-    Base = (Context.prefixes.'@base'),
-    New_Prefixes = (Prefixes.put(_{woql: "http://terminusdb.com/schema/woql#",
-                                   '@base' : Base,
-                                   '@schema' : Schema})),
-    json_woql(Query, New_Prefixes, AST),
+    json_woql(Query, AST),
 
     AST = (
-        t(v('AID'),'http://somewhere.for.now/schema#account_owner',v('UID')),
-        (   t(v('AID'),'http://somewhere.for.now/schema#public_databases',v('DBID')),
+        t(v('AID'),'@schema':account_owner,v('UID')),
+        (   t(v('AID'),'@schema':public_databases,v('DBID')),
             v('Public_Or_Private')="public"^^'http://www.w3.org/2001/XMLSchema#string'
-        ;   t(v('AID'),'http://somewhere.for.now/schema#private_databases',v('DBID')),
+        ;   t(v('AID'),'@schema':private_databases,v('DBID')),
             v('Public_Or_Private')="private"^^'http://www.w3.org/2001/XMLSchema#string')
     ),
 
@@ -3461,130 +3170,80 @@ test(get_put, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{ '@type': "woql:Put",
-               'woql:as_vars':
-               [ _{ '@type': "woql:NamedAsVar",
-                    'woql:identifier': _{ '@type': "xsd:string",
-                                          '@value': "v:Start_Station"
-                                        },
-                    'woql:variable_name': _{ '@type': "xsd:string",
-                                             '@value': "End_Station"
-                                           }
+    Query = _{ '@type': "Put",
+               columns:
+               [ _{ '@type': "Column",
+                    indicator: _{ '@type': "Indicator",
+                                  name: "End Station"
+                                },
+                    variable: "End_Station"
                   }
                ],
-               'woql:query': _{ '@type': "woql:Get",
-                                'woql:as_vars':
-                                [ _{ '@type': "woql:NamedAsVar",
-                                     'woql:identifier': _{ '@type': "xsd:string",
-                                                           '@value': "Start station"                                                          },
-                                     'woql:variable_name': _{
-                                                               '@type': "xsd:string",
-                                                               '@value': "Start_Station"
-                                                           }
-                                   },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "End station"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "End_Station"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "Start date"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "Start_Time"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "End date"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "End_Time"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "Duration"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "Duration"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "Start station number"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "Start_ID"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "End station number"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "End_ID"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "Bike number"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "Bike"
-                                                            }
-                                  },
-                                  _{
-                                      '@type': "woql:NamedAsVar",
-                                      'woql:identifier': _{
-                                                             '@type': "xsd:string",
-                                                             '@value': "Member type"
-                                                         },
-                                      'woql:variable_name': _{
-                                                                '@type': "xsd:string",
-                                                                '@value': "Member_Type"
-                                                            }
-                                  }
-                                ],
-                                'woql:query_resource': _{
-                                                           '@type': "woql:RemoteResource",
-                                                           'woql:remote_uri': _{
-                                                                                  '@type': "xsd:anyURI",
-                                                                                  '@value': "https://terminusdb.com/t/data/bike_tutorial.csv"
-                                                                              }
-                                                       }
-                              },
-               'woql:query_resource': _{ '@type': "woql:FileResource",
-                                         'woql:file':
-                                         _{ '@type': "xsd:string",
-                                            '@value': TestFile
-                                          }
-                                       }
+               query: _{ '@type': "Get",
+                         columns:
+                         [ _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "Start station" },
+                              variable: "Start_Station"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "End station" },
+                              variable: "End_Station"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "Start date" },
+                              variable: "Start_Time"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "End date" },
+                              variable: "End_Time"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "Duration"
+                                          },
+                              variable: "Duration"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "Start station number"
+                                          },
+                              variable: "Start_ID"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "End station number"
+                                          },
+                              variable: "End_ID"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "Bike number"
+                                          },
+                              variable: "Bike"
+                            },
+                           _{ '@type': "Column",
+                              indicator: _{ '@type': "Indicator",
+                                            name: "Member type"
+                                          },
+                              variable: "Member_Type"
+                            }
+                         ],
+                         resource: _{ '@type': "QueryResource",
+                                      source: _{ '@type': "Source",
+                                                 url: "https://terminusdb.com/t/data/bike_tutorial.csv"
+                                               },
+                                      format: "csv"
+                                   }
+                       },
+               resource: _{ '@type': "QueryResource",
+                            source : _{ '@type' : "Source",
+                                        file: TestFile },
+                            format: "csv"
+                          }
              },
 
     query_test_response_test_branch(Query, _JSON),
@@ -3596,38 +3255,24 @@ test(idgen, [
          cleanup(teardown_temp_store(State))
      ]) :-
     Atom = '{
-  "@type": "woql:IDGenerator",
-  "woql:base": {
-    "@type": "woql:Datatype",
-    "woql:datatype": {
-      "@type": "woql:Node",
-      "woql:node": "Journey"
-    }
+  "@type": "LexicalKey",
+  "base": {
+    "@type": "Value",
+    "node": "Journey"
   },
-  "woql:key_list": {
-    "@type": "woql:Array",
-    "woql:array_element": [
-      {
-        "@type": "woql:ArrayElement",
-        "woql:datatype": {
+  "key_list": [
+      { "@type": "DataValue",
+        "data": {
           "@type": "xsd:string",
           "@value": "test"
-        },
-        "woql:index": {
-          "@type": "xsd:nonNegativeInteger`",
-          "@value": 0
         }
       }
-    ]
-  },
-  "woql:uri": {
-    "@type": "woql:Variable",
-    "woql:variable_name": {
-      "@value": "Journey_ID",
-      "@type": "xsd:string"
+    ],
+  "uri": {
+    "@type": "Value",
+    "variable": "Journey_ID"
     }
-  }
-}',
+  }',
     atom_json_dict(Atom, Query, []),
     query_test_response_test_branch(Query, JSON),
 
@@ -3640,22 +3285,19 @@ test(isa_literal, [
          cleanup(teardown_temp_store(State))
      ]) :-
     Atom = '{
-  "@type": "woql:IsA",
-  "woql:element": {
-    "@type": "woql:Datatype",
-    "woql:datatype": {
+  "@type": "IsA",
+  "element": {
+    "@type": "DataValue",
+    "data": {
       "@type": "xsd:string",
       "@value": "test"
     }
   },
-  "woql:of_type": {
-    "@type": "woql:Variable",
-    "woql:variable_name": {
-      "@value": "Type",
-      "@type": "xsd:string"
+  "of_type": {
+    "@type": "DataValue",
+    "variable": "Type"
     }
-  }
-}',
+  }',
     atom_json_dict(Atom, Query, []),
     query_test_response_test_branch(Query, JSON),
     [Value] = (JSON.bindings),
@@ -3665,17 +3307,14 @@ test(isa_node, [setup(setup_temp_store(State)),
                 cleanup(teardown_temp_store(State))
                ]) :-
     Atom = '{
-  "@type": "woql:IsA",
-  "woql:element": {
-    "@type": "woql:Node",
-    "woql:node": "terminusdb://system/data/admin"
+  "@type": "IsA",
+  "element": {
+    "@type": "NodeValue",
+    "node": "terminusdb://system/data/admin"
   },
-  "woql:of_type": {
-    "@type": "woql:Variable",
-    "woql:variable_name": {
-      "@value": "Type",
-      "@type": "xsd:string"
-    }
+  "of_type": {
+    "@type": "NodeValue",
+    "variable": "Type"
   }
 }',
     atom_json_dict(Atom, Query, []),
@@ -3685,72 +3324,6 @@ test(isa_node, [setup(setup_temp_store(State)),
     [Value] = (JSON.bindings),
     (Value.'Type') = '@schema:User'.
 
-test(temp_graph_rdf, [
-         blocked('No temp store yet'),
-         setup((setup_temp_store(State),
-                create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    Atom = '{
-  "@type": "woql:Limit",
-  "woql:limit": {
-    "@type": "woql:Datatype",
-    "woql:datatype": {
-      "@type": "xsd:nonNegativeInteger",
-      "@value": 50
-    }
-  },
-  "woql:query": {
-    "@type": "woql:With",
-    "woql:graph": {
-      "@type": "woql:Datatype",
-      "woql:datatype": {
-        "@type": "xsd:string",
-        "@value": "graph://temp"
-      }
-    },
-    "woql:query_resource": {
-      "@type": "woql:FileResource",
-      "woql:file": {
-        "@type": "xsd:string",
-        "@value": "/app/local_files/language_skills_collection.ttl"
-      }
-    },
-    "woql:query": {
-      "@type": "woql:Quad",
-      "woql:subject": {
-        "@type": "woql:Variable",
-        "woql:variable_name": {
-          "@value": "Subject",
-          "@type": "xsd:string"
-        }
-      },
-      "woql:predicate": {
-        "@type": "woql:Variable",
-        "woql:variable_name": {
-          "@value": "Predicate",
-          "@type": "xsd:string"
-        }
-      },
-      "woql:object": {
-        "@type": "woql:Variable",
-        "woql:variable_name": {
-          "@value": "Object",
-          "@type": "xsd:string"
-        }
-      },
-      "woql:graph_filter": {
-        "@type": "xsd:string",
-        "@value": "graph://temp"
-      }
-    }
-  }
-}',
-    atom_json_dict(Atom,Query,[]),
-    resolve_absolute_string_descriptor("admin/test", Descriptor),
-    query_test_response(Descriptor, Query, _JSON).
-
 test(date_marshall, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -3758,7 +3331,8 @@ test(date_marshall, [
      ]) :-
 
     AST = (get([as('Start date', v('Start date'), 'http://www.w3.org/2001/XMLSchema#dateTime')],
-               remote("https://terminusdb.com/t/data/bike_tutorial.csv", _{}))),
+               resource(remote("https://terminusdb.com/t/data/bike_tutorial.csv"), csv, _{}),
+               true)),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
@@ -3954,80 +3528,48 @@ test(using_sequence, [
          cleanup(teardown_temp_store(State))
      ]) :-
     Atom = '{
-  "@type": "woql:And",
-  "woql:query_list": [
+  "@type": "And",
+  "and": [
     {
-      "@type": "woql:QueryListElement",
-      "woql:index": {
-        "@type": "xsd:nonNegativeInteger",
-        "@value": 0
-      },
-      "woql:query": {
-        "@type": "woql:Using",
-        "woql:collection": {
-          "@type": "xsd:string",
-          "@value": "_system"
-        },
-        "woql:query": {
-          "@type": "woql:Triple",
-          "woql:subject": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "DA",
-              "@type": "xsd:string"
-            }
+        "@type": "Using",
+        "collection": "_system",
+        "query" : {
+          "@type": "Triple",
+          "subject": {
+            "@type": "NodeValue",
+            "variable": "DA"
           },
-          "woql:predicate": {
-            "@type": "woql:Node",
-            "woql:node": "system:resource_name"
+          "predicate": {
+            "@type": "NodeValue",
+            "node": "resource_name"
           },
-          "woql:object": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "o",
-              "@type": "xsd:string"
-            }
+          "object": {
+            "@type": "Value",
+            "variable": "o"
           }
         }
-      }
     },
     {
-      "@type": "woql:QueryListElement",
-      "woql:index": {
-        "@type": "xsd:nonNegativeInteger",
-        "@value": 1
-      },
-      "woql:query": {
-        "@type": "woql:Using",
-        "woql:collection": {
-          "@type": "xsd:string",
-          "@value": "admin/test"
-        },
-        "woql:query": {
-          "@type": "woql:Triple",
-          "woql:subject": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "D",
-              "@type": "xsd:string"
-            }
+        "@type": "Using",
+        "collection": "admin/test",
+        "query": {
+          "@type": "Triple",
+          "subject": {
+            "@type": "NodeValue",
+            "variable": "D"
           },
-          "woql:predicate": {
-            "@type": "woql:Node",
-            "woql:node": "system:database_name"
+          "predicate": {
+            "@type": "NodeValue",
+            "node": "database_name"
           },
-          "woql:object": {
-            "@type": "woql:Variable",
-            "woql:variable_name": {
-              "@value": "o",
-              "@type": "xsd:string"
-            }
+          "object": {
+            "@type": "Value",
+            "variable": "o"
           }
         }
       }
-    }
-  ]
-}',
+    ]
+  }',
 
     atom_json_dict(Atom,Query,[]),
     resolve_absolute_string_descriptor("admin/test", Descriptor),
@@ -4286,24 +3828,19 @@ test(typeof, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{'@type' : "woql:And",
-              'woql:query_list' :
-              [_{'@type' : "woql:QueryListElement",
-                 'woql:index' : _{'@type' : "xsd:integer",
-                           '@value' : 0},
-                 'woql:query' : _{'@type' : "woql:Equals",
-                           'woql:left' : _{'@type' : "xsd:string",
-                                    '@value' : "test"},
-                           'woql:right' : _{'@type' : "woql:Variable",
-                                     'woql:variable_name' : "X"}}},
-               _{'@type' : "woql:QueryListElement",
-                 'woql:index' : _{'@type' : "xsd:integer",
-                           '@value' : 1},
-                 'woql:query' : _{'@type' : "woql:TypeOf",
-                           'woql:type' : _{'@type' : "woql:Variable",
-                                     'woql:variable_name' : "Type"},
-                           'woql:value' : _{'@type' : "woql:Variable",
-                                     'woql:variable_name' : "X"}}}]},
+    Query = _{'@type' : "And",
+              and :
+              [_{'@type' : "Equals",
+                 left: _{'@type' : "DataValue",
+                         data: _{'@type' : "xsd:string",
+                                 '@value' : "test"}},
+                 right: _{'@type' : "DataValue",
+                          variable : "X"}},
+               _{'@type' : "TypeOf",
+                 type: _{'@type' : "Value",
+                         variable : "Type"},
+                 value: _{'@type' : "Value",
+                          variable : "X"}}]},
 
     query_test_response(system_descriptor{}, Query, JSON),
     [Result] = (JSON.bindings),
@@ -4315,26 +3852,22 @@ test(once, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{'@type' : "woql:Once",
-              'woql:query': _{'@type' : "woql:Or",
-                              'woql:query_list' :
-                       [_{'@type' : "woql:QueryListElement",
-                          'woql:index' : _{'@type' : "xsd:integer",
-                                    '@value' : 0},
-                          'woql:query' : _{'@type' : "woql:Equals",
-                                    'woql:left' : _{'@type' : "xsd:string",
-                                             '@value' : "foo"},
-                                    'woql:right' : _{'@type' : "woql:Variable",
-                                              'woql:variable_name' : "X"}}},
-                        _{'@type' : "woql:QueryListElement",
-                          'woql:index' : _{'@type' : "xsd:integer",
-                                    '@value' : 1},
-                          'woql:query' : _{'@type' : "woql:Equals",
-                                    'woql:left' : _{'@type' : "xsd:string",
-                                             '@value' : "bar"},
-                                    'woql:right' : _{'@type' : "woql:Variable",
-                                              'woql:variable_name' : "X"}}}]
-                      }
+    Query = _{'@type' : "Once",
+              'query': _{'@type' : "Or",
+                         or:
+                         [_{'@type' : "Equals",
+                            left: _{'@type' : "DataValue",
+                                    data:_{'@type' : "xsd:string",
+                                           '@value' : "foo"}},
+                            right: _{'@type' : "DataValue",
+                                     variable : "X"}},
+                         _{'@type' : "Equals",
+                           left: _{'@type' : "DataValue",
+                                   data:_{'@type' : "xsd:string",
+                                          '@value' : "bar"}},
+                           right: _{'@type' : "DataValue",
+                                    variable : "X"}}]
+                        }
              },
     query_test_response(system_descriptor{}, Query, JSON),
     [Result] = (JSON.bindings),
@@ -4346,23 +3879,13 @@ test(literal_datetime, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{
-                '@type': "woql:Equals",
-                'woql:left': _{
-                                 '@type': "woql:Variable",
-                                 'woql:variable_name': _{
-                                                           '@value': "X",
-                                                           '@type': "xsd:string"
-                                                       }
-                             },
-                'woql:right': _{
-                                  '@type': "woql:Datatype",
-                                  'woql:datatype': _{
-                                                       '@value': "2021-02-23T21:12:58Z",
-                                                       '@type': "xsd:dateTime"
-                                                   }
-                              }
-            },
+    Query = _{ '@type': "Equals",
+               left: _{ '@type': "DataValue",
+                        variable: "X" },
+               right: _{ '@type': "DataValue",
+                         data: _{ '@value': "2021-02-23T21:12:58Z",
+                                  '@type': "xsd:dateTime" } }
+             },
 
     query_test_response(system_descriptor{}, Query, _JSON),
     !.
@@ -4373,25 +3896,18 @@ test(language_en_variable, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{ '@type': "woql:Triple",
-               'woql:subject':
-               _{ '@type': "woql:Variable",
-                  'woql:variable_name':
-                  _{ '@value': "s",
-                     '@type': "xsd:string"
-                   }
+    Query = _{ '@type': "Triple",
+               'subject':
+               _{ '@type': "NodeValue",
+                  variable: "s"
                 },
-               'woql:predicate':
-               _{ '@type': "woql:Node",
-                  'woql:node': "title"
+               'predicate':
+               _{ '@type': "NodeValue",
+                  'node': "title"
                 },
-               'woql:object':
-               _{ '@type': "woql:Variable",
-                  'woql:variable_name':
-                  _{ '@value': "title",
-                     '@language' : "en"
-                     %'@type': "xsd:string"
-                   }
+               'object':
+               _{ '@type': "Value",
+                  variable: "title"
                 }
              },
     resolve_absolute_string_descriptor("admin/db", Descriptor),
@@ -4415,25 +3931,18 @@ test(language_en_variable, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{ '@type': "woql:Triple",
-               'woql:subject':
-               _{ '@type': "woql:Variable",
-                  'woql:variable_name':
-                  _{ '@value': "s",
-                     '@type': "xsd:string"
-                   }
+    Query = _{ '@type': "Triple",
+               'subject':
+               _{ '@type': "NodeValue",
+                  variable: "s"
                 },
-               'woql:predicate':
-               _{ '@type': "woql:Node",
-                  'woql:node': "title"
+               'predicate':
+               _{ '@type': "NodeValue",
+                  'node': "title"
                 },
-               'woql:object':
-               _{ '@type': "woql:Variable",
-                  'woql:variable_name':
-                  _{ '@value': "title",
-                     '@language' : "en"
-                     %'@type': "xsd:string"
-                   }
+               'object':
+               _{ '@type': "Value",
+                  variable: "title"
                 }
              },
     resolve_absolute_string_descriptor("admin/db", Descriptor),
@@ -4459,29 +3968,30 @@ test(and_type, [
                 create_db_without_schema("admin", "db"))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    And_Type = '{ "@type": "woql:And",
-  "woql:query_list": [
-   {"@type": "woql:Triple",
-    "woql:subject": {
-      "@type": "woql:Variable",
-      "woql:variable_name": "X"},
-    "woql:predicate": {
-          "@type": "woql:Variable",
-          "woql:variable_name": "P"
+    And_Type = '{ "@type": "And",
+  "and": [
+   {"@type": "Triple",
+    "subject": {
+      "@type": "NodeValue",
+      "variable": "X"},
+    "predicate": {
+          "@type": "NodeValue",
+          "variable": "P"
         },
-    "woql:object": {
-          "@type": "woql:Variable",
-          "woql:variable_name": "Z"
+    "object": {
+          "@type": "Value",
+          "variable": "Z"
         }
       },
-    { "@type": "woql:TypeOf",
-      "woql:value": {
-          "@type": "woql:Variable",
-          "woql:variable_name": "Z"
+    { "@type": "TypeOf",
+      "value": {
+          "@type": "DataValue",
+          "variable": "Z"
         },
-      "woql:type": {
-          "@type": "xsd:string",
-          "@value": "en"
+      "type": {
+          "@type": "DataValue",
+          "data" : { "@type": "xsd:string",
+                    "@value": "en" }
         }
     }]}',
     atom_json_dict(And_Type, Query, []),
@@ -4507,24 +4017,21 @@ test(gyear_cast, [
          cleanup(teardown_temp_store(State))
      ]) :-
     Typecast = '{
-  "@type": "woql:Typecast",
-  "woql:typecast_value": {
-    "@type": "woql:Datatype",
-    "woql:datatype": {
+  "@type": "Typecast",
+  "value": {
+    "@type": "DataValue",
+    "data": {
       "@type": "xsd:string",
       "@value": "1999"
     }
   },
-  "woql:typecast_type": {
-    "@type": "woql:Node",
-    "woql:node": "xsd:gYear"
+  "type": {
+    "@type": "NodeValue",
+    "node": "xsd:gYear"
   },
-  "woql:typecast_result": {
-    "@type": "woql:Variable",
-    "woql:variable_name": {
-      "@value": "V",
-      "@type": "xsd:string"
-    }
+  "result": {
+    "@type": "Value",
+    "variable": "V"
   }
 }',
 
@@ -4552,27 +4059,21 @@ test(schema_prefix, [
     ),
 
     Atom = '{
-  "@type": "woql:Using",
-  "woql:collection": {
-    "@type": "xsd:string",
-    "@value": "_commits"
-  },
-  "woql:query": {
-    "@type": "woql:Triple",
-    "woql:subject": {
-      "@type": "woql:Variable",
-      "woql:variable_name": {
-        "@value": "a",
-        "@type": "xsd:string"
-      }
+  "@type": "Using",
+  "collection": "_commits",
+  "query": {
+    "@type": "Triple",
+    "subject": {
+      "@type": "NodeValue",
+      "variable": "a"
     },
-    "woql:predicate": {
-      "@type": "woql:Node",
-      "woql:node": "rdf:type"
+    "predicate": {
+      "@type": "NodeValue",
+      "node": "rdf:type"
     },
-    "woql:object": {
-      "@type": "woql:Node",
-      "woql:node": "ref:Branch"
+    "object": {
+      "@type": "Value",
+      "node": "ref:Branch"
     }
   }
 }',
