@@ -430,7 +430,8 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_SERVER_PACK_DIR',
                          'TERMINUSDB_JWT_ENABLED',
-                         'TERMINUSDB_SERVER_TMP_PATH'
+                         'TERMINUSDB_SERVER_TMP_PATH',
+                         'PATH'
                      ],
                      Env_List),
 
