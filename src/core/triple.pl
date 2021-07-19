@@ -33,6 +33,7 @@
               gyear_month_string/2,
               gmonth_day_string/2,
               gday_string/2,
+              current_xsd_date_time/1,
               uri_to_prefixed/3,
               schema_uri_to_prefixed/3,
               instance_uri_to_prefixed/3,

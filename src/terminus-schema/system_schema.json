@@ -75,6 +75,7 @@
              "@fields" : [ "name" ] },
   "label" : "xsd:string",
   "comment" : "xsd:string",
+  "creation_date" : "xsd:dateTime",
   "state" : "DatabaseState" }
 
 { "@id" : "DatabaseState",

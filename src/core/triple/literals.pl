@@ -13,6 +13,7 @@
               gyear_month_string/2,
               gmonth_day_string/2,
               gday_string/2,
+              current_xsd_date_time/1,
               uri_to_prefixed/3,
               schema_uri_to_prefixed/3,
               instance_uri_to_prefixed/3,
@@ -259,6 +260,11 @@ duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
     !,
     atom_codes(String,Codes),
     phrase(xsd_parser:duration(Sign,Y,M,D,HH,MM,SS),Codes).
+
+current_xsd_date_time(XSD) :-
+    get_time(Unix),
+    stamp_date_time(Unix, date(YY,MM,DD,H,M,S,_,_,_), 0),
+    date_time_string(date_time(YY,MM,DD,H,M,S),XSD).
 
 is_number_type(Type) :-
     (   Type = 'http://www.w3.org/2001/XMLSchema#float'

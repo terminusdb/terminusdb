@@ -82,13 +82,14 @@ agent_name_exists(Askable, Name) :-
 
 insert_db_object(System_Transaction, Organization_Name, Database_Name, Label, Comment, DB_Uri) :-
     organization_name_uri(System_Transaction, Organization_Name, Organization_Uri),
-
+    current_xsd_date_time(Date),
     insert_document(
         System_Transaction,
         _{ '@type' : 'UserDatabase',
            'name' : Database_Name,
            'label' : Label,
            'state' : "creating",
+           'creation_date' : Date,
            'comment' : Comment},
         DB_Uri),
 
