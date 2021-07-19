@@ -156,6 +156,36 @@
   "graph" : {"@type" : "Optional",
              "@class" : "xsd:string" } }
 
+{ "@id" : "AddedTriple",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "Value",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "DeleteTriple",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "Value",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
+{ "@id" : "DeletedTriple",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "subject" : "NodeValue",
+  "predicate" : "NodeValue",
+  "object" : "Value",
+  "graph" : {"@type" : "Optional",
+             "@class" : "xsd:string" } }
+
 { "@id" : "Link",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
@@ -544,7 +574,6 @@
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
-  "member" : "DataValue",
   "list" : "DataValue",
   "separator" : "DataValue",
   "result" : "DataValue" }
@@ -568,7 +597,7 @@
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
   "query" : "Query",
-  "start" : "xsd:nonNegativeInteger" }
+  "limit" : "xsd:nonNegativeInteger" }
 
 { "@id" : "Regexp",
   "@type" : "Class",
@@ -610,7 +639,7 @@
   "group_by" : { "@type" : "List",
                  "@class" : "xsd:string" },
   "query" : "Query",
-  "grouped" : "DataValue" }
+  "grouped" : "Value" }
 
 { "@id" : "Length",
   "@type" : "Class",
@@ -674,7 +703,7 @@
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "PathPattern",
-  "inverse" : "xsd:string" }
+  "predicate" : "xsd:string" }
 
 { "@id" : "PathSequence",
   "@type" : "Class",
