@@ -406,7 +406,7 @@
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
   "expression" : "ArithmeticExpression",
-  "result" : "DataValue" }
+  "result" : "ArithmeticValue" }
 
 { "@id" : "ArithmeticExpression",
   "@type" : "Class",
@@ -415,7 +415,17 @@
   "@abstract" : [] }
 
 { "@id" : "ArithmeticValue",
-  "@inherits" : ["ArithmeticExpression","DataValue"] }
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A variable or node.",
+      "@properties" : { "data" : "An xsd data type value.",
+                        "variable" : "A variable." }
+  },
+  "@subdocument" : [],
+  "@inherits" : "ArithmeticExpression",
+  "@key" : { "@type" : "ValueHash" },
+  "data" : "xsd:anySimpleType",
+  "variable" : "xsd:string" }
 
 { "@id" : "Plus",
   "@inherits" : "ArithmeticExpression",
@@ -678,8 +688,8 @@
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
   "value" : "Value",
-  "type" : "DataValue",
-  "result" : "DataValue" }
+  "type" : "NodeValue",
+  "result" : "Value" }
 
 { "@id" : "PathPattern",
   "@type" : "Class",
