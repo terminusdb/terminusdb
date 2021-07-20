@@ -44,10 +44,13 @@
       "@comment" : "A variable, node or data point.",
       "@properties" : { "node" : "A URI representing a resource.",
                         "variable" : "A variable.",
+                        "list" : "A list of datavalues",
                         "data" : "An xsd data type value." }
   },
   "@subdocument" : [],
   "@key" : { "@type" : "ValueHash" },
+  "list" : { "@type" : "List",
+             "@class" : "Value" },
   "node" : "xsd:string",
   "variable" : "xsd:string",
   "data" : "xsd:anySimpleType" }
@@ -69,10 +72,13 @@
   "@documentation" : {
       "@comment" : "A variable or node.",
       "@properties" : { "data" : "An xsd data type value.",
-                        "variable" : "A variable." }
+                        "variable" : "A variable.",
+                        "list" : "A list of datavalues" }
   },
   "@subdocument" : [],
   "@key" : { "@type" : "ValueHash" },
+  "list" : { "@type" : "List",
+             "@class" : "DataValue" },
   "data" : "xsd:anySimpleType",
   "variable" : "xsd:string" }
 
@@ -415,7 +421,7 @@
   "@abstract" : [] }
 
 { "@id" : "ArithmeticValue",
-  "@type" : "Class",
+  "@type" : "TaggedUnion",
   "@documentation" : {
       "@comment" : "A variable or node.",
       "@properties" : { "data" : "An xsd data type value.",

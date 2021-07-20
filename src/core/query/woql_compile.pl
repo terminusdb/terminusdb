@@ -1874,8 +1874,7 @@ test(typecast_string_integer, [
 test(eval, [
          setup((setup_temp_store(State),
                 create_db_without_schema(admin,test))),
-         cleanup(teardown_temp_store(State)),
-         fixme('refactoring woql')
+         cleanup(teardown_temp_store(State))
      ])
 :-
     Query = _{'@type' : "Eval",
@@ -1921,8 +1920,7 @@ test(add_triple, [
 test(add_quad, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State)),
-         fixme('refactoring woql')
+         cleanup(teardown_temp_store(State))
      ])
 :-
     Query = _{'@type' : "AddTriple",
@@ -1930,8 +1928,8 @@ test(add_quad, [
                              'node' : "DBadmin"},
               'predicate' : _{ '@type' : "NodeValue",
                                'node' : "rdfs:label"},
-              'object' : _{ '@type' : "NodeValue",
-                                 'node' : "xxx"},
+              'object' : _{ '@type' : "Value",
+                            'node' : "xxx"},
               'graph' : "instance"
              },
 
@@ -1943,15 +1941,14 @@ test(add_quad, [
 test(upper, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State)),
-         fixme('refactoring woql')
+         cleanup(teardown_temp_store(State))
      ]) :-
     Query = _{'@type' : "Upper",
-              'left' : _{ '@type' : "DataValue",
-                          data : _{ '@type' : "xsd:string",
-                                    '@value' : "Aaaa"}},
-              'right' : _{'@type' : "DataValue",
-                          variable : "Upcased"}},
+              mixed : _{ '@type' : "DataValue",
+                         data : _{ '@type' : "xsd:string",
+                                   '@value' : "Aaaa"}},
+              upper : _{'@type' : "DataValue",
+                        variable : "Upcased"}},
 
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
@@ -1981,7 +1978,8 @@ test(unique, [
               'uri' : _{'@type' : "NodeValue",
                         variable : "URI"}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
 
     [Res] = JSON.bindings,
     _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
@@ -2001,7 +1999,8 @@ test(split, [
               'list' : _{'@type' : "DataValue",
                          variable : "Split"}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Split': [_{'@type':'xsd:string','@value':"you"},
                 _{'@type':'xsd:string','@value':"should"},
@@ -2013,28 +2012,32 @@ test(split, [
 test(join, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Need a theory of datatype lists')
      ]) :-
     Query = _{'@type' : "Join",
-              'list' : [_{ '@type' : "DataValue",
-                           data : _{ '@type' : "xsd:string",
-                                     '@value' : "you"}},
-                        _{ '@type' : "DataValue",
-                           data : _{ '@type' : "xsd:string",
-                                     '@value' : "should"}},
-                        _{ '@type' : "DataValue",
-                           data : _{ '@type' : "xsd:string",
-                                     '@value' : "be"}},
-                        _{ '@type' : "DataValue",
-                           data : _{ '@type' : "xsd:string",
-                                     '@value' : "joined"}}],
+              'list' : _{ '@type' : 'DataValue',
+                          'list' : [_{ '@type' : "DataValue",
+                                       data : _{ '@type' : "xsd:string",
+                                                 '@value' : "you"}},
+                                    _{ '@type' : "DataValue",
+                                       data : _{ '@type' : "xsd:string",
+                                                 '@value' : "should"}},
+                                    _{ '@type' : "DataValue",
+                                       data : _{ '@type' : "xsd:string",
+                                                 '@value' : "be"}},
+                                    _{ '@type' : "DataValue",
+                                       data : _{ '@type' : "xsd:string",
+                                                 '@value' : "joined"}}]
+                        },
               'separator' : _{ '@type' : "DataValue",
                                data : _{ '@type' : "xsd:string",
                                          '@value' : "_"}},
               'result' : _{'@type' : "DataValue",
                            variable : "Join"}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Join': _{'@type':'xsd:string',
                 '@value':"you_should_be_joined"}} :< Res.

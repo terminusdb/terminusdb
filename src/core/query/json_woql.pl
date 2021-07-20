@@ -613,8 +613,8 @@ json_type_to_woql_ast('HashKey',JSON,WOQL,Path) :-
                                |Path]),
     WOQL = hash(WBase,WKey,WURI).
 json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
-    _{left :  S,
-      right : V
+    _{mixed :  S,
+      upper : V
      } :< JSON,
     json_to_woql_ast(S,WS,[left
                            |Path]),
@@ -622,8 +622,8 @@ json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
                            |Path]),
     WOQL = upper(WS,WV).
 json_type_to_woql_ast('Lower',JSON,WOQL,Path) :-
-    _{left : S,
-      right : V
+    _{mixed : S,
+      lower : V
      } :< JSON,
     json_to_woql_ast(S,WS,[left
                            |Path]),
@@ -859,6 +859,8 @@ json_type_to_woql_ast('DataValue',JSON,WOQL,_) :-
     ->  json_data_to_woql_ast(Var,Var_String^^_),
         atom_string(Var_Atom, Var_String),
         WOQL = v(Var_Atom)
+    ;   _{list: List} :< JSON
+    ->  json_data_to_woql_ast(List,WOQL)
     ).
 json_type_to_woql_ast('Value',JSON,WOQL,_) :-
     (   _{node: Node} :< JSON
@@ -869,6 +871,8 @@ json_type_to_woql_ast('Value',JSON,WOQL,_) :-
         WOQL = v(Var_Atom)
     ;   _{data: Data} :< JSON
     ->  json_data_to_woql_ast(Data,WOQL)
+    ;   _{list: List} :< JSON
+    ->  json_data_to_woql_ast(List,WOQL)
     ).
 json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
     _{value : Value,
