@@ -179,11 +179,13 @@ info_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Ping Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(db/ok), cors_handler(Method, ok_handler),
+:- http_handler(api(ok), cors_handler(Method, ok_handler),
                 [method(Method),
-                 methods([options,get,post,put,patch,delete])]).
+                 methods([options,get])]).
 
-ok_handler(_Request,_System_DB, _Auth).
+ok_handler(_Method, _Request, _System_DB, _Auth) :-
+    format('Content-type: application/octets~n', []),
+    format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),

@@ -2,6 +2,14 @@
 
 Some CURL examples to make things easier for people building clients in various languages.
 
+# Ping
+
+Ping the server to see if it is alive
+
+```bash
+curl -X GET "http://127.0.0.1:6363/api/ok" -u "admin:root"
+```
+
 # Connect
 
 ```bash
