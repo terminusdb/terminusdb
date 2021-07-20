@@ -24,6 +24,7 @@
               nuke_schema_documents/1,
               database_context/2,
               insert_context_document/2,
+              run_insert_document/4,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
               write_json_stream_to_schema/2,
