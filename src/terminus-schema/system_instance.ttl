@@ -15,6 +15,7 @@
   scm:comment "a test db" ;
   scm:label "test" ;
   scm:name "bar" ;
+  scm:creation_date "2021-07-19T14:21:28.000Z"^^xsd:dateTime ;
   scm:state scm:DatabaseState_finalized .
 
 <UserDatabase_foo>
@@ -22,6 +23,7 @@
   scm:comment "a test db" ;
   scm:label "test" ;
   scm:name "foo" ;
+  scm:creation_date "2021-08-10T14:21:05.000Z"^^xsd:dateTime ;
   scm:state scm:DatabaseState_finalized .
 
 <admin>
