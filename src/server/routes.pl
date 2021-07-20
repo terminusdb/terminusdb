@@ -177,6 +177,14 @@ info_handler(get, Request, System_DB, Auth) :-
                                        'api:info' : Info,
                                        'api:status' : 'api:success'}))).
 
+
+%%%%%%%%%%%%%%%%%%%% Ping Handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(db/ok), cors_handler(Method, ok_handler),
+                [method(Method),
+                 methods([options,get,post,put,patch,delete])]).
+
+ok_handler(_Request,_System_DB, _Auth).
+
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
