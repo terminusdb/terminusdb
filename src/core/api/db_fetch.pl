@@ -67,10 +67,6 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ->  Document = _{ repository_head: Repository_Head }
     ;   Document = _{}),
 
-    (   is_local_https(URL)
-    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
-    ;   Additional_Options = []),
-
     remote_pack_url(URL,Pack_URL),
 
     http_post(Pack_URL,
@@ -79,7 +75,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
               [request_header('Authorization'=Authorization),
                json_object(dict),
                status_code(Status)
-              |Additional_Options]),
+              ]),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)

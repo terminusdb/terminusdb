@@ -153,11 +153,6 @@ remote_tus_url(URL, TUS_URL) :-
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
-
-    (   is_local_https(Remote_URL)
-    ->  Additional_Options = [cert_verify_hook(cert_accept_any)]
-    ;   Additional_Options = []),
-
     catch(
         (   % Try TUS protocol (we could check resulting options too for create etc...)
             remote_tus_url(Remote_URL, TUS_URL),
@@ -188,7 +183,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                      json_object(dict),
                      timeout(infinite),
                      status_code(Status_Code)
-                     |Additional_Options]),
+                    ]),
           E,
           throw(error(communication_failure(E),_))),
 

@@ -186,9 +186,7 @@
               benchmark/0,
 
               % http_utils.pl
-              basic_authorization/3,
-              is_local_https/1
-
+              basic_authorization/3
           ]).
 
 % note: test_utils is intentionally omitted
