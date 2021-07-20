@@ -224,6 +224,11 @@ with_transaction_(Query_Context,
         Meta_Data = (Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}))
     ;   !,
         fail).
+with_transaction_(_,
+                  _,
+                  _) :-
+    throw(error(transaction_retry_exceeded, _)).
+
 
 :- use_module(core(util/test_utils)).
 :- use_module(library(http/json)).

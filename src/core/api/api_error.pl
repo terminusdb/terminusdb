@@ -1147,6 +1147,9 @@ generic_exception_jsonld(origin_cannot_be_branched(Descriptor),JSON) :-
     format(string(Msg), "origin ~w cannot be branched", [Descriptor]),
     JSON = _{'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(transaction_retry_exceeded, JSON) :-
+    JSON = _{'api:status' : 'api:server_error',
+             'api:message': "Transaction retry count exceeded in internal operation"}.
 
 json_http_code(JSON,Code) :-
     Status = (JSON.'api:status'),
