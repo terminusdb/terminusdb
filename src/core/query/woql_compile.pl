@@ -613,7 +613,7 @@ compile_query(Term, Prog, Ctx_Out) :-
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
     (   safe_guard_removal(Term, Optimized),
-        * pre_flight_access(Context, Term),
+        * pre_flight_access(Ctx_In, Term),
         do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
@@ -881,28 +881,26 @@ convert_csv_options(Options,CSV_Options) :-
 
     CSV_Options = CSV_Options2.
 
-find_resource(t(X,P,Y,Graph_Type), Collection, Default_Read_Graph, Default_Write_Graph, Read, Write) :-
-    Read = [resource(Collection,Graph_Type)],
-    Wead = [].
-find_resource(delete(X,P,Y,Graph_Type), Collection, Default_Read_Graph, Default_Write_Graph, Read, Write) :-
+find_resources(t(_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,Type)].
+find_resources(delete(_,_,_,Graph_Type), Collection, _Default_Read_Graph, _Default_Write_Graph, Read, Write) :-
     Write = [resource(Collection,Graph_Type)],
     Read = [].
-find_resource(delete(X,P,Y), Collection, Default_Read_Graph, Default_Write_Graph, Read, Write) :-
-    Read = []
+find_resources(delete(_,_,_), Collection, _Default_Read_Graph, Default_Write_Graph, Read, Write) :-
     Write = [resource(Collection,Default_Write_Graph)],
-find_resource(insert(X,P,Y,G), Collection, _Default_Read_Graph, _Default_Write_Graph, Read, Write) :-
-    Read = []
-    Write = [resource(Collection,G)].
-find_resource((P,Q), Collection, DRG, DWG, Read, Write) :-
-    find_resource(P, Collection, DRG, DWG, Read_P, Write_P),
-    find_resource(Q, Collection, DRG, DWG, Read_Q, Write_Q),
+    Read = [].
+find_resources(insert(_,_,_,Graph_Type), Collection, _Default_Read_Graph, _Default_Write_Graph, Read, Write) :-
+    Write = [resource(Collection,Graph_Type)],
+    Read = [].
+find_resources((P,Q), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read_P, Write_P),
+    find_resources(Q, Collection, DRG, DWG, Read_Q, Write_Q),
     union(Read_P, Read_Q, Read),
     union(Write_P, Write_Q, Write).
-find_resource(using(Collection_String,P), Collection, DRG, DWG, Read, Write) :-
-    resolve_string_descriptor(Collection_String, Collection),
-    find_resource(P, Collection, DRG, DWG, Read_P, Write_P),
-    union(Read_P, Read_Q, Read),
-    union(Write_P, Write_Q, Write).
+find_resources(using(Collection_String,P), _Collection, DRG, DWG, Read, Write) :-
+    resolve_absolute_string_descriptor(Collection_String, Collection),
+    find_resources(P, Collection, DRG, DWG, Read, Write).
 
 pre_flight_access(Context, AST) :-
     find_resources(AST,
