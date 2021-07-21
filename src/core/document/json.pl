@@ -120,7 +120,8 @@ get_value(Elaborated, Value) :-
     get_dict('@id', Elaborated, Value).
 get_value(Elaborated,Value) :-
     is_dict(Elaborated),
-    get_dict('@type',Elaborated,"@container"),
+    get_dict('@container',Elaborated,List_Type),
+    memberchk(List_Type, ["@array", "@list", "@set"]),
     !,
     get_dict('@value',Elaborated, List),
     member(Elt,List),
@@ -150,10 +151,18 @@ get_path_value(Elaborated,Path,Value) :-
     ->  Path = [P],
         V = Value
     ;   get_value(V,Value)
-    ->  Path = [P]
+    *->  Path = [P]
     ;   get_path_value(V,Sub_Path,Value),
         Path = [P|Sub_Path]
     ).
+get_path_value(Elaborated,[I|Path],Value) :-
+    is_list(Elaborated),
+    sort(Elaborated, Sorted),
+    !,
+    % We must be sorted to ensure stability.
+    % NOTE: This probably breaks if there are unbound dictionary tags!
+    nth0(I, Sorted, Elt),
+    get_path_value(Elt, Path, Value).
 
 get_field_values(JSON,Context,Fields,Values) :-
     findall(
@@ -3623,6 +3632,65 @@ test(partial_document_elaborate,
                     'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
                                                 '@type':"@id"}
                   }.
+
+test(partial_document_elaborate,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@id' : 'Dog_Henry',
+                '@type':'Dog',
+                hair_colour: "blue"
+               },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,JSON_ID),
+
+    JSON_ID = json{ '@id':'http://i/Dog_Henry',
+                    '@type':'http://s/Dog',
+                    'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
+                                                '@type':"@id"}
+                  }.
+
+test(all_path_values,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema2(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    JSON = json{'@id' : 'Mystery%20Readers',
+                '@type' : 'BookClub',
+                name: "Mystery Readers",
+                book_list: [ json{ name : "And Then There Were None" },
+                             json{ name : "In Cold Blood" }
+                           ]
+               },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB,JSON,JSON_El),
+
+    get_all_path_values(JSON_El, Paths),
+    Paths =
+    [['@type']-'http://s/BookClub',
+     ['http://s/book_list','@type']-'http://s/Book',
+     ['http://s/book_list','@value',0,'@type']-'http://s/Book',
+     ['http://s/book_list','@value',0,'http://s/name']-("And Then There Were None"^^'http://www.w3.org/2001/XMLSchema#string'),
+     ['http://s/book_list','@value',1,'@type']-'http://s/Book',
+     ['http://s/book_list','@value',1,'http://s/name']-("In Cold Blood"^^'http://www.w3.org/2001/XMLSchema#string'),
+     ['http://s/name']-("Mystery Readers"^^'http://www.w3.org/2001/XMLSchema#string')].
 
 test(partial_document_elaborate_list,
      [

@@ -3088,8 +3088,7 @@ test(ast_disjunction_test, [
 test(json_disjunction_test, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State)),
-         fixme('Complex value hash recieves wrong value on lists')
+         cleanup(teardown_temp_store(State))
      ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
