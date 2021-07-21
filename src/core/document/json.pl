@@ -4637,37 +4637,33 @@ test(named_parametric_query, [
                                              message : "boo"}, Query, Id),
 
     get_document(Desc, Id, JSON2),
-
-    JSON2 = json{'@id':'NamedParametricQuery_user_name_uri',
-                 '@type':'NamedParametricQuery',
-                 name:"user_name_uri",
-                 parameters:["User_Name","URI"],
-                 query:
-                 json{'@id':'And_baaf3afcb1550fca6f056c2320ac1985a788e880',
-                      '@type':'And',
-                      and:[json{'@id':'Data_5bede08c2f7d67926360a3354506e3185abb4289',
-                                '@type':'Data',
-                                object:
-                                json{'@id':'DataValue_d297b13d259bb2907ab4ee4765630d16c70dbbd0',
-                                     '@type':'DataValue',
-                                     variable:"User_Name"},
-                                predicate:
-                                json{'@id':'NodeValue_6c8cfac7a2f90775aef8d87c3b8bff1cf5b785dd',
-                                     '@type':'NodeValue',
-                                     node:"name"},
-                                subject:
-                                json{'@id':'NodeValue_2a08557c4ddb4dac5acccf4d7d065ab97941aeef',
-                                     '@type':'NodeValue',
-                                     variable:"URI"}},
-                           json{'@id':'IsA_455780e860a42ee2fc5d079dd421cacaeed85197',
-                                '@type':'IsA',
-                                element:json{'@id':'NodeValue_2a08557c4ddb4dac5acccf4d7d065ab97941aeef',
-                                             '@type':'NodeValue',
-                                             variable:"URI"},
-                                type:json{'@id':'NodeValue_aa894772405b3e0a4d2e86351103d65a7b906b17',
-                                          '@type':'NodeValue',
-                                          node:"User"}}]}}.
-
+    JSON2 =
+    json{'@id':'NamedParametricQuery_user_name_uri',
+         '@type':'NamedParametricQuery',
+         name:"user_name_uri",
+         parameters:["User_Name","URI"],
+         query:json{'@id':'And_58e5a25b35ac30a91441abee01e2ec262d99f808',
+                    '@type':'And',
+                    and:
+                    [json{'@id':'Data_5bede08c2f7d67926360a3354506e3185abb4289',
+                          '@type':'Data',
+                          object:json{'@id':'DataValue_d297b13d259bb2907ab4ee4765630d16c70dbbd0',
+                                      '@type':'DataValue',
+                                      variable:"User_Name"},
+                          predicate:json{'@id':'NodeValue_6c8cfac7a2f90775aef8d87c3b8bff1cf5b785dd',
+                                         '@type':'NodeValue',
+                                         node:"name"},
+                          subject:json{'@id':'NodeValue_2a08557c4ddb4dac5acccf4d7d065ab97941aeef',
+                                       '@type':'NodeValue',
+                                       variable:"URI"}},
+                     json{'@id':'IsA_455780e860a42ee2fc5d079dd421cacaeed85197',
+                          '@type':'IsA',
+                          element:json{'@id':'NodeValue_2a08557c4ddb4dac5acccf4d7d065ab97941aeef',
+                                       '@type':'NodeValue',
+                                       variable:"URI"},
+                          type:json{'@id':'NodeValue_aa894772405b3e0a4d2e86351103d65a7b906b17',
+                                    '@type':'NodeValue',
+                                    node:"User"}}]}}.
 
 :- end_tests(woql_document).
 
