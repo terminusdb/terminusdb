@@ -426,46 +426,6 @@ refute_instance_schema(Validation_Object, Witness) :-
              xrdf(Instance, Subject, _, _)),
     refute_subject(Validation_Object,Subject,Witness).
 
-/*
-insert_document(JSON,JSON_ID) :-
-    json_elaborate(JSON,Elaborated),
-    json_jsonid(Elaborated,JSON_ID),
-    (   json_instance:t(JSON_ID, rdf:type, _)
-    ->  throw(error(document_alread_exists(JSON_ID)))
-    ;   true),
-    forall(
-        json_triple_(Elaborated,Triple),
-        insert_triple(Triple)
-    ),
-
-    forall(
-        json_triple_(Elaborated,t(X,Y,Z)),
-        (   refute_insert(X,Y,Z,Witness)
-        ->  throw(error(insert_failure(Witness)))
-        ;   true)
-    ),
-    commit.
-
-delete_document(JSON) :-
-    json_elaborate(JSON,Elaborated),
-    json_jsonid(Elaborated,JSON_ID),
-    (   json_instance:t(JSON_ID, rdf:type, _)
-    ->  throw(error(document_alread_exists(JSON_ID)))
-    ;   true),
-    forall(
-        json_triple_(Elaborated,Triple),
-        delete_triple(Triple)
-    ),
-
-    forall(
-        json_triple_(Elaborated,t(X,Y,Z)),
-        (   refute_insert(X,Y,Z,Witness)
-        ->  throw(error(insert_failure(Witness)))
-        ;   true)
-    ),
-    commit.
-*/
-
 %%%%%%%%%%%%%%%%%%%%%%
 %%  BASETYPES ONLY  %%
 %%%%%%%%%%%%%%%%%%%%%%
