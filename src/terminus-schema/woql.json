@@ -261,12 +261,14 @@
 { "@id" : "Indicator",
   "@type" : "TaggedUnion",
   "@key" : { "@type" : "ValueHash" },
+  "@subdocument" : [],
   "name" : "xsd:string",
   "index" : "xsd:nonNegativeInteger" }
 
 { "@id" : "Column",
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
+  "@subdocument" : [],
   "indicator" : "Indicator",
   "variable" : "xsd:string",
   "type" : { "@type" : "Optional",
@@ -275,6 +277,7 @@
 { "@id" : "Source",
   "@type" : "TaggedUnion",
   "@key" : { "@type" : "ValueHash" },
+  "@subdocument" : [],
   "post" : "xsd:string",
   "file" : "xsd:string",
   "url" : "xsd:string" }
@@ -287,6 +290,7 @@
 { "@id" : "QueryResource",
   "@type" : "TaggedUnion",
   "@key" : { "@type" : "ValueHash" },
+  "@subdocument" : [],
   "source" : "Source",
   "format" : "FormatType",
   "options" : { "@type" : "Optional",
@@ -306,11 +310,10 @@
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
+  "query" : "Query",
   "columns" : { "@type" : "List",
                 "@class" : "Column" },
-  "resource" : "QueryResource",
-  "has_header" : { "@type" : "Optional",
-                   "@class" : "xsd:boolean" } }
+  "resource" : "QueryResource" }
 
 { "@id" : "AddData",
   "@type" : "Class",
@@ -636,6 +639,8 @@
 
 { "@id" : "OrderTemplate",
   "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "@subdocument" : [],
   "order" : "Order",
   "variable" : "xsd:string" }
 
@@ -643,6 +648,7 @@
   "@type" : "Class",
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
+  "query" : "Query",
   "ordering" : { "@type" : "List",
                  "@class" : "OrderTemplate" } }
 

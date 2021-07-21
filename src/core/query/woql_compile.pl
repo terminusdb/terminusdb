@@ -2046,8 +2046,7 @@ test(split, [
 test(join, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State)),
-         fixme('Need a theory of datatype lists')
+         cleanup(teardown_temp_store(State))
      ]) :-
     Query = _{'@type' : "Join",
               'list' : _{ '@type' : 'DataValue',
@@ -2091,7 +2090,8 @@ test(like, [
               'similarity' : _{'@type' : "DataValue",
                                variable : "Similarity"}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Similarity':_{'@type':'xsd:decimal',
                      '@value':1.0}} :< Res.
@@ -2114,7 +2114,8 @@ test(exp, [
               result : _{'@type' : "ArithmeticValue",
                          variable : "Exp"}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Exp':_{'@type':'xsd:decimal',
               '@value':4}} :< Res.
@@ -2146,8 +2147,8 @@ test(limit, [
                          'object' : _{'@type' : "Value",
                                       variable : "Object"}
                        }},
-
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
     maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
 
     list_to_ord_set(Orderable,Bindings_Set),
@@ -2179,7 +2180,8 @@ test(indexed_get,
         source : _{ '@type' : "Source",
                     url : "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res|_] = JSON.bindings,
     % Should this really be without a header?
     _{'First':_{'@type':'xsd:string','@value':"Duration"},
@@ -2209,7 +2211,8 @@ test(named_get, [
         source: _{ '@type' : "Source",
                    url: "https://terminusdb.com/t/data/bike_tutorial.csv"}}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [First|_] = JSON.bindings,
 
     _{'Bike_Number': _{'@type':'xsd:string',
@@ -2283,7 +2286,8 @@ test(named_get_two, [
          }
     },
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
 
     [Res|_] = JSON.bindings,
     _{'Bike':_{'@type':'xsd:string',
@@ -2313,19 +2317,22 @@ test(concat, [
 :-
     Query =
     _{'@type' : 'Concatenate',
-      list : [
-          _{'@type' : 'DataValue',
-            data : _{ '@type' : "xsd:string",
-                      '@value' : "First"}},
-          _{'@type' : 'DataValue',
-            data : _{ '@type' : "xsd:string",
-                      '@value' : "Second"}}
-      ],
+      list : _{'@type' : 'DataValue',
+               list: [
+                   _{'@type' : 'DataValue',
+                     data : _{ '@type' : "xsd:string",
+                               '@value' : "First"}},
+                   _{'@type' : 'DataValue',
+                     data : _{ '@type' : "xsd:string",
+                               '@value' : "Second"}}
+               ]
+              },
       result :
       _{'@type' : 'DataValue',
         variable : "Concatenated" }},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(system_descriptor{}, Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Concatenated':_{'@type':'xsd:string',
                        '@value':"FirstSecond"}} :< Res.
@@ -2338,19 +2345,22 @@ test(sum, [
 :-
     Query =
     _{'@type' : 'Sum',
-      list: [
-          _{'@type' : 'DataValue',
-            data : _{ '@type' : "xsd:integer",
-                      '@value' : 1}},
-          _{'@type' : 'DataValue',
-            data : _{ '@type' : "xsd:integer",
-                      '@value' : 2}}
-      ],
+      list:  _{'@type' : 'DataValue',
+               list: [
+                   _{'@type' : 'DataValue',
+                     data : _{ '@type' : "xsd:integer",
+                               '@value' : 1}},
+                   _{'@type' : 'DataValue',
+                     data : _{ '@type' : "xsd:integer",
+                               '@value' : 2}}
+               ]
+              },
       result :
       _{'@type' : 'DataValue',
         variable : "Sum" }},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Sum':_{'@type':'xsd:decimal',
               '@value': 3}} :< Res.
@@ -2362,18 +2372,20 @@ test(length, [
      ])
 :-
     Query = _{'@type' : "Length",
-              list : [
-                  _{'@type' : 'DataValue',
-                    data : _{ '@type' : "xsd:integer",
-                              '@value' : 1}},
-                  _{'@type' : 'DataValue',
-                    data : _{ '@type' : "xsd:integer",
-                              '@value' : 2}}
-                ],
+              list : _{'@type' : 'DataValue',
+                       list : [
+                           _{'@type' : 'DataValue',
+                             data : _{ '@type' : "xsd:integer",
+                                       '@value' : 1}},
+                           _{'@type' : 'DataValue',
+                             data : _{ '@type' : "xsd:integer",
+                                       '@value' : 2}}
+                       ]},
               length : _{ '@type' : "DataValue",
                           variable : "Length"}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Length':_{'@type':'xsd:decimal',
                  '@value': 2}} :< Res.
@@ -2429,7 +2441,8 @@ test(order_by, [
                                       '@value' : 20}}}
                  ]}},
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
 
     JSON.bindings = [_{'X':_{'@type':'xsd:integer',
                              '@value':10}},
@@ -2465,7 +2478,8 @@ test(order_by_desc, [
                                       '@value' : 20}}}
                  ]}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(system_descriptor{}, Query_Out, JSON),
     JSON.bindings = [_{'X':_{'@type':'xsd:integer',
                              '@value':20}},
                      _{'X':_{'@type':'xsd:integer',
@@ -2611,7 +2625,8 @@ test(group_by, [
               grouped : _{'@type' : "Value",
                           variable : "Grouped"}},
 
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
 
     [_{'Grouped': [['@schema:p',q],
                    ['@schema:p',w],
@@ -2654,7 +2669,8 @@ test(group_by_simple_template, [
               grouped: _{'@type' : "Value",
                          variable : "Grouped"}},
 
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
 
     [_{'Grouped': ['@schema:p','@schema:p','@schema:p'],
        'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
@@ -2678,7 +2694,8 @@ test(select, [setup(setup_temp_store(State)),
                                             variable : "Object"}
                                 }}},
 
-    query_test_response(system_descriptor{}, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(system_descriptor{}, Query_Out, JSON),
 
     [_{'Subject':admin}] = JSON.bindings.
 
@@ -2739,7 +2756,8 @@ test(double_select, [
                 }
              },
 
-    query_test_response_test_branch(Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
     forall(
         member(Elt,JSON.bindings),
         (   get_dict('X',Elt, _),
@@ -2960,7 +2978,8 @@ test(metadata_triple_count_json, [
               count : _{'@type' : "DataValue",
                         variable : "Count"}},
 
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
     [Binding] = (JSON.bindings),
 
     (Binding.'Count'.'@value' = 13).
@@ -2993,7 +3012,8 @@ test(metadata_size_count_json, [
               size: _{'@type' : "DataValue",
                       variable : "Size"}},
 
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
     [Binding] = (JSON.bindings),
 
     (Binding.'Size'.'@value' = Val),
@@ -3027,7 +3047,8 @@ test(metadata_size_commits_json, [
               size : _{'@type' : "DataValue",
                        variable : "Size"}},
 
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
     [Binding] = (JSON.bindings),
     (Binding.'Size'.'@value' = Val),
     Val > 0,
@@ -3067,7 +3088,8 @@ test(ast_disjunction_test, [
 test(json_disjunction_test, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Complex value hash recieves wrong value on lists')
      ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
@@ -3131,6 +3153,8 @@ test(json_disjunction_test, [
               ]
              },
 
+    save_and_retrieve_woql(Query, Query_Out),
+
     json_woql(Query, AST),
 
     AST = (
@@ -3141,7 +3165,7 @@ test(json_disjunction_test, [
             v('Public_Or_Private')="private"^^'http://www.w3.org/2001/XMLSchema#string')
     ),
 
-    query_test_response(Descriptor, Query, Response),
+    query_test_response(Descriptor, Query_Out, Response),
 
     Bindings = (Response.bindings),
     Bindings = [_{'AID':account1,
@@ -3304,7 +3328,8 @@ test(get_put, [
                           }
              },
 
-    query_test_response_test_branch(Query, _JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, _JSON),
     exists_file(TestFile).
 
 test(idgen, [
@@ -4077,7 +4102,7 @@ test(gyear_cast, [
     Typecast = '{
   "@type": "Typecast",
   "value": {
-    "@type": "DataValue",
+    "@type": "Value",
     "data": {
       "@type": "xsd:string",
       "@value": "1999"
@@ -4094,8 +4119,8 @@ test(gyear_cast, [
 }',
 
     atom_json_dict(Typecast, Query, []),
-
-    query_test_response(system_descriptor{}, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(system_descriptor{}, Query_Out, JSON),
     [Binding] = (JSON.bindings),
     Binding = _{'V':_{'@type':'xsd:gYear',
                       '@value':"1999"}}.
@@ -4137,7 +4162,8 @@ test(schema_prefix, [
 }',
 
     atom_json_dict(Atom, Query, []),
-    query_test_response(Descriptor, Query, JSON),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
     JSON = false.
 
 :- end_tests(woql).

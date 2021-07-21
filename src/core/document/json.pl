@@ -4981,7 +4981,7 @@ schema6('
   "age": "xsd:integer",
   "friend_of": {"@class": "Person",
                 "@type": "Set"},
-  "name": "xsd:string"}
+  "name": "xsd:string" }
 ').
 
 write_schema6(Desc) :-
@@ -5043,3 +5043,141 @@ test(insert_employee, [
     get_document(Desc, ID3, _JSON3).
 
 :- end_tests(employee_documents).
+
+:- begin_tests(polity_documents).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema7('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id": "GeneralVariables",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "alternative_name": {"@class": "xsd:string", "@type": "Set"},
+  "language": "xsd:string"}
+
+{ "@id": "WarfareVariables",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "military_technologies": "MilitaryTechnologies"}
+
+{ "@id": "MilitaryTechnologies",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "atlatl": {"@class": "EpistemicState", "@type": "Optional"},
+  "battle_axes": {"@class": "EpistemicState", "@type": "Optional"},
+  "breastplates": {"@class": "EpistemicState", "@type": "Optional"}}
+
+{ "@id": "SocialComplexityVariables",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "hierarchical_complexity": "HierarchicalComplexity",
+  "information": "Information",
+  "specialized_buildings_polity_owned": "SpecializedBuildingsPolityOwned"}
+
+{ "@id": "Information",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "articles": {"@class": "EpistemicState", "@type": "Optional"}}
+
+{ "@id": "SpecializedBuildingsPolityOwned",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "bridges": {"@class": "EpistemicState", "@type": "Optional"}}
+
+{ "@id": "Confidence", "@type": "Enum", "@value": ["inferred", "suspected"]}
+
+{ "@id": "HierarchicalComplexity",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "@type": "Class",
+  "admin_levels": "AdministrativeLevels"}
+
+{ "@id": "EpistemicState",
+  "@type": "Enum",
+  "@value": ["absent",
+             "present",
+             "unknown",
+             "inferred_absent",
+             "inferred_present"]}
+
+{ "@id": "AdministrativeLevels",
+  "@type": "Enum",
+  "@value": ["five", "four", "three", "two", "one"]}
+
+{ "@id": "Polity",
+  "@key": {"@type": "Random"},
+  "@type": "Class",
+  "general_variables": "GeneralVariables",
+  "name": "xsd:string",
+  "social_complexity_variables": "SocialComplexityVariables",
+  "warfare_variables": "WarfareVariables"}').
+
+write_schema7(Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    schema7(Schema1),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema1),
+        _Meta).
+
+test(insert_polity,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema7(Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      ),
+      fixme('Insert of optional enums fails')
+     ]
+    ) :-
+
+    Polity =
+    _{'@type': 'Polity',
+      'general_variables': _{'@type': 'GeneralVariables',
+                             'language' : 'latin',
+                             'alternative_name': ['Sadozai Kingdom',
+                                                  'Last Afghan Empire']},
+      'name': 'AfDurrn',
+      'social_complexity_variables':
+      _{'@type': 'SocialComplexityVariables',
+        'hierarchical_complexity': _{'@type': 'HierarchicalComplexity',
+                                     'admin_levels': 'five'},
+        'information': _{'@type': 'Information',
+                         'articles': "present"}},
+      'warfare_variables': _{'@type': 'WarfareVariables',
+                             'military_technologies': _{'@type': 'MilitaryTechnologies',
+                                                        'atlatl': "present",
+                                                        'battle_axes': "present",
+                                                        'breastplates': "present"}}},
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        (
+            insert_document(Context, Polity, ID)
+        ),
+        _
+    ),
+
+    get_document(Desc, ID, JSON),
+    writeq(JSON).
+
+:- end_tests(polity_documents).

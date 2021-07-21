@@ -852,7 +852,7 @@ json_type_to_woql_ast('NodeValue',JSON,WOQL,_) :-
         atom_string(Var_Atom, Var_String),
         WOQL = v(Var_Atom)
     ).
-json_type_to_woql_ast('DataValue',JSON,WOQL,_) :-
+json_type_to_woql_ast('DataValue',JSON,WOQL,Path) :-
     (   _{data: Data} :< JSON
     ->  json_data_to_woql_ast(Data,WOQL)
     ;   _{variable: Var} :< JSON
@@ -860,7 +860,7 @@ json_type_to_woql_ast('DataValue',JSON,WOQL,_) :-
         atom_string(Var_Atom, Var_String),
         WOQL = v(Var_Atom)
     ;   _{list: List} :< JSON
-    ->  json_data_to_woql_ast(List,WOQL)
+    ->  json_to_woql_ast(List,WOQL,[list|Path])
     ).
 json_type_to_woql_ast('Value',JSON,WOQL,_) :-
     (   _{node: Node} :< JSON
