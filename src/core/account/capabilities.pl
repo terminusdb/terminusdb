@@ -334,6 +334,20 @@ assert_read_access(Context) :-
 assert_read_access(Context) :-
     throw(error(read_access_malformed_context(Context))).
 
+assert_read_access(_System, Auth, _Collection, _Type) :-
+    is_super_user(Auth),
+    % This probably makes all super user checks redundant.
+    !.
+assert_read_access(System, Auth, Collection, _Type) :-
+    database_descriptor{
+        organization_name: Organization_Name,
+        database_name : Database_Name
+    } :< Collection,
+    !,
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(System, Auth, '@schema':'Action_meta_read_access', Scope_Iri).
+
+
 /**
  * assert_auth_action_scope(DB, Auth, Action, Scope) is det + error
  *
