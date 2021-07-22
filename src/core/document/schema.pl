@@ -13,6 +13,7 @@
               type_descriptor/3,
               class_subsumed/3,
               key_descriptor/3,
+              key_descriptor/4,
               documentation_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
@@ -570,44 +571,47 @@ type_descriptor(Validation_Object, Type, optional(Class)) :-
     !,
     xrdf(Schema, Type, sys:class, Class).
 
-key_base(Validation_Object, Type, Base) :-
+key_base(Validation_Object, _, Type, Base) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, sys:base, Base^^xsd:string),
     !.
-key_base(Validation_Object, Type, Base) :-
-    database_context(Validation_Object,Context),
+key_base(_Validation_Object, Context, Type, Base) :-
     get_dict('@schema', Context, Schema),
     put_dict(_{'@base' : Schema}, Context, New_Context),
     compress_dict_uri(Type,New_Context,Type_Compressed),
     atomic_list_concat([Type_Compressed,'_'],Base).
 
-% should refactor to do key lookup once.
 key_descriptor(Validation_Object, Type, Descriptor) :-
+    database_context(Validation_Object, Prefixes),
+    key_descriptor(Validation_Object, Prefixes, Type, Descriptor).
+
+% should refactor to do key lookup once.
+key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, sys:key, Obj),
-    key_descriptor_(Validation_Object,Type,Obj,Descriptor),
+    key_descriptor_(Validation_Object,Prefixes,Type,Obj,Descriptor),
     !.
 
-key_descriptor_(Validation_Object, Type, Obj, lexical(Base,Fields)) :-
+key_descriptor_(Validation_Object, Prefixes, Type, Obj, lexical(Base,Fields)) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Obj,rdf:type, sys:'Lexical'),
     xrdf(Schema, Obj, sys:fields, L),
     rdf_list(Validation_Object,L,Fields),
-    key_base(Validation_Object,Type,Base).
-key_descriptor_(Validation_Object, Type, Obj, hash(Base,Fields)) :-
+    key_base(Validation_Object,Prefixes,Type,Base).
+key_descriptor_(Validation_Object, Prefixes, Type, Obj, hash(Base,Fields)) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Obj, rdf:type, sys:'Hash'),
     xrdf(Schema, Obj, sys:fields, L),
     rdf_list(Validation_Object,L,Fields),
-    key_base(Validation_Object,Type,Base).
-key_descriptor_(Validation_Object, Type, Obj, value_hash(Base)) :-
+    key_base(Validation_Object,Prefixes,Type,Base).
+key_descriptor_(Validation_Object, Prefixes, Type, Obj, value_hash(Base)) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Obj, rdf:type, sys:'ValueHash'),
-    key_base(Validation_Object,Type,Base).
-key_descriptor_(Validation_Object, Type, Obj, random(Base)) :-
+    key_base(Validation_Object,Prefixes,Type,Base).
+key_descriptor_(Validation_Object, Prefixes, Type, Obj, random(Base)) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Obj, rdf:type, sys:'Random'),
-    key_base(Validation_Object,Type,Base).
+    key_base(Validation_Object,Prefixes,Type,Base).
 
 is_schemaless(Validation_Object) :-
     database_schema(Validation_Object, Schema),

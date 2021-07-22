@@ -239,7 +239,7 @@ path_strings(Elts, Prefixes, Strings) :-
 
 json_idgen(JSON,DB,Context,Path,ID_Ex) :-
     get_dict('@type',JSON,Type),
-    key_descriptor(DB,Type,Descriptor),
+    key_descriptor(DB,Context,Type,Descriptor),
     (   Descriptor = lexical(Base,Fields)
     ->  get_field_values(JSON, Context, Fields, Values),
         path_strings(Path, Context, Strings),
@@ -876,14 +876,18 @@ json_schema_triple(JSON,Context,Triple) :-
 
 % Triple generator
 json_triple(DB,JSON,Triple) :-
-    json_elaborate(DB,JSON,Elaborated),
     database_context(DB,Context),
+    json_triple(DB,Context,JSON,Triple).
+
+json_triple(DB,Context,JSON,Triple) :-
+    json_elaborate(DB,JSON,Context,Elaborated),
     json_triple_(Elaborated,Context,Triple).
 
 json_triples(DB,JSON,Triples) :-
+    database_context(DB,Context),
     findall(
         Triple,
-        json_triple(DB, JSON, Triple),
+        json_triple(DB, Context, JSON, Triple),
         Triples).
 
 json_triple_(JSON,_,_Triple) :-
@@ -1308,7 +1312,7 @@ schema_subject_predicate_object_key_value(DB,_,Id,P,O,'@value',Enum_List) :-
 schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@key',V) :-
     global_prefix_expand(sys:key,P),
     !,
-    key_descriptor(DB, Id, Key),
+    key_descriptor(DB, Prefixes, Id, Key),
     key_descriptor_json(Key,Prefixes,V).
 schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@documentation',V) :-
     global_prefix_expand(sys:documentation,P),
@@ -1497,11 +1501,12 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
         )
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
+    database_context(DB,Context),
     forall(
         json_read_dict_stream(JSON_Stream, Dict),
         (
             forall(
-                json_triple(DB,Dict,t(S,P,O)),
+                json_triple(DB,Context,Dict,t(S,P,O)),
                 (
                     object_storage(O,OS),
                     nb_add_triple(Builder, S, P, OS)
