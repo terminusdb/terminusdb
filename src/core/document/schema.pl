@@ -633,7 +633,7 @@ documentation_descriptor_(Validation_Object, Obj, documentation(Comment,Property
 
 refute_diamond_property(Validation_Object, Class, Witness) :-
     catch(
-        (   class_frame(Validation_Object, Class, _),
+        (   class_property_dictionary(Validation_Object, Class, _),
             fail
         ),
         error(violation_of_diamond_property(Class,Predicate),_),

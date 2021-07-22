@@ -33,6 +33,7 @@
               write_json_string_to_instance/2,
               replace_json_schema/2,
               class_frame/3,
+              class_property_dictionary/3,
               prefix_expand_schema/3,
               prefix_expand/3
           ]).
@@ -313,20 +314,19 @@ predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     atom_string(Prop,Short).
 predicate_map(P, _Context, P, json{}).
 
-type_context(_DB, "@id", json{}) :- !.
-type_context(_DB, Base_Type, json{}) :-
+type_context(_DB, "@id", _, json{}) :- !.
+type_context(_DB, Base_Type, _, json{}) :-
     is_base_type(Base_Type),
     !.
-type_context(DB,Type,Context) :-
-    database_context(DB, Database_Context),
-    prefix_expand_schema(Type,Database_Context,TypeEx),
+type_context(DB,Type,Prefixes,Context) :-
+    prefix_expand_schema(Type,Prefixes,TypeEx),
     do_or_die(is_simple_class(DB, TypeEx),
               error(type_not_found(Type), _)),
     findall(Prop - C,
           (
               class_predicate_type(DB, TypeEx, P, Desc),
               class_descriptor_image(Desc, Image),
-              predicate_map(P,Database_Context,Prop, Map),
+              predicate_map(P,Prefixes,Prop, Map),
               put_dict(Map,Image,C)
           ),
           Edges),
@@ -372,7 +372,7 @@ json_elaborate(DB,JSON,Context,Path,JSON_ID) :-
 
 
     do_or_die(
-        type_context(DB,TypeEx,Type_Context),
+        type_context(DB,TypeEx,Context,Type_Context),
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
@@ -1803,6 +1803,40 @@ class_frame(Desc, Class, Frame) :-
     open_descriptor(Desc, Trans),
     class_frame(Trans, Class, Frame).
 
+class_property_dictionary(Transaction, Class, Frame) :-
+    (   is_transaction(Transaction)
+    ;   is_validation_object(Transaction)
+    ),
+    !,
+    database_context(Transaction, DB_Prefixes),
+    default_prefixes(Default_Prefixes),
+    Prefixes = (Default_Prefixes.put(DB_Prefixes)),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    findall(
+        Predicate_Comp-Result,
+        (   class_predicate_type(Transaction, Class_Ex, Predicate, Type_Desc),
+            type_descriptor_json(Type_Desc, Prefixes, Result),
+            compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
+        ),
+        Pairs),
+    sort(Pairs, Sorted_Pairs),
+    catch(
+        dict_create(Frame,json,Sorted_Pairs),
+        error(duplicate_key(Predicate),_),
+        throw(error(violation_of_diamond_property(Class,Predicate),_))
+    ).
+class_property_dictionary(Query_Context, Class, Frame) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    class_property_dictionary(TO, Class, Frame).
+class_property_dictionary(Desc, Class, Frame) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc, Trans),
+    class_property_dictionary(Trans, Class, Frame).
+
+
 insert_into_builder_context_document(Builder, Document) :-
     forall(
         context_triple(Document,t(S,P,O)),
@@ -2097,7 +2131,8 @@ test(create_database_context,
          )
      ]) :-
     open_descriptor(Desc, DB),
-    type_context(DB,'Employee',Context),
+    database_context(DB,Prefixes),
+    type_context(DB,'Employee',Prefixes,Context),
 
     Context = json{ birthdate:json{ '@id':'http://s/birthdate',
 		                            '@type':'http://www.w3.org/2001/XMLSchema#date'
@@ -3390,8 +3425,8 @@ test(enum_elaborate,
      ]) :-
 
     open_descriptor(Desc, DB),
-
-    type_context(DB,'Dog',TypeContext),
+    database_context(DB,Prefixes),
+    type_context(DB,'Dog',Prefixes,TypeContext),
 
     TypeContext = json{ hair_colour:json{'@id':'http://s/hair_colour',
                                          '@type':'http://s/Colour'},
@@ -3502,12 +3537,13 @@ test(binary_tree_context,
      ]) :-
 
     open_descriptor(Desc, DB),
-    type_context(DB,'BinaryTree', Binary_Context),
+    database_context(DB,Prefixes),
+    type_context(DB,'BinaryTree', Prefixes, Binary_Context),
 
     Binary_Context = json{ leaf:json{'@id':'http://s/leaf'},
                            node:json{'@id':'http://s/node','@type':"@id"}
                          },
-    type_context(DB,'Node', Node_Context),
+    type_context(DB,'Node', Prefixes, Node_Context),
     Node_Context = json{ left:json{'@id':'http://s/left','@type':"@id"},
                          right:json{'@id':'http://s/right','@type':"@id"},
                          value:json{ '@id':'http://s/value',
