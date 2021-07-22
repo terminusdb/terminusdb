@@ -7,6 +7,7 @@
               is_built_in/1,
               is_list_type/1,
               is_array_type/1,
+              is_key/1,
               refute_class/3,
               class_predicate_type/4,
               type_descriptor/3,
@@ -320,6 +321,10 @@ refute_class_documentation(Validation_Object,Class,Witness) :-
         )
     ).
 
+is_key(Type) :-
+    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
+    memberchk(Type, List).
+
 refute_class_key(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:key, Key_Obj),
@@ -328,8 +333,7 @@ refute_class_key(Validation_Object,Class,Witness) :-
 refute_key_obj(Validation_Object,Class,Obj,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Obj, rdf:type, Type),
-    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
-    \+ memberchk(Type, List),
+    \+ is_key(Type),
     Witness = witness{ '@type' : bad_key_type,
                        class: Class,
                        key: Obj,

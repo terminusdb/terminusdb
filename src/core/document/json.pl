@@ -466,7 +466,18 @@ context_value_expand(DB,_Context,_Path,Value,Expansion,V) :-
     json_elaborate(DB,New_Expansion, V).
 
 enum_value(Type,Value,ID) :-
-    atomic_list_concat([Type, '_', Value], ID).
+    ground(Type),
+    ground(Value),
+    !,
+    uri_encoded(segment, Value, Encoded_Value),
+    atomic_list_concat([Type, '_', Encoded_Value], ID).
+enum_value(Type,Value,ID) :-
+    ground(Type),
+    !,
+    atom_concat(Type,'_',Prefix),
+    atom_concat(Prefix,Encoded_Value,ID),
+    uri_encoded(segment, Value, Encoded_Value).
+
 
 json_context_elaborate(DB, JSON, Context, _Path, Expanded) :-
     is_dict(JSON),
@@ -827,7 +838,7 @@ json_schema_elaborate(JSON,Context,_,Elaborated) :-
     get_dict('@value', JSON, List),
     maplist({ID_Ex}/[Elt,json{'@type' : "@id",
                               '@id' : V}]>>(
-                format(string(V),'~w_~w',[ID_Ex,Elt])
+                enum_value(ID_Ex,Elt,V)
             ),List,New_List),
     Type_ID = json{ '@id' : ID_Ex,
                     '@type' : Expanded
@@ -1040,8 +1051,7 @@ list_type_id_predicate_value([O|T],C,Id,P,Recursion,DB,Prefixes,Compress,Unfold,
     list_type_id_predicate_value(T,C,Id,P,Recursion,DB,Prefixes,Compress,Unfold,L).
 
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
-    atom_concat(C, Rest, V),
-    atom_concat('_', O, Rest).
+    enum_value(C, O, V).
 type_id_predicate_iri_value(list(C),Id,P,O,Recursion,DB,Prefixes,Compress,Unfold,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
@@ -1293,8 +1303,7 @@ schema_subject_predicate_object_key_value(DB,_,Id,P,O,'@value',Enum_List) :-
     database_schema(DB,Schema),
     rdf_list_list(Schema, O, L),
     maplist({Id}/[V,Enum]>>(
-                atom_concat(Id,'_',Prefix),
-                atom_concat(Prefix,Enum,V)
+                enum_value(Id,Enum,V)
             ), L, Enum_List).
 schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@key',V) :-
     global_prefix_expand(sys:key,P),
@@ -1807,6 +1816,39 @@ insert_schema_document_unsafe(Query_Context, Document) :-
     query_default_collection(Query_Context, TO),
     insert_schema_document_unsafe(TO, Document).
 
+delete_schema_list(_, _, RDF_Nil) :-
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    !.
+delete_schema_list(Transaction, Context, Id) :-
+    database_schema(Transaction, [Schema]),
+    delete(Schema, Id, rdf:type, rdf:'List', _),
+    xrdf([Schema], Id, rdf:rest, Rest),
+    %writeq('Rest: '),writeq(Rest),nl,
+    delete(Schema, Id, rdf:rest, Rest, _),
+    delete_schema_list(Transaction, Context, Rest),
+    xrdf([Schema],Id, rdf:first, O),
+    delete(Schema, Id, rdf:first, O, _),
+    %writeq('First: '),writeq(O),nl,
+    delete_schema_subdocument(Transaction, Context, O).
+
+delete_schema_subdocument(Transaction, Context, Id) :-
+    database_schema(Transaction, Schema),
+    (   atom(Id)
+    ->  (   xrdf(Schema, Id, rdf:type, C),
+            (   (   is_system_class(C)
+                ;   is_key(C))
+            ->  xrdf(Schema, Id, P, R),
+                \+ global_prefix_expand(rdf:type, P),
+                delete_schema_subdocument(Transaction, Context, R)
+            ;   is_list_type(C)
+            ->  delete_schema_list(Transaction,Context,Id)
+            ;   true
+            )
+        % Enum
+        % NOTE: This should probably have an ENUM type field.
+        ;   true)
+    ;   true).
+
 % NOTE: This leaves garbage! We need a way to collect the leaves which
 % link to array elements or lists.
 delete_schema_document(Transaction, Id) :-
@@ -1815,15 +1857,14 @@ delete_schema_document(Transaction, Id) :-
     database_context(Transaction, Context),
     database_schema(Transaction, [Schema]),
 
-    get_schema_document(Transaction, Id, Document),
-
     default_prefixes(Prefixes),
     put_dict(Context,Prefixes,Expanded_Context),
-
+    prefix_expand_schema(Id, Expanded_Context, Id_Ex),
     forall(
-        (   json_schema_triple(Document, Expanded_Context, t(S,P,O)),
-            xrdf([Schema], S, P, O)),
-        delete(Schema, S, P, O, _)
+        xrdf([Schema], Id_Ex, P, O),
+        (   delete(Schema, Id_Ex, P, O, _),
+            delete_schema_subdocument(Transaction,Expanded_Context,O)
+        )
     ).
 delete_schema_document(Query_Context, Id) :-
     is_query_context(Query_Context),
@@ -3315,7 +3356,6 @@ test(enum_elaborate,
                },
 
     json_elaborate(DB, JSON, Elaborated),
-
     Elaborated = json{ '@id':'http://i/Dog_Ralph',
                        '@type':'http://s/Dog',
                        'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
@@ -4021,7 +4061,6 @@ test(replace_schema_document,
              teardown_temp_store(State)
          )
      ]) :-
-
     Document =
     _{ '@id' : "Squash",
        '@type' : "Class",
@@ -5119,6 +5158,51 @@ test(insert_employee, [
     get_document(Desc, ID2, _JSON2),
     get_document(Desc, ID3, _JSON3).
 
+test(update_enum,[
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema6(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    New_Team =  _{'@id': "Team",
+                  '@type': "Enum",
+                  '@value': ["Information Technology", "Amazing Marketing"]},
+
+    database_context(Desc,Prefixes),
+    json_schema_elaborate(New_Team, Prefixes, Elaborated),
+    Elaborated =
+    json{'@id':'http://s/Team',
+         '@type':'http://terminusdb.com/schema/sys#Enum',
+         'http://terminusdb.com/schema/sys#value':
+         json{'@container':"@list",
+              '@type':"@id",
+              '@value':[json{'@id':'http://s/Team_Information%20Technology',
+                             '@type':"@id"},
+                        json{'@id':'http://s/Team_Amazing%20Marketing',
+                             '@type':"@id"}]}},
+    %nl,
+    %writeq('------------------------------------------'),nl,
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        replace_schema_document(Context, New_Team, Id),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    get_schema_document(DB2, Id, New_Document),
+    New_Document =
+    json{'@id':'Team',
+         '@type':'Enum',
+         '@value':['Information Technology','Amazing Marketing']}.
+
+
 :- end_tests(employee_documents).
 
 :- begin_tests(polity_documents).
@@ -5366,3 +5450,5 @@ test(database_expansion,
               '@type':"@id"}}.
 
 :- end_tests(system_documents).
+
+
