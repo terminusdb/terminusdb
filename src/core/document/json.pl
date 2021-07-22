@@ -260,10 +260,7 @@ json_idgen(JSON,DB,Context,Path,ID_Ex) :-
 
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
-class_descriptor_image(optional(C),Image) :-
-    (   is_base_type(C)
-    ->  Image = json{ '@type' : C }
-    ;   Image = json{ '@type' : "@id" }).
+class_descriptor_image(optional(C),json{ '@type' : C }).
 class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
 class_descriptor_image(base_class(C),json{ '@type' : C }).
 class_descriptor_image(enum(C,_),json{ '@type' : C }).
@@ -446,6 +443,23 @@ context_value_expand(_,Context,_Path,Value,_Expansion,V) :-
     prefix_expand(Type,Context,Type_Ex),
     !,
     V = json{'@value' : Elt, '@type' : Type_Ex}.
+context_value_expand(DB,Context,_Path,Value,Expansion,V) :-
+    get_dict('@type', Expansion, Type),
+    is_enum(DB,Type),
+    !,
+    enum_value(Type,Value,Enum_Value),
+    prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
+    V = json{'@id' : Enum_Value_Ex,
+             '@type' : "@id"}.
+context_value_expand(DB,Context,Path,Value,Expansion,V) :-
+    get_dict('@type', Expansion, Type),
+    \+ is_base_type(Type),
+    !,
+    (   is_dict(Value)
+    ->  json_elaborate(DB, Value, Context, Path, V)
+    ;   prefix_expand(Value,Context,Value_Ex),
+        V = json{ '@type' : "@id", '@id' : Value_Ex}
+    ).
 context_value_expand(DB,_Context,_Path,Value,Expansion,V) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
@@ -1997,7 +2011,7 @@ test(create_database_context,
     Context = json{ birthdate:json{ '@id':'http://s/birthdate',
 		                            '@type':'http://www.w3.org/2001/XMLSchema#date'
 		                          },
-                    boss:json{'@id':'http://s/boss','@type':"@id"},
+                    boss:json{'@id':'http://s/boss','@type':'http://s/Employee'},
                     friends:json{'@container':"@set",
                                  '@id':'http://s/friends',
                                  '@type':'http://s/Person'},
@@ -2084,7 +2098,6 @@ test(id_expand,
 
     open_descriptor(Desc, DB),
     json_elaborate(DB, Document, Elaborated),
-
     Elaborated =
     json{
         '@id':'http://i/gavin',
@@ -5143,20 +5156,13 @@ schema7('
   "@subdocument": [],
   "@type": "Class",
   "hierarchical_complexity": "HierarchicalComplexity",
-  "information": "Information",
-  "specialized_buildings_polity_owned": "SpecializedBuildingsPolityOwned"}
+  "information": "Information"}
 
 { "@id": "Information",
   "@key": {"@type": "Random"},
   "@subdocument": [],
   "@type": "Class",
   "articles": {"@class": "EpistemicState", "@type": "Optional"}}
-
-{ "@id": "SpecializedBuildingsPolityOwned",
-  "@key": {"@type": "Random"},
-  "@subdocument": [],
-  "@type": "Class",
-  "bridges": {"@class": "EpistemicState", "@type": "Optional"}}
 
 { "@id": "Confidence", "@type": "Enum", "@value": ["inferred", "suspected"]}
 
@@ -5208,8 +5214,7 @@ test(insert_polity,
           )),
       cleanup(
           teardown_temp_store(State)
-      ),
-      fixme('Insert of optional enums fails')
+      )
      ]
     ) :-
 
@@ -5232,6 +5237,54 @@ test(insert_polity,
                                                         'battle_axes': "present",
                                                         'breastplates': "present"}}},
 
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, Polity, Elaborated),
+
+    Elaborated =
+    json{'@id':_,
+         '@type':'http://s/Polity',
+         'http://s/general_variables':
+         json{'@id':_,
+              '@type':'http://s/GeneralVariables',
+              'http://s/alternative_name':
+              _{'@container':"@set",
+                '@type':'http://www.w3.org/2001/XMLSchema#string',
+                '@value':[
+                    json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                         '@value':'Sadozai Kingdom'},
+                    json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                         '@value':'Last Afghan Empire'}]},
+              'http://s/language':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@value':latin}},
+         'http://s/name':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                              '@value':'AfDurrn'},
+         'http://s/social_complexity_variables':
+         json{'@id':_,
+              '@type':'http://s/SocialComplexityVariables',
+              'http://s/hierarchical_complexity':
+              json{'@id':_,
+                   '@type':'http://s/HierarchicalComplexity',
+                   'http://s/admin_levels':json{'@id':'http://s/AdministrativeLevels_five',
+                                                '@type':"@id"}},
+              'http://s/information':
+              json{'@id':_,
+                   '@type':'http://s/Information',
+                   'http://s/articles':
+                   json{'@id':'http://s/EpistemicState_present',
+                        '@type':"@id"}}},
+         'http://s/warfare_variables':
+         json{'@id':_,
+              '@type':'http://s/WarfareVariables',
+              'http://s/military_technologies':
+              json{'@id':_,
+                   '@type':'http://s/MilitaryTechnologies',
+                   'http://s/atlatl':json{'@id':'http://s/EpistemicState_present',
+                                          '@type':"@id"},
+                   'http://s/battle_axes':json{'@id':'http://s/EpistemicState_present',
+                                               '@type':"@id"},
+                   'http://s/breastplates':json{'@id':'http://s/EpistemicState_present',
+                                                '@type':"@id"}}}},
+
     create_context(Desc, commit{author: "me", message: "something"}, Context),
     with_transaction(
         Context,
@@ -5242,6 +5295,74 @@ test(insert_polity,
     ),
 
     get_document(Desc, ID, JSON),
-    writeq(JSON).
+
+    JSON = json{'@id':_,
+                '@type':'Polity',
+                general_variables:
+                json{'@id':_,
+                     '@type':'GeneralVariables',
+                     alternative_name:["Last Afghan Empire",
+                                       "Sadozai Kingdom"],
+                     language:"latin"},
+                name:"AfDurrn",
+                social_complexity_variables:
+                json{'@id':_,
+                     '@type':'SocialComplexityVariables',
+                     hierarchical_complexity:
+                     json{'@id':_,
+                          '@type':'HierarchicalComplexity',
+                          admin_levels:five},
+                     information:json{'@id':_,
+                                      '@type':'Information',
+                                      articles:present}},
+                warfare_variables:
+                json{'@id':_,
+                     '@type':'WarfareVariables',
+                     military_technologies:
+                     json{'@id':_,
+                          '@type':'MilitaryTechnologies',
+                          atlatl:present,
+                          battle_axes:present,
+                          breastplates:present}}}.
 
 :- end_tests(polity_documents).
+
+:- begin_tests(system_documents).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+test(database_expansion,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    Database = json{'@type':'UserDatabase',
+                    comment:"a test db",
+                    creation_date:"2021-07-22T10:05:20.000Z",
+                    label:"test",
+                    name:"foo",
+                    state:"creating"},
+    open_descriptor(system_descriptor{}, Transaction),
+    json_elaborate(Transaction,Database,Elaborated),
+
+    Elaborated =
+    json{'@id':_,
+         '@type':'http://terminusdb.com/schema/system#UserDatabase',
+         'http://terminusdb.com/schema/system#comment':
+         json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+              '@value':"a test db"},
+         'http://terminusdb.com/schema/system#creation_date':
+         json{'@type':'http://www.w3.org/2001/XMLSchema#dateTime',
+              '@value':"2021-07-22T10:05:20.000Z"},
+         'http://terminusdb.com/schema/system#label':
+         json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+              '@value':"test"},
+         'http://terminusdb.com/schema/system#name':
+         json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+              '@value':"foo"},
+         'http://terminusdb.com/schema/system#state':
+         json{'@id':'http://terminusdb.com/schema/system#DatabaseState_creating',
+              '@type':"@id"}}.
+
+:- end_tests(system_documents).
