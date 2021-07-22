@@ -1706,6 +1706,56 @@ run_replace_document(Desc, Commit, Document, Id) :-
         replace_document(Context, Document, Id),
         _).
 
+% Frames
+
+type_descriptor_sub_frame(unit, _DB, _Prefix, "Unit").
+type_descriptor_sub_frame(class(C), DB, Prefixes, Frame) :-
+    (   is_abstract(DB, C)
+    ->  findall(F,
+                (   concrete_subclass(DB,C,Class),
+                    type_descriptor(DB, Class, Desc),
+                    type_descriptor_sub_frame(Desc,DB,Prefixes,F)
+                ),
+                Frame)
+    ;   is_subdocument(DB,C)
+    ->  compress_schema_uri(C, Prefixes, Class_Comp),
+        Frame = json{ '@class' : Class_Comp,
+                      '@subdocument' : []}
+    ;   compress_schema_uri(C, Prefixes, Frame)
+    ).
+type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Class_Comp) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_sub_frame(optional(C), DB, Prefixes, json{ '@type' : "Optional",
+                                                           '@class' : Frame }) :-
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
+type_descriptor_sub_frame(set(C), DB, Prefixes, json{ '@type' : "Set",
+                                                  '@class' : Frame }) :-
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
+type_descriptor_sub_frame(array(C), DB, Prefixes, json{ '@type' : "Array",
+                                                    '@class' : Frame }) :-
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
+type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : "List",
+                                                       '@class' : Frame }) :-
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
+type_descriptor_sub_frame(tagged_union(C,_), DB, Prefixes, Frame) :-
+    (   is_subdocument(DB,C)
+    ->  compress_schema_uri(C, Prefixes, Class_Comp),
+        Frame = json{ '@class' : Class_Comp,
+                      '@subdocument' : []}
+    ;   compress_schema_uri(C, Prefixes, Frame)
+    ).
+type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : "Enum",
+                                                           '@id' : Class_Comp,
+                                                           '@values' : Enum_List}) :-
+    compress_schema_uri(C, Prefixes, Class_Comp),
+    maplist({C}/[V,Enum]>>(
+                enum_value(C,Enum,V)
+            ), List, Enum_List).
+
 class_frame(Transaction, Class, Frame) :-
     (   is_transaction(Transaction)
     ;   is_validation_object(Transaction)
@@ -1716,9 +1766,9 @@ class_frame(Transaction, Class, Frame) :-
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     findall(
-        Predicate_Comp-Type,
+        Predicate_Comp-Subframe,
         (   class_predicate_type(Transaction, Class_Ex, Predicate, Type_Desc),
-            type_descriptor_json(Type_Desc, Prefixes, Type),
+            type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Subframe),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
         Pairs),
@@ -4785,6 +4835,10 @@ schema5('
   "inner" : "Inner",
   "number" : "xsd:integer" }
 
+{ "@id" : "Things",
+  "@type" : "Enum",
+  "@value" : ["thing1","thing2"] }
+
 { "@id" : "Inner",
   "@type" : "Class",
   "@subdocument" : [],
@@ -4793,6 +4847,35 @@ schema5('
                "@class" : "xsd:integer" },
   "name" : "xsd:string",
   "number" : "xsd:integer" }
+
+{ "@id" : "NewOuter",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "inners" : { "@type" : "Set",
+               "@class" : "Inner" },
+  "inner" : "Inner",
+  "things" : "Things",
+  "number" : "xsd:integer" }
+
+{ "@id" : "Abstract",
+  "@type" : "Class",
+  "@abstract" : [] }
+
+{ "@id" : "A",
+  "@type" : "Class",
+  "@inherits" : "Abstract",
+  "has_something" : "B" }
+
+{ "@id" : "B",
+  "@type" : "Class",
+  "@inherits" : "Abstract",
+  "has_something" : "A" }
+
+{ "@id" : "Points_To_Abstract",
+  "@type" : "Class",
+  "points" : "Abstract" }
 
 ').
 
@@ -5039,8 +5122,51 @@ test(arithmetic_frame, [
     class_frame(Desc, 'Plus2', JSON),
     JSON = json{'@key':json{'@type':"Random"},
                 '@subdocument':[],
-                left:'ArithmeticExpression2',
-                right:'ArithmeticExpression2'}.
+                left:[json{'@class':'Plus2','@subdocument':[]},
+                      json{'@class':'Value2','@subdocument':[]}],
+                right:[json{'@class':'Plus2','@subdocument':[]},
+                       json{'@class':'Value2','@subdocument':[]}]}.
+
+
+test(outer_frame, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc, 'NewOuter', JSON),
+
+    JSON = json{'@key':json{'@fields':[name],'@type':"Lexical"},
+                inner:json{'@class':'Inner',
+                           '@subdocument':[]},
+                inners:json{'@class':json{'@class':'Inner',
+                                          '@subdocument':[]},
+                            '@type':"Set"},
+                name:'xsd:string',
+                number:'xsd:integer',
+                things:json{'@id':'Things',
+                            '@type':"Enum",
+                            '@values':[thing1,thing2]}}.
+
+
+test(points_to_abstract, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema5(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc, 'Points_To_Abstract', JSON),
+    JSON = json{points:['A','B']}.
 
 :- end_tests(arithmetic_document).
 

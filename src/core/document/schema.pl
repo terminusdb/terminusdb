@@ -17,6 +17,7 @@
               type_family_constructor/1,
               is_schemaless/1,
               class_subsumed/3,
+              concrete_subclass/3,
               is_abstract/2,
               is_subdocument/2
           ]).
@@ -61,6 +62,10 @@ is_simple_class(Validation_Object,Class) :-
 
 is_base_type(Type) :-
     base_type(Type).
+
+concrete_subclass(Validation_Object,Class,Concrete) :-
+    class_super(Validation_Object,Concrete,Class),
+    \+ is_abstract(Validation_Object,Concrete).
 
 class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
