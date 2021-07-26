@@ -613,7 +613,7 @@ compile_query(Term, Prog, Ctx_Out) :-
 
 compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
     (   safe_guard_removal(Term, Optimized),
-        * pre_flight_access(Ctx_In, Term),
+        assert_pre_flight_access(Ctx_In, Term),
         do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
         % Unsuspend all updates so they run at the end of the query
@@ -881,38 +881,158 @@ convert_csv_options(Options,CSV_Options) :-
 
     CSV_Options = CSV_Options2.
 
-find_resources(t(_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+find_resources(t(_,_,_), Collection, DRG, _DWG, Read, Write) :-
     Write = [],
-    Read = [resource(Collection,Type)].
-find_resources(delete(_,_,_,Graph_Type), Collection, _Default_Read_Graph, _Default_Write_Graph, Read, Write) :-
-    Write = [resource(Collection,Graph_Type)],
+    Read = [resource(Collection,DRG)].
+find_resources(t(_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(path(_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(path(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(get_document(_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(replace_document(_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
     Read = [].
-find_resources(delete(_,_,_), Collection, _Default_Read_Graph, Default_Write_Graph, Read, Write) :-
-    Write = [resource(Collection,Default_Write_Graph)],
+find_resources(replace_document(_,_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
     Read = [].
-find_resources(insert(_,_,_,Graph_Type), Collection, _Default_Read_Graph, _Default_Write_Graph, Read, Write) :-
-    Write = [resource(Collection,Graph_Type)],
+find_resources(insert_document(_,_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
+    Read = [].
+find_resources(delete_document(_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
+    Read = [].
+find_resources(delete(_,_,_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
+    Read = [].
+find_resources(delete(_,_,_,G), Collection, _DRG, _DWG, Read, Write) :-
+    ensure_filter_resolves_to_graph_descriptor(G, Collection, DWG),
+    Write = [resource(Collection,DWG)],
+    Read = [].
+find_resources(insert(_,_,_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
+    Read = [].
+find_resources(insert(_,_,_,G), Collection, _Default_Read_Graph, _Default_Write_Graph, Read, Write) :-
+    ensure_filter_resolves_to_graph_descriptor(G, Collection, DWG),
+    Write = [resource(Collection,DWG)],
     Read = [].
 find_resources((P,Q), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read_P, Write_P),
     find_resources(Q, Collection, DRG, DWG, Read_Q, Write_Q),
-    union(Read_P, Read_Q, Read),
-    union(Write_P, Write_Q, Write).
-find_resources(using(Collection_String,P), _Collection, DRG, DWG, Read, Write) :-
+    append(Read_P, Read_Q, Read),
+    append(Write_P, Write_Q, Write).
+find_resources((P;Q), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read_P, Write_P),
+    find_resources(Q, Collection, DRG, DWG, Read_Q, Write_Q),
+    append(Read_P, Read_Q, Read),
+    append(Write_P, Write_Q, Write).
+find_resources(when(P,Q), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read_P, Write_P),
+    find_resources(Q, Collection, DRG, DWG, Read_Q, Write_Q),
+    append(Read_P, Read_Q, Read),
+    append(Write_P, Write_Q, Write).
+find_resources(using(Collection_String,P), _Collection, DRG, _DWG, Read, Write) :-
     resolve_absolute_string_descriptor(Collection_String, Collection),
+    % NOTE: Don't we need the collection descriptor default filter?
+    collection_descriptor_default_write_graph(Collection, DWG),
     find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(size(Path,_), _, DRG_In, _, [resource(Collection,DRG)], []) :-
+    (   resolve_absolute_string_descriptor_and_graph(Path, Collection, DRG)
+    ->  true
+    ;   resolve_absolute_string_descriptor(Path,Collection)
+    ->  DRG_In = DRG).
+find_resources(triple_count(Path,_), _, DRG_In, _, [resource(Collection,DRG)], []) :-
+    (   resolve_absolute_string_descriptor_and_graph(Path, Collection, DRG)
+    ->  true
+    ;   resolve_absolute_string_descriptor(Path,Collection)
+    ->  DRG_In = DRG).
+find_resources(from(G,P), Collection, _, DWG, Read, Write) :-
+    resolve_filter(G,DRG),
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(into(G,P), Collection, DRG, _, Read, Write) :-
+    (   resolve_absolute_graph_descriptor(G,DWG)
+    ->  true
+    ;   resolve_filter(G,DWG)),
+    find_resources(into(G,P), Collection, DRG, DWG, Read, Write).
+find_resources(typeof(_,_), Collection, DRG, _DWG, [resource(Collection,DRG)], []).
+find_resources('<<'(_,_), Collection, DRG, _, [resource(Collection,DRG)], []).
+find_resources(isa(_,_), Collection, DRG, _, [resource(Collection,DRG)], []).
+find_resources(select(_, P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(count(P, _), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(start(_, P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(limit(_, P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(order_by(_, P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(group_by(_,_,P, _), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(distinct(_,P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(put(_,P, _), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(once(P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(opt(P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(not(P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(get(_,_,_), _, _, _, [], []).
+find_resources(typecast(_,_,_,_), _, _, _, [], []).
+find_resources(hash(_,_,_), _, _, _, [], []).
+find_resources(random_idgen(_,_,_), _, _, _, [], []).
+find_resources(idgen(_,_,_), _, _, _, [], []).
+find_resources(asc(_), _, _, _, [], []).
+find_resources(desc(_), _, _, _, [], []).
+find_resources(debug_log(_, _), _, _, _, [], []).
+find_resources(concat(_,_),_, _, _, [], []).
+find_resources(trim(_,_),_, _, _, [], []).
+find_resources('='(_,_),_, _, _, [], []).
+find_resources(like(_,_),_, _, _, [], []).
+find_resources(like(_,_,_),_, _, _, [], []).
+find_resources(pad(_,_,_,_),_, _, _, [], []).
+find_resources(sub_string(_,_,_,_,_),_, _, _, [], []).
+find_resources(re(_,_,_),_, _, _, [], []).
+find_resources(split(_,_,_),_, _, _, [], []).
+find_resources(upper(_,_),_, _, _, [], []).
+find_resources(lower(_,_),_, _, _, [], []).
+find_resources(format(_,_,_),_, _, _, [], []).
+find_resources('is'(_,_),_, _, _, [], []).
+find_resources(dot(_,_,_),_, _, _, [], []).
+find_resources(length(_,_),_, _, _, [], []).
+find_resources(member(_,_),_, _, _, [], []).
+find_resources(join(_,_,_),_, _, _, [], []).
+find_resources(sum(_,_),_, _, _, [], []).
+find_resources(timestamp_now(_),_, _, _, [], []).
+find_resources(false,_, _, _, [], []).
+find_resources(true,_, _, _, [], []).
 
-pre_flight_access(Context, AST) :-
+assert_pre_flight_access(Context, _AST) :-
+    is_super_user(Context.authorization, Context.prefixes),
+    % This probably makes all super user checks redundant.
+    !.
+assert_pre_flight_access(Context, AST) :-
     find_resources(AST,
                    (Context.default_collection),
-                   (Context.default_read_graph),
-                   (Context.default_write_graph),
+                   (Context.filter),
+                   (Context.write_graph),
                    Read,
                    Write),
-    forall(member(resource(Collection,Type),Read),
-           assert_read_access(Context.system, Context.auth, Collection, Type)),
-    forall(member(resource(Collection, Type),Write),
-           assert_write_access(Context.system, Context.auth, Collection, Type)).
+    sort(Read,Read_Sorted),
+    sort(Write,Write_Sorted),
+    forall(member(resource(Collection,Type),Read_Sorted),
+           assert_read_access(Context.system, Context.authorization, Collection, Type)),
+    forall(member(resource(Collection, Type),Write_Sorted),
+           assert_write_access(Context.system, Context.authorization, Collection, Type)).
 
 /*
  * turtle_term(Path,Values,Prog,Options) is det.
@@ -928,21 +1048,18 @@ turtle_term(Path,Vars,Prog,Options) :-
 
 compile_wf(get_document(Doc_ID,Doc),
            get_document(S0, URI, JSON)) -->
-    assert_read_access,
     resolve(Doc_ID,URI),
     resolve(Doc,JSON),
     peek(S0).
 compile_wf(replace_document(Doc),(
                freeze(Guard,
                       replace_document(S0, DocE, _)))) -->
-    assert_write_access,
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
 compile_wf(replace_document(Doc,X),(
                freeze(Guard,
                       replace_document(S0, DocE, URI)))) -->
-    assert_write_access,
     resolve(X,URI),
     resolve(Doc,DocE),
     view(update_guard, Guard),
@@ -950,7 +1067,6 @@ compile_wf(replace_document(Doc,X),(
 compile_wf(insert_document(Doc,X),(
                freeze(Guard,
                       insert_document(S0, DocE, URI)))) -->
-    assert_write_access,
     resolve(X,URI),
     resolve(Doc,DocE),
     view(update_guard, Guard),
@@ -958,7 +1074,6 @@ compile_wf(insert_document(Doc,X),(
 compile_wf(delete_document(X),(
                freeze(Guard,
                       delete_document(S0, URI)))) -->
-    assert_write_access,
     resolve(X,URI),
     view(update_guard, Guard),
     peek(S0).
@@ -978,7 +1093,6 @@ compile_wf(delete(X,P,Y),(
                      )
            ))
 -->
-    assert_write_access,
     resolve(X,XE),
     resolve_predicate(P,PE),
     resolve(Y,YE),
@@ -1012,7 +1126,6 @@ compile_wf(insert(X,P,Y),(
            )
           )
 -->
-    assert_write_access,
     resolve(X,XE),
     resolve_predicate(P,PE),
     resolve(Y,YE),
@@ -1057,7 +1170,6 @@ compile_wf(A << B,(distinct([AE,BE], class_subsumed(Transaction_Object,AE,BE))))
 compile_wf(opt(P), optional(Goal)) -->
     compile_wf(P,Goal).
 compile_wf(addition(X,P,Y),Goal) -->
-    assert_read_access,
     resolve(X,XE),
     resolve_predicate(P,PE),
     resolve(Y,YE),
@@ -1078,7 +1190,6 @@ compile_wf(addition(X,P,Y,G),Goal) -->
     compile_wf(addition(X,P,Y),Goal),
     update(filter, _, Old_Filter).
 compile_wf(removal(X,P,Y),Goal) -->
-    assert_read_access,
     resolve(X,XE),
     resolve_predicate(P,PE),
     resolve(Y,YE),
@@ -1099,7 +1210,6 @@ compile_wf(removal(X,P,Y,G),Goal) -->
     compile_wf(removal(X,P,Y), Goal),
     update(filter, _Filter, Old_Filter).
 compile_wf(t(X,P,Y),Goal) -->
-    assert_read_access,
     resolve(X,XE),
     resolve_predicate(P,PE),
     resolve(Y,YE),
@@ -1124,7 +1234,6 @@ compile_wf(t(X,P,Y,G),Goal) -->
 compile_wf(path(X,Pattern,Y),Goal) -->
     compile_wf(path(X,Pattern,Y,_),Goal).
 compile_wf(path(X,Pattern,Y,Path),Goal) -->
-    assert_read_access,
     resolve(X,XE),
     resolve(Y,YE),
     resolve(Path,PathE),
@@ -1280,8 +1389,6 @@ compile_wf(put(Spec,Query,resource(File_Spec,_Format,_Opts)), Prog) -->
                    close(Out)
                )
     }.
-compile_wf(where(P), Prog) -->
-    compile_wf(P, Prog).
 compile_wf(typecast(Val,Type,_Hints,Cast),
            (typecast(ValE, TypeE, [], CastE))) -->
     resolve(Val,ValE),
@@ -1462,7 +1569,6 @@ compile_wf(size(Path,Size),Goal) -->
     peek(Context),
     {
         Context_2 = (Context.put(_{ default_collection : Descriptor })),
-        assert_read_access(Context_2),
         Transaction_Objects = (Context_2.transaction_objects),
         (   Graph = none
         ->  collection_descriptor_transaction_object(Descriptor,Transaction_Objects,
@@ -1487,7 +1593,6 @@ compile_wf(triple_count(Path,Count),Goal) -->
     peek(Context),
     {
         Context_2 = (Context.put(_{ default_collection : Descriptor })),
-        assert_read_access(Context_2),
         Transaction_Objects = (Context_2.transaction_objects),
         (   Graph = none
         ->  collection_descriptor_transaction_object(Descriptor,Transaction_Objects,

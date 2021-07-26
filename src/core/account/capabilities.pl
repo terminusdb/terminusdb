@@ -8,9 +8,11 @@
               assert_read_access/1,
               assert_read_access/2,
               assert_read_access/3,
+              assert_read_access/4,
               assert_write_access/1,
               assert_write_access/2,
               assert_write_access/3,
+              assert_write_access/4,
               authorisation_object/3,
               user_accessible_database/3,
               super_user_authority/1,
@@ -234,6 +236,51 @@ assert_write_access(Context) :-
 assert_write_access(Context) :-
     throw(error(write_access_malformed_context(Context))).
 
+/* Associated with the resource pre-pass checking */
+assert_write_access(_System, Auth, _Collection, _Filter) :-
+    is_super_user(Auth),
+    % This probably makes all super user checks redundant.
+    !.
+assert_write_access(System, Auth, Collection, _Filter) :-
+    database_descriptor{
+        organization_name: Organization_Name,
+        database_name: Database_Name
+    } :< Collection,
+    !,
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(System, Auth, '@schema':'Action_meta_write_access', Scope_Iri).
+assert_write_access(System, Auth, Collection, _Filter) :-
+    repository_descriptor{
+        database_descriptor :
+        database_descriptor{
+            organization_name: Organization_Name,
+            database_name : Database_Name
+        },
+        repository_name : _Repo
+    } :< Collection,
+    !,
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(System, Auth, '@schema':'Action_commit_write_access', Scope_Iri).
+assert_write_access(System, Auth, Collection, Filter) :-
+    branch_descriptor{
+        repository_descriptor :
+        repository_descriptor{
+            database_descriptor :
+            database_descriptor{
+                organization_name: Organization_Name,
+                database_name : Database_Name
+            },
+            repository_name : _Repo
+        },
+        branch_name : _Branch_Name
+    }:< Collection,
+    !,
+    write_type_access(Filter,Access),
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(System, Auth, Access, Scope_Iri).
+assert_write_access(_System, _Auth, Collection, _Filter) :-
+    throw(error(write_access_malformed_collection(Collection))).
+
 /**
  * assert_read_access(Filter,Context,Context) is det + error.
  *
@@ -334,11 +381,11 @@ assert_read_access(Context) :-
 assert_read_access(Context) :-
     throw(error(read_access_malformed_context(Context))).
 
-assert_read_access(_System, Auth, _Collection, _Type) :-
+assert_read_access(_System, Auth, _Collection, _Filter) :-
     is_super_user(Auth),
     % This probably makes all super user checks redundant.
     !.
-assert_read_access(System, Auth, Collection, _Type) :-
+assert_read_access(System, Auth, Collection, _Filter) :-
     database_descriptor{
         organization_name: Organization_Name,
         database_name : Database_Name
@@ -346,6 +393,58 @@ assert_read_access(System, Auth, Collection, _Type) :-
     !,
     organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(System, Auth, '@schema':'Action_meta_read_access', Scope_Iri).
+assert_read_access(System, Auth, Collection, _Filter) :-
+    repository_descriptor{
+        database_descriptor :
+        database_descriptor{
+        organization_name: Organization_Name,
+        database_name : Database_Name
+        },
+        repository_name : _Repo
+    } :< Collection,
+    !,
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    assert_auth_action_scope(System, Auth, '@schema':'Action_commit_read_access', Scope_Iri).
+assert_read_access(System, Auth, Collection, Filter) :-
+    branch_descriptor{
+        repository_descriptor :
+        repository_descriptor{
+            database_descriptor :
+            database_descriptor{
+                organization_name: Organization_Name,
+                database_name : Database_Name
+            },
+            repository_name : _Repo
+        },
+        branch_name : _Branch_Name
+    } :< Collection,
+    !,
+    filter_types(Filter,Types),
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    forall(member(Type,Types),
+           (   read_type_access(Type,Access),
+               assert_auth_action_scope(System, Auth, Access, Scope_Iri))).
+assert_read_access(System, Auth, Collection, Filter) :-
+    commit_descriptor{
+        repository_descriptor:
+        repository_descriptor{
+            database_descriptor:
+            database_descriptor{
+                organization_name: Organization_Name,
+                database_name : Database_Name
+            },
+            repository_name : _Repo
+        },
+        commit_id : _ID
+    } :< Collection,
+    !,
+    filter_types(Filter,Types),
+    organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
+    forall(member(Type,Types),
+           (   read_type_access(Type,Access),
+               assert_auth_action_scope(System, Auth, Access, Scope_Iri))).
+assert_read_access(_System, _Auth, Collection, _Filter) :-
+    throw(error(read_access_malformed_collection(Collection))).
 
 
 /**
