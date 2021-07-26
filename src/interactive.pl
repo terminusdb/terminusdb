@@ -55,7 +55,6 @@ hup(_Signal) :-
 
 main(_Argv) :-
     initialise_log_settings,
-    initialise_woql_contexts,
     bootstrap_config_files,
     bootstrap_files,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
