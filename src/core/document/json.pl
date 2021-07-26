@@ -460,10 +460,10 @@ context_value_expand(DB,Context,Path,Value,Expansion,V) :-
     ;   prefix_expand(Value,Context,Value_Ex),
         V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
-context_value_expand(DB,_Context,_Path,Value,Expansion,V) :-
+context_value_expand(DB,Context,_Path,Value,Expansion,V) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
-    json_elaborate(DB,New_Expansion, V).
+    json_elaborate(DB,New_Expansion, Context, V).
 
 enum_value(Type,Value,ID) :-
     ground(Type),
@@ -1571,11 +1571,11 @@ run_delete_document(Desc, Commit, ID) :-
         delete_document(Context, ID),
         _).
 
-delete_subdocument(DB, V) :-
+delete_subdocument(DB, Prefixes, V) :-
     (   atom(V),
         instance_of(DB, V, C)
     ->  (   is_subdocument(DB, C)
-        ->  key_descriptor(DB, C, Descriptor),
+        ->  key_descriptor(DB, Prefixes, C, Descriptor),
             (   memberchk(Descriptor,[lexical(_,_),hash(_,_),random(_)])
             ->  delete_document(DB, V)
             ;   true)
@@ -1585,10 +1585,7 @@ delete_subdocument(DB, V) :-
         )
     ;   true).
 
-delete_document(DB, Id) :-
-    is_transaction(DB),
-    !,
-    database_context(DB,Prefixes),
+delete_document(DB, Prefixes, Id) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
     (   xrdf(Instance, Id_Ex, rdf:type, _)
@@ -1598,9 +1595,15 @@ delete_document(DB, Id) :-
     forall(
         xquad(Instance, G, Id_Ex, P, V),
         (   delete(G, Id_Ex, P, V, _),
-            delete_subdocument(DB,V)
+            delete_subdocument(DB,Prefixes,V)
         )
     ).
+
+delete_document(DB, Id) :-
+    is_transaction(DB),
+    !,
+    database_context(DB,Prefixes),
+    delete_document(DB, Prefixes, Id).
 delete_document(Query_Context, Id) :-
     is_query_context(Query_Context),
     !,
