@@ -5300,10 +5300,13 @@ test(doc_frame, [
          )]) :-
     open_descriptor(Desc, DB),
     class_frame(DB, 'Address', Frame),
-    json{'@documentation':json{'@comment':"This is address"},
-	 '@key':json{'@fields':[street,postal_code],'@type':"Lexical"},
-	 '@subdocument':[],country:'Country',postal_code:'xsd:string',
-	 street:'xsd:string'}.
+    Frame = json{'@documentation':json{'@comment':"This is address"},
+	             '@key':json{'@fields':[street,postal_code],
+                             '@type':"Lexical"},
+	             '@subdocument':[],
+                 country:'Country',
+                 postal_code:'xsd:string',
+	             street:'xsd:string'}.
 
 test(insert_employee, [
          setup(
