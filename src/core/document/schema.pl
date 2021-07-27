@@ -197,12 +197,13 @@ refute_schema(Validation_Object,Witness) :-
 refute_schema(Validation_Object, Witness) :-
     refute_schema_context(Validation_Object, Witness).
 refute_schema(Validation_Object,Witness) :-
+    database_context(Validation_Object, Prefixes),
     is_simple_class(Validation_Object,Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
     ;   refute_class_meta(Validation_Object,Class,Witness)
-    ;   refute_diamond_property(Validation_Object,Class,Witness)).
+    ;   refute_diamond_property(Validation_Object,Prefixes,Class,Witness)).
 
 /* O(n^3)
  */
@@ -635,9 +636,9 @@ documentation_descriptor_(Validation_Object, Obj, documentation(Comment,Property
     xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
     documentation_property_obj(Validation_Object,Obj,Property_Obj).
 
-refute_diamond_property(Validation_Object, Class, Witness) :-
+refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
-        (   class_property_dictionary(Validation_Object, Class, _),
+        (   class_property_dictionary(Validation_Object, Prefixes, Class, _),
             fail
         ),
         error(violation_of_diamond_property(Class,Predicate),_),

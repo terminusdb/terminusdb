@@ -34,6 +34,7 @@
               replace_json_schema/2,
               class_frame/3,
               class_property_dictionary/3,
+              class_property_dictionary/4,
               prefix_expand_schema/3,
               prefix_expand/3
           ]).
@@ -1816,14 +1817,7 @@ class_frame(Desc, Class, Frame) :-
     open_descriptor(Desc, Trans),
     class_frame(Trans, Class, Frame).
 
-class_property_dictionary(Transaction, Class, Frame) :-
-    (   is_transaction(Transaction)
-    ;   is_validation_object(Transaction)
-    ),
-    !,
-    database_context(Transaction, DB_Prefixes),
-    default_prefixes(Default_Prefixes),
-    Prefixes = (Default_Prefixes.put(DB_Prefixes)),
+class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     findall(
         Predicate_Comp-Result,
@@ -1838,6 +1832,16 @@ class_property_dictionary(Transaction, Class, Frame) :-
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
+
+class_property_dictionary(Transaction, Class, Frame) :-
+    (   is_transaction(Transaction)
+    ;   is_validation_object(Transaction)
+    ),
+    !,
+    database_context(Transaction, DB_Prefixes),
+    default_prefixes(Default_Prefixes),
+    Prefixes = (Default_Prefixes.put(DB_Prefixes)),
+    class_property_dictionary(Transaction, Prefixes, Class, Frame).
 class_property_dictionary(Query_Context, Class, Frame) :-
     is_query_context(Query_Context),
     !,
