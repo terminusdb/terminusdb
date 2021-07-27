@@ -299,7 +299,6 @@ test(user_ownership, [
             update_guard : _Guard0,
             authorization : User_URI
         }, Context1, Context1_0),
-
     with_transaction(
         Context1_0,
         ask(Context1_0,

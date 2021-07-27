@@ -275,7 +275,7 @@ assert_write_access(System, Auth, Collection, Filter) :-
         branch_name : _Branch_Name
     }:< Collection,
     !,
-    write_type_access(Filter,Access),
+    write_type_access(Filter.type,Access),
     organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(System, Auth, Access, Scope_Iri).
 assert_write_access(_System, _Auth, Collection, _Filter) :-
