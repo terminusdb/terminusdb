@@ -1793,8 +1793,13 @@ class_frame(Transaction, Class, Frame) :-
         key_descriptor_json(Key_Desc,Prefixes,Key_JSON)
     ->  Pairs4 = ['@key'-Key_JSON|Pairs3]
     ;   Pairs4 = Pairs3),
+    % documentation
+    (   documentation_descriptor(Transaction, Class_Ex, Documentation_Desc),
+	documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
+    ->  Pairs5 = ['@documentation'-Documentation_Json|Pairs4]
+    ;   Pairs5 = Pairs4),
 
-    sort(Pairs4, Sorted_Pairs),
+    sort(Pairs5, Sorted_Pairs),
     catch(
         dict_create(Frame,json,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -5283,6 +5288,22 @@ write_schema6(Desc) :-
         Context,
         write_json_string_to_schema(Context, Schema1),
         _Meta).
+
+test(doc_frame, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema6(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )]) :-
+    open_descriptor(Desc, DB),
+    class_frame(DB, 'Address', Frame),
+    json{'@documentation':json{'@comment':"This is address"},
+	 '@key':json{'@fields':[street,postal_code],'@type':"Lexical"},
+	 '@subdocument':[],country:'Country',postal_code:'xsd:string',
+	 street:'xsd:string'}.
 
 test(insert_employee, [
          setup(
