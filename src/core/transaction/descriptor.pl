@@ -405,6 +405,10 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
  * @New_Map has type list(descriptor=transaction_object)
  *      Updated map
  */
+open_descriptor(Descriptor, _, _, _, _) :-
+    var(Descriptor),
+    !,
+    throw(error(instantiation_error, _)).
 open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, Map) :-
     memberchk(Descriptor=Transaction_Object, Map),
     !.
