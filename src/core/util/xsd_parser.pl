@@ -117,6 +117,10 @@ threeDigitNatural(N) --> digit(A), digit(B), digit(C), { string_concat(A,B,I), s
 fourDigitNatural(N) --> digit(A), digit(B), digit(C), digit(D),
 			{ string_concat(A,B,S1), string_concat(S1,C,S2), string_concat(S2,D,S3), number_string(N,S3) } .
 
+sixDigitNatural(N) --> digit(A), digit(B), digit(C), digit(D), digit(E), digit(F),
+			           { atomic_list_concat([A,B,C,D,E,F],Atom),
+                         atom_string(Atom,S),
+                         number_string(N,S) }.
 
 digits(T) --> digit(X), digits(S),
 	      { string_concat(X, S, T) } .
@@ -203,8 +207,12 @@ time_and_offset(H,M,0,Offset) -->
 % Hour, Minute, Second, Offset, Zone, DST
 time(H,M,SS,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	".", threeDigitNatural(MS), optional_time_offset(Offset),
-    { SS is S + MS / 1000}.
+	".",
+    (   sixDigitNatural(NS), optional_time_offset(Offset),
+        !, { SS is S + NS / 1000000}
+    ;   threeDigitNatural(MS), optional_time_offset(Offset),
+        !, { SS is S + MS / 1000}
+    ).
 time(H,M,S,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 	optional_time_offset(Offset) .
