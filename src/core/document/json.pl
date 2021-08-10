@@ -690,20 +690,22 @@ json_schema_elaborate_key(V,Context,Value) :-
     ;   expand_match_system(Candidate, 'Hash', Type)
     ),
     !,
-    get_dict('@fields', V, Fields),
-    maplist({Context}/[Elt,Elt_ID]>>(
-                prefix_expand_schema(Elt,Context,Elt_Ex),
-                wrap_id(Elt_Ex,Elt_ID)
-            ),
-            Fields, Fields_Wrapped),
-    global_prefix_expand(sys:fields,Field),
-    Type_Value = json{ '@type' : Type },
-    Value = (Type_Value.put(Field,
-                            json{
-                                '@container' : "@list",
-                                '@type' : "@id",
-                                '@value' : Fields_Wrapped
-                            })).
+    (   get_dict('@fields', V, Fields)
+    ->  maplist({Context}/[Elt,Elt_ID]>>(
+                    prefix_expand_schema(Elt,Context,Elt_Ex),
+                    wrap_id(Elt_Ex,Elt_ID)
+                ),
+                Fields, Fields_Wrapped),
+        global_prefix_expand(sys:fields,Field),
+        Type_Value = json{ '@type' : Type },
+        Value = (Type_Value.put(Field,
+                                json{
+                                    '@container' : "@list",
+                                    '@type' : "@id",
+                                    '@value' : Fields_Wrapped
+                                }))
+    ;   throw(error(key_missing_fields(V,Type),_))
+    ).
 json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     get_dict('@type', V, ValueHash),
     expand_match_system(ValueHash, 'ValueHash', Type),
@@ -5678,6 +5680,30 @@ test(lexical_timestamp,
     ) :-
 
     write_schema(schema8_1,Desc).
+
+
+schema8_2('
+{"@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#", "@type": "@context"}
+{"@type": "Class", "@id": "Grades", "last_name": "xsd:string", "first_name": "xsd:string", "ssn": "xsd:string", "test1": "xsd:decimal", "test2": "xsd:decimal", "test3": "xsd:decimal", "test4": "xsd:decimal", "final": "xsd:decimal", "grade": "xsd:string", "@key": {"@type": "Hash", "@field": ["last_name", "first_name", "ssn", "test1", "test2", "test3", "test4", "final", "grade"]}}
+').
+
+test(round_trip_hash_key,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      ),
+      error(key_missing_fields(json{'@field':["last_name","first_name","ssn","test1","test2","test3","test4","final","grade"],'@type':"Hash"},'http://terminusdb.com/schema/sys#Hash'),_)
+     ]
+    ) :-
+
+    write_schema(schema8_2,Desc),
+    print_all_triples(Desc,schema),
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Grades', _JSON).
+
 
 :- end_tests(python_client_bugs).
 
