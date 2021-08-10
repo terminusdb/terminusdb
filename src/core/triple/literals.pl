@@ -47,7 +47,7 @@ date_time_string(Date_Time,String) :-
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
                [Y,M,D,HH,MM,SS])
     ;   S is floor(SS),
-        MS is floor((SS - S) / 1000),
+        MS is floor((SS - S) * 1000),
         format(string(String),
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
                [Y,M,D,HH,MM,S,MS])
@@ -71,7 +71,7 @@ date_time_stamp_string(Date_Time,String) :-
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
                [Y,M,D,HH,MM,SS])
     ;   S is floor(SS),
-        MS is floor((SS - S) / 1000),
+        MS is floor((SS - S) * 1000),
         format(string(String),
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
                [Y,M,D,HH,MM,S,MS])
@@ -212,7 +212,7 @@ time_string(Time,String) :-
                '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
                [HH,MM,SS])
     ;   S is floor(SS),
-        MS is floor((SS - S) / 1000),
+        MS is floor((SS - S) * 1000),
         format(string(String),
                '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
                [HH,MM,S,MS])
