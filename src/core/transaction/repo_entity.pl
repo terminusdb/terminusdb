@@ -119,14 +119,23 @@ update_repository_remote_url(Context, Repo_Name, Remote_Url) :-
                  insert(Repo_Uri, remote_url, Remote_Url^^xsd:string)))).
 
 
+remove_repository_head(Context, Repo_Uri):-
+    ignore(ask(Context,
+             (   t(Repo_Uri, head,Layer_Uri),
+                 delete(Repo_Uri, head,Layer_Uri)))).
+
+
 remove_local_repository(Context, Repo_Name) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
+    remove_repository_head(Context, Repo_Uri),
     once(ask(Context,
              (   delete(Repo_Uri, rdf:type, '@schema':'Local'),
-                 delete(Repo_Uri, name, Repo_Name^^xsd:string)))).
+                 delete(Repo_Uri, name, Repo_Name^^xsd:string) 
+                 ))).
 
 remove_remote_repository(Context, Repo_Name) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
+    remove_repository_head(Context, Repo_Uri),
     once(ask(Context,
              (   t(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
                  delete(Repo_Uri, rdf:type, '@schema':'Remote'),
