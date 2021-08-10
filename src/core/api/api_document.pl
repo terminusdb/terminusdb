@@ -177,7 +177,10 @@ api_delete_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
 
     with_transaction(Context,
                      forall(
-                         (   json_read_dict_stream(Stream,ID),
+                         (   json_read_dict_stream(Stream,JSON),
+                             (   is_list(JSON)
+                             ->  member(ID, JSON)
+                             ;   ID = JSON),
                              do_or_die(
                                  string(ID),
                                  error(not_a_proper_id(ID)))),
@@ -244,3 +247,83 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
                              ;   Document = JSON)),
                          api_replace_document_(Schema_Or_Instance, Transaction, Document)),
                      _).
+
+:- begin_tests(delete_document).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+
+insert_some_cities(System, Path) :-
+    open_string('
+{ "@type": "City",
+  "@id" : "Dublin",
+  "name" : "Dublin" }
+{ "@type": "City",
+  "@id" : "Pretoria",
+  "name" : "Pretoria" }
+{ "@type": "City",
+  "@id" : "Utrecht",
+  "name" : "Utrecht" }',
+                Stream),
+    api_insert_documents(System, admin, Path, instance, "author", "message", false, Stream, _Out_Ids).
+
+test(delete_objects_with_stream,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('"Dublin" "Pretoria"', Stream),
+    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
+    create_context(Descriptor, Context),
+    findall(Id_Compressed,
+            (   get_document_uri(Context, true, Id),
+                'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
+            Ids),
+
+    Ids = ['Utrecht'].
+
+test(delete_objects_with_string,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('["Dublin", "Pretoria"]', Stream),
+    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
+    create_context(Descriptor, Context),
+    findall(Id_Compressed,
+            (   get_document_uri(Context, true, Id),
+                'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
+            Ids),
+
+    Ids = ['Utrecht'].
+
+test(delete_objects_with_mixed_string_stream,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('"Dublin"\n["Pretoria"]', Stream),
+    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+
+    resolve_absolute_string_descriptor("admin/foo", Descriptor),
+    create_context(Descriptor, Context),
+    findall(Id_Compressed,
+            (   get_document_uri(Context, true, Id),
+                'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
+            Ids),
+
+    Ids = ['Utrecht'].
+
+:- end_tests(delete_document).
