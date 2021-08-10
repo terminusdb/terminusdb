@@ -433,6 +433,9 @@ context_value_expand(DB,Context,Path,Value,Expansion,V) :-
     !,
     (   is_dict(Value)
     ->  json_elaborate(DB, Value, Context, Path, V)
+    ;   is_list(Value)
+    ->  Value = [Val],
+        context_value_expand(DB,Context,Path,Val,Expansion,V)
     ;   prefix_expand(Value,Context,Value_Ex),
         V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
@@ -1994,6 +1997,21 @@ replace_schema_document(Query_Context, Document, Id) :-
     replace_schema_document(TO, Document, Id).
 
 
+:- meta_predicate write_schema(1,+).
+write_schema(P,Desc) :-
+    create_context(Desc,commit{
+                            author : "me",
+                            message : "none"},
+                   Context),
+
+    call(P,Schema),
+
+    % Schema
+    with_transaction(
+        Context,
+        write_json_string_to_schema(Context, Schema),
+        _Meta).
+
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -2105,20 +2123,6 @@ schema1('
                 "@class" : "xsd:string" } }
 ').
 
-write_schema1(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema1(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(get_field_values, []) :-
     Expanded = json{'@type':'http://s/Person',
                     'http://s/birthdate':
@@ -2141,7 +2145,7 @@ test(create_database_context,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2172,7 +2176,7 @@ test(elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2217,7 +2221,7 @@ test(id_expand,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2273,7 +2277,7 @@ test(triple_convert,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2333,7 +2337,7 @@ test(extract_json,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2390,7 +2394,7 @@ test(double_insert_document,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2439,7 +2443,7 @@ test(get_value,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema1(Desc)
+                 write_schema(schema1,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2556,20 +2560,6 @@ schema2('
 
 ').
 
-write_schema2(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema2(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(schema_key_elaboration1, []) :-
     Doc = json{'@id':"Capability",
                '@key':json{'@type':"ValueHash"},
@@ -2664,7 +2654,7 @@ test(idgen_lexical,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2692,7 +2682,7 @@ test(idgen_hash,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2728,7 +2718,7 @@ test(idgen_value_hash,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2753,7 +2743,7 @@ test(idgen_random,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -2993,7 +2983,7 @@ test(list_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3117,7 +3107,7 @@ test(array_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3225,7 +3215,7 @@ test(set_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3341,7 +3331,7 @@ test(set_elaborate_id,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3376,7 +3366,7 @@ test(elaborate_id,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3403,7 +3393,7 @@ test(empty_list,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3434,7 +3424,7 @@ test(enum_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3546,7 +3536,7 @@ test(binary_tree_context,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3573,7 +3563,7 @@ test(binary_tree_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3674,7 +3664,7 @@ test(insert_get_delete,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3700,7 +3690,7 @@ test(document_update,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3735,7 +3725,7 @@ test(auto_id_update,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3768,7 +3758,7 @@ test(partial_document_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3794,7 +3784,7 @@ test(partial_document_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3820,7 +3810,7 @@ test(all_path_values,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3853,7 +3843,7 @@ test(partial_document_elaborate_list,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3904,7 +3894,7 @@ test(partial_document_elaborate_list_without_required,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3950,7 +3940,7 @@ test(optional_missing,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -3977,7 +3967,7 @@ test(extract_schema_person,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4001,7 +3991,7 @@ test(extract_schema_employee,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4026,7 +4016,7 @@ test(extract_schema_colour,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4044,7 +4034,7 @@ test(extract_schema_binary_tree,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4066,7 +4056,7 @@ test(insert_schema_object,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4110,7 +4100,7 @@ test(delete_schema_document,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4158,7 +4148,7 @@ test(replace_schema_document,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4230,7 +4220,7 @@ test(double_insert_schema,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4291,7 +4281,7 @@ test(comment_elaborate,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4391,7 +4381,7 @@ test(bad_documentation,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema2(Desc)
+                 write_schema(schema2,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4449,20 +4439,6 @@ schema3('
   "@inherits" : "Employee" }
 ').
 
-write_schema3(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema3(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(check_for_cycles_bad,
      [
          setup(
@@ -4484,7 +4460,7 @@ test(check_for_cycles_bad,
              _)
      ]) :-
 
-    write_schema3(Desc).
+    write_schema(schema3,Desc).
 
 schema4('
 { "@type" : "@context",
@@ -4572,7 +4548,7 @@ test(diamond_ok,
          )
      ]) :-
 
-    write_schema4(Desc),
+    write_schema(schema4,Desc),
 
     open_descriptor(Desc, Transaction),
     class_frame(Transaction, "Bottom", Frame),
@@ -4591,7 +4567,7 @@ test(extract_bottom,
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema4(Desc)
+                 write_schema(schema4,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4638,20 +4614,6 @@ schema5('
                  "@class" : "Top" } }
 ').
 
-write_schema5(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema5(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(diamond_bad,
      [
          setup(
@@ -4668,7 +4630,7 @@ test(diamond_bad,
                           predicate:thing}]),_)
      ]) :-
 
-    write_schema5(Desc),
+    write_schema(schema5,Desc),
     print_all_documents(Desc, schema).
 
 
@@ -4932,25 +4894,11 @@ schema5('
 
 ').
 
-write_schema5(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema5(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(get_value_schema, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -4970,7 +4918,7 @@ test(plus_doc_extract, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5021,7 +4969,7 @@ test(plus_doc_delete, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5078,7 +5026,7 @@ test(subdocument_deletes_lists, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5121,7 +5069,7 @@ test(subdocument_deletes_lists, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5165,7 +5113,7 @@ test(arithmetic_frame, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5185,7 +5133,7 @@ test(outer_frame, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5211,7 +5159,7 @@ test(points_to_abstract, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema5(Desc)
+                 write_schema(schema5,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5279,25 +5227,11 @@ schema6('
   "name": "xsd:string" }
 ').
 
-write_schema6(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema6(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(doc_frame, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema6(Desc)
+                 write_schema(schema6,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5316,7 +5250,7 @@ test(insert_employee, [
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema6(Desc)
+                 write_schema(schema6,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5360,7 +5294,7 @@ test(update_enum,[
          setup(
              (   setup_temp_store(State),
                  test_document_label_descriptor(Desc),
-                 write_schema6(Desc)
+                 write_schema(schema6,Desc)
              )),
          cleanup(
              teardown_temp_store(State)
@@ -5474,25 +5408,11 @@ schema7('
   "social_complexity_variables": "SocialComplexityVariables",
   "warfare_variables": "WarfareVariables"}').
 
-write_schema7(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema7(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(insert_polity,
      [setup(
           (   setup_temp_store(State),
               test_document_label_descriptor(Desc),
-              write_schema7(Desc)
+              write_schema(schema7,Desc)
           )),
       cleanup(
           teardown_temp_store(State)
@@ -5650,3 +5570,195 @@ test(database_expansion,
 :- end_tests(system_documents).
 
 
+:- begin_tests(python_client_bugs).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema8('
+{"@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#", "@type": "@context"}
+{"@documentation": {"@comment": "This is address"},
+ "@id": "Address",
+ "@key": {"@type": "Random"},
+ "@subdocument": [],
+ "@type": "Class",
+ "country": "Country",
+ "postal_code": "xsd:string", "street": "xsd:string"}
+{"@id": "Coordinate",
+ "@key": {"@type": "Random"},
+ "@type": "Class",
+ "x": "xsd:decimal",
+ "y": "xsd:decimal"}
+{"@id": "Country",
+ "@key": {"@type": "ValueHash"},
+ "@type": "Class",
+ "name": "xsd:string",
+ "perimeter": {"@class": "Coordinate", "@type": "List"}}
+{"@id": "Employee",
+ "@inherits": "Person",
+ "@key": {"@type": "Random"},
+ "@type": "Class",
+ "address_of": "Address",
+ "age": "xsd:integer",
+ "contact_number": {"@class": "xsd:string", "@type": "Optional"},
+ "friend_of": {"@class": "Person", "@type": "Set"},
+ "managed_by": "Employee",
+ "member_of": "Team",
+ "name": "xsd:string"}
+{"@documentation": {"@comment": "This is a person", "@properties": {"age": "Age of the person.", "name": "Name of the person."}},
+ "@id": "Person",
+ "@key": {"@type": "Random"},
+ "@type": "Class",
+ "age": "xsd:integer",
+ "friend_of": {"@class": "Person", "@type": "Set"},
+ "name": "xsd:string"}
+{"@id": "Team",
+ "@type": "Enum",
+ "@value": ["Information Technology", "Marketing"]}').
+
+schema8_1('
+{"@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#", "@type": "@context"}
+{ "@type": "Class",
+  "@id": "my_ip",
+  "@key": { "@type": "Lexical",
+            "@fields": ["timestamp"]},
+  "ip": "xsd:string",
+  "timestamp": "xsd:dateTime"}').
+
+test(type_not_found,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(schema8,Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      )
+     ]
+    ) :-
+
+    UK = _{ '@type' : "Country",
+            name : "United Kingdom",
+            perimeter : []
+          },
+
+    Home = _{ '@type' : "Address",
+              street : "123 Abc Street",
+              country : UK,
+              postal_code : "A12 345"
+            },
+
+    Cheuk = _{ '@type' : "Employee",
+               '@id' : 'Cheuk2342343',
+               address_of : Home,
+               contact_number : "07777123456",
+               age : 21,
+               name : "Cheuk",
+               managed_by : 'Cheuk2342343',
+               member_of : "Information Technology"
+             },
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        (
+            insert_document(Context, Cheuk, 'terminusdb:///data/Cheuk2342343')
+        ),
+        _
+    ).
+
+test(lexical_timestamp,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      )
+     ]
+    ) :-
+
+    write_schema(schema8_1,Desc).
+
+:- end_tests(python_client_bugs).
+
+
+:- begin_tests(javascript_client_bugs).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema9('
+{ "@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#", "@type": "@context"}
+{ "@abstract": [], "@id": "Entity", "@type": "Class", "status": "Status" }
+{ "@id": "Invitation", "@inherits": "Entity", "@key": { "@type": "ValueHash" },
+  "@subdocument": [], "@type": "Class", "email_to": "xsd:string", "invited_by": "User", "note": { "@class": "xsd:string", "@type": "Optional" }, "sent_date": { "@class": "xsd:dateTime", "@type": "Optional" } }
+{ "@id": "Organization", "@inherits": "Entity", "@key": { "@fields": [ "organization_name" ], "@type": "Lexical" }, "@type": "Class", "child": { "@class": "Organization", "@type": "Set" }, "collaborators": { "@class": "User", "@type": "Set" }, "creation_date": "xsd:dateTime", "expiration_data": { "@class": "xsd:dateTime", "@type": "Optional" }, "invitations": { "@class": "Invitation", "@type": "Set" }, "organization_name": "xsd:string", "owned_by": "User", "stripe_subscription": "StripeSubscription" }
+{ "@id": "Personal", "@inherits": "Organization", "@type": "Class" }
+{ "@id": "Status", "@type": "Enum", "@value": [ "pending", "inactive", "active", "needs_invite", "invite_sent", "accepted", "rejected" ] }
+{ "@id": "StripeSubscription", "@inherits": "Entity", "@key": {"@type": "Random"}, "@subdocument": [], "@type": "Class", "billing_email": "xsd:string", "stripe_id": "xsd:string", "stripe_quantity": "xsd:decimal", "stripe_user": "User", "subscription_id": "xsd:string" }
+{ "@id": "Team", "@inherits": "Organization", "@type": "Class" }
+{ "@id": "User", "@inherits": "Entity", "@key": { "@fields": [ "user_id" ], "@type": "Lexical" }, "@type": "Class", "company": "xsd:string", "email": "xsd:string", "first_name": "xsd:string", "last_name": "xsd:string", "picture": "xsd:string", "registration_date": { "@class": "xsd:dateTime", "@type": "Optional" }, "user_id": "xsd:string" }
+').
+
+test(js_type_not_found,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(schema9,Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      )
+     ]
+    ) :-
+    Bonzai = _{ '@type' : "User",
+                company: "Yoyodyne",
+                email: "Bonzai@yoyodyne.com",
+                first_name: "Buckaroo",
+                last_name: "Bonzai",
+                picture: "My pic",
+                status: "active",
+                registration_date: "2009-07-01T10:11:12Z",
+                user_id: "bonzai"
+              },
+    Hikita = _{ '@type' : "User",
+                company: "Yoyodyne",
+                email: "Tohichi@yoyodyne.com",
+                first_name: "Tohichi",
+                last_name: "Hikita",
+                picture: "My pic of me",
+                status: "active",
+                registration_date: "2009-07-01T10:11:12Z",
+                user_id: "hikita"
+            },
+    Organization = _{ '@type':"Organization",
+                      child: [],
+                      collaborators:[ "User_hikita" ],
+                      invitations:[ _{ email_to:"hello",
+                                       invited_by:"User_bonzai",
+                                       status:"needs_invite" },
+                                    _{ email_to:"monkey",
+                                       invited_by:"User_bonzai",
+                                       status:"needs_invite" } ],
+                      organization_name:"withsubscription",
+                      owned_by: "User_bonzai",
+                      status: "invite_sent",
+                      stripe_subscription:[ _{ '@type' : "StripeSubscription",
+                                               billing_email:"somewkjf",
+                                               status: "active",
+                                               stripe_id:"KItty",
+                                               stripe_quantity:"32",
+                                               stripe_user:"User_hikita",
+                                               subscription_id:"932438238429384ASBJDA" } ],
+                      creation_date:"2011-01-01T01:00:37Z" },
+    create_context(Desc, commit{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        (
+            insert_document(Context, Bonzai, _),
+            insert_document(Context, Hikita, _),
+            insert_document(Context, Organization, _)
+        ),
+        _
+    ).
+
+:- end_tests(javascript_client_bugs).
