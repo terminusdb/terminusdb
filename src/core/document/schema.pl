@@ -303,11 +303,26 @@ refute_class_documentation(Validation_Object,Class,Witness) :-
 refute_class_documentation(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:documentation, Doc),
-    xrdf(Schema, Doc, rdf:type, sys:'Documentation'),
+    refute_documentation_object(Validation_Object,Class,Doc,Witness).
+
+refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Doc, rdf:type, sys:'Documentation'),
+    Witness = witness{ '@type' : not_a_typed_documentation_object,
+                       class: Class,
+                       object : Doc }.
+refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Doc, sys:comment, _),
+    Witness = witness{ '@type' : no_comment_on_documentation_object,
+                       class: Class,
+                       object : Doc }.
+refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
+    database_schema(Validation_Object,Schema),
     xrdf(Schema, Doc, Prop, _),
     prefix_list([sys:comment, sys:properties, rdf:type], List),
     (   \+ memberchk(Prop, List)
-    ->  Witness = witness{ '@type' : not_a_valid_documenation_object,
+    ->  Witness = witness{ '@type' : not_a_valid_documentation_object,
                            predicate: Prop,
                            class: Class,
                            subject: Doc }
