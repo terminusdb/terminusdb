@@ -311,14 +311,14 @@ print_all_triples(Askable) :-
             ask(Askable, t(S,P,O)),
             Triples),
     forall(member(Triple,Triples),
-           (   writeq(Triple), nl)).
+           (   writeq(user_error, Triple), nl(user_error) )).
 
 print_all_triples(Askable, Selector) :-
     findall(t(S,P,O),
             ask(Askable, t(S,P,O, Selector)),
             Triples),
     forall(member(Triple,Triples),
-           (   writeq(Triple), nl)).
+           (   writeq(user_error, Triple), nl(user_error))).
 
 print_all_documents(Askable) :-
     print_all_documents(Askable, instance).
