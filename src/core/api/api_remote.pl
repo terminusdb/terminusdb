@@ -121,3 +121,54 @@ list_remotes(SystemDB, Auth, Path, Remote_Names) :-
             has_remote_repository(Context, Remote_Name),
             Remote_Names).
 
+
+:- begin_tests(remote_tests).
+
+:- use_module(core(util/test_utils)).
+
+test(add_remote,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    open_descriptor(system_descriptor{}, System),
+    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
+    has_remote_repository(Descriptor, "remote").
+
+
+test(remove_remote,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    open_descriptor(system_descriptor{}, System),
+    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    remove_remote(System, admin, 'admin/test', 'remote'),
+    resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
+    \+ has_remote_repository(Descriptor, "remote").
+
+test(update_remote,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    open_descriptor(system_descriptor{}, System),
+    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    update_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
+    has_remote_repository(Descriptor, "remote").     
+
+test(show_remote,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    open_descriptor(system_descriptor{}, System),
+    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    show_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    resolve_absolute_string_descriptor('admin/test/_meta', Descriptor),
+    has_remote_repository(Descriptor, 'remote').     
+
+
+:- end_tests(remote_tests).

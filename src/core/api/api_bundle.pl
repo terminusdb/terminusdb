@@ -35,6 +35,7 @@ bundle(System_DB, Auth, Path, Payload, Options) :-
                  {Payload}/[_,P]>>(P = Payload),
                  _)
         ),
+
         % Cleanup
         remove_remote(System_DB, Auth, Path, Remote_Name)
     ).
@@ -51,3 +52,27 @@ create_fake_repo_head(Branch_Descriptor, Remote_Name) :-
         Context,
         update_repository_head(Context, Remote_Name, Layer_Id),
         _).
+
+:- begin_tests(bundle_tests).
+
+:- use_module(core(util/test_utils)).
+
+
+test(bundle,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    open_descriptor(system_descriptor{}, System),
+    bundle(System, admin, 'admin/test', Payload, []).
+
+test(create_fake_repo_head,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    resolve_absolute_string_descriptor('admin/test', Branch_Descriptor),
+    create_fake_repo_head(Branch_Descriptor, Remote_Name).
+
+
+ :- end_tests(bundle_tests).
