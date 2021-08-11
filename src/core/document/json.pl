@@ -4217,6 +4217,60 @@ test(replace_schema_document,
         shape:'xsd:string',
         species:'xsd:string'}.
 
+test(replace_schema_document_lexical_key,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus"] },
+       genus : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    create_context(DB2, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+
+    New_Document =
+    _{ '@id' : "Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus"] },
+       genus : "xsd:string"
+     },
+
+    with_transaction(
+        Context2,
+        replace_schema_document(Context2, New_Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB3),
+    get_schema_document(DB3, 'Squash', JSON),
+
+    JSON =
+    json{
+        '@id':'Squash',
+        '@key':json{'@fields':[genus],'@type':"Lexical"},
+        '@type':'Class',
+        genus:'xsd:string'}.
+
 test(double_insert_schema,
      [
          setup(
