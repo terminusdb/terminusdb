@@ -1071,7 +1071,10 @@ generic_exception_jsonld(unknown_deletion_error(Doc_ID),JSON) :-
     JSON = _{'api:status' : 'terminus_failure',
              'api:message' : MSG,
              'system:object' : Doc_ID}.
-generic_exception_jsonld(schema_check_failure(Witnesses),Witnesses).
+generic_exception_jsonld(schema_check_failure(Witnesses),JSON) :-
+    JSON = _{'api:message' : 'Schema check failure',
+             'api:status' : 'api:failure',
+             'system:witnesses' : Witnesses}.
 generic_exception_jsonld(database_not_found(DB),JSON) :-
     format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
     JSON = _{'api:message' : MSG,
