@@ -1938,13 +1938,14 @@ delete_schema_list(Transaction, Context, Id) :-
     delete_schema_subdocument(Transaction, Context, O).
 
 delete_schema_subdocument(Transaction, Context, Id) :-
-    database_schema(Transaction, Schema),
+    database_schema(Transaction, [Schema]),
     (   atom(Id)
-    ->  (   xrdf(Schema, Id, rdf:type, C),
+    ->  (   xrdf([Schema], Id, rdf:type, C),
             (   (   is_system_class(C)
                 ;   is_key(C))
-            ->  xrdf(Schema, Id, P, R),
+            ->  xrdf([Schema], Id, P, R),
                 \+ global_prefix_expand(rdf:type, P),
+                delete(Schema, Id, P, R, _),
                 delete_schema_subdocument(Transaction, Context, R)
             ;   is_list_type(C)
             ->  delete_schema_list(Transaction,Context,Id)
@@ -4245,7 +4246,7 @@ test(replace_schema_document_lexical_key,
     ),
 
     open_descriptor(Desc, DB2),
-    create_context(DB2, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    create_context(DB2, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
 
     New_Document =
     _{ '@id' : "Squash",
