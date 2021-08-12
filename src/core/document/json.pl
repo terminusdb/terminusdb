@@ -4512,6 +4512,38 @@ test(bad_documentation,
         _
     ).
 
+
+test(subdocument_key_problem,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure([witness{'@type':subdocuments_must_be_random_or_value_hash,class:'http://s/Not_A_Squash',key:'http://s/Not_A_Squash_Lexical_genus'}]),_)
+     ]) :-
+
+    Document =
+    _{ '@id' : "Not_A_Squash",
+       '@type' : "Class",
+       '@subdocument' : [],
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus"]},
+       genus : "xsd:string"
+     },
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ).
+
+
 :- end_tests(json).
 
 :- begin_tests(schema_checker).

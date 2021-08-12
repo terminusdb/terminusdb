@@ -365,7 +365,11 @@ refute_key_obj(Validation_Object,Class,Obj,Witness) :-
     xrdf(Schema, Obj, rdf:type, Type),
     prefix_list([sys:'Lexical', sys:'Hash'], List),
     memberchk(Type, List),
-    (   xrdf(Schema, Obj, sys:fields, List_Obj)
+    (   is_subdocument(Validation_Object, Class)
+    ->  Witness = witness{ '@type' : subdocuments_must_be_random_or_value_hash,
+                           class: Class,
+                           key: Obj}
+    ;   xrdf(Schema, Obj, sys:fields, List_Obj)
     ->  (   rdf_list(Validation_Object,List_Obj,Fields)
         ->  member(Field,Fields),
             \+ class_predicate_type(Validation_Object, Class, Field, _),
