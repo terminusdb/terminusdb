@@ -1,0 +1,47 @@
+# Build `terminusdb` and run the unit tests.
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+
+  ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install swi-prolog
+        run: |
+          # Installing swipl on Debian: https://www.swi-prolog.org/build/PPA.html
+          sudo apt-add-repository ppa:swi-prolog/stable
+          sudo apt-get update
+          sudo apt-get install swi-prolog
+
+      - name: Install terminus_store_prolog
+        run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
+
+      - run: make
+
+      - run: ./terminusdb test
+
+  macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install swi-prolog
+        run: |
+          # Installing swipl on macOS: https://www.swi-prolog.org/build/macos.html
+          brew install swi-prolog
+
+      - name: Install terminus_store_prolog
+        run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
+
+      - run: make
+
+      - run: ./terminusdb test
