@@ -64,7 +64,7 @@ test(bundle,
       cleanup(teardown_temp_store(State))])
 :-
     open_descriptor(system_descriptor{}, System),
-    bundle(System, admin, 'admin/test', Payload, []).
+    bundle(System, admin, 'admin/test', _, []).
 
 test(create_fake_repo_head,
      [setup((setup_temp_store(State),
@@ -72,7 +72,7 @@ test(create_fake_repo_head,
       cleanup(teardown_temp_store(State))])
 :-
     resolve_absolute_string_descriptor('admin/test', Branch_Descriptor),
-    create_fake_repo_head(Branch_Descriptor, Remote_Name).
+    create_fake_repo_head(Branch_Descriptor, _).
 
 
  :- end_tests(bundle_tests).
