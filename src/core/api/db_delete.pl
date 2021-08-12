@@ -22,7 +22,7 @@ begin_deleting_db_from_system(System, Organization,DB_Name) :-
     organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
     ask(System,
         (   delete(Db_Uri, state, '@schema':'DatabaseState_finalized'),
-            insert(Db_Uri, state, '@schema':'DatabaseState_finalized'))).
+            insert(Db_Uri, state, '@schema':'DatabaseState_deleting'))).
 
 /**
 * Deletes the database from the system. Fails if the database does not exist.
