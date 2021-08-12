@@ -122,6 +122,7 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
+
 api_insert_document_(instance, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
@@ -143,8 +144,8 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
-
-    % todo authentication
+         
+    % todo authentication  
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(resource_does_not_exist(Path), _)),
@@ -154,10 +155,9 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
                      (   Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id,
-                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
-                                 Ids)),
-                     _).
+                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids), 
+                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Id), _))),
+                     _).         
 
 api_delete_document_(schema, Transaction, Id) :-
     delete_schema_document(Transaction, Id).
@@ -177,7 +177,7 @@ api_delete_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
 
     with_transaction(Context,
                      forall(
-                         (   json_read_dict_stream(Stream,ID),
+                         (json_read_dict_stream(Stream,ID),
                              do_or_die(
                                  string(ID),
                                  error(not_a_proper_id(ID)))),
@@ -244,3 +244,20 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
                              ;   Document = JSON)),
                          api_replace_document_(Schema_Or_Instance, Transaction, Document)),
                      _).
+
+
+/* :- begin_tests(document_tests).
+
+:- use_module(core(util/test_utils)).
+
+test(add_remote,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))])
+:-
+    open_descriptor(system_descriptor{}, System),
+    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
+    has_remote_repository(Descriptor, "remote").
+
+:- end_tests(document_tests). */
