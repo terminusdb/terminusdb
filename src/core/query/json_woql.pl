@@ -830,8 +830,7 @@ json_type_to_woql_ast('Dot',JSON,WOQL,Path) :-
 json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
     _{subject : Subject,
       pattern : Pattern,
-      object : Object,
-      path : Edge_Path
+      object : Object
      } :< JSON,
     json_to_woql_ast(Subject,WSubject,[subject
                                        |Path]),
@@ -839,9 +838,12 @@ json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
                                                 |Path]),
     json_to_woql_ast(Object,WObject,[object
                                      |Path]),
-    json_to_woql_ast(Edge_Path,WEdge_Path,[path
-                                           |Path]),
-    WOQL = path(WSubject,WPattern,WObject,WEdge_Path).
+
+    (   _{path : Edge_Path} :< JSON
+    ->  json_to_woql_ast(Edge_Path,WEdge_Path,[path
+                                               |Path]),
+        WOQL = path(WSubject,WPattern,WObject,WEdge_Path)
+    ;   WOQL = path(WSubject,WPattern,WObject)).
 json_type_to_woql_ast('True',_,WOQL,_) :-
     WOQL = true.
 json_type_to_woql_ast('NodeValue',JSON,WOQL,_) :-
