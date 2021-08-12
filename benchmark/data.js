@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1628787297321,
+  "lastUpdate": 1628788743738,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -1533,6 +1533,68 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 46.898,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dani@terminusdb.com",
+            "name": "AstroChelonian"
+          },
+          "committer": {
+            "email": "dani@terminusdb.com",
+            "name": "AstroChelonian"
+          },
+          "distinct": true,
+          "id": "4353ccf6d470475961e4c593a8b294b3bb3d9999",
+          "message": "issue resolved. The process exits with an error when two instances with the same ID are added with the same transaction.",
+          "timestamp": "2021-08-12T18:15:18+01:00",
+          "tree_id": "8fe2b3b0b6ecfe5d051d9679a622c45b23e4da4e",
+          "url": "https://github.com/terminusdb/terminusdb/commit/4353ccf6d470475961e4c593a8b294b3bb3d9999"
+        },
+        "date": 1628788742667,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 89.84,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 265.433,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 272.52,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 158.251,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 165.994,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 85.871,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 38.132,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 33.806,
             "unit": "ms"
           }
         ]
