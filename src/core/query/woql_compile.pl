@@ -4270,6 +4270,30 @@ test(schema_prefix, [
     query_test_response(Descriptor, Query_Out, JSON),
     JSON = false.
 
+
+test(commit_graph, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Using_Query = '{"@type": "Using", "collection": "_commits", "query": {"@type": "Limit", "limit": 499, "query": {"@type": "Select", "variables": ["cid", "author", "message", "timestamp", "cur_cid", "cur_author", "cur_message", "cur_timestamp"], "query": {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "branch"}, "predicate": {"@type": "NodeValue", "node": "branch_name"}, "object": {"@type": "Value", "node": "main"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "branch"}, "predicate": {"@type": "NodeValue", "node": "ref_commit"}, "object": {"@type": "Value", "variable": "commit"}}, {"@type": "Or", "or": [{"@type": "And", "and": [{"@type": "Path", "subject": {"@type": "NodeValue", "variable": "commit"}, "pattern": {"@type": "PathPlus", "plus": {"@type": "PathPredicate", "predicate": "commit_parent"}}, "object": {"@type": "Value", "variable": "target_commit"}, "path": {"@type": "Value", "variable": "path"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_id"}, "object": {"@type": "Value", "variable": "cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_author"}, "object": {"@type": "Value", "variable": "author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_message"}, "object": {"@type": "Value", "variable": "message"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_timestamp"}, "object": {"@type": "Value", "variable": "timestamp"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_id"}, "object": {"@type": "Value", "variable": "cur_cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_author"}, "object": {"@type": "Value", "variable": "cur_author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_message"}, "object": {"@type": "Value", "variable": "cur_message"}}, {"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_timestamp"}, "object": {"@type": "Value", "variable": "cur_timestamp"}}]}]}]}]}]}]}]}]}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_id"}, "object": {"@type": "Value", "variable": "cur_cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_author"}, "object": {"@type": "Value", "variable": "cur_author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_message"}, "object": {"@type": "Value", "variable": "cur_message"}}, {"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_timestamp"}, "object": {"@type": "Value", "variable": "cur_timestamp"}}]}]}]}]}]}]}}}}',
+
+    atom_json_dict(Using_Query, JSON, []),
+    json_woql(JSON, WOQL), % Just to see that we can...
+    writeq(WOQL),nl,
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, rdf:type, '@schema':test))),
+        _Meta_Data
+    ),
+
+    query_test_response(Descriptor, JSON, Response),
+    writeq(Response).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data).

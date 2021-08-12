@@ -829,7 +829,7 @@ json_type_to_woql_ast('Dot',JSON,WOQL,Path) :-
     WOQL = dot(WDictionary,WKey,WValue).
 json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
     _{subject : Subject,
-      path_pattern : Pattern,
+      pattern : Pattern,
       object : Object,
       path : Edge_Path
      } :< JSON,
@@ -890,65 +890,64 @@ json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
     !,
-    (   _{'@type' : 'PathPredicate',
-          predicate : Node} :< JSON
-    ->   json_to_woql_ast(Node,WNode,[path_predicate
-                                      |Path]),
-         Pattern = p(WNode)
-    ;   _{'@type' : 'InversePathPredicate',
-          predicate : Node} :< JSON
-    ->   json_to_woql_ast(Node,WNode,[path_predicate
-                                      |Path]),
-         Pattern = n(WNode)
-    ;   _{'@type' : 'PathSequence',
-          sequence : List
-         } :< JSON
-    ->  json_list_to_woql_path_pattern(List,WList,[sequence|Path]),
-        xfy_list(',',Pattern,WList)
-    ;   _{'@type' : 'PathOr',
-          or : List} :< JSON
-    ->  json_list_to_woql_path_pattern(List,WList,[or|Path]),
-        xfy_list(';',Pattern,WList)
-    ;   _{'@type' : 'PathPlus',
-          plus : SubPattern} :< JSON
-    ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                  [path_pattern
-                                   |Path]),
-        Pattern = plus(PSubPattern)
-    ;   _{'@type' : 'PathStar',
-          star : SubPattern} :< JSON
-    ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                  [path_pattern
-                                   |Path]),
-        Pattern = star(PSubPattern)
-    ;   _{'@type' : 'PathTimes',
-          times : SubPattern,
-          from : N,
-          to : M
-         } :< JSON
-    ->  json_to_woql_path_pattern(SubPattern,PSubPattern,
-                                  [path_left
-                                   |Path]),
-        json_to_woql_ast(N,WN,
-                         [path_minimum
-                          |Path]),
-        json_to_woql_ast(M,WM,
-                         [path_maximum
-                          |Path]),
-        do_or_die(
-            (WN = N_int ^^ _),
-            error(woql_syntax_error(JSON,
-                                    [path_minimum|Path],
-                                    N), _)),
+    (   get_dict('@type', JSON, Type)
+    ->  atom_string(Type_Atom,Type),
+        json_type_to_woql_path_pattern(Type_Atom,JSON,Pattern,Path)
+    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))).
 
-        do_or_die(
-            (WM = M_int ^^ _),
-            error(woql_syntax_error(JSON,
-                                    [path_maximum|Path],
-                                    M), _)),
-        Pattern = times(PSubPattern,N_int,M_int)
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))
-    ).
+json_type_to_woql_path_pattern('PathPredicate',JSON,Pattern,_Path) :-
+    _{predicate : Node} :< JSON,
+    prefix_split(Node,WNode),
+    Pattern = p(WNode).
+json_type_to_woql_path_pattern('InversePathPredicate',JSON,Pattern,_Path) :-
+    _{predicate : Node} :< JSON,
+    prefix_split(Node,WNode),
+    Pattern = n(WNode).
+json_type_to_woql_path_pattern('PathSequence',JSON,Pattern,Path) :-
+    _{sequence : List} :< JSON,
+    json_list_to_woql_path_pattern(List,WList,[sequence|Path]),
+    xfy_list(',',Pattern,WList).
+json_type_to_woql_path_pattern('PathOr',JSON,Pattern,Path) :-
+    _{or : List} :< JSON,
+    json_list_to_woql_path_pattern(List,WList,[or|Path]),
+    xfy_list(';',Pattern,WList).
+json_type_to_woql_path_pattern('PathPlus',JSON,Pattern,Path) :-
+    _{plus : SubPattern} :< JSON,
+    json_to_woql_path_pattern(SubPattern,PSubPattern,
+                              [path_pattern
+                               |Path]),
+    Pattern = plus(PSubPattern).
+json_type_to_woql_path_pattern('PathStar',JSON,Pattern,Path) :-
+    _{star : SubPattern} :< JSON,
+    json_to_woql_path_pattern(SubPattern,PSubPattern,
+                              [path_pattern
+                               |Path]),
+    Pattern = star(PSubPattern).
+json_type_to_woql_path_pattern('PathTimes',JSON,Pattern,Path) :-
+    _{times : SubPattern,
+      from : N,
+      to : M
+     } :< JSON,
+    json_to_woql_path_pattern(SubPattern,PSubPattern,
+                              [path_left
+                               |Path]),
+    json_to_woql_ast(N,WN,
+                     [path_minimum
+                      |Path]),
+    json_to_woql_ast(M,WM,
+                     [path_maximum
+                      |Path]),
+    do_or_die(
+        (WN = N_int ^^ _),
+        error(woql_syntax_error(JSON,
+                                [path_minimum|Path],
+                                N), _)),
+    do_or_die(
+        (WM = M_int ^^ _),
+        error(woql_syntax_error(JSON,
+                                [path_maximum|Path],
+                                M), _)),
+    Pattern = times(PSubPattern,N_int,M_int).
 
 
 is_json_var(A) :-
