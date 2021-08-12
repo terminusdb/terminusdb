@@ -689,7 +689,7 @@ typecast_switch('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral', 'http
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#NCName', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
     !.
 %%% xsd:dateTime => timestamp (xsd:decimal)
-typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#dateTime', date(Y,M,D,HH,MM,SS,Offset), _,
+typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#dateTime', date_time(Y,M,D,HH,MM,SS,0,Offset), _,
                 Num^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
     date_time_stamp(date(Y,M,D,HH,MM,SS,Offset,-,-), Num).
@@ -835,10 +835,10 @@ test(string_long,[]) :-
     typecast("12"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#long', [], 12^^'http://www.w3.org/2001/XMLSchema#long').
 
 test(string_dateTime,[]) :-
-    typecast("2012-10-09T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#dateTime', [], date_time(2012, 10, 9, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
+    typecast("2012-10-09T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#dateTime', [], date_time(2012, 10, 9, 0, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
 
 test(dateTime_string,[]) :-
-    typecast(date_time(2012, 10, 9, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', 'http://www.w3.org/2001/XMLSchema#string', [], "2012-10-09T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+    typecast(date_time(2012, 10, 9, 0, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', 'http://www.w3.org/2001/XMLSchema#string', [], "2012-10-09T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(boolean_string, []) :-
     typecast(true^^'http://www.w3.org/2001/XMLSchema#boolean', 'http://www.w3.org/2001/XMLSchema#string', [], "true"^^'http://www.w3.org/2001/XMLSchema#string'),

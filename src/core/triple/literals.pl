@@ -41,48 +41,71 @@ date_time_string(Date_Time,String) :-
     nonvar(Date_Time),
     !,
     % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
-    Date_Time = date_time(Y,M,D,HH,MM,SS),
-    (   integer(SS)
+    Date_Time = date_time(Y,M,D,HH,MM,SS,NS),
+
+    (   NS = 0
     ->  format(string(String),
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
                [Y,M,D,HH,MM,SS])
-    ;   S is floor(SS),
-        MS is floor((SS - S) * 1000),
+    ;   0 is NS mod 1 000 000
+    ->  MS is NS div 1 000 000,
         format(string(String),
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
-               [Y,M,D,HH,MM,S,MS])
+               [Y,M,D,HH,MM,SS,MS])
+    ;   0 is NS mod 1 000
+    ->  MuS is NS div 1 000,
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~6+Z',
+               [Y,M,D,HH,MM,SS,MuS])
+    ;   format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~9+Z',
+               [Y,M,D,HH,MM,SS,NS])
+
     ).
 date_time_string(Date_Time,String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,Offset),Codes),
-    datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,-,-), Date_Time).
-
+    phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,NS,Offset),Codes),
+    remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset, Date_Time).
 
 date_time_stamp_string(Date_Time,String) :-
     nonvar(Date_Time),
     !,
     % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
-    Date_Time = date_time(Y,M,D,HH,MM,SS),
-    (   integer(SS)
+    Date_Time = date_time(Y,M,D,HH,MM,SS,NS),
+    (   NS = 0
     ->  format(string(String),
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
                [Y,M,D,HH,MM,SS])
-    ;   S is floor(SS),
-        MS is floor((SS - S) * 1000),
+    ;   0 is NS mod 1 000 000
+    ->  MS is NS div 1 000 000,
         format(string(String),
                '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
-               [Y,M,D,HH,MM,S,MS])
+               [Y,M,D,HH,MM,SS,MS])
+    ;   0 is NS mod 1 000
+    ->  MuS is NS div 1 000,
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~6+Z',
+               [Y,M,D,HH,MM,SS,MuS])
+    ;   format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~9+Z',
+               [Y,M,D,HH,MM,SS,NS])
+
     ).
 date_time_stamp_string(Date_Time,String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:dateTimeStamp(Y,M,D,HH,MM,SS,Offset),Codes),
-    datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,-,-), Date_Time).
+    phrase(xsd_parser:dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
+    remove_date_time_offset(Y,M,D,HH,MM,SS,Offset,NS,Date_Time).
+
+remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
+    date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),
+    stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
+    SS_Floor is floor(SS1).
 
 /*
  * date_string(-Date,+String) is det.
@@ -217,13 +240,13 @@ time_string(Time,String) :-
                '~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
                [HH,MM,S,MS])
     ).
-time_string(Time,String) :-
+time_string(time(HN,MN,SN),String) :-
     % So expensive! Let's do this faster somehow.
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:time(HH,MM,SS,Offset),Codes),
-    time_to_internal_time(time(HH,MM,SS,Offset),Time).
+    phrase(xsd_parser:time(HH,MM,SS,_NS,Offset),Codes),
+    time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)).
 
 duration_string(Duration,String) :-
     nonvar(Duration),
@@ -264,7 +287,10 @@ duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
 current_xsd_date_time(XSD) :-
     get_time(Unix),
     stamp_date_time(Unix, date(YY,MM,DD,H,M,S,_,_,_), 0),
-    date_time_string(date_time(YY,MM,DD,H,M,S),XSD).
+    SS is floor(S),
+    % Force milisecond precision
+    NS is floor((S - SS) * 1 000) * 1 000 000,
+    date_time_string(date_time(YY,MM,DD,H,M,SS,NS),XSD).
 
 is_number_type(Type) :-
     (   Type = 'http://www.w3.org/2001/XMLSchema#float'
@@ -517,7 +543,7 @@ prefixed_to_property(Term, Ctx, URI) :-
 :- begin_tests(turtle_literal_marshalling).
 
 test(date, []) :-
-    literal_to_turtle(date_time(-228, 10, 10, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00Z'))).
+    literal_to_turtle(date_time(-228, 10, 10, 0, 0, 0, 0)^^'http://www.w3.org/2001/XMLSchema#dateTime', literal(type('http://www.w3.org/2001/XMLSchema#dateTime','-228-10-10T00:00:00Z'))).
 
 test(bool, []) :-
     literal_to_turtle(false^^'http://www.w3.org/2001/XMLSchema#boolean', literal(type('http://www.w3.org/2001/XMLSchema#boolean',false))).
