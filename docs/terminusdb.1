@@ -1,6 +1,6 @@
-.\" generated with Ronn-NG/v0.8.0
-.\" http://github.com/apjanke/ronn-ng/tree/0.8.0
-.TH "TERMINUSDB" "1" "January 2021" "" ""
+.\" generated with Ronn-NG/v0.9.1
+.\" http://github.com/apjanke/ronn-ng/tree/0.9.1
+.TH "TERMINUSDB" "1" "August 2021" ""
 .SH "NAME"
 \fBterminusdb\fR \- command line interface to the terminusdb Graph DBMS
 .SH "SYNOPSIS"
@@ -32,10 +32,13 @@ Run a specific test
 Run the TerminusDB server\.
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
-print help for \fBserve\fR command
+Print help for \fBserve\fR command
 .TP
 \fB\-i\fR, \fB\-\-interactive\fR=[value]
-run server in interactive mode
+Run server in interactive mode
+.TP
+\fB\-m\fR, \fB\-\-memory\fR=[value]
+Run server in\-memory, without a persistent store\. Takes a password as an optional argument\. The in\-memory store will be initialized with an admin account with the given password\. If absent, the admin account will have 'root' as a password\.
 .SS "list"
 \fBterminusdb list OPTIONS\fR
 .P
@@ -43,10 +46,13 @@ List databases\.
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBlist\fR command
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+Return a JSON as the result of the \fBlist\fR command
 .SS "optimize"
 \fBterminusdb optimize OPTIONS\fR
 .P
-Optimize a database (including \fIsystem and\fRmeta)\.
+Optimize a database (including _system and _meta)\.
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBoptimize\fR command
@@ -176,9 +182,9 @@ print help for the \fBbundle\fR command
 \fB\-o\fR, \fB\-\-output\fR=[value]
 file name to use for pack output file (defaults to descriptor based name)\.
 .SS "unbundle"
-\fBterminusdb unbundle FILE DATABASE_SPEC OPTIONS\fR
+\fBterminusdb unbundle DATABASE_SPEC FILE OPTIONS\fR
 .P
-Unpack \.
+Unbundle a bundle file\.
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBunbundle\fR command
@@ -256,62 +262,6 @@ key to use for admin login
 .TP
 \fB\-f\fR, \fB\-\-force\fR=[value]
 force the creation of a new store even when one already exists
-.SS "csv list"
-\fBterminusdb csv list DB_SPEC\fR
-.P
-List CSVs in the given DB\.
-.TP
-\fB\-h\fR, \fB\-\-help\fR=[value]
-print help for the \fBcsv load\fR sub command
-.SS "csv delete"
-\fBterminusdb csv delete DB_SPEC FILE OPTIONS\fR
-.P
-Delete a CSV file from the given database\.
-.TP
-\fB\-h\fR, \fB\-\-help\fR=[value]
-print help for the \fBcsv load\fR sub command
-.TP
-\fB\-m\fR, \fB\-\-message\fR=[value]
-message to associate with the commit
-.TP
-\fB\-a\fR, \fB\-\-author\fR=[value]
-author to place on the commit
-.SS "csv load"
-\fBterminusdb csv load DB_SPEC FILES OPTIONS\fR
-.P
-Load a CSV file (appends new lines if already existing)\.
-.TP
-\fB\-h\fR, \fB\-\-help\fR=[value]
-print help for the \fBcsv load\fR sub command
-.TP
-\fB\-m\fR, \fB\-\-message\fR=[value]
-message to associate with the commit
-.TP
-\fB\-a\fR, \fB\-\-author\fR=[value]
-author to place on the commit
-.SS "csv update"
-\fBterminusdb csv update DB_SPEC FILES OPTIONS\fR
-.P
-Update a CSV file (equivalent to delete / load but with a minimal delta)\.
-.TP
-\fB\-h\fR, \fB\-\-help\fR=[value]
-print help for the \fBcsv update\fR sub command
-.TP
-\fB\-m\fR, \fB\-\-message\fR=[value]
-message to associate with the commit
-.TP
-\fB\-a\fR, \fB\-\-author\fR=[value]
-author to place on the commit
-.SS "csv dump"
-\fBterminusdb csv dump DB_SPEC FILES OPTIONS\fR
-.P
-Dump a CSV file from the database\.
-.TP
-\fB\-h\fR, \fB\-\-help\fR=[value]
-print help for the \fBcsv dump\fR sub command
-.TP
-\fB\-o\fR, \fB\-\-output\fR=[value]
-file name to use for csv output
 .SS "triples dump"
 \fBterminusdb triples dump GRAPH_SPEC\fR
 .P
@@ -433,10 +383,10 @@ Set the transaction retry count\. Default is \fB3\fR\.
 Set the location of the storage volume to be used by \fBterminusdb\fR operations\. Can be addressed relative to current path using \fB\./\fR\fIpath\fR\. Default is \fB\./storage/db\fR\.
 .TP
 \fBTERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH\fR
-Set the public key path for JWT\. Default is \fB\'\'\fR\.
+Set the public key path for JWT\. Default is \fB''\fR\.
 .TP
 \fBTERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID\fR
-Set the public key identifier for JWT\. Default is \fB\'\'\fR\.
+Set the public key identifier for JWT\. Default is \fB''\fR\.
 .TP
 \fBTERMINUSDB_CONSOLE_BASE_URL\fR
 Set the console javascript load URL\. Default is \fBhttps://cdn\.terminusdb\.com/js_libs/terminusdb_console/dev\fR\.
@@ -490,14 +440,14 @@ http://www\.apache\.org/licenses/LICENSE\-2\.0
 .P
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied\. See the License for the specific language governing permissions and limitations under the License\.
 .SH "AUTHORS"
-Gavin Mendel\-Gleason \fI\%mailto:gavin@terminusdb\.com\fR
+Gavin Mendel\-Gleason \fIgavin@terminusdb\.com\fR
 .P
-Matthijs van Otterdijk \fI\%mailto:matthijs@terminusdb\.com\fR
+Matthijs van Otterdijk \fImatthijs@terminusdb\.com\fR
 .P
-Robin de Rooij \fI\%mailto:robin@terminusdb\.com\fR
+Robin de Rooij \fIrobin@terminusdb\.com\fR
 .P
-Anne Ogborn \fI\%mailto:anne@swi\-prolog\.org\fR
+Anne Ogborn \fIanne@swi\-prolog\.org\fR
 .P
-Dmytri Kleiner \fI\%mailto:dk@terminusdb\.com\fR
+Dmytri Kleiner \fIdk@terminusdb\.com\fR
 .P
-Paulo Moura \fI\%https://github\.com/pmoura\fR
+Paulo Moura \fIhttps://github\.com/pmoura\fR

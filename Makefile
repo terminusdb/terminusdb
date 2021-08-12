@@ -31,7 +31,7 @@ debug:
 	echo "main, halt." | swipl -f src/bootstrap.pl
 
 docs:
-	utils/compile_docs.sh
+	src/utils/compile_docs.sh
 	ronn docs/terminusdb.1.ronn --roff
 	cp docs/terminusdb.1.ronn docs/CLI.md
 
