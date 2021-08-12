@@ -4277,22 +4277,37 @@ test(commit_graph, [
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Using_Query = '{"@type": "Using", "collection": "_commits", "query": {"@type": "Limit", "limit": 499, "query": {"@type": "Select", "variables": ["cid", "author", "message", "timestamp", "cur_cid", "cur_author", "cur_message", "cur_timestamp"], "query": {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "branch"}, "predicate": {"@type": "NodeValue", "node": "branch_name"}, "object": {"@type": "Value", "node": "main"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "branch"}, "predicate": {"@type": "NodeValue", "node": "ref_commit"}, "object": {"@type": "Value", "variable": "commit"}}, {"@type": "Or", "or": [{"@type": "And", "and": [{"@type": "Path", "subject": {"@type": "NodeValue", "variable": "commit"}, "pattern": {"@type": "PathPlus", "plus": {"@type": "PathPredicate", "predicate": "commit_parent"}}, "object": {"@type": "Value", "variable": "target_commit"}, "path": {"@type": "Value", "variable": "path"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_id"}, "object": {"@type": "Value", "variable": "cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_author"}, "object": {"@type": "Value", "variable": "author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_message"}, "object": {"@type": "Value", "variable": "message"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "commit_timestamp"}, "object": {"@type": "Value", "variable": "timestamp"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_id"}, "object": {"@type": "Value", "variable": "cur_cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_author"}, "object": {"@type": "Value", "variable": "cur_author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_message"}, "object": {"@type": "Value", "variable": "cur_message"}}, {"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_timestamp"}, "object": {"@type": "Value", "variable": "cur_timestamp"}}]}]}]}]}]}]}]}]}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_id"}, "object": {"@type": "Value", "variable": "cur_cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_author"}, "object": {"@type": "Value", "variable": "cur_author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_message"}, "object": {"@type": "Value", "variable": "cur_message"}}, {"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "commit"}, "predicate": {"@type": "NodeValue", "node": "commit_timestamp"}, "object": {"@type": "Value", "variable": "cur_timestamp"}}]}]}]}]}]}]}}}}',
-
-    atom_json_dict(Using_Query, JSON, []),
-    json_woql(JSON, WOQL), % Just to see that we can...
-    writeq(WOQL),nl,
     resolve_absolute_string_descriptor("admin/test", Descriptor),
-    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    create_context(Descriptor, commit_info{ author : "test", message: "message1"}, Context),
 
     with_transaction(
         Context,
         ask(Context, (insert(a, rdf:type, '@schema':test))),
-        _Meta_Data
+        _
     ),
 
-    query_test_response(Descriptor, JSON, Response),
-    writeq(Response).
+    create_context(Descriptor, commit_info{ author : "test", message: "message2"}, Context2),
+    with_transaction(
+        Context2,
+        ask(Context2, (insert(b, rdf:type, '@schema':test))),
+        _
+    ),
+
+    AST = using('_commits',
+                limit(499^^xsd:decimal,
+                      (   t(v(branch),name,"main"^^xsd:string),
+                          t(v(branch),head,v(commit)),
+                          path(v(commit),star(p(parent)),v(target_commit)),
+                          t(v(target_commit),identifier,v(cid)),
+                          t(v(target_commit),author,v(author)),
+                          t(v(target_commit),message,v(message)),
+                          t(v(target_commit),timestamp,v(timestamp))))),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message3"}, Context3),
+    query_response:run_context_ast_jsonld_response(Context3, AST, Response),
+    [Commit1,Commit2] = (Response.bindings),
+    (Commit1.message.'@value') = "message2",
+    (Commit2.message.'@value') = "message1".
 
 :- end_tests(woql).
 
