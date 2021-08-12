@@ -244,20 +244,3 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
                              ;   Document = JSON)),
                          api_replace_document_(Schema_Or_Instance, Transaction, Document)),
                      _).
-
-
-/* :- begin_tests(document_tests).
-
-:- use_module(core(util/test_utils)).
-
-test(add_remote,
-     [setup((setup_temp_store(State),
-             create_db_with_test_schema('admin','test'))),
-      cleanup(teardown_temp_store(State))])
-:-
-    open_descriptor(system_descriptor{}, System),
-    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
-    resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
-    has_remote_repository(Descriptor, "remote").
-
-:- end_tests(document_tests). */
