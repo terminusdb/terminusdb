@@ -933,12 +933,8 @@ json_type_to_woql_path_pattern('PathTimes',JSON,Pattern,Path) :-
     json_to_woql_path_pattern(SubPattern,PSubPattern,
                               [times
                                |Path]),
-    json_to_woql_ast(N,WN,
-                     [from
-                      |Path]),
-    json_to_woql_ast(M,WM,
-                     [to
-                      |Path]),
+    json_data_to_woql_ast(N,WN),
+    json_data_to_woql_ast(M,WM),
     do_or_die(
         (WN = N_int ^^ _),
         error(woql_syntax_error(JSON,
