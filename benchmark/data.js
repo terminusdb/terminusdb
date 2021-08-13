@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1628858797386,
+  "lastUpdate": 1628862985296,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -2291,6 +2291,68 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 37.728,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dani@terminusdb.com",
+            "name": "AstroChelonian"
+          },
+          "committer": {
+            "email": "dani@terminusdb.com",
+            "name": "AstroChelonian"
+          },
+          "distinct": true,
+          "id": "fb6e9943ab1911ecb0d156fb3f3c9eb63627331a",
+          "message": "whitespace issue resolved",
+          "timestamp": "2021-08-13T14:52:52+01:00",
+          "tree_id": "d17db74f4e558cc09990729b044d55aada1ad438",
+          "url": "https://github.com/terminusdb/terminusdb/commit/fb6e9943ab1911ecb0d156fb3f3c9eb63627331a"
+        },
+        "date": 1628862984780,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 100.717,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 280.426,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 300.179,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 157.172,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 168.021,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 79.199,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 36.876,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 31.349,
             "unit": "ms"
           }
         ]
