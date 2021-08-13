@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1628852824791,
+  "lastUpdate": 1628853470537,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -1909,6 +1909,68 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 35.942,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dani@terminusdb.com",
+            "name": "AstroChelonian"
+          },
+          "committer": {
+            "email": "dani@terminusdb.com",
+            "name": "AstroChelonian"
+          },
+          "distinct": true,
+          "id": "c3b1aa55a838da78bd54cc65678d813373449c3b",
+          "message": "Merge branch 'check_duplicates' of github.com:terminusdb/terminusdb into check_duplicates",
+          "timestamp": "2021-08-13T12:13:43+01:00",
+          "tree_id": "a1f04f1ac7d155013756e51672a183a2005c225f",
+          "url": "https://github.com/terminusdb/terminusdb/commit/c3b1aa55a838da78bd54cc65678d813373449c3b"
+        },
+        "date": 1628853469452,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 116.149,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 366.571,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 367.498,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 234.065,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 207.189,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 113.638,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 45.291,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 41.927,
             "unit": "ms"
           }
         ]
