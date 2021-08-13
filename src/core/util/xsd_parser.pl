@@ -13,8 +13,8 @@
                        unsignedDecimal//1,
                        year//1,
                        date//4,
-                       dateTime//7,
-                       dateTimeStamp//7,
+                       dateTime//8,
+                       dateTimeStamp//8,
                        gYear//2,
                        gYearMonth//3,
                        gMonth//2,
@@ -29,7 +29,7 @@
                        language//0,
                        whitespace//0,
                        anyBut//1,
-                       time//4,
+                       time//5,
                        coordinatePolygon//1,
                        dateRange//2,
                        decimalRange//2,
@@ -122,6 +122,13 @@ sixDigitNatural(N) --> digit(A), digit(B), digit(C), digit(D), digit(E), digit(F
                          atom_string(Atom,S),
                          number_string(N,S) }.
 
+nineDigitNatural(N) --> digit(A), digit(B), digit(C),
+                        digit(D), digit(E), digit(F),
+                        digit(G), digit(H), digit(I),
+			           { atomic_list_concat([A,B,C,D,E,F,G,H,I],Atom),
+                         atom_string(Atom,S),
+                         number_string(N,S) }.
+
 digits(T) --> digit(X), digits(S),
 	      { string_concat(X, S, T) } .
 digits(S) --> digit(S) .
@@ -195,28 +202,40 @@ optional_time_offset(Offset) -->
 optional_time_offset(0) -->
     "".
 
-time_and_offset(H,M,S,Offset) -->
+time_and_offset(H,M,S,NS,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
-	".", threeDigitNatural(_), time_offset(Offset).
-time_and_offset(H,M,S,Offset) -->
+	".", digits(D),
+    { length(L, 9),
+      atom_codes(D,Codes),
+      append(Codes, Tail, L),
+      maplist([0'0]>>true, Tail),
+      atom_codes(Number,L),
+      atom_number(Number, NS)
+    },
+    time_offset(Offset).
+time_and_offset(H,M,S,0,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 	time_offset(Offset) .
-time_and_offset(H,M,0,Offset) -->
+time_and_offset(H,M,0,0,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), time_offset(Offset).
 
-% Hour, Minute, Second, Offset, Zone, DST
-time(H,M,SS,Offset) -->
+% Hour, Minute, Second, Nanosecond, Offset, Zone, DST
+time(H,M,S,NS,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 	".",
-    (   sixDigitNatural(NS), optional_time_offset(Offset),
-        !, { SS is S + NS / 1000000}
-    ;   threeDigitNatural(MS), optional_time_offset(Offset),
-        !, { SS is S + MS / 1000}
-    ).
-time(H,M,S,Offset) -->
+    digits(D),
+    { length(L, 9),
+      atom_codes(D,Codes),
+      append(Codes, Tail, L),
+      maplist([0'0]>>true, Tail),
+      atom_codes(Number,L),
+      atom_number(Number, NS)
+    },
+    optional_time_offset(Offset).
+time(H,M,S,0,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
 	optional_time_offset(Offset) .
-time(H,M,0,Offset) -->
+time(H,M,0,0,Offset) -->
     twoDigitNatural(H), ":", twoDigitNatural(M), optional_time_offset(Offset).
 
 year(SY) --> sign(S), natural(Y),
@@ -228,13 +247,13 @@ date(SY,Mo,D,Offset) -->
 time_separator --> "T".
 time_separator --> " ".
 
-dateTime(SY,Mo,D,H,M,S,Offset) -->
+dateTime(SY,Mo,D,H,M,S,NS,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    time_separator, time(H,M,S,Offset).
+    time_separator, time(H,M,S,NS,Offset).
 
-dateTimeStamp(SY,Mo,D,H,M,S,Offset) -->
+dateTimeStamp(SY,Mo,D,H,M,S,NS,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
-    time_separator, time_and_offset(H,M,S,Offset).
+    time_separator, time_and_offset(H,M,S,NS,Offset).
 
 gYear(Y,Offset) --> year(Y), optional_time_offset(Offset) .
 

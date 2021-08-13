@@ -3528,8 +3528,8 @@ test(date_marshall, [
 
     [_{'Start date':
        _{'@type':'xsd:dateTime',
-         '@value':"2018-12-01T00:00:44.000Z"}}
-     |_] = Response.bindings,
+         '@value':"2018-12-01T00:00:44Z"}}
+     |_] = (Response.bindings),
     length(Response.bindings, 49).
 
 test(into_absolute_descriptor, [
@@ -4408,7 +4408,7 @@ test(float_neg) :-
     test_lit(-123.456^^xsd:float, "-123.456^^'http://www.w3.org/2001/XMLSchema#float'").
 
 test(dateTime) :-
-    test_lit(date_time(2020,01,02,03,04,05)^^xsd:dateTime, "\"2020-01-02T03:04:05Z\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
+    test_lit(date_time(2020,01,02,03,04,05,0)^^xsd:dateTime, "\"2020-01-02T03:04:05Z\"^^'http://www.w3.org/2001/XMLSchema#dateTime'").
 
 test(byte_pos) :-
     % note that the number saved is not further quoted

@@ -285,13 +285,14 @@ days_in_month(_,12,31).
  * Determines if `DateTime` is a valid date time object.
  * We assume no DST, no zone, and offset of zero for normalised dates.
  */
-is_date_time(date_time(Y,M,D,HH,MM,SS)) :-
+is_date_time(date_time(Y,M,D,HH,MM,SS,NS)) :-
     integer(Y),
     integer(M), M >= 1, M =< 12,
     days_in_month(Y,M,Days), D >= 1, D =< Days,
     integer(HH), HH >= 0, HH =< 24,
     integer(MM), MM >= 0, MM =< 60,
-    number(SS), SS >= 0, HH =< 60.
+    integer(SS), SS >= 0, HH =< 60,
+    integer(NS), NS >= 0, NS =< 1 000 000 000.
 
 is_offset(Offset) :-
     number(Offset),
