@@ -144,8 +144,8 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
-         
-    % todo authentication  
+
+    % todo authentication
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(resource_does_not_exist(Path), _)),
@@ -155,9 +155,9 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
                      (   Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids), 
+                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids),
                          do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Id), _))),
-                     _).         
+                     _).
 
 api_delete_document_(schema, Transaction, Id) :-
     delete_schema_document(Transaction, Id).
