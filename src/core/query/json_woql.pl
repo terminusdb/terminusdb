@@ -834,7 +834,7 @@ json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
      } :< JSON,
     json_to_woql_ast(Subject,WSubject,[subject
                                        |Path]),
-    json_to_woql_path_pattern(Pattern,WPattern,[path_pattern
+    json_to_woql_path_pattern(Pattern,WPattern,[pattern
                                                 |Path]),
     json_to_woql_ast(Object,WObject,[object
                                      |Path]),
@@ -891,11 +891,11 @@ json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
-    !,
-    (   get_dict('@type', JSON, Type)
-    ->  atom_string(Type_Atom,Type),
-        json_type_to_woql_path_pattern(Type_Atom,JSON,Pattern,Path)
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))).
+    get_dict('@type', JSON, Type),
+    atom_string(Type_Atom,Type),
+    json_type_to_woql_path_pattern(Type_Atom,JSON,Pattern,Path).
+json_to_woql_path_pattern(JSON,_Pattern,Path) :-
+    throw(error(woql_syntax_error(JSON,Path,JSON), _)).
 
 json_type_to_woql_path_pattern('PathPredicate',JSON,Pattern,_Path) :-
     _{predicate : Node} :< JSON,
@@ -916,13 +916,13 @@ json_type_to_woql_path_pattern('PathOr',JSON,Pattern,Path) :-
 json_type_to_woql_path_pattern('PathPlus',JSON,Pattern,Path) :-
     _{plus : SubPattern} :< JSON,
     json_to_woql_path_pattern(SubPattern,PSubPattern,
-                              [path_pattern
+                              [plus
                                |Path]),
     Pattern = plus(PSubPattern).
 json_type_to_woql_path_pattern('PathStar',JSON,Pattern,Path) :-
     _{star : SubPattern} :< JSON,
     json_to_woql_path_pattern(SubPattern,PSubPattern,
-                              [path_pattern
+                              [star
                                |Path]),
     Pattern = star(PSubPattern).
 json_type_to_woql_path_pattern('PathTimes',JSON,Pattern,Path) :-
@@ -931,23 +931,19 @@ json_type_to_woql_path_pattern('PathTimes',JSON,Pattern,Path) :-
       to : M
      } :< JSON,
     json_to_woql_path_pattern(SubPattern,PSubPattern,
-                              [path_left
+                              [times
                                |Path]),
-    json_to_woql_ast(N,WN,
-                     [path_minimum
-                      |Path]),
-    json_to_woql_ast(M,WM,
-                     [path_maximum
-                      |Path]),
+    json_data_to_woql_ast(N,WN),
+    json_data_to_woql_ast(M,WM),
     do_or_die(
         (WN = N_int ^^ _),
         error(woql_syntax_error(JSON,
-                                [path_minimum|Path],
+                                [from|Path],
                                 N), _)),
     do_or_die(
         (WM = M_int ^^ _),
         error(woql_syntax_error(JSON,
-                                [path_maximum|Path],
+                                [to|Path],
                                 M), _)),
     Pattern = times(PSubPattern,N_int,M_int).
 
