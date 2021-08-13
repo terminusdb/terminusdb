@@ -834,7 +834,7 @@ json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
      } :< JSON,
     json_to_woql_ast(Subject,WSubject,[subject
                                        |Path]),
-    json_to_woql_path_pattern(Pattern,WPattern,[path_pattern
+    json_to_woql_path_pattern(Pattern,WPattern,[pattern
                                                 |Path]),
     json_to_woql_ast(Object,WObject,[object
                                      |Path]),
@@ -891,11 +891,11 @@ json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
-    !,
-    (   get_dict('@type', JSON, Type)
-    ->  atom_string(Type_Atom,Type),
-        json_type_to_woql_path_pattern(Type_Atom,JSON,Pattern,Path)
-    ;   throw(error(woql_syntax_error(JSON,Path,JSON), _))).
+    get_dict('@type', JSON, Type),
+    atom_string(Type_Atom,Type),
+    json_type_to_woql_path_pattern(Type_Atom,JSON,Pattern,Path).
+json_to_woql_path_pattern(JSON,_Pattern,Path) :-
+    throw(error(woql_syntax_error(JSON,Path,JSON), _)).
 
 json_type_to_woql_path_pattern('PathPredicate',JSON,Pattern,_Path) :-
     _{predicate : Node} :< JSON,

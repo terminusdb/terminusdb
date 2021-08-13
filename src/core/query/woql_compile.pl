@@ -4309,6 +4309,36 @@ test(commit_graph, [
     (Commit1.message.'@value') = "message2",
     (Commit2.message.'@value') = "message1".
 
+
+test(commit_graph_json, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message1"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, rdf:type, '@schema':test))),
+        _
+    ),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message2"}, Context2),
+    with_transaction(
+        Context2,
+        ask(Context2, (insert(b, rdf:type, '@schema':test))),
+        _
+    ),
+
+    Commit_Query = '{"@type": "Using", "collection": "_commits", "query": {"@type": "Limit", "limit": 499, "query": {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "branch"}, "predicate": {"@type": "NodeValue", "node": "name"}, "object": {"@type": "Value", "data": {"@type": "xsd:string", "@value": "main"}}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "branch"}, "predicate": {"@type": "NodeValue", "node": "head"}, "object": {"@type": "Value", "variable": "commit"}}, {"@type": "And", "and": [{"@type": "Path", "subject": {"@type": "NodeValue", "variable": "commit"}, "pattern": {"@type": "PathPlus", "plus": {"@type": "PathPredicate", "predicate": "parent"}}, "object": {"@type": "Value", "variable": "target_commit"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "identifier"}, "object": {"@type": "Value", "variable": "cid"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "author"}, "object": {"@type": "Value", "variable": "author"}}, {"@type": "And", "and": [{"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "message"}, "object": {"@type": "Value", "variable": "message"}}, {"@type": "Triple", "subject": {"@type": "NodeValue", "variable": "target_commit"}, "predicate": {"@type": "NodeValue", "node": "timestamp"}, "object": {"@type": "Value", "variable": "timestamp"}}]}]}]}]}]}]}}}',
+
+    atom_json_dict(Commit_Query, Query, []),
+    query_test_response(Descriptor, Query, JSON),
+    writeq(JSON).
+
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data).
