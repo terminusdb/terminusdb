@@ -122,6 +122,7 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
+
 api_insert_document_(instance, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
@@ -154,9 +155,8 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
                      (   Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id,
-                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
-                                 Ids)),
+                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids),
+                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Id), _))),
                      _).
 
 api_delete_document_(schema, Transaction, Id) :-
