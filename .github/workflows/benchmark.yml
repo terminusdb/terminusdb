@@ -2,6 +2,11 @@ name: Benchmark
 
 on:
   push:
+    # We only use the `main` branch, because the benchmark graphs are linear.
+    # The results are confusing when commits from different branches are
+    # interleaved.
+    branches:
+      - main
 
 jobs:
   benchmark:
