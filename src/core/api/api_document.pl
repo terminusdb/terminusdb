@@ -177,7 +177,7 @@ api_delete_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
 
     with_transaction(Context,
                      forall(
-                         (  json_read_dict_stream(Stream,ID),
+                         (   json_read_dict_stream(Stream,ID),
                              do_or_die(
                                  string(ID),
                                  error(not_a_proper_id(ID)))),
