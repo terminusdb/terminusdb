@@ -5938,4 +5938,23 @@ test(js_type_not_found,
         _
     ).
 
+test(subdocument_update,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(schema9,Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      )
+     ]
+    ) :-
+
+    Document = _{'@id':"Organization_somewhere",
+                 '@type':"Organization","invitations":[],
+                 organization_name:"somewhere",
+                 status:"inactive"},
+    writeq(Document).
+
+
 :- end_tests(javascript_client_bugs).
