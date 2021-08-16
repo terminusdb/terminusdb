@@ -5829,6 +5829,32 @@ test(round_trip_hash_key,
     open_descriptor(Desc, DB),
     get_schema_document(DB, 'Grades', _JSON).
 
+test(key_exchange_problem,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema8_1,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Query = '{"@type": "Class", "@id": "Grades", "last_name": "xsd:string", "first_name": "xsd:string", "ssn": "xsd:string", "test1": "xsd:decimal", "test2": "xsd:decimal", "test3": "xsd:decimal", "test4": "xsd:decimal", "final": "xsd:decimal", "grade": "xsd:string", "@key": {"@type": "Hash", "@fields": ["last_name", "first_name", "ssn", "test1", "test2", "test3", "test4", "final", "grade"]}}',
+    atom_json_dict(Query, Document, []),
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Document),
+        _
+    ),
+
+    open_descriptor(Desc, DB2),
+    get_schema_document(DB2, 'Grades', Grades),
+    "Hash" = (Grades.'@key'.'@type').
 
 :- end_tests(python_client_bugs).
 
