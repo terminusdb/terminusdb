@@ -5938,4 +5938,121 @@ test(js_type_not_found,
         _
     ).
 
+test(subdocument_update,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(schema9,Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      )
+     ]
+    ) :-
+
+    Bonzai = _{ '@type' : "User",
+                company: "Yoyodyne",
+                email: "Bonzai@yoyodyne.com",
+                first_name: "Buckaroo",
+                last_name: "Bonzai",
+                picture: "My pic",
+                status: "active",
+                registration_date: "2009-07-01T10:11:12Z",
+                user_id: "bonzai"
+              },
+    Hikita = _{ '@type' : "User",
+                company: "Yoyodyne",
+                email: "Tohichi@yoyodyne.com",
+                first_name: "Tohichi",
+                last_name: "Hikita",
+                picture: "My pic of me",
+                status: "active",
+                registration_date: "2009-07-01T10:11:12Z",
+                user_id: "hikita"
+            },
+    Document = _{'@id':"Organization_somewhere",
+                 '@type':"Organization",
+                 invitations:[
+                     _{'@type':"Invitation",
+                       invited_by: 'User_bonzai',
+                       email_to:"something",
+                       note:"whjgasdj",
+                       status:"pending"}
+                 ],
+                 stripe_subscription:[ _{ '@type' : "StripeSubscription",
+                                          billing_email:"somewkjf",
+                                          status: "active",
+                                          stripe_id:"KItty",
+                                          stripe_quantity:"32",
+                                          stripe_user:"User_bonzai",
+                                          subscription_id:"932438238429384ASBJDA" } ],
+                 owned_by: 'User_bonzai',
+                 creation_date: "2021-05-01T12:10:10Z",
+                 organization_name:"somewhere",
+                 status:"inactive"},
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        (
+            insert_document(Context, Bonzai, _),
+            insert_document(Context, Hikita, _),
+            insert_document(Context, Document, _)
+        ),
+        _
+    ),
+
+    Document2 = _{'@id':"Organization_somewhere",
+                  '@type':"Organization",
+                  invitations:[
+                      _{'@type':"Invitation",
+                        email_to:"something",
+                        invited_by: 'User_hikita',
+                        note:"whjgasdj",
+                        status:"pending"}
+                  ],
+                  stripe_subscription:[ _{ '@type' : "StripeSubscription",
+                                           billing_email:"somewkjf",
+                                           status: "active",
+                                           stripe_id:"KItty",
+                                           stripe_quantity:"32",
+                                           stripe_user:"User_bonzai",
+                                           subscription_id:"932438238429384ASBJDA" } ],
+                  owned_by: 'User_bonzai',
+                  creation_date: "2021-05-01T12:10:10Z",
+                  organization_name:"somewhere",
+                  status:"inactive"},
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context2),
+    with_transaction(
+        Context2,
+        (
+            replace_document(Context2, Document2, _)
+        ),
+        _
+    ),
+
+    open_descriptor(Desc, DB),
+    get_document(DB, 'Organization_somewhere', Organization),
+    Organization = json{'@id':'Organization_somewhere',
+                        '@type':'Organization',
+                        creation_date:"2021-05-01T12:10:10Z",
+                        invitations:[json{'@id':_,
+                                          '@type':'Invitation',
+                                          email_to:"something",
+                                          invited_by:'User_hikita',
+                                          note:"whjgasdj",
+                                          status:pending}],
+                        organization_name:"somewhere",
+                        owned_by:'User_bonzai',
+                        status:inactive,
+                        stripe_subscription:json{'@id':_,
+                                                 '@type':'StripeSubscription',
+                                                 billing_email:"somewkjf",
+                                                 status:active,
+                                                 stripe_id:"KItty",
+                                                 stripe_quantity:32,
+                                                 stripe_user:'User_bonzai',
+                                                 subscription_id:"932438238429384ASBJDA"}}.
+
 :- end_tests(javascript_client_bugs).
