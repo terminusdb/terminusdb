@@ -5402,7 +5402,7 @@ test(insert_employee, [
          cleanup(
              teardown_temp_store(State)
          ),
-         error(subdocument_key_type_restriction,_)
+         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country_760fca065482d4e1f64c8bc85e4a5bad525d859b',predicate:'http://s/perimeter'}]),_)
      ]) :-
 
     D1 = _{'@type': "Country",
