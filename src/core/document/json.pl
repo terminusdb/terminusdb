@@ -380,7 +380,14 @@ json_elaborate(DB,JSON,Context,Path,JSON_ID) :-
     json_context_elaborate(DB,JSON,New_Context,[node(JSON_ID)|Path],Elaborated),
 
     (   is_subdocument(DB, TypeEx)
-    ->  Id_Path = Path
+    ->  Id_Path = Path,
+        do_or_die(
+            (   global_prefix_expand(sys:key, KeyP),
+                get_dict(KeyP, Elaborated, Key),
+                (   global_prefix_expand(sys:'ValueHash',Key_Type)
+                ;   global_prefix_expand(sys:'Random',Key_Type)),
+                get_dict('@type', Key, Key_Type)),
+            error(subdocument_key_type_restriction,_))
     ;   Id_Path = []),
 
     json_assign_id(Elaborated,DB,Context,Id_Path,JSON_ID).
@@ -5382,7 +5389,7 @@ test(insert_employee, [
          cleanup(
              teardown_temp_store(State)
          ),
-         blocked(unable_to_do_lexical_subdocuments)
+         error(subdocument_key_type_restriction,_)
      ]) :-
 
     D1 = _{'@type': "Country",
