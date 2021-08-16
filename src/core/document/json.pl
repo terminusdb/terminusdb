@@ -871,7 +871,27 @@ json_schema_elaborate(JSON,Context,Old_Path,Elaborated) :-
             json_schema_predicate_value(P,V,Context,Path,Prop,Value)
         ),
         PVs),
-    dict_pairs(Elaborated,json,PVs).
+    dict_pairs(Elaborated,json,PVs),
+    check_schema_document_restrictions(Elaborated).
+
+check_schema_document_restrictions(Elaborated) :-
+    global_prefix_expand(sys:subdocument, SubP),
+    \+ get_dict(SubP, Elaborated, _),
+    !.
+check_schema_document_restrictions(Elaborated) :-
+    global_prefix_expand(sys:abstract, AbsP),
+    get_dict(AbsP, Elaborated, _),
+    !.
+check_schema_document_restrictions(Elaborated) :-
+    do_or_die(
+        (   global_prefix_expand(sys:key, KeyP),
+            get_dict(KeyP, Elaborated, Key),
+            (   global_prefix_expand(sys:'ValueHash',Key_Type)
+            ;   global_prefix_expand(sys:'Random',Key_Type)),
+            get_dict('@type', Key, Key_Type_String),
+            atom_string(Key_Type, Key_Type_String)
+        ),
+        error(subdocument_key_type_restriction,_)).
 
 json_schema_elaborate(JSON,Context,JSON_Schema) :-
     json_schema_elaborate(JSON,Context,[],JSON_Schema).
@@ -4523,7 +4543,7 @@ test(subdocument_key_problem,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([witness{'@type':subdocuments_must_be_random_or_value_hash,class:'http://s/Not_A_Squash',key:'http://s/Not_A_Squash_Lexical_genus'}]),_)
+         error(subdocument_key_type_restriction, _)
      ]) :-
 
     Document =
@@ -5382,7 +5402,7 @@ test(insert_employee, [
          cleanup(
              teardown_temp_store(State)
          ),
-         blocked(unable_to_do_lexical_subdocuments)
+         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country_760fca065482d4e1f64c8bc85e4a5bad525d859b',predicate:'http://s/perimeter'}]),_)
      ]) :-
 
     D1 = _{'@type': "Country",
