@@ -222,10 +222,10 @@ api_nuke_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message)
                      api_nuke_documents_(Schema_Or_Instance, Transaction),
                     _).
 
-api_replace_document_(schema, Transaction, Document) :-
-    replace_schema_document(Transaction, Document).
-api_replace_document_(instance, Transaction, Document) :-
-    replace_document(Transaction, Document).
+api_replace_document_(instance, Transaction, Document, Id):-
+    replace_document(Transaction, Document, Id).
+api_replace_document_(schema, Transaction, Document, Id):-
+    replace_schema_document(Transaction, Document, Id).
 
 api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
     do_or_die(
@@ -234,18 +234,25 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
 
     % todo authentication
 
-    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(resource_does_not_exist(Path), _)),
+    do_or_die(
+        create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
+        error(resource_does_not_exist(Path), _)),
+
     query_default_collection(Context, Transaction),
 
     with_transaction(Context,
-                     forall(
-                         (   json_read_dict_stream(Stream,JSON),
-                             (   is_list(JSON)
-                             ->  !,
-                                 member(Document, JSON)
-                             ;   Document = JSON)),
-                         api_replace_document_(Schema_Or_Instance, Transaction, Document)),
+                     (   findall(Id,
+                                 (   json_read_dict_stream(Stream,JSON),
+                                     (   is_list(JSON)
+                                     ->  !,
+                                         member(Document, JSON)
+                                     ;   Document = JSON),
+                                     api_replace_document_(Schema_Or_Instance,
+                                                           Transaction,Document, Id)
+                                 ),
+                                 Ids),
+                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Id), _))
+                     ),
                      _).
 
 :- begin_tests(delete_document).
