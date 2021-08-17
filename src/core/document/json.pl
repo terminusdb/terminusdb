@@ -4642,20 +4642,6 @@ schema4('
                  "@class" : "Top" }  }
 ').
 
-write_schema4(Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
-    schema4(Schema1),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema1),
-        _Meta).
-
 test(elaborate_multiple_inheritance, []) :-
     Doc = json{'@id':"Bottom",
                '@inherits':["Right", "Left"],
