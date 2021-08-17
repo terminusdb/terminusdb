@@ -2019,22 +2019,14 @@ replace_schema_document(Query_Context, Document, Id) :-
     query_default_collection(Query_Context, TO),
     replace_schema_document(TO, Document, Id).
 
+write_schema_string(Schema, Desc) :-
+    create_context(Desc, commit{author: "a", message: "m"}, Context),
+    with_transaction(Context, write_json_string_to_schema(Context, Schema), _).
 
 :- meta_predicate write_schema(1,+).
 write_schema(P,Desc) :-
-    create_context(Desc,commit{
-                            author : "me",
-                            message : "none"},
-                   Context),
-
     call(P,Schema),
-
-    % Schema
-    with_transaction(
-        Context,
-        write_json_string_to_schema(Context, Schema),
-        _Meta).
-
+    write_schema_string(Schema, Desc).
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -4569,6 +4561,30 @@ test(subdocument_key_problem,
 :- begin_tests(schema_checker).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
+
+test(context_missing,
+     [
+         setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(no_context_found_in_schema,_)
+     ]) :-
+    write_schema_string('{"@base": "http://b/", "@schema": "http://s/"}', Desc).
+
+test(context_missing_base_prefix,
+     [
+         setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(schema_check_failure([witness{'@type': context_has_no_base_prefix}]), _)
+     ]) :-
+    write_schema_string('{"@type": "@context", "@schema": "http://s/"}', Desc).
+
+test(context_missing_schema_prefix,
+     [
+         setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(schema_check_failure([witness{'@type': context_has_no_schema_prefix}]), _)
+     ]) :-
+    write_schema_string('{"@type": "@context", "@base": "http://b/"}', Desc).
 
 schema3('
 { "@type" : "@context",
