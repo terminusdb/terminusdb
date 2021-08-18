@@ -1,7 +1,10 @@
 # API
 
+In this document we will define the API options for terminusdb, and create a database.
 
-The TerminusDB Server HTTP API. JSON documents have optional elements notated with angle-brackets, for instance:
+### General rule
+
+The TerminusDB Server HTTP API JSON documents have optional elements notated with angle-brackets, for instance:
 
 ```jsx
 {
@@ -15,12 +18,22 @@ The TerminusDB Server HTTP API. JSON documents have optional elements notated wi
 ## Connect
 
 ```
-GET http://localhost:6363/api/
+GET http://localhost:6363/api/ -u admin:root
 ```
+<details>
+<summary>curl</summary>
+<p>
 
-The Connect API endpoint returns the `system:User` object associated
-with the authentication provided (as documented in the
-`system_schema.owl.ttl` ontology). If no authentication is provided,
+```
+curl -X GET http://localhost:6363/api/ -u admin:root
+```
+</p>
+</details>
+</br>
+
+
+The Connect API endpoint returns the `user:password` object associated
+with the authentication provided. If no authentication is provided,
 the user will be the predefined `terminusdb:///system/data/anonymous`
 user.
 
@@ -54,6 +67,18 @@ to the anonymous user. It defaults to false.
 The `schema` boolean will determine if this database is created with
 an empty schema, or if it is running in "schema free" mode. It
 defaults to false.
+
+Example:
+
+Create a database with the following:
+organization: admin
+dbid: owl_db
+label: label
+comment "information about owls"
+public: true
+schema: true
+
+
 
 ## Delete Database
 
