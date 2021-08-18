@@ -1026,6 +1026,13 @@ generic_exception_jsonld(access_not_authorised(Auth,Action,Scope),JSON) :-
              'action' : Action_String,
              'scope' : Scope_String
             }.
+generic_exception_jsonld(malformed_api_document(Document),JSON) :-
+    format(string(Msg), "The input API document was malformed", []),
+    JSON = _{'@type' : 'api:BadAPIDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:MalformedDocument',
+                             'api:document' : Document},
+             'api:message' : Msg}.
 generic_exception_jsonld(bad_api_document(Document,Expected),JSON) :-
     format(string(Msg), "The input API document was missing required fields: ~q", [Expected]),
     JSON = _{'@type' : 'api:BadAPIDocumentErrorResponse',
@@ -1108,23 +1115,31 @@ generic_exception_jsonld(could_not_create_filled_class_frame(Instance),JSON) :-
     JSON = _{ 'api:message' : MSG,
               'api:status' : 'api:failure',
               'system:instance' : Instance}.
-generic_exception_jsonld(maformed_json(Atom),JSON) :-
-    format(atom(MSG), 'Malformed JSON Object ~q', [MSG]),
+generic_exception_jsonld(malformed_json_payload(JSON_String),JSON) :-
+    format(atom(MSG), 'Submitted object was not valid JSON', []),
     JSON = _{'api:status' : 'api:failure',
              'api:message' : MSG,
-             'system:object' : Atom}.
+             'system:object' : JSON_String}.
 generic_exception_jsonld(no_document_for_key(Key),JSON) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
     JSON = _{'api:status' : 'api:failure',
              'api:message' : MSG,
              'system:key' : Key}.
+generic_exception_jsonld(no_parameter_key_in_query_parameters(Key,Query_Parameters),JSON) :-
+    format(atom(MSG), 'No parameter key ~q in query parameters', [Key]),
+    maplist([A=B,A-B]>>true, Query_Parameters, Transformed),
+    dict_pairs(Query_Dict, json, Transformed),
+    JSON = _{'api:status' : 'api:failure',
+             'api:message' : MSG,
+             'system:key' : Key,
+             'system:query_parameters' : Query_Dict}.
 generic_exception_jsonld(no_parameter_key_in_document(Key,Document),JSON) :-
-    format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Document]),
+    format(atom(MSG), 'No parameter key ~q in submitted document', [Key]),
     JSON = _{'api:status' : 'api:failure',
              'api:message' : MSG,
              'system:key' : Key,
              'system:object' : Document}.
-generic_exception_jsonld(no_parameter_key_form_method(Key,Method),JSON) :-
+generic_exception_jsonld(no_parameter_key_for_method(Key,Method),JSON) :-
     format(atom(MSG), 'No parameter key ~q for method ~q', [Key,Method]),
     JSON = _{'api:status' : 'api:failure',
              'api:message' : MSG,

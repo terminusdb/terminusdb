@@ -707,11 +707,11 @@ document_handler(get, Path, Request, System_DB, Auth) :-
     % as a schema check failure for some reason. gotta fix that.
     (   json_content_type(Request),
         memberchk(content_length(_), Request)
-    ->  http_read_data(Request, Posted, [json_object(dict)])
+    ->  http_read_json_data(Request, Posted)
     ;   Posted = _{}),
 
     do_or_die(is_dict(Posted),
-              error(posted_data_is_not_a_dictionary(Posted),_)),
+              error(malformed_api_document(Posted), _)),
 
     (   memberchk(search(Search), Request)
     ->  true
@@ -884,7 +884,7 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
     % as a schema check failure for some reason. gotta fix that.
     (   json_content_type(Request),
         memberchk(content_length(_), Request)
-    ->  http_read_data(Request, Posted, [json_object(dict)])
+    ->  http_read_json_data(Request, Posted)
     ;   Posted = _{}),
 
     (   memberchk(search(Search), Request)
@@ -3395,25 +3395,28 @@ cors_handler(_Old_Method, Goal, Options, Request) :-
     downcase_atom(Method,Mapped),
     cors_handler(Mapped, Goal, Options, New_Request).
 cors_handler(Method, Goal, Options, R) :-
-    (   memberchk(Method, [post, put, delete]),
-        \+ memberchk(add_payload(false), Options)
-    ->  add_payload_to_request(R,Request)
-    ;   Request = R),
+    cors_catch(
+        R,
+        (
+            (   memberchk(Method, [post, put, delete]),
+                \+ memberchk(add_payload(false), Options)
+            ->  add_payload_to_request(R,Request)
+            ;   Request = R),
 
-    open_descriptor(system_descriptor{}, System_Database),
-    catch((   authenticate(System_Database, Request, Auth),
-              cors_catch(Method, Goal, Request, System_Database, Auth)),
+            open_descriptor(system_descriptor{}, System_Database),
+            catch((   authenticate(System_Database, Request, Auth),
+                      call_http_handler(Method, Goal, Request, System_Database, Auth)),
 
-          error(authentication_incorrect(Reason),_),
+                  error(authentication_incorrect(Reason),_),
 
-          (   write_cors_headers(Request),
-              http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
-              reply_json(_{'@type' : 'api:ErrorResponse',
-                           'api:status' : 'api:failure',
-                           'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
-                           'api:message' : 'Incorrect authentication information'
-                          },
-                         [status(401)]))),
+                  (   write_cors_headers(Request),
+                      http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+                      reply_json(_{'@type' : 'api:ErrorResponse',
+                                   'api:status' : 'api:failure',
+                                   'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
+                                   'api:message' : 'Incorrect authentication information'
+                                  },
+                                 [status(401)]))))),
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
@@ -3426,22 +3429,17 @@ cors_handler(_Method, Goal, _Options, R) :-
                [status(500)]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
-:- meta_predicate cors_catch(+,3,?,?,?).
-cors_catch(Method, Goal, Request, System_Database, Auth) :-
-    strip_module(Goal, Module, PlainGoal),
-    PlainGoal =.. [Head|Args],
-    NewArgs = [Method|Args],
-    NewPlainGoal =.. [Head|NewArgs],
-    NewGoal = Module:NewPlainGoal,
-    catch(call(NewGoal, Request, System_Database, Auth),
+:- meta_predicate cors_catch(+, 0).
+:- meta_predicate call_http_handler(+,3,?,?,?).
+cors_catch(Request, Goal) :-
+    catch(Goal,
           E,
           (
               write_cors_headers(Request),
               customise_exception(E)
-          )
-         ),
+          )),
     !.
-cors_catch(_,Request) :-
+cors_catch(Request, _Goal) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'api:status' : 'api:failure',
@@ -3449,6 +3447,15 @@ cors_catch(_,Request) :-
                  _{'@type' : 'xsd:string',
                    '@value' : 'Unexpected failure in request handler'}},
                [status(500)]).
+
+call_http_handler(Method, Goal, Request, System_Database, Auth) :-
+    strip_module(Goal, Module, PlainGoal),
+    PlainGoal =.. [Head|Args],
+    NewArgs = [Method|Args],
+    NewPlainGoal =.. [Head|NewArgs],
+    NewGoal = Module:NewPlainGoal,
+
+    call(NewGoal, Request, System_Database, Auth).
 
 customise_exception(reply_json(M,Status)) :-
     reply_json(M,
@@ -3634,8 +3641,9 @@ try_get_param(Key,Request,Value) :-
 
     http_parameters(Request, [], [form_data(Data)]),
 
+    http_log("request: ~q~n", [Request]),
     (   memberchk(Key=Value,Data)
-    <>  throw(error(no_parameter_key_in_document(Key,Data)))),
+    <>  throw(error(no_parameter_key_in_query_parameters(Key,Data)))),
     !.
 try_get_param(Key,Request,Value) :-
     % POST with JSON package
@@ -3703,13 +3711,11 @@ get_param(Key,Request,Value) :-
     memberchk(payload(Document), Request),
     Value = Document.get(Key).
 
-
-/*
- * try_atom_json(Atom,JSON) is det.
- */
-try_atom_json(Atom,JSON) :-
-    atom_json_dict(Atom, JSON, [])
-    <> throw(error(malformed_json(Atom))).
+http_read_json_data(Request, JSON) :-
+    http_read_data(Request, JSON_String, [to(string)]),
+    catch(atom_json_dict(JSON_String, JSON, []),
+          error(syntax_error(json(illegal_json)),_),
+          throw(error(malformed_json_payload(JSON_String), _))).
 
 /*
  * add_payload_to_request(Request:request,JSON:json) is det.
@@ -3729,7 +3735,7 @@ add_payload_to_request(Request,[multipart(Form_Data)|Request]) :-
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     json_content_type(Request),
     !,
-    http_read_data(Request, Document, [json_object(dict)]).
+    http_read_json_data(Request, Document).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     memberchk(content_type(_Some_Other_Type), Request),
     !,
