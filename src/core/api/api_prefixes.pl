@@ -15,7 +15,7 @@ get_prefixes(Path, System_DB, Auth, JSON) :-
 
     check_descriptor_auth(System_DB, Descriptor, system:instance_read_access, Auth),
 
-    database_context(Descriptor,JSON).
+    database_prefixes(Descriptor,JSON).
 
 update_prefixes(Path, System_DB, Auth, Commit_Info, Document) :-
 

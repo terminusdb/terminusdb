@@ -32,7 +32,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
-:- use_module(core(document), [database_context/2]).
+:- use_module(core(document), [database_prefixes/2]).
 
 prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
     freeze(Woql_Var,
@@ -192,7 +192,7 @@ create_context(Validation,Context) :-
 create_context(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
-    database_context(Transaction_Object, Database_Prefixes),
+    database_prefixes(Transaction_Object, Database_Prefixes),
     collection_descriptor_prefixes(Descriptor, Default_Prefixes),
     put_dict(Database_Prefixes, Default_Prefixes, Prefixes),
     collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor),
@@ -279,7 +279,7 @@ context_extend_prefixes(Context, Prefixes, New_Context) :-
  */
 context_default_prefixes(Context, New_Context) :-
     default_prefixes(Default),
-    database_context(Context, New_Prefixes),
+    database_prefixes(Context, New_Prefixes),
     Total = (Default.put(New_Prefixes)),
     New_Context = Context.put(prefixes, Total).
 

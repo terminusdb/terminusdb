@@ -1293,7 +1293,7 @@ compile_wf(using(Collection_String,P),Goal) -->
     {
         collection_descriptor_transaction_object(Default_Collection,Transaction_Objects,
                                                  Transaction_Object),
-        database_context(Transaction_Object, Prefixes),
+        database_prefixes(Transaction_Object, Prefixes),
         put_dict(Prefixes, Old_NS, New_NS)
     },
     compile_wf(P, Goal),

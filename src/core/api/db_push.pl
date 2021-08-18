@@ -623,7 +623,7 @@ test(push_prefixes,
     push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], test_pusher(_), _Result),
 
     resolve_absolute_string_descriptor("admin/foo/remote/branch/main", Remote),
-    database_context(Remote, Prefixes),
+    database_prefixes(Remote, Prefixes),
 
     Prefixes = _{'@base' : "http://somewhere.for.now/document/",
                  '@schema': "http://somewhere.for.now/schema#",

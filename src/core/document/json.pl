@@ -22,7 +22,7 @@
               replace_schema_document/2,
               replace_schema_document/3,
               nuke_schema_documents/1,
-              database_context/2,
+              database_prefixes/2,
               insert_context_document/2,
               run_insert_document/4,
               create_graph_from_json/5,
@@ -275,7 +275,57 @@ class_descriptor_image(set(C),json{ '@container' : "@set",
 class_descriptor_image(cardinality(C,_), json{ '@container' : "@set",
                                                '@type' : C }).
 
-database_context(DB,Context) :-
+get_context_documentation(DB, ID, Documentation) :-
+    database_schema(DB, Schema),
+    xrdf(Schema, ID, sys:documentation, Doc_ID),
+    Documentation0 = _{},
+    (   xrdf(Schema, Doc_ID, sys:title, Title^^_)
+    ->  put_dict(_{ '@title': Title}, Documentation0, Documentation1)
+    ;   Documentation0 = Documentation1),
+    (   xrdf(Schema, Doc_ID, sys:description, Desc^^_)
+    ->  put_dict(_{ '@description': Desc}, Documentation1, Documentation2)
+    ;   Documentation1 = Documentation2),
+    (   xrdf(Schema, Doc_ID, sys:authors, Author_ID)
+    ->  rdf_list_list(Schema, Author_ID, Authors),
+        maplist([Author^^_,Author]>>true, Authors, Authors_List),
+        put_dict(_{ '@authors': Authors_List}, Documentation2, Documentation)
+    ;   Documentation2 = Documentation).
+
+database_context_object(DB,Prefixes) :-
+    is_transaction(DB),
+    is_schemaless(DB),
+    !,
+    database_prefixes(DB, Prefixes).
+database_context_object(DB,Context) :-
+    is_transaction(DB),
+    !,
+    database_prefixes(DB, Prefixes),
+    database_schema(DB, Schema),
+    % This should always exist according to schema correctness criteria?
+    xrdf(Schema, ID, rdf:type, sys:'Context'),
+    xrdf(Schema, ID, sys:base, Base_String^^_),
+    xrdf(Schema, ID, sys:schema, Schema_String^^_),
+    (   get_context_documentation(DB, ID, Documentation)
+    ->  put_dict(
+            _{ '@base' : Base_String,
+               '@schema' : Schema_String,
+               '@documentation' : Documentation},
+            Prefixes, Context)
+    ;   put_dict(
+            _{ '@base' : Base_String,
+               '@schema' : Schema_String},
+            Prefixes, Context)
+    ).
+database_context_object(Query_Context,Context) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    database_context_object(TO, Context).
+database_context_object(Askable,Context) :-
+    create_context(Askable, Query_Context),
+    database_context_object(Query_Context, Context).
+
+database_prefixes(DB,Context) :-
     is_transaction(DB),
     !,
     database_schema(DB,Schema),
@@ -296,14 +346,14 @@ database_context(DB,Context) :-
             select_dict(json{'@id' : _ }, Context_With_ID, Context)
         ;   Context = _{})
     ).
-database_context(Query_Context, Context) :-
+database_prefixes(Query_Context, Context) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    database_context(TO, Context).
-database_context(Askable, Context) :-
+    database_prefixes(TO, Context).
+database_prefixes(Askable, Context) :-
     create_context(Askable, Query_Context),
-    database_context(Query_Context, Context).
+    database_prefixes(Query_Context, Context).
 
 predicate_map(P, Context, Prop, json{ '@id' : P }) :-
     % NOTE: This is probably wrong if it already has a prefix...
@@ -340,7 +390,7 @@ type_context(DB,Type,Prefixes,Context) :-
     ).
 
 json_elaborate(DB,JSON,JSON_ID) :-
-    database_context(DB,Context),
+    database_prefixes(DB,Context),
     json_elaborate(DB,JSON,Context,JSON_ID).
 
 prefix_expand_schema(Node,Context,NodeEx) :-
@@ -617,17 +667,40 @@ context_triple(JSON,Triple) :-
                           xdd:'http://terminusdb.com/schema/xdd#'
                       },
            Expanded),
-    json_triple_(Expanded,_{},Triple).
+    % A small white lie...
+    do_or_die(
+        get_dict('@base', JSON, Base),
+        error(schema_check_failure([witness{'@type':context_has_no_base_prefix}]), _)),
+    json_triple_(Expanded,_{'@base' : Base},Triple).
 
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
+context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
+    dict_pairs(Documentation, json, Pairs),
+    findall(P-V,
+            (   member(Keyword-Value,Pairs),
+                \+ Keyword = '@type',
+                context_documentation_value_map(Keyword,Value,P,V)
+            ),
+            PVs),
+    dict_pairs(Result,json,['@id'-"terminusdb://context/SchemaDocumentation",
+                            '@type'-"sys:SchemaDocumentation"|PVs]).
+
+context_documentation_value_map('@title',Value,'sys:title',
+                                json{'@type' : "xsd:string", '@value' : Value}).
+context_documentation_value_map('@description',Value,'sys:description',
+                                json{'@type' : "xsd:string", '@value' : Value}).
+context_documentation_value_map('@authors',Value,'sys:authors',json{ '@container' : "@list",
+                                                                     '@type' : "xsd:string",
+                                                                     '@value' : Value_List }) :-
+    maplist([V,JSON]>>(JSON = json{ '@value' : V, '@type' : "xsd:string"}), Value,Value_List).
 
 context_elaborate(JSON,Elaborated) :-
     is_context(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
-    partition([P-_]>>(member(P, ['@type', '@base', '@schema'])),
+    partition([P-_]>>(member(P, ['@type', '@base', '@schema', '@documentation'])),
               Pairs, Keyword_Values, Prop_Values),
     findall(
         P-V,
@@ -902,7 +975,7 @@ json_schema_triple(JSON,Context,Triple) :-
 
 % Triple generator
 json_triple(DB,JSON,Triple) :-
-    database_context(DB,Context),
+    database_prefixes(DB,Context),
     json_triple(DB,Context,JSON,Triple).
 
 json_triple(DB,Context,JSON,Triple) :-
@@ -910,7 +983,7 @@ json_triple(DB,Context,JSON,Triple) :-
     json_triple_(Elaborated,Context,Triple).
 
 json_triples(DB,JSON,Triples) :-
-    database_context(DB,Context),
+    database_prefixes(DB,Context),
     findall(
         Triple,
         json_triple(DB, Context, JSON, Triple),
@@ -1171,7 +1244,7 @@ get_document_uri_by_type(Desc, Type, Uri) :-
     open_descriptor(Desc,Transaction),
     get_document_by_type(Transaction, Type, Uri).
 get_document_uri_by_type(DB, Type, Uri) :-
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
@@ -1190,7 +1263,7 @@ get_document_by_type(Desc, Type, Document) :-
     open_descriptor(Desc,Transaction),
     get_document_by_type(Transaction, Type, Document).
 get_document_by_type(DB, Type, Document) :-
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
@@ -1214,7 +1287,7 @@ get_document(Desc, Compress, Unfold, Id, Document) :-
     open_descriptor(Desc,Transaction),
     get_document(Transaction, Compress, Unfold, Id, Document).
 get_document(DB, Compress, Unfold, Id, Document) :-
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     get_document(DB, Prefixes, Compress, Unfold, Id, Document).
 
 get_document(DB, Prefixes, Compress, Unfold, Id, Document) :-
@@ -1366,11 +1439,11 @@ get_schema_document_uri(DB, Uri) :-
 
 get_schema_document(DB, '@context', Document) :-
     !,
-    database_context(DB, DB_Prefixes),
-    % TODO: should database_context even return an object where type is Context instead of @context?
-    Document = (DB_Prefixes.put('@type', '@context')).
+    database_context_object(DB, Context_Object),
+    % TODO: should database_prefixes even return an object where type is Context instead of @context?
+    Document = (Context_Object.put('@type', '@context')).
 get_schema_document(DB, Id, Document) :-
-    database_context(DB, DB_Prefixes),
+    database_prefixes(DB, DB_Prefixes),
     default_prefixes(Defaults),
     Prefixes = (Defaults.put(DB_Prefixes)),
     id_schema_json(DB, Prefixes, Id, Document).
@@ -1527,7 +1600,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
         )
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
-    database_context(DB,Context),
+    database_prefixes(DB,Context),
     forall(
         json_read_dict_stream(JSON_Stream, Dict),
         (
@@ -1628,7 +1701,7 @@ delete_document(DB, Prefixes, Id) :-
 delete_document(DB, Id) :-
     is_transaction(DB),
     !,
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     delete_document(DB, Prefixes, Id).
 delete_document(Query_Context, Id) :-
     is_query_context(Query_Context),
@@ -1702,7 +1775,7 @@ insert_document(Query_Context, Document, ID) :-
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
     database_instance(Transaction, [Instance]),
-    database_context(Transaction, Context),
+    database_prefixes(Transaction, Context),
     % insert
     forall(
         json_triple_(Elaborated, Context, t(S,P,O)),
@@ -1795,7 +1868,7 @@ class_frame(Transaction, Class, Frame) :-
     ;   is_validation_object(Transaction)
     ),
     !,
-    database_context(Transaction, DB_Prefixes),
+    database_prefixes(Transaction, DB_Prefixes),
     default_prefixes(Default_Prefixes),
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
@@ -1863,7 +1936,7 @@ class_property_dictionary(Transaction, Class, Frame) :-
     ;   is_validation_object(Transaction)
     ),
     !,
-    database_context(Transaction, DB_Prefixes),
+    database_prefixes(Transaction, DB_Prefixes),
     default_prefixes(Default_Prefixes),
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     class_property_dictionary(Transaction, Prefixes, Class, Frame).
@@ -1910,7 +1983,7 @@ insert_schema_document(Transaction, Document) :-
     ),
     database_schema(Transaction, Schema),
 
-    database_context(Transaction, Context),
+    database_prefixes(Transaction, Context),
     prefix_expand_schema(Id,Context,Id_Ex),
     do_or_die(
         \+ xrdf(Schema, Id_Ex, _, _),
@@ -1927,7 +2000,7 @@ insert_schema_document_unsafe(Transaction, Document) :-
     is_transaction(Transaction),
     !,
     % Is this a context? If so do something else.
-    database_context(Transaction, Context),
+    database_prefixes(Transaction, Context),
     database_schema(Transaction, [Schema]),
 
     default_prefixes(Prefixes),
@@ -1981,7 +2054,7 @@ delete_schema_subdocument(Transaction, Context, Id) :-
 delete_schema_document(Transaction, Id) :-
     is_transaction(Transaction),
     !,
-    database_context(Transaction, Context),
+    database_prefixes(Transaction, Context),
     database_schema(Transaction, [Schema]),
 
     default_prefixes(Prefixes),
@@ -2106,6 +2179,91 @@ test(write_json_stream_to_builder, [
 
 :- use_module(core(util/test_utils)).
 
+test(expand_context_with_documentation, []) :-
+    Context =
+    _{ '@type' : "@context",
+       '@base' : "http://i/",
+       '@schema' : "http://s/",
+       '@documentation' :
+       _{ '@title' : "WOQL schema",
+          '@description' : "This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
+          '@authors' : ["Gavin"]
+        }
+     },
+
+    context_elaborate(
+        Context,
+        Elaborated),
+
+    Elaborated =
+    json{'@id':"terminusdb://context",
+         '@type':'sys:Context',
+         'sys:base':json{'@type':"xsd:string",'@value':"http://i/"},
+         'sys:documentation':
+         json{'@id':"terminusdb://context/SchemaDocumentation",
+              '@type':"sys:SchemaDocumentation",
+              'sys:authors':
+              json{'@container':"@list",
+                   '@type':"xsd:string",
+                   '@value':[json{'@type':"xsd:string", '@value':"Gavin"}]},
+              'sys:description':
+              json{'@type':"xsd:string",
+                   '@value':"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products."},
+              'sys:title':json{'@type':"xsd:string",
+                               '@value':"WOQL schema"}},
+         'sys:prefix_pair':json{'@container':"@set",'@type':"sys:Prefix",'@value':[]},
+         'sys:schema':json{'@type':"xsd:string",'@value':"http://s/"}},
+
+    findall(Triple, context_triple(Context, Triple), Triples),
+
+    Triples =
+    [t("terminusdb://context",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/sys#Context'),
+     t("terminusdb://context",'http://terminusdb.com/schema/sys#base',"http://i/"^^'http://www.w3.org/2001/XMLSchema#string'),
+     t("terminusdb://context/SchemaDocumentation",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/sys#SchemaDocumentation'),
+     t("terminusdb://context/SchemaDocumentation",'http://terminusdb.com/schema/sys#authors',Cons),
+     t(Cons,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+     t(Cons,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+     t(Cons,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest','http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+     t("terminusdb://context/SchemaDocumentation",'http://terminusdb.com/schema/sys#description',"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products."^^'http://www.w3.org/2001/XMLSchema#string'),
+     t("terminusdb://context/SchemaDocumentation",'http://terminusdb.com/schema/sys#title',"WOQL schema"^^'http://www.w3.org/2001/XMLSchema#string'),
+     t("terminusdb://context",'http://terminusdb.com/schema/sys#documentation',"terminusdb://context/SchemaDocumentation"),
+     t("terminusdb://context",'http://terminusdb.com/schema/sys#schema',"http://s/"^^'http://www.w3.org/2001/XMLSchema#string')].
+
+context_schema('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/",
+  "@documentation" :
+  { "@title" : "WOQL schema",
+    "@description" : "This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
+    "@authors" : ["Gavin"]
+  }
+}').
+
+test(insert_retrieve_context_with_documentation, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc)
+             )
+         ),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    write_schema(context_schema, Desc),
+
+    open_descriptor(Desc, DB),
+    database_context_object(DB,Context),
+
+    Context =
+    _{'@base':"http://i/",
+      '@documentation':_{'@authors':["Gavin"],
+                         '@description':"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
+                         '@title':"WOQL schema"},
+      '@schema':"http://s/",
+      '@type':'Context'}.
+
 schema1('
 { "@type" : "@context",
   "@base" : "http://i/",
@@ -2155,7 +2313,7 @@ test(get_field_values, []) :-
                             '@value':"1979-12-28"}
                      ]).
 
-test(create_database_context,
+test(create_database_prefixes,
      [
          setup(
              (   setup_temp_store(State),
@@ -2167,7 +2325,7 @@ test(create_database_context,
          )
      ]) :-
     open_descriptor(Desc, DB),
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     type_context(DB,'Employee',Prefixes,Context),
 
     Context = json{ birthdate:json{ '@id':'http://s/birthdate',
@@ -3447,7 +3605,7 @@ test(enum_elaborate,
      ]) :-
 
     open_descriptor(Desc, DB),
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     type_context(DB,'Dog',Prefixes,TypeContext),
 
     TypeContext = json{ hair_colour:json{'@id':'http://s/hair_colour',
@@ -3559,7 +3717,7 @@ test(binary_tree_context,
      ]) :-
 
     open_descriptor(Desc, DB),
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     type_context(DB,'BinaryTree', Prefixes, Binary_Context),
 
     Binary_Context = json{ leaf:json{'@id':'http://s/leaf'},
@@ -5453,7 +5611,7 @@ test(update_enum,[
                   '@type': "Enum",
                   '@value': ["Information Technology", "Amazing Marketing"]},
 
-    database_context(Desc,Prefixes),
+    database_prefixes(Desc,Prefixes),
     json_schema_elaborate(New_Team, Prefixes, Elaborated),
     Elaborated =
     json{'@id':'http://s/Team',
