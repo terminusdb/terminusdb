@@ -72,8 +72,29 @@ const getJSONAndGenerateMDFile = async () => {
         request(urls[i], function (error, response, body) {
             // parse contents of the json file
             let parsedWoqlJSON = JSON.parse(
-                "[" + body.toString().replace(/\n\n/g, ",\n\n") + "]"
+                "[" + body.toString().replace(/}\s*{/g, "},{") + "]"
             );
+
+            let mdContents = "";
+
+            contextJSON = parsedWoqlJSON.filter((object) => (object["@type"] == "@context"
+                                                             && object["@documentation"]));
+            if (contextJSON.length > 0){
+                let documentation = contextJSON[0]["@documentation"];
+                mdContents +=
+                    documentation["@title"] ? "# "+documentation["@title"] +"\n\n" : "";
+                mdContents +=
+                    documentation["@description"] ? documentation["@description"] +"\n\n" : "";
+                mdContents += documentation["@authors"] ? " **Authored by:** " : "";
+                let latch = false;
+                for(var j in documentation["@authors"]){
+                    mdContents += latch ? ", " : "";
+                    console.log(documentation["@authors"][j])
+                    mdContents += documentation["@authors"][j];
+                    latch = true;
+                }
+                mdContents += "\n\n---"
+            }
 
             // remove non class objects and sort the list according to the order of Alphabets
             parsedWoqlJSON = parsedWoqlJSON.filter((object) => object["@id"]);
@@ -83,9 +104,6 @@ const getJSONAndGenerateMDFile = async () => {
             // remove duplicates from the list
             parsedWoqlJSON = uniq(parsedWoqlJSON);
 
-            //   let mdContents =
-            //     "# WOQL JSON-LD Reference \n >**On this page:** The JSON-LD definition of the WOQL language. \n\n implement clients for TerminusDB by constructing JSON-LD messages according to the [WOQL syntax schema](http://terminusdb.com/schema/woql) described below.  \n\n ## WOQL classes";
-            let mdContents = "";
             // for each object generate document using the template
             parsedWoqlJSON.forEach((object) => {
                 if (object["@id"]) {

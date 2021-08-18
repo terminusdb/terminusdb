@@ -1,4 +1,10 @@
- 
+# WOQL schema
+
+This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.
+
+ **Authored by:** Gavin
+
+--- 
 
  ### AddData 
 
