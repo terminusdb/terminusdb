@@ -91,6 +91,45 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     class_super(Validation_Object,Class,Super),
     class_predicate_type(Validation_Object,Super,Predicate,Type).
 
+refute_schema_context_documentation(Validation_Object, Documentation, Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Documentation, rdf:type, sys:'SchemaDocumentation'),
+    Witness = witness{
+                  '@type': documentation_is_mistyped,
+                  documentation: Documentation
+              }.
+refute_schema_context_documentation(Validation_Object, Documentation, Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Documentation, sys:authors, Author_ID),
+    global_prefix_expand(xsd:string,XSD_String),
+    (   rdf_list(Validation_Object, Author_ID, List)
+    ->  \+ maplist([_^^XSD_String]>>true, List),
+        Witness = witness{
+                      '@type': documentation_authors_malformed,
+                      documentation: Documentation
+                  }
+    ;   Witness = witness{
+                      '@type': documentation_authors_malformed_list,
+                      documentation: Documentation
+                  }
+    ).
+refute_schema_context_documentation(Validation_Object, Documentation, Witness) :-
+    database_schema(Validation_Object,Schema),
+    global_prefix_expand(xsd:string,XSD_String),
+    \+ xrdf(Schema, Documentation, sys:title, _Title^^XSD_String),
+    Witness = witness{
+                      '@type': documentation_title_malformed,
+                      documentation: Documentation
+              }.
+refute_schema_context_documentation(Validation_Object, Documentation, Witness) :-
+    database_schema(Validation_Object,Schema),
+    global_prefix_expand(xsd:string,XSD_String),
+    \+ xrdf(Schema, Documentation, sys:description, _Desc^^XSD_String),
+    Witness = witness{
+                  '@type': documentation_description_malformed,
+                  documentation: Documentation
+              }.
+
 refute_schema_context_prefix(Schema, Prefix, Witness) :-
     \+ xrdf(Schema, Prefix, rdf:type, sys:'Prefix'),
     Witness = witness{
@@ -147,10 +186,6 @@ refute_schema_context_prefix(Schema, Prefix, Witness) :-
 refute_schema_context(Validation_Object, Witness) :-
     database_schema(Validation_Object, Schema),
     \+ xrdf(Schema, 'terminusdb://context', rdf:type,sys:'Context'),
-    [Argh] = (Validation_Object.schema_objects),
-    Layer = (Argh.read),
-    forall(terminus_store:triple(Layer, S, P, O),
-           format("t(~q,~q,~q)~n", [S, P, O])),
     Witness = witness{
                   '@type': context_not_found
               }.
@@ -174,6 +209,7 @@ refute_schema_context(Validation_Object, Witness) :-
             sys:base,
             sys:schema,
             sys:prefix_pair,
+            sys:documentation,
             rdf:type
         ], List),
     \+ memberchk(Property, List),
@@ -189,6 +225,15 @@ refute_schema_context(Validation_Object, Witness) :-
     ;   Witness = witness{
                       '@type': context_has_malformed_prefix
                   }).
+refute_schema_context(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
+    xrdf(Schema, 'terminusdb://context', sys:documentation, Documentation),
+    (   atom(Documentation)
+    ->  refute_schema_context_documentation(Validation_Object, Documentation, Witness)
+    ;   Witness = witness{
+                      '@type': context_has_malformed_documentation
+                  }
+    ).
 
 refute_schema(Validation_Object,Witness) :-
     is_circular_hasse_diagram(Validation_Object,Witness),
@@ -197,7 +242,7 @@ refute_schema(Validation_Object,Witness) :-
 refute_schema(Validation_Object, Witness) :-
     refute_schema_context(Validation_Object, Witness).
 refute_schema(Validation_Object,Witness) :-
-    database_context(Validation_Object, Prefixes),
+    database_prefixes(Validation_Object, Prefixes),
     is_simple_class(Validation_Object,Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
     ;   refute_class_documentation(Validation_Object,Class,Witness)
@@ -602,7 +647,7 @@ key_base(_Validation_Object, Context, Type, Base) :-
     atomic_list_concat([Type_Compressed,'_'],Base).
 
 key_descriptor(Validation_Object, Type, Descriptor) :-
-    database_context(Validation_Object, Prefixes),
+    database_prefixes(Validation_Object, Prefixes),
     key_descriptor(Validation_Object, Prefixes, Type, Descriptor).
 
 % should refactor to do key lookup once.

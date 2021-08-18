@@ -171,7 +171,7 @@ test(create_db_and_check_master_branch, [
 
          true((once(ask(Repo_Descriptor, t(_,name,"main"^^xsd:string))),
                \+ ask(Branch_Descriptor, t(_,_,_)),
-               database_context(Branch_Descriptor,
+               database_prefixes(Branch_Descriptor,
                                 _{'@base':"http://somewhere/document",
                                   '@schema':"http://somewhere/schema",
                                   '@type':_})))

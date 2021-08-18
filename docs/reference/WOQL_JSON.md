@@ -1,1724 +1,1165 @@
-# WOQL
+# WOQL Schema
 
-This is the JSON-LD definition of the WOQL language. Those wishing to
-implement clients for TerminusDB should construct JSON-LD messages according
-to this ontology.
+The WOQL schema describes the shape of a valid WOQL AST. This schema allows WOQL objects to be saved and retrieved from TerminusDB.
 
-# Terminus DB WOQL Query Syntax Schema (`http://terminusdb.com/schema/woql`)
+---
 
-Authors: Gavin Mendel-Gleason Kevin C. Feeney
+ ### AddData 
 
-Schema describing all the structure of the WOQL query language
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Node (`woql:Node`)
+ **Class:** `woql:AddData`
 
-An arbitrary node identifier
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  (`woql:NodeRestriction`)
+ **Properties:** None.
 
+--- 
 
+ ### AddLink 
 
-### Property:  node (`woql:node`)
-#### Range:  (`owl:Thing`)
+ <p class="tdb-f">Description pending.</p>
 
-The URI of an object of an edge
+ **Class:** `woql:AddLink`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### AddTriple 
 
-## Class:  Variable (`woql:Variable`)
+ <p class="tdb-f">Description pending.</p>
 
-A WOQL logic variable
+ **Class:** `woql:AddTriple`
 
-### Super classes 
- *  (`woql:VariableNameRestriction`)
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-### Property:  Variable Name (`woql:variable_name`)
-#### Range:  (`xsd:string`)
+ ### AddedData 
 
-A name for the variable
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:AddedData`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Array Element (`woql:ArrayElement`)
+ ### AddedLink 
 
-Box for an element of an array
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Indexable (`woql:Indexable`)
- *  (`woql:IndexableRestriction`)
- *  (`woql:Value`)
+ **Class:** `woql:AddedLink`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Node (`woql:Datatype`)
+ ### AddedTriple 
 
-An arbitrary node identifier
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  (`woql:DatatypeRestriction`)
+ **Class:** `woql:AddedTriple`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-### Property:  datatype (`woql:datatype`)
-#### Range:  (`xsd:anySimpleType`)
+--- 
 
-The datatype value of an object of an edge
+ ### And 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:And`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-## Class:  Indexable (`woql:Indexable`)
+--- 
 
-Something with an index
+ ### ArithmeticExpression 
 
-### Super classes 
- *  (`woql:IndexableRestriction`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:ArithmeticExpression`
 
+ **Super class:** None.
 
-### Property:  index (`woql:index`)
-#### Range:  (`xsd:nonNegativeInteger`)
+ **Properties:** None.
 
-The index of a list
+--- 
 
+ ### ArithmeticValue 
 
+ <p class="tdb-f">A variable or node. It is a subdocument</p>
 
+ **Class:** `woql:ArithmeticValue`
 
+ **Super class:** `woql:ArithmeticExpression`
 
-## Class:  Query (`woql:Query`)
+ **Properties:** 
 
-A WOQL Query
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:data` | `xsd:anySimpleType` | An xsd data type value. |
+| `woql:variable` | `xsd:string` | A variable. |
 
-### Super classes 
- *  Document Class (`system:Document`)
+--- 
 
+ ### Column 
 
+ <p class="tdb-f">Description pending.</p>
 
-### Property:  document (`woql:document`)
-#### Range:  (`owl:Thing`)
+ **Class:** `woql:Column`
 
-Document associated with a query
+ **Super class:** None.
 
+ **Properties:** None.
 
+--- 
 
+ ### Concatenate 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  query list element (`woql:QueryListElement`)
+ **Class:** `woql:Concatenate`
 
-An element of a list of queries
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Indexable (`woql:Indexable`)
- *  (`woql:IndexableRestriction`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Properties:** None.
 
+--- 
 
+ ### Count 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Query with indexable sub query (`woql:QueryWithIndexedSubQuery`)
+ **Class:** `woql:Count`
 
-A Query with an indexed sub-query
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### Data 
 
-### Property:  query list (`woql:query_list`)
-#### Range:  query list element (`woql:QueryListElement`)
+ <p class="tdb-f">Description pending.</p>
 
-A list of queries
+ **Class:** `woql:Data`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### DataValue 
 
-## Class:  Query With Subquery (`woql:QueryWithSubQuery`)
+ <p class="tdb-f">A variable or node. It is a subdocument</p>
 
-A WOQL Query with a subquery
+ **Class:** `woql:DataValue`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
+ **Super class:** None.
 
+ **Properties:** 
 
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:data` | `xsd:anySimpleType` | An xsd data type value. |
+| `woql:variable` | `xsd:string` | A variable. |
+| `woql:list` | `DataValue` | A list of datavalues |
 
-### Property:  (`woql:query`)
-#### Range:  Query (`woql:Query`)
+--- 
 
+ ### DeleteDocument 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:DeleteDocument`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  And (`woql:And`)
+ ### DeleteLink 
 
-A conjunction of clauses
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  Query with indexable sub query (`woql:QueryWithIndexedSubQuery`)
+ **Class:** `woql:DeleteLink`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Using (`woql:Comment`)
+ ### DeleteTriple 
 
-Introduce a default collection.
-{'@type' : 'Comment',
- 'comment' : collection_descriptor}
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:DeleteTriple`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-### Property:  comment (`woql:comment`)
-#### Range:  (`xsd:string`)
+ ### DeletedLink 
 
-A comment
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:DeletedLink`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  From (`woql:From`)
+ ### DeletedTriple 
 
-A query with a graph filter for selection
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  Query with graph filter (`woql:QueryWithGraphFilter`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Class:** `woql:DeletedTriple`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Into (`woql:Into`)
+ ### Distinct 
 
-A query with a graph for selection
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  Query with graph (`woql:QueryWithGraph`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Class:** `woql:Distinct`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Or (`woql:Or`)
+ ### Div 
 
-A disjunction of clauses
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  Query with indexable sub query (`woql:QueryWithIndexedSubQuery`)
+ **Class:** `woql:Div`
 
+ **Super class:** `woql:ArithmeticExpression`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Query with graph (`woql:QueryWithGraph`)
+ ### Divide 
 
-A query with a specified graph
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ **Class:** `woql:Divide`
 
+ **Super class:** `woql:ArithmeticExpression`
 
+ **Properties:** None.
 
-### Property:  graph (`woql:graph`)
-#### Range:  (`xsd:string`)
+--- 
 
-the string to form a graph descriptor
+ ### Dot 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Dot`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-## Class:  Query with graph filter (`woql:QueryWithGraphFilter`)
+--- 
 
-A query with a graph filter
+ ### Equals 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Equals`
 
+ **Super class:** `woql:Query`
 
-### Property:  graph filter (`woql:graph_filter`)
-#### Range:  (`xsd:string`)
+ **Properties:** None.
 
-the string to form a graph filter descriptor
+--- 
 
+ ### Eval 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Eval`
 
+ **Super class:** `woql:Query`
 
-## Class:  Select (`woql:Select`)
+ **Properties:** None.
 
-A Selection of variables from subquery
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Has Variable List (`woql:HasVariableList`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ ### Exp 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Exp`
 
+ **Super class:** `woql:ArithmeticExpression`
 
-## Class:  Using (`woql:Using`)
+ **Properties:** None.
 
-Introduce a default collection.
-{'@type' : 'Using',
- 'collection' : collection_descriptor,
- 'query' : query}
+--- 
 
+ ### Floor 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Floor`
 
+ **Super class:** `woql:ArithmeticExpression`
 
-### Property:  Collection (`woql:collection`)
-#### Range:  (`xsd:string`)
+ **Properties:** None.
 
-A collection
+--- 
 
+ ### FormatType 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:FormatType`
 
+ **Super class:** None.
 
-## Class:  Variable List Element (`woql:VariableListElement`)
+ **Properties:** None.
 
-An element of a list by position
+--- 
 
-### Super classes 
- *  Indexable (`woql:Indexable`)
- *  (`woql:IndexableRestriction`)
- *  Variable (`woql:Variable`)
- *  (`woql:VariableNameRestriction`)
+ ### From 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:From`
 
+ **Super class:** `woql:Query`
 
-## Class:  Binary Operator (`woql:BinaryOperator`)
+ **Properties:** None.
 
-A binary operator, with left and right
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ ### Get 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Get`
 
-### Property:  left (`woql:left`)
-#### Range:  (`woql:Value`)
+ **Super class:** `woql:Query`
 
-The left of a Binary Operator
+ **Properties:** None.
 
+--- 
 
+ ### Greater 
 
+ <p class="tdb-f">Description pending.</p>
 
-### Property:  right (`woql:right`)
-#### Range:  (`woql:Value`)
+ **Class:** `woql:Greater`
 
-The right of a Binary Operator
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### GroupBy 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Equals (`woql:Equals`)
+ **Class:** `woql:GroupBy`
 
-Defines unification between two things
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Binary Operator (`woql:BinaryOperator`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### HashKey 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Quad (`woql:Quad`)
+ **Class:** `woql:HashKey`
 
-A triple with graph filter
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
- *  Query with graph filter (`woql:QueryWithGraphFilter`)
- *  Triple (`woql:Triple`)
+ **Properties:** None.
 
+--- 
 
+ ### If 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Substring (`woql:Substring`)
+ **Class:** `woql:If`
 
-Find substrings of a given string
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  HasLength (`woql:HasLength`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### Immediately 
 
-### Property:  after (`woql:after`)
-#### Range:  (`woql:Value`)
+ <p class="tdb-f">Description pending.</p>
 
-The after characters index of a substring search
+ **Class:** `woql:Immediately`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-### Property:  before (`woql:before`)
-#### Range:  (`woql:Value`)
+ ### Indicator 
 
-The before characters index of a substring search
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Indicator`
 
+ **Super class:** None.
 
+ **Properties:** None.
 
-### Property:  string (`woql:string`)
-#### Range:  (`woql:Value`)
+--- 
 
-The string of a substring search
+ ### Into 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Into`
 
+ **Super class:** `woql:Query`
 
-### Property:  substring (`woql:substring`)
-#### Range:  (`woql:Value`)
+ **Properties:** None.
 
-The substring of a substring search
+--- 
 
+ ### InversePathPredicate 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:InversePathPredicate`
 
+ **Super class:** `woql:PathPattern`
 
-## Class:  Subsumption (`woql:Subsumption`)
+ **Properties:** None.
 
-Subsumption of one class by another
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ ### IsA 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:IsA`
 
-### Property:  child (`woql:child`)
-#### Range:  (`owl:Thing`)
+ **Super class:** `woql:Query`
 
-The child of a subsumption
+ **Properties:** None.
 
+--- 
 
+ ### Join 
 
+ <p class="tdb-f">Description pending.</p>
 
-### Property:  parent (`woql:parent`)
-#### Range:  (`owl:Thing`)
+ **Class:** `woql:Join`
 
-The parent of a subsumption
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### Length 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Triple (`woql:Triple`)
+ **Class:** `woql:Length`
 
-A edge in the graph specified by subject, predicate, object
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### Less 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Document Query (`woql:DocumentQuery`)
+ **Class:** `woql:Less`
 
-A query which references a document
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### LexicalKey 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Read Object (`woql:ReadObject`)
+ **Class:** `woql:LexicalKey`
 
-Read an object as JSON
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Document Query (`woql:DocumentQuery`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### Like 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Add quad (`woql:AddQuad`)
+ **Class:** `woql:Like`
 
-Add a quad
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
- *  Query with graph (`woql:QueryWithGraph`)
- *  Triple (`woql:Triple`)
+ **Properties:** None.
 
+--- 
 
+ ### Limit 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Add triple (`woql:AddTriple`)
+ **Class:** `woql:Limit`
 
-Add a triple
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
- *  Triple (`woql:Triple`)
+ **Properties:** None.
 
+--- 
 
+ ### Link 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Value (`woql:ArithmeticValue`)
+ **Class:** `woql:Link`
 
-An arithmetic value - float, int, bignum, etc.
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  (`woql:Value`)
+ **Properties:** None.
 
+--- 
 
+ ### Lower 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  As Var (`woql:AsVar`)
+ **Class:** `woql:Lower`
 
-As Var
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Variable (`woql:Variable`)
- *  (`woql:VariableNameRestriction`)
+ **Properties:** None.
 
+--- 
 
+ ### Member 
 
-### Property:  var type (`woql:var_type`)
-#### Range:  (`xsd:string`)
+ <p class="tdb-f">Description pending.</p>
 
-An AsVar casting type
+ **Class:** `woql:Member`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### Minus 
 
-## Class:  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
+ <p class="tdb-f">Description pending.</p>
 
-Binary Arithmetic Operator
+ **Class:** `woql:Minus`
 
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
+ **Super class:** `woql:ArithmeticExpression`
 
+ **Properties:** None.
 
+--- 
 
-### Property:  first (`woql:first`)
-#### Range:  Arithmetic Expression (`woql:ArithmeticExpression`)
+ ### NamedParametricQuery 
 
-The first argument of a binary operator
+ <p class="tdb-f">A named parametric query which names a specific query for later retrieval and re-use and allows the specification of bindings for a specific set of variables in the query.</p>
 
+ **Class:** `woql:NamedParametricQuery`
 
+ **Super class:** None.
 
+ **Properties:** 
 
-### Property:  second (`woql:second`)
-#### Range:  Arithmetic Expression (`woql:ArithmeticExpression`)
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:name` | `xsd:string` | The name of the NamedParametricQuery to be retrieved. |
+| `woql:parameters` | `xsd:string` | Variable name list for auxilliary bindings. |
+| `woql:query` | `Query` | The query AST as WOQL JSON. |
 
-The second argument of a binary operator
+--- 
 
+ ### NamedQuery 
 
+ <p class="tdb-f">A named query names a specific query for later retrieval and re-use</p>
 
+ **Class:** `woql:NamedQuery`
 
+ **Super class:** None.
 
-## Class:  Concatenate (`woql:Concatenate`)
+ **Properties:** 
 
-Concatenate a list of strings
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:name` | `xsd:string` | The name of the NamedQuery to be retrieved |
+| `woql:query` | `Query` | The query AST as WOQL JSON |
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+--- 
 
+ ### NodeValue 
 
+ <p class="tdb-f">A variable or node. It is a subdocument</p>
 
-### Property:  list (`woql:concat_list`)
-#### Range:  (`woql:Value`)
+ **Class:** `woql:NodeValue`
 
-The list of elements to concatenate
+ **Super class:** None.
 
+ **Properties:** 
 
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:node` | `xsd:string` | A URI representing a resource. |
+| `woql:variable` | `xsd:string` | A variable. |
 
+--- 
 
-### Property:  concatcatenated (`woql:concatenated`)
-#### Range:  (`woql:Value`)
+ ### Not 
 
-The string which has been concatenated
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Not`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Delete Object (`woql:DeleteObject`)
+ ### Once 
 
-Delete an object as JSON
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Document Query (`woql:DocumentQuery`)
- *  Query (`woql:Query`)
+ **Class:** `woql:Once`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Delete quad (`woql:DeleteQuad`)
+ ### Optional 
 
-Delete a quad
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
- *  Query with graph (`woql:QueryWithGraph`)
- *  Triple (`woql:Triple`)
+ **Class:** `woql:Optional`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Delete triple (`woql:DeleteTriple`)
+ ### Or 
 
-Delete a triple
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
- *  Triple (`woql:Triple`)
+ **Class:** `woql:Or`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Div (`woql:Div`)
+ ### Order 
 
-Integer division
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
+ **Class:** `woql:Order`
 
+ **Super class:** None.
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Divide (`woql:Divide`)
+ ### OrderBy 
 
-Arithmetic division
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
+ **Class:** `woql:OrderBy`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
-## Class:  Eval (`woql:Eval`)
+ ### OrderTemplate 
 
-Eval an arithmetic expression
+ <p class="tdb-f">Description pending.</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ **Class:** `woql:OrderTemplate`
 
+ **Super class:** None.
 
+ **Properties:** None.
 
-### Property:  expression (`woql:expression`)
-#### Range:  Arithmetic Expression (`woql:ArithmeticExpression`)
+--- 
 
-The arithmetic expression under evaluation
+ ### Pad 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Pad`
 
+ **Super class:** `woql:Query`
 
-### Property:  result (`woql:result`)
-#### Range:  (`woql:Value`)
+ **Properties:** None.
 
+--- 
 
+ ### Path 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Path`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-## Class:  Exp (`woql:Exp`)
+--- 
 
-Arithmetic exponentiation
+ ### PathOr 
 
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:PathOr`
 
+ **Super class:** `woql:PathPattern`
 
+ **Properties:** None.
 
-## Class:  File Query Resource (`woql:FileResource`)
+--- 
 
-A File Query Resource
+ ### PathPattern 
 
-### Super classes 
- *  Query Resource (`woql:QueryResource`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:PathPattern`
 
+ **Super class:** None.
 
-### Property:  file (`woql:file`)
-#### Range:  (`xsd:string`)
+ **Properties:** None.
 
-File associated with a query resource
+--- 
 
+ ### PathPlus 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:PathPlus`
 
+ **Super class:** `woql:PathPattern`
 
-## Class:  Floor (`woql:Floor`)
+ **Properties:** None.
 
-The floor of a floating point number
+--- 
 
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:UnaryArithmeticOperator`)
+ ### PathPredicate 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:PathPredicate`
 
+ **Super class:** `woql:PathPattern`
 
-## Class:  Get (`woql:Get`)
+ **Properties:** None.
 
-Get variable bindings from a resource
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Get or Put (`woql:GetOrPut`)
- *  Query (`woql:Query`)
+ ### PathSequence 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:PathSequence`
 
+ **Super class:** `woql:PathPattern`
 
-## Class:  Get or Put (`woql:GetOrPut`)
+ **Properties:** None.
 
-Abstract class for Get or Put
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ ### PathStar 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:PathStar`
 
-### Property:  as vars (`woql:as_vars`)
-#### Range:  As Var (`woql:AsVar`)
+ **Super class:** `woql:PathPattern`
 
-The variable captures associated with a get
+ **Properties:** None.
 
+--- 
 
+ ### PathTimes 
 
+ <p class="tdb-f">Description pending.</p>
 
-### Property:  resource (`woql:query_resource`)
-#### Range:  Query Resource (`woql:QueryResource`)
+ **Class:** `woql:PathTimes`
 
-A resource for woql:Get
+ **Super class:** `woql:PathPattern`
 
+ **Properties:** None.
 
+--- 
 
+ ### Plus 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Greater (`woql:Greater`)
+ **Class:** `woql:Plus`
 
-One value greater than another
+ **Super class:** `woql:ArithmeticExpression`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Binary Operator (`woql:BinaryOperator`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### Put 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Group By (`woql:GroupBy`)
+ **Class:** `woql:Put`
 
-Group a query by a spec
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Properties:** None.
 
+--- 
 
+ ### Query 
 
-### Property:  grouped (`woql:group_by`)
-#### Range:  Variable List Element (`woql:VariableListElement`)
+ <p class="tdb-f">An abstract class which represents an arbitrary query AST. It is a subdocument</p>
 
-Variable in which to place the grouping
+ **Class:** `woql:Query`
 
+ **Super class:** None.
 
+ **Properties:** None.
 
+--- 
 
-### Property:  grouped (`woql:group_template`)
-#### Range:  Variable List Element (`woql:VariableListElement`)
+ ### QueryResource 
 
-Variable in which to place the grouping
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:QueryResource`
 
+ **Super class:** None.
 
+ **Properties:** None.
 
-### Property:  group var (`woql:grouped`)
-#### Range:  (`woql:Value`)
+--- 
 
-Variable which to group
+ ### RandomKey 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:RandomKey`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-## Class:  ID Gen (`woql:IDGenerator`)
+--- 
 
-A reversible unique identifier generated from a Base and a Key
+ ### ReadDocument 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  URI Generator (`woql:URIGenerator`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:ReadDocument`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-## Class:  Is A (`woql:IsA`)
+--- 
 
-Check that Object 'is a' Type
+ ### Regexp 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Regexp`
 
+ **Super class:** `woql:Query`
 
-### Property:  element (`woql:element`)
-#### Range:  (`owl:Thing`)
+ **Properties:** None.
 
-The element of an IsA being type checked
+--- 
 
+ ### Select 
 
+ <p class="tdb-f">Select specific variables from a query to return.</p>
 
+ **Class:** `woql:Select`
 
-### Property:  of type (`woql:of_type`)
-#### Range:  (`owl:Thing`)
+ **Super class:** `woql:Query`
 
-Element is 'of type'
+ **Properties:** 
 
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:variables` | `xsd:string` | The variables to select from the query. |
+| `woql:query` | `Query` | The query which will be run prior to selection. |
 
+--- 
 
+ ### Size 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Join (`woql:Join`)
+ **Class:** `woql:Size`
 
-Join a list of strings
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### Source 
 
-### Property:  join (`woql:join`)
-#### Range:  (`woql:Value`)
+ <p class="tdb-f">Description pending.</p>
 
-The join of the list
+ **Class:** `woql:Source`
 
+ **Super class:** None.
 
+ **Properties:** None.
 
+--- 
 
-### Property:  join list (`woql:join_list`)
-#### Range:  (`woql:Value`)
+ ### Split 
 
-The list of things to be joined
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Split`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-### Property:  join separator (`woql:join_separator`)
-#### Range:  (`woql:Value`)
+--- 
 
-The separator in a join list
+ ### Start 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Start`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
-## Class:  Length (`woql:Length`)
+--- 
 
-Find the length of a collection
+ ### Substring 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  HasLength (`woql:HasLength`)
- *  Query (`woql:Query`)
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Substring`
 
+ **Super class:** `woql:Query`
 
-### Property:  list (`woql:length_list`)
-#### Range:  (`woql:Value`)
+ **Properties:** None.
 
-The thing of which we want a length
+--- 
 
+ ### Subsumption 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Subsumption`
 
+ **Super class:** `woql:Query`
 
-## Class:  Less (`woql:Less`)
+ **Properties:** None.
 
-One value less than another
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Binary Operator (`woql:BinaryOperator`)
- *  Query (`woql:Query`)
+ ### Sum 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Sum`
 
+ **Super class:** `woql:Query`
 
-## Class:  Like (`woql:Like`)
+ **Properties:** None.
 
-An element is like another element
+--- 
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Binary Operator (`woql:BinaryOperator`)
- *  Query (`woql:Query`)
+ ### Times 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Times`
 
-### Property:  similarity (`woql:like_similarity`)
-#### Range:  (`woql:Value`)
+ **Super class:** `woql:ArithmeticExpression`
 
-The similarity value (between 0 and 1)
+ **Properties:** None.
 
+--- 
 
+ ### Trim 
 
+ <p class="tdb-f">Description pending.</p>
 
+ **Class:** `woql:Trim`
 
-## Class:  limit (`woql:Limit`)
+ **Super class:** `woql:Query`
 
-A query limited by number of results
+ **Properties:** None.
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+--- 
 
+ ### Triple 
 
+ <p class="tdb-f">Description pending.</p>
 
-### Property:  limit (`woql:limit`)
-#### Range:  (`woql:Value`)
+ **Class:** `woql:Triple`
 
-The limit of results to obtain
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### TripleCount 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Lower (`woql:Lower`)
+ **Class:** `woql:TripleCount`
 
-Lowercase string left to string right
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Binary Operator (`woql:BinaryOperator`)
- *  Query (`woql:Query`)
+ **Properties:** None.
 
+--- 
 
+ ### True 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  Minus (`woql:Minus`)
+ **Class:** `woql:True`
 
-Arithmetic subtraction
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
+ **Properties:** None.
 
+--- 
 
+ ### Typecast 
 
+ <p class="tdb-f">Description pending.</p>
 
-## Class:  A var by column or header name (`woql:NamedAsVar`)
+ **Class:** `woql:Typecast`
 
-A var by column or header name
+ **Super class:** `woql:Query`
 
-### Super classes 
- *  As Var (`woql:AsVar`)
- *  Variable (`woql:Variable`)
- *  (`woql:VariableNameRestriction`)
+ **Properties:** None.
 
+--- 
 
+ ### UpdateDocument 
 
-### Property:  identifier (`woql:identifier`)
-#### Range:  (`xsd:string`)
+ <p class="tdb-f">Description pending.</p>
 
-Identifier for a column name
+ **Class:** `woql:UpdateDocument`
 
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### Upper 
 
-## Class:  Not (`woql:Not`)
+ <p class="tdb-f">Description pending.</p>
 
-Not the query
+ **Class:** `woql:Upper`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Super class:** `woql:Query`
 
+ **Properties:** None.
 
+--- 
 
+ ### Using 
 
-## Class:  Optional (`woql:Optional`)
+ <p class="tdb-f">Select a specific collection for query.</p>
 
-Query which is optional
+ **Class:** `woql:Using`
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Super class:** `woql:Query`
 
+ **Properties:** 
 
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:collection` | `xsd:string` | The resource over which to run the query. |
+| `woql:query` | `Query` | The query which will be run on the selected collection. |
 
+--- 
 
-## Class:  Order By (`woql:OrderBy`)
+ ### Value 
 
-Order a queries results by the given list
+ <p class="tdb-f">A variable, node or data point. It is a subdocument</p>
 
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
+ **Class:** `woql:Value`
 
+ **Super class:** None.
 
+ **Properties:** 
 
-### Property:  Variable Array (`woql:variable_ordering`)
-#### Range:  Variable Ordering (`woql:VariableOrdering`)
+| Property | Range  | Desc | 
+| -------- | ------ | ---- |
+| `woql:node` | `xsd:string` | A URI representing a resource. |
+| `woql:variable` | `xsd:string` | A variable. |
+| `woql:list` | `Value` | A list of datavalues |
+| `woql:data` | `xsd:anySimpleType` | An xsd data type value. |
 
-An array of variables
-
-
-
-
-
-## Class:  Pad (`woql:Pad`)
-
-Pad a string with character C, N times, to get a result
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  pad char (`woql:pad_char`)
-#### Range:  (`woql:Value`)
-
-Character with which to pad to string
-
-
-
-
-### Property:  pad result (`woql:pad_result`)
-#### Range:  (`woql:Value`)
-
-Result of padding
-
-
-
-
-### Property:  pad string (`woql:pad_string`)
-#### Range:  (`woql:Value`)
-
-String to pad
-
-
-
-
-### Property:  pad times (`woql:pad_times`)
-#### Range:  (`woql:Value`)
-
-Number of times to pad woql:pad_char
-
-
-
-
-
-## Class:  Plus (`woql:Plus`)
-
-Arithmetic addition
-
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
-
-
-
-
-## Class:  Post Query Resource (`woql:PostResource`)
-
-An HTTP POST Query Resource
-
-### Super classes 
- *  File Query Resource (`woql:FileResource`)
- *  Query Resource (`woql:QueryResource`)
-
-
-
-
-## Class:  Put (`woql:Put`)
-
-Put some variables bindings in a defined resource
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Get or Put (`woql:GetOrPut`)
- *  Query (`woql:Query`)
-
-
-
-
-## Class:  regexp (`woql:Regexp`)
-
-A regular expression and its results
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  pattern (`woql:pattern`)
-#### Range:  (`woql:Value`)
-
-The pattern to match
-
-
-
-
-### Property:  list (`woql:regexp_list`)
-#### Range:  (`woql:Value`)
-
-The list of results matched in the pattern
-
-
-
-
-### Property:  string (`woql:regexp_string`)
-#### Range:  (`woql:Value`)
-
-The string to match against pattern
-
-
-
-
-
-## Class:  Remote Query Resource (`woql:RemoteResource`)
-
-A Query Resource
-
-### Super classes 
- *  Query Resource (`woql:QueryResource`)
-
-
-
-### Property:  remote uri (`woql:remote_uri`)
-#### Range:  (`xsd:anyURI`)
-
-Remote URI associated with a query resource
-
-
-
-
-
-## Class:  Split (`woql:Split`)
-
-split string on pattern result
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  split list (`woql:split_list`)
-#### Range:  (`woql:Value`)
-
-List of splits from string
-
-
-
-
-### Property:  split pattern (`woql:split_pattern`)
-#### Range:  (`woql:Value`)
-
-Pattern on which to split a string
-
-
-
-
-### Property:  split string (`woql:split_string`)
-#### Range:  (`woql:Value`)
-
-String to split
-
-
-
-
-
-## Class:  start (`woql:Start`)
-
-The starting point in result set
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
-
-
-
-
-## Class:  Sum (`woql:Sum`)
-
-Sum of a list of numbers
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  start (`woql:start`)
-#### Range:  (`woql:Value`)
-
-The number from which to start
-
-
-
-
-### Property:  sum (`woql:sum`)
-#### Range:  (`woql:Value`)
-
-The sum of the list
-
-
-
-
-### Property:  sum list (`woql:sum_list`)
-#### Range:  (`woql:Value`)
-
-The list of things to be summed
-
-
-
-
-
-## Class:  Times (`woql:Times`)
-
-Arithmetic multiplication
-
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
- *  Binary Arithmetic Operator (`woql:BinaryArithmeticOperator`)
-
-
-
-
-## Class:  True (`woql:True`)
-
-Always true
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-
-## Class:  Typecast (`woql:Typecast`)
-
-A typecast of a variable to a new type
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  typecast result (`woql:typecast_result`)
-#### Range:  (`woql:Value`)
-
-The casted value
-
-
-
-
-### Property:  typecast type (`woql:typecast_type`)
-#### Range:  (`woql:Value`)
-
-The type we want to typecast to
-
-
-
-
-### Property:  typecast value (`woql:typecast_value`)
-#### Range:  (`woql:Value`)
-
-The thing of which we want a typecast
-
-
-
-
-
-## Class:  URI Generator (`woql:URIGenerator`)
-
-A Generator for IDs
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  base (`woql:base`)
-#### Range:  (`woql:Value`)
-
-The document base of a URI
-
-
-
-
-### Property:  key list (`woql:key_list`)
-#### Range:  Value List (`woql:ValueList`)
-
-The key list of a URI
-
-
-
-
-### Property:  base (`woql:uri`)
-#### Range:  (`woql:Value`)
-
-The document base of a URI
-
-
-
-
-
-## Class:  Binary Arithmetic Operator (`woql:UnaryArithmeticOperator`)
-
-Binary Arithmetic Operator
-
-### Super classes 
- *  Arithmetic Expression (`woql:ArithmeticExpression`)
-
-
-
-### Property:  argument (`woql:argument`)
-#### Range:  Arithmetic Expression (`woql:ArithmeticExpression`)
-
-The argument of a unary operator
-
-
-
-
-
-## Class:  Unique (`woql:Unique`)
-
-An irreversible unique identifier generated from a Base and a Key
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  URI Generator (`woql:URIGenerator`)
-
-
-
-
-## Class:  Update Object (`woql:UpdateObject`)
-
-Update an object as JSON
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Document Query (`woql:DocumentQuery`)
- *  Query (`woql:Query`)
-
-
-
-
-## Class:  Upper (`woql:Upper`)
-
-Uppercase string left to string right
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Binary Operator (`woql:BinaryOperator`)
- *  Query (`woql:Query`)
-
-
-
-
-## Class:  Value List Element (`woql:ValueListElement`)
-
-A Value List Element
-
-### Super classes 
- *  Indexable (`woql:Indexable`)
- *  (`woql:IndexableRestriction`)
- *  (`woql:Value`)
-
-
-
-
-## Class:  Variable Ordering (`woql:VariableOrdering`)
-
-A specific variable to de used in ordering
-
-### Super classes 
- *  Indexable (`woql:Indexable`)
- *  (`woql:IndexableRestriction`)
- *  Variable (`woql:Variable`)
- *  Variable List Element (`woql:VariableListElement`)
- *  (`woql:VariableNameRestriction`)
-
-
-
-### Property:  Ascending (`woql:ascending`)
-#### Range:  (`xsd:boolean`)
-
-Should the ordering be ascending
-
-
-
-
-
-## Class:  When (`woql:When`)
-
-When A, do B
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
- *  (`woql:QueryWithSingleSubQuery`)
- *  Query With Subquery (`woql:QueryWithSubQuery`)
-
-
-
-### Property:  consequent (`woql:consequent`)
-#### Range:  Query (`woql:Query`)
-
-The consequence of a woql:When
-
-
-
-
-
-## Class:  Dot (`woql:Dot`)
-
-Select from a dictionary
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  dictionary (`woql:dictionary`)
-#### Range:  (`woql:Value`)
-
-Dictionary of a selection
-
-
-
-
-### Property:  key (`woql:dictionary_key`)
-#### Range:  (`woql:Value`)
-
-Dictionary key of a selection
-
-
-
-
-### Property:  value (`woql:dictionary_value`)
-#### Range:  (`woql:Value`)
-
-Dictionary value of a selection
-
-
-
-
-
-## Class:  Plus (`woql:Edge`)
-
-Follow pattern at least once
-
-### Super classes 
- *  Object (`woql:HasObject`)
- *  Predicate (`woql:HasPredicate`)
- *  Subject (`woql:HasSubject`)
-
-
-
-
-## Class:  Has a resource (`woql:HasResource`)
-
-Has a graph or collection resource descriptor
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  resource (`woql:resource`)
-#### Range:  (`xsd:string`)
-
-A graph or collection resource descriptor
-
-
-
-
-
-## Class:  Path (`woql:Path`)
-
-A path query
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Object (`woql:HasObject`)
- *  Has Pattern (`woql:HasPathPattern`)
- *  Subject (`woql:HasSubject`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  path (`woql:path`)
-#### Range:  Path Pattern (`woql:PathPattern`)
-
-The path taken by a pattern
-
-
-
-
-
-## Class:  Sequence (`woql:PathOr`)
-
-path_first followed by path_second
-
-### Super classes 
- *  Path Pattern (`woql:PathPattern`)
-
-
-
-### Property:  left (`woql:path_left`)
-#### Range:  Path Pattern (`woql:PathPattern`)
-
-The left branch pattern in a fork
-
-
-
-
-### Property:  right (`woql:path_right`)
-#### Range:  Path Pattern (`woql:PathPattern`)
-
-The right branch pattern in a fork
-
-
-
-
-
-## Class:  Plus (`woql:PathPlus`)
-
-Follow pattern at least once
-
-### Super classes 
- *  Has Pattern (`woql:HasPathPattern`)
- *  Path Pattern (`woql:PathPattern`)
-
-
-
-
-## Class:  Predicate (`woql:PathPredicate`)
-
-Contains a predicate to follow in a pattern
-
-### Super classes 
- *  Path Pattern (`woql:PathPattern`)
-
-
-
-### Property:  first (`woql:path_predicate`)
-#### Range:  (`owl:Thing`)
-
-Pattern to deploy first in a sequence
-
-
-
-
-
-## Class:  Sequence (`woql:PathSequence`)
-
-path_first followed by path_second
-
-### Super classes 
- *  Path Pattern (`woql:PathPattern`)
-
-
-
-### Property:  first (`woql:path_first`)
-#### Range:  Path Pattern (`woql:PathPattern`)
-
-Pattern to deploy first in a sequence
-
-
-
-
-### Property:  second (`woql:path_second`)
-#### Range:  Path Pattern (`woql:PathPattern`)
-
-Pattern to deploy second in a sequence
-
-
-
-
-
-## Class:  Star (`woql:PathStar`)
-
-Follow pattern any number of times (including the empty transition)
-
-### Super classes 
- *  Has Pattern (`woql:HasPathPattern`)
- *  Path Pattern (`woql:PathPattern`)
-
-
-
-
-## Class:  Plus (`woql:PathTimes`)
-
-Follow pattern at least once
-
-### Super classes 
- *  Has Pattern (`woql:HasPathPattern`)
- *  Path Pattern (`woql:PathPattern`)
-
-
-
-### Property:  maximum (`woql:path_maximum`)
-#### Range:  (`xsd:nonNegativeInteger`)
-
-Maximum applications of pattern.
-
-
-
-
-### Property:  minimum (`woql:path_minimum`)
-#### Range:  (`xsd:nonNegativeInteger`)
-
-Minumum applications of pattern.
-
-
-
-
-
-## Class:  Size (`woql:Size`)
-
-Size of a resource
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Has a resource (`woql:HasResource`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  size (`woql:size`)
-#### Range:  (`woql:Value`)
-
-Calculated size of a graph or collection resource
-
-
-
-
-
-## Class:  Size (`woql:TripleCount`)
-
-Size of a resource
-
-### Super classes 
- *  Document Class (`system:Document`)
- *  Has a resource (`woql:HasResource`)
- *  Query (`woql:Query`)
-
-
-
-### Property:  triple count (`woql:triple_count`)
-#### Range:  (`woql:Value`)
-
-Triple count of a graph or collection resource
-
+---

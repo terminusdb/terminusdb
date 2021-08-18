@@ -1293,7 +1293,7 @@ compile_wf(using(Collection_String,P),Goal) -->
     {
         collection_descriptor_transaction_object(Default_Collection,Transaction_Objects,
                                                  Transaction_Object),
-        database_context(Transaction_Object, Prefixes),
+        database_prefixes(Transaction_Object, Prefixes),
         put_dict(Prefixes, Old_NS, New_NS)
     },
     compile_wf(P, Goal),
@@ -2635,6 +2635,49 @@ test(path_star, [
                  a-B=[(A,P,B)],
                  a-C=[(A,P,B),(B,P,C)],
                  a-A=[(A,P,B),(B,P,C),(C,P,A)]].
+
+test(path_num, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "me",
+                               message : "Graph creation"},
+
+    create_context(Descriptor,
+                   Commit_Info,
+                   Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            (
+                insert(node, rdf:type, owl:'Class', schema),
+                insert(p, rdf:type, owl:'ObjectProperty', schema),
+                insert(p, rdfs:domain, node, schema),
+                insert(p, rdfs:range, node, schema),
+                insert(a, rdf:type, node),
+                insert(b, rdf:type, node),
+                insert(c, rdf:type, node),
+                insert(a, p, b),
+                insert(b, p, c),
+                insert(c, p, a)
+            )),
+        _Meta),
+
+    findall((a-Y=Simple_Path),
+            (   ask(Descriptor,
+                    path(a, times(p(p),1,1), Y, Path)),
+                maplist([Edge,(A,B,C)]>>(
+                            get_dict('http://terminusdb.com/schema/woql#subject',Edge, A),
+                            get_dict('http://terminusdb.com/schema/woql#predicate',Edge, B),
+                            get_dict('http://terminusdb.com/schema/woql#object',Edge, C)
+                        ), Path, Simple_Path)
+            ),
+            Solutions),
+
+    Solutions = [a-B=[(_,_,B)]].
 
 test(complex_path, [
          setup((setup_temp_store(State),
@@ -4390,6 +4433,54 @@ test(target_commit, [
     atom_json_dict(Commit_Query, Query, []),
     query_test_response(Descriptor, Query, JSON),
     [_Commit] = (JSON.bindings).
+
+
+test(jobs_group_by, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    with_transaction(
+        Context,
+        ask(Context, (
+                insert(a, 'Id', 'foo'^^xsd:string),
+                insert(a, 'JobInfo', ji),
+                insert(b, 'Id', 'bar'^^xsd:string),
+                insert(b, 'JobInfo', ji),
+                insert(ji, 'JobInterest', 'Something'^^xsd:string),
+                insert(c, 'Id', 'baz'^^xsd:string),
+                insert(c, 'JobInfo', jj),
+                insert(d, 'Id', 'quux'^^xsd:string),
+                insert(d, 'JobInfo', jj),
+                insert(jj, 'JobInterest', 'SomethingElse'^^xsd:string)
+
+            )),
+        _
+    ),
+
+    AST = limit(10^^xsd:decimal,
+                select([v('JobInterest'),v('TheCount'),v('JobRoleInterestGroup')],
+                       (group_by(v('JobInterest'),
+                                 v('Id'),
+                                 (t(v('Coder'),'Id',v('Id')),
+                                  t(v('Coder'),'JobInfo',v('JobInfo')),
+                                  t(v('JobInfo'),'JobInterest',v('JobInterest'))),
+                                 v('JobRoleInterestGroup')),
+                        length(v('JobRoleInterestGroup'),v('TheCount'))))),
+    create_context(Descriptor, commit_info{ author : "test", message: "message2"},
+                   Context2),
+    query_response:run_context_ast_jsonld_response(Context2, AST, Response),
+    [_{'JobInterest':json{'@type':'xsd:string','@value':"Something"},
+       'JobRoleInterestGroup':[json{'@type':'xsd:string','@value':"foo"},
+                               json{'@type':'xsd:string','@value':"bar"}],
+       'TheCount':json{'@type':'xsd:decimal','@value':2}},
+     _{'JobInterest':json{'@type':'xsd:string','@value':"SomethingElse"},
+       'JobRoleInterestGroup':[json{'@type':'xsd:string','@value':"baz"},
+                               json{'@type':'xsd:string','@value':"quux"}],
+       'TheCount':json{'@type':'xsd:decimal','@value':2}}] = (Response.bindings).
 
 :- end_tests(woql).
 

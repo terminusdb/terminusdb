@@ -21,7 +21,7 @@ expand_query_document_class_property('@id', DB, Type, Query, '@id', Query_Ex) :-
     (   string(Query)
     ;   atom(Query)),
     !,
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     do_or_die(prefix_expand(Query, Prefixes, Expanded_Id),
               query_error(unknown_prefix(Query), _)),
     Query_Ex = id_exact(Type, Expanded_Id).
@@ -29,7 +29,7 @@ expand_query_document_class_property('@id', DB, Type, Query, '@id', Query_Ex) :-
 expand_query_document_class_property('@id', DB, Type, _{ '@one-of' : List}, '@id', Query_Ex) :-
     is_list(List),
     !,
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     maplist({Prefixes}/[Q, Q_Ex]>>(
                 do_or_die(prefix_expand(Q, Prefixes, Q_Ex),
                           query_error(unknown_prefix(Q), _))
@@ -44,7 +44,7 @@ expand_query_document_class_property('@type', DB, _Type, Query, '@type', Query_E
     (   string(Query)
     ;   atom(Query)),
     !,
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     do_or_die(prefix_expand_schema(Query, Prefixes, Query_Type_Ex),
               query_error(unknown_prefix(Query), _)),
 
@@ -52,8 +52,8 @@ expand_query_document_class_property('@type', DB, _Type, Query, '@type', Query_E
 expand_query_document_class_property('@type', _DB, _Type, Query, _Prop_Ex, _Query_Ex) :-
     throw(error(query_error(unrecognized_query_document(Query)), _)).
 expand_query_document_class_property(Prop, DB, Type, Query, Prop_Ex, Query_Ex) :-
-    database_context(DB, Database_Context),
-    do_or_die(prefix_expand_schema(Prop, Database_Context, Prop_Ex),
+    database_prefixes(DB, Database_Prefixes),
+    do_or_die(prefix_expand_schema(Prop, Database_Prefixes, Prop_Ex),
               error(query_error(unknown_prefix(Prop)), _)),
 
     do_or_die(class_predicate_type(DB, Type, Prop_Ex, Prop_Type),
@@ -135,7 +135,7 @@ expand_query_document_(DB, Type, Query, Query_Ex) :-
 
 expand_query_document_(DB, Type, Query, Query_Ex) :-
     (   get_dict('@type', Query, Query_Type)
-    ->  database_context(DB, Prefixes),
+    ->  database_prefixes(DB, Prefixes),
         do_or_die(prefix_expand_schema(Query_Type, Prefixes, Query_Type_Ex),
                   error(query_error(unknown_prefix(Query_Type)),_)),
         do_or_die(once(class_subsumed(DB, Type, Query_Type_Ex)),
@@ -150,7 +150,7 @@ expand_query_document_(DB, Type, Query, Query_Ex) :-
     expand_query_document_for_type(Query_Type_Descriptor, DB, Query, Query_Ex).
 
 expand_query_document(DB, Type, Query, Query_Ex) :-
-    database_context(DB,Prefixes),
+    database_prefixes(DB,Prefixes),
     (   var(Type)
     ->  Type_Ex = _
     ;   do_or_die(prefix_expand_schema(Type, Prefixes, Type_Ex),
