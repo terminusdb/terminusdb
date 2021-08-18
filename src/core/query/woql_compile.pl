@@ -2668,7 +2668,7 @@ test(path_num, [
 
     findall((a-Y=Simple_Path),
             (   ask(Descriptor,
-                    path(a, times(p(p,1,1)), Y, Path)),
+                    path(a, times(p(p),1,1), Y, Path)),
                 maplist([Edge,(A,B,C)]>>(
                             get_dict('http://terminusdb.com/schema/woql#subject',Edge, A),
                             get_dict('http://terminusdb.com/schema/woql#predicate',Edge, B),
@@ -2677,7 +2677,7 @@ test(path_num, [
             ),
             Solutions),
 
-    Solutions = [a-B=[(A,p,B)]].
+    Solutions = [a-B=[(_,_,B)]].
 
 test(complex_path, [
          setup((setup_temp_store(State),
