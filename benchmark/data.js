@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1629375238060,
+  "lastUpdate": 1629380765759,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -4015,6 +4015,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 36.777,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea97d9649a3afbb6467075975ed55464f01fb06c",
+          "message": "Makefile: fail on error or warning (#429)\n\nCurrently, `make` doesn't fail if there is an error or warning while\r\nbuilding the target with `swipl`. This adds a few `grep`s to do that.\r\nIt also fixes a warning on the Fedora build caused by UTF-8 Prolog files.",
+          "timestamp": "2021-08-19T15:42:19+02:00",
+          "tree_id": "03068baa51f46060ad32880fa8373762c9d12af6",
+          "url": "https://github.com/terminusdb/terminusdb/commit/ea97d9649a3afbb6467075975ed55464f01fb06c"
+        },
+        "date": 1629380764465,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 120.591,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 350.983,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 351.841,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 185.91,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 216.108,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 114.778,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 43.39,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 43.468,
             "unit": "ms"
           }
         ]
