@@ -34,7 +34,7 @@
 { "@id" : "Local",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "A local repository.",
+      "@comment" : "A local repository."
   },
   "@inherits" : "Repository",
   "@key" : { "@type" : "Lexical",
