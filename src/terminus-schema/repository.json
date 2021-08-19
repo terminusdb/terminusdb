@@ -1,4 +1,9 @@
 { "@type" : "@context",
+  "@documentation" : {
+      "@title" : "Repo schema",
+      "@description" : "This is the Repo schema. It is a specification for repository metadata management.",
+      "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
+  },
   "@base" : "terminusdb://repository/data/",
   "@schema" : "http://terminusdb.com/schema/repository#",
   "layer" : "http://terminusdb.com/schema/layer#",
@@ -7,24 +12,40 @@
 
 { "@id" : "layer:Layer",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A layer object which has the identifier used in storage.",
+      "@properties" : { "layer:identifier" : "The layer identifier." }
+  },
   "@base" : "layer_data:Layer_",
   "@key" : { "@type" : "ValueHash" },
   "layer:identifier" : "xsd:string" }
 
 { "@id" : "Repository",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A repository.",
+      "@properties" : { "head" : "The current most recent layer of the repository.",
+                        "name" : "The name of the repository."}
+  },
   "head" : { "@type": "Optional",
              "@class": "layer:Layer"},
   "name" : "xsd:string" }
 
 { "@id" : "Local",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A local repository.",
+  },
   "@inherits" : "Repository",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] } }
 
 { "@id" : "Remote",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A remote repository.",
+      "@properties" : { "remote_url" : "The url of the remote repository." }
+  },
   "@inherits" : "Repository",
   "remote_url" : "xsd:string",
   "@key" : { "@type" : "Lexical",

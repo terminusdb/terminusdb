@@ -1,10 +1,21 @@
 { "@type" : "@context",
+  "@documentation" : {
+      "@title" : "The System schema",
+      "@description" : "This is the System schema in which resides all information regarding capabilities, users, organizations, databases and available actions.",
+      "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
+  },
   "@schema" : "http://terminusdb.com/schema/system#",
   "@base" :  "terminusdb://system/data/",
   "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 
 { "@id" : "User",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A database user.",
+      "@properties" : { "name" : "The users name.",
+                        "key_hash" : "An optional key hash for authentication.",
+                        "capability" : "A set of capabilities which the user has access to." }
+  },
   "@key" : { "@type" : "Lexical",
              "@fields" : ["name"]},
   "name" : "xsd:string",
@@ -15,10 +26,20 @@
 
 { "@id" : "Resource",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A named resource.",
+      "@properties" : { "name" : "The name of the resource."}
+  },
   "name" : "xsd:string" }
 
 { "@id" : "Organization",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "An organisation.",
+      "@properties" : { "name" : "The name of the organization.",
+                        "child" : "The set of children of the organization.",
+                        "database" : "The set of databases controlled by the organization." }
+  },
   "@inherits" : "Resource",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
@@ -29,12 +50,22 @@
 
 { "@id" : "Role",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "Roles are named collections of actions which can be provided to a capability.",
+      "@properties" : { "name" : "The name of the role.",
+                        "action" : "The set of actions associated with the role." }
+  },
   "name" : "xsd:string",
   "action" : { "@type" : "Set",
                "@class" : "Action" } }
 
 { "@id" : "Capability",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A capability is a set of roles combined with a rescource over which those roles hold.",
+      "@properties" : { "scope" : "The resource over which the role holds.",
+                        "role" : "The set of roles the capability has access to." }
+  },
   "@key" : { "@type" : "ValueHash" },
   "scope" : "Resource",
   "role" : { "@type" : "Set",
@@ -42,6 +73,9 @@
 
 { "@id" : "Action",
   "@type" : "Enum",
+  "@documentation" : {
+      "@comment" : "The exhaustive list of actions which are available to roles."
+  },
   "@value" : [ "create_database",
                "delete_database",
                "class_frame",
@@ -62,14 +96,27 @@
 
 { "@id" : "Database",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A database.",
+  },
   "@inherits" : "Resource" }
 
 { "@id" : "SystemDatabase",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "The special system database.",
+  },
   "@inherits" : "Database" }
 
 { "@id" : "UserDatabase",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A normal user database.",
+      "@properties" : { "label" : "The label name of the database.",
+                        "comment" : "A comment associated with the database.",
+                        "creation_date" : "The time of creation of the database.",
+                        "state" : "The system transaction state of the database."}
+  },
   "@inherits" : "Database",
   "@key" : { "@type" : "Random" },
   "label" : "xsd:string",
@@ -79,6 +126,9 @@
 
 { "@id" : "DatabaseState",
   "@type" : "Enum",
+  "@documentation" : {
+      "@comment" : "The current system transaction state of a database. Only the 'finalized' state is a consistent state, all others indicate that database construction failed.",
+  },
   "@value" : [ "creating",
                "deleting",
                "finalized" ] }
