@@ -108,7 +108,7 @@ api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfo
         error(invalid_path(Path),_)),
 
     assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
-    
+
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
 
@@ -310,7 +310,7 @@ test(delete_objects_with_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"Dublin" "Pretoria"', Stream),
-    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -330,7 +330,7 @@ test(delete_objects_with_string,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('["Dublin", "Pretoria"]', Stream),
-    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -350,7 +350,7 @@ test(delete_objects_with_mixed_string_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"Dublin"\n["Pretoria"]', Stream),
-    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -396,7 +396,7 @@ test(replace_objects_with_stream,
 { "@type": "City",
   "@id" : "Pretoria",
   "name" : "Tshwane" }', Stream),
-    api_replace_documents(system, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
+    api_replace_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
 
     Ids = ['http://example.com/data/world/Dublin','http://example.com/data/world/Pretoria'].
 
