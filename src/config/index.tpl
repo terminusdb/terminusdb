@@ -45,7 +45,7 @@
                     <img src="https://terminusdb.com/img/logos/logo.svg" class="menu__logo" alt="Terminus DB logo">
 
                 </div>  
-                <img src="https://assets.terminusdb.com/images/21_7-min.png" class="card-img-top cow-image" alt="...">
+                <img src="https://assets.terminusdb.com/images/21_7-min.png" class="card-img-top cow-image" >
                 <div class="card-body">
                   <p class="card-text"><strong>We're hard at work getting a new TerminusDB console ready for you. In the meantime, try one of our clients:</strong></p>
                   <p class="card-text"><strong><a href="https://github.com/terminusdb/terminusdb-client-python" 
