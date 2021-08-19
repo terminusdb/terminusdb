@@ -27,15 +27,25 @@
 :- use_module(library(http/http_ssl_plugin)).
 :- use_module(library(http/html_write)).
 
-% Conditional loading of the JWT IO library...
+% JWT IO library
 :- if(config:jwt_enabled).
-:- use_module(library(jwt_io)).
-:- endif.
 
+% Load the library only if JWT is enabled
+:- use_module(library(jwt_io)).
+
+% Set up JWKS only if we have an endpoint
 load_jwt_conditionally :-
-    (   config:jwt_enabled, config:jwt_jwks_endpoint(Endpoint)
+    (   config:jwt_jwks_endpoint(Endpoint)
     ->  jwt_io:setup_jwks(Endpoint)
-    ; true).
+    ;   true).
+
+:- else.
+
+% Otherwise, do nothing
+load_jwt_conditionally :-
+    true.
+
+:- endif.
 
 
 terminus_server(Argv,Wait) :-
