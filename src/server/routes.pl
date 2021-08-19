@@ -3357,13 +3357,19 @@ worker_handler(get, _Request, _System_DB, _Auth) :-
  * console_handler(+Method,+Request) is det.
  */
 console_handler(get, _Request, _System_DB, _Auth) :-
+    config:index_template(Index),
+    /*
+    NOTE: Pending useable console....
+
     config:index_template(Tpl_String),
+
     config:console_base_url(BaseURL),
     (   config:autologin_enabled
     ->  Key = '"root"'
     ;   Key = false),
 
     format(string(Index), Tpl_String, [BaseURL, Key, BaseURL]),
+    */
 
     throw(http_reply(bytes('text/html', Index))).
 
