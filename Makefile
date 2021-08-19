@@ -34,6 +34,7 @@ rpm: $(TARGET)
 debug:
 	echo "main, halt." | swipl -f src/bootstrap.pl
 
+.PHONY: docs
 docs:
 	src/utils/compile_docs.sh
 	ronn docs/terminusdb.1.ronn --roff

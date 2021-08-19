@@ -97,14 +97,14 @@
 { "@id" : "Database",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "A database.",
+      "@comment" : "A database."
   },
   "@inherits" : "Resource" }
 
 { "@id" : "SystemDatabase",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "The special system database.",
+      "@comment" : "The special system database."
   },
   "@inherits" : "Database" }
 
@@ -115,7 +115,7 @@
       "@properties" : { "label" : "The label name of the database.",
                         "comment" : "A comment associated with the database.",
                         "creation_date" : "The time of creation of the database.",
-                        "state" : "The system transaction state of the database."}
+                        "state" : "The system transaction state of the database." }
   },
   "@inherits" : "Database",
   "@key" : { "@type" : "Random" },
@@ -127,7 +127,7 @@
 { "@id" : "DatabaseState",
   "@type" : "Enum",
   "@documentation" : {
-      "@comment" : "The current system transaction state of a database. Only the 'finalized' state is a consistent state, all others indicate that database construction failed.",
+      "@comment" : "The current system transaction state of a database. Only the 'finalized' state is a consistent state, all others indicate that database construction failed."
   },
   "@value" : [ "creating",
                "deleting",

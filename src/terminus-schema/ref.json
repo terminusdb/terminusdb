@@ -61,7 +61,7 @@
 { "@id" : "InitialCommit",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "A special initial commit which is replaced when data exists.",
+      "@comment" : "A special initial commit which is replaced when data exists."
   },
   "@inherits" : "Commit",
   "@key" : { "@type" : "Lexical",
