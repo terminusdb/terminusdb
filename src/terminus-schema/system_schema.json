@@ -104,7 +104,7 @@
 { "@id" : "SystemDatabase",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "The special system database.",
+      "@comment" : "The special system database."
   },
   "@inherits" : "Database" }
 
