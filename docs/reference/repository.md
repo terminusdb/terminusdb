@@ -1,37 +1,37 @@
- 
 
- ### Local 
 
- <p class="tdb-f">Description pending.</p>
+### Local
 
- **Class:** `Local`
+<p class="tdb-f">Description pending.</p>
 
- **Super class:** `Repository`
+**Class:** `Local`
 
---- 
+**Super class:** `Repository`
 
- ### Remote 
+---
 
- <p class="tdb-f">Description pending.</p>
+### Remote
 
- **Class:** `Remote`
+<p class="tdb-f">Description pending.</p>
 
- **Super class:** `Repository`
+**Class:** `Remote`
 
---- 
+**Super class:** `Repository`
 
- ### Repository 
+---
 
- <p class="tdb-f">Description pending.</p>
+### Repository
 
- **Class:** `Repository`
+<p class="tdb-f">Description pending.</p>
 
---- 
+**Class:** `Repository`
 
- ### layer:Layer 
+---
 
- <p class="tdb-f">Description pending.</p>
+### layer:Layer
 
- **Class:** `layer:Layer`
+<p class="tdb-f">Description pending.</p>
+
+**Class:** `layer:Layer`
 
 ---

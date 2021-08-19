@@ -1,73 +1,73 @@
- 
 
- ### Branch 
 
- <p class="tdb-f">Description pending.</p>
+### Branch
 
- **Class:** `Branch`
+<p class="tdb-f">Description pending.</p>
 
---- 
+**Class:** `Branch`
 
- ### Commit 
+---
 
- <p class="tdb-f">Description pending.</p>
+### Commit
 
- **Class:** `Commit`
+<p class="tdb-f">Description pending.</p>
 
---- 
+**Class:** `Commit`
 
- ### InitialCommit 
+---
 
- <p class="tdb-f">Description pending.</p>
+### InitialCommit
 
- **Class:** `InitialCommit`
+<p class="tdb-f">Description pending.</p>
 
- **Super class:** `Commit`
+**Class:** `InitialCommit`
 
---- 
+**Super class:** `Commit`
 
- ### InvalidCommit 
+---
 
- <p class="tdb-f">Description pending.</p>
+### InvalidCommit
 
- **Class:** `InvalidCommit`
+<p class="tdb-f">Description pending.</p>
 
- **Super class:** `Commit`
+**Class:** `InvalidCommit`
 
---- 
+**Super class:** `Commit`
 
- ### Ref 
+---
 
- <p class="tdb-f">Description pending.</p>
+### Ref
 
- **Class:** `Ref`
+<p class="tdb-f">Description pending.</p>
 
---- 
+**Class:** `Ref`
 
- ### Tag 
+---
 
- <p class="tdb-f">Description pending.</p>
+### Tag
 
- **Class:** `Tag`
+<p class="tdb-f">Description pending.</p>
 
- **Super class:** `Ref`
+**Class:** `Tag`
 
---- 
+**Super class:** `Ref`
 
- ### ValidCommit 
+---
 
- <p class="tdb-f">Description pending.</p>
+### ValidCommit
 
- **Class:** `ValidCommit`
+<p class="tdb-f">Description pending.</p>
 
- **Super class:** `Commit`
+**Class:** `ValidCommit`
 
---- 
+**Super class:** `Commit`
 
- ### layer:Layer 
+---
 
- <p class="tdb-f">Description pending.</p>
+### layer:Layer
 
- **Class:** `layer:Layer`
+<p class="tdb-f">Description pending.</p>
+
+**Class:** `layer:Layer`
 
 ---
