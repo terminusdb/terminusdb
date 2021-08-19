@@ -15,8 +15,28 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
+:- use_module(core(account)).
 
 :- use_module(library(http/json)).
+
+document_auth_action_type(system_descriptor, _, _, '@schema':'Action_manage_capabilities').
+document_auth_action_type(database_descriptor, _, read, '@schema':'Action_meta_read_access').
+document_auth_action_type(database_descriptor, instance, write, '@schema':'Action_meta_write_access').
+document_auth_action_type(repository_descriptor, _, read, '@schema':'Action_commit_read_access').
+document_auth_action_type(repository_descriptor, instance, write, '@schema':'Action_commit_write_access').
+document_auth_action_type(branch_descriptor, instance, read, '@schema':'Action_instance_read_access').
+document_auth_action_type(branch_descriptor, instance, write, '@schema':'Action_instance_write_access').
+document_auth_action_type(branch_descriptor, schema, read, '@schema':'Action_schema_read_access').
+document_auth_action_type(branch_descriptor, schema, write, '@schema':'Action_schema_write_access').
+document_auth_action_type(commit_descriptor, instance, read, '@schema':'Action_instance_read_access').
+document_auth_action_type(commit_descriptor, schema, read, '@schema':'Action_schema_read_access').
+
+assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, ReadWrite) :-
+    Descriptor_Type{} :< Descriptor,
+    do_or_die(document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action),
+              error(document_access_impossible(Descriptor, Graph_Type, ReadWrite), _)),
+
+    check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
 
 api_generate_document_uris_(instance, Transaction, Unfold, Skip, Count, Uri) :-
     (   Unfold = true
@@ -51,10 +71,13 @@ api_generate_documents_(schema, Transaction, _Prefixed, Unfold, Skip, Count, Doc
     api_generate_document_uris_(schema, Transaction, Unfold, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
 
-api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Skip, Count, Document) :-
+api_generate_documents(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
+
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
+
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
 
@@ -67,19 +90,25 @@ api_generate_documents_by_type_(instance, Transaction, Type, Prefixed, Unfold, S
     api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri),
     get_document(Transaction, Prefixed, Unfold, Uri, Document).
 
-api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Prefixed, Unfold, Type, Skip, Count, Document) :-
+api_generate_documents_by_type(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
+
+    assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
+
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
 
     api_generate_documents_by_type_(Graph_Type, Transaction, Type, Prefixed, Unfold, Skip, Count, Document).
 
-api_generate_documents_by_query(_System_DB, _Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document) :-
+api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
+
+    assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
+
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
 
@@ -100,12 +129,12 @@ api_get_document_(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Id, Document) :-
+api_get_document(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Id, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    % todo authentication
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
 
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
@@ -139,12 +168,12 @@ replace_existing_graph(instance, Transaction, Stream) :-
     forall(api_insert_document_(instance, Transaction, Stream, _),
            true).
 
-api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
+api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    % todo authentication
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(unresolvable_collection(Descriptor), _)),
@@ -163,12 +192,12 @@ api_delete_document_(schema, Transaction, Id) :-
 api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
-api_delete_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
+api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    % todo authentication
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(unresolvable_collection(Descriptor), _)),
@@ -186,12 +215,12 @@ api_delete_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
                          api_delete_document_(Schema_Or_Instance, Transaction, ID)),
                      _).
 
-api_delete_document(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, ID) :-
+api_delete_document(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, ID) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    % todo authentication
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(unresolvable_collection(Descriptor), _)),
@@ -206,12 +235,12 @@ api_nuke_documents_(schema, Transaction) :-
 api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
 
-api_nuke_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message) :-
+api_nuke_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    % todo authentication
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
               error(unresolvable_collection(Descriptor), _)),
@@ -226,12 +255,12 @@ api_replace_document_(instance, Transaction, Document, Id):-
 api_replace_document_(schema, Transaction, Document, Id):-
     replace_schema_document(Transaction, Document, Id).
 
-api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
+api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    % todo authentication
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
 
     do_or_die(
         create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
@@ -281,7 +310,7 @@ test(delete_objects_with_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"Dublin" "Pretoria"', Stream),
-    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -301,7 +330,7 @@ test(delete_objects_with_string,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('["Dublin", "Pretoria"]', Stream),
-    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -321,7 +350,7 @@ test(delete_objects_with_mixed_string_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"Dublin"\n["Pretoria"]', Stream),
-    api_delete_documents(system, admin, 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -367,7 +396,7 @@ test(replace_objects_with_stream,
 { "@type": "City",
   "@id" : "Pretoria",
   "name" : "Tshwane" }', Stream),
-    api_replace_documents(system, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
+    api_replace_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
 
     Ids = ['http://example.com/data/world/Dublin','http://example.com/data/world/Pretoria'].
 

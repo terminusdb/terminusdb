@@ -900,7 +900,7 @@ run_command(db,create,[DB_Path],Opts) :-
     put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
     api_report_errors(
         create_db,
-        create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Merged)),
+        create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Merged)),
     format(current_output,"Database ~s/~s created~n",[Organization,DB]).
 run_command(db,delete,[DB_Path],Opts) :-
     super_user_authority(Auth),
