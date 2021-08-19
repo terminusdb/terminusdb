@@ -95,7 +95,7 @@ api_generate_documents_by_type(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfol
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
+    assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
 
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
@@ -107,7 +107,7 @@ api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfo
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
 
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
+    assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
     
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
