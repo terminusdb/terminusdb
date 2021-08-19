@@ -881,9 +881,11 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 
             http_read_data(Request, Data, [to(string)]),
             open_string(Data, Stream),
-            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream),
+            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Ids),
+
             write_cors_headers(Request),
-            nl,nl
+            reply_json(Ids),
+            nl
         )).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
