@@ -71,9 +71,10 @@ const getJSONAndGenerateMDFile = async () => {
         let url = urls[i];
         request(url, function (error, response, body) {
             // parse contents of the json file
-            let parsedWoqlJSON = JSON.parse(
-                "[" + body.toString().replace(/}\s*{/g, "},{") + "]"
-            );
+            var json_list = "[" + body.toString().replace(/}\s*{/g, "},\n\n{") + "]"
+            console.log(json_list);
+
+            let parsedWoqlJSON = JSON.parse(json_list);
 
             let mdContents = "";
 
