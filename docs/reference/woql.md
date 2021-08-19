@@ -1338,23 +1338,6 @@ This is the WOQL schema. It gives a complete specification of the syntax of the 
 
 ---
 
-### Times
-
-<p class="tdb-f">Multiply two numbers.</p>
-
-**Class:** `Times`
-
-**Super class:** `ArithmeticExpression`
-
-**Properties:**
-
-| Property | Range  | Desc |
-| -------- | ------ | ---- |
-| `left` | `ArithmeticExpression` | First operand of times. |
-| `right` | `ArithmeticExpression` | Second operand of times. |
-
----
-
 ### Trim
 
 <p class="tdb-f">Trims whitespace from 'untrimmed'.</p>

@@ -56,30 +56,30 @@ const uniq = (list) => {
   });
 };
 
-const urls = [
-    "https://raw.githubusercontent.com/terminusdb/terminusdb/main/src/terminus-schema/woql.json",
-    "https://raw.githubusercontent.com/terminusdb/terminusdb/main/src/terminus-schema/ref.json",
-    "https://raw.githubusercontent.com/terminusdb/terminusdb/main/src/terminus-schema/repository.json",
-    "https://raw.githubusercontent.com/terminusdb/terminusdb/main/src/terminus-schema/system_schema.json",
+const files = [
+    "./src/terminus-schema/woql.json",
+    "./src/terminus-schema/ref.json",
+    "./src/terminus-schema/repository.json",
+    "./src/terminus-schema/system_schema.json",
 ];
 
 //console.log(process.argv[2])
 var destination = process.argv.length > 2 ? process.argv[2] : './';
 
 const getJSONAndGenerateMDFile = async () => {
-    for (var i in urls){
-        let url = urls[i];
-        request(url, function (error, response, body) {
+    for (var i in files){
+        let file = files[i];
+        fs.readFile(file, (error, body) => {
             // parse contents of the json file
             var json_list = "[" + body.toString().replace(/}\s*{/g, "},\n\n{") + "]"
-
+            console.log(json_list);
             let parsedWoqlJSON = JSON.parse(json_list);
 
             let mdContents = "";
 
             contextJSON = parsedWoqlJSON.filter((object) => (object["@type"] == "@context"
                                                              && object["@documentation"]));
-            console.log(contextJSON);
+
             if (contextJSON.length > 0){
                 let documentation = contextJSON[0]["@documentation"];
                 mdContents +=
@@ -123,7 +123,7 @@ const getJSONAndGenerateMDFile = async () => {
             });
 
             // write the conetents into the file
-            var f = destination+url.split("/").pop().split(".")[0]+'.md';
+            var f = destination+file.split("/").pop().split(".")[0]+'.md';
 
             fs.writeFile(f, mdContents, (err) => {
                 if (err) {
