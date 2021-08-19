@@ -21,6 +21,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install swi-prolog
 
+      - name: Check out tus
+        uses: actions/checkout@v2
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
       - name: Install terminus_store_prolog
         run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
 
@@ -38,6 +48,16 @@ jobs:
         run: |
           # Installing swipl on macOS: https://www.swi-prolog.org/build/macos.html
           brew install swi-prolog
+
+      - name: Check out tus
+        uses: actions/checkout@v2
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
 
       - name: Install terminus_store_prolog
         run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
