@@ -587,7 +587,7 @@
 { "@id" : "ArithmeticExpression",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "An abstract class specifying the AST super-class of all arithemtic expressions.",
+      "@comment" : "An abstract class specifying the AST super-class of all arithemtic expressions."
   },
   "@key" : { "@type" : "ValueHash" },
   "@subdocument" : [],
