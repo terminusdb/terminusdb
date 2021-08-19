@@ -97,7 +97,7 @@
 { "@id" : "Database",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "A database.",
+      "@comment" : "A database."
   },
   "@inherits" : "Resource" }
 
@@ -115,7 +115,7 @@
       "@properties" : { "label" : "The label name of the database.",
                         "comment" : "A comment associated with the database.",
                         "creation_date" : "The time of creation of the database.",
-                        "state" : "The system transaction state of the database."}
+                        "state" : "The system transaction state of the database." }
   },
   "@inherits" : "Database",
   "@key" : { "@type" : "Random" },
