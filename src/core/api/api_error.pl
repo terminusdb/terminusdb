@@ -951,6 +951,14 @@ api_error_jsonld(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld(get_documents, Error, JSON) :-
+    api_document_error_jsonld(get_documents, Error, JSON).
+api_error_jsonld(insert_documents, Error, JSON) :-
+    api_document_error_jsonld(insert_documents, Error, JSON).
+api_error_jsonld(replace_documents, Error, JSON) :-
+    api_document_error_jsonld(replace_documents, Error, JSON).
+api_error_jsonld(delete_documents, Error, JSON) :-
+    api_document_error_jsonld(delete_documents, Error, JSON).
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1007,6 +1015,112 @@ api_error_jsonld(graph,error(graph_already_exists(Descriptor,Graph_Name), _), Ty
                               'api:absolute_descriptor' : Path}
             }.
 
+
+document_error_type(get_documents, 'api:GetDocumentErrorResponse').
+document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
+document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
+document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+
+api_document_error_jsonld(Type,error(unknown_graph_type(Graph_Type), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unknown graph type specified: ~q", [Graph_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnknownGraphType',
+                              'api:graph_type' : Graph_Type },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(invalid_path(Path), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Resource path invalid: ~q", [Path]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidResourcePath',
+                              'api:resource_path' : Path },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(unresolvable_collection(Descriptor),_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:not_found',
+             'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(no_commit_author, _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "No commit author specified", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoCommitAuthorSpecified' },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(no_commit_message, _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "No commit message specified", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoCommitMessageSpecified' },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids, _)), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to mutate document with same id multiple times", [Ids]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SameDocumentIdsMutatedInOneTransaction',
+                              'api:document_ids' : Ids},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(get_documents, error(skip_is_not_a_number(Skip_Atom), _), JSON) :-
+    format(string(Msg), "specified skip count is not a number: ~q", [Skip_Atom]),
+    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SkipNotANumber',
+                              'api:skip' : Skip_Atom },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(get_documents, error(count_is_not_a_number(Count_Atom), _), JSON) :-
+    format(string(Msg), "specified retrieval count is not a number: ~q", [Count_Atom]),
+    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:CountNotANumber',
+                              'api:count' : Count_Atom },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(get_documents,error(document_not_found(Id),_), JSON) :-
+    format(string(Msg), "Document with id ~q not found", [Id]),
+    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+             'api:status' : 'api:not_found',
+             'api:error' : _{ '@type' : 'api:DocumentNotFound',
+                              'api:document_id' : Id},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(get_documents,error(query_is_only_supported_for_instance_graphs,_), JSON) :-
+    format(string(Msg), "Query documents are currently only supported for instance graphs", []),
+    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
+    format(string(Msg), "Query documents are currently only supported for instance graphs", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:error' : _{ '@type' : 'api:DocumentInsertionFailedUnexpectedly',
+                              'api:document': Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
+    format(string(Msg), "Query documents are currently only supported for instance graphs", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:error' : _{ '@type' : 'api:DocumentInsertionFailedUnexpectedly',
+                              'api:document': Document},
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

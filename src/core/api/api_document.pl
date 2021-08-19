@@ -56,7 +56,7 @@ api_generate_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Un
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
 
     api_generate_documents_(Schema_Or_Instance, Transaction, Prefixed, Unfold, Skip, Count, Document).
 
@@ -72,7 +72,7 @@ api_generate_documents_by_type(_System_DB, _Auth, Path, Graph_Type, Prefixed, Un
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
 
     api_generate_documents_by_type_(Graph_Type, Transaction, Type, Prefixed, Unfold, Skip, Count, Document).
 
@@ -81,7 +81,7 @@ api_generate_documents_by_query(_System_DB, _Auth, Path, Graph_Type, Prefixed, U
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
     do_or_die(open_descriptor(Descriptor, Transaction),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
 
     do_or_die(Graph_Type = instance,
               error(query_is_only_supported_for_instance_graphs, _)),
@@ -108,7 +108,7 @@ api_get_document(_System_DB, _Auth, Path, Schema_Or_Instance, Prefixed, Unfold, 
     % todo authentication
 
     do_or_die(open_descriptor(Descriptor, Transaction),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
     api_get_document_(Schema_Or_Instance, Transaction, Prefixed, Unfold, Id, Document).
 
 api_insert_document_(schema, Transaction, Stream, Id) :-
@@ -118,10 +118,7 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
         member(Document, JSON)
     ;   Document = JSON),
     do_or_die(insert_schema_document(Transaction, Document),
-              error(document_insertion_failed_unexpectedly(Document), _)),
-
-    do_or_die(Id = (Document.get('@id')),
-              error(document_has_no_id_somehow, _)).
+              error(document_insertion_failed_unexpectedly(Document), _)).
 
 api_insert_document_(instance, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, JSON),
@@ -148,7 +145,7 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
     % todo authentication
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
     query_default_collection(Context, Transaction),
 
     with_transaction(Context,
@@ -156,7 +153,7 @@ api_insert_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
                      ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids),
-                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Id), _))),
+                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Ids), _))),
                      _).
 
 api_delete_document_(schema, Transaction, Id) :-
@@ -172,7 +169,7 @@ api_delete_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messag
     % todo authentication
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
     query_default_collection(Context, Transaction),
 
     with_transaction(Context,
@@ -195,7 +192,7 @@ api_delete_document(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message
     % todo authentication
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
     query_default_collection(Context, Transaction),
 
     with_transaction(Context,
@@ -215,7 +212,7 @@ api_nuke_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message)
     % todo authentication
 
     do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(resource_does_not_exist(Path), _)),
+              error(unresolvable_collection(Descriptor), _)),
     query_default_collection(Context, Transaction),
 
     with_transaction(Context,
@@ -236,7 +233,7 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
 
     do_or_die(
         create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-        error(resource_does_not_exist(Path), _)),
+        error(unresolvable_collection(Descriptor), _)),
 
     query_default_collection(Context, Transaction),
 
@@ -251,7 +248,7 @@ api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Messa
                                                            Transaction,Document, Id)
                                  ),
                                  Ids),
-                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Id), _))
+                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Ids), _))
                      ),
                      _).
 
