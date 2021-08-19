@@ -10,7 +10,11 @@ TARGET=terminusdb
 all: bin deb docs
 
 $(TARGET):
-	$(SWIPL_DIR)swipl -t 'main,halt.' -O -q -f src/bootstrap.pl
+	# Build the target and fail for errors and warnings. Ignore warnings
+	# having "qsave(strip_failed(..." that occur on macOS.
+	LANG=C.UTF-8 $(SWIPL_DIR)swipl -t 'main,halt.' -O -q -f src/bootstrap.pl 2>&1 | \
+	  grep -v 'qsave(strip_failed' | \
+	  (! grep -e ERROR -e Warning)
 
 bin: $(TARGET)
 
