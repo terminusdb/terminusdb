@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1629373070147,
+  "lastUpdate": 1629374296400,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -3759,6 +3759,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 40.697,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "54183981+Francesca-Bit@users.noreply.github.com",
+            "name": "Francesca Bitto",
+            "username": "Francesca-Bit"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4dcd93d9e306fe7adcd8bb2456b2c965ed393b88",
+          "message": "update index.tpl\n\n<!DOCTYPE html>\r\n<html lang=\"en\" class=\"h-100\">\r\n  <!-- include \"meta-head.html\" -->\r\n<!DOCTYPE html>\r\n<html lang=\"en\">\r\n<head>\r\n    <meta charset=\"utf-8\">\r\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge,chrome=1\">\r\n    <meta name=\"description\" content=\"TerminusDB is an open source model driven graph database for knowledge graph representation designed specifically for the web-age.\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n    <link rel=\"shortcut icon\" type=\"image/png\" href=\"https://terminusdb.com/img/favicon.png\"/>    \r\n    \r\n    <title>TerminusDB</title>\r\n    <!--<link rel=\"stylesheet\" href=\"css/main.css?v=1.0\">-->\r\n    <!--<link href=\"https://fonts.googleapis.com/css?family=Lexend+Deca&display=swap\" rel=\"stylesheet\">\r\n    <link href=\"https://fonts.googleapis.com/css?family=Poppins&display=swap\" rel=\"stylesheet\">-->\r\n    <link rel=\"stylesheet\" href=\"https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css\" integrity=\"sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh\" crossorigin=\"anonymous\">\r\n  </head>\r\n  <style>\r\n      .box{\r\n        margin-left: auto;\r\n        margin-right: auto;\r\n        margin-top: 5%;\r\n        width: 500px;\r\n      }\r\n\r\n      .header-bck{\r\n        background-color: #002855;\r\n      }\r\n\r\n      .cow-image{\r\n        max-width: 350px;\r\n        margin-left: auto;\r\n        margin-right: auto;\r\n      }\r\n\r\n  </style>\r\n  <body class=\"h-100\">\r\n    <div id=\"root\" class=\"h-100\">\r\n        <div class=\"container\">\r\n            <div class=\"card box\">\r\n                <div class=\"card-header header-bck\">\r\n                    \r\n                    <img src=\"https://terminusdb.com/img/logos/logo.svg\" class=\"menu__logo\" alt=\"Terminus DB logo\">\r\n\r\n                </div>  \r\n                <img src=\"https://assets.terminusdb.com/images/21_7-min.png\" class=\"card-img-top cow-image\" alt=\"...\">\r\n                <div class=\"card-body\">\r\n                  <p class=\"card-text\"><strong>We're hard at work getting a new TerminusDB console ready for you. In the meantime, try one of our clients:</strong></p>\r\n                  <p class=\"card-text\"><strong><a href=\"https://github.com/terminusdb/terminusdb-client-python\" \r\n                    rel=\"stylesheet\" target=\"_blank\">terminusdb-client-python</a>\r\n                    <br><a href=\"https://github.com/terminusdb/terminusdb-client-js\" \r\n                    rel=\"stylesheet\" target=\"_blank\">terminusdb-client-js</a></strong></p>\r\n                  \r\n                </div>\r\n              </div>\r\n        </div>\r\n    </div>\r\n    <!--\r\n      This HTML file is a template.\r\n      If you open it directly in the browser, you will see an empty page.\r\n\r\n      You can add webfonts, meta tags, or analytics to this file.\r\n      The build step will place the bundled scripts into the <body> tag.\r\n\r\n      To begin the development, run `npm start` or `yarn start`.\r\n      To create a production bundle, use `npm run build` or `yarn build`.\r\n\r\n    <script src=\"js/main.js\"></script>\r\n\r\n    <script src=\"js/homepage.js\"></script>-->\r\n   <!-- <script async src=\"https://www.googletagmanager.com/gtag/js?id=UA-151888980-1\"></script>-->\r\n  </body>\r\n</html>\r\n\r\n<!-- <script src=\"bundle.js\"></script> -->",
+          "timestamp": "2021-08-19T12:54:22+01:00",
+          "tree_id": "2caef71d7a74020188a2903a7d4a424ca9812a6f",
+          "url": "https://github.com/terminusdb/terminusdb/commit/4dcd93d9e306fe7adcd8bb2456b2c965ed393b88"
+        },
+        "date": 1629374295253,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 118.87,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 310.698,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 317.474,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 200.482,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 200.554,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 122.867,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 46.48,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 42.68,
             "unit": "ms"
           }
         ]
