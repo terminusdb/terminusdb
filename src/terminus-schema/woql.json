@@ -954,7 +954,7 @@
 { "@id" : "True",
   "@type" : "Class",
   "@documentation" : {
-      "@comment" : "The query which is always true.",
+      "@comment" : "The query which is always true."
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query"}
