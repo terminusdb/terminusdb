@@ -127,7 +127,7 @@
 { "@id" : "DatabaseState",
   "@type" : "Enum",
   "@documentation" : {
-      "@comment" : "The current system transaction state of a database. Only the 'finalized' state is a consistent state, all others indicate that database construction failed.",
+      "@comment" : "The current system transaction state of a database. Only the 'finalized' state is a consistent state, all others indicate that database construction failed."
   },
   "@value" : [ "creating",
                "deleting",
