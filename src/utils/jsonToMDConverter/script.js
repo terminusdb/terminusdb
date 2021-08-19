@@ -86,7 +86,7 @@ const getJSONAndGenerateMDFile = async () => {
                     documentation["@title"] ? "# "+documentation["@title"] +"\n\n" : "";
                 mdContents +=
                     documentation["@description"] ? documentation["@description"] +"\n\n" : "";
-                mdContents += documentation["@authors"] ? " **Authored by:** " : "";
+                mdContents += documentation["@authors"] ? "**Authored by:** " : "";
                 let latch = false;
                 for(var j in documentation["@authors"]){
                     mdContents += latch ? ", " : "";
