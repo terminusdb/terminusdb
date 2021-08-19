@@ -6,7 +6,7 @@
               api_insert_documents/9,
               api_delete_documents/7,
               api_delete_document/7,
-              api_replace_documents/7,
+              api_replace_documents/8,
               api_nuke_documents/6
           ]).
 
@@ -224,7 +224,7 @@ api_replace_document_(instance, Transaction, Document, Id):-
 api_replace_document_(schema, Transaction, Document, Id):-
     replace_schema_document(Transaction, Document, Id).
 
-api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
+api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -331,3 +331,42 @@ test(delete_objects_with_mixed_string_stream,
     Ids = ['Utrecht'].
 
 :- end_tests(delete_document).
+
+:- begin_tests(replace_document).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+
+insert_some_cities(System, Path) :-
+    open_string('
+{ "@type": "City",
+  "@id" : "Dublin",
+  "name" : "Dublin" }
+{ "@type": "City",
+  "@id" : "Pretoria",
+  "name" : "Pretoria" }
+{ "@type": "City",
+  "@id" : "Utrecht",
+  "name" : "Utrecht" }',
+                Stream),
+    api_insert_documents(System, admin, Path, instance, "author", "message", false, Stream, _Out_Ids).
+
+test(replace_objects_with_stream,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('
+{ "@type": "City",
+  "@id" : "Dublin",
+  "name" : "Baile Atha Cliath" }
+{ "@type": "City",
+  "@id" : "Pretoria",
+  "name" : "Tshwane" }', Stream),
+    api_replace_documents(system, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
+
+    Ids = ['http://example.com/data/world/Dublin','http://example.com/data/world/Pretoria'].
+
+:- end_tests(replace_document).
