@@ -255,11 +255,7 @@ api_replace_document_(instance, Transaction, Document, Id):-
 api_replace_document_(schema, Transaction, Document, Id):-
     replace_schema_document(Transaction, Document, Id).
 
-<<<<<<< HEAD
-api_replace_documents(_System_DB, _Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
-=======
-api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
->>>>>>> 43eae106 (Check authorization for all the document operations)
+api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
