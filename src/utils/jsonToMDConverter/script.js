@@ -21,14 +21,14 @@ const getObjectClass = (object, key) => {
 
 const getSuperClass = (object) => {
   return object["@inherits"]
-    ? "\n\n **Super class:** `" + object["@inherits"] + "`"
+    ? "\n\n**Super class:** `" + object["@inherits"] + "`"
     : "";
 };
 
 const getProperties = (object) => {
   if (object["@documentation"] && object["@documentation"]["@properties"]) {
     let properties =
-      "\n\n **Properties:** \n\n| Property | Range  | Desc | \n| -------- | ------ | ---- |";
+      "\n\n**Properties:**\n\n| Property | Range  | Desc |\n| -------- | ------ | ---- |";
     for (const [key, value] of Object.entries(
       object["@documentation"]["@properties"]
     )) {
@@ -108,12 +108,12 @@ const getJSONAndGenerateMDFile = async () => {
             parsedWoqlJSON.forEach((object) => {
                 if (object["@id"]) {
                     mdContents +=
-                        " \n\n ### " +
+                        "\n\n### " +
                         object["@id"] +
-                        ' \n\n <p class="tdb-f">' +
+                        '\n\n<p class="tdb-f">' +
                         getComment(object) +
                         "</p>" +
-                        "\n\n **Class:** `" +
+                        "\n\n**Class:** `" +
                         object["@id"] +
                         "`" +
                         getSuperClass(object) +

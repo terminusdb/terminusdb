@@ -4,960 +4,960 @@ This is the WOQL schema. It gives a complete specification of the syntax of the 
 
  **Authored by:** Gavin
 
---- 
+---
 
- ### AddData 
+### AddData
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `AddData`
+**Class:** `AddData`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### AddLink 
+### AddLink
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `AddLink`
+**Class:** `AddLink`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### AddTriple 
+### AddTriple
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `AddTriple`
+**Class:** `AddTriple`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### AddedData 
+### AddedData
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `AddedData`
+**Class:** `AddedData`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### AddedLink 
+### AddedLink
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `AddedLink`
+**Class:** `AddedLink`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### AddedTriple 
+### AddedTriple
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `AddedTriple`
+**Class:** `AddedTriple`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### And 
+### And
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `And`
+**Class:** `And`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### ArithmeticExpression 
+### ArithmeticExpression
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `ArithmeticExpression`
+**Class:** `ArithmeticExpression`
 
---- 
+---
 
- ### ArithmeticValue 
+### ArithmeticValue
 
- <p class="tdb-f">A variable or node. It is a subdocument</p>
+<p class="tdb-f">A variable or node. It is a subdocument</p>
 
- **Class:** `ArithmeticValue`
+**Class:** `ArithmeticValue`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `data` | `xsd:anySimpleType` | An xsd data type value. |
 | `variable` | `xsd:string` | A variable. |
 
---- 
+---
 
- ### Column 
+### Column
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Column`
+**Class:** `Column`
 
---- 
+---
 
- ### Concatenate 
+### Concatenate
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Concatenate`
+**Class:** `Concatenate`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Count 
+### Count
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Count`
+**Class:** `Count`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Data 
+### Data
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Data`
+**Class:** `Data`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### DataValue 
+### DataValue
 
- <p class="tdb-f">A variable or node. It is a subdocument</p>
+<p class="tdb-f">A variable or node. It is a subdocument</p>
 
- **Class:** `DataValue`
+**Class:** `DataValue`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `data` | `xsd:anySimpleType` | An xsd data type value. |
 | `variable` | `xsd:string` | A variable. |
 | `list` | `DataValue` | A list of datavalues |
 
---- 
+---
 
- ### DeleteDocument 
+### DeleteDocument
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `DeleteDocument`
+**Class:** `DeleteDocument`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### DeleteLink 
+### DeleteLink
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `DeleteLink`
+**Class:** `DeleteLink`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### DeleteTriple 
+### DeleteTriple
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `DeleteTriple`
+**Class:** `DeleteTriple`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### DeletedLink 
+### DeletedLink
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `DeletedLink`
+**Class:** `DeletedLink`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### DeletedTriple 
+### DeletedTriple
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `DeletedTriple`
+**Class:** `DeletedTriple`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Distinct 
+### Distinct
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Distinct`
+**Class:** `Distinct`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Div 
+### Div
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Div`
+**Class:** `Div`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### Divide 
+### Divide
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Divide`
+**Class:** `Divide`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### Dot 
+### Dot
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Dot`
+**Class:** `Dot`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Equals 
+### Equals
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Equals`
+**Class:** `Equals`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Eval 
+### Eval
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Eval`
+**Class:** `Eval`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Exp 
+### Exp
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Exp`
+**Class:** `Exp`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### Floor 
+### Floor
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Floor`
+**Class:** `Floor`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### FormatType 
+### FormatType
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `FormatType`
+**Class:** `FormatType`
 
---- 
+---
 
- ### From 
+### From
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `From`
+**Class:** `From`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Get 
+### Get
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Get`
+**Class:** `Get`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Greater 
+### Greater
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Greater`
+**Class:** `Greater`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### GroupBy 
+### GroupBy
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `GroupBy`
+**Class:** `GroupBy`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### HashKey 
+### HashKey
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `HashKey`
+**Class:** `HashKey`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### If 
+### If
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `If`
+**Class:** `If`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Immediately 
+### Immediately
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Immediately`
+**Class:** `Immediately`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Indicator 
+### Indicator
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Indicator`
+**Class:** `Indicator`
 
---- 
+---
 
- ### Into 
+### Into
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Into`
+**Class:** `Into`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### InversePathPredicate 
+### InversePathPredicate
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `InversePathPredicate`
+**Class:** `InversePathPredicate`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### IsA 
+### IsA
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `IsA`
+**Class:** `IsA`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Join 
+### Join
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Join`
+**Class:** `Join`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Length 
+### Length
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Length`
+**Class:** `Length`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Less 
+### Less
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Less`
+**Class:** `Less`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### LexicalKey 
+### LexicalKey
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `LexicalKey`
+**Class:** `LexicalKey`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Like 
+### Like
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Like`
+**Class:** `Like`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Limit 
+### Limit
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Limit`
+**Class:** `Limit`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Link 
+### Link
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Link`
+**Class:** `Link`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Lower 
+### Lower
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Lower`
+**Class:** `Lower`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Member 
+### Member
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Member`
+**Class:** `Member`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Minus 
+### Minus
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Minus`
+**Class:** `Minus`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### NamedParametricQuery 
+### NamedParametricQuery
 
- <p class="tdb-f">A named parametric query which names a specific query for later retrieval and re-use and allows the specification of bindings for a specific set of variables in the query.</p>
+<p class="tdb-f">A named parametric query which names a specific query for later retrieval and re-use and allows the specification of bindings for a specific set of variables in the query.</p>
 
- **Class:** `NamedParametricQuery`
+**Class:** `NamedParametricQuery`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `name` | `xsd:string` | The name of the NamedParametricQuery to be retrieved. |
 | `parameters` | `xsd:string` | Variable name list for auxilliary bindings. |
 | `query` | `Query` | The query AST as WOQL JSON. |
 
---- 
+---
 
- ### NamedQuery 
+### NamedQuery
 
- <p class="tdb-f">A named query names a specific query for later retrieval and re-use</p>
+<p class="tdb-f">A named query names a specific query for later retrieval and re-use</p>
 
- **Class:** `NamedQuery`
+**Class:** `NamedQuery`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `name` | `xsd:string` | The name of the NamedQuery to be retrieved |
 | `query` | `Query` | The query AST as WOQL JSON |
 
---- 
+---
 
- ### NodeValue 
+### NodeValue
 
- <p class="tdb-f">A variable or node. It is a subdocument</p>
+<p class="tdb-f">A variable or node. It is a subdocument</p>
 
- **Class:** `NodeValue`
+**Class:** `NodeValue`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `node` | `xsd:string` | A URI representing a resource. |
 | `variable` | `xsd:string` | A variable. |
 
---- 
+---
 
- ### Not 
+### Not
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Not`
+**Class:** `Not`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Once 
+### Once
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Once`
+**Class:** `Once`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Optional 
+### Optional
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Optional`
+**Class:** `Optional`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Or 
+### Or
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Or`
+**Class:** `Or`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Order 
+### Order
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Order`
+**Class:** `Order`
 
---- 
+---
 
- ### OrderBy 
+### OrderBy
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `OrderBy`
+**Class:** `OrderBy`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### OrderTemplate 
+### OrderTemplate
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `OrderTemplate`
+**Class:** `OrderTemplate`
 
---- 
+---
 
- ### Pad 
+### Pad
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Pad`
+**Class:** `Pad`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Path 
+### Path
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Path`
+**Class:** `Path`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### PathOr 
+### PathOr
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathOr`
+**Class:** `PathOr`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### PathPattern 
+### PathPattern
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathPattern`
+**Class:** `PathPattern`
 
---- 
+---
 
- ### PathPlus 
+### PathPlus
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathPlus`
+**Class:** `PathPlus`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### PathPredicate 
+### PathPredicate
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathPredicate`
+**Class:** `PathPredicate`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### PathSequence 
+### PathSequence
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathSequence`
+**Class:** `PathSequence`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### PathStar 
+### PathStar
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathStar`
+**Class:** `PathStar`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### PathTimes 
+### PathTimes
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `PathTimes`
+**Class:** `PathTimes`
 
- **Super class:** `PathPattern`
+**Super class:** `PathPattern`
 
---- 
+---
 
- ### Plus 
+### Plus
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Plus`
+**Class:** `Plus`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### Put 
+### Put
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Put`
+**Class:** `Put`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Query 
+### Query
 
- <p class="tdb-f">An abstract class which represents an arbitrary query AST. It is a subdocument</p>
+<p class="tdb-f">An abstract class which represents an arbitrary query AST. It is a subdocument</p>
 
- **Class:** `Query`
+**Class:** `Query`
 
---- 
+---
 
- ### QueryResource 
+### QueryResource
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `QueryResource`
+**Class:** `QueryResource`
 
---- 
+---
 
- ### RandomKey 
+### RandomKey
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `RandomKey`
+**Class:** `RandomKey`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### ReadDocument 
+### ReadDocument
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `ReadDocument`
+**Class:** `ReadDocument`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Regexp 
+### Regexp
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Regexp`
+**Class:** `Regexp`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Select 
+### Select
 
- <p class="tdb-f">Select specific variables from a query to return.</p>
+<p class="tdb-f">Select specific variables from a query to return.</p>
 
- **Class:** `Select`
+**Class:** `Select`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `variables` | `xsd:string` | The variables to select from the query. |
 | `query` | `Query` | The query which will be run prior to selection. |
 
---- 
+---
 
- ### Size 
+### Size
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Size`
+**Class:** `Size`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Source 
+### Source
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Source`
+**Class:** `Source`
 
---- 
+---
 
- ### Split 
+### Split
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Split`
+**Class:** `Split`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Start 
+### Start
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Start`
+**Class:** `Start`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Substring 
+### Substring
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Substring`
+**Class:** `Substring`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Subsumption 
+### Subsumption
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Subsumption`
+**Class:** `Subsumption`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Sum 
+### Sum
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Sum`
+**Class:** `Sum`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Times 
+### Times
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Times`
+**Class:** `Times`
 
- **Super class:** `ArithmeticExpression`
+**Super class:** `ArithmeticExpression`
 
---- 
+---
 
- ### Trim 
+### Trim
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Trim`
+**Class:** `Trim`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Triple 
+### Triple
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Triple`
+**Class:** `Triple`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### TripleCount 
+### TripleCount
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `TripleCount`
+**Class:** `TripleCount`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### True 
+### True
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `True`
+**Class:** `True`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Typecast 
+### Typecast
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Typecast`
+**Class:** `Typecast`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### UpdateDocument 
+### UpdateDocument
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `UpdateDocument`
+**Class:** `UpdateDocument`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Upper 
+### Upper
 
- <p class="tdb-f">Description pending.</p>
+<p class="tdb-f">Description pending.</p>
 
- **Class:** `Upper`
+**Class:** `Upper`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
---- 
+---
 
- ### Using 
+### Using
 
- <p class="tdb-f">Select a specific collection for query.</p>
+<p class="tdb-f">Select a specific collection for query.</p>
 
- **Class:** `Using`
+**Class:** `Using`
 
- **Super class:** `Query`
+**Super class:** `Query`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `collection` | `xsd:string` | The resource over which to run the query. |
 | `query` | `Query` | The query which will be run on the selected collection. |
 
---- 
+---
 
- ### Value 
+### Value
 
- <p class="tdb-f">A variable, node or data point. It is a subdocument</p>
+<p class="tdb-f">A variable, node or data point. It is a subdocument</p>
 
- **Class:** `Value`
+**Class:** `Value`
 
- **Properties:** 
+**Properties:**
 
-| Property | Range  | Desc | 
+| Property | Range  | Desc |
 | -------- | ------ | ---- |
 | `node` | `xsd:string` | A URI representing a resource. |
 | `variable` | `xsd:string` | A variable. |
