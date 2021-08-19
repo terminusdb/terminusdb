@@ -630,7 +630,7 @@
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
-{ "@id" : "Times",
+{ "@Id" : "Times",
   "@documentation" : {
       "@comment" : "Multiply two numbers.",
       "@properties" : { "left" : "First operand of times.",
@@ -957,7 +957,7 @@
       "@comment" : "The query which is always true."
   },
   "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query"}
+  "@inherits" : "Query" }
 
 { "@id" : "Order",
   "@type" : "Enum",
@@ -1027,7 +1027,7 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "The negation of a query. Provides no solution bindings, but will succeed if its sub-query fails.",
-      "@properties" : { "query" : "The query which must not hold."}
+      "@properties" : { "query" : "The query which must not hold." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
@@ -1037,7 +1037,7 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "Obtains exactly one solution from a query. Simliar to a limit of 1.",
-      "@properties" : { "query" : "The query from which to obtain a solution."}
+      "@properties" : { "query" : "The query from which to obtain a solution." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
@@ -1047,7 +1047,7 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "Attempts to perform all side-effecting operations immediately. Can have strange non-backtracking effects but can also increase performance. Use at your own risk.",
-      "@properties" : { "query" : "The query from which to obtain the side-effects."}
+      "@properties" : { "query" : "The query from which to obtain the side-effects." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
@@ -1058,7 +1058,7 @@
   "@documentation" : {
       "@comment" : "Counts the number of solutions of a query.",
       "@properties" : { "query" : "The query from which to obtain the count.",
-                        "count" : "The count of the number of solutions."}
+                        "count" : "The count of the number of solutions." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
@@ -1071,7 +1071,7 @@
       "@comment" : "Casts one type as another if possible.",
       "@properties" : { "value" : "The value to cast.",
                         "type" : "The type to which to cast.",
-                        "result" : "The resulting value after cast."}
+                        "result" : "The resulting value after cast." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
