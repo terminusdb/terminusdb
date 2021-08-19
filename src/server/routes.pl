@@ -945,19 +945,17 @@ test(get_frame, [
                request_header('X-HTTP-Method-Override'='GET')
               ]),
 
-    JSON = _{
-               '@key':_{'@fields':["name"],'@type':"Lexical"},
-               capability:_{
-                              '@class':"Capability",
-                              '@type':"Set"},
-               key_hash:_{
-                            '@class':"xsd:string",
-                            '@type':"Optional"
-                        },
-               name:"xsd:string"
-           }.
-%
-%    _{'@type':"system:Frame"} :< JSON.
+    JSON =
+    _{'@documentation':
+      _{'@comment':"A database user.",
+        '@properties':
+        _{capability:"A set of capabilities which the user has access to.",
+          key_hash:"An optional key hash for authentication.",
+          name:"The users name."}},
+      '@key':_{'@fields':["name"],'@type':"Lexical"},
+      capability:_{'@class':"Capability",'@type':"Set"},
+      key_hash:_{'@class':"xsd:string",'@type':"Optional"},
+      name:"xsd:string"}.
 
 
 :- end_tests(frame_endpoint).

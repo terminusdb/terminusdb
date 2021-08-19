@@ -69,7 +69,7 @@ var destination = process.argv.length > 2 ? process.argv[2] : './';
 const getJSONAndGenerateMDFile = async () => {
     for (var i in urls){
         let url = urls[i];
-        request(urls[i], function (error, response, body) {
+        request(url, function (error, response, body) {
             // parse contents of the json file
             let parsedWoqlJSON = JSON.parse(
                 "[" + body.toString().replace(/}\s*{/g, "},{") + "]"
@@ -79,6 +79,7 @@ const getJSONAndGenerateMDFile = async () => {
 
             contextJSON = parsedWoqlJSON.filter((object) => (object["@type"] == "@context"
                                                              && object["@documentation"]));
+            console.log(contextJSON);
             if (contextJSON.length > 0){
                 let documentation = contextJSON[0]["@documentation"];
                 mdContents +=
@@ -89,7 +90,6 @@ const getJSONAndGenerateMDFile = async () => {
                 let latch = false;
                 for(var j in documentation["@authors"]){
                     mdContents += latch ? ", " : "";
-                    console.log(documentation["@authors"][j])
                     mdContents += documentation["@authors"][j];
                     latch = true;
                 }

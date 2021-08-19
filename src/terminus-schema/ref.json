@@ -1,4 +1,9 @@
 { "@type" : "@context",
+  "@documentation" : {
+      "@title" : "The Ref schema",
+      "@description" : "This is the Ref schema. It gives a specification for storage of references, branches and commits in our commit graph.",
+      "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
+  },
   "@base" : "terminusdb://ref/data/",
   "@schema" : "http://terminusdb.com/schema/ref#",
   "layer" : "http://terminusdb.com/schema/layer#",
@@ -7,12 +12,21 @@
 
 { "@id" : "layer:Layer",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A layer object which has the identifier used in storage.",
+      "@properties" : { "layer:identifier" : "The layer identifier." }
+  },
   "@base" : "layer_data:Layer_",
   "@key" : { "@type" : "ValueHash" },
   "layer:identifier" : "xsd:string" }
 
 { "@id" : "Branch",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A named branch object which points to the current head (or none if empty).",
+      "@properties" : { "name" : "The name of the branch.",
+                        "head" : "An optional commit object giving the present latest commit."}
+  },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] },
   "head" : { "@type" : "Optional",
@@ -21,6 +35,17 @@
 
 { "@id" : "Commit",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A commit object which has the various metadata associated with a commit",
+      "@properties" : { "instance" : "The (optional) current instance layer object.",
+                        "schema" : "The current schema layer object.",
+                        "author" : "The author of the commit.",
+                        "message" : "The message associated with the commit.",
+                        "identifier" : "The identifier of the commit.",
+                        "timestamp" : "The timestamp for the commit.",
+                        "parent" : "The previous commit (if one exists)."
+                      }
+  },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "identifier" ] },
   "instance" : { "@type" : "Optional",
@@ -35,27 +60,64 @@
 
 { "@id" : "InitialCommit",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A special initial commit which is replaced when data exists.",
+  },
   "@inherits" : "Commit",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "identifier" ] } }
 
 { "@id" : "ValidCommit",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "The type of commits which have passed schema validation.",
+      "@properties" : { "instance" : "The (optional) current instance layer object.",
+                        "schema" : "The current schema layer object.",
+                        "author" : "The author of the commit.",
+                        "message" : "The message associated with the commit.",
+                        "identifier" : "The identifier of the commit.",
+                        "timestamp" : "The timestamp for the commit.",
+                        "parent" : "The previous commit (if one exists)."
+                      }
+  },
   "@inherits" : "Commit",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "identifier" ] } }
 
 { "@id" : "InvalidCommit",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "The type of commits which have *failed* schema validation.",
+      "@properties" : { "instance" : "The (optional) current instance layer object.",
+                        "schema" : "The current schema layer object.",
+                        "author" : "The author of the commit.",
+                        "message" : "The message associated with the commit.",
+                        "identifier" : "The identifier of the commit.",
+                        "timestamp" : "The timestamp for the commit.",
+                        "parent" : "The previous commit (if one exists)."
+                      }
+  },
   "@inherits" : "Commit",
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "identifier" ] } }
 
 { "@id" : "Ref",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A reference to a commit.",
+      "@properties" : { "identifier" : "The identifier of the reference.",
+                        "commit" : "The commit object pointed to by the reference."
+                      }
+  },
   "commit" : "Commit",
   "identifier" : "xsd:string" }
 
 { "@id" : "Tag",
   "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A tag for a commit.",
+      "@properties" : { "identifier" : "The identifier of the reference.",
+                        "commit" : "The commit object pointed to by the reference."
+                      }
+  },
   "@inherits" : "Ref" }
