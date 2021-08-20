@@ -1138,7 +1138,7 @@ api_document_error_jsonld(Type, error(no_id_in_document(Document),_),JSON) :-
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoIdInDocument',
-                              'api:Document' : Document },
+                              'api:document' : Document },
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JSON) :-
@@ -1147,7 +1147,18 @@ api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JS
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:IdCouldNotBeDetermined',
-                              'api:Document' : Document },
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(unrecognized_property(Document_Type, Property, _Value, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Submitted document contained unrecognized property ~q for type ~q", [Property, Document_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:IdCouldNotBeDetermined',
+                              'api:property': Property,
+                              'api:type': Document_Type,
+                              'api:document' : Document },
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents, error(skip_is_not_a_number(Skip_Atom), _), JSON) :-
