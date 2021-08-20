@@ -577,7 +577,7 @@ json_assign_id(JSON,DB,Context,Path,JSON_ID) :-
     ->  JSON_ID = JSON
     ;   json_idgen(JSON,DB,Context,Path,ID)
     ->  JSON_ID = (JSON.put(json{'@id' : ID}))
-    ;   throw(error(no_id(JSON),_))
+    ;   throw(error(id_could_not_be_elaborated(JSON), _))
     ).
 
 json_prefix_access(JSON,Edge,Type) :-
@@ -1003,7 +1003,7 @@ json_triple_(JSON,Context,Triple) :-
 
     (   get_dict('@id', JSON, ID)
     ->  true
-    ;   throw(error(no_id(JSON), _))
+    ;   throw(error(no_id_in_document(JSON), _))
     ),
 
     member(Key, Keys),
@@ -1752,11 +1752,8 @@ insert_document(Transaction, Document, ID) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
-
-    (   get_dict('@id', Elaborated, ID)
-    ->  true
-    ;   throw(error(no_id_in_document(Elaborated), _))
-    ),
+    % After elaboration, the Elaborated document will have an '@id'
+    get_dict('@id', Elaborated, ID),
 
     check_existing_document_status(Transaction, Elaborated, Status),
     (   Status = not_present
@@ -1979,7 +1976,7 @@ insert_schema_document(Transaction, Document) :-
 
     (   get_dict('@id', Document, Id)
     ->  true
-    ;   throw(error(no_id_in_schema_document(Document), _))
+    ;   throw(error(no_id_in_document(Document), _))
     ),
     database_schema(Transaction, Schema),
 
@@ -2084,7 +2081,7 @@ replace_schema_document(Transaction, Document, Id) :-
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
         insert_context_document(Transaction, Document)
-    ;   throw(error(no_id_in_schema_document(Document),_))
+    ;   throw(error(no_id_in_document(Document),_))
     ).
 replace_schema_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
@@ -2730,6 +2727,10 @@ schema2('
   "@type" : "Class",
   "mother" : "Human",
   "father" : "Human" }
+
+{ "@id" : "Moo",
+  "@type" : "Class",
+  "name" : "xsd:string" }
 
 ').
 
@@ -4713,6 +4714,32 @@ test(subdocument_key_problem,
         _
     ).
 
+test(document_with_no_required_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_not_cardinality_one,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/doug',predicate:'http://s/name'}]), _)
+     ]) :-
+
+    Document = _{ '@id' : "doug",
+                  '@type' : "Moo"},
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
 
 :- end_tests(json).
 

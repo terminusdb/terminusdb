@@ -1039,6 +1039,15 @@ api_document_error_jsonld(Type, error(invalid_path(Path), _), JSON) :-
                               'api:resource_path' : Path },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type,error(database_does_not_exist(Organization,Database), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Database ~s/~s does not exist.", [Organization, Database]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:DatabaseDoesNotExist',
+                             'api:database_name' : Database,
+                             'api:organization_name' : Organization},
+             'api:message' : Msg}.
 api_document_error_jsonld(Type,error(unresolvable_collection(Descriptor),_), JSON) :-
     document_error_type(Type, JSON_Type),
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -1048,6 +1057,16 @@ api_document_error_jsonld(Type,error(unresolvable_collection(Descriptor),_), JSO
              'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(branch_does_not_exist(Descriptor), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path}
             }.
 api_document_error_jsonld(Type, error(no_commit_author, _), JSON) :-
     document_error_type(Type, JSON_Type),
@@ -1072,6 +1091,74 @@ api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids, _)), JSON
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SameDocumentIdsMutatedInOneTransaction',
                               'api:document_ids' : Ids},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(document_access_impossible(Descriptor, Graph_Type, Read_Write), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    resolve_absolute_string_descriptor(Descriptor_String, Descriptor),
+    format(string(Msg), "action '~q' on graph type ~q is impossible on resource ~q", [Read_Write, Graph_Type, Descriptor_String]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentAccessImpossible',
+                              'api:resource_path' : Descriptor_String,
+                              'api:graph_type': Graph_Type,
+                              'api:access_type': Read_Write},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(syntax_error(json(_)), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Submitted JSON data is invalid", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:JSONInvalid'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(type_not_found(Document_Type, Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Type in submitted document not found in the schema: ~q", [Document_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:TypeNotFound',
+                              'api:type' : Document_Type,
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(schema_check_failure(Witnesses),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Schema check failure", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SchemaCheckFailure',
+                              'api:witnesses' : Witnesses },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(no_id_in_document(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "No '@id' field found in document, but it was required", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoIdInDocument',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "No '@id' field found in document, and it could not be determined from its type definition", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:IdCouldNotBeDetermined',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(unrecognized_property(Document_Type, Property, _Value, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Submitted document contained unrecognized property ~q for type ~q", [Property, Document_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:IdCouldNotBeDetermined',
+                              'api:property': Property,
+                              'api:type': Document_Type,
+                              'api:document' : Document },
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents, error(skip_is_not_a_number(Skip_Atom), _), JSON) :-
@@ -1106,7 +1193,7 @@ api_document_error_jsonld(get_documents,error(query_is_only_supported_for_instan
              'api:message' : Msg
             }.
 api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
-    format(string(Msg), "Query documents are currently only supported for instance graphs", []),
+    format(string(Msg), "Document insertion failed unexpectedly", []),
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
              'api:status' : 'api:server_error',
              'api:error' : _{ '@type' : 'api:DocumentInsertionFailedUnexpectedly',
@@ -1119,6 +1206,15 @@ api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexp
              'api:status' : 'api:server_error',
              'api:error' : _{ '@type' : 'api:DocumentInsertionFailedUnexpectedly',
                               'api:document': Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents, error(can_not_insert_existing_object_with_id(Id, Document), _), JSON) :-
+    format(string(Msg), "Tried to insert a new document with id ~q, but an object with that id already exists", [Id]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentIdAlreadyExists',
+                              'api:document_id' : Id,
+                              'api:document' : Document},
              'api:message' : Msg
             }.
 

@@ -200,8 +200,8 @@ range_term_list(Validation_Object, S, P, L) :-
 
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
-    class_predicate_type(Validation_Object,C,P,_),
     !,
+    class_predicate_type(Validation_Object,C,P,_),
     (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
     ;   class_predicate_type(Validation_Object,C,Q,_),
         P \= Q,
@@ -390,7 +390,11 @@ refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
     subject_predicate_changed(Validation_Object,Subject,Predicate),
     % We also need to check arrays / lists for coherence here?
     (   is_built_in(Predicate)
-    ->  refute_built_in(Validation_Object,Subject,Predicate,Witness)
+    ->  (   refute_built_in(Validation_Object,Subject,Predicate,Witness)
+        ;   global_prefix_expand(rdf:type, Predicate),
+            (   refute_subject_deletion(Validation_Object, Subject, Witness)
+            ;   refute_subject_type_change(Validation_Object,Subject,Witness)
+            ;   refute_cardinality(Validation_Object,Subject,Predicate,Class,Witness)))
     ;   is_abstract(Validation_Object,Class)
     ->  refute_abstract(Subject, Class, Witness)
     ;   refute_subject_deletion(Validation_Object,Subject,Witness)

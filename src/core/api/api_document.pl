@@ -140,14 +140,34 @@ api_get_document(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Id,
               error(unresolvable_collection(Descriptor), _)),
     api_get_document_(Schema_Or_Instance, Transaction, Prefixed, Unfold, Id, Document).
 
+embed_document_in_error(Error, Document, New_Error) :-
+    Error =.. Error_List,
+    append(Error_List, [Document], New_Error_List),
+    New_Error =.. New_Error_List.
+
+known_document_error(type_not_found(_)).
+known_document_error(can_not_insert_existing_object_with_id(_)).
+known_document_error(unrecognized_property(_,_,_)).
+
+:- meta_predicate call_catch_document_mutation(+, :).
+call_catch_document_mutation(Document, Goal) :-
+    catch(Goal,
+          error(E, Context),
+          (   known_document_error(E)
+          ->  embed_document_in_error(E, Document, New_E),
+              throw(error(New_E, _))
+          ;   throw(error(E, Context)))).
+
 api_insert_document_(schema, Transaction, Stream, Id) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
     ->  !,
         member(Document, JSON)
     ;   Document = JSON),
-    do_or_die(insert_schema_document(Transaction, Document),
-              error(document_insertion_failed_unexpectedly(Document), _)),
+    call_catch_document_mutation(
+        Document,
+        do_or_die(insert_schema_document(Transaction, Document),
+                  error(document_insertion_failed_unexpectedly(Document), _))),
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
@@ -157,8 +177,10 @@ api_insert_document_(instance, Transaction, Stream, Id) :-
     ->  !,
         member(Document, JSON)
     ;   Document = JSON),
-    do_or_die(insert_document(Transaction, Document, Id),
-              error(document_insertion_failed_unexpectedly(Document), _)).
+    call_catch_document_mutation(
+        Document,
+        do_or_die(insert_document(Transaction, Document, Id),
+                  error(document_insertion_failed_unexpectedly(Document), _))).
 
 replace_existing_graph(schema, Transaction, Stream) :-
     replace_json_schema(Transaction, Stream).
