@@ -737,9 +737,12 @@ random_string(String) :-
  * uri_has_protocol(K) is semidet.
  *
  * Tests to see if a URI has a protocol.
+ *
+ * This performs a very simple check and does not support the full URI
+ * specification. We can always improve on this if needed.
  */
 uri_has_protocol(K) :-
-    re_match('^[^:/]+://.*',K).
+    re_match('^\\p{L}\\p{Xan}*://.+', K).
 
 /*
  * uri_has_prefix(K) is semidet.
