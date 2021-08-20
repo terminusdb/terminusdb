@@ -2728,6 +2728,10 @@ schema2('
   "mother" : "Human",
   "father" : "Human" }
 
+{ "@id" : "Moo",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+
 ').
 
 test(schema_key_elaboration1, []) :-
@@ -4710,6 +4714,32 @@ test(subdocument_key_problem,
         _
     ).
 
+test(document_with_no_required_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_not_cardinality_one,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/doug',predicate:'http://s/name'}]), _)
+     ]) :-
+
+    Document = _{ '@id' : "doug",
+                  '@type' : "Moo"},
+
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
 
 :- end_tests(json).
 

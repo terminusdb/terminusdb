@@ -200,8 +200,8 @@ range_term_list(Validation_Object, S, P, L) :-
 
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
-    class_predicate_type(Validation_Object,C,P,_),
     !,
+    class_predicate_type(Validation_Object,C,P,_),
     (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
     ;   class_predicate_type(Validation_Object,C,Q,_),
         P \= Q,
