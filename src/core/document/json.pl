@@ -577,7 +577,7 @@ json_assign_id(JSON,DB,Context,Path,JSON_ID) :-
     ->  JSON_ID = JSON
     ;   json_idgen(JSON,DB,Context,Path,ID)
     ->  JSON_ID = (JSON.put(json{'@id' : ID}))
-    ;   throw(error(no_id(JSON),_))
+    ;   throw(error(id_could_not_be_elaborated(JSON), _))
     ).
 
 json_prefix_access(JSON,Edge,Type) :-
@@ -1003,7 +1003,7 @@ json_triple_(JSON,Context,Triple) :-
 
     (   get_dict('@id', JSON, ID)
     ->  true
-    ;   throw(error(no_id(JSON), _))
+    ;   throw(error(no_id_in_document(JSON), _))
     ),
 
     member(Key, Keys),
@@ -1752,11 +1752,8 @@ insert_document(Transaction, Document, ID) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
-
-    (   get_dict('@id', Elaborated, ID)
-    ->  true
-    ;   throw(error(no_id_in_document(Elaborated), _))
-    ),
+    % After elaboration, the Elaborated document will have an '@id'
+    get_dict('@id', Elaborated, ID),
 
     check_existing_document_status(Transaction, Elaborated, Status),
     (   Status = not_present
@@ -1979,7 +1976,7 @@ insert_schema_document(Transaction, Document) :-
 
     (   get_dict('@id', Document, Id)
     ->  true
-    ;   throw(error(no_id_in_schema_document(Document), _))
+    ;   throw(error(no_id_in_document(Document), _))
     ),
     database_schema(Transaction, Schema),
 
@@ -2084,7 +2081,7 @@ replace_schema_document(Transaction, Document, Id) :-
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
         insert_context_document(Transaction, Document)
-    ;   throw(error(no_id_in_schema_document(Document),_))
+    ;   throw(error(no_id_in_document(Document),_))
     ).
 replace_schema_document(Query_Context, Document, Id) :-
     is_query_context(Query_Context),
