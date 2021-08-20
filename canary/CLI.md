@@ -44,10 +44,13 @@ Run internal TerminusDB tests.
 Run the TerminusDB server.
 
   * `-h`, `--help`=[value]:
-  print help for `serve` command
+  Print help for `serve` command
 
   * `-i`, `--interactive`=[value]:
-  run server in interactive mode
+  Run server in interactive mode
+
+  * `-m`, `--memory`=[value]:
+  Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have 'root' as a password.
 
 ### list
 
@@ -57,6 +60,9 @@ List databases.
 
   * `-h`, `--help`=[value]:
   print help for the `list` command
+
+  * `-j`, `--json`=[value]:
+  Return a JSON as the result of the `list` command
 
 ### optimize
 
@@ -210,9 +216,9 @@ Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `ter
 
 ### unbundle
 
-`terminusdb unbundle FILE DATABASE_SPEC OPTIONS`
+`terminusdb unbundle DATABASE_SPEC FILE OPTIONS`
 
-Unpack .
+Unbundle a bundle file.
 
   * `-h`, `--help`=[value]:
   print help for the `unbundle` command
@@ -300,72 +306,6 @@ Initialize a store for TerminusDB.
 
   * `-f`, `--force`=[value]:
   force the creation of a new store even when one already exists
-
-### csv list
-
-`terminusdb csv list DB_SPEC`
-
-List CSVs in the given DB.
-
-  * `-h`, `--help`=[value]:
-  print help for the `csv load` sub command
-
-### csv delete
-
-`terminusdb csv delete DB_SPEC FILE OPTIONS`
-
-Delete a CSV file from the given database.
-
-  * `-h`, `--help`=[value]:
-  print help for the `csv load` sub command
-
-  * `-m`, `--message`=[value]:
-  message to associate with the commit
-
-  * `-a`, `--author`=[value]:
-  author to place on the commit
-
-### csv load
-
-`terminusdb csv load DB_SPEC FILES OPTIONS`
-
-Load a CSV file (appends new lines if already existing).
-
-  * `-h`, `--help`=[value]:
-  print help for the `csv load` sub command
-
-  * `-m`, `--message`=[value]:
-  message to associate with the commit
-
-  * `-a`, `--author`=[value]:
-  author to place on the commit
-
-### csv update
-
-`terminusdb csv update DB_SPEC FILES OPTIONS`
-
-Update a CSV file (equivalent to delete / load but with a minimal delta).
-
-  * `-h`, `--help`=[value]:
-  print help for the `csv update` sub command
-
-  * `-m`, `--message`=[value]:
-  message to associate with the commit
-
-  * `-a`, `--author`=[value]:
-  author to place on the commit
-
-### csv dump
-
-`terminusdb csv dump DB_SPEC FILES OPTIONS`
-
-Dump a CSV file from the database.
-
-  * `-h`, `--help`=[value]:
-  print help for the `csv dump` sub command
-
-  * `-o`, `--output`=[value]:
-  file name to use for csv output
 
 ### triples dump
 
@@ -528,7 +468,7 @@ requires the use of an appropriate descriptor path.
 
   * `TERMINUSDB_CONSOLE_BASE_URL`:
   Set the console javascript load URL. Default is
-  `https://cdn.terminusdb.com/js_libs/terminusdb_hub_console/dev`.
+  `https://cdn.terminusdb.com/js_libs/terminusdb_console/dev`.
 
   * `TERMINUSDB_AUTOLOGIN_ENABLED`:
   If `true` then attempt to login automatically with default

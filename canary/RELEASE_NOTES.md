@@ -1,3 +1,19 @@
+# TerminusDB Server v5.0.0 Release Notes
+
+## New
++ JSON schema interface - build schemas using a simple JSON format.
++ Radically simplified document interface - you can insert, update and query JSON documents.
++ JSON documents can refer to other documents in the graph.
+
+## Bug fixes
+
++ Improvements to datatype coverage and correctness.
+
+## Backwards-Incompatible Changes
+
++ TerminusDB no longer supports OWL schema validation.
++ The WOQL JSON interchange format has changed to enable WOQL documents to be savable and retrievable from within TerminusDB.
+
 # TerminusDB Server v4.2.3 Release Notes
 
 ## New
