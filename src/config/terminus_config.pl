@@ -76,19 +76,33 @@ worker_js(Value) :-
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
 
-jwt_enabled :-
-    getenv_default('TERMINUSDB_JWT_ENABLED', false, Value),
-    Value = true.
+jwt_enabled_env_var :-
+    getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
 
-jwt_jwks_endpoint(Value) :-
-    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', Value).
+% jwt_enabled is used for conditional compilation of jwt_io, but want to use the
+% value passed to TERMINUSDB_JWT_ENABLED at compile time, which may be different
+% from runtime. Therefore, we save the TERMINUSDB_JWT_ENABLED value for runtime
+% again using conditional compilation here.
+:- if(jwt_enabled_env_var).
+jwt_enabled :-
+    true.
+:- else.
+jwt_enabled :-
+    false.
+:- endif.
+
+jwt_jwks_endpoint(Endpoint) :-
+    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', Value),
+    % Ignore an empty value in the environment variable.
+    (   Value = ''
+    ->  false
+    ;   Endpoint = Value).
 
 console_base_url(Value) :-
     getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://cdn.terminusdb.com/js_libs/terminusdb_console/canary', Value).
 
 autologin_enabled :-
-    getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', 'false', Value),
-    Value = 'true'.
+    getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', false, true).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
