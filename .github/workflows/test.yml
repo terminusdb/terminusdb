@@ -17,6 +17,8 @@ jobs:
     steps:
       - uses: fkirc/skip-duplicate-actions@master
         id: check_skip
+        with:
+          concurrent_skipping: same_content_newer
 
   ubuntu:
     runs-on: ubuntu-latest
