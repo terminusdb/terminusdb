@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1629716331247,
+  "lastUpdate": 1629718374734,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -4463,6 +4463,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 40.064,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "rrooij@users.noreply.github.com",
+            "name": "Robin de Rooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f120a4a9702e5482b2ae91b065156a6cd4ca75e0",
+          "message": "jwt: use agent name as username (#447)\n\n'sub' can't be changed as easy as a custom entry in the token.",
+          "timestamp": "2021-08-23T13:29:08+02:00",
+          "tree_id": "a3e5123b4e78c6c9b7114fc3a9e5d938fe20b8db",
+          "url": "https://github.com/terminusdb/terminusdb/commit/f120a4a9702e5482b2ae91b065156a6cd4ca75e0"
+        },
+        "date": 1629718374075,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 144.821,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 433.795,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 435.157,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 236.281,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 245.356,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 124.411,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 47.558,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 42.384,
             "unit": "ms"
           }
         ]
