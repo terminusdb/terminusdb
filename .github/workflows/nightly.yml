@@ -1,25 +1,25 @@
-# Build and run tests after every push and pull request
-name: Test
+# Build and run tests every night of the working week
+name: Nightly
 
 on:
-  push:
-  pull_request:
+  schedule:
+    - cron:  '45 1 * * MON-FRI'
   workflow_dispatch:
 
 jobs:
 
-  ubuntu:
-    runs-on: ubuntu-latest
+  # We don't test macOS on every push and pull request, because the tests take a
+  # long time to run (12 - 20 minutes).
+  macos:
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v2
 
       - name: Install swi-prolog
         run: |
-          # Installing swipl on Debian: https://www.swi-prolog.org/build/PPA.html
-          sudo apt-add-repository ppa:swi-prolog/stable
-          sudo apt-get update
-          sudo apt-get install swi-prolog
+          # Installing swipl on macOS: https://www.swi-prolog.org/build/macos.html
+          brew install swi-prolog
 
       - name: Check out tus
         uses: actions/checkout@v2
@@ -37,3 +37,4 @@ jobs:
       - run: make
 
       - run: ./terminusdb test
+
