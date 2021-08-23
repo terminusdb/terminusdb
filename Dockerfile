@@ -12,7 +12,6 @@ FROM terminusdb/terminus_store_prolog:v0.19.1
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
 COPY --from=0 /usr/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
-ENV TERMINUSDB_JWT_ENABLED=true
 RUN apt-get update && apt-get install -y --no-install-recommends libjwt0 make openssl \
         && swipl -g "ignore(pack_install('https://github.com/terminusdb-labs/jwt_io.git', [interactive(false)]))" \
     && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && make
