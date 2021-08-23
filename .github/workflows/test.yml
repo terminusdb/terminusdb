@@ -8,8 +8,24 @@ on:
 
 jobs:
 
+  check_skip:
+    runs-on: ubuntu-latest
+
+    outputs:
+      should_skip: ${{ steps.check_skip.outputs.should_skip }}
+
+    steps:
+      - uses: fkirc/skip-duplicate-actions@master
+        id: check_skip
+        with:
+          concurrent_skipping: same_content_newer
+
   ubuntu:
     runs-on: ubuntu-latest
+
+    # Run if not already run (e.g. with a push followed by a PR)
+    needs: check_skip
+    if: ${{ needs.check_skip.outputs.should_skip != 'true' }}
 
     steps:
       - uses: actions/checkout@v2
