@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1629453664787,
+  "lastUpdate": 1629716331247,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -4399,6 +4399,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 44.002,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2912f3b6188f0dbd8d941564d9183b8619dc844d",
+          "message": "Move macos build and test into nightly workflow (#445)\n\nThe macOS tests take a long time to run, so we don't do them on every\r\npush and pull request.",
+          "timestamp": "2021-08-23T12:55:19+02:00",
+          "tree_id": "b23479328048f3554e4a7c405f53f37585b1cf04",
+          "url": "https://github.com/terminusdb/terminusdb/commit/2912f3b6188f0dbd8d941564d9183b8619dc844d"
+        },
+        "date": 1629716330634,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 113.475,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 319.262,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 312.27,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 175.568,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 192.677,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 116.993,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 47.766,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 40.064,
             "unit": "ms"
           }
         ]
