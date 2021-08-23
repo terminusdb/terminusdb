@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     # Run if not already run (e.g. with a push followed by a PR)
+    needs: check_skip
     if: ${{ needs.check_skip.outputs.should_skip != 'true' }}
 
     steps:
