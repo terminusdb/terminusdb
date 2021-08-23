@@ -1,0 +1,559 @@
+
+# TerminusDB Schema
+
+TerminusDB has a schema language allows you to specify documents and their interconnections using a simple class based syntax.
+
+This syntax is designed to make it as simple as possible to specify a JSON object which can also be converted automatically to a graph. This approach lets us view our data either from the perspective of documents as collections of data or as a knowledge graph of interconnected documents.
+
+# The Class definition
+
+The basic unit of document construction is the class. Each class
+definition has a number of keywords (beginning with '@'), which impact
+the way the behaviour of the class, and then some number of
+properties which are merely listed.
+
+```javascript
+{ "@type" : "Class",
+  "@id" : "Person",
+  "name" : "xsd:string" }
+```
+This class definition defines a class named `Person` with one property `name` whose value must be an "xsd:string" (see XSD definitions).
+
+## The Context Class
+
+The context class is a special class whose properties apply globally
+to the entire schema.
+
+```javascript
+{ "@type" : "@context",
+  "@documentation" : {
+      "@title" : "WOQL schema",
+      "@description" : "This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+  },
+  "@schema" : "http://terminusdb.com/schema/woql#",
+  "@base" : "terminusdb://woql/data/",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
+```
+
+This example context gives documentation about the schema, along with the default prefixes to be used.
+
+### Context Prefixes
+
+All properties in the context which are not proceeded with `@` are
+considered to be URI definitions. They must be of the form:
+
+```
+Prefix := ":alpha::alphaNum:*"
+URI := ":alpha:alphaNum:*://:uriChar:*"
+
+{ ...
+ Prefix : URI
+ ...}
+```
+Where Prefix and URI are defined by the respective regular expressions.
+
+### Context Keywords
+
+#### `@schema`
+
+The `@schema` keyword gives the default URI expansion that will be
+used for all elements of the schema. For instance, given the following definition:
+
+```javascript
+{ "@type" : "@context",
+  "@schema" : "http://terminusdb.com/schema/woql#",
+  "@base" : "terminusdb://woql/data/" }
+
+{ "@id" : "NamedQuery",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "name" : "xsd:string",
+  "query" : "Query" }
+```
+
+The class name `NamedQuery` expands to
+`http://terminusdb.com/schema/woql#NamedQuery`.
+
+#### `@base`
+
+The `@base` keyword gives the default URI expansion that will be used
+for all elements of instance data. For instance, given the following
+schema definition:
+
+```javascript
+{ "@type" : "@context",
+  "@schema" : "http://terminusdb.com/schema/woql#",
+  "@base" : "terminusdb://woql/data/" }
+
+{ "@id" : "NamedQuery",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "name" : "xsd:string",
+  "query" : "Query" }
+```
+
+And the following document in the instance graph:
+
+```javascript
+{ "@type" : "NamedQuery",
+  "@id" : "NamedQuery_my_query",
+  "name" : "my_query",
+  "query" : { "@type" : "True" }}
+```
+
+The id `NamedQuery_my_query` expands to
+`terminusdb://woql/data/NamedQuery_my_query`.
+
+#### `@documentation`
+
+The documentation keyword allows you to give documentation which is
+global to the entire schema. The object is comprised entirely of
+keywords which are described below.
+
+Example:
+```javasript
+{ "@type" : "@context",
+  "@documentation" : {
+      "@title" : "WOQL schema",
+      "@description" : "This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+  },
+  "@schema" : "http://terminusdb.com/schema/woql#",
+  "@base" : "terminusdb://woql/data/",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
+```
+
+##### `@title`
+
+The title of the schema which should be displayed.
+
+##### `@description`
+
+The long form description which reveals the purpose of the schema, the
+type of documents which should be contained within and any keywords
+which are useful to those searching for the type of content that the
+schema intends to encode.
+
+##### `@authors`
+
+A list of strings which give the names of all authors involve in
+writing the schema.
+
+## Class Keywords
+
+A class definition includes a number of properties as well as the
+keywords (beginning with `@`) which describe the class behaviour.
+
+### `@type`
+
+The `@type` keyword specifies the type of the object. At the schema
+level this is one of: `Enum`, `Class`, `TaggedUnion`.
+
+### `@id`
+
+The `@id` key of a class defines the class name and identifier. This is the name which will uniquely define the class and allow the class to be updated, retrieved, and deleted. For instance:
+
+```javascript
+{ "@id" : "NamedQuery",
+  "@type" : "Class",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "name" : "xsd:string",
+  "query" : "Query" }
+```
+
+Here the class is named `NamedQuery` and because it does not have a fully qualified URL or prefix, it is implicitly based on whatever URI is given for `@schema`.
+
+### `@key`
+
+The `@key` keyword specifies the mechanism which will be used to define the `@id` of *documents* in the database.  This is analogous to a primary key for a database.
+
+The following key types are valid: `Lexical`,`Hash`,`ValueHash`,`Random`.
+
+If the key `@base` is specified in the class, then this will be
+pre-pended to the key. If this is a fully qualified URI then it will
+be complete. If it is not then it will be combined with the value of
+`@base` from the context.
+
+#### `Lexical`
+
+A Lexical key specifies a URI name which is formed from a URI encoded
+combination of all `@fields` arguments provided in the order
+provided. For instance:
+
+```javascript
+{ "@type" : "@context",
+  "@schema" : "http://example.com/people#",
+  "@base" : "http://example.com/people/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "@base" : "Person_",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "first_name", "last_name" ] },
+  "first_name" : "xsd:string",
+  "last_name" : "xsd:string",
+  "year_of_birth" : "xsd:gYear" }
+```
+
+With this key strategy a URI will be formed from the combination of
+`first_name` and `last_name`.
+
+If `@base` is specified in the class, this will be prepended.
+
+Given the following document:
+
+```javascript
+{ "@type" : "Person",
+  "first_name" : "Hasdrupal",
+  "last_name" : "Barca",
+  "year_of_birth" "-245" }
+```
+
+This will either generate (if `@id` is not supplied) or check that the URI
+`http://example.com/people/Person_Hasdrupal_Barca` is the "@id"
+element.
+
+#### `Hash`
+
+Hash is generated exactly as with `Lexical` except that we first hash
+the values using the SHA-256 hash algorithm. This can be used if there
+are a large number of items that form the key which would make the URI
+unwieldly, where there is no need for the URI to inform the user of
+the content of the object, or when it is a requirement that data about
+the object not be divulged by the key.
+
+It likewise has a `@fields` argument.
+
+```javascript
+{ "@type" : "@context",
+  "@schema" : "http://example.com/people#",
+  "@base" : "http://example.com/people/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "@base" : "Person_",
+  "@key" : { "@type" : "Hash",
+             "@fields" : [ "first_name", "last_name" ] },
+  "first_name" : "xsd:string",
+  "last_name" : "xsd:string",
+  "year_of_birth" : "xsd:gYear" }
+```
+
+The document:
+
+```javascript
+{ "@type" : "Person",
+  "first_name" : "Hasdrupal",
+  "last_name" : "Barca",
+  "year_of_birth" "-245" }
+```
+
+Will generate the id: `Person_5dd7004081e437b3e684075fa3132542f5cd06c1`
+
+#### `ValueHash`
+
+The `ValueHash` key will generate a key which is defined as the
+downward transitive closure of the directed acyclic graph from the
+root of the document.  In practice this means you can produce a key
+which is entirely based on the entire data object.
+
+`ValueHash` takes no additional keywords.
+
+`ValueHash` objects *can not be cyclic* but must instead be
+directed acyclic graphs.
+
+The value hash is formed using the SHA-256 hashing algorithm.
+
+```javascript
+{ "@id" : "layer:Layer",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A layer object which has the identifier used in storage.",
+      "@properties" : { "layer:identifier" : "The layer identifier." }
+  },
+  "@base" : "layer_data:Layer_",
+  "@key" : { "@type" : "ValueHash" },
+  "layer:identifier" : "xsd:string" }
+```
+
+Here the valuehash is formed only from the value of `layer:identifier`.
+
+#### `Random`
+
+If an object has no important characteristics which inform a key, and
+it does not need to be constructed such that it is reproducible, then
+`Random` can be a convenient key type.
+
+```javascript
+{ "@id" : "UserDatabase",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A normal user database.",
+      "@properties" : { "label" : "The label name of the database.",
+                        "comment" : "A comment associated with the database.",
+                        "creation_date" : "The time of creation of the database.",
+                        "state" : "The system transaction state of the database." }
+  },
+  "@inherits" : "Database",
+  "@key" : { "@type" : "Random" },
+  "label" : "xsd:string",
+  "comment" : "xsd:string",
+  "creation_date" : "xsd:dateTime",
+  "state" : "DatabaseState" }
+```
+
+Here the key is defined as random meaning that each new database which
+is added will be unique regardless of label.
+
+### `@documentation`
+
+The `@documentation` keyword allows the user to add documentation to
+the class and to property fields of the class.
+
+The keywords of the documentation object are: `@comment` and `@properties`
+
+An example documentation for a class might be as follows:
+
+```javascript
+{ "@id" : "UserDatabase",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A normal user database.",
+      "@properties" : { "label" : "The label name of the database.",
+                        "comment" : "A comment associated with the database.",
+                        "creation_date" : "The time of creation of the database.",
+                        "state" : "The system transaction state of the database." }
+  },
+  "@inherits" : "Database",
+  "@key" : { "@type" : "Random" },
+  "label" : "xsd:string",
+  "comment" : "xsd:string",
+  "creation_date" : "xsd:dateTime",
+  "state" : "DatabaseState" }
+```
+
+#### `@comment`
+
+The `@comment` is the class description.
+
+#### `@properties`
+
+The `@properties` keyword is a JSON object with pairs of the form:
+
+```javascript
+ { "property_1" : "description_1",
+   ...
+   "property_n" : "description_n" }
+```
+
+### `@base`
+
+The `@base` keyword specifies a prefix to be prepended to the `@key`. This prefix will be absolute if `@base` is a fully qualified URI, otherwise it will in turn be prefixed by the system wide `@base` definition.
+
+```javascript
+{ "@type" : "@context",
+  "@documentation" : {
+      "@title" : "The Ref schema",
+      "@description" : "This is the Ref schema. It gives a specification for storage of references, branches and commits in our commit graph.",
+      "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
+  },
+  "@base" : "terminusdb://ref/data/",
+  "@schema" : "http://terminusdb.com/schema/ref#",
+  "layer" : "http://terminusdb.com/schema/layer#",
+  "layer_data" : "terminusdb://layer/data/",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
+
+{ "@id" : "layer:Layer",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A layer object which has the identifier used in storage.",
+      "@properties" : { "layer:identifier" : "The layer identifier." }
+  },
+  "@base" : "layer_data:Layer_",
+  "@key" : { "@type" : "ValueHash" },
+  "layer:identifier" : "xsd:string" }
+```
+
+Here `@base` for the class is fully qualified after the `layer_data`
+prefix is expanded. This means that layer URIs will have the form:
+`terminusdb://layer/data/Layer_` followed by a random string.
+
+## Class Properties
+
+All non key-words are treated as properties of the class. They have the form:
+
+```javascript
+ <property> : <Class>
+```
+Or
+
+```javascript
+ <property> : { "@type" : <TypeFamily>,  "@class" : <Class> }
+```
+
+Range classes can be either a concrete base type defined as any of the
+of the xsd types (see XSD), or they can be a class defined in the
+current schema, including the current class.
+
+An example class might be of the form:
+
+```javascript
+{ "@type" : "@context",
+  "@schema" : "http://example.com/people#",
+  "@base" : "http://example.com/people/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "@base" : "Person/",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "first_name", "last_name" ] },
+  "first_name" : "xsd:string",
+  "last_name" : "xsd:string",
+  "knows" : { "@type" : "Set", "@class" : "Person"},
+  "year_of_birth" : "xsd:gYear" }
+```
+
+Here `first_name` and `last_name` are strings, `year_of_birth` is a
+year, and `friend` is any number of `Person` objects, in no particular
+order and without duplication.
+
+A concrete example of a set of documents with this form might be:
+
+```javascript
+{ "@type" : "Person",
+  "@id" : "Person/Hasdrubal_Barca",
+  "first_name" : "Hasdrubal",
+  "last_name" : "Barca",
+  "knows" :  ["Person/Imilce_Barca","Person/Hannibal_Barca"],
+  "year_of_birth" "-245" }
+
+{ "@type" : "Person",
+  "@id" : "Person/Imilce_Barca",
+  "first_name" : "Imilce",
+  "last_name" : "Barca",
+  "knows" :  ["Person/Hasdrupal_Barca","Person/Hannibal_Barca"],
+  "year_of_birth" "-255" }
+
+{ "@type" : "Person",
+  "@id" : Person/Hannibal_Barca"
+  "first_name" : "Hannibal",
+  "last_name" : "Barca",
+  "knows" : ["Person/Imilce_Barca","Person/Hannibal_Barca"],
+  "year_of_birth" "-247" }
+```
+
+## Type Families
+
+The following type families are defined: `List`, `Set`, `Array` and
+`Optional`. These type families allow us to construct optionality or
+collections of values.
+
+### `Optional`
+
+In the case where a property is not required, you can supply
+`Optional` as a type family.
+
+```javascript
+{ "@type" : "@context",
+  "@schema" : "http://example.com/people#",
+  "@base" : "http://example.com/people/" }
+
+{ "@type" : "Class",
+  "@id" : "CodeBlock",
+  "code" : "xsd:string",
+  "comment" : { "@type" : "Optional",
+                 "@class" : "xsd:string" }}
+```
+
+Here we can supply an optional `comment` field on our `CodeBlock`.
+Both of the following documents are valid:
+
+```javascript
+{ "@type" : "CodeBlock",
+  "@id" : "my_code_block",
+  "code" : "print('hello world')",
+  "comment" : "This is a silly bit of code" }
+```
+OR
+
+```javascript
+{ "@type" : "CodeBlock",
+  "@id" : "my_code_block",
+  "code" : "print('hello world')" }
+```
+
+### `List`
+
+The `List` definition specifies an ordered collection, with
+multiplicity, of values of either a class or datatype.
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "TaskList",
+  "@type" : "Class",
+  "tasks" : { "@type" : "List",
+              "@class" : "Task" } }
+
+{ "@id" : "Task",
+  "@type" : "Class",
+  "@key" : "ValueHash",
+  "name" : "xsd:string" }
+```
+
+Here we have an object, a `Task` which can be contained in a list of
+elements known as a `TaskList`. The form an example object might take would be:
+
+```javascript
+{ "@id" : "my_task_list",
+  "@type" : "TaskList",
+  "tasks" : [{ "@type": "Task", "name" : "Laundry" },
+             { "@type": "Task", "name" : "Take_Garage_Out" }
+            ]}
+```
+
+This list will always be retrieved with the same order that it is
+inserted. It is also be capable of storing duplicates.
+
+### `Set`
+
+The `Set` definition specifies an unordered set of values of either a
+class or datatype.
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "Person",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "friends" : { "@type" : "Set",
+                "@class" : "Person" } }
+```
+
+Here we have an object, a `Person` which can have any number
+(including zero) of friends.
+
+```javascript
+{ "@id" : "Me",
+  "@type" : "Person",
+  "tasks" : [{ "@type": "Person",
+               "@id" : "you",
+               "name" : "You" },
+             { "@type": "Person",
+               "@id" : "someone_else",
+               "name" : "Someone Else" }
+            ]}
+```
+
+This list has no order, and may come out of the database in a
+different order. If duplicates are inserted they will not create
+additional linkages, and only a single of the multply supplied results
+will be returned.
