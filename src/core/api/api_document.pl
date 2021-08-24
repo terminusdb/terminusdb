@@ -19,17 +19,22 @@
 
 :- use_module(library(http/json)).
 
-document_auth_action_type(system_descriptor, _, _, '@schema':'Action_manage_capabilities').
-document_auth_action_type(database_descriptor, _, read, '@schema':'Action_meta_read_access').
-document_auth_action_type(database_descriptor, instance, write, '@schema':'Action_meta_write_access').
-document_auth_action_type(repository_descriptor, _, read, '@schema':'Action_commit_read_access').
-document_auth_action_type(repository_descriptor, instance, write, '@schema':'Action_commit_write_access').
-document_auth_action_type(branch_descriptor, instance, read, '@schema':'Action_instance_read_access').
-document_auth_action_type(branch_descriptor, instance, write, '@schema':'Action_instance_write_access').
-document_auth_action_type(branch_descriptor, schema, read, '@schema':'Action_schema_read_access').
-document_auth_action_type(branch_descriptor, schema, write, '@schema':'Action_schema_write_access').
-document_auth_action_type(commit_descriptor, instance, read, '@schema':'Action_instance_read_access').
-document_auth_action_type(commit_descriptor, schema, read, '@schema':'Action_schema_read_access').
+document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
+    atom_string(Graph_Type, Graph_Type_String),
+    atom_string(ReadWrite, ReadWrite_String),
+
+    document_auth_action_type_(Descriptor_Type, Graph_Type, ReadWrite, Action).
+document_auth_action_type_(system_descriptor, _, _, '@schema':'Action_manage_capabilities').
+document_auth_action_type_(database_descriptor, _, read, '@schema':'Action_meta_read_access').
+document_auth_action_type_(database_descriptor, instance, write, '@schema':'Action_meta_write_access').
+document_auth_action_type_(repository_descriptor, _, read, '@schema':'Action_commit_read_access').
+document_auth_action_type_(repository_descriptor, instance, write, '@schema':'Action_commit_write_access').
+document_auth_action_type_(branch_descriptor, instance, read, '@schema':'Action_instance_read_access').
+document_auth_action_type_(branch_descriptor, instance, write, '@schema':'Action_instance_write_access').
+document_auth_action_type_(branch_descriptor, schema, read, '@schema':'Action_schema_read_access').
+document_auth_action_type_(branch_descriptor, schema, write, '@schema':'Action_schema_write_access').
+document_auth_action_type_(commit_descriptor, instance, read, '@schema':'Action_instance_read_access').
+document_auth_action_type_(commit_descriptor, schema, read, '@schema':'Action_schema_read_access').
 
 assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, ReadWrite) :-
     Descriptor_Type{} :< Descriptor,
