@@ -1,0 +1,40 @@
+# Build and run tests every night of the working week
+name: Nightly
+
+on:
+  schedule:
+    - cron:  '45 1 * * MON-FRI'
+  workflow_dispatch:
+
+jobs:
+
+  # We don't test macOS on every push and pull request, because the tests take a
+  # long time to run (12 - 20 minutes).
+  macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install swi-prolog
+        run: |
+          # Installing swipl on macOS: https://www.swi-prolog.org/build/macos.html
+          brew install swi-prolog
+
+      - name: Check out tus
+        uses: actions/checkout@v2
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Install terminus_store_prolog
+        run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
+
+      - run: make
+
+      - run: ./terminusdb test
+

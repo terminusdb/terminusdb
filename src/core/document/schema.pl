@@ -31,6 +31,7 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
+:- use_module(core(triple/literals)).
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
 :- use_module(json). % This feels very circular.
@@ -138,9 +139,7 @@ refute_schema_context_prefix(Schema, Prefix, Witness) :-
               }.
 refute_schema_context_prefix(Schema, Prefix, Witness) :-
     (   xrdf(Schema, Prefix, sys:prefix, Prefix_Name)
-    ->  (   Prefix_Name = Prefix_String^^Type,
-            Type = 'http://www.w3.org/2001/XMLSchema#string',
-            string(Prefix_String)
+    ->  (   literal_to_string(Prefix_Name, _)
         ->  fail
         ;   format(string(Content), "~q", [Prefix_Name]),
             Witness = witness{
@@ -154,13 +153,11 @@ refute_schema_context_prefix(Schema, Prefix, Witness) :-
                   }).
 refute_schema_context_prefix(Schema, Prefix, Witness) :-
     (   xrdf(Schema, Prefix, sys:url, Prefix_Url)
-    ->  (   Prefix_Url = Prefix_Url_String^^Type,
-            Type = 'http://www.w3.org/2001/XMLSchema#string',
-            string(Prefix_Url_String)
+    ->  (   literal_to_string(Prefix_Url, _)
         ->  fail
         ;   format(string(Content), "~q", [Prefix_Url]),
             Witness = witness{
-                          '@type': prefix_name_malformed,
+                          '@type': prefix_url_malformed,
                           prefix: Prefix,
                           content: Content
                       })
@@ -183,6 +180,30 @@ refute_schema_context_prefix(Schema, Prefix, Witness) :-
                   property: Property
               }.
 
+refute_schema_context_system_prefix(Schema, Prefix_Name, Witness) :-
+    (   xrdf(Schema, 'terminusdb://context', Prefix_Name, Prefix_Value)
+    ->  (   literal_to_string(Prefix_Value, Prefix_Value_String)
+        ->  (   uri_has_protocol(Prefix_Value_String)
+            ->  fail
+            ;   Witness = witness{
+                              '@type': context_system_prefix_is_not_a_uri,
+                              prefix_name: Prefix_Name,
+                              prefix_value: Prefix_Value_String
+                          }
+            )
+        ;   term_string(Prefix_Value, Prefix_Value_String),
+            Witness = witness{
+                          '@type': context_system_prefix_is_not_a_string,
+                          prefix_name: Prefix_Name,
+                          prefix_value: Prefix_Value_String
+                      }
+        )
+    ;   Witness = witness{
+                      '@type': context_missing_system_prefix,
+                      prefix_name: Prefix_Name
+                  }
+    ).
+
 refute_schema_context(Validation_Object, Witness) :-
     database_schema(Validation_Object, Schema),
     \+ xrdf(Schema, 'terminusdb://context', rdf:type,sys:'Context'),
@@ -191,16 +212,9 @@ refute_schema_context(Validation_Object, Witness) :-
               }.
 refute_schema_context(Validation_Object, Witness) :-
     database_schema(Validation_Object, Schema),
-    \+ xrdf(Schema, 'terminusdb://context', sys:base,_),
-    Witness = witness{
-                  '@type': context_has_no_base_prefix
-              }.
-refute_schema_context(Validation_Object, Witness) :-
-    database_schema(Validation_Object, Schema),
-    \+ xrdf(Schema, 'terminusdb://context', sys:schema,_),
-    Witness = witness{
-                  '@type': context_has_no_schema_prefix
-              }.
+    (   global_prefix_expand(sys:base, Prefix_Name)
+    ;   global_prefix_expand(sys:schema, Prefix_Name)),
+    refute_schema_context_system_prefix(Schema, Prefix_Name, Witness).
 refute_schema_context(Validation_Object, Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, 'terminusdb://context', Property, _),

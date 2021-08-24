@@ -1,4 +1,4 @@
-# Build `terminusdb` and run the unit tests.
+# Build and run tests after every push and pull request
 name: Test
 
 on:
@@ -8,8 +8,24 @@ on:
 
 jobs:
 
+  check_skip:
+    runs-on: ubuntu-latest
+
+    outputs:
+      should_skip: ${{ steps.check_skip.outputs.should_skip }}
+
+    steps:
+      - uses: fkirc/skip-duplicate-actions@master
+        id: check_skip
+        with:
+          concurrent_skipping: same_content_newer
+
   ubuntu:
     runs-on: ubuntu-latest
+
+    # Run if not already run (e.g. with a push followed by a PR)
+    needs: check_skip
+    if: ${{ needs.check_skip.outputs.should_skip != 'true' }}
 
     steps:
       - uses: actions/checkout@v2
@@ -20,34 +36,6 @@ jobs:
           sudo apt-add-repository ppa:swi-prolog/stable
           sudo apt-get update
           sudo apt-get install swi-prolog
-
-      - name: Check out tus
-        uses: actions/checkout@v2
-        with:
-          repository: terminusdb/tus
-          path: tus
-          ref: v0.0.5
-
-      - name: Install tus
-        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
-
-      - name: Install terminus_store_prolog
-        run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
-
-      - run: make
-
-      - run: ./terminusdb test
-
-  macos:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install swi-prolog
-        run: |
-          # Installing swipl on macOS: https://www.swi-prolog.org/build/macos.html
-          brew install swi-prolog
 
       - name: Check out tus
         uses: actions/checkout@v2

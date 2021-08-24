@@ -670,7 +670,12 @@ context_triple(JSON,Triple) :-
     % A small white lie...
     do_or_die(
         get_dict('@base', JSON, Base),
-        error(schema_check_failure([witness{'@type':context_has_no_base_prefix}]), _)),
+        error(
+            schema_check_failure(
+                [witness{
+                    '@type': context_missing_system_prefix,
+                    prefix_name: 'http://terminusdb.com/schema/sys#base'
+                }]), _)),
     json_triple_(Expanded,_{'@base' : Base},Triple).
 
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
@@ -4759,7 +4764,12 @@ test(context_missing_base_prefix,
      [
          setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
          cleanup(teardown_temp_store(State)),
-         error(schema_check_failure([witness{'@type': context_has_no_base_prefix}]), _)
+         error(
+             schema_check_failure(
+                 [witness{
+                     '@type': context_missing_system_prefix,
+                     prefix_name: 'http://terminusdb.com/schema/sys#base'
+                 }]))
      ]) :-
     write_schema_string('{"@type": "@context", "@schema": "http://s/"}', Desc).
 
@@ -4767,9 +4777,42 @@ test(context_missing_schema_prefix,
      [
          setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
          cleanup(teardown_temp_store(State)),
-         error(schema_check_failure([witness{'@type': context_has_no_schema_prefix}]), _)
+         error(
+             schema_check_failure(
+                 [witness{
+                     '@type': context_missing_system_prefix,
+                     prefix_name: 'http://terminusdb.com/schema/sys#schema'
+                 }]))
      ]) :-
     write_schema_string('{"@type": "@context", "@base": "http://b/"}', Desc).
+
+test(context_base_prefix_not_uri,
+     [
+         setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(
+             schema_check_failure(
+                 [witness{
+                     '@type': context_system_prefix_is_not_a_uri,
+                     prefix_name: 'http://terminusdb.com/schema/sys#base',
+                     prefix_value: "b/"
+                 }]))
+     ]) :-
+    write_schema_string('{"@type": "@context", "@base": "b/", "@schema": "http://s/"}', Desc).
+
+test(context_schema_prefix_not_uri,
+     [
+         setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(
+             schema_check_failure(
+                 [witness{
+                     '@type': context_system_prefix_is_not_a_uri,
+                     prefix_name: 'http://terminusdb.com/schema/sys#schema',
+                     prefix_value: "s/"
+                 }]))
+     ]) :-
+    write_schema_string('{"@type": "@context", "@base": "http://b/", "@schema": "s/"}', Desc).
 
 schema3('
 { "@type" : "@context",

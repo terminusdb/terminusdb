@@ -151,10 +151,35 @@ default_schema_path(Organization_Name, Database_Name, Graph_Path) :-
                         "local/branch/main/schema/main"], Graph_Path).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes) :-
-    do_or_die(get_dict('@base', Prefixes, _),
-              error(no_base_prefix_specified, _)),
-    do_or_die(get_dict('@schema', Prefixes, _),
-              error(no_schema_prefix_specified, _)),
+    % FIXME! These checks should go away once the same checks in the schema
+    % checker can cause the database creation to fail.
+    do_or_die(get_dict('@base', Prefixes, Base_Prefix),
+              error(
+                  schema_check_failure(
+                      [witness{
+                          '@type': context_missing_system_prefix,
+                          prefix_name: 'http://terminusdb.com/schema/sys#base'}]), _)),
+    do_or_die(get_dict('@schema', Prefixes, Schema_Prefix),
+              error(
+                  schema_check_failure(
+                      [witness{
+                          '@type': context_missing_system_prefix,
+                          prefix_name: 'http://terminusdb.com/schema/sys#schema'}]), _)),
+    do_or_die(uri_has_protocol(Base_Prefix),
+              error(
+                  schema_check_failure(
+                      [witness{
+                          '@type': context_system_prefix_is_not_a_uri,
+                          prefix_name: 'http://terminusdb.com/schema/sys#base',
+                          prefix_value: Base_Prefix}]), _)),
+    do_or_die(uri_has_protocol(Schema_Prefix),
+              error(
+                  schema_check_failure(
+                      [witness{
+                          '@type': context_system_prefix_is_not_a_uri,
+                          prefix_name: 'http://terminusdb.com/schema/sys#schema',
+                          prefix_value: Schema_Prefix}]), _)),
+
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
 
     % update system with finalized
