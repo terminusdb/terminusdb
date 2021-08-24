@@ -687,7 +687,7 @@ A concrete example of a set of documents with this form might be:
   "year_of_birth" "-255" }
 
 { "@type" : "Person",
-  "@id" : Person/Hannibal_Barca"
+  "@id" : "Person/Hannibal_Barca"
   "first_name" : "Hannibal",
   "last_name" : "Barca",
   "knows" : ["Person/Imilce_Barca","Person/Hannibal_Barca"],
