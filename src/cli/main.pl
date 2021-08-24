@@ -897,7 +897,7 @@ run_command(db,create,[DB_Path],Opts) :-
     option(schema_prefix(Schema_Prefix), Opts),
     option(prefixes(Prefixes_Atom), Opts),
     atom_json_dict(Prefixes_Atom, Prefixes, []),
-    put_dict(Prefixes, _{doc : Data_Prefix, scm : Schema_Prefix}, Merged),
+    put_dict(Prefixes, _{'@base' : Data_Prefix, '@schema' : Schema_Prefix}, Merged),
     api_report_errors(
         create_db,
         create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Merged)),
