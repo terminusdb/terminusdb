@@ -1,28 +1,35 @@
 
 # TerminusDB Schema
 
-TerminusDB has a schema language allows you to specify documents and their interconnections using a simple class based syntax.
+TerminusDB has a schema language which allows you to specify documents
+and their interconnections using a simple class-based syntax.
 
-This syntax is designed to make it as simple as possible to specify a JSON object which can also be converted automatically to a graph. This approach lets us view our data either from the perspective of documents as collections of data or as a knowledge graph of interconnected documents.
+This syntax is designed to make it as simple as possible to specify a
+JSON object which can also be converted automatically to a graph. This
+approach lets us view our data either from the perspective of
+documents as collections of data or as a knowledge graph of
+interconnected documents.
 
 # The Class definition
 
 The basic unit of document construction is the class. Each class
-definition has a number of keywords (beginning with '@'), which impact
-the way the behaviour of the class, and then some number of
-properties which are merely listed.
+definition has a number of keywords (beginning with `@`), which impact
+the way the behaviour of the class, together with some number of
+properties (not beginning with `@`) and their *range* type.
 
 ```javascript
 { "@type" : "Class",
   "@id" : "Person",
   "name" : "xsd:string" }
 ```
-This class definition defines a class named `Person` with one property `name` whose value must be an "xsd:string" (see XSD definitions).
+
+This class definition defines a class named `Person` with one property
+`name` whose value must be an `xsd:string` (see XSD definitions).
 
 ## The Context Class
 
 The context class is a special class whose properties apply globally
-to the entire schema.
+to the entire schema. It is designated with the type `@context`.
 
 ```javascript
 { "@type" : "@context",
@@ -36,7 +43,12 @@ to the entire schema.
   "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 ```
 
-This example context gives documentation about the schema, along with the default prefixes to be used.
+This example context gives documentation about the schema, along with
+the default prefixes to be used and the explicit prefix `xsd`. The
+explicit prefixes allow us to base our vocabular on different URI
+prefixes by prepending with `<prefix>:<suffix>`. For instance we can
+write: `xsd:string` to denote
+`http://www.w3.org/2001/XMLSchema#string`.
 
 ### Context Prefixes
 
