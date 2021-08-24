@@ -1156,9 +1156,20 @@ api_document_error_jsonld(Type, error(unrecognized_property(Document_Type, Prope
     format(string(Msg), "Submitted document contained unrecognized property ~q for type ~q", [Property, Document_Type]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:IdCouldNotBeDetermined',
+             'api:error' : _{ '@type' : 'api:UnrecognizedProperty',
                               'api:property': Property,
                               'api:type': Document_Type,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "value ~q could not be casted to a ~q", [Value, Destination_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : Value,
+                              'api:type' : Destination_Type,
                               'api:document' : Document },
              'api:message' : Msg
             }.

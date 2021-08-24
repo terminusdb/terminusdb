@@ -148,6 +148,7 @@ embed_document_in_error(Error, Document, New_Error) :-
 known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
+known_document_error(casting_error(_,_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
