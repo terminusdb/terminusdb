@@ -63,7 +63,12 @@ URI := ":alpha:alphaNum:*://:uriChar:*"
  Prefix : URI
  ...}
 ```
-Where Prefix and URI are defined by the respective regular expressions.
+
+Where Prefix and URI are defined by the respective regular
+expressions. This is, a prefix should be an identifier starting with
+an alphabetic character followed by alpha numerics. The URI should
+have a protocol followed by valid URI characters. Each prefix should
+be paired with a URI.
 
 ### Context Keywords
 
