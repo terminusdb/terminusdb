@@ -150,7 +150,115 @@ keywords (beginning with `@`) which describe the class behaviour.
 ### `@type`
 
 The `@type` keyword specifies the type of the object. At the schema
-level this is one of: `Enum`, `Class`, `TaggedUnion`.
+level this is one of: `Enum`, `Class`, `TaggedUnion` and `Unit`.
+
+#### `Class`
+
+The class designation is a standard class document. It will have some
+number of properties defined as well as some number of keywords
+describing various class attributes. An example of a class would be as
+follows:
+
+```
+{ "@id" : "Dog",
+  "@type" : "Class",
+  "@base" : "Dog_",
+  "@key" : { "@type" : "Lexical",
+             "@fields" : [ "name" ] },
+  "name" : "xsd:string",
+  "hair_colour" : "Colour" }
+```
+
+An example instance of this class might be:
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s#" }
+
+{ "@type" : "Dog",
+  "@id" : "Dog_Cerberus",
+  "name" : "Cerberus",
+  "hair_colour" : "Grey" }
+```
+
+#### `Enum`
+
+An enum is a non-standard class in which each instance is a simple URI
+with no additional structure. To be a member of the class you must be
+one of the referent URIs.
+
+An `Enum` example class might be:
+
+```javascript
+{ "@type" : "Enum",
+  "@id" : "PrimaryColour",
+  "@values" : ["Red", "Blue", "Yellow"] }
+```
+
+An extension might be:
+
+```javascript
+"Blue"
+```
+
+In the database the actual URI for an Enum is expanded with the type
+name preceeding and so the above `Blue` extension can be found as:
+
+```javascript
+"http://s#PrimaryColour_Blue"
+```
+
+#### `TaggedUnion`
+
+A `TaggedUnion` gives us the ability to provide mutually exclusive
+properties. This can be very useful when there is a disjoint choice
+between options.
+
+An example of a schema including a `TaggedUnion` is as follows:
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s#" }
+
+{ "@id" : "BinaryTree",
+  "@type" : "TaggedUnion",
+  "@base" : "binary_tree_",
+  "@key" : { "@type" : "ValueHash" },
+  "leaf" : "sys:Unit",
+  "node" : "Node" }
+
+{ "@id" : "Node",
+  "@type" : "Class",
+  "@key" : { "@type" : "ValueHash" },
+  "value" : "xsd:integer",
+  "left" : "BinaryTree",
+  "right" : "BinaryTree" }
+```
+
+Here the `BinaryTree` class gives us a tagged union that allows us to
+choose between either a leaf (with no value), or a node class carying
+a value and branches.
+
+A concrete extension of this class might be as follows:
+
+```javascript
+{ "@type" : "Node",
+  "value" : 0,
+  "left" : { "@type" : "BinaryTree",
+             "leaf" : []},
+  "right": { "@type" : "BinaryTree",
+             "leaf" : []}}
+```
+
+#### `Unit`
+
+The `Unit` type has a single extension, `[]`. This is used when only
+the presence of the property is interesting, but it carries no
+interesting value.
+
+An example is given for the `BinaryTree` above.
 
 ### `@id`
 
@@ -381,6 +489,146 @@ The `@base` keyword specifies a prefix to be prepended to the `@key`. This prefi
 Here `@base` for the class is fully qualified after the `layer_data`
 prefix is expanded. This means that layer URIs will have the form:
 `terminusdb://layer/data/Layer_` followed by a random string.
+
+### `@subdocument`
+
+The `@subdocument` key is either present with the value `[]` or it is
+not present. If a class is designated as a sub-document then it is
+considered to be completely owned by its containing document. Likewise
+it is not possible to directly update or delete a subdocument, but it
+must be done through the containing document.
+
+Currently subdocuments *must* have a key which is one of either:
+`Random` or `ValueHash`. This restriction may be relaxed in the
+future.
+
+An example subdocument declaration in a schema is as follows:
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "terminusdb://i/",
+  "@schema" : "terminusdb://s#" }
+
+{ "@type": "Class",
+  "@id": "Person",
+  "age": "xsd:integer",
+  "name": "xsd:string",
+  "address" : "Address" }
+
+{ "@type": "Class",
+  "@id": "Address",
+  "@key": {"@type": "Random"},
+  "@subdocument": [],
+  "country": "xsd:string",
+  "postal_code": "xsd:string",
+  "street": "xsd:string"}
+```
+
+The corresponding document might look like the following:
+
+```javascript
+{ "@type" : "Person",
+  "@id" : "doug",
+  "name" : "Doug A. Trench",
+  "address" : { "@type" : Address",
+                "country" : "Neverlandistan",
+                "postal_code" : "3",
+                "street" : "Cool Harbour lane"}}
+```
+
+### `@abstract`
+
+The `@abstract` key is either present with the value `[]` or it is not
+present.
+
+When a class is abstract it will have no concrete referents. Instead
+it is designed to provide a common super-class and potentially some
+number of properties which will be shared by all of its decendents.
+
+Useful concrete members can be created by using the `@inherits`
+keyword.
+
+An example of the abstract keyword is given in the following schema:
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "terminusdb://i/",
+  "@schema" : "terminusdb://s#" }
+
+{ "@type": "Class",
+  "@abstract": [],
+  "@id": "NamedEntity",
+  "name": "xsd:string" }
+
+{ "@type" : "Person",
+  "@id" : "Person",
+  "@inherits" : ["NamedEntity"] }
+```
+
+A concrete instance of the `Person` class can be created (but not of
+the `NamedEntity` class) and might look as follows:
+
+```javascript
+{ "@type" : "Person",
+  "@id" : "doug,
+  "name" : "Doug A. Trench" }
+```
+
+### `@inherits`
+
+The `@inherits` keyword allows classes to inherit properties (and the
+`@subdocument` designation) from parent classes. This inheritance tree
+is also available as a `subsumption` relation in the WOQL query
+language, and provides the semantics for *frames* in the *schema API*.
+
+The range of `@inherits` may be either a class, or a list of
+classes. For instance:
+
+```javascript
+{ ...,
+  "@inherits" : "MyClass",
+  ... }
+```
+Or
+
+```javascript
+{ ...,
+  "@inherits" : ["MyFirstClass","MySecondClass"]
+  ... }
+```
+
+TerminusDB allows multiple-inheritence as long as all inherited
+properties of the same name have the same range class. If the range
+classes conflict then the schema checker will not pass.
+
+An example of inheritence of properties is as follows:
+
+```javascript
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id" : "RightHanded",
+  "@type" : "Class",
+  "right_hand" : "xsd:string" }
+
+{ "@id" : "LeftHanded",
+  "@type" : "Class",
+  "left_hand" : "xsd:string" }
+
+{ "@id" : "TwoHanded",
+  "@type" : "Class",
+  "@inherits" : [ "RightHanded", "LeftHanded"] }
+```
+
+An object which meets this specification might look like:
+
+```javascript
+{ "@type" : "TwoHanded",
+  "@id" : "a two-hander",
+  "left_hand" : "Pretty sinister",
+  "right_hand" : "But this one is dexterous" }
+```
 
 ## Class Properties
 
