@@ -39,9 +39,9 @@ The alternative method uses a POST rather than a get, specifies the header `X-HT
 
 ```jsx
 {
-	"type": "Person",
+    "type": "Person",
     "count": 10,
-	"query": { "age": 42 },
+    "query": { "age": 42 },
 }
 ```
 
