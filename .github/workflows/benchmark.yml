@@ -7,6 +7,9 @@ on:
     # interleaved.
     branches:
       - main
+    # Don't run if only the docs are changed.
+    paths-ignore:
+      - 'docs/**'
 
 jobs:
   benchmark:
