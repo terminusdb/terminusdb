@@ -289,21 +289,21 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
 
-    (   branch_head_commit(Parent_Transaction, Branch_Name, Old_Commit_Uri),
-        commit_type(Parent_Transaction, Old_Commit_Uri, Commit_Type),
-        Commit_Type = 'http://terminusdb.com/schema/ref#InitialCommit'
-    ->  replace_initial_commit_on_branch(Parent_Transaction,
-                                         (Validation_Object.commit_info),
-                                         Branch_Name,
-                                         Instance_Object,
-                                         Schema_Object)
-    ;   exists(validation_object_changed, [Instance_Object, Schema_Object])
-    ->  insert_commit_object_on_branch(Parent_Transaction,
-                                       Validation_Object.commit_info,
-                                                         Branch_Name,
-                                                         _Commit_Id,
-                                                         Commit_Uri),
-        attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, Instance_Object)
+    (   exists(validation_object_changed, [Instance_Object, Schema_Object])
+    ->  (   branch_head_commit(Parent_Transaction, Branch_Name, Old_Commit_Uri),
+            commit_type(Parent_Transaction, Old_Commit_Uri, Commit_Type),
+            Commit_Type = 'http://terminusdb.com/schema/ref#InitialCommit'
+        ->  replace_initial_commit_on_branch(Parent_Transaction,
+                                             (Validation_Object.commit_info),
+                                             Branch_Name,
+                                             Instance_Object,
+                                             Schema_Object)
+        ;   insert_commit_object_on_branch(Parent_Transaction,
+                                           Validation_Object.commit_info,
+                                           Branch_Name,
+                                           _Commit_Id,
+                                           Commit_Uri),
+            attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, Instance_Object))
 
     ;   true).
 
@@ -717,3 +717,26 @@ test(cardinality_min_error,
 
 
 :- end_tests(instance_validation).
+
+:- begin_tests(query_without_commit).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+
+test(query_empty_database,
+     [setup((setup_temp_store(State),
+             create_db_without_schema('admin','test'))),
+      cleanup(teardown_temp_store(State))]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, commit_info{}, Context),
+
+    with_transaction(Context,
+                     \+ ask(Context,
+                            t(_,_,_)),
+                     _).
+
+:- end_tests(query_without_commit).
