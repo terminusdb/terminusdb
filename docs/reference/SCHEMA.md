@@ -1,21 +1,31 @@
-
 # TerminusDB Schema
 
-TerminusDB has a schema language which allows you to specify documents
-and their interconnections using a simple class-based syntax.
+TerminusDB has a schema language which allows you to define
+specifications for documents and their relationships using a simple
+JSON-based syntax.
 
-This syntax is designed to make it as simple as possible to specify a
-JSON object which can also be converted automatically to a graph. This
-approach lets us view our data either from the perspective of
-documents as collections of data or as a knowledge graph of
-interconnected documents.
+This syntax is designed to make it as easy as possible to specify a JSON
+object which can be converted automatically to a graph. This approach
+lets you view your data either as collections of documents or as
+knowledge graphs of interconnected objects.
 
-# The Class definition
+## Schema Objects
 
-The basic unit of document construction is the class. Each class
-definition has a number of keywords (beginning with `@`), which impact
-the way the behaviour of the class, together with some number of
-properties (not beginning with `@`) and their *range* type.
+A JSON object in the TerminusDB schema is composed of key-value pairs in
+which a key is one of the following:
+
+* **keyword** – starts with `@`, has a value with a special meaning
+* **property** – does not start with `@`, has a value with a **range**
+  type
+
+The full schema definition is a stream or list of these JSON objects.
+
+# The Class Definition
+
+The basic unit of specification is the **class**. A class definition is
+a JSON object whose keys are either **keywords** (starting with `@`) and
+or **property** names (not starting with `@`). A keyword impacts the
+behavior of the class beginning with `@`) and their *range* type.
 
 ```javascript
 { "@type" : "Class",
