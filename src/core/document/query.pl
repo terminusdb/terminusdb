@@ -210,10 +210,10 @@ match_query_document_uri_(Query, DB, Uri) :-
     forall(member(P-V, Pairs),
            match_query_document_against_uri_property(V, DB, Uri, P)),
     !.
-    
+
 match_query_document_uri(DB, Type, Query, Uri) :-
     expand_query_document(DB, Type, Query, Query_Ex),
-    http_log("~n~n~q~n~n", [Query_Ex]),
+
     (   (   is_dict(Query_Ex)
         ->  (   get_dict('@id', Query_Ex, id_exact(_,Uri))
             ->  true
