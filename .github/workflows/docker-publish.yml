@@ -15,6 +15,9 @@ on:
 
   # Run tests for any PRs.
   pull_request:
+    # Don't run if only the docs are changed.
+    paths-ignore:
+      - 'docs/**'
 
 env:
   TERMINUSDB_STORE_PROLOG_VERSION: v0.19.1

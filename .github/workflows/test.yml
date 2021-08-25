@@ -3,7 +3,13 @@ name: Test
 
 on:
   push:
+    # Don't run if only the docs are changed.
+    paths-ignore:
+      - 'docs/**'
   pull_request:
+    # Don't run if only the docs are changed.
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:
