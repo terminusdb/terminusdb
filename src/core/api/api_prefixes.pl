@@ -13,7 +13,7 @@ get_prefixes(Path, System_DB, Auth, JSON) :-
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
 
-    check_descriptor_auth(System_DB, Descriptor, system:instance_read_access, Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_instance_read_access', Auth),
 
     database_prefixes(Descriptor,JSON).
 
@@ -23,7 +23,7 @@ update_prefixes(Path, System_DB, Auth, Commit_Info, Document) :-
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
 
-    check_descriptor_auth(System_DB, Descriptor, system:instance_read_access, Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_instance_read_access', Auth),
 
     create_context(Descriptor, Commit_Info, Context),
     with_transaction(
@@ -52,5 +52,22 @@ test(get_prefixes,
     _{'@base':"http://somewhere.for.now/document/",
       '@schema':"http://somewhere.for.now/schema#",
       '@type':'Context'} :< Prefixes.
+
+
+test(get_prefixes_auth_failure,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(access_not_authorised('terminusdb://system/data/User_Doug',
+                                  '@schema':'Action_instance_read_access',
+                                  _))
+     ]) :-
+
+    add_user("Doug", some("password"), User_URI),
+    Path = "admin/testdb",
+    get_prefixes(Path,system_descriptor{},User_URI,Prefixes),
+
+    writeq(Prefixes).
 
 :- end_tests(api_prefixes).
