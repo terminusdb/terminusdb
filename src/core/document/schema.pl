@@ -17,6 +17,7 @@
               documentation_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
+              drop_schemaless_mode/1,
               class_subsumed/3,
               concrete_subclass/3,
               is_abstract/2,
@@ -695,6 +696,12 @@ key_descriptor_(Validation_Object, Prefixes, Type, Obj, random(Base)) :-
 is_schemaless(Validation_Object) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
+
+drop_schemaless_mode(Transaction) :-
+   (   is_schemaless(Transaction)
+   ->  database_schema(Transaction, [Schema]),
+       delete(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil, _)
+   ;   true).
 
 documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),

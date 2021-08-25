@@ -1590,6 +1590,10 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     default_prefixes(Prefixes),
     put_dict(Context,Prefixes,Expanded_Context),
 
+    global_prefix_expand(rdf:type,RDF_TYPE),
+    global_prefix_expand(rdf:nil,RDF_NIL),
+    ignore(nb_remove_triple(Builder, 'terminusdb://data/Schema', RDF_TYPE, node(RDF_NIL))),
+
     forall(
         (   var(Rest)
         ->  json_read_dict_stream(JSON_Stream, Dict)
@@ -1984,6 +1988,8 @@ insert_schema_document(Transaction, Document) :-
     ;   throw(error(no_id_in_document(Document), _))
     ),
     database_schema(Transaction, Schema),
+
+    drop_schemaless_mode(Transaction),
 
     database_prefixes(Transaction, Context),
     prefix_expand_schema(Id,Context,Id_Ex),
@@ -4743,6 +4749,44 @@ test(document_with_no_required_field,
     with_transaction(
         Context,
         insert_document(Context, Document, _Id),
+        _
+    ).
+
+test(add_a_double_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_without_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_not_cardinality_one,
+                            class:'http://www.w3.org/2001/XMLSchema#string',
+                            instance:'http://i/doug',
+                            predicate:'http://s/name'}
+                   ]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "doug",
+                  '@type' : "Moo",
+                  name : "moo?"},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, Id),
+        _
+    ),
+
+    create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
+
+    with_transaction(
+        Context2,
+        ask(Context2, insert(Id, name, "moo!"^^xsd:string)),
         _
     ).
 
