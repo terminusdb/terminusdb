@@ -455,7 +455,7 @@ assert_read_access(_System, _Auth, Collection, _Filter) :-
 assert_auth_action_scope(DB, Auth, Action, Scope) :-
     (   auth_action_scope(DB, Auth, Action, Scope)
     ->  true
-    ;   throw(error(access_not_authorised(Auth,Action,Scope)))).
+    ;   throw(error(access_not_authorised(Auth,Action,Scope), _))).
 
 /**
  * authorisation_capabilities(DB,Auth_ID,Capabilities) is det.

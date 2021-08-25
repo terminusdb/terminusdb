@@ -61,7 +61,8 @@ test(get_prefixes_auth_failure,
       cleanup(teardown_temp_store(State)),
       error(access_not_authorised('terminusdb://system/data/User_Doug',
                                   '@schema':'Action_instance_read_access',
-                                  _))
+                                  _),
+            _)
      ]) :-
 
     add_user("Doug", some("password"), User_URI),
