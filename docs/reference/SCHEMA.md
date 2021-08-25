@@ -20,12 +20,11 @@ which a key is one of the following:
 
 The full schema definition is a stream or list of these JSON objects.
 
-# The Class Definition
+## Class Definition
 
-The basic unit of specification is the **class**. A class definition is
-a JSON object whose keys are either **keywords** (starting with `@`) and
-or **property** names (not starting with `@`). A keyword impacts the
-behavior of the class beginning with `@`) and their *range* type.
+The basic unit of specification is the **class**. A class definition is a schema
+object with the keyword `@type` whose value is `Class` plus the keyword `@id`
+and the name of the class. Here is an example:
 
 ```javascript
 { "@type" : "Class",
@@ -33,13 +32,13 @@ behavior of the class beginning with `@`) and their *range* type.
   "name" : "xsd:string" }
 ```
 
-This class definition defines a class named `Person` with one property
-`name` whose value must be an `xsd:string` (see XSD definitions).
+We define a class named `Person` with one property, `name`, whose type is
+`xsd:string`. (See the XSD definitions for more information about types.).
 
-## The Context Class
+## Context Object
 
-The context class is a special class whose properties apply globally
-to the entire schema. It is designated with the type `@context`.
+There is one special schema object that affects the entire schema. It is
+designated by the special `@type` value `@context`. Here is an example:
 
 ```javascript
 { "@type" : "@context",
@@ -56,17 +55,19 @@ the storage and retrieval of queries so that queries can be associated with data
   "xsd" : "http://www.w3.org/2001/XMLSchema#" }
 ```
 
-This example context gives documentation about the schema, along with
-the default prefixes to be used and the explicit prefix `xsd`. The
-explicit prefixes allow us to base our vocabular on different URI
-prefixes by prepending with `<prefix>:<suffix>`. For instance we can
-write: `xsd:string` to denote
-`http://www.w3.org/2001/XMLSchema#string`.
+We're doing several things here:
+
+1. We document the schema in the `@documentation` value. This includes the
+   title, a description, and the list of schema authors.
+2. We define default prefixes to be used for the schema and data.
+3. We define the prefix `xsd`. This allows us to base our vocabulary on
+   different URI prefixes. For example, we can write `xsd:string` to denote
+   `http://www.w3.org/2001/XMLSchema#string`.
 
 ### Context Prefixes
 
-All properties in the context which are not proceeded with `@` are
-considered to be URI definitions. They must be of the form:
+All properties in the context object that do not start with `@` are considered
+to be URI definitions. They must be of the form:
 
 ```
 Prefix := ":alpha::alphaNum:*"
@@ -77,11 +78,10 @@ URI := ":alpha:alphaNum:*://:uriChar:*"
  ...}
 ```
 
-Where Prefix and URI are defined by the respective regular
-expressions. This is, a prefix should be an identifier starting with
-an alphabetic character followed by alpha numerics. The URI should
-have a protocol followed by valid URI characters. Each prefix should
-be paired with a URI.
+Prefix and URI are defined by the respective regular expressions. That is, a
+prefix should be an identifier starting with an alphabetic character followed by
+alphanumeric characters. The URI should have a protocol followed by valid URI
+characters. Each prefix should be paired with a URI.
 
 ### Context Keywords
 
