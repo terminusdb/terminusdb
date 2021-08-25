@@ -587,4 +587,74 @@ test(rebase_fast_forward_from_nothing,
     Optional_Common_Commit_Id = none,
     [Commit_Id1,Commit_Id2] = Their_Applied_Commit_Ids.
 
+test(rebase_conflict,
+     [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "foo"),
+                resolve_absolute_string_descriptor("admin/foo", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(rebase_commit_application_failed(
+                   schema_validation_error(
+                       _,
+                       [witness{'@type':instance_not_cardinality_one,
+                                class:'http://www.w3.org/2001/XMLSchema#string',
+                                instance:'http://somewhere.for.now/document/Document1',
+                                predicate:'http://somewhere.for.now/schema#name'}]),
+                   _),
+               _)
+     ])
+:-
+
+    Schema = _{ '@id' : "User",
+                '@type' : "Class",
+                name : "xsd:string" },
+
+    create_context(Desc, commit{author: "me", message: "something"}, Schema_Context),
+    with_transaction(
+        Schema_Context,
+        insert_schema_document(Schema_Context, Schema),
+        _
+    ),
+
+
+    Document1 = _{ '@id' : "Document1",
+                   '@type' : "User",
+                   name : "Document1"},
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document1, _),
+        _),
+
+    super_user_authority(Auth),
+    Path = "admin/foo/local/branch/moo",
+    branch_create(system_descriptor{}, Auth, Path, some("admin/foo"), _),
+
+    resolve_absolute_string_descriptor(Path, Desc2),
+    create_context(Desc2, commit{author: "me", message: "something"}, Context2),
+
+    Document2 = _{ '@id' : "Document1",
+                   '@type' : "User",
+                   name : "Document1 is changed X"},
+
+    with_transaction(
+        Context2,
+        replace_document(Context2, Document2, _),
+        _),
+
+
+    Document3 = _{ '@id' : "Document1",
+                   '@type' : "User",
+                   name : "Document1 is changed Y"},
+
+    create_context(Desc, commit{author: "me", message: "something"}, Context3),
+    with_transaction(
+        Context3,
+        replace_document(Context3, Document3, _),
+        _),
+
+    rebase_on_branch(system_descriptor{}, Auth, "admin/foo", Path, "me", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
+
+
 :- end_tests(rebase).
