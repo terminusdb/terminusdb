@@ -171,7 +171,7 @@ branch_delete(System_DB, Auth, Path) :-
         }:< Descriptor,
         error(not_a_branch_descriptor(Descriptor), _)),
 
-    check_descriptor_auth(System_DB, Descriptor, system:branch, Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_branch', Auth),
 
     do_or_die(
         has_branch(Repository_Descriptor, Branch_Name),

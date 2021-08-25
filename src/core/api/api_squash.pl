@@ -21,7 +21,7 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
         branch_descriptor{} :< Descriptor,
         error(not_a_branch_descriptor(Descriptor),_)),
 
-    check_descriptor_auth(System_DB, Descriptor, system:commit_write_access, Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_commit_write_access', Auth),
 
     do_or_die(
         open_descriptor(Descriptor,_),
