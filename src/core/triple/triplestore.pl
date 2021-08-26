@@ -311,8 +311,10 @@ xquad(Gs,G,X,Y,Z) :-
     xrdf_db(Layer,X,Y,Z).
 
 unlink_object(Gs, ID) :-
-    ignore((xquad(Gs, G, Subject, Predicate, ID),
-            delete(G, Subject, Predicate, ID, _))).
+    forall(
+        xquad(Gs, G, Subject, Predicate, ID),
+        delete(G, Subject, Predicate, ID, _)
+    ).
 
 pre_convert_node(X,A) :-
     (   nonvar(X)
