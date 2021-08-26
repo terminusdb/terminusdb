@@ -590,7 +590,7 @@ test(rebase_fast_forward_from_nothing,
 test(rebase_conflict,
      [
          setup((setup_temp_store(State),
-                create_db_without_schema("admin", "foo"),
+                create_db_with_empty_schema("admin", "foo"),
                 resolve_absolute_string_descriptor("admin/foo", Desc))),
          cleanup(teardown_temp_store(State)),
          error(rebase_commit_application_failed(

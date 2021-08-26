@@ -1590,10 +1590,6 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     default_prefixes(Prefixes),
     put_dict(Context,Prefixes,Expanded_Context),
 
-    global_prefix_expand(rdf:type,RDF_TYPE),
-    global_prefix_expand(rdf:nil,RDF_NIL),
-    ignore(nb_remove_triple(Builder, 'terminusdb://data/Schema', RDF_TYPE, node(RDF_NIL))),
-
     forall(
         (   var(Rest)
         ->  json_read_dict_stream(JSON_Stream, Dict)
@@ -1988,8 +1984,6 @@ insert_schema_document(Transaction, Document) :-
     ;   throw(error(no_id_in_document(Document), _))
     ),
     database_schema(Transaction, Schema),
-
-    drop_schemaless_mode(Transaction),
 
     database_prefixes(Transaction, Context),
     prefix_expand_schema(Id,Context,Id_Ex),
@@ -4756,7 +4750,7 @@ test(add_a_double_field,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_without_schema("admin", "foo"),
+                 create_db_with_empty_schema("admin", "foo"),
                  resolve_absolute_string_descriptor("admin/foo", Desc),
                  write_schema(schema2,Desc)
              )),
