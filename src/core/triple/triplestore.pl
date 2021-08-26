@@ -311,8 +311,10 @@ xquad(Gs,G,X,Y,Z) :-
     xrdf_db(Layer,X,Y,Z).
 
 unlink_object(Gs, ID) :-
+    global_prefix_expand(rdf:first, First),
     forall(
-        xquad(Gs, G, Subject, Predicate, ID),
+        (   xquad(Gs, G, Subject, Predicate, ID),
+            Predicate \= First),
         delete(G, Subject, Predicate, ID, _)
     ).
 

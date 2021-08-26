@@ -4827,7 +4827,11 @@ test(delete_list_element,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(_,
+         error(schema_check_failure(
+                   [
+                       _{'@type':deleted_object_still_referenced,
+                         object:'http://i/task3',
+                         predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',subject:_}]),
                _)
      ]) :-
     Document = _{ '@id' : "my_task_list",
@@ -4847,7 +4851,7 @@ test(delete_list_element,
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
     with_transaction(
         Context,
-        insert_document(Context, Document, Id),
+        insert_document(Context, Document, _Id),
         _
     ),
 
@@ -4856,14 +4860,7 @@ test(delete_list_element,
         Context2,
         delete_document(Context2, 'task3'),
         _
-    ),
-
-    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context_get),
-    get_document(Context_get, Id, Result),
-    nl,
-    print_term(Result,[]),
-    nl,
-    print_all_triples(Desc).
+    ).
 
 test(delete_an_array_element,
      [
