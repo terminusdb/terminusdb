@@ -281,12 +281,20 @@ refute_key_(hash(_,Fields),Validation_Object,Subject,Predicate,Witness) :-
 
 refute_subject_deletion(Validation_Object, Subject,Witness) :-
     subject_deleted(Validation_Object, Subject),
+    refute_subject_deletion_(Validation_Object, Subject, Witness).
+
+refute_subject_deletion_(Validation_Object, Subject,Witness) :-
     database_instance(Validation_Object, Instance),
-    xrdf(Instance,Subject,Predicate,Object),
-    Witness = json{ '@type' : entire_object_not_deleted,
-                    subject : Subject,
-                    predicate : Predicate,
-                    object : Object }.
+    (   xrdf(Instance,Subject,Predicate,Object),
+        Witness = json{ '@type' : entire_object_not_deleted,
+                        subject : Subject,
+                        predicate : Predicate,
+                        object : Object }
+    ;   xrdf(Instance, Other_Subject, Predicate, Subject),
+        Witness = json{ '@type' : deleted_object_still_referenced,
+                        subject : Other_Subject,
+                        predicate : Predicate,
+                        object : Subject }).
 
 refute_subject_type_change(Validation_Object,Subject,Witness) :-
     database_instance(Validation_Object, Instance),
@@ -397,7 +405,6 @@ refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
             ;   refute_cardinality(Validation_Object,Subject,Predicate,Class,Witness)))
     ;   is_abstract(Validation_Object,Class)
     ->  refute_abstract(Subject, Class, Witness)
-    ;   refute_subject_deletion(Validation_Object,Subject,Witness)
     ;   refute_subject_type_change(Validation_Object,Subject,Witness)
     ;   refute_key(Validation_Object,Subject,Predicate,Class,Witness)
         % NOTE: Perhaps this can be more intelligence predicates
@@ -405,12 +412,17 @@ refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
     ;   refute_object_type(Validation_Object,Class,Subject,Predicate,Witness)
     ).
 
-refute_subject(Validation_Object,Subject,_Witness) :-
+refute_subject(Validation_Object,Subject,Witness) :-
+    (   refute_subject_deletion(Validation_Object,Subject,Witness)
+    *-> true
+    ;   refute_subject_1(Validation_Object, Subject, Witness)).
+
+refute_subject_1(Validation_Object,Subject,_Witness) :-
     database_instance(Validation_Object, Instance),
     \+ xrdf(Instance, Subject, _, _),
     !,
     fail.
-refute_subject(Validation_Object,Subject,Witness) :-
+refute_subject_1(Validation_Object,Subject,Witness) :-
     (   instance_of(Validation_Object, Subject, Class)
     ->  refute_typed_subject(Validation_Object, Subject, Class, Witness)
     ;   Witness = witness{

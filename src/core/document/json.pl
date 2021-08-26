@@ -1701,7 +1701,8 @@ delete_document(DB, Prefixes, Id) :-
         (   delete(G, Id_Ex, P, V, _),
             delete_subdocument(DB,Prefixes,V)
         )
-    ).
+    ),
+    unlink_object(Instance, Id_Ex).
 
 delete_document(DB, Id) :-
     is_transaction(DB),
@@ -4783,6 +4784,123 @@ test(add_a_double_field,
         ask(Context2, insert(Id, name, "moo!"^^xsd:string)),
         _
     ).
+
+schema2_0('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+
+{ "@id" : "Task",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "name" : "xsd:string" }
+
+{ "@id" : "TaskList",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "task_list" : { "@type" : "List",
+                  "@class" : "Task" }}
+
+{ "@id" : "TaskArray",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "task_list" : { "@type" : "Array",
+                  "@class" : "Task" }}
+
+').
+
+test(delete_list_element,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2_0,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [
+                       _{'@type':deleted_object_still_referenced,
+                         object:'http://i/task3',
+                         predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',subject:_}]),
+               _)
+     ]) :-
+    Document = _{ '@id' : "my_task_list",
+                  '@type' : "TaskList",
+                  task_list : [
+                      _{ '@id' : "task1",
+                         '@type' : "Task",
+                         name : "Laundry"},
+                      _{ '@id' : "task2",
+                         '@type' : "Task",
+                         name : "Rubbish"},
+                      _{ '@id' : "task3",
+                         '@type' : "Task",
+                         name : "Dishes"}
+                  ]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ),
+
+    create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
+    with_transaction(
+        Context2,
+        delete_document(Context2, 'task3'),
+        _
+    ).
+
+test(delete_an_array_element,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2_0,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = _{ '@id' : "my_task_array",
+                  '@type' : "TaskArray",
+                  task_list : [
+                      _{ '@id' : "task1",
+                         '@type' : "Task",
+                         name : "Laundry"},
+                      _{ '@id' : "task2",
+                         '@type' : "Task",
+                         name : "Rubbish"},
+                      _{ '@id' : "task3",
+                         '@type' : "Task",
+                         name : "Dishes"}
+                  ]},
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, Id),
+        _
+    ),
+
+    create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
+    with_transaction(
+        Context2,
+        delete_document(Context2, 'task2'),
+        _
+    ),
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context_get),
+    get_document(Context_get, Id, Result),
+    Result = json{'@id':my_task_array,
+                  '@type':'TaskArray',
+                  task_list:[task1,null,task3]}.
 
 :- end_tests(json).
 
