@@ -23,7 +23,7 @@ update_prefixes(Path, System_DB, Auth, Commit_Info, Document) :-
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
 
-    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_instance_read_access', Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_instance_write_access', Auth),
 
     create_context(Descriptor, Commit_Info, Context),
     with_transaction(
@@ -70,5 +70,21 @@ test(get_prefixes_auth_failure,
     get_prefixes(Path,system_descriptor{},User_URI,Prefixes),
 
     writeq(Prefixes).
+
+test(update_prefixes_auth_failure,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(access_not_authorised('terminusdb://system/data/User_Doug',
+                                  '@schema':'Action_instance_write_access',
+                                  _),
+            _)
+     ]) :-
+
+    add_user("Doug", some("password"), User_URI),
+    Path = "admin/testdb",
+    Commit_Info = commit_info{author: "me", message: "prefix it"},
+    update_prefixes(Path, system_descriptor{}, User_URI, Commit_Info, _{}).
 
 :- end_tests(api_prefixes).
