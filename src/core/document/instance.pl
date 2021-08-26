@@ -416,6 +416,7 @@ refute_subject(Validation_Object,Subject,Witness) :-
     (   refute_subject_deletion(Validation_Object,Subject,Witness)
     *-> true
     ;   refute_subject_1(Validation_Object, Subject, Witness)).
+
 refute_subject_1(Validation_Object,Subject,_Witness) :-
     database_instance(Validation_Object, Instance),
     \+ xrdf(Instance, Subject, _, _),
