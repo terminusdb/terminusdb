@@ -1705,7 +1705,8 @@ delete_document(DB, Prefixes, Id) :-
         (   delete(G, Id_Ex, P, V, _),
             delete_subdocument(DB,Prefixes,V)
         )
-    ).
+    ),
+    unlink_object(Instance, Id).
 
 delete_document(DB, Id) :-
     is_transaction(DB),

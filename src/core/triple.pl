@@ -101,6 +101,7 @@
               insert/5,
               delete/5,
               delete_all/1,
+              unlink_object/2,
               storage/1,
               triple_store/1,
               global_triple_store/1,

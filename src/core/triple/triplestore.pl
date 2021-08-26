@@ -11,6 +11,7 @@
               insert/5,
               delete/5,
               delete_all/1,
+              unlink_object/2,
               storage/1,
               triple_store/1,
               global_triple_store/1,
@@ -308,6 +309,10 @@ xquad(Gs,G,X,Y,Z) :-
     memberchk(G,Gs),
     read_write_obj_reader(G, Layer),
     xrdf_db(Layer,X,Y,Z).
+
+unlink_object(Gs, ID) :-
+    ignore((xquad(Gs, G, Subject, Predicate, ID),
+            delete(G, Subject, Predicate, ID, _))).
 
 pre_convert_node(X,A) :-
     (   nonvar(X)
