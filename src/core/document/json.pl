@@ -4820,7 +4820,7 @@ test(delete_list_element,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_without_schema("admin", "foo"),
+                 create_db_with_empty_schema("admin", "foo"),
                  resolve_absolute_string_descriptor("admin/foo", Desc),
                  write_schema(schema2_0,Desc)
              )),
@@ -4866,7 +4866,7 @@ test(delete_an_array_element,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_without_schema("admin", "foo"),
+                 create_db_with_empty_schema("admin", "foo"),
                  resolve_absolute_string_descriptor("admin/foo", Desc),
                  write_schema(schema2_0,Desc)
              )),
