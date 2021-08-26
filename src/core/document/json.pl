@@ -4750,7 +4750,7 @@ test(add_a_double_field,
      [
          setup(
              (   setup_temp_store(State),
-                 create_db_without_schema("admin", "foo"),
+                 create_db_with_empty_schema("admin", "foo"),
                  resolve_absolute_string_descriptor("admin/foo", Desc),
                  write_schema(schema2,Desc)
              )),
