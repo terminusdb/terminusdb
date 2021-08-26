@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1629975769526,
+  "lastUpdate": 1629989969413,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -5743,6 +5743,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 40.027,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "distinct": true,
+          "id": "fdfc6f85b23ebe2a344fe798ef6d2da2ea80690e",
+          "message": "add docs and storage to dockerignore",
+          "timestamp": "2021-08-26T16:55:48+02:00",
+          "tree_id": "5ce4b32ae8998a08fcd6f99461084ea2f8cb19e4",
+          "url": "https://github.com/terminusdb/terminusdb/commit/fdfc6f85b23ebe2a344fe798ef6d2da2ea80690e"
+        },
+        "date": 1629989968325,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 94.449,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 276.628,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 271.51,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 152.807,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 164.614,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 97.501,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 38.966,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 33.77,
             "unit": "ms"
           }
         ]
