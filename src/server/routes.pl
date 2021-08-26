@@ -197,6 +197,7 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
  */
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
+    check_content_type_json(Request),
     get_payload(Database_Document,Request),
     do_or_die(
         (_{ comment : Comment,
@@ -3694,6 +3695,19 @@ try_get_param(Key,_Request,_Value) :-
 json_content_type(Request) :-
     memberchk(content_type(CT), Request),
     re_match('^application/json', CT, []).
+
+check_content_type(Request, Expected, ContentType) :-
+    do_or_die(
+        memberchk(content_type(ContentType), Request),
+        error(missing_content_type(Expected), _)).
+
+check_content_type_json(Request) :-
+    Expected = 'application/json',
+    check_content_type(Request, Expected, ContentType),
+    atom_concat('^', Expected, RE),
+    do_or_die(
+        re_match(RE, ContentType, []),
+        error(bad_content_type(ContentType, Expected), _)).
 
 json_mime_type(Mime) :-
     memberchk(type(CT),Mime),
