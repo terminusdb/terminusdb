@@ -220,7 +220,7 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     api_report_errors(
         create_db,
         Request,
-        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Public, Schema, Prefixes),
+        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
                                        'api:status' : 'api:success'}))).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
