@@ -227,7 +227,7 @@ corresponds with this might be something along the lines of:
 
 { "@type" : "Class",
   "@id" : "Map",
-  "coordinates" : { "@type" : "List",
+  "coordinates" : { "@type" : "Array",
                     "@class" : "Coordinate" } }
 
 { "@type" : "Class",
@@ -247,6 +247,39 @@ corresponds with this might be something along the lines of:
   "name" : "xsd:string",
   "address" : "Address",
   "friend" : "Person" }
+```
+
+An example of the of the documents (without the full polygon
+coordinate outline) might be as follows:
+
+```javascript
+{ "@type" : "Person",
+  "@id" : "Person/Joe",
+  "name" : "Joe Bloggs",
+  "address" : { "@type" : "Address",
+                "@id" : "Adress/aa1264e404a5b34381abc37cad83fabd",
+                "street" : "Elm St.",
+                "country" : "Country/USA" },
+  "friend" : [ "Person/Jill" ] }
+
+{ "@type" : "Person",
+  "@id" : "Person/Jill",
+  "name" : "Jill Smith",
+  "address" : { "@type" : "Address",
+                "@id" : "Adress/5fba7438dc2b23258d304bb8cd1222bd",
+                "street" : "Main St.",
+                "country" : "Country/Ireland" },
+  "friend" : [ "Person/Joe" ] }
+
+{ "@type" : "Country",
+  "@id" : "Country/USA",
+  "name" : "USA",
+  "coordinates" : [ ... ] }
+
+{ "@type" : "Country",
+  "@id" : "Country/Ireland",
+  "name" : "Ireland",
+  "coordinates" : [ ... ] }
 ```
 
 With a bit of practice, designing your own knowledge graph in
