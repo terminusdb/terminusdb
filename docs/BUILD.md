@@ -67,8 +67,11 @@ For online help and background, visit http://www.swi-prolog.org
 For built-in help, use ?- help(Topic). or ?- apropos(Word).
 
 1 ?- pack_install(terminus_store_prolog).
-% Contacting server ....
-  ?- pack_install(tus).
+% Contacting server ...
+
+2 ?- pack_install(tus).
+
+% Contacting server ...
 ```
 
 ### TerminusDB Server
