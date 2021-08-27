@@ -1210,3 +1210,15 @@
   "@inherits" : "Query",
   "resource" : "xsd:string",
   "count" : "DataValue" }
+
+{ "@id" : "TypeOf",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "TypeOf gives the type of an element.",
+      "@properties" : { "value" : "The value of which to obtain the type.",
+                        "type" : "The URI which that specifies the type." }
+  },
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "value" : "Value",
+  "type" : "NodeValue" }
