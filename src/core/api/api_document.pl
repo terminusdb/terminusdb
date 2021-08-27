@@ -153,6 +153,7 @@ embed_document_in_error(Error, Document, New_Error) :-
 known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
+known_document_error(casting_error(_,_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -238,7 +239,7 @@ api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                              ;   ID = JSON),
                              do_or_die(
                                  string(ID),
-                                 error(not_a_proper_id(ID)))),
+                                 error(not_a_proper_id_for_deletion(ID), _))),
                          api_delete_document_(Schema_Or_Instance, Transaction, ID)),
                      _).
 
@@ -302,8 +303,10 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
                                      ->  !,
                                          member(Document, JSON)
                                      ;   Document = JSON),
-                                     api_replace_document_(Schema_Or_Instance,
-                                                           Transaction,Document, Id)
+                                     call_catch_document_mutation(
+                                         Document,
+                                         api_replace_document_(Schema_Or_Instance,
+                                                               Transaction,Document, Id))
                                  ),
                                  Ids),
                          do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Ids), _))

@@ -1105,13 +1105,14 @@ api_document_error_jsonld(Type, error(document_access_impossible(Descriptor, Gra
                               'api:access_type': Read_Write},
              'api:message' : Msg
             }.
-api_document_error_jsonld(Type, error(syntax_error(json(_)), _), JSON) :-
+api_document_error_jsonld(Type, error(syntax_error(json(What)), _), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Submitted JSON data is invalid", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:JSONInvalid'},
-             'api:message' : Msg
+             'api:message' : Msg,
+             'api:what': What
             }.
 api_document_error_jsonld(Type, error(type_not_found(Document_Type, Document), _), JSON) :-
     document_error_type(Type, JSON_Type),
@@ -1155,9 +1156,20 @@ api_document_error_jsonld(Type, error(unrecognized_property(Document_Type, Prope
     format(string(Msg), "Submitted document contained unrecognized property ~q for type ~q", [Property, Document_Type]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:IdCouldNotBeDetermined',
+             'api:error' : _{ '@type' : 'api:UnrecognizedProperty',
                               'api:property': Property,
                               'api:type': Document_Type,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "value ~q could not be casted to a ~q", [Value, Destination_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : Value,
+                              'api:type' : Destination_Type,
                               'api:document' : Document },
              'api:message' : Msg
             }.
@@ -1215,6 +1227,22 @@ api_document_error_jsonld(insert_documents, error(can_not_insert_existing_object
              'api:error' : _{ '@type' : 'api:DocumentIdAlreadyExists',
                               'api:document_id' : Id,
                               'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(delete_documents, error(document_does_not_exist(Id), _), JSON) :-
+    format(string(Msg), "Document with id ~q was not found", [Id]),
+    JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:DocumentNotFound',
+                              'api:document_id' : Id},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(delete_documents, error(not_a_proper_id_for_deletion(Id), _), JSON) :-
+    format(string(Msg), "not a document id: ~q", [Id]),
+    JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NotADocumentId',
+                              'api:invalid_document_id' : Id},
              'api:message' : Msg
             }.
 
