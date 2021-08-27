@@ -2,10 +2,12 @@ name: Docs
 on:
   push:
     branches:
-      - master
+      - main
       - rc
       - canary
-      - dev
+    tags:
+      - v* # Environment variables available to all jobs and steps in this workflow
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -19,11 +21,7 @@ jobs:
       - name: Extract branch name
         shell: bash
         run: |
-          if [[ $GITHUB_REF == 'refs/heads/master' ]]; then
-            echo "##[set-output name=branch;]$(echo '')"
-          else
-            echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
-          fi
+            echo "##[set-output name=branch;]$(echo ${GITHUB_REF##*/})"
         id: extract_branch
 
 
