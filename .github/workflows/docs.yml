@@ -6,7 +6,7 @@ on:
       - rc
       - canary
     tags:
-      - v* # Environment variables available to all jobs and steps in this workflow
+      - v*
 
 jobs:
   build-and-deploy:
