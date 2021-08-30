@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1630072854386,
+  "lastUpdate": 1630312883632,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -6127,6 +6127,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 49.463,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "committer": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "distinct": true,
+          "id": "e544d9fc54da297cb19af111a83ccd7e53017b63",
+          "message": "Remove docs.yml\n\nOur documentation has moved to <https://github.com/terminusdb/terminusdb-docs>",
+          "timestamp": "2021-08-30T10:37:24+02:00",
+          "tree_id": "45be36689c5089bd011bd0fbbb399b4b901a4b73",
+          "url": "https://github.com/terminusdb/terminusdb/commit/e544d9fc54da297cb19af111a83ccd7e53017b63"
+        },
+        "date": 1630312882575,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 115.015,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 353.57,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 349.311,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 207.438,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 202.131,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 114.821,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 40.421,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 38.607,
             "unit": "ms"
           }
         ]
