@@ -5168,6 +5168,129 @@ test(diamond_bad,
     write_schema(schema5,Desc),
     print_all_documents(Desc, schema).
 
+test(incompatible_key_change,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure([json{'@type':lexical_key_changed,predicate:'http://somewhere.for.now/schema#f2',subject:'http://somewhere.for.now/document/Thing_foo'}]))
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                '@key' : _{ '@type': "Lexical",
+                            '@fields': ["f1"] },
+                'f1' : "xsd:string",
+                'f2' : "xsd:string"},
+
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    with_transaction(Context2,
+                     insert_document(Context2, _{'@type': "Thing",
+                                                 'f1' : "foo",
+                                                 'f2' : "bar"},
+                                     _),
+                     _),
+
+
+    New_Schema = (Schema.put('@key', _{ '@type': "Lexical",
+                                        '@fields': ["f2"]})),
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+
+    with_transaction(Context3,
+                     replace_schema_document(Context3, New_Schema),
+                     _).
+
+test(compatible_key_change_same_value,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure([json{'@type':lexical_key_changed,predicate:'http://somewhere.for.now/schema#f2',subject:'http://somewhere.for.now/document/Thing_foo'}]))
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                '@key' : _{ '@type': "Lexical",
+                            '@fields': ["f1"] },
+                'f1' : "xsd:string",
+                'f2' : "xsd:string"},
+
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    with_transaction(Context2,
+                     insert_document(Context2, _{'@type': "Thing",
+                                                 'f1' : "foo",
+                                                 'f2' : "foo"},
+                                     _),
+                     _),
+
+
+    New_Schema = (Schema.put('@key', _{ '@type': "Lexical",
+                                        '@fields': ["f2"]})),
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+
+    with_transaction(Context3,
+                     replace_schema_document(Context3, New_Schema),
+                     _).
+
+test(compatible_key_change_to_random,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                '@key' : _{ '@type': "Lexical",
+                            '@fields': ["f1"] },
+                'f1' : "xsd:string",
+                'f2' : "xsd:string"},
+
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    with_transaction(Context2,
+                     insert_document(Context2, _{'@type': "Thing",
+                                                 'f1' : "foo",
+                                                 'f2' : "bar"},
+                                     _),
+                     _),
+
+
+    New_Schema = (Schema.put('@key', _{ '@type': "Random"})),
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+
+    with_transaction(Context3,
+                     replace_schema_document(Context3, New_Schema),
+                     _).
 
 :- end_tests(schema_checker).
 
