@@ -45,8 +45,12 @@ server_port(Value) :-
 worker_amount(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
 
+:- table max_transaction_retries/1.
 max_transaction_retries(Value) :-
-    getenv_default_number('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', 3, Value).
+    (   getenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', Atom_Value)
+    ->  atom_number(Atom_Value, Value)
+    ;   worker_amount(Num_Workers),
+        Value is Num_Workers * 2).
 
 :- dynamic index_template_/1.
 
