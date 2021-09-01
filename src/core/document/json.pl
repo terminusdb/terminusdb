@@ -389,10 +389,6 @@ type_context(DB,Type,Prefixes,Context) :-
         throw(error(violation_of_diamond_property(Type,P)))
     ).
 
-json_elaborate(DB,JSON,JSON_ID) :-
-    database_prefixes(DB,Context),
-    json_elaborate(DB,JSON,Context,JSON_ID).
-
 prefix_expand_schema(Node,Context,NodeEx) :-
     (   get_dict('@schema', Context, Schema),
         put_dict(_{'@base' : Schema}, Context, New_Context)
@@ -400,21 +396,23 @@ prefix_expand_schema(Node,Context,NodeEx) :-
     ;   Context = New_Context),
     prefix_expand(Node, New_Context, NodeEx).
 
-property_expand_key_value(Prop,Value,DB,Context,Path,P,V) :-
+property_expand_key_value(Prop,Value,DB,Context,P,V) :-
     get_dict(Prop, Context, Full_Expansion),
     is_dict(Full_Expansion),
     !,
     expansion_key(Prop,Full_Expansion,P,Expansion),
-    context_value_expand(DB,Context,Path,Value,Expansion,V).
-property_expand_key_value(Prop,Value,DB,Context,Path,P,V) :-
+    context_value_expand(DB,Context,Value,Expansion,V).
+property_expand_key_value(Prop,Value,DB,Context,P,V) :-
     prefix_expand_schema(Prop, Context, Prop_Ex),
     Prop \= Prop_Ex,
-    property_expand_key_value(Prop_Ex,Value,DB,Context,Path,P,V).
+    property_expand_key_value(Prop_Ex,Value,DB,Context,P,V).
 
-json_elaborate(DB,JSON,Context,JSON_ID) :-
-    json_elaborate(DB,JSON,Context,[],JSON_ID).
+json_elaborate(DB,JSON,JSON_ID) :-
+    database_prefixes(DB,Context),
+    json_elaborate(DB,JSON,Context,Elaborated),
+    json_assign_ids(DB,Context,Elaborated,JSON_ID).
 
-json_elaborate(DB,JSON,Context,Path,JSON_ID) :-
+json_elaborate(DB,JSON,Context,Result) :-
     is_dict(JSON),
     !,
     do_or_die(get_dict('@type',JSON,Type),
@@ -427,13 +425,55 @@ json_elaborate(DB,JSON,Context,Path,JSON_ID) :-
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
-    json_context_elaborate(DB,JSON,New_Context,[node(JSON_ID)|Path],Elaborated),
+    json_context_elaborate(DB,JSON,New_Context,Elaborated),
 
-    (   is_subdocument(DB, TypeEx)
-    ->  Id_Path = Path
-    ;   Id_Path = []),
+    % Insert an id. If id was part of the input document, it is
+    % prefix-expanded. If not, it is kept as a variable, to be unified
+    % with what it should be later on.
+    (   get_dict('@id', Elaborated, Id)
+    ->  prefix_expand(Id, Context, Id_Ex)
+    ;   Id_Ex = _),
 
-    json_assign_id(Elaborated,DB,Context,Id_Path,JSON_ID).
+    put_dict('@id', Elaborated, Id_Ex, Result).
+
+json_assign_ids(DB,Context,JSON) :-
+    json_assign_ids(DB,Context,JSON,[]).
+
+json_assign_ids(DB,Context,JSON,Path) :-
+    get_dict('@id',JSON,ID),
+    !,
+    (   ground(ID)
+    ->  true
+    ;   json_idgen(JSON, DB, Context, Path, ID)),
+
+    dict_pairs(JSON, _, Pairs),
+    maplist({DB, Context, ID}/[Property-Value]>>(
+                json_assign_ids(DB, Context, Value, [ID,Property|Path])
+            ),
+            Pairs).
+json_assign_ids(DB,Context,JSON,Path) :-
+    get_dict('@container',JSON, "@set"),
+    !,
+    get_dict('@value', JSON, Values),
+    maplist({DB,Context,Path}/[Value]>>(
+                json_assign_ids(DB, Context, Value, Path)
+            ),
+            Values).
+json_assign_ids(DB,Context,JSON,Path) :-
+    get_dict('@container',JSON, _),
+    !,
+    get_dict('@value', JSON, Values),
+    length(Values, Value_Len),
+    Max_Index is Value_Len - 1,
+    numlist(0, Max_Index, Numlist),
+
+    maplist({DB,Context,Path}/[Value,Index]>>(
+                New_Path=[Index|Path],
+                json_assign_ids(DB, Context, Value, New_Path)
+            ),
+            Values,
+            Numlist).
+json_assign_ids(_DB,_Context,JSON,_,JSON).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -443,8 +483,8 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
     ).
 
 
-value_expand_list([], _DB, _Path, _Context, _Elt_Type, []).
-value_expand_list([Value|Vs], DB, Path, Context, Elt_Type, [Expanded|Exs]) :-
+value_expand_list([], _DB, _Context, _Elt_Type, []).
+value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
     (   is_enum(DB,Elt_Type)
     ->  enum_value(Elt_Type,Value,Enum_Value),
         prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
@@ -459,13 +499,13 @@ value_expand_list([Value|Vs], DB, Path, Context, Elt_Type, [Expanded|Exs]) :-
                         '@type': Elt_Type}
     ;   Prepared = json{'@id' : Value,
                         '@type': "@id"}),
-    json_elaborate(DB, Prepared, Context, Path, Expanded),
-    value_expand_list(Vs, DB, Path, Context, Elt_Type, Exs).
+    json_elaborate(DB, Prepared, Context, Expanded),
+    value_expand_list(Vs, DB, Context, Elt_Type, Exs).
 
 % Unit type expansion
-context_value_expand(_,_,_Path,[],json{},[]) :-
+context_value_expand(_,_,[],json{},[]) :-
     !.
-context_value_expand(DB,Context,Path,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
     % Container type
@@ -475,21 +515,21 @@ context_value_expand(DB,Context,Path,Value,Expansion,V) :-
     ;   string(Value)
     ->  Value_List = [Value]
     ;   get_dict('@value',Value,Value_List)),
-    value_expand_list(Value_List, DB, Path, Context, Elt_Type, Expanded_List),
+    value_expand_list(Value_List, DB, Context, Elt_Type, Expanded_List),
     V = (Expansion.put(json{'@value' : Expanded_List})).
-context_value_expand(DB,Context,Path,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,V) :-
     % A possible reference
     get_dict('@type', Expansion, "@id"),
     !,
     (   is_dict(Value)
-    ->  json_elaborate(DB, Value, Context, Path, V)
+    ->  json_elaborate(DB, Value, Context, V)
     ;   is_list(Value)
     ->  Value = [Val],
-        context_value_expand(DB,Context,Path,Val,Expansion,V)
+        context_value_expand(DB,Context,Val,Expansion,V)
     ;   prefix_expand(Value,Context,Value_Ex),
         V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
-context_value_expand(_,Context,_Path,Value,_Expansion,V) :-
+context_value_expand(_,Context,Value,_Expansion,V) :-
     % An already expanded typed value
     is_dict(Value),
     get_dict('@value',Value, Elt),
@@ -497,7 +537,7 @@ context_value_expand(_,Context,_Path,Value,_Expansion,V) :-
     prefix_expand(Type,Context,Type_Ex),
     !,
     V = json{'@value' : Elt, '@type' : Type_Ex}.
-context_value_expand(DB,Context,_Path,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@type', Expansion, Type),
     is_enum(DB,Type),
     !,
@@ -505,16 +545,16 @@ context_value_expand(DB,Context,_Path,Value,Expansion,V) :-
     prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
     V = json{'@id' : Enum_Value_Ex,
              '@type' : "@id"}.
-context_value_expand(DB,Context,Path,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@type', Expansion, Type),
     \+ is_base_type(Type),
     !,
     (   is_dict(Value)
-    ->  json_elaborate(DB, Value, Context, Path, V)
+    ->  json_elaborate(DB, Value, Context, V)
     ;   prefix_expand(Value,Context,Value_Ex),
         V = json{ '@type' : "@id", '@id' : Value_Ex}
     ).
-context_value_expand(DB,Context,_Path,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,V) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
     json_elaborate(DB,New_Expansion, Context, V).
@@ -533,7 +573,7 @@ enum_value(Type,Value,ID) :-
     uri_encoded(segment, Value, Encoded_Value).
 
 
-json_context_elaborate(DB, JSON, Context, _Path, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Expanded) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
     prefix_expand_schema(Type,Context,Type_Ex),
@@ -543,14 +583,14 @@ json_context_elaborate(DB, JSON, Context, _Path, Expanded) :-
     enum_value(Type,Value,Full_ID),
     Expanded = json{ '@type' : "@id",
                      '@id' : Full_ID }.
-json_context_elaborate(DB, JSON, Context, Path, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Expanded) :-
     is_dict(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
     findall(
         P-V,
         (   member(Prop-Value,Pairs),
-            (   property_expand_key_value(Prop,Value,DB,Context,[property(Prop)|Path],P,V)
+            (   property_expand_key_value(Prop,Value,DB,Context,P,V)
             ->  true
             ;   Prop = '@type'
             ->  P = Prop,
