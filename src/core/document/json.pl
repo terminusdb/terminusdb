@@ -4855,6 +4855,7 @@ test(delete_list_element,
         delete_document(Context2, 'task3'),
         _
     ).
+ :- end_tests(json).
 
 :- begin_tests(schema_checker).
 :- use_module(core(util/test_utils)).
