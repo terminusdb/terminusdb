@@ -4856,54 +4856,6 @@ test(delete_list_element,
         _
     ).
 
-test(delete_an_array_element,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 create_db_with_empty_schema("admin", "foo"),
-                 resolve_absolute_string_descriptor("admin/foo", Desc),
-                 write_schema(schema2_0,Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         )
-     ]) :-
-    Document = _{ '@id' : "my_task_array",
-                  '@type' : "TaskArray",
-                  task_list : [
-                      _{ '@id' : "task1",
-                         '@type' : "Task",
-                         name : "Laundry"},
-                      _{ '@id' : "task2",
-                         '@type' : "Task",
-                         name : "Rubbish"},
-                      _{ '@id' : "task3",
-                         '@type' : "Task",
-                         name : "Dishes"}
-                  ]},
-
-    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
-    with_transaction(
-        Context,
-        insert_document(Context, Document, Id),
-        _
-    ),
-
-    create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
-    with_transaction(
-        Context2,
-        delete_document(Context2, 'task2'),
-        _
-    ),
-
-    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context_get),
-    get_document(Context_get, Id, Result),
-    Result = json{'@id':my_task_array,
-                  '@type':'TaskArray',
-                  task_list:[task1,null,task3]}.
-
-:- end_tests(json).
-
 :- begin_tests(schema_checker).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
