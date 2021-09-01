@@ -5244,6 +5244,75 @@ test(compatible_key_change_to_random,
                      replace_schema_document(Context3, New_Schema),
                      _).
 
+test(insert_with_empty_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 'f' : _{'@type': "List",
+                         '@class': "OtherThing"}},
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "OtherThing"},
+    with_transaction(Context1,
+                     (   insert_schema_document(Context1, Schema1),
+                         insert_schema_document(Context1, Schema2)),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': []},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+    once(ask(Desc, t(a_thing, f, rdf:nil))).
+
+test(insert_with_empty_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 'f' : _{'@type': "Array",
+                         '@class': "OtherThing"}},
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "OtherThing"},
+    with_transaction(Context1,
+                     (   insert_schema_document(Context1, Schema1),
+                         insert_schema_document(Context1, Schema2)),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': []},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+    \+ ask(Desc, t(a_thing, f, _)).
+
+
 setup_db_with_list(Desc) :-
     create_db_with_empty_schema("admin", "foo"),
     resolve_absolute_string_descriptor("admin/foo", Desc),
@@ -6096,23 +6165,21 @@ test(insert_employee, [
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country_760fca065482d4e1f64c8bc85e4a5bad525d859b',predicate:'http://s/perimeter'}]),_)
+         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country_760fca065482d4e1f64c8bc85e4a5bad525d859b',predicate:'http://s/perimeter'}]))
      ]) :-
 
     D1 = _{'@type': "Country",
-           name: "United Kingdom"},
+           name: "United Kingdom"
+          },
     D2 = _{'@type': "Address",
-           country: _{'@type': "Country",
-                      name: "United Kingdom"},
+           country: D1,
            postal_code: "A12 345",
            street: "123 Abc Street"},
     D3 = _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
            '@type': "Employee",
-           address_of: _{'@type': "Address",
-                         country: _{'@type': 'Country',
-                                    name: "United Kingdom"},
-                         postal_code: "A12 345",
-                         street: "123 Abc Street"},
+           name: "Bob",
+           age: 22,
+           address_of: D2,
            contact_number: "07777123456",
            managed_by: _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
                          '@type': "@id"}},
@@ -6121,15 +6188,13 @@ test(insert_employee, [
     with_transaction(
         Context,
         (
-            insert_document(Context, D1, ID1),
-            insert_document(Context, D2, ID2),
             insert_document(Context, D3, ID3)
         ),
         _),
 
-    get_document(Desc, ID1, _JSON1),
-    get_document(Desc, ID2, _JSON2),
-    get_document(Desc, ID3, _JSON3).
+    get_document(Desc, ID3, JSON3),
+    ID1 = (JSON3.address_of.country),
+    get_document(Desc, ID1, _JSON1).
 
 test(update_enum,[
          setup(
