@@ -151,12 +151,12 @@
   "@documentation" : {
       "@comment" : "Change the default read graph (between instance/schema).",
       "@properties" : { "query" : "The subquery with a new default graph.",
-                        "graph_filter" : "The graph filter: 'schema' or 'instance' or '*'." }
+                        "graph" : "The graph filter: 'schema' or 'instance' or '*'." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
   "query" : "Query",
-  "graph_filter" : "xsd:string" }
+  "graph" : "xsd:string" }
 
 { "@id" : "Into",
   "@type" : "Class",
