@@ -59,7 +59,7 @@ test(get_prefixes_auth_failure,
              create_db_without_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State)),
-      error(access_not_authorised('terminusdb://system/data/User_Doug',
+      error(access_not_authorised('terminusdb://system/data/User/Doug',
                                   '@schema':'Action_instance_read_access',
                                   _),
             _)
@@ -76,7 +76,7 @@ test(update_prefixes_auth_failure,
              create_db_without_schema("admin", "testdb")
             )),
       cleanup(teardown_temp_store(State)),
-      error(access_not_authorised('terminusdb://system/data/User_Doug',
+      error(access_not_authorised('terminusdb://system/data/User/Doug',
                                   '@schema':'Action_instance_write_access',
                                   _),
             _)

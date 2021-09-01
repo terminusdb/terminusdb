@@ -426,11 +426,7 @@ refute_key_obj(Validation_Object,Class,Obj,Witness) :-
     xrdf(Schema, Obj, rdf:type, Type),
     prefix_list([sys:'Lexical', sys:'Hash'], List),
     memberchk(Type, List),
-    (   is_subdocument(Validation_Object, Class)
-    ->  Witness = witness{ '@type' : subdocument_key_must_be_random_or_value_hash,
-                           class: Class,
-                           key: Obj}
-    ;   xrdf(Schema, Obj, sys:fields, List_Obj)
+    (   xrdf(Schema, Obj, sys:fields, List_Obj)
     ->  (   rdf_list(Validation_Object,List_Obj,Fields)
         ->  member(Field,Fields),
             \+ class_predicate_type(Validation_Object, Class, Field, _),
@@ -660,7 +656,7 @@ key_base(_Validation_Object, Context, Type, Base) :-
     get_dict('@schema', Context, Schema),
     put_dict(_{'@base' : Schema}, Context, New_Context),
     compress_dict_uri(Type,New_Context,Type_Compressed),
-    atomic_list_concat([Type_Compressed,'_'],Base).
+    atomic_list_concat([Type_Compressed,'/'],Base).
 
 key_descriptor(Validation_Object, Type, Descriptor) :-
     database_prefixes(Validation_Object, Prefixes),
