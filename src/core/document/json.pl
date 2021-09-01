@@ -5453,6 +5453,112 @@ test(add_extra_cell_rest,
                                   insert(Cons, rdf:rest, rdf:nil)))),
                      _).
 
+setup_db_with_array(Desc) :-
+    create_db_with_empty_schema("admin", "foo"),
+    resolve_absolute_string_descriptor("admin/foo", Desc),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "Array",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _).
+
+test(delete_array_index,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#index'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  t(Array, sys:index, Index),
+                                  delete(Array, sys:index, Index)))),
+                     _).
+
+test(delete_array_value,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#value'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  t(Array, sys:value, Value),
+                                  delete(Array, sys:value, Value)))),
+                     _).
+
+test(add_extra_array_index,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#index'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  insert(Array, sys:index, 1^^xsd:nonNegativeInteger)))),
+                     _).
+
+test(insert_extra_array_value,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#value'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  insert(Array, sys:value, "extra entry"^^xsd:string)))),
+                     _).
 
 :- end_tests(schema_checker).
 
