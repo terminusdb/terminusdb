@@ -4482,6 +4482,69 @@ test(jobs_group_by, [
                                json{'@type':'xsd:string','@value':"quux"}],
        'TheCount':json{'@type':'xsd:decimal','@value':2}}] = (Response.bindings).
 
+test(triple_graph, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{'@type': "Triple",
+              'subject': _{'@type': "NodeValue", 'variable': "A"},
+              'predicate': _{'@type': "NodeValue", 'variable': "B"},
+              'object': _{'@type': "Value", 'variable': "C"},
+              'graph': "schema"},
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    _{ 'api:status': 'api:success' } :< JSON.
+
+test(delete_triple1, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, insert(a, b, c)),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "DeleteTriple",
+              'subject' : _{'@type' : "NodeValue", 'node' : "a"},
+              'predicate' : _{'@type' : "NodeValue", 'node' : "b"},
+              'object' : _{'@type' : "Value", 'node' : "c"}},
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    JSON.deletes = 1.
+
+test(delete_triple2, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, insert(a, b, c, instance)),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "DeleteTriple",
+              'subject' : _{'@type' : "NodeValue", 'node' : "a"},
+              'predicate' : _{'@type' : "NodeValue", 'node' : "b"},
+              'object' : _{'@type' : "Value", 'node' : "c"},
+              'graph' : "instance"},
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    JSON.deletes = 1.
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data).

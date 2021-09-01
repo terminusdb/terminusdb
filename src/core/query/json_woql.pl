@@ -195,28 +195,31 @@ json_type_to_woql_ast('Or',JSON,WOQL,Path) :-
 json_type_to_woql_ast('Using',JSON,WOQL,Path) :-
     _{collection : Collection,
       query : Query } :< JSON,
-    atom_string(WC,Collection),
+    json_data_to_woql_ast(Collection,WC),
+    do_or_die(
+        (WC = Collection_String^^_, atom_string(WC_Atom, Collection_String)),
+        error(woql_syntax_error(JSON,
+                                [collection|Path],
+                                Collection), _)),
     json_to_woql_ast(Query,WQ,[query
                                |Path]),
-    WOQL = using(WC,WQ).
+    WOQL = using(WC_Atom,WQ).
 json_type_to_woql_ast('From',JSON,WOQL,Path) :-
-    _{graph_filter : Graph_Filter,
+    _{graph : Graph,
       query : Query } :< JSON,
-    json_to_woql_ast(Graph_Filter,WG,[graph_filter
-                                      |Path]),
+    json_data_to_woql_ast(Graph,WG),
     json_to_woql_ast(Query,WQ,[query
                                |Path]),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                [graph_filter|Path],
-                                Graph_Filter), _)),
+                                [graph|Path],
+                                Graph), _)),
     WOQL = from(Graph_String,WQ).
 json_type_to_woql_ast('Into',JSON,WOQL,Path) :-
     _{graph : Graph,
       query : Query } :< JSON,
-    json_to_woql_ast(Graph,WG,[graph
-                               |Path]),
+    json_data_to_woql_ast(Graph,WG),
     json_to_woql_ast(Query,WQ,[query
                                |Path]),
     do_or_die(
@@ -229,7 +232,7 @@ json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object,
-      graph_filter : Graph
+      graph : Graph
      } :< JSON,
     json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
@@ -237,13 +240,12 @@ json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
                                     |Path]),
     json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,[graph
-                               |Path]),
+    json_data_to_woql_ast(Graph,WG),
 
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                [graph_filter|Path],
+                                [graph|Path],
                                 Graph), _)),
 
     WOQL = t(WQA,WQB,WQC,Graph_String).
@@ -374,8 +376,7 @@ json_type_to_woql_ast('AddQuad',JSON,WOQL,Path) :-
                                     |Path]),
     json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,[graph
-                               |Path]),
+    json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
@@ -386,7 +387,7 @@ json_type_to_woql_ast('AddedQuad',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object,
-      graph_filter : Graph
+      graph : Graph
      } :< JSON,
     json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
@@ -394,19 +395,18 @@ json_type_to_woql_ast('AddedQuad',JSON,WOQL,Path) :-
                                     |Path]),
     json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,[graph_filter
-                               |Path]),
+    json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                [graph_filter|Path],
+                                [graph|Path],
                                 Graph), _)),
     WOQL = addition(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('RemovedQuad',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object,
-      graph_filter : Graph
+      graph : Graph
      } :< JSON,
     json_to_woql_ast(Subject,WQA,[subject
                                   |Path]),
@@ -414,14 +414,32 @@ json_type_to_woql_ast('RemovedQuad',JSON,WOQL,Path) :-
                                     |Path]),
     json_to_woql_ast(Object,WQC,[object
                                  |Path]),
-    json_to_woql_ast(Graph,WG,[graph_filter
-                               |Path]),
+    json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
         error(woql_syntax_error(JSON,
-                                [graph_filter|Path],
+                                [graph|Path],
                                 Graph), _)),
     WOQL = removal(WQA,WQB,WQC,Graph_String).
+json_type_to_woql_ast('DeleteTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph : Graph
+     } :< JSON,
+    json_to_woql_ast(Subject,WQA,[subject
+                                  |Path]),
+    json_to_woql_ast(Predicate,WQB,[predicate
+                                    |Path]),
+    json_to_woql_ast(Object,WQC,[object
+                                 |Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = delete(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('DeleteTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
@@ -434,26 +452,6 @@ json_type_to_woql_ast('DeleteTriple',JSON,WOQL,Path) :-
     json_to_woql_ast(Object,WQC,[object
                                  |Path]),
     WOQL = delete(WQA,WQB,WQC).
-json_type_to_woql_ast('DeleteQuad',JSON,WOQL,Path) :-
-    _{subject : Subject,
-      predicate : Predicate,
-      object : Object,
-      graph : Graph
-     } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
-    json_to_woql_ast(Graph,WG,[graph
-                               |Path]),
-    do_or_die(
-        (WG = Graph_String^^_),
-        error(woql_syntax_error(JSON,
-                                [graph|Path],
-                                Graph), _)),
-    WOQL = delete(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('When',JSON,WOQL,Path) :-
     _{query : Q,
       consequent : U
@@ -1065,11 +1063,6 @@ woql_element_error_message(
     Element,
     Message) :-
     format(string(Message),'Poorly formed collection descriptor: ~q',Element).
-woql_element_error_message(
-    graph_filter,
-    Element,
-    Message) :-
-    format(string(Message),'Poorly formed graph filter: ~q',Element).
 woql_element_error_message(
     graph,
     Element,
