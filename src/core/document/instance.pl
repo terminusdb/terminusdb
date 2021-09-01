@@ -1,6 +1,7 @@
 :- module('document/instance', [
               refute_instance/2,
               refute_instance_schema/2,
+              refute_existing_object_keys/3,
               is_instance/3,
               is_instance2/3,
               instance_of/3
@@ -262,22 +263,33 @@ subject_predicate_updated(Validation_Object, Subject,Predicate) :-
 
 refute_key(Validation_Object, Subject,Predicate,Class,Witness) :-
     key_descriptor(Validation_Object, Class,Desc),
-    refute_key_(Desc,Validation_Object,Subject,Predicate,Witness).
-
-refute_key_(lexical(_,Fields),Validation_Object,Subject,Predicate,Witness) :-
     subject_predicate_updated(Validation_Object,Subject,Predicate),
+    refute_key_(Desc,Subject,Predicate,Witness).
+
+refute_key_(lexical(_,Fields),Subject,Predicate,Witness) :-
     member(Predicate,Fields),
     Witness = json{ '@type' : lexical_key_changed,
-                    subject: Subject }.
-refute_key_(value_hash(_),Validation_Object,Subject,Predicate,Witness) :-
-    subject_predicate_updated(Validation_Object,Subject,Predicate),
+                    subject: Subject,
+                    predicate: Predicate}.
+refute_key_(value_hash(_),Subject,Predicate,Witness) :-
     Witness = json{ '@type' : value_key_changed,
-                    subject: Subject }.
-refute_key_(hash(_,Fields),Validation_Object,Subject,Predicate,Witness) :-
-    subject_predicate_updated(Validation_Object,Subject,Predicate),
+                    subject: Subject,
+                    predicate: Predicate}.
+refute_key_(hash(_,Fields),Subject,Predicate,Witness) :-
     member(Predicate,Fields),
     Witness = json{ '@type' : hash_key_changed,
-                    subject: Subject }.
+                    subject: Subject,
+                    predicate: Predicate}.
+
+refute_existing_object_keys(Validation_Object,Class,Witness) :-
+    key_descriptor(Validation_Object, Class,Desc),
+    database_instance(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    distinct(Subject-Predicate,
+             (   xrdf(Instance, Subject, Rdf_Type, Class),
+                 xrdf(Instance, Subject, Predicate, _))),
+    refute_key_(Desc,Subject,Predicate,Witness).
+
 
 refute_subject_deletion(Validation_Object, Subject,Witness) :-
     subject_deleted(Validation_Object, Subject),

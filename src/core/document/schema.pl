@@ -36,6 +36,7 @@
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
 :- use_module(json). % This feels very circular.
+:- use_module(instance). % This is most definitely circular.
 
 is_unit(Class) :-
     global_prefix_expand(sys:'Unit', Class).
@@ -409,8 +410,10 @@ is_key(Type) :-
 
 refute_class_key(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
-    xrdf(Schema, Class, sys:key, Key_Obj),
-    refute_key_obj(Validation_Object,Class,Key_Obj, Witness).
+    xrdf_added(Schema, Class, sys:key, Key_Obj),
+    (   refute_key_obj(Validation_Object,Class,Key_Obj, Witness)
+    ->  true
+    ;   refute_existing_object_keys(Validation_Object,Class,Witness)).
 
 refute_key_obj(Validation_Object,Class,Obj,Witness) :-
     database_schema(Validation_Object,Schema),
