@@ -5292,6 +5292,168 @@ test(compatible_key_change_to_random,
                      replace_schema_document(Context3, New_Schema),
                      _).
 
+test(delete_cell_first,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "List",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+    with_transaction(Context3,
+                     once(ask(Context3,
+                              (   t(a_thing, f, Cons),
+                                  t(Cons, rdf:first, Val),
+                                  delete(Cons, rdf:first, Val)))),
+                     _).
+
+test(add_extra_cell_first,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "List",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+    with_transaction(Context3,
+                     once(ask(Context3,
+                              (   t(a_thing, f, Cons),
+                                  insert(Cons, rdf:first, "second value"^^xsd:string)))),
+                     _).
+
+test(delete_cell_rest,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "List",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+    with_transaction(Context3,
+                     once(ask(Context3,
+                              (   t(a_thing, f, Cons),
+                                  delete(Cons, rdf:rest, rdf:nil)))),
+                     _).
+
+test(add_extra_cell_rest,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "List",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello", "hi"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+    with_transaction(Context3,
+                     once(ask(Context3,
+                              (   t(a_thing, f, Cons),
+                                  insert(Cons, rdf:rest, rdf:nil)))),
+                     _).
+
+
 :- end_tests(schema_checker).
 
 

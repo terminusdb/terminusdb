@@ -150,11 +150,10 @@ refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
 refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
     fail.
-refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
+refute_cardinality_(list,Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,_,1),
-    Witness = witness{ '@type': instance_not_cardinality_one,
+    Witness = witness{ '@type': list_predicate_not_cardinality_one,
                        instance: S,
-                       class: C,
                        predicate: P
                      }.
 refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
@@ -199,6 +198,10 @@ range_term_list(Validation_Object, S, P, L) :-
             ),
             L).
 
+refute_cardinality(Validation_Object,S,P,C,Witness) :-
+    is_list_type(C),
+    !,
+    refute_cardinality_(list, Validation_Object, S, P, Witness).
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
     !,
