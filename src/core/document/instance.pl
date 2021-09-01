@@ -148,13 +148,29 @@ refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
     fail.
 refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
-    % no bad cardinality possible
+    % a property whose value is an array
+    % No bad cardinality possible - absence means empty array
     fail.
+refute_cardinality_(array,Validation_Object,S,P,Witness) :-
+    % a property inside an array element
+    \+ card_count(Validation_Object,S,P,_,1),
+    Witness = witness{ '@type': array_predicate_not_cardinality_one,
+                       instance: S,
+                       predicate: P
+                     }.
 refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
+    % a property whose value is a list
     \+ card_count(Validation_Object,S,P,_,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: S,
                        class: C,
+                       predicate: P
+                     }.
+refute_cardinality_(list,Validation_Object,S,P,Witness) :-
+    % a property inside a list cell
+    \+ card_count(Validation_Object,S,P,_,1),
+    Witness = witness{ '@type': list_predicate_not_cardinality_one,
+                       instance: S,
                        predicate: P
                      }.
 refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
@@ -199,6 +215,14 @@ range_term_list(Validation_Object, S, P, L) :-
             ),
             L).
 
+refute_cardinality(Validation_Object,S,P,C,Witness) :-
+    is_array_type(C),
+    !,
+    refute_cardinality_(array, Validation_Object, S, P, Witness).
+refute_cardinality(Validation_Object,S,P,C,Witness) :-
+    is_list_type(C),
+    !,
+    refute_cardinality_(list, Validation_Object, S, P, Witness).
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
     !,

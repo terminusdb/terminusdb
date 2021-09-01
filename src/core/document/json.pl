@@ -4855,53 +4855,6 @@ test(delete_list_element,
         delete_document(Context2, 'task3'),
         _
     ).
-
-test(delete_an_array_element,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 create_db_with_empty_schema("admin", "foo"),
-                 resolve_absolute_string_descriptor("admin/foo", Desc),
-                 write_schema(schema2_0,Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         )
-     ]) :-
-    Document = _{ '@id' : "my_task_array",
-                  '@type' : "TaskArray",
-                  task_list : [
-                      _{ '@id' : "task1",
-                         '@type' : "Task",
-                         name : "Laundry"},
-                      _{ '@id' : "task2",
-                         '@type' : "Task",
-                         name : "Rubbish"},
-                      _{ '@id' : "task3",
-                         '@type' : "Task",
-                         name : "Dishes"}
-                  ]},
-
-    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
-    with_transaction(
-        Context,
-        insert_document(Context, Document, Id),
-        _
-    ),
-
-    create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
-    with_transaction(
-        Context2,
-        delete_document(Context2, 'task2'),
-        _
-    ),
-
-    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context_get),
-    get_document(Context_get, Id, Result),
-    Result = json{'@id':my_task_array,
-                  '@type':'TaskArray',
-                  task_list:[task1,null,task3]}.
-
 :- end_tests(json).
 
 :- begin_tests(schema_checker).
@@ -5290,6 +5243,308 @@ test(compatible_key_change_to_random,
 
     with_transaction(Context3,
                      replace_schema_document(Context3, New_Schema),
+                     _).
+
+test(insert_with_empty_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 'f' : _{'@type': "List",
+                         '@class': "OtherThing"}},
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "OtherThing"},
+    with_transaction(Context1,
+                     (   insert_schema_document(Context1, Schema1),
+                         insert_schema_document(Context1, Schema2)),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': []},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+    once(ask(Desc, t(a_thing, f, rdf:nil))).
+
+test(insert_with_empty_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 'f' : _{'@type': "Array",
+                         '@class': "OtherThing"}},
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "OtherThing"},
+    with_transaction(Context1,
+                     (   insert_schema_document(Context1, Schema1),
+                         insert_schema_document(Context1, Schema2)),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': []},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+    \+ ask(Desc, t(a_thing, f, _)).
+
+
+setup_db_with_list(Desc) :-
+    create_db_with_empty_schema("admin", "foo"),
+    resolve_absolute_string_descriptor("admin/foo", Desc),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "List",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _).
+
+
+test(delete_cell_first,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_list(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Cons),
+                                  t(Cons, rdf:first, Val),
+                                  delete(Cons, rdf:first, Val)))),
+                     _).
+
+test(add_extra_cell_first,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_list(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Cons),
+                                  insert(Cons, rdf:first, "second value"^^xsd:string)))),
+                     _).
+
+test(delete_cell_rest,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_list(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Cons),
+                                  delete(Cons, rdf:rest, rdf:nil)))),
+                     _).
+
+test(add_extra_cell_rest,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':list_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "List",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello", "hi"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _),
+
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
+    with_transaction(Context3,
+                     once(ask(Context3,
+                              (   t(a_thing, f, Cons),
+                                  insert(Cons, rdf:rest, rdf:nil)))),
+                     _).
+
+setup_db_with_array(Desc) :-
+    create_db_with_empty_schema("admin", "foo"),
+    resolve_absolute_string_descriptor("admin/foo", Desc),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@id' : "Thing",
+                'f' : _{'@type': "Array",
+                        '@class': "xsd:string"}},
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
+    Document = _{ '@type': "Thing",
+                  '@id': "a_thing",
+                  'f': ["hello"]},
+    with_transaction(Context2,
+                     insert_document(Context2, Document, _),
+                     _).
+
+test(delete_array_index,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#index'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  t(Array, sys:index, Index),
+                                  delete(Array, sys:index, Index)))),
+                     _).
+
+test(delete_array_value,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#value'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  t(Array, sys:value, Value),
+                                  delete(Array, sys:value, Value)))),
+                     _).
+
+test(add_extra_array_index,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#index'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  insert(Array, sys:index, 1^^xsd:nonNegativeInteger)))),
+                     _).
+
+test(insert_extra_array_value,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 setup_db_with_array(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{
+                        '@type':array_predicate_not_cardinality_one,
+                        instance:_,predicate:'http://terminusdb.com/schema/sys#value'}]))
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     once(ask(Context,
+                              (   t(a_thing, f, Array),
+                                  insert(Array, sys:value, "extra entry"^^xsd:string)))),
                      _).
 
 :- end_tests(schema_checker).
@@ -5911,23 +6166,21 @@ test(insert_employee, [
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country_760fca065482d4e1f64c8bc85e4a5bad525d859b',predicate:'http://s/perimeter'}]),_)
+         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country_760fca065482d4e1f64c8bc85e4a5bad525d859b',predicate:'http://s/perimeter'}]))
      ]) :-
 
     D1 = _{'@type': "Country",
-           name: "United Kingdom"},
+           name: "United Kingdom"
+          },
     D2 = _{'@type': "Address",
-           country: _{'@type': "Country",
-                      name: "United Kingdom"},
+           country: D1,
            postal_code: "A12 345",
            street: "123 Abc Street"},
     D3 = _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
            '@type': "Employee",
-           address_of: _{'@type': "Address",
-                         country: _{'@type': 'Country',
-                                    name: "United Kingdom"},
-                         postal_code: "A12 345",
-                         street: "123 Abc Street"},
+           name: "Bob",
+           age: 22,
+           address_of: D2,
            contact_number: "07777123456",
            managed_by: _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
                          '@type': "@id"}},
@@ -5936,15 +6189,13 @@ test(insert_employee, [
     with_transaction(
         Context,
         (
-            insert_document(Context, D1, ID1),
-            insert_document(Context, D2, ID2),
             insert_document(Context, D3, ID3)
         ),
         _),
 
-    get_document(Desc, ID1, _JSON1),
-    get_document(Desc, ID2, _JSON2),
-    get_document(Desc, ID3, _JSON3).
+    get_document(Desc, ID3, JSON3),
+    ID1 = (JSON3.address_of.country),
+    get_document(Desc, ID1, _JSON1).
 
 test(update_enum,[
          setup(

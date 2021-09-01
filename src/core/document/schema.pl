@@ -310,9 +310,7 @@ is_built_in(P) :-
             sys:inherits,
             sys:key,
             sys:base,
-            sys:value,
             sys:class,
-            sys:index,
             sys:abstract,
             sys:subdocument
         ],
