@@ -261,6 +261,29 @@ test(db_create, [
                    authorization(basic(admin, Key))]),
     _{'api:status' : "api:success"} :< In.
 
+create_db_bad_prefixes(URI, Prefix_Name) :-
+    dict_create(Prefixes, _, [Prefix_Name-"x"]),
+    Doc = _{prefixes : Prefixes, comment : "c", label : "l"},
+    admin_pass(Key),
+    http_post(URI, json(Doc), JSON,
+              [json_object(dict),
+               authorization(basic(admin, Key)),
+               status_code(Code)]),
+    400 = Code,
+    _{'@type' : "api:DbCreateErrorResponse", 'api:error' : Error} :< JSON,
+    atom_string(Prefix_Name, Prefix_Name_String),
+    _{'@type' : "api:InvalidPrefix",
+      'api:prefix_name' : Prefix_Name_String,
+      'api:prefix_value' : "x"} :< Error.
+
+test(db_create_bad_prefixes, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
+    forall(member(Prefix_Name, ['@base', '@schema', other]),
+           create_db_bad_prefixes(URI, Prefix_Name)).
+
 test(db_create_bad_api_document, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))

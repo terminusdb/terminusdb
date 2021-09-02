@@ -36,11 +36,21 @@ api_error_jsonld(create_db,error(database_in_inconsistent_state,_), JSON) :-
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
              'api:message' : 'Database is in an inconsistent state. Partial creation has taken place, but server could not finalize the database.'}.
-api_error_jsonld(create_db,error(no_base_prefix_specified,_), JSON) :-
+api_error_jsonld(create_db, error(missing_required_prefix(Prefix_Name), _), JSON) :-
+    format(string(Msg), "The database requires the following prefix: ~w", [Prefix_Name]),
     JSON = _{'@type' : 'api:DbCreateErrorResponse',
              'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:NoBasePrefixSpecified'},
-             'api:message' : 'The database requires a base prefix ("@base")'}.
+             'api:error' : _{'@type' : 'api:MissingRequiredPrefix',
+                             'api:prefix_name' : Prefix_Name},
+             'api:message' : Msg}.
+api_error_jsonld(create_db, error(invalid_uri_prefix(Prefix_Name, Prefix_Value), _), JSON) :-
+    format(string(Msg), "The value for the prefix ~q (~w) is not a valid URI prefix.", [Prefix_Name, Prefix_Value]),
+    JSON = _{'@type' : 'api:DbCreateErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:InvalidPrefix',
+                             'api:prefix_name' : Prefix_Name,
+                             'api:prefix_value' : Prefix_Value},
+             'api:message' : Msg}.
 %% DB Delete
 api_error_jsonld(delete_db,error(unknown_organization(Organization_Name),_), JSON) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
