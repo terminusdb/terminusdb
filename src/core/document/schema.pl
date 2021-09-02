@@ -668,6 +668,8 @@ key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
     xrdf(Schema, Type, sys:key, Obj),
     key_descriptor_(Validation_Object,Prefixes,Type,Obj,Descriptor),
     !.
+key_descriptor(Validation_Object, Prefixes, Type, base(Base)) :-
+    key_base(Validation_Object,Prefixes,Type,Base).
 
 key_descriptor_(Validation_Object, Prefixes, Type, Obj, lexical(Base,Fields)) :-
     database_schema(Validation_Object, Schema),

@@ -1,9 +1,9 @@
-{ "@id" : "admin_organization",
+{ "@id" : "Organization/admin",
   "@type" : "Organization",
   "name" : "admin",
-  "database" : [ "system" ] }
+  "database" : [ "SystemDatabase/system" ] }
 
-{ "@id" : "admin_role",
+{ "@id" : "Role/admin",
   "@type" : "Role",
   "name" : "Admin Role",
   "action" : [ "create_database",
@@ -25,17 +25,17 @@
                "manage_capabilities"
              ]}
 
-{ "@id" : "server_access",
+{ "@id" : "Capability/server_access",
   "@type" : "Capability",
-  "scope" : "admin_organization",
-  "role" : "admin_role" }
+  "scope" : "Organization/admin",
+  "role" : "Role/admin" }
 
-{ "@id" : "anonymous",
+{ "@id" : "User/anonymous",
   "@type" : "User",
-  "name" : "anyonymous",
+  "name" : "anonymous",
   "capability" : [] }
 
-{ "@id" : "consumer_role",
+{ "@id" : "Role/consumer",
   "@type" : "Role",
   "name" : "Consumer Role",
   "action" : [ "class_frame",
@@ -43,12 +43,12 @@
                "schema_read_access"
              ]}
 
-{ "@id" : "admin",
+{ "@id" : "User/admin",
   "@type" : "User",
   "name" : "admin",
   "key_hash" : "~s",
-  "capability" : [ "server_access" ] }
+  "capability" : [ "Capability/server_access" ] }
 
-{ "@id" : "system",
+{ "@id" : "SystemDatabase/system",
   "@type" : "SystemDatabase",
   "name" : "_system"}

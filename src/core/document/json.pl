@@ -266,10 +266,23 @@ json_idgen(JSON,DB,Context,Path,ID_Ex) :-
     ;   Descriptor = value_hash(Base)
     ->  get_all_path_values(JSON,Path_Values),
         idgen_path_values_hash(Base,Path_Values,ID)
-    ;   Descriptor = random(Base)
-    ->  idgen_random(Base,ID)
+    ;   (   Descriptor = random(Base)
+        ;   Descriptor = base(Base))
+    ->  (   get_dict('@id', JSON, Submitted_ID),
+            ground(Submitted_ID)
+        ->  do_or_die(idgen_check_base(Submitted_ID, Base, Context),
+                      error(submitted_id_does_not_match_base(Submitted_ID,
+                                                             Base),
+                            _)),
+            ID = Submitted_ID
+        ;   idgen_random(Base,ID))
     ),
     prefix_expand(ID, Context, ID_Ex).
+
+idgen_check_base(Submitted_ID, Base, Context) :-
+    prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
+    prefix_expand(Base, Context, Base_Ex),
+    atom_concat(Base_Ex, _, Submitted_ID_Ex).
 
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
@@ -459,6 +472,9 @@ json_assign_ids(DB,Context,JSON) :-
 json_assign_ids(_DB,_Context,JSON,_Path) :-
     \+ is_dict(JSON),
     !.
+json_assign_ids(_DB,_Context,JSON,_Path) :-
+    get_dict('@type',JSON,"@id"),
+    !.
 json_assign_ids(DB,Context,JSON,Path) :-
     get_dict('@id',JSON,ID),
     !,
@@ -468,9 +484,15 @@ json_assign_ids(DB,Context,JSON,Path) :-
     ->  Next_Path = Path
     ;   Next_Path = []),
 
+    json_idgen(JSON, DB, Context, Next_Path, Generated_ID),
     (   ground(ID)
-    ->  true
-    ;   json_idgen(JSON, DB, Context, Next_Path, ID)),
+    ->  prefix_expand(ID, Context, ID_Ex),
+        do_or_die(ID_Ex = Generated_ID,
+                  error(submitted_id_does_not_match_generated_id(
+                            ID_Ex,
+                            Generated_ID),
+                        _))
+    ;   ID = Generated_ID),
 
     dict_pairs(JSON, _, Pairs),
     maplist({DB, Context, ID, Next_Path}/[Property-Value]>>(
@@ -634,20 +656,6 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
         ),
         PVs),
     dict_pairs(Expanded,json,PVs).
-
-json_assign_id(JSON,DB,Context,Path,JSON_ID) :-
-    % Set up the ID
-    (   get_dict('@id',JSON,ID)
-    ->  prefix_expand(ID, Context, ID_Ex),
-        JSON_ID = (JSON.put(json{'@id' : ID_Ex}))
-    ;   get_dict('@container', JSON, _)
-    ->  JSON_ID = JSON
-    ;   get_dict('@value', JSON, _)
-    ->  JSON_ID = JSON
-    ;   json_idgen(JSON,DB,Context,Path,ID)
-    ->  JSON_ID = (JSON.put(json{'@id' : ID}))
-    ;   throw(error(id_could_not_be_elaborated(JSON), _))
-    ).
 
 json_prefix_access(JSON,Edge,Type) :-
     global_prefix_expand(Edge,Expanded),
@@ -6971,3 +6979,167 @@ test(subdocument_update,
                                                  subscription_id:"932438238429384ASBJDA"}}.
 
 :- end_tests(javascript_client_bugs).
+
+:- begin_tests(document_id_generation).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+test_generated_document_id(Desc, Schema, Instance, ID) :-
+    Commit_Info = commit_info{author:"test",message:"test"},
+    create_context(Desc, Commit_Info, Context1),
+    with_transaction(Context1,
+                     insert_schema_document(
+                         Context1,
+                         Schema),
+                     _),
+
+    create_context(Desc, Commit_Info, Context2),
+    with_transaction(Context2,
+                     insert_document(
+                         Context2,
+                         Instance,
+                         ID_Ex),
+                     _),
+
+    database_prefixes(Desc, Prefixes),
+    compress_dict_uri(ID_Ex, Prefixes, Found_ID),
+
+    do_or_die(ID = Found_ID,
+              error(comparison_error(expected(ID), found(Found_ID)))).
+
+test(document_lexical,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Lexical",
+                     '@fields': ["foo","bar"]},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        'Thing/hi_0.5').
+
+test(document_hash,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Hash",
+                     '@fields': ["foo","bar"]},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        '1f28f0ae013c9219470fdbb09c043393d4014c4e').
+
+test(document_random,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Random"},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        ID),
+
+    atom_concat('Thing/', _, ID).
+
+test(document_valuehash,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "ValueHash"},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        'Thing/1293a81c0c3fd8bafa7ef1a33cbf385dc375ec20').
+
+test(document_invalid_id_submitted,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Lexical",
+                     '@fields': ["foo", "bar"]},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           '@id' : 'ThisIsWrong',
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        ID),
+
+    database_prefixes(Desc, Prefixes),
+    prefix_expand_schema('Thing', Prefixes, Thing_Ex),
+    open_descriptor(Desc, DB),
+    do_or_die(key_descriptor(DB, Thing_Ex, Key),
+              error(wtf)),
+    nl,write_term(Key,[]),nl,
+
+    get_document(Desc, ID, JSON),
+    nl,write_term(JSON, []),nl,
+
+
+    writeq(ID),nl.
+
+
+:- end_tests(document_id_generation).

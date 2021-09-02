@@ -76,7 +76,7 @@ make_db_public(System_Context,DB_Uri) :-
         _{
             '@type' : 'Capability',
             'scope' : DB_Uri,
-            'role' : [ 'consumer_role' ]
+            'role' : [ 'Role/consumer' ]
         },
         Capability_Uri),
 

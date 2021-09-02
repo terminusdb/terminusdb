@@ -306,6 +306,7 @@ refute_key_(hash(_,Fields),Subject,Predicate,Witness) :-
                     predicate: Predicate}.
 
 refute_existing_object_keys(Validation_Object,Class,Witness) :-
+    % this is just wrong
     key_descriptor(Validation_Object, Class,Desc),
     database_instance(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
