@@ -3615,7 +3615,7 @@ test(using_insert_default_graph, [
 
     create_context(system_descriptor{},Commit_Info,System_Context),
     % Need to get a "no schema"...
-    branch_create(System_Context,admin,"admin/test/local/branch/new",
+    branch_create(System_Context,'User/admin',"admin/test/local/branch/new",
                   some("admin/test"),_),
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
