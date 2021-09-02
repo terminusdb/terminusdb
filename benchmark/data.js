@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1630579256505,
+  "lastUpdate": 1630579653332,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -6575,6 +6575,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 47.886,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "502e936702a346327ab818ec7ed9166d93f4e1d4",
+          "message": "Speed up CI (#504)\n\n* Move ubuntu install to nightly\r\n* Docker test for all push, pull_request, workflow_dispatch events\r\n* Skip test for pull_request duplicates of push events\r\n* Deploy only for push events with certain refs\r\n* Other cleanups",
+          "timestamp": "2021-09-02T12:43:42+02:00",
+          "tree_id": "28d7af6fb41b15c1c1161f71d6e896561e136963",
+          "url": "https://github.com/terminusdb/terminusdb/commit/502e936702a346327ab818ec7ed9166d93f4e1d4"
+        },
+        "date": 1630579652130,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 139.066,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 416.358,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 431.251,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 221.96,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 286.397,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 119.071,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 45.835,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 43.283,
             "unit": "ms"
           }
         ]
