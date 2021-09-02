@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1630579653332,
+  "lastUpdate": 1630580928863,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -6639,6 +6639,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 43.283,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "committer": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "distinct": true,
+          "id": "441b426a8a08bfe28198717123bed20a6ce3be7b",
+          "message": "Fix deploy job in CI workflow",
+          "timestamp": "2021-09-02T13:05:33+02:00",
+          "tree_id": "eed4dabdfc87aed5b36657e49952b58d715b3775",
+          "url": "https://github.com/terminusdb/terminusdb/commit/441b426a8a08bfe28198717123bed20a6ce3be7b"
+        },
+        "date": 1630580927834,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 126.831,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 378.154,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 394.531,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 228.166,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 239.738,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 116.26,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 49.092,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 42.232,
             "unit": "ms"
           }
         ]
