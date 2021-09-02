@@ -938,10 +938,10 @@ find_resources(when(P,Q), Collection, DRG, DWG, Read, Write) :-
     find_resources(Q, Collection, DRG, DWG, Read_Q, Write_Q),
     append(Read_P, Read_Q, Read),
     append(Write_P, Write_Q, Write).
-find_resources(using(Collection_String,P), _Collection, DRG, _DWG, Read, Write) :-
-    resolve_absolute_string_descriptor(Collection_String, Collection),
+find_resources(using(Collection_String,P), Collection, DRG, _DWG, Read, Write) :-
+    resolve_relative_string_descriptor(Collection, Collection_String, Descriptor),
     % NOTE: Don't we need the collection descriptor default filter?
-    collection_descriptor_default_write_graph(Collection, DWG),
+    collection_descriptor_default_write_graph(Descriptor, DWG),
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(size(Path,_), _, DRG_In, _, [resource(Collection,DRG)], []) :-
     (   resolve_absolute_string_descriptor_and_graph(Path, Collection, DRG)
@@ -4570,6 +4570,56 @@ test(less_than, [
                     false,
                     JSON),
     [_] = (JSON.bindings).
+
+
+test(using_resource_works, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query_Atom = '{ "@type": "Using", "collection": "_commits",
+    "query": { "@type": "Limit", "limit": 10, "query": { "@type":
+    "Select", "variables": [ "Parent ID", "Commit ID", "Time",
+    "Author", "Branch ID", "Message" ], "query": { "@type": "And",
+    "and": [ { "@type": "Triple", "subject": { "@type": "NodeValue",
+    "variable": "Branch" }, "predicate": { "@type": "NodeValue",
+    "node": "name" }, "object": { "@type": "Value", "data": { "@type":
+    "xsd:string", "@value": "main" } } }, { "@type": "Triple",
+    "subject": { "@type": "NodeValue", "variable": "Branch" },
+    "predicate": { "@type": "NodeValue", "node": "head" }, "object": {
+    "@type": "Value", "variable": "Active Commit ID" } }, { "@type":
+    "Path", "subject": { "@type": "NodeValue", "variable": "Active
+    Commit ID" }, "pattern": { "@type": "PathStar", "star": { "@type":
+    "PathPredicate", "predicate": "parent" } }, "object": { "@type":
+    "Value", "variable": "Parent" }, "path": { "@type": "Value",
+    "variable": "Path" } }, { "@type": "Triple", "subject": { "@type":
+    "NodeValue", "variable": "Parent" }, "predicate": { "@type":
+    "NodeValue", "node": "timestamp" }, "object": { "@type": "Value",
+    "variable": "Time" } }, { "@type": "Triple", "subject": { "@type":
+    "NodeValue", "variable": "Parent" }, "predicate": { "@type":
+    "NodeValue", "node": "identifier" }, "object": { "@type": "Value",
+    "variable": "Commit ID" } }, { "@type": "Triple", "subject": {
+    "@type": "NodeValue", "variable": "Parent" }, "predicate": {
+    "@type": "NodeValue", "node": "author" }, "object": { "@type":
+    "Value", "variable": "Author" } }, { "@type": "Triple", "subject":
+    { "@type": "NodeValue", "variable": "Parent" }, "predicate": {
+    "@type": "NodeValue", "node": "message" }, "object": { "@type":
+    "Value", "variable": "Message" } } ] } } } }',
+
+    atom_json_dict(Query_Atom, Query,[]),
+
+    Commit_Info = commit_info{author: "TERMINUSQA", message: "less than"},
+
+    woql_query_json(system_descriptor{},
+                    Auth,
+                    some("TERMINUSQA/test"),
+                    Query,
+                    Commit_Info,
+                    [],
+                    false,
+                    _JSON).
 
 :- end_tests(woql).
 
