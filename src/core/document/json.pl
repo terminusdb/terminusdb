@@ -5438,13 +5438,13 @@ test(insert_with_empty_list,
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
     Document = _{ '@type': "Thing",
-                  '@id': "a_thing",
+                  '@id': "Thing/a_thing",
                   'f': []},
     with_transaction(Context2,
                      insert_document(Context2, Document, _),
                      _),
 
-    once(ask(Desc, t(a_thing, f, rdf:nil))).
+    once(ask(Desc, t('Thing/a_thing', f, rdf:nil))).
 
 test(insert_with_empty_array,
      [
@@ -5472,13 +5472,13 @@ test(insert_with_empty_array,
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
     Document = _{ '@type': "Thing",
-                  '@id': "a_thing",
+                  '@id': "Thing/a_thing",
                   'f': []},
     with_transaction(Context2,
                      insert_document(Context2, Document, _),
                      _),
 
-    \+ ask(Desc, t(a_thing, f, _)).
+    \+ ask(Desc, t('Thing/a_thing', f, _)).
 
 
 setup_db_with_list(Desc) :-
@@ -5496,7 +5496,7 @@ setup_db_with_list(Desc) :-
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
     Document = _{ '@type': "Thing",
-                  '@id': "a_thing",
+                  '@id': "Thing/a_thing",
                   'f': ["hello"]},
     with_transaction(Context2,
                      insert_document(Context2, Document, _),
@@ -5520,7 +5520,7 @@ test(delete_cell_first,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Cons),
+                              (   t('Thing/a_thing', f, Cons),
                                   t(Cons, rdf:first, Val),
                                   delete(Cons, rdf:first, Val)))),
                      _).
@@ -5542,7 +5542,7 @@ test(add_extra_cell_first,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Cons),
+                              (   t('Thing/a_thing', f, Cons),
                                   insert(Cons, rdf:first, "second value"^^xsd:string)))),
                      _).
 
@@ -5563,7 +5563,7 @@ test(delete_cell_rest,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Cons),
+                              (   t('Thing/a_thing', f, Cons),
                                   delete(Cons, rdf:rest, rdf:nil)))),
                      _).
 
@@ -5593,7 +5593,7 @@ test(add_extra_cell_rest,
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
     Document = _{ '@type': "Thing",
-                  '@id': "a_thing",
+                  '@id': "Thing/a_thing",
                   'f': ["hello", "hi"]},
     with_transaction(Context2,
                      insert_document(Context2, Document, _),
@@ -5603,7 +5603,7 @@ test(add_extra_cell_rest,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context3),
     with_transaction(Context3,
                      once(ask(Context3,
-                              (   t(a_thing, f, Cons),
+                              (   t('Thing/a_thing', f, Cons),
                                   insert(Cons, rdf:rest, rdf:nil)))),
                      _).
 
@@ -5622,7 +5622,7 @@ setup_db_with_array(Desc) :-
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context2),
     Document = _{ '@type': "Thing",
-                  '@id': "a_thing",
+                  '@id': "Thing/a_thing",
                   'f': ["hello"]},
     with_transaction(Context2,
                      insert_document(Context2, Document, _),
@@ -5645,7 +5645,7 @@ test(delete_array_index,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Array),
+                              (   t('Thing/a_thing', f, Array),
                                   t(Array, sys:index, Index),
                                   delete(Array, sys:index, Index)))),
                      _).
@@ -5667,7 +5667,7 @@ test(delete_array_value,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Array),
+                              (   t('Thing/a_thing', f, Array),
                                   t(Array, sys:value, Value),
                                   delete(Array, sys:value, Value)))),
                      _).
@@ -5689,7 +5689,7 @@ test(add_extra_array_index,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Array),
+                              (   t('Thing/a_thing', f, Array),
                                   insert(Array, sys:index, 1^^xsd:nonNegativeInteger)))),
                      _).
 
@@ -5710,7 +5710,7 @@ test(insert_extra_array_value,
     create_context(Desc, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context,
                      once(ask(Context,
-                              (   t(a_thing, f, Array),
+                              (   t('Thing/a_thing', f, Array),
                                   insert(Array, sys:value, "extra entry"^^xsd:string)))),
                      _).
 
@@ -6300,13 +6300,13 @@ test(insert_employee, [
            country: D1,
            postal_code: "A12 345",
            street: "123 Abc Street"},
-    D3 = _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
+    D3 = _{'@id': "Employee/def2f711f95943378d8b9712b2820a8a",
            '@type': "Employee",
            name: "Bob",
            age: 22,
            address_of: D2,
            contact_number: "07777123456",
-           managed_by: _{'@id': "Employee_def2f711f95943378d8b9712b2820a8a",
+           managed_by: _{'@id': "Employee/def2f711f95943378d8b9712b2820a8a",
                          '@type': "@id"}},
 
     create_context(Desc, commit{author: "me", message: "something"}, Context),
@@ -6679,12 +6679,12 @@ test(type_not_found,
             },
 
     Cheuk = _{ '@type' : "Employee",
-               '@id' : 'Cheuk2342343',
+               '@id' : 'Employee/Cheuk2342343',
                address_of : Home,
                contact_number : "07777123456",
                age : 21,
                name : "Cheuk",
-               managed_by : 'Cheuk2342343',
+               managed_by : 'Employee/Cheuk2342343',
                member_of : "Information Technology"
              },
 
@@ -6692,7 +6692,7 @@ test(type_not_found,
     with_transaction(
         Context,
         (
-            insert_document(Context, Cheuk, 'terminusdb:///data/Cheuk2342343')
+            insert_document(Context, Cheuk, 'terminusdb:///data/Employee/Cheuk2342343')
         ),
         _
     ).
@@ -6874,7 +6874,7 @@ test(subdocument_update,
                 registration_date: "2009-07-01T10:11:12Z",
                 user_id: "hikita"
             },
-    Document = _{'@id':"Organization_somewhere",
+    Document = _{'@id':"Organization/somewhere",
                  '@type':"Organization",
                  invitations:[
                      _{'@type':"Invitation",
@@ -6906,7 +6906,7 @@ test(subdocument_update,
         _
     ),
 
-    Document2 = _{'@id':"Organization_somewhere",
+    Document2 = _{'@id':"Organization/somewhere",
                   '@type':"Organization",
                   invitations:[
                       _{'@type':"Invitation",
@@ -6937,8 +6937,8 @@ test(subdocument_update,
     ),
 
     open_descriptor(Desc, DB),
-    get_document(DB, 'Organization_somewhere', Organization),
-    Organization = json{'@id':'Organization_somewhere',
+    get_document(DB, 'Organization/somewhere', Organization),
+    Organization = json{'@id':'Organization/somewhere',
                         '@type':'Organization',
                         creation_date:"2021-05-01T12:10:10Z",
                         invitations:[json{'@id':_,
@@ -7034,7 +7034,7 @@ test(document_hash,
            bar: (0.5),
            baz: 42},
 
-        '1f28f0ae013c9219470fdbb09c043393d4014c4e').
+        'Thing/1f28f0ae013c9219470fdbb09c043393d4014c4e').
 
 test(document_random,
      [setup((setup_temp_store(State),
@@ -7089,7 +7089,9 @@ test(document_invalid_id_submitted,
              create_db_with_empty_schema("admin","foo"),
              resolve_absolute_string_descriptor("admin/foo", Desc)
             )),
-      cleanup(teardown_temp_store(State))]) :-
+      cleanup(teardown_temp_store(State)),
+      error(submitted_id_does_not_match_generated_id('http://somewhere.for.now/document/ThisIsWrong','http://somewhere.for.now/document/Thing/hi_0.5'),_)
+     ]) :-
     test_generated_document_id(
         Desc,
 
@@ -7107,20 +7109,6 @@ test(document_invalid_id_submitted,
            bar: (0.5),
            baz: 42},
 
-        ID),
-
-    database_prefixes(Desc, Prefixes),
-    prefix_expand_schema('Thing', Prefixes, Thing_Ex),
-    open_descriptor(Desc, DB),
-    do_or_die(key_descriptor(DB, Thing_Ex, Key),
-              error(wtf)),
-    nl,write_term(Key,[]),nl,
-
-    get_document(Desc, ID, JSON),
-    nl,write_term(JSON, []),nl,
-
-
-    writeq(ID),nl.
-
+        _ID).
 
 :- end_tests(document_id_generation).

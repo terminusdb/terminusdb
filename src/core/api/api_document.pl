@@ -321,13 +321,13 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
 insert_some_cities(System, Path) :-
     open_string('
 { "@type": "City",
-  "@id" : "Dublin",
+  "@id" : "City/Dublin",
   "name" : "Dublin" }
 { "@type": "City",
-  "@id" : "Pretoria",
+  "@id" : "City/Pretoria",
   "name" : "Pretoria" }
 { "@type": "City",
-  "@id" : "Utrecht",
+  "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
     api_insert_documents(System, admin, Path, instance, "author", "message", false, Stream, _Out_Ids).
@@ -340,7 +340,7 @@ test(delete_objects_with_stream,
     open_descriptor(system_descriptor{}, System),
     insert_some_cities(System, 'admin/foo'),
 
-    open_string('"Dublin" "Pretoria"', Stream),
+    open_string('"City/Dublin" "City/Pretoria"', Stream),
     api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
@@ -350,7 +350,7 @@ test(delete_objects_with_stream,
                 'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
-    Ids = ['Utrecht'].
+    Ids = ['City/Utrecht'].
 
 test(delete_objects_with_string,
      [setup((setup_temp_store(State),
@@ -360,7 +360,7 @@ test(delete_objects_with_string,
     open_descriptor(system_descriptor{}, System),
     insert_some_cities(System, 'admin/foo'),
 
-    open_string('["Dublin", "Pretoria"]', Stream),
+    open_string('["City/Dublin", "City/Pretoria"]', Stream),
     api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
@@ -370,7 +370,7 @@ test(delete_objects_with_string,
                 'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
-    Ids = ['Utrecht'].
+    Ids = ['City/Utrecht'].
 
 test(delete_objects_with_mixed_string_stream,
      [setup((setup_temp_store(State),
@@ -380,7 +380,7 @@ test(delete_objects_with_mixed_string_stream,
     open_descriptor(system_descriptor{}, System),
     insert_some_cities(System, 'admin/foo'),
 
-    open_string('"Dublin"\n["Pretoria"]', Stream),
+    open_string('"City/Dublin"\n["City/Pretoria"]', Stream),
     api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
@@ -390,7 +390,7 @@ test(delete_objects_with_mixed_string_stream,
                 'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
-    Ids = ['Utrecht'].
+    Ids = ['City/Utrecht'].
 
 :- end_tests(delete_document).
 

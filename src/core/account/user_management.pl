@@ -87,7 +87,7 @@ add_user_organization(Context, Nick, Org, Organization_URI) :-
     get_document(Context, User_URI, User_Document),
     Capabilities = (User_Document.capability),
     New_Capabilities = [_{ 'scope' : Organization_URI,
-                           'role': ["admin_role"]}
+                           'role': ["Role/admin"]}
                         |Capabilities],
     New_User_Document = (User_Document.put(capability, New_Capabilities)),
     replace_document(Context, New_User_Document, _).
@@ -151,7 +151,7 @@ add_user(SystemDB, Nick, Pass_Opt, User_URI) :-
                         'name': Nick,
                         'capability': [
                             json{ 'scope': Organization_URI,
-                                  'role': [ "admin_role" ]
+                                  'role': [ "Role/admin" ]
                                 }
                         ]
                     },

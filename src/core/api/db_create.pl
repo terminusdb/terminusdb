@@ -81,7 +81,7 @@ make_db_public(System_Context,DB_Uri) :-
         Capability_Uri),
 
     ask(System_Context,
-        (   insert(anonymous, capability, Capability_Uri))).
+        (   insert('User/anonymous', capability, Capability_Uri))).
 
 create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.

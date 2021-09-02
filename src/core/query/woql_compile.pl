@@ -2839,13 +2839,13 @@ test(select, [setup(setup_temp_store(State)),
                                   predicate: _{'@type' : "NodeValue",
                                                variable : "Predicate"},
                                   object: _{'@type' : "Value",
-                                            variable : "Object"}
+                                            node : "@schema:User"}
                                 }}},
 
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
 
-    [_{'Subject':admin}] = JSON.bindings.
+    [_{'Subject':'User/admin'}] = JSON.bindings.
 
 
 test(double_select, [
@@ -3540,7 +3540,7 @@ test(isa_node, [setup(setup_temp_store(State)),
   "@type": "IsA",
   "element": {
     "@type": "NodeValue",
-    "node": "terminusdb://system/data/admin"
+    "node": "User/admin"
   },
   "of_type": {
     "@type": "NodeValue",
