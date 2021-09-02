@@ -52,6 +52,17 @@ jobs:
       - name: Run unit tests
         run: docker run --name terminusdb $DOCKER_IMAGE_NAME:local /app/terminusdb/terminusdb test
 
+      - name: Save Docker image
+        if: github.repository == 'terminusdb/terminusdb' && github.event_name == 'push'
+        run: docker save $DOCKER_IMAGE_NAME:local > terminusdb-server-docker-image.tar
+
+      - name: Upload Docker image
+        if: github.repository == 'terminusdb/terminusdb' && github.event_name == 'push'
+        uses: actions/upload-artifact@v2
+        with:
+            name: terminusdb-server-docker-image
+            path: terminusdb-server-docker-image.tar
+
   # Begin deployment only for push events and certain refs.
   #
   # This is an empty job that serves as a common dependency for downstream jobs
@@ -82,6 +93,12 @@ jobs:
     needs: begin_deploy
 
     steps:
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
       - name: Push image to Docker Container Registry
         run: |
           echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
@@ -99,6 +116,7 @@ jobs:
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
 
+          docker load < terminusdb-server-docker-image.tar
           docker tag $DOCKER_IMAGE_NAME:local $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
