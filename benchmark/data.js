@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1630581719925,
+  "lastUpdate": 1630582777601,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -6767,6 +6767,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 43.587,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "committer": {
+            "email": "sean@terminusdb.com",
+            "name": "Sean Leather",
+            "username": "spl"
+          },
+          "distinct": true,
+          "id": "a40542b800593adc9ea07f616dd8855aeadec47e",
+          "message": "Compress the Docker image with gzip\n\nThis reduces the file size from ~150 MB to ~50 MB.",
+          "timestamp": "2021-09-02T13:34:44+02:00",
+          "tree_id": "7209ab92ad7e4273c41ffcb7eb365e63c9898a13",
+          "url": "https://github.com/terminusdb/terminusdb/commit/a40542b800593adc9ea07f616dd8855aeadec47e"
+        },
+        "date": 1630582776891,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 91.484,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 288.45,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 270.626,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 149.137,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 168.846,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 93.168,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 36.9,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 32.258,
             "unit": "ms"
           }
         ]
