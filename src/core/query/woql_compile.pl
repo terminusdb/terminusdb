@@ -997,6 +997,8 @@ find_resources(debug_log(_, _), _, _, _, [], []).
 find_resources(concat(_,_),_, _, _, [], []).
 find_resources(trim(_,_),_, _, _, [], []).
 find_resources('='(_,_),_, _, _, [], []).
+find_resources('<'(_,_),_, _, _, [], []).
+find_resources('>'(_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -4544,6 +4546,30 @@ test(delete_triple2, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(Descriptor, Query_Out, JSON),
     JSON.deletes = 1.
+
+test(less_than, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{ '@type' : "Less",
+               left : _{'@type' : "DataValue", 'data' : 0},
+               right : _{'@type' : "DataValue", 'data' : 1}
+             },
+
+    Commit_Info = commit_info{author: "TERMINUSQA", message: "less than"},
+
+    woql_query_json(system_descriptor{},
+                    Auth,
+                    some("TERMINUSQA/test"),
+                    Query,
+                    Commit_Info,
+                    [],
+                    false,
+                    JSON),
+    [_] = (JSON.bindings).
 
 :- end_tests(woql).
 
