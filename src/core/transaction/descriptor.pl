@@ -1032,7 +1032,7 @@ test(terminus, [
     Descriptor = system_descriptor{},
     open_descriptor(Descriptor, Transaction),
 
-    once(ask(Transaction, isa(system, 'SystemDatabase'))).
+    once(ask(Transaction, isa('SystemDatabase/system', 'SystemDatabase'))).
 
 test(label, [
          setup(setup_temp_store(State)),

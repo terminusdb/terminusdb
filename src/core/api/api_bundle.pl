@@ -64,7 +64,7 @@ test(bundle,
       cleanup(teardown_temp_store(State))])
 :-
     open_descriptor(system_descriptor{}, System),
-    bundle(System, admin, 'admin/test', _, []).
+    bundle(System, 'User/admin', 'admin/test', _, []).
 
 test(create_fake_repo_head,
      [setup((setup_temp_store(State),

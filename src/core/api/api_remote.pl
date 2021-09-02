@@ -132,7 +132,7 @@ test(add_remote,
       cleanup(teardown_temp_store(State))])
 :-
     open_descriptor(system_descriptor{}, System),
-    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    add_remote(System, 'User/admin', 'admin/test', 'remote', 'http://remote_url'),
     resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
     has_remote_repository(Descriptor, "remote").
 
@@ -143,8 +143,8 @@ test(remove_remote,
       cleanup(teardown_temp_store(State))])
 :-
     open_descriptor(system_descriptor{}, System),
-    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
-    remove_remote(System, admin, 'admin/test', 'remote'),
+    add_remote(System, 'User/admin', 'admin/test', 'remote', 'http://remote_url'),
+    remove_remote(System, 'User/admin', 'admin/test', 'remote'),
     resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
     \+ has_remote_repository(Descriptor, "remote").
 
@@ -154,10 +154,10 @@ test(update_remote,
       cleanup(teardown_temp_store(State))])
 :-
     open_descriptor(system_descriptor{}, System),
-    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
-    update_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    add_remote(System, 'User/admin', 'admin/test', 'remote', 'http://remote_url'),
+    update_remote(System, 'User/admin', 'admin/test', 'remote', 'http://remote_url'),
     resolve_absolute_string_descriptor("admin/test/_meta", Descriptor),
-    has_remote_repository(Descriptor, "remote").     
+    has_remote_repository(Descriptor, "remote").
 
 test(show_remote,
      [setup((setup_temp_store(State),
@@ -165,10 +165,10 @@ test(show_remote,
       cleanup(teardown_temp_store(State))])
 :-
     open_descriptor(system_descriptor{}, System),
-    add_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
-    show_remote(System, admin, 'admin/test', 'remote', 'http://remote_url'),
+    add_remote(System, 'User/admin', 'admin/test', 'remote', 'http://remote_url'),
+    show_remote(System, 'User/admin', 'admin/test', 'remote', 'http://remote_url'),
     resolve_absolute_string_descriptor('admin/test/_meta', Descriptor),
-    has_remote_repository(Descriptor, 'remote').     
+    has_remote_repository(Descriptor, 'remote').
 
 
 :- end_tests(remote_tests).

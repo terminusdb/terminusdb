@@ -1161,6 +1161,28 @@ api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JS
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(submitted_id_does_not_match_base(Submitted_ID, Base, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document was submitted with id ~q which does not match base ~q", [Submitted_ID, Base]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SubmittedIdDoesNotMatchBase',
+                              'api:submitted_id': Submitted_ID,
+                              'api:base': Base,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(submitted_id_does_not_match_generated_id(Submitted_ID, Generated_ID, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document was submitted with id ~q, but id ~q was generated", [Submitted_ID, Generated_ID]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SubmittedIdDoesNotMatchGeneratedId',
+                              'api:submitted_id': Submitted_ID,
+                              'api:generated_id': Generated_ID,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(unrecognized_property(Document_Type, Property, _Value, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Submitted document contained unrecognized property ~q for type ~q", [Property, Document_Type]),

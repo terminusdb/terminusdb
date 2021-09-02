@@ -2841,13 +2841,13 @@ test(select, [setup(setup_temp_store(State)),
                                   predicate: _{'@type' : "NodeValue",
                                                variable : "Predicate"},
                                   object: _{'@type' : "Value",
-                                            variable : "Object"}
+                                            node : "@schema:User"}
                                 }}},
 
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
 
-    [_{'Subject':admin}] = JSON.bindings.
+    [_{'Subject':'User/admin'}] = JSON.bindings.
 
 
 test(double_select, [
@@ -3542,7 +3542,7 @@ test(isa_node, [setup(setup_temp_store(State)),
   "@type": "IsA",
   "element": {
     "@type": "NodeValue",
-    "node": "terminusdb://system/data/admin"
+    "node": "User/admin"
   },
   "of_type": {
     "@type": "NodeValue",
@@ -3617,7 +3617,7 @@ test(using_insert_default_graph, [
 
     create_context(system_descriptor{},Commit_Info,System_Context),
     % Need to get a "no schema"...
-    branch_create(System_Context,admin,"admin/test/local/branch/new",
+    branch_create(System_Context,'User/admin',"admin/test/local/branch/new",
                   some("admin/test"),_),
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),

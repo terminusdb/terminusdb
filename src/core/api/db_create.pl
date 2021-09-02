@@ -76,12 +76,12 @@ make_db_public(System_Context,DB_Uri) :-
         _{
             '@type' : 'Capability',
             'scope' : DB_Uri,
-            'role' : [ 'consumer_role' ]
+            'role' : [ 'Role/consumer' ]
         },
         Capability_Uri),
 
     ask(System_Context,
-        (   insert(anonymous, capability, Capability_Uri))).
+        (   insert('User/anonymous', capability, Capability_Uri))).
 
 create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
@@ -185,7 +185,7 @@ test(create_db_and_check_master_branch, [
 :-
     Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
     open_descriptor(system_descriptor{}, System),
-    create_db(System, admin, admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
+    create_db(System, 'User/admin', admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
     Database_Descriptor = database_descriptor{
                               organization_name: "admin",
                               database_name: "testdb" },

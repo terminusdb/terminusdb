@@ -662,7 +662,7 @@ test(cardinality_error,
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
 
     Object = _{'@type': "City",
-               '@id' : "Dublin",
+               '@id' : "City/Dublin",
                'name': ["Dublin",
                         "Dubhlinn"
                         ]
@@ -692,7 +692,7 @@ test(cardinality_min_error,
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
     Object = _{'@type': "Person",
-               '@id' : "Duke",
+               '@id' : "Person/Duke",
                'name': ["Duke",
                         "Doug"]
               },

@@ -154,6 +154,8 @@ known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
+known_document_error(submitted_id_does_not_match_generated_id(_,_)).
+known_document_error(submitted_id_does_not_match_base(_,_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -320,16 +322,16 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
 insert_some_cities(System, Path) :-
     open_string('
 { "@type": "City",
-  "@id" : "Dublin",
+  "@id" : "City/Dublin",
   "name" : "Dublin" }
 { "@type": "City",
-  "@id" : "Pretoria",
+  "@id" : "City/Pretoria",
   "name" : "Pretoria" }
 { "@type": "City",
-  "@id" : "Utrecht",
+  "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
-    api_insert_documents(System, admin, Path, instance, "author", "message", false, Stream, _Out_Ids).
+    api_insert_documents(System, 'User/admin', Path, instance, "author", "message", false, Stream, _Out_Ids).
 
 test(delete_objects_with_stream,
      [setup((setup_temp_store(State),
@@ -339,8 +341,8 @@ test(delete_objects_with_stream,
     open_descriptor(system_descriptor{}, System),
     insert_some_cities(System, 'admin/foo'),
 
-    open_string('"Dublin" "Pretoria"', Stream),
-    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
+    open_string('"City/Dublin" "City/Pretoria"', Stream),
+    api_delete_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -349,7 +351,7 @@ test(delete_objects_with_stream,
                 'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
-    Ids = ['Utrecht'].
+    Ids = ['City/Utrecht'].
 
 test(delete_objects_with_string,
      [setup((setup_temp_store(State),
@@ -359,8 +361,8 @@ test(delete_objects_with_string,
     open_descriptor(system_descriptor{}, System),
     insert_some_cities(System, 'admin/foo'),
 
-    open_string('["Dublin", "Pretoria"]', Stream),
-    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
+    open_string('["City/Dublin", "City/Pretoria"]', Stream),
+    api_delete_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -369,7 +371,7 @@ test(delete_objects_with_string,
                 'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
-    Ids = ['Utrecht'].
+    Ids = ['City/Utrecht'].
 
 test(delete_objects_with_mixed_string_stream,
      [setup((setup_temp_store(State),
@@ -379,8 +381,8 @@ test(delete_objects_with_mixed_string_stream,
     open_descriptor(system_descriptor{}, System),
     insert_some_cities(System, 'admin/foo'),
 
-    open_string('"Dublin"\n["Pretoria"]', Stream),
-    api_delete_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream),
+    open_string('"City/Dublin"\n["City/Pretoria"]', Stream),
+    api_delete_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -389,7 +391,7 @@ test(delete_objects_with_mixed_string_stream,
                 'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
-    Ids = ['Utrecht'].
+    Ids = ['City/Utrecht'].
 
 :- end_tests(delete_document).
 
@@ -400,16 +402,16 @@ test(delete_objects_with_mixed_string_stream,
 insert_some_cities(System, Path) :-
     open_string('
 { "@type": "City",
-  "@id" : "Dublin",
+  "@id" : "City/Dublin",
   "name" : "Dublin" }
 { "@type": "City",
-  "@id" : "Pretoria",
+  "@id" : "City/Pretoria",
   "name" : "Pretoria" }
 { "@type": "City",
-  "@id" : "Utrecht",
+  "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
-    api_insert_documents(System, admin, Path, instance, "author", "message", false, Stream, _Out_Ids).
+    api_insert_documents(System, 'User/admin', Path, instance, "author", "message", false, Stream, _Out_Ids).
 
 test(replace_objects_with_stream,
      [setup((setup_temp_store(State),
@@ -421,13 +423,13 @@ test(replace_objects_with_stream,
 
     open_string('
 { "@type": "City",
-  "@id" : "Dublin",
+  "@id" : "City/Dublin",
   "name" : "Baile Atha Cliath" }
 { "@type": "City",
-  "@id" : "Pretoria",
+  "@id" : "City/Pretoria",
   "name" : "Tshwane" }', Stream),
-    api_replace_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
+    api_replace_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream, Ids),
 
-    Ids = ['http://example.com/data/world/Dublin','http://example.com/data/world/Pretoria'].
+    Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
 
 :- end_tests(replace_document).

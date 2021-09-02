@@ -489,7 +489,7 @@ test(rebase_conflicting_history_errors,
     Master_Path = "admin/test",
     resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
-    City_Uri_String = "Dublin",
+    City_Uri_String = "City/Dublin",
 
     Document = _{'@type': "City",
                  '@id' : City_Uri_String,
@@ -598,7 +598,7 @@ test(rebase_conflict,
                        _,
                        [witness{'@type':instance_not_cardinality_one,
                                 class:'http://www.w3.org/2001/XMLSchema#string',
-                                instance:'http://somewhere.for.now/document/Document1',
+                                instance:'http://somewhere.for.now/document/User/Document1',
                                 predicate:'http://somewhere.for.now/schema#name'}]),
                    _),
                _)
@@ -617,7 +617,7 @@ test(rebase_conflict,
     ),
 
 
-    Document1 = _{ '@id' : "Document1",
+    Document1 = _{ '@id' : "User/Document1",
                    '@type' : "User",
                    name : "Document1"},
 
@@ -634,7 +634,7 @@ test(rebase_conflict,
     resolve_absolute_string_descriptor(Path, Desc2),
     create_context(Desc2, commit{author: "me", message: "something"}, Context2),
 
-    Document2 = _{ '@id' : "Document1",
+    Document2 = _{ '@id' : "User/Document1",
                    '@type' : "User",
                    name : "Document1 is changed X"},
 
@@ -644,7 +644,7 @@ test(rebase_conflict,
         _),
 
 
-    Document3 = _{ '@id' : "Document1",
+    Document3 = _{ '@id' : "User/Document1",
                    '@type' : "User",
                    name : "Document1 is changed Y"},
 
