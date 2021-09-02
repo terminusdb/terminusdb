@@ -401,13 +401,13 @@ test(delete_objects_with_mixed_string_stream,
 insert_some_cities(System, Path) :-
     open_string('
 { "@type": "City",
-  "@id" : "Dublin",
+  "@id" : "City/Dublin",
   "name" : "Dublin" }
 { "@type": "City",
-  "@id" : "Pretoria",
+  "@id" : "City/Pretoria",
   "name" : "Pretoria" }
 { "@type": "City",
-  "@id" : "Utrecht",
+  "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
     api_insert_documents(System, admin, Path, instance, "author", "message", false, Stream, _Out_Ids).
@@ -422,13 +422,13 @@ test(replace_objects_with_stream,
 
     open_string('
 { "@type": "City",
-  "@id" : "Dublin",
+  "@id" : "City/Dublin",
   "name" : "Baile Atha Cliath" }
 { "@type": "City",
-  "@id" : "Pretoria",
+  "@id" : "City/Pretoria",
   "name" : "Tshwane" }', Stream),
     api_replace_documents(system_descriptor{}, admin, 'admin/foo', instance, "author", "message", Stream, Ids),
 
-    Ids = ['http://example.com/data/world/Dublin','http://example.com/data/world/Pretoria'].
+    Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
 
 :- end_tests(replace_document).
