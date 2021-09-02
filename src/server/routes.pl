@@ -216,7 +216,7 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
     (   _{ schema : Schema } :< Database_Document
     ->  true
-    ;   Schema = false),
+    ;   Schema = true),
 
     api_report_errors(
         create_db,
