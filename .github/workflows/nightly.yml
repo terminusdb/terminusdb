@@ -1,4 +1,6 @@
-# Build and run tests every night of the working week
+# Build and run tests every night of the working week.
+#
+# These mainly exist to test installing TerminusDB on different systems.
 name: Nightly
 
 on:
@@ -8,8 +10,36 @@ on:
 
 jobs:
 
-  # We don't test macOS on every push and pull request, because the tests take a
-  # long time to run (12 - 20 minutes).
+  ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install swi-prolog
+        run: |
+          # Installing swipl on Debian: https://www.swi-prolog.org/build/PPA.html
+          sudo apt-add-repository ppa:swi-prolog/stable
+          sudo apt-get update
+          sudo apt-get install swi-prolog
+
+      - name: Check out tus
+        uses: actions/checkout@v2
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Install terminus_store_prolog
+        run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
+
+      - run: make
+
+      - run: ./terminusdb test
+
   macos:
     runs-on: macos-latest
 
@@ -36,5 +66,5 @@ jobs:
 
       - run: make
 
+        # This can take a long time to run (12 - 20 minutes).
       - run: ./terminusdb test
-

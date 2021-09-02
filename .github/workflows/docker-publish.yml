@@ -1,53 +1,92 @@
-name: Publish
+name: CI
 
 on:
   push:
-    # Publish `stable` as Docker `latest` image.
     branches:
-      - main
-      - canary
-      - rc
-      - stable
-
-    # Publish `v1.2.3` tags as releases.
     tags:
-      - v*
-
-  # Run tests for any PRs.
   pull_request:
     # Don't run if only the docs are changed.
     paths-ignore:
       - 'docs/**'
+  workflow_dispatch:
 
 env:
   TERMINUSDB_STORE_PROLOG_VERSION: v0.19.1
   TUS_VERSION: v0.0.5
+  DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
 
 jobs:
-  test_and_push_docker:
+
+  # Check if this job is already running with the same or newer content.
+  #
+  # This should never skip push events: they are used by begin_deploy.
+  check_skip:
     runs-on: ubuntu-latest
 
-    env:
-      IMAGE_NAME: terminusdb/terminusdb-server
+    outputs:
+      should_skip: ${{ steps.check_skip.outputs.should_skip }}
 
+    steps:
+      - uses: fkirc/skip-duplicate-actions@master
+        id: check_skip
+        with:
+          concurrent_skipping: same_content_newer
+          do_not_skip: '["push", "workflow_dispatch", "schedule"]'
+
+  # Build the Docker image and run the unit tests.
+  #
+  # This should be a very quick job that runs for all events.
+  test:
+    runs-on: ubuntu-latest
+
+    # Check if this job needs to run. We skip a pull_request after a push.
+    needs: check_skip
+    if: needs.check_skip.outputs.should_skip != 'true'
 
     steps:
       - uses: actions/checkout@v2
 
-      - name: Build image
-        run: docker build . --file Dockerfile --tag $IMAGE_NAME:local
+      - name: Build Docker image
+        run: docker build . --file Dockerfile --tag $DOCKER_IMAGE_NAME:local
 
-      - name: Run tests
-        run: docker run --name terminusdb terminusdb/terminusdb-server:local /app/terminusdb/terminusdb test
+      - name: Run unit tests
+        run: docker run --name terminusdb $DOCKER_IMAGE_NAME:local /app/terminusdb/terminusdb test
 
-      - name: Log into Docker Container Registry
-        if: github.event_name != 'pull_request'
-        run: echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
+  # Begin deployment only for push events and certain refs.
+  #
+  # This is an empty job that serves as a common dependency for downstream jobs
+  # in their `needs`.
+  begin_deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: |
+      github.repository == 'terminusdb/terminusdb' &&
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/canary' ||
+        github.ref == 'refs/heads/rc' ||
+        github.ref == 'refs/heads/stable' ||
+        startsWith(github.ref, 'refs/tags/v')
+      )
 
-      - name: Push image to Docker Container Registry
-        if: github.event_name != 'pull_request'
+    steps:
+      - name: Begin deploy
         run: |
-          IMAGE_ID=$IMAGE_NAME
+          echo "Deploying for:"
+          echo "  event: ${{ github.event_name }}"
+          echo "  ref:   ${{ github.ref }}"
+
+  # Push Docker image to container repository.
+  push_docker:
+    runs-on: ubuntu-latest
+    needs: begin_deploy
+
+    steps:
+      - name: Push image to Docker Container Registry
+        run: |
+          echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
+
+          IMAGE_ID=$DOCKER_IMAGE_NAME
           # Change all uppercase to lowercase
           IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
           # Strip git ref prefix from version
@@ -60,12 +99,13 @@ jobs:
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
 
-          docker tag $IMAGE_NAME:local $IMAGE_ID:$VERSION
+          docker tag $DOCKER_IMAGE_NAME:local $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
   fedora_bin:
     runs-on: ubuntu-latest
-    needs: test_and_push_docker
+    needs: begin_deploy
+
     steps:
       - uses: actions/checkout@v2
       - run: git clone --single-branch --branch "$TUS_VERSION" 'https://github.com/terminusdb/tus.git'
@@ -79,7 +119,8 @@ jobs:
 
   deb_and_rpm:
     runs-on: ubuntu-latest
-    needs: [test_and_push_docker, appimage, fedora_bin]
+    needs: [appimage, fedora_bin]
+
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
@@ -115,8 +156,7 @@ jobs:
         name: terminusdb-rpm
         path: terminusdb*.rpm
 
-    - name: Upload to bintray repo
-      if: github.event_name != 'pull_request'
+    - name: Upload to JFrog repository
       run: |
           BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           VERSION=$(grep 'VERSION=' Makefile | sed 's/VERSION=//g')
@@ -132,9 +172,9 @@ jobs:
             curl -T terminusdb*.deb -u "robin@terminusdb.com:${{ secrets.JFROG_ACCESS_TOKEN }}" -XPUT "https://terminusdb.jfrog.io/artifactory/terminusdb-deb-$BRANCH/pool/terminusdb_${VERSION}_amd64;$DEB_DISTRIBUTIONS;deb.component=main;deb.architecture=amd64"
           fi
 
-
   appimage:
     runs-on: ubuntu-18.04
+    needs: begin_deploy
 
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -177,8 +217,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [test_and_push_docker, appimage, deb_and_rpm]
-    if: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/stable' }}
+    needs: deb_and_rpm
 
     steps:
     - uses: actions/checkout@v2
