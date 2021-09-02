@@ -2447,7 +2447,7 @@ test(elaborate,
      ]) :-
 
     Document = json{
-                   '@id' : gavin,
+                   '@id' : 'Criminal/gavin',
                    '@type' : 'Criminal',
                    name : "gavin",
                    birthdate : "1977-05-24",
@@ -2458,7 +2458,7 @@ test(elaborate,
 
     json_elaborate(DB, Document, Elaborated),
 
-    Elaborated = json{ '@id':'http://i/gavin',
+    Elaborated = json{ '@id':'http://i/Criminal/gavin',
                        '@type':'http://s/Criminal',
                        'http://s/aliases':
                        _{ '@container':"@list",
@@ -2492,13 +2492,13 @@ test(id_expand,
      ]) :-
 
     Document = json{
-                   '@id' : gavin,
+                   '@id' : 'Employee/gavin',
                    '@type' : 'Employee',
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
                    boss : json{
-                              '@id' : jane,
+                              '@id' : 'Employee/jane',
                               '@type' : 'Employee',
                               name : "jane",
                               staff_number : "12",
@@ -2510,12 +2510,12 @@ test(id_expand,
     json_elaborate(DB, Document, Elaborated),
     Elaborated =
     json{
-        '@id':'http://i/gavin',
+        '@id':'http://i/Employee/gavin',
         '@type':'http://s/Employee',
         'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
 				                   '@value':"1977-05-24"
 			                     },
-        'http://s/boss':json{ '@id':'http://i/jane',
+        'http://s/boss':json{ '@id':'http://i/Employee/jane',
 			                  '@type':'http://s/Employee',
 			                  'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
 						                                 '@value':"1979-12-28"
@@ -2548,13 +2548,13 @@ test(triple_convert,
      ]) :-
 
     Document = json{
-                   '@id' : gavin,
+                   '@id' : 'Employee/gavin',
                    '@type' : 'Employee',
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
                    boss : json{
-                              '@id' : jane,
+                              '@id' : 'Employee/jane',
                               '@type' : 'Employee',
                               name : "jane",
                               staff_number : "12",
@@ -2568,29 +2568,29 @@ test(triple_convert,
     sort(Triples, Sorted),
 
     Sorted = [
-        t('http://i/gavin',
+        t('http://i/Employee/gavin',
           'http://s/birthdate',
           date(1977,5,24,0)^^'http://www.w3.org/2001/XMLSchema#date'),
-        t('http://i/gavin','http://s/boss','http://i/jane'),
-        t('http://i/gavin',
+        t('http://i/Employee/gavin','http://s/boss','http://i/Employee/jane'),
+        t('http://i/Employee/gavin',
           'http://s/name',
           "gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/gavin',
+        t('http://i/Employee/gavin',
           'http://s/staff_number',
           "13"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/gavin',
+        t('http://i/Employee/gavin',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://s/Employee'),
-        t('http://i/jane',
+        t('http://i/Employee/jane',
           'http://s/birthdate',
           date(1979,12,28,0)^^'http://www.w3.org/2001/XMLSchema#date'),
-        t('http://i/jane',
+        t('http://i/Employee/jane',
           'http://s/name',
           "jane"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/jane',
+        t('http://i/Employee/jane',
           'http://s/staff_number',
           "12"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://i/jane',
+        t('http://i/Employee/jane',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://s/Employee')
     ].
@@ -2608,14 +2608,14 @@ test(extract_json,
      ]) :-
 
     Document = json{
-                   '@id' : gavin,
+                   '@id' : 'Employee/gavin',
                    '@type' : 'Employee',
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
                    tasks : [],
                    boss : json{
-                              '@id' : jane,
+                              '@id' : 'Employee/jane',
                               '@type' : 'Employee',
                               name : "jane",
                               tasks : [],
@@ -2634,17 +2634,17 @@ test(extract_json,
     get_document(DB,Id,JSON1),
 
     !,
-    JSON1 = json{'@id':gavin,
+    JSON1 = json{'@id':'Employee/gavin',
                  '@type':'Employee',
                  birthdate:"1977-05-24",
-                 boss:jane,
+                 boss:'Employee/jane',
                  tasks: [],
                  name:"gavin",
                  staff_number:"13"},
 
-    get_document(DB,jane,JSON2),
+    get_document(DB,'Employee/jane',JSON2),
     !,
-    JSON2 = json{ '@id':jane,
+    JSON2 = json{ '@id':'Employee/jane',
                   '@type':'Employee',
                   birthdate:"1979-12-28",
                   tasks: [],
@@ -2663,19 +2663,19 @@ test(double_insert_document,
              teardown_temp_store(State)
          ),
          error(
-             can_not_insert_existing_object_with_id('http://i/jane')
+             can_not_insert_existing_object_with_id('http://i/Employee/jane')
          )
      ]) :-
 
     Document = json{
-                   '@id' : gavin,
+                   '@id' : 'Employee/gavin',
                    '@type' : 'Employee',
                    name : "gavin",
                    staff_number : "13",
                    birthdate : "1977-05-24",
                    tasks : [],
                    boss : json{
-                              '@id' : jane,
+                              '@id' : 'Employee/jane',
                               '@type' : 'Employee',
                               name : "jane",
                               tasks : [],
@@ -2690,7 +2690,7 @@ test(double_insert_document,
 
     Jane_Again =
     json{
-        '@id' : jane,
+        '@id' : 'Employee/jane',
         '@type' : 'Employee',
         name : "jane",
         tasks : [],
@@ -2713,7 +2713,7 @@ test(get_value,
          )
      ]) :-
 
-    JSON = json{'@id':jane,
+    JSON = json{'@id':'Employee/jane',
                 '@type':'Employee',
                 birthdate:"1979-12-28",
                 name:"jane",
@@ -3641,18 +3641,18 @@ test(elaborate_id,
      ]) :-
 
     JSON = json{'@type':'Human',
-                '@id' : "Cleatus",
-                'mother' : "MaryJane",
-                'father' : "BobbyJoe" },
+                '@id' : "Human/Cleatus",
+                'mother' : "Human/MaryJane",
+                'father' : "Human/BobbyJoe" },
 
     open_descriptor(Desc, DB),
     json_elaborate(DB, JSON, Elaborated),
     Elaborated =
-    json{'@id':'http://i/Cleatus',
+    json{'@id':'http://i/Human/Cleatus',
          '@type':'http://s/Human',
-         'http://s/father':json{'@id':'http://i/BobbyJoe',
+         'http://s/father':json{'@id':'http://i/Human/BobbyJoe',
                                 '@type':"@id"},
-         'http://s/mother':json{'@id':'http://i/MaryJane',
+         'http://s/mother':json{'@id':'http://i/Human/MaryJane',
                                 '@type':"@id"}}.
 
 test(empty_list,
@@ -4035,6 +4035,7 @@ test(partial_document_elaborate,
 
     JSON = json{'@id' : 'Dog/Henry',
                 '@type':'Dog',
+                name: "Henry",
                 hair_colour: "blue"
                },
 
@@ -4044,34 +4045,11 @@ test(partial_document_elaborate,
     JSON_ID = json{ '@id':'http://i/Dog/Henry',
                     '@type':'http://s/Dog',
                     'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
-                                                '@type':"@id"}
+                                                '@type':"@id"},
+                    'http://s/name':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                         '@value':"Henry"}
                   }.
 
-test(partial_document_elaborate,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 test_document_label_descriptor(Desc),
-                 write_schema(schema2,Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         )
-     ]) :-
-
-    JSON = json{'@id' : 'Dog/Henry',
-                '@type':'Dog',
-                hair_colour: "blue"
-               },
-
-    open_descriptor(Desc, DB),
-    json_elaborate(DB,JSON,JSON_ID),
-
-    JSON_ID = json{ '@id':'http://i/Dog/Henry',
-                    '@type':'http://s/Dog',
-                    'http://s/hair_colour':json{'@id':'http://s/Colour_blue',
-                                                '@type':"@id"}
-                  }.
 
 test(all_path_values,
      [
@@ -4085,7 +4063,7 @@ test(all_path_values,
          )
      ]) :-
 
-    JSON = json{'@id' : 'Mystery%20Readers',
+    JSON = json{'@id' : 'BookClub/Mystery%20Readers',
                 '@type' : 'BookClub',
                 name: "Mystery Readers",
                 book_list: [ json{ name : "And Then There Were None" },
@@ -4167,7 +4145,10 @@ test(partial_document_elaborate_list_without_required,
              )),
          cleanup(
              teardown_temp_store(State)
-         )
+         ),
+         error(missing_key('http://s/name',
+                           _),
+               _)
      ]) :-
 
     JSON = json{'@id' : 'BookClub/Murder%20Mysteries',
@@ -4919,10 +4900,10 @@ test(document_with_no_required_field,
          error(schema_check_failure(
                    [witness{'@type':instance_not_cardinality_one,
                             class:'http://www.w3.org/2001/XMLSchema#string',
-                            instance:'http://i/doug',predicate:'http://s/name'}]), _)
+                            instance:'http://i/Moo/doug',predicate:'http://s/name'}]), _)
      ]) :-
 
-    Document = _{ '@id' : "doug",
+    Document = _{ '@id' : "Moo/doug",
                   '@type' : "Moo"},
 
     open_descriptor(Desc, DB),
@@ -4947,12 +4928,12 @@ test(add_a_double_field,
          error(schema_check_failure(
                    [witness{'@type':instance_not_cardinality_one,
                             class:'http://www.w3.org/2001/XMLSchema#string',
-                            instance:'http://i/doug',
+                            instance:'http://i/Moo/doug',
                             predicate:'http://s/name'}
                    ]),
                _)
      ]) :-
-    Document = _{ '@id' : "doug",
+    Document = _{ '@id' : "Moo/doug",
                   '@type' : "Moo",
                   name : "moo?"},
 
@@ -5010,20 +4991,20 @@ test(delete_list_element,
          error(schema_check_failure(
                    [
                        _{'@type':deleted_object_still_referenced,
-                         object:'http://i/task3',
+                         object:'http://i/Task/task3',
                          predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',subject:_}]),
                _)
      ]) :-
-    Document = _{ '@id' : "my_task_list",
+    Document = _{ '@id' : "TaskList/my_task_list",
                   '@type' : "TaskList",
                   task_list : [
-                      _{ '@id' : "task1",
+                      _{ '@id' : "Task/task1",
                          '@type' : "Task",
                          name : "Laundry"},
-                      _{ '@id' : "task2",
+                      _{ '@id' : "Task/task2",
                          '@type' : "Task",
                          name : "Rubbish"},
-                      _{ '@id' : "task3",
+                      _{ '@id' : "Task/task3",
                          '@type' : "Task",
                          name : "Dishes"}
                   ]},
@@ -5038,7 +5019,7 @@ test(delete_list_element,
     create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
     with_transaction(
         Context2,
-        delete_document(Context2, 'task3'),
+        delete_document(Context2, 'Task/task3'),
         _
     ).
 :- end_tests(json).
