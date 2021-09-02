@@ -997,6 +997,8 @@ find_resources(debug_log(_, _), _, _, _, [], []).
 find_resources(concat(_,_),_, _, _, [], []).
 find_resources(trim(_,_),_, _, _, [], []).
 find_resources('='(_,_),_, _, _, [], []).
+find_resources('<'(_,_),_, _, _, [], []).
+find_resources('>'(_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
