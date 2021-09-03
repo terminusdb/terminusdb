@@ -2250,13 +2250,13 @@ test(write_json_stream_to_builder, [
         t("http://terminusdb.com/system/schema#User/capability/Set_Capability",
           "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
           node("http://terminusdb.com/schema/sys#Set")),
-        t("terminusdb://Prefix_Pair/93538b446fef31f7eef2e4d45f7addf0aa1d4ad5",
+        t("terminusdb://Prefix_Pair/7de63588111a7e39f87e3f5cb597edc2a2f1023d",
           "http://terminusdb.com/schema/sys#prefix",
           value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair/93538b446fef31f7eef2e4d45f7addf0aa1d4ad5",
+        t("terminusdb://Prefix_Pair/7de63588111a7e39f87e3f5cb597edc2a2f1023d",
           "http://terminusdb.com/schema/sys#url",
           value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair/93538b446fef31f7eef2e4d45f7addf0aa1d4ad5",
+        t("terminusdb://Prefix_Pair/7de63588111a7e39f87e3f5cb597edc2a2f1023d",
           "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
           node("http://terminusdb.com/schema/sys#Prefix")),
         t("terminusdb://context",
@@ -2264,7 +2264,7 @@ test(write_json_stream_to_builder, [
           value("\"terminusdb://system/data/\"^^'http://www.w3.org/2001/XMLSchema#string'")),
         t("terminusdb://context",
           "http://terminusdb.com/schema/sys#prefix_pair",
-          node("terminusdb://Prefix_Pair/93538b446fef31f7eef2e4d45f7addf0aa1d4ad5")),
+          node("terminusdb://Prefix_Pair/7de63588111a7e39f87e3f5cb597edc2a2f1023d")),
         t("terminusdb://context",
           "http://terminusdb.com/schema/sys#schema",
           value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
@@ -4956,10 +4956,10 @@ test(subdocument_lexical_key_with_odd_chars,
     Assigned =
     json{'@id':'Has_Non_Squash/Its%20%2F%20me',
          '@type':'Has_Non_Squash',
-         me:"It's me",
+         me:"Its / me",
          non_squash:json{'@id': 'Has_Non_Squash/Its%20%2F%20me/non_squash/Not_A_Squash/Malus%20%2F%20Mill',
                          '@type':'Not_A_Squash',
-                         genus:"Malus Mill"}}.
+                         genus:"Malus / Mill"}}.
 
 
 test(document_with_no_required_field,
@@ -5174,7 +5174,7 @@ test(elaborate_null,
     ),
 
     Document = _{ '@type' : "Doc",
-                  s : true },
+                  s : null },
 
 
     open_descriptor(Desc, DB),
