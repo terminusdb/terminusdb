@@ -2125,7 +2125,9 @@ delete_schema_subdocument(Transaction, Context, Id) :-
     (   atom(Id)
     ->  (   xrdf([Schema], Id, rdf:type, C),
             (   (   is_system_class(C)
-                ;   is_key(C))
+                ;   is_key(C)
+                ;   is_documentation(C)
+                )
             ->  xrdf([Schema], Id, P, R),
                 \+ global_prefix_expand(rdf:type, P),
                 delete(Schema, Id, P, R, _),
@@ -5022,6 +5024,58 @@ test(delete_list_element,
         delete_document(Context2, 'Task/task3'),
         _
     ).
+
+test(alter_documentation,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Doc1 = _{ '@type': "Class",
+              '@id': "Doc001",
+              '@key': _{
+                  '@type': "Random"
+              },
+              '@documentation': _{
+                  '@comment': "comment 01"
+              }
+            },
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Doc1),
+        _
+    ),
+
+    Doc2 = _{ '@type': "Class",
+              '@id': "Doc001",
+              '@key': _{
+                  '@type': "Random"
+              },
+              '@documentation': _{
+                  '@comment': "comment 02"
+              }
+            },
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
+    with_transaction(
+        Context2,
+        replace_schema_document(Context2, Doc2),
+        _
+    ),
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Doc001', JSON),
+
+    "comment 02" = (JSON.'@documentation'.'@comment').
+
 :- end_tests(json).
 
 :- begin_tests(schema_checker).
