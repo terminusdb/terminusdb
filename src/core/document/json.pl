@@ -556,6 +556,8 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
 % Unit type expansion
 context_value_expand(_,_,[],json{},[]) :-
     !.
+context_value_expand(_,_,null,_,null) :-
+    !.
 context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
@@ -1123,6 +1125,8 @@ json_triple_(JSON,Context,Triple) :-
     ;   (   Value = []
         ->  global_prefix_expand(rdf:nil,RDF_Nil),
             Triple = t(ID,Key,RDF_Nil)
+        ;   Value = null
+        ->  fail
         ;   get_dict('@id', Value, Value_ID)
         ->  (   json_triple_(Value, Context, Triple)
             ;   Triple = t(ID,Key,Value_ID)
@@ -5075,6 +5079,45 @@ test(alter_documentation,
     get_schema_document(DB, 'Doc001', JSON),
 
     "comment 02" = (JSON.'@documentation'.'@comment').
+
+test(elaborate_null,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Class = _{ '@type': "Class",
+               '@id': "Doc",
+               s : "xsd:string"
+             },
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(Context, Class),
+        _
+    ),
+
+    Document = _{ '@type' : "Doc",
+                  s : null },
+
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, Document, Elaborated),
+
+    database_prefixes(DB,Prefixes),
+    findall(Triple, json_triple_(Elaborated,Prefixes,Triple), Triples),
+
+    Triples = [
+        t(_,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://somewhere.for.now/schema#Doc')
+    ].
 
 :- end_tests(json).
 
