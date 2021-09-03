@@ -81,7 +81,7 @@ typecast(Val, Type, Hint, Cast) :-
         throw(error(M))
     ;   (   \+ (   base_type(Type)
                ;   Type = 'http://www.w3.org/2002/07/owl#Thing')
-        ->  throw(error(unknown_type_casting_error(Type), _))
+        ->  throw(error(unknown_type_casting_error(Val, Type), _))
         ;   Val = Bare_Literal^^Source_Type,
             (   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#string')
                 % Upcast to xsd:string for downcast
@@ -861,7 +861,7 @@ test(string_node, []) :-
              'http://www.w3.org/2002/07/owl#Thing', [], Cast),
     Cast = 'http://something'.
 
-test(cast_to_unknown, [error(unknown_type_casting_error(unknown))]) :-
+test(cast_to_unknown, [error(unknown_type_casting_error(1^^'http://www.w3.org/2001/XMLSchema#boolean', unknown))]) :-
     typecast(1^^'http://www.w3.org/2001/XMLSchema#boolean',
              'unknown', [], _).
 
