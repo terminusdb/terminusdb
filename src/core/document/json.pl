@@ -4952,7 +4952,7 @@ test(subdocument_lexical_key_with_odd_chars,
 
     get_document(Desc, Id, Assigned),
     !,
-    writeq(Assigned),
+
     Assigned =
     json{'@id':'Has_Non_Squash/Its%20%2F%20me',
          '@type':'Has_Non_Squash',
