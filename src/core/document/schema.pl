@@ -8,6 +8,7 @@
               is_list_type/1,
               is_array_type/1,
               is_key/1,
+              is_documentation/1,
               refute_class/3,
               class_predicate_type/4,
               type_descriptor/3,
@@ -404,6 +405,10 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
 
 is_key(Type) :-
     prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
+    memberchk(Type, List).
+
+is_documentation(Type) :-
+    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation'], List),
     memberchk(Type, List).
 
 refute_class_key(Validation_Object,Class,Witness) :-

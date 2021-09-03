@@ -2125,7 +2125,9 @@ delete_schema_subdocument(Transaction, Context, Id) :-
     (   atom(Id)
     ->  (   xrdf([Schema], Id, rdf:type, C),
             (   (   is_system_class(C)
-                ;   is_key(C))
+                ;   is_key(C)
+                ;   is_documentation(C)
+                )
             ->  xrdf([Schema], Id, P, R),
                 \+ global_prefix_expand(rdf:type, P),
                 delete(Schema, Id, P, R, _),
