@@ -186,13 +186,13 @@ raw(JValue,JValue).
 
 idgen_lexical(Base,Values,ID) :-
     maplist(raw,Values,Raw),
-    maplist(uri_encoded(path),Raw,Encoded),
+    maplist(uri_encoded(segment),Raw,Encoded),
     merge_separator_split(Suffix, '_', Encoded),
     format(string(ID), '~w~w', [Base,Suffix]).
 
 idgen_hash(Base,Values,ID) :-
     maplist(raw,Values,Raw),
-    maplist(uri_encoded(path),Raw,Encoded),
+    maplist(uri_encoded(segment),Raw,Encoded),
     merge_separator_split(String, '_', Encoded),
     sha_hash(String, Octets, []),
     hash_atom(Octets, Hash),
@@ -558,6 +558,10 @@ context_value_expand(_,_,[],json{},[]) :-
     !.
 context_value_expand(_,_,null,_,null) :-
     !.
+context_value_expand(_,_,true,_,{"@type" : "xsd:boolean", "@value" : true}) :-
+    !.
+context_value_expand(_,_,false,_,{"@type" : "xsd:boolean", "@value" : false}) :-
+    !.
 context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
@@ -683,7 +687,7 @@ type_family_parts(JSON,[Family,Class]) :-
 type_family_id(JSON,Context,Path,ID) :-
     path_component(Path,Context,Component),
     type_family_parts(JSON,Parts),
-    maplist(uri_encoded(path),Parts,Encoded),
+    maplist(uri_encoded(segment),Parts,Encoded),
     merge_separator_split(Type_String,'_',Encoded),
     append(Component, [Type_String], Total),
     merge_separator_split(Merged,'/',Total),
@@ -701,7 +705,7 @@ key_id(JSON,Context,Path,ID) :-
     path_component([type(Type),property(key)|Path], Context, [Path_String]),
     (   Fields = []
     ->  Total = [Path_String]
-    ;   maplist(uri_encoded(path),Fields,Encoded),
+    ;   maplist(uri_encoded(segment),Fields,Encoded),
         merge_separator_split(Fields_String,'_',Encoded),
         Total = [Path_String,Fields_String]
     ),
@@ -715,7 +719,7 @@ property_part(JSON,Keys) :-
 property_id(JSON,Context,Path,ID) :-
     path_component(Path,Context,Component),
     property_part(JSON,Keys),
-    maplist(uri_encoded(path),Keys,Encoded),
+    maplist(uri_encoded(segment),Keys,Encoded),
     merge_separator_split(Key_String,'_',Encoded),
     append(Component,[Key_String], Total),
     merge_separator_split(Merged,'/',Total),
@@ -4893,6 +4897,71 @@ test(subdocument_lexical_key,
                          '@type':'Not_A_Squash',
                          genus:"Malus Mill"}}.
 
+test(subdocument_lexical_key_with_odd_chars,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Has_Non_Squash =
+    _{ '@id' : "Has_Non_Squash",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["me"]},
+       me : "xsd:string",
+       non_squash : "Not_A_Squash"
+     },
+
+    Not_A_Squash =
+    _{ '@id' : "Not_A_Squash",
+       '@type' : "Class",
+       '@subdocument' : [],
+       '@key' : _{ '@type' : "Lexical",
+                   '@fields' : ["genus"]},
+       genus : "xsd:string"
+     },
+
+    create_context(Desc, _{ author : "me", message : "Adding context" }, Context),
+    with_transaction(
+        Context,
+        (   insert_schema_document(Context, Not_A_Squash),
+            insert_schema_document(Context, Has_Non_Squash)
+        ),
+        _
+    ),
+
+    Document =
+    _{ '@type' : "Has_Non_Squash",
+       me : "Its / me",
+       non_squash : _{ '@type' : "Not_A_Squash",
+                       genus : "Malus / Mill" }},
+
+
+    create_context(Desc, _{ author : "me", message : "Adding doc." }, Context2),
+    with_transaction(
+        Context2,
+        insert_document(Context2, Document,Id),
+        _
+    ),
+
+    get_document(Desc, Id, Assigned),
+    !,
+    writeq(Assigned),
+    Assigned =
+    json{'@id':'Has_Non_Squash/Its%20%2F%20me',
+         '@type':'Has_Non_Squash',
+         me:"It's me",
+         non_squash:json{'@id': 'Has_Non_Squash/Its%20%2F%20me/non_squash/Not_A_Squash/Malus%20%2F%20Mill',
+                         '@type':'Not_A_Squash',
+                         genus:"Malus Mill"}}.
+
+
 test(document_with_no_required_field,
      [
          setup(
@@ -5105,7 +5174,8 @@ test(elaborate_null,
     ),
 
     Document = _{ '@type' : "Doc",
-                  s : null },
+                  s : true },
+
 
     open_descriptor(Desc, DB),
     json_elaborate(DB, Document, Elaborated),
