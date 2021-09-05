@@ -80,6 +80,10 @@ instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X,rdf:type,C).
 
+is_foreign_instance(Validation_Object, X, C) :-
+    database_instance(Validation_Object, Instance),
+    xrdf(Instance, X,sys:foreign_type,C).
+
 array_object(Validation_Object, S,I,O) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, S,rdf:type,sys:'Array_Object'),
@@ -374,6 +378,11 @@ refute_object_type(Validation_Object, Class,Subject,Predicate,Witness) :-
 
 refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
     refute_basetype_elt(Object,C,Witness).
+refute_object_type_(foreign(C),Validation_Object,Object,Witness) :-
+    \+ is_foreign_instance(Validation_Object,Object,C),
+    Witness = witness{ '@type': instance_not_of_class,
+                       class: C,
+                       instance: Object }.
 refute_object_type_(class(C),Validation_Object,Object,Witness) :-
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,

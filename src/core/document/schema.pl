@@ -46,6 +46,10 @@ is_enum(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, rdf:type, sys:'Enum').
 
+is_foreign(Validation_Object,Class) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, rdf:type, sys:'Foreign').
+
 is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
@@ -53,6 +57,7 @@ is_tagged_union(Validation_Object,Class) :-
 is_system_class(Class) :-
     prefix_list(
         [
+            sys:'Foreign',
             sys:'Class',
             sys:'TaggedUnion',
             sys:'Enum',
@@ -598,6 +603,9 @@ refute_type(Validation_Object,Type,Witness) :-
 
 type_descriptor(_Validation_Object, Class, unit) :-
     is_unit(Class),
+    !.
+type_descriptor(Validation_Object, Class, foreign(Class)) :-
+    is_foreign(Validation_Object,Class),
     !.
 type_descriptor(Validation_Object, Class, tagged_union(Class,Map)) :-
     is_tagged_union(Validation_Object, Class),
