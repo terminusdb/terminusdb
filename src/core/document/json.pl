@@ -1126,8 +1126,7 @@ json_triple_(JSON,Context,Triple) :-
     ->  fail
     ;   Key = '@foreign'
     ->  global_prefix_expand(sys:foreign_type, Foreign_Type),
-        Triple = t(ID,Foreign_Type,Value),
-        writeq(Triple)
+        Triple = t(ID,Foreign_Type,Value)
     ;   Key = '@type'
     ->  global_prefix_expand(rdf:type, RDF_Type),
         Triple = t(ID,RDF_Type,Value)
@@ -7307,8 +7306,7 @@ test(elaborate_foreign_type,
              create_db_with_empty_schema("admin","foreign"),
              resolve_absolute_string_descriptor("admin/foreign", Desc)
             )),
-      cleanup(teardown_temp_store(State)),
-      error(asdf)
+      cleanup(teardown_temp_store(State))
      ]) :-
 
     From = _{ '@type' : "Class",
@@ -7448,8 +7446,23 @@ test(foreign_type,
         ),
         _
     ),
-    writeq(Payroll_Doc_Id),
-    true.
+
+    get_document(Finance_Desc, Payroll_Doc_Id, New_Payroll),
+    writeq(New_Payroll),
+    New_Payroll =
+    json{'@id':'Payroll/standard',
+         '@type':'Payroll',
+         payroll:[json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjane_1995-05-03',
+                       '@type':'PayRecord',
+                       employee: 'Employee/jane_1995-05-03',
+                       pay:32.85,
+                       pay_period:"P1M"},
+                  json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe_2012-05-03',
+                       '@type':'PayRecord',
+                       employee: 'Employee/joe_2012-05-03',
+                       pay:12.3,
+                       pay_period:"P1M"}]}.
+
 
 
 :- end_tests(foreign_types).

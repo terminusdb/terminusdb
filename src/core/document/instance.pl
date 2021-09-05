@@ -80,7 +80,7 @@ instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X,rdf:type,C).
 
-is_foreign_instance(Validation_Object, X, C) :-
+foreign_instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X,sys:foreign_type,C).
 
@@ -379,7 +379,7 @@ refute_object_type(Validation_Object, Class,Subject,Predicate,Witness) :-
 refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
     refute_basetype_elt(Object,C,Witness).
 refute_object_type_(foreign(C),Validation_Object,Object,Witness) :-
-    \+ is_foreign_instance(Validation_Object,Object,C),
+    \+ foreign_instance_of(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
@@ -468,6 +468,19 @@ refute_subject_1(Validation_Object,Subject,_Witness) :-
     \+ xrdf(Instance, Subject, _, _),
     !,
     fail.
+refute_subject_1(Validation_Object,Subject,Witness) :-
+    foreign_instance_of(Validation_Object, Subject, Class),
+    !,
+    database_instance(Validation_Object, Instance),
+    global_prefix_expand(sys:foreign_type,Foreign_Type),
+    xrdf(Instance,Subject, P, _),
+    \+ P = Foreign_Type,
+    Witness = witness{
+                  '@type': foreign_type_has_local_properties,
+                  property: P,
+                  foreign_type: Class,
+                  instance: Subject
+              }.
 refute_subject_1(Validation_Object,Subject,Witness) :-
     (   instance_of(Validation_Object, Subject, Class)
     ->  refute_typed_subject(Validation_Object, Subject, Class, Witness)
