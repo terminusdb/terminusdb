@@ -1271,6 +1271,11 @@ list_type_id_predicate_value([O|T],C,Id,P,Recursion,DB,Prefixes,Compress,Unfold,
 
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
     enum_value(C, O, V).
+type_id_predicate_iri_value(foreign(_),_,_,Id,_,_,Prefixes,Compress,_,Value) :-
+    (   Compress = true
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
 type_id_predicate_iri_value(list(C),Id,P,O,Recursion,DB,Prefixes,Compress,Unfold,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
@@ -7357,8 +7362,7 @@ test(foreign_type,
              resolve_absolute_string_descriptor("admin/hr", HR_Desc),
              resolve_absolute_string_descriptor("admin/finance", Finance_Desc)
             )),
-      cleanup(teardown_temp_store(State)),
-      error(asdf)
+      cleanup(teardown_temp_store(State))
      ]) :-
 
     Employee =
@@ -7454,15 +7458,13 @@ test(foreign_type,
          '@type':'Payroll',
          payroll:[json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjane_1995-05-03',
                        '@type':'PayRecord',
-                       employee: 'Employee/jane_1995-05-03',
-                       pay:32.85,
+                       employee:'Employee/jane_1995-05-03',
+                       pay:(32.85),
                        pay_period:"P1M"},
-                  json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe_2012-05-03',
-                       '@type':'PayRecord',
-                       employee: 'Employee/joe_2012-05-03',
-                       pay:12.3,
+                  json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe_2012-05-03','@type':'PayRecord',
+                       employee:'Employee/joe_2012-05-03',
+                       pay:(12.3),
                        pay_period:"P1M"}]}.
-
 
 
 :- end_tests(foreign_types).
