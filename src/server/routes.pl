@@ -3775,8 +3775,9 @@ get_param(Key,Request,Value) :-
 http_read_json_data(Request, JSON) :-
     http_read_data(Request, JSON_String, [to(string)]),
     catch(atom_json_dict(JSON_String, JSON, []),
-          error(syntax_error(json(illegal_json)),_),
-          throw(error(malformed_json_payload(JSON_String), _))).
+          error(syntax_error(json(_Kind)),_),
+          throw(error(malformed_json_payload(JSON_String), _))
+         ).
 
 /*
  * add_payload_to_request(Request:request,JSON:json) is det.
