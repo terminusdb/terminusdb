@@ -498,8 +498,7 @@ test(db_auth_test, [
 
 test(bad_json, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         error(asdf)
+         cleanup(teardown_temp_server(State))
      ]) :-
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
     Doc = '{ "prefixes" : {',
