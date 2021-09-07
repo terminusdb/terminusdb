@@ -34,7 +34,7 @@ unpack(System_DB, Auth, Path, Payload_or_Resource) :-
         error(not_a_repository_descriptor(Repository_Descriptor))),
 
     check_descriptor_auth(System_DB, Repository_Descriptor,
-                          '@schema':'Action_commit_write_access',
+                          '@schema':'Action/commit_write_access',
                           Auth),
 
     % 0. Get Payload

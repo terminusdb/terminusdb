@@ -6,9 +6,6 @@
 
               % casting.pl
               typecast/4,
-              hash/3,
-              idgen/3,
-              random_idgen/3,
 
               % database_utils.pl
               system_graph_layer/2,

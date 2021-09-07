@@ -1400,7 +1400,8 @@ compile_wf(typecast(Val,Type,_Hints,Cast),
 compile_wf(hash(Base,Args,Id),(
                literally(BaseE,BaseL),
                literally(ArgsE,ArgsL),
-               hash(BaseL,ArgsL,IdE),
+               idgen_hash(BaseL,ArgsL,IdS),
+               atom_string(IdE,IdS),
                unliterally(BaseL,BaseE),
                unliterally(ArgsL,ArgsE)
            )) -->
@@ -1410,7 +1411,8 @@ compile_wf(hash(Base,Args,Id),(
 compile_wf(random_idgen(Base,Args,Id),(
                literally(BaseE,BaseL),
                literally(ArgsE,ArgsL),
-               random_idgen(BaseL,ArgsL,IdE),
+               idgen_random(BaseL,ArgsL,IdS),
+               atom_string(IdE,IdS),
                unliterally(BaseL,BaseE),
                unliterally(ArgsL,ArgsE)
            )) -->
@@ -1420,7 +1422,8 @@ compile_wf(random_idgen(Base,Args,Id),(
 compile_wf(idgen(Base,Args,Id),(
                literally(BaseE,BaseL),
                literally(ArgsE,ArgsL),
-               idgen(BaseL,ArgsL,IdE),
+               idgen_lexical(BaseL,ArgsL,IdS),
+               atom_string(IdE,IdS),
                unliterally(BaseL,BaseE),
                unliterally(ArgsL,ArgsE)
            )) -->
@@ -2123,7 +2126,7 @@ test(unique, [
     query_test_response_test_branch(Query_Out, JSON),
 
     [Res] = JSON.bindings,
-    _{'URI': 'http://foo.com/900150983cd24fb0d6963f7d28e17f72'} :< Res.
+    _{'URI': 'http://foo.com/5291241b76087352cd96a565175eca6ce739b2eb'} :< Res.
 
 test(split, [
          setup((setup_temp_store(State),
@@ -3490,7 +3493,7 @@ test(idgen, [
   "@type": "LexicalKey",
   "base": {
     "@type": "Value",
-    "node": "Journey"
+    "node": "Journey/"
   },
   "key_list": [
       { "@type": "DataValue",
@@ -3509,7 +3512,7 @@ test(idgen, [
     query_test_response_test_branch(Query, JSON),
 
     [Value] = (JSON.bindings),
-    (Value.'Journey_ID') = 'Journey_test'.
+    (Value.'Journey_ID') = 'Journey/test'.
 
 test(isa_literal, [
          setup((setup_temp_store(State),

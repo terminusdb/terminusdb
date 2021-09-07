@@ -41,7 +41,7 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
         (branch_descriptor{} :< Branch_Descriptor),
         error(push_requires_branch(Branch_Descriptor),_)),
 
-    check_descriptor_auth(System_DB, (Branch_Descriptor.repository_descriptor), '@schema':'Action_push', Auth),
+    check_descriptor_auth(System_DB, (Branch_Descriptor.repository_descriptor), '@schema':'Action/push', Auth),
 
     do_or_die(
         open_descriptor(Branch_Descriptor, _Branch_Transaction), % dodgy underscore

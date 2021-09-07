@@ -127,7 +127,7 @@ user_managed_resource(_Askable, User_Uri, _Resource_Uri) :-
     is_super_user(User_Uri),
     !.
 user_managed_resource(Askable, User_Uri, Resource_Uri) :-
-    auth_action_scope(Askable, User_Uri, '@schema':'Action_manage_capabilities', Resource_Uri).
+    auth_action_scope(Askable, User_Uri, '@schema':'Action/manage_capabilities', Resource_Uri).
 
 add_user(Nick, Pass_Opt, User_URI) :-
     create_context(system_descriptor{},

@@ -127,7 +127,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
     ->  Origin_Descriptor = empty
     ;   throw(error(bad_origin_path_option(Origin_Option),_))),
 
-    assert_auth_action_scope(System_DB, Auth, '@schema':'Action_branch', Scope_Iri),
+    assert_auth_action_scope(System_DB, Auth, '@schema':'Action/branch', Scope_Iri),
 
     % ensure that we're putting this branch into a local repository
     do_or_die(
@@ -171,7 +171,7 @@ branch_delete(System_DB, Auth, Path) :-
         }:< Descriptor,
         error(not_a_branch_descriptor(Descriptor), _)),
 
-    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_branch', Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/branch', Auth),
 
     do_or_die(
         has_branch(Repository_Descriptor, Branch_Name),

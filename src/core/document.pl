@@ -4,6 +4,10 @@
               refute_validation_objects/2,
 
               % json.pl
+              idgen_random/2,
+              idgen_hash/3,
+              idgen_lexical/3,
+
               json_elaborate/3,
               json_triple/3,
               json_schema_triple/3,

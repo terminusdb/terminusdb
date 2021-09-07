@@ -18,6 +18,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple/casting)).
 :- use_module(library(semweb/turtle)).
+:- use_module(core(document)).
 
 :- multifile user:portray/1.
 user:portray(turtle_utils:open_string(_, Stream)) :-
@@ -86,9 +87,13 @@ insert_turtle_graph(Context,TTL) :-
 
     % Setup blank nodes
     get_dict(prefixes,Context, Prefixes),
-    (   get_dict(doc,Prefixes,Doc)
-    ->  random_idgen(Doc,['Blank_Node'],Blank_Node_Prefix)
-    ;   random_idgen('terminusdb:///data/Blank_Node',[],Blank_Node_Prefix)),
+    (   get_dict('@base',Prefixes,Prefix)
+    ->  atomic_list_concat([Prefix,'Blank_Node/'], Blank_Node),
+        idgen_random(Blank_Node,Blank_Node_Prefix_String),
+        atom_string(Blank_Node_Prefix, Blank_Node_Prefix_String)
+    ;   idgen_random('terminusdb:///data/Blank_Node/',Blank_Node_Prefix_String),
+        atom_string(Blank_Node_Prefix, Blank_Node_Prefix_String)
+    ),
 
     coerce_literal_string(TTL, TTLS),
     setup_call_cleanup(
