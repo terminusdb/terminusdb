@@ -1590,13 +1590,12 @@ test(fetch_second_time_with_change, [
                  time_limit(infinite),
                  methods([options,post])]).
 
-
 rebase_handler(post, Path, Request, System_DB, Auth) :-
+    check_content_type_json(Request),
+    get_payload(Document,Request),
     do_or_die(
-        (   get_payload(Document, Request),
-            _{ author : Author,
-               rebase_from : Their_Path } :< Document
-        ),
+        (_{ author : Author,
+            rebase_from : Their_Path } :< Document),
         error(bad_api_document(Document,[author,rebase_from]),_)),
 
     api_report_errors(
