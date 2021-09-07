@@ -280,7 +280,7 @@ idgen_check_base(Submitted_ID, Base, Context) :-
     prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
     prefix_expand(Base, Context, Base_Ex),
     do_or_die(atom_concat(Base_Ex, _, Submitted_ID_Ex),
-              error(submitted_document_id_does_not_have_exp_prefix(Submitted_ID_Ex, Base_Ex),_)).
+              error(submitted_document_id_does_not_have_expected_prefix(Submitted_ID_Ex, Base_Ex),_)).
 
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).

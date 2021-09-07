@@ -1161,12 +1161,12 @@ api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JS
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(Type, error(submitted_document_id_does_not_have_exp_prefix(Submitted_ID, Prefix, Document),_),JSON) :-
+api_document_error_jsonld(Type, error(submitted_document_id_does_not_have_expected_prefix(Submitted_ID, Prefix, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Document id ~q does not have expected prefix ~q", [Submitted_ID, Prefix]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:SubmittedDocIdDoesNotHaveExpectedPrefix',
+             'api:error' : _{ '@type' : 'api:SubmittedDocumentIdDoesNotHaveExpectedPrefix',
                               'api:submitted_id': Submitted_ID,
                               'api:prefix': Prefix,
                               'api:document' : Document },

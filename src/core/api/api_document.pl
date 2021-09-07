@@ -155,7 +155,7 @@ known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
 known_document_error(submitted_id_does_not_match_generated_id(_,_)).
-known_document_error(submitted_document_id_does_not_have_exp_prefix(_,_)).
+known_document_error(submitted_document_id_does_not_have_expected_prefix(_,_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
