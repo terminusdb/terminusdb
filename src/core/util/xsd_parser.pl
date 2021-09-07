@@ -272,16 +272,16 @@ maybeMonth(M) --> natural(M), "M" .
 maybeMonth(0) --> "" .
 
 maybeDay(D) --> natural(D), "D" .
-maybeDay(-1) --> "" .
+maybeDay(0) --> "" .
 
 maybeHour(H) --> natural(H), "H" .
-maybeHour(-1) --> "" .
+maybeHour(0) --> "" .
 
 maybeMinute(M) --> natural(M), "M" .
-maybeMinute(-1) --> "" .
+maybeMinute(0) --> "" .
 
 maybeSecond(S) --> unsignedDecimal(S), "S" .
-maybeSecond(-1) --> "" .
+maybeSecond(0) --> "" .
 
 maybeTime(H,M,S) --> time_separator, maybeHour(MH), maybeMinute(MM), maybeSecond(MS),
 		     { (MH < 0, MM < 0, MS < 0)

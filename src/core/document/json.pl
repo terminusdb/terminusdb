@@ -92,6 +92,15 @@ value_json(X,O) :-
         },
     string(X),
     !.
+value_json(X,O) :-
+    ground(O), % this looks dubious...
+    O = json{
+            '@type': "@id",
+            '@id': X,
+            '@foreign' : _
+        },
+    string(X),
+    !.
 value_json(RDF_Nil,[]) :-
     global_prefix_expand(rdf:nil,RDF_Nil),
     !.
@@ -181,7 +190,10 @@ get_field_values(JSON,Context,Fields,Values) :-
 raw(JValue,Value) :-
     is_dict(JValue),
     !,
-    get_dict('@value',JValue,Value).
+    (   get_dict('@type', JValue, "@id")
+    ->  get_dict('@id', JValue, Value)
+    ;   get_dict('@value',JValue,Value)
+    ).
 raw(JValue,JValue).
 
 idgen_lexical(Base,Values,ID) :-
@@ -284,6 +296,7 @@ idgen_check_base(Submitted_ID, Base, Context) :-
 
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
+class_descriptor_image(foreign(C),json{ '@type' : "@id", '@foreign' : C}).
 class_descriptor_image(optional(C),json{ '@type' : C }).
 class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
 class_descriptor_image(base_class(C),json{ '@type' : C }).
@@ -582,7 +595,7 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     ->  Value = [Val],
         context_value_expand(DB,Context,Val,Expansion,V)
     ;   prefix_expand(Value,Context,Value_Ex),
-        V = json{ '@type' : "@id", '@id' : Value_Ex}
+        put_dict(_{'@id' : Value_Ex},Expansion,V)
     ).
 context_value_expand(_,Context,Value,_Expansion,V) :-
     % An already expanded typed value
@@ -1109,6 +1122,9 @@ json_triple_(JSON,Context,Triple) :-
     ;   Key = '@type', % this is a leaf
         Value = "@id"
     ->  fail
+    ;   Key = '@foreign'
+    ->  global_prefix_expand(sys:foreign_type, Foreign_Type),
+        Triple = t(ID,Foreign_Type,Value)
     ;   Key = '@type'
     ->  global_prefix_expand(rdf:type, RDF_Type),
         Triple = t(ID,RDF_Type,Value)
@@ -1253,6 +1269,11 @@ list_type_id_predicate_value([O|T],C,Id,P,Recursion,DB,Prefixes,Compress,Unfold,
 
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
     enum_value(C, O, V).
+type_id_predicate_iri_value(foreign(_),_,_,Id,_,_,Prefixes,Compress,_,Value) :-
+    (   Compress = true
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
 type_id_predicate_iri_value(list(C),Id,P,O,Recursion,DB,Prefixes,Compress,Unfold,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
@@ -7277,3 +7298,171 @@ test(document_invalid_id_submitted,
         _ID).
 
 :- end_tests(document_id_generation).
+
+
+:- begin_tests(foreign_types).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+test(elaborate_foreign_type,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foreign"),
+             resolve_absolute_string_descriptor("admin/foreign", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    From = _{ '@type' : "Class",
+              '@id' : "From",
+              '@key' : _{ '@type' : "Lexical", '@fields' : ["to"]},
+              to : "To"},
+    To= _{ '@type' : "Foreign",
+           '@id' : "To" },
+    create_context(Desc, commit_info{author: "me", message: "something"}, Context),
+    with_transaction(
+        Context,
+        (   insert_schema_document(Context,From),
+            insert_schema_document(Context,To)
+        ),
+        _
+    ),
+
+    From_Doc = _{ '@type' : "From", to : "To/george" },
+    open_descriptor(Desc, DB),
+
+    json_elaborate(DB, From_Doc, Elaborated),
+
+    Elaborated =
+    json{'@id':'http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
+         '@type':'http://somewhere.for.now/schema#From',
+         'http://somewhere.for.now/schema#to':
+         json{'@id':'http://somewhere.for.now/document/To/george',
+              '@type':"@id",
+              '@foreign' : 'http://somewhere.for.now/schema#To'}},
+
+    json_triples(DB,From_Doc, Triples),
+
+    Triples =[
+        t('http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://somewhere.for.now/schema#From'),
+        t('http://somewhere.for.now/document/To/george',
+          'http://terminusdb.com/schema/sys#foreign_type',
+          'http://somewhere.for.now/schema#To'),
+        t('http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
+          'http://somewhere.for.now/schema#to',
+          'http://somewhere.for.now/document/To/george')].
+
+test(foreign_type,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","hr"),
+             create_db_with_empty_schema("admin","finance"),
+             resolve_absolute_string_descriptor("admin/hr", HR_Desc),
+             resolve_absolute_string_descriptor("admin/finance", Finance_Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Employee =
+    _{ '@type' : "Class",
+       '@id' : "Employee",
+       '@key' : _{ '@type' : "Lexical", '@fields' : ["name", "start_date"] },
+       name : "xsd:string",
+       start_date : "xsd:date",
+       termination_date : _{ '@type' : "Optional", '@class' : "xsd:date"},
+       title : "xsd:string"
+     },
+
+    create_context(HR_Desc, commit_info{author: "me", message: "something"}, HR_Context),
+    with_transaction(
+        HR_Context,
+        insert_schema_document(HR_Context,Employee),
+        _
+    ),
+
+    Payroll =
+    _{ '@type' : "Class",
+       '@id' : "Payroll",
+       payroll : _{ '@type' : "Set",
+                    '@class' : "PayRecord"}},
+    PayRecord =
+    _{ '@type' : "Class",
+       '@id' : "PayRecord",
+       '@subdocument' : [],
+       '@key' : _{ '@type' : "Lexical", '@fields' : ["employee"] },
+       pay_period : "xsd:duration",
+       pay : "xsd:decimal",
+       employee : "Employee"
+     },
+    Employee_Stub =
+    _{ '@type' : "Foreign",
+       '@id' : "Employee" },
+
+    create_context(Finance_Desc, commit_info{author: "me", message: "something"}, Finance_Context),
+    with_transaction(
+        Finance_Context,
+        (   insert_schema_document(Finance_Context,Payroll),
+            insert_schema_document(Finance_Context,PayRecord),
+            insert_schema_document(Finance_Context,Employee_Stub)
+        ),
+        _
+    ),
+
+    Joe = _{ '@type' : "Employee",
+             name : "joe",
+             start_date : "2012-05-03",
+             title : "Senior Engineer" },
+    Jane = _{ '@type' : "Employee",
+             name : "jane",
+             start_date : "1995-05-03",
+             title : "Senior Senior Engineer" },
+
+    create_context(HR_Desc, commit_info{author: "me", message: "something"}, HR_Doc_Context),
+    with_transaction(
+        HR_Doc_Context,
+        (   insert_document(HR_Doc_Context,Joe,Joe_Id),
+            insert_document(HR_Doc_Context,Jane,Jane_Id)
+        ),
+        _
+    ),
+
+    Payroll_Doc =
+    _{ '@type' : "Payroll",
+       '@id' : "Payroll/standard",
+       payroll : [
+           _{ '@type' : "PayRecord",
+              pay_period : "P1M",
+              pay : "12.30",
+              employee : Joe_Id },
+           _{ '@type' : "PayRecord",
+              pay_period : "P1M",
+              pay : "32.85",
+              employee : Jane_Id }
+       ]
+     },
+
+    create_context(Finance_Desc, commit_info{author: "me", message: "something"}, Finance_Doc_Context),
+    with_transaction(
+        Finance_Doc_Context,
+        (   insert_document(Finance_Doc_Context,Payroll_Doc,Payroll_Doc_Id)
+        ),
+        _
+    ),
+
+    get_document(Finance_Desc, Payroll_Doc_Id, New_Payroll),
+    writeq(New_Payroll),
+    New_Payroll =
+    json{'@id':'Payroll/standard',
+         '@type':'Payroll',
+         payroll:[json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjane_1995-05-03',
+                       '@type':'PayRecord',
+                       employee:'Employee/jane_1995-05-03',
+                       pay:(32.85),
+                       pay_period:"P1M"},
+                  json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe_2012-05-03','@type':'PayRecord',
+                       employee:'Employee/joe_2012-05-03',
+                       pay:(12.3),
+                       pay_period:"P1M"}]}.
+
+
+:- end_tests(foreign_types).
