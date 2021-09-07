@@ -270,9 +270,10 @@ json_idgen(JSON,DB,Context,Path,ID_Ex) :-
         ;   Descriptor = base(Base))
     ->  (   get_dict('@id', JSON, Submitted_ID),
             ground(Submitted_ID)
-        ->  do_or_die(idgen_check_base(Submitted_ID, Base, Context),
+        ->  prefix_expand(Base, Context, Base_Ex),
+            do_or_die(idgen_check_base(Submitted_ID, Base, Context),
                       error(submitted_id_does_not_match_base(Submitted_ID,
-                                                             Base),
+                                                             Base_Ex),
                             _)),
             ID = Submitted_ID
         ;   idgen_random(Base,ID))

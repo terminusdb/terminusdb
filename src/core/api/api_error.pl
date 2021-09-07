@@ -1163,7 +1163,7 @@ api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JS
             }.
 api_document_error_jsonld(Type, error(submitted_id_does_not_match_base(Submitted_ID, Base, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Document was submitted with id ~q which does not match base ~q", [Submitted_ID, Base]),
+    format(string(Msg), "Document was submitted with id ~q which does not match the base URI ~q on which the id should be placed according to the schema.", [Submitted_ID, Base]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SubmittedIdDoesNotMatchBase',
