@@ -1205,19 +1205,19 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents, error(skip_is_not_a_number(Skip_Atom), _), JSON) :-
-    format(string(Msg), "specified skip count is not a number: ~q", [Skip_Atom]),
+api_document_error_jsonld(get_documents, error(skip_is_not_an_integer(Skip_Atom), _), JSON) :-
+    format(string(Msg), "specified skip count is not an integer: ~q", [Skip_Atom]),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:SkipNotANumber',
+             'api:error' : _{ '@type' : 'api:SkipNotAnInteger',
                               'api:skip' : Skip_Atom },
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents, error(count_is_not_a_number(Count_Atom), _), JSON) :-
-    format(string(Msg), "specified retrieval count is not a number: ~q", [Count_Atom]),
+api_document_error_jsonld(get_documents, error(count_is_not_an_integer(Count_Atom), _), JSON) :-
+    format(string(Msg), "specified retrieval count is not an integer: ~q", [Count_Atom]),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:CountNotANumber',
+             'api:error' : _{ '@type' : 'api:CountNotAnInteger',
                               'api:count' : Count_Atom },
              'api:message' : Msg
             }.
