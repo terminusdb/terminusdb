@@ -53,6 +53,20 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+encode_id_fragment(Elt, Encoded) :-
+    ground(Elt),
+    !,
+    format(atom(Fragment), '~w', [Elt]),
+    re_replace('_'/g, '%5F', Fragment, New_Fragment),
+    uri_encoded(segment, New_Fragment, Encoded).
+encode_id_fragment(Fragment, Encoded) :-
+    ground(Encoded),
+    !,
+    re_replace('%5F'/g, '_', Encoded, New_Encoded),
+    uri_encoded(segment, New_Encoded, Fragment).
+encode_id_fragment(_, _) :-
+    throw(error(instantiation_error, _)).
+
 value_type_to_json_type(X, T, X, T) :-
     number(X),
     !.
@@ -186,13 +200,13 @@ raw(JValue,JValue).
 
 idgen_lexical(Base,Values,ID) :-
     maplist(raw,Values,Raw),
-    maplist(uri_encoded(segment),Raw,Encoded),
+    maplist(encode_id_fragment,Raw,Encoded),
     merge_separator_split(Suffix, '_', Encoded),
     format(string(ID), '~w~w', [Base,Suffix]).
 
 idgen_hash(Base,Values,ID) :-
     maplist(raw,Values,Raw),
-    maplist(uri_encoded(segment),Raw,Encoded),
+    maplist(encode_id_fragment,Raw,Encoded),
     merge_separator_split(String, '_', Encoded),
     sha_hash(String, Octets, []),
     hash_atom(Octets, Hash),
@@ -620,14 +634,14 @@ enum_value(Type,Value,ID) :-
     ground(Type),
     ground(Value),
     !,
-    uri_encoded(segment, Value, Encoded_Value),
+    encode_id_fragment(Value, Encoded_Value),
     atomic_list_concat([Type, '_', Encoded_Value], ID).
 enum_value(Type,Value,ID) :-
     ground(Type),
     !,
     atom_concat(Type,'_',Prefix),
     atom_concat(Prefix,Encoded_Value,ID),
-    uri_encoded(segment, Value, Encoded_Value).
+    encode_id_fragment(Value, Encoded_Value).
 
 
 json_context_elaborate(DB, JSON, Context, Expanded) :-
@@ -687,7 +701,7 @@ type_family_parts(JSON,[Family,Class]) :-
 type_family_id(JSON,Context,Path,ID) :-
     path_component(Path,Context,Component),
     type_family_parts(JSON,Parts),
-    maplist(uri_encoded(segment),Parts,Encoded),
+    maplist(encode_id_fragment,Parts,Encoded),
     merge_separator_split(Type_String,'_',Encoded),
     append(Component, [Type_String], Total),
     merge_separator_split(Merged,'/',Total),
@@ -705,7 +719,7 @@ key_id(JSON,Context,Path,ID) :-
     path_component([type(Type),property(key)|Path], Context, [Path_String]),
     (   Fields = []
     ->  Total = [Path_String]
-    ;   maplist(uri_encoded(segment),Fields,Encoded),
+    ;   maplist(encode_id_fragment,Fields,Encoded),
         merge_separator_split(Fields_String,'_',Encoded),
         Total = [Path_String,Fields_String]
     ),
@@ -719,7 +733,7 @@ property_part(JSON,Keys) :-
 property_id(JSON,Context,Path,ID) :-
     path_component(Path,Context,Component),
     property_part(JSON,Keys),
-    maplist(uri_encoded(segment),Keys,Encoded),
+    maplist(encode_id_fragment,Keys,Encoded),
     merge_separator_split(Key_String,'_',Encoded),
     append(Component,[Key_String], Total),
     merge_separator_split(Merged,'/',Total),
@@ -727,7 +741,6 @@ property_id(JSON,Context,Path,ID) :-
 
 documentation_id(Context,Path,ID) :-
     path_component([type('Documentation'),property('documentation')|Path], Context, Encoded),
-    %maplist(uri_encoded(path),Full_Path,Encoded),
     merge_separator_split(Merged,'/',Encoded),
     prefix_expand_schema(Merged,Context,ID).
 
@@ -7277,5 +7290,30 @@ test(document_invalid_id_submitted,
            baz: 42},
 
         _ID).
+
+test(underscore_space_slash_in_id,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Lexical",
+                     '@fields': ["foo", "bar", "baz"]},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:string"},
+
+        _{ '@type': "Thing",
+           foo: "hi_there buddy",
+           bar: (0.5),
+           baz: "lo_there/buddy"},
+        'Thing/hi%255Fthere%20buddy_0.5_lo%255Fthere%2Fbuddy').
+
 
 :- end_tests(document_id_generation).
