@@ -63,7 +63,8 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
-              skip_generate_nsols/3
+              skip_generate_nsols/3,
+              input_to_integer/2
           ]).
 
 /** <module> Utils
@@ -893,3 +894,10 @@ skip_generate_nsols(Goal, Skip, Count) :-
     (   Count = unlimited
     ->  offset(Skip, Goal)
     ;   limit(Count, offset(Skip, Goal))).
+
+input_to_integer(Atom, Integer) :-
+    (   integer(Atom)
+    ->  Integer = Atom
+    ;   error:text(Atom)
+    ->  atom_number(Atom, Integer),
+        integer(Integer)).

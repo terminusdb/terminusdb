@@ -767,14 +767,14 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             (   (   get_dict(skip, Posted, Skip_Atom)
                 ->  true
                 ;   memberchk(skip=Skip_Atom, Search))
-            ->  do_or_die(atom_number(Skip_Atom, Skip),
-                          error(skip_is_not_a_number(Skip_Atom), _))
+            ->  do_or_die(input_to_integer(Skip_Atom, Skip),
+                          error(skip_is_not_an_integer(Skip_Atom),_))
             ;   Skip = 0),
             (   (   get_dict(count, Posted, Count_Atom)
                 ->  true
                 ;   memberchk(count=Count_Atom, Search))
-            ->  do_or_die(atom_number(Count_Atom, Count),
-                          error(count_is_not_a_number(Count_Atom), _))
+            ->  do_or_die(input_to_integer(Count_Atom, Count),
+                          error(count_is_not_an_integer(Count_Atom),_))
             ;   Count = unlimited),
 
             (   (   get_dict(minimized, Posted, true)
