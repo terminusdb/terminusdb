@@ -663,7 +663,7 @@ layer:LayerIdRestriction2 a owl:Restriction.",
 
     http_get(URI, Result, [json_object(dict),
                            authorization(basic(admin, Key))]),
-    writeq(Result),
+
     once(sub_string(Result, _, _, _,
                     "LayerIdRestriction>\n  a owl:Restriction")),
 
