@@ -138,9 +138,9 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
         error(invalid_target_absolute_path(Our_Branch_Path),_)),
 
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_commit_read_access', Auth),
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_schema_write_access', Auth),
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_instance_write_access', Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/commit_read_access', Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/schema_write_access', Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/instance_write_access', Auth),
 
     do_or_die(
         (branch_descriptor{} :< Our_Branch_Descriptor),
@@ -156,7 +156,7 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         ;   commit_descriptor{} :< Their_Ref_Descriptor),
         error(rebase_requires_source_branch(Their_Ref_Descriptor),_)),
 
-    check_descriptor_auth(System_DB, Their_Ref_Descriptor, '@schema':'Action_commit_read_access', Auth),
+    check_descriptor_auth(System_DB, Their_Ref_Descriptor, '@schema':'Action/commit_read_access', Auth),
 
     Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repo_Descriptor = (Their_Ref_Descriptor.repository_descriptor),

@@ -59,7 +59,7 @@ organization_name_exists(Askable, Name) :-
 database_finalized(Askable,Organization,Database) :-
     organization_database_name_uri(Askable,Organization,Database,Db_Uri),
     once(ask(Askable,
-             t(Db_Uri, state, '@schema':'DatabaseState_finalized'))).
+             t(Db_Uri, state, '@schema':'DatabaseState/finalized'))).
 
 user_name_uri(Askable, User_Name, Uri) :-
     once(ask(Askable,

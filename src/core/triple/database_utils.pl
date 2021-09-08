@@ -18,7 +18,6 @@
 :- use_module(triplestore).
 :- use_module(constants).
 :- use_module(literals, [object_storage/2]).
-:- use_module(casting, [idgen/3]).
 
 :- use_module(core(util)).
 

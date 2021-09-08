@@ -587,13 +587,15 @@ test(triples_update, [
     % First make the schema graph
 
     read_file_to_string(TTL_File, TTL, []),
-
+    %Server2 = 'http://127.0.0.1:6363',
+    %writeq(Server2),
     atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/instance'], URI),
     admin_pass(Key),
     http_post(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
                           turtle : TTL}),
               _In, [json_object(dict),
+                    status_code(_),
                     authorization(basic(admin, Key)),
                     cert_verify_hook(cert_accept_any),
                     reply_header(_)]),
@@ -604,7 +606,6 @@ test(triples_update, [
             Triples),
 
     memberchk('http://terminusdb.com/schema/system#Capability'-(rdf:type)-(sys:'Class'), Triples),
-
 
     findall(A-B-C,
             ask(Branch_Descriptor,
@@ -645,8 +646,8 @@ layer:LayerIdRestriction a owl:Restriction.",
     http_put(URI, json(_{commit_info : _{ author : "Test",
                                            message : "testing" },
                          turtle : TTL}),
-             _Result1, [json_object(dict),
-                        authorization(basic(admin, Key))]),
+             _Result, [json_object(dict),
+                       authorization(basic(admin, Key))]),
 
     TTL2 = "
 @prefix layer: <http://terminusdb.com/schema/layer#> .

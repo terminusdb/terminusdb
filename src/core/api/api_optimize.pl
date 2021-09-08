@@ -20,13 +20,13 @@ api_optimize(SystemDB, Auth, Path) :-
                       error(requires_super_user,_))
         ;   database_descriptor{} :< Descriptor,
             check_descriptor_auth(SystemDB, Descriptor,
-                                  '@schema':'Action_meta_write_access', Auth)
+                                  '@schema':'Action/meta_write_access', Auth)
         ;   repository_descriptor{} :< Descriptor,
             check_descriptor_auth(SystemDB, Descriptor,
-                                  '@schema':'Action_meta_write_access', Auth)
+                                  '@schema':'Action/meta_write_access', Auth)
         ;   branch_descriptor{} :< Descriptor,
             check_descriptor_auth(SystemDB, Descriptor,
-                                  '@schema':'Action_meta_write_access', Auth)
+                                  '@schema':'Action/meta_write_access', Auth)
         ),
         error(not_a_valid_descriptor_for_optimization(Descriptor),_)),
 

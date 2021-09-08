@@ -21,8 +21,8 @@
 begin_deleting_db_from_system(System, Organization,DB_Name) :-
     organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
     ask(System,
-        (   delete(Db_Uri, state, '@schema':'DatabaseState_finalized'),
-            insert(Db_Uri, state, '@schema':'DatabaseState_deleting'))).
+        (   delete(Db_Uri, state, '@schema':'DatabaseState/finalized'),
+            insert(Db_Uri, state, '@schema':'DatabaseState/deleting'))).
 
 /**
 * Deletes the database from the system. Fails if the database does not exist.
@@ -53,8 +53,8 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
             do_or_die(organization_name_uri(System_Context, Organization, Organization_Uri),
                       error(unknown_organization(Organization), _)),
 
-            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_create_database', Organization_Uri),
-            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_delete_database', Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action/create_database', Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action/delete_database', Organization_Uri),
 
             do_or_die(database_exists(System_Context,Organization,DB_Name),
                       error(database_does_not_exist(Organization,DB_Name), _)),

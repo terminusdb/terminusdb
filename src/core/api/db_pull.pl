@@ -17,8 +17,8 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
         resolve_absolute_string_descriptor(Our_Branch_Path,Our_Branch_Descriptor),
         error(invalid_absolute_path(Our_Branch_Path),_)),
 
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_schema_write_access', Local_Auth),
-    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action_instance_write_access', Local_Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/schema_write_access', Local_Auth),
+    check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/instance_write_access', Local_Auth),
 
     do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
                open_descriptor(Our_Branch_Descriptor, _)),

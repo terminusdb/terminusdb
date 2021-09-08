@@ -13,7 +13,7 @@ get_prefixes(Path, System_DB, Auth, JSON) :-
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
 
-    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_instance_read_access', Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/instance_read_access', Auth),
 
     database_prefixes(Descriptor,JSON).
 
@@ -23,7 +23,7 @@ update_prefixes(Path, System_DB, Auth, Commit_Info, Document) :-
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
 
-    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action_instance_write_access', Auth),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/instance_write_access', Auth),
 
     create_context(Descriptor, Commit_Info, Context),
     with_transaction(
@@ -60,7 +60,7 @@ test(get_prefixes_auth_failure,
             )),
       cleanup(teardown_temp_store(State)),
       error(access_not_authorised('terminusdb://system/data/User/Doug',
-                                  '@schema':'Action_instance_read_access',
+                                  '@schema':'Action/instance_read_access',
                                   _),
             _)
      ]) :-
@@ -77,7 +77,7 @@ test(update_prefixes_auth_failure,
             )),
       cleanup(teardown_temp_store(State)),
       error(access_not_authorised('terminusdb://system/data/User/Doug',
-                                  '@schema':'Action_instance_write_access',
+                                  '@schema':'Action/instance_write_access',
                                   _),
             _)
      ]) :-

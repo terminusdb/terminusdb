@@ -22,7 +22,7 @@ remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has
         (repository_descriptor{} :< Repository_Descriptor),
         error(fetch_requires_repository(Repository_Descriptor),_)),
 
-    check_descriptor_auth(System_DB, Repository_Descriptor, '@schema':'Action_fetch', Auth),
+    check_descriptor_auth(System_DB, Repository_Descriptor, '@schema':'Action/fetch', Auth),
 
     Database_Descriptor = (Repository_Descriptor.database_descriptor),
 

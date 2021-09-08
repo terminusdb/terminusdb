@@ -59,12 +59,12 @@ finalize_db(DB_Uri) :-
         Context,
         (   ask(Context, (
                     t(DB_Uri, rdf:type, '@schema':'UserDatabase'),
-                    t(DB_Uri, state, '@schema':'DatabaseState_creating')
+                    t(DB_Uri, state, '@schema':'DatabaseState/creating')
                 )
                )
         ->  ask(Context,
-                (   delete(DB_Uri, state, '@schema':'DatabaseState_creating'),
-                    insert(DB_Uri, state, '@schema':'DatabaseState_finalized')
+                (   delete(DB_Uri, state, '@schema':'DatabaseState/creating'),
+                    insert(DB_Uri, state, '@schema':'DatabaseState/finalized')
                 )
                )
         ;   throw(error(database_in_inconsistent_state))),
@@ -93,7 +93,7 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
             % don't create if already exists
             do_or_die(organization_name_uri(System_Context, Organization_Name, Organization_Uri),
                       error(unknown_organization(Organization_Name),_)),
-            assert_auth_action_scope(System_Context, Auth, '@schema':'Action_create_database', Organization_Uri),
+            assert_auth_action_scope(System_Context, Auth, '@schema':'Action/create_database', Organization_Uri),
 
             (   database_exists(Organization_Name, Database_Name)
             ->  throw(error(database_already_exists(Organization_Name, Database_Name),_))

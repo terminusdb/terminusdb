@@ -1,8 +1,5 @@
 :- module(casting,[
-              typecast/4,
-              hash/3,
-              idgen/3,
-              random_idgen/3
+              typecast/4
           ]).
 
 /** <module> Casting
@@ -25,52 +22,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
-
 :- use_module(library(http/json), [atom_json_dict/3]).
-
-/**
- * idgen(?Base:uri,?Args:list(any),++Output:uri) is det.
- * idgen(++Base:uri,++Args:list(any),?Output:uri) is det.
- *
- * Create a safe uri starting from @Base using key @Args.
- *
- * NOTE: Invertibility is due to the impossibility of having a %5f
- * as the result of a path encoding. _ translates as _ and
- * %5f translates as %255f.
- */
-idgen(Base,Args,Output) :-
-    ground(Base),
-    ground(Args),
-    !,
-    maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts),
-    merge_separator_split(Output,'_',[Base|Safe_Parts]).
-idgen(Base,Args,Output) :-
-    merge_separator_split(Output,'_',[Base|Safe_Parts]),
-    maplist([In,Out]>>uri_encoded(path,In,Out), Args, Safe_Parts).
-
-random_idgen(Base,Args,Output) :-
-    ground(Base),
-    ground(Args),
-    !,
-    random_string(String),
-    append(Args,[String], New_Args),
-    idgen(Base,New_Args,Output).
-
-/*
- * hash(+Base:uri,++Args:list(any),-Output:uri) is det.
- *
- * Create a hash uri starting from @Base using key @Args.
- */
-hash(Base,Args,Output) :-
-    maplist([In,Out]>>
-            (   (   string(In)
-                ;   atom(In))
-            ->  trim(In,Out)
-            ;   In=Out
-            ), Args, Trimmed),
-    interpolate(Trimmed,ArgAtom),
-    md5_hash(ArgAtom,Hash,[]),
-    atom_concat(Base,Hash,Output).
 
 /*
  * Presumably this should record into prov on failure.
