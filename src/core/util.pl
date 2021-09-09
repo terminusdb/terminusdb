@@ -112,6 +112,7 @@
               op(700,xfy,<>),
               '<>'/2,
               do_or_die/2,
+              die_if/2,
               whole_arg/2,
               random_string/1,
               uri_has_prefix/1,
@@ -127,6 +128,8 @@
               json_read_dict_stream/2,
               skip_generate_nsols/3,
               input_to_integer/2,
+              duplicates/2,
+              has_duplicates/2,
 
               % speculative_parse.pl
               %guess_date/2,
