@@ -1878,7 +1878,7 @@ check_existing_document_status(Transaction, Document, Ignore_Duplicates, Status)
         ->  (   Document = Existing_Document_Elaborated
             ->  Status = equivalent
             ;   Status = present)
-        ;   status = not_present)
+        ;   Status = not_present)
     ;   (   xrdf(Instance, Id, _, _)
         ->  Status = present
         ;   Status = not_present)
