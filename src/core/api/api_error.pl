@@ -1269,6 +1269,16 @@ api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _)
              'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
              'api:message' : Msg
             }.
+api_document_error_jsonld(replace_documents, error(document_does_not_exist(Id, Document), _), JSON) :-
+    format(string(Msg), "Document submitted for replacement, but original is not found for ID ~q", [Id]),
+    JSON = _{'@type' : 'api:ReplaceDocumentErrorResponse',
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:OriginalDocumentNotFound',
+                              'api:document_id' : Id,
+                              'api:replacement_document': Document
+                            },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(delete_documents, error(document_does_not_exist(Id), _), JSON) :-
     format(string(Msg), "Document with id ~q was not found", [Id]),
     JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
