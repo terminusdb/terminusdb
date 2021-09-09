@@ -778,11 +778,11 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                           error(count_is_not_an_integer(Count_Atom),_))
             ;   Count = unlimited),
 
-            (   (   get_dict(minimized, Posted, true)
+            (   (   get_dict(minimized, Posted, false)
                 ->  true
-                ;   memberchk(minimized=true, Search))
-            ->  JSON_Options = [width(0)]
-            ;   JSON_Options = []),
+                ;   memberchk(minimized=false, Search))
+            ->  JSON_Options = []
+            ;   JSON_Options = [width(0)]),
 
             (   (   get_dict(as_list, Posted, true)
                 ->  true
