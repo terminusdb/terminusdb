@@ -164,17 +164,18 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     do_or_die(
         create_context(Our_Repo_Descriptor, Our_Repo_Context),
         error(unresolvable_target_descriptor(Our_Repo_Descriptor))),
-
     do_or_die(
         create_context(Their_Repo_Descriptor, Their_Repo_Context),
         error(unresolvable_source_descriptor(Their_Repo_Descriptor))),
 
     benchmark(after_checks),
 
-    branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
-
-    % Note: What if there is nothing to rebase?  Should fail or do nothing...
-    descriptor_commit_id_uri(Their_Repo_Context, Their_Ref_Descriptor, Their_Commit_Id, Their_Commit_Uri),
+    do_or_die(
+        branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
+        error(target_branch_not_found(Our_Branch_Path), _)),
+    do_or_die(
+        descriptor_commit_id_uri(Their_Repo_Context, Their_Ref_Descriptor, Their_Commit_Id, Their_Commit_Uri),
+        error(source_branch_not_found(Their_Branch_Path), _)),
 
     (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
         commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
@@ -263,6 +264,36 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
 :- use_module(db_create).
 :- use_module(db_branch).
+
+test(rebase_target_branch_does_not_exist,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(target_branch_not_found("admin/foo/local/branch/does_not_exist"), _))
+     ])
+:-
+    super_user_authority(Auth),
+    rebase_on_branch(system_descriptor{},
+                     Auth,
+                     "admin/foo/local/branch/does_not_exist",
+                     "admin/foo/local/branch/other",
+                     "rebaser",
+                     [], _, _, []).
+
+test(rebase_source_branch_does_not_exist,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(source_branch_not_found("admin/foo/local/branch/does_not_exist"), _))
+     ])
+:-
+    super_user_authority(Auth),
+    rebase_on_branch(system_descriptor{},
+                     Auth,
+                     "admin/foo/local/branch/main",
+                     "admin/foo/local/branch/does_not_exist",
+                     "rebaser",
+                     [], _, _, []).
 
 test(rebase_fast_forward,
      [setup((setup_temp_store(State),
