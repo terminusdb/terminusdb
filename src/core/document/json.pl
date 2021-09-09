@@ -2188,6 +2188,10 @@ delete_schema_document(Transaction, Id) :-
     default_prefixes(Prefixes),
     put_dict(Context,Prefixes,Expanded_Context),
     prefix_expand_schema(Id, Expanded_Context, Id_Ex),
+    (   xrdf([Schema], Id_Ex, rdf:type, _)
+    ->  true
+    ;   throw(error(document_does_not_exist(Id),_))
+    ),
     forall(
         xrdf([Schema], Id_Ex, P, O),
         (   delete(Schema, Id_Ex, P, O, _),
@@ -2207,7 +2211,9 @@ replace_schema_document(Transaction, Document, Id) :-
     is_transaction(Transaction),
     !,
     (   get_dict('@id', Document, Id)
-    ->  delete_schema_document(Transaction, Id),
+    ->  catch(delete_schema_document(Transaction, Id),
+              error(document_does_not_exist(_),_),
+              throw(error(document_does_not_exist(Id, Document),_))),
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
