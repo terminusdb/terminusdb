@@ -1261,6 +1261,13 @@ api_document_error_jsonld(insert_documents, error(can_not_insert_existing_object
                               'api:document' : Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _), JSON) :-
+    format(string(Msg), "No context found in submitted schema", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(delete_documents, error(document_does_not_exist(Id), _), JSON) :-
     format(string(Msg), "Document with id ~q was not found", [Id]),
     JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
