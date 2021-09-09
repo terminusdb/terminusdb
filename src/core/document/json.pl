@@ -406,15 +406,7 @@ database_prefixes(Askable, Context) :-
     create_context(Askable, Query_Context),
     database_prefixes(Query_Context, Context).
 
-predicate_map(P, Context, Prop, json{ '@id' : P }) :-
-    % NOTE: This is probably wrong if it already has a prefix...
-    get_dict('@schema', Context, Base),
-    atomic_list_concat([Base,'(.*)'],Pat),
-    re_matchsub(Pat, P, Match, []),
-    !,
-    get_dict(1,Match,Short),
-    atom_string(Prop,Short).
-predicate_map(P, _Context, P, json{}).
+predicate_map(P, json{ '@id' : P }).
 
 type_context(_DB, "@id", _, json{}) :- !.
 type_context(_DB, Base_Type, _, json{}) :-
@@ -424,11 +416,11 @@ type_context(DB,Type,Prefixes,Context) :-
     prefix_expand_schema(Type,Prefixes,TypeEx),
     do_or_die(is_simple_class(DB, TypeEx),
               error(type_not_found(Type), _)),
-    findall(Prop - C,
+    findall(P - C,
           (
               class_predicate_type(DB, TypeEx, P, Desc),
               class_descriptor_image(Desc, Image),
-              predicate_map(P,Prefixes,Prop, Map),
+              predicate_map(P, Map),
               put_dict(Map,Image,C)
           ),
           Edges),
@@ -2462,20 +2454,20 @@ test(create_database_prefixes,
     database_prefixes(DB,Prefixes),
     type_context(DB,'Employee',Prefixes,Context),
 
-    Context = json{ birthdate:json{ '@id':'http://s/birthdate',
-		                            '@type':'http://www.w3.org/2001/XMLSchema#date'
-		                          },
-                    boss:json{'@id':'http://s/boss','@type':'http://s/Employee'},
-                    friends:json{'@container':"@set",
-                                 '@id':'http://s/friends',
-                                 '@type':'http://s/Person'},
-                    name:json{ '@id':'http://s/name',
-		                       '@type':'http://www.w3.org/2001/XMLSchema#string'
-	                         },
-                    staff_number:json{ '@id':'http://s/staff_number',
-			                           '@type':'http://www.w3.org/2001/XMLSchema#string'
-		                             },
-                    tasks:json{'@container':"@list",'@id':'http://s/tasks','@type':'http://s/Task'}
+    Context = json{ 'http://s/birthdate':json{ '@id':'http://s/birthdate',
+                                               '@type':'http://www.w3.org/2001/XMLSchema#date'
+                                             },
+                    'http://s/boss':json{'@id':'http://s/boss','@type':'http://s/Employee'},
+                    'http://s/friends':json{'@container':"@set",
+                                            '@id':'http://s/friends',
+                                            '@type':'http://s/Person'},
+                    'http://s/name':json{ '@id':'http://s/name',
+                                          '@type':'http://www.w3.org/2001/XMLSchema#string'
+                                        },
+                    'http://s/staff_number':json{ '@id':'http://s/staff_number',
+                                                  '@type':'http://www.w3.org/2001/XMLSchema#string'
+                                                },
+                    'http://s/tasks':json{'@container':"@list",'@id':'http://s/tasks','@type':'http://s/Task'}
                   }.
 
 test(elaborate,
@@ -3730,11 +3722,11 @@ test(enum_elaborate,
     database_prefixes(DB,Prefixes),
     type_context(DB,'Dog',Prefixes,TypeContext),
 
-    TypeContext = json{ hair_colour:json{'@id':'http://s/hair_colour',
-                                         '@type':'http://s/Colour'},
-                        name:json{ '@id':'http://s/name',
-		                           '@type':'http://www.w3.org/2001/XMLSchema#string'
-	                             }
+    TypeContext = json{ 'http://s/hair_colour':json{'@id':'http://s/hair_colour',
+                                                    '@type':'http://s/Colour'},
+                        'http://s/name':json{ '@id':'http://s/name',
+                                              '@type':'http://www.w3.org/2001/XMLSchema#string'
+                                            }
                       },
 
     JSON = json{'@type':'Dog',
@@ -3843,15 +3835,15 @@ test(binary_tree_context,
     database_prefixes(DB,Prefixes),
     type_context(DB,'BinaryTree', Prefixes, Binary_Context),
 
-    Binary_Context = json{ leaf:json{'@id':'http://s/leaf'},
-                           node:json{'@id':'http://s/node','@type':"@id"}
+    Binary_Context = json{ 'http://s/leaf':json{'@id':'http://s/leaf'},
+                           'http://s/node':json{'@id':'http://s/node','@type':"@id"}
                          },
     type_context(DB,'Node', Prefixes, Node_Context),
-    Node_Context = json{ left:json{'@id':'http://s/left','@type':"@id"},
-                         right:json{'@id':'http://s/right','@type':"@id"},
-                         value:json{ '@id':'http://s/value',
-		                             '@type':'http://www.w3.org/2001/XMLSchema#integer'
-		                           }
+    Node_Context = json{ 'http://s/left':json{'@id':'http://s/left','@type':"@id"},
+                         'http://s/right':json{'@id':'http://s/right','@type':"@id"},
+                         'http://s/value':json{ '@id':'http://s/value',
+                                                '@type':'http://www.w3.org/2001/XMLSchema#integer'
+                                              }
                        }.
 
 test(binary_tree_elaborate,
