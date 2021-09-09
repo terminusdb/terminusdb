@@ -1094,13 +1094,14 @@ api_document_error_jsonld(Type, error(no_commit_message, _), JSON) :-
              'api:error' : _{ '@type' : 'api:NoCommitMessageSpecified' },
              'api:message' : Msg
             }.
-api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids, _)), JSON) :-
+api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids), _), JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Tried to mutate document with same id multiple times", [Ids]),
+
+    format(string(Msg), "Tried to mutate document with same id multiple times", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SameDocumentIdsMutatedInOneTransaction',
-                              'api:document_ids' : Ids},
+                              'api:duplicate_ids' : Ids},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(document_access_impossible(Descriptor, Graph_Type, Read_Write), _), JSON) :-

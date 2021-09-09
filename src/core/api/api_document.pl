@@ -214,7 +214,7 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
                      ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids),
-                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Ids), _))),
+                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
 
 api_delete_document_(schema, Transaction, Id) :-
@@ -311,7 +311,7 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
                                                                Transaction,Document, Id))
                                  ),
                                  Ids),
-                         do_or_die(is_set(Ids), error(same_ids_in_one_transaction(Ids), _))
+                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
                      ),
                      _).
 
