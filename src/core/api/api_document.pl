@@ -437,6 +437,6 @@ test(replace_objects_with_stream,
   "name" : "Tshwane" }', Stream),
     api_replace_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream, Ids),
 
-    Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
+    Ids = ['City/Dublin','City/Pretoria'].
 
 :- end_tests(replace_document).
