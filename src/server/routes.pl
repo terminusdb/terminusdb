@@ -858,9 +858,13 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Full_Replace = false),
 
+            (   memberchk(ignore_duplicates=Ignore_Duplicates, Search)
+            ->  true
+            ;   Ignore_Duplicates = false),
+
             http_read_data(Request, Data, [to(string)]),
             open_string(Data, Stream),
-            api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Ids),
+            api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ignore_Duplicates, Stream, Ids),
 
             write_cors_headers(Request),
             reply_json(Ids),

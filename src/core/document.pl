@@ -33,6 +33,7 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_document/4,
               replace_document/2,
               replace_document/3,
               nuke_documents/1,

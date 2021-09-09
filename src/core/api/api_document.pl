@@ -3,7 +3,7 @@
               api_generate_documents_by_type/10,
               api_generate_documents_by_query/11,
               api_get_document/8,
-              api_insert_documents/9,
+              api_insert_documents/10,
               api_delete_documents/7,
               api_delete_document/7,
               api_replace_documents/8,
@@ -179,7 +179,7 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Transaction, Stream, Id) :-
+api_insert_document_(instance, Transaction, Stream, Ignore_Duplicates, Id) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
     ->  !,
@@ -187,7 +187,7 @@ api_insert_document_(instance, Transaction, Stream, Id) :-
     ;   Document = JSON),
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Id),
+        do_or_die(insert_document(Transaction, Document, Ignore_Duplicates, Id),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 replace_existing_graph(schema, Transaction, Stream) :-
@@ -195,10 +195,10 @@ replace_existing_graph(schema, Transaction, Stream) :-
 replace_existing_graph(instance, Transaction, Stream) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
-    forall(api_insert_document_(instance, Transaction, Stream, _),
+    forall(api_insert_document_(instance, Transaction, false, Stream, _),
            true).
 
-api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
+api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Ignore_Duplicates, Stream, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -213,7 +213,7 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                      (   Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids),
+                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Ignore_Duplicates, Id), Ids),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
 

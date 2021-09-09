@@ -17,6 +17,7 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_document/4,
               replace_document/2,
               replace_document/3,
               nuke_documents/1,
@@ -1862,7 +1863,7 @@ nuke_schema_documents(Query_Context) :-
     query_default_collection(Query_Context, TO),
     nuke_documents(TO).
 
-check_existing_document_status(Transaction, Document, Status) :-
+check_existing_document_status(Transaction, Document, Ignore_Duplicates, Status) :-
     get_dict('@type', Document, Type),
     get_dict('@id', Document, Id),
     database_instance(Transaction, Instance),
@@ -1870,19 +1871,30 @@ check_existing_document_status(Transaction, Document, Status) :-
     ->  (   xrdf(Instance, Id, _, _)
         ->  Status = equivalent
         ;   Status = not_present)
+    ;   Ignore_Duplicates = true
+        ->  (   get_document(Transaction, false, true, Id, Existing_Document),
+                json_elaborate(Transaction, Existing_Document, Existing_Document_Elaborated),
+                http_log("~n~q~n~n~q~n", [Document, Existing_Document_Elaborated])
+        ->  (   Document = Existing_Document_Elaborated
+            ->  Status = equivalent
+            ;   Status = present)
+        ;   status = not_present)
     ;   (   xrdf(Instance, Id, _, _)
         ->  Status = present
         ;   Status = not_present)
     ).
 
-insert_document(Transaction, Document, ID) :-
+insert_document(Desc, Document, ID) :-
+    insert_document(Desc, Document, false, ID).
+
+insert_document(Transaction, Document, Ignore_Duplicates, ID) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
     % After elaboration, the Elaborated document will have an '@id'
     get_dict('@id', Elaborated, ID),
 
-    check_existing_document_status(Transaction, Elaborated, Status),
+    check_existing_document_status(Transaction, Elaborated, Ignore_Duplicates, Status),
     (   Status = not_present
     ->  insert_document_expanded(Transaction, Elaborated, ID)
     ;   Status = equivalent
@@ -1890,11 +1902,11 @@ insert_document(Transaction, Document, ID) :-
     ;   Status = present
     ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
     ).
-insert_document(Query_Context, Document, ID) :-
+insert_document(Query_Context, Document, Ignore_Duplicates, ID) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, ID).
+    insert_document(TO, Document, Ignore_Duplicates, ID).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),

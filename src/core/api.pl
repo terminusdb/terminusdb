@@ -115,7 +115,7 @@
               api_generate_documents_by_type/10,
               api_generate_documents_by_query/11,
               api_get_document/8,
-              api_insert_documents/9,
+              api_insert_documents/10,
               api_delete_documents/7,
               api_delete_document/7,
               api_replace_documents/8,
