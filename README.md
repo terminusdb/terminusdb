@@ -19,7 +19,7 @@ TerminusDB provides a [document API](https://github.com/terminusdb/terminusdb-do
 
 TerminusDB allow you to build, deploy, execute, monitor, and share versioned data products. TerminusDB versions both data and schema allowing your team to deliver a consistent product to others while continuing to improve and innovate. Versioning is the enabler of collaboration and the future for all important data. TerminusDB brings software engineering best practices to data.
 
-If you want to build data-intensive applications, a knowledge graph document store of interconnected data products; or collaborate with colleagues, TerminusDB and TerminusX is right for you.
+If you want to build: a knowledge graph of interconnected data products; data-intensive applications; or collaborate with colleagues, TerminusDB and TerminusX are right for you.
 
 
 ## Quick Links
