@@ -2,10 +2,9 @@
 
 ## Build an ecosystem of versioned data products
 
-[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic)](https://hub.docker.com/r/terminusdb/terminusdb-server)
-[![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic)](https://discord.gg/yTJKAma)
-[![Discourse](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic)](https://discuss.terminusdb.com/)
+[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg?branch=master)](https://github.com/terminusdb/terminusdb/actions) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic)
+
+
 
 TerminusDB is an open source knowledge graph and document store. Use it to build versioned data products. 
 
@@ -42,7 +41,7 @@ TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding]
 ## Why TerminusDB/TerminusX
 
 * Get started in minutes. Work using your preferred language, or use our low-code console to get your database running in just a few minutes.
-* Add, replace and query documents using out document interface.
+* Add, replace and query documents using our document interface.
 * Powerful query allows you to search for repeating patterns using recursion.
 * Generate forms, get data validation, and a flexible & surfable document interface (in the console).
 * Visual tool to build complex data models, which are easy, maintainable, and enforced.
@@ -76,7 +75,7 @@ http://www.apache.org/licenses/LICENSE-2.0
    <body>
       <a href="https://signup.terminusdb.com/">
          <img alt="TerminusX" src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/sign-up-now-button.png"
-         width=150" height="70">
+         width="150" height="auto">
       </a>
    </body>
 </html>
