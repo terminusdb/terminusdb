@@ -24,7 +24,7 @@ If you want to build data-intensive applications, a knowledge graph document sto
 
 ## Quick Links
 
-| [Quick Start](https://terminusdb.com/docs/terminushub/quickstart/)     | [TerminusDB documentation](https://docs.terminusdb.com/v10.0/#/)       | [Python Client](https://github.com/terminusdb/terminusdb-client-python)         | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) |
+| [Quick Start](https://terminusdb.com/docs/terminushub/quickstart/)     | [TerminusDB Documentation](https://docs.terminusdb.com/v10.0/#/)       | [Python Client](https://github.com/terminusdb/terminusdb-client-python)         | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) |
 | :--- | :--- | :--- | :--- |
 
 <br/><br/>
