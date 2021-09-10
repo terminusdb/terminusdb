@@ -2126,7 +2126,7 @@ test(unique, [
     query_test_response_test_branch(Query_Out, JSON),
 
     [Res] = JSON.bindings,
-    _{'URI': 'http://foo.com/5291241b76087352cd96a565175eca6ce739b2eb'} :< Res.
+    _{ 'URI':'http://foo.com/ff02308b1ff78b66ab564140c91419e94e47644d3e94addcc8b0864058ca4028'} :< Res.
 
 test(split, [
          setup((setup_temp_store(State),
