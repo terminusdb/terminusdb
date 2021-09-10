@@ -1,4 +1,4 @@
-# TerminusDB Server v5.0.0 Release Notes
+# TerminusDB Server v10.0.0 Release Notes
 
 ## New
 + JSON schema interface - build schemas using a simple JSON format.
