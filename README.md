@@ -1,6 +1,6 @@
-<img src="https://assets.terminusdb.com/images/main_lockup.png" width="700px"/>
+<img src="https://assets.terminusdb.com/images/main_lockup.png" width="700px" alt="TerminusDB" />
 
-# Data products made simple.
+# Beta
 
 [![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg)](https://github.com/terminusdb/terminusdb/actions) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
 
@@ -35,19 +35,11 @@ Data collaboration is facilitated through [TerminusX](https://terminusdb.com), w
 
 ## Getting Started
 
-We encourage you to read our [Quick Start](https://terminusdb.com/docs/terminushub/quickstart/) guide to better understand how to get started with TerminusDB.
-
-Desktop versions of TerminusDB can be found in our [Download Center](https://terminusdb.com/hub/download).
-
-For development and testing, we recommend our [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) installer, which uses the Docker image.
+We encourage you to read our [Quick Start](https://docs.terminusdb.com/) guide to better understand how to get started with TerminusDB.
 
 ### Building from source
 
 In order to build from the source, follow the [build from source](docs/BUILD.md) directions.
-
-### Open Console
-
-Once you have installed terminusdb-server either from the docker image or built from the source you can enter the server location into your browser to view your database from the console "http://SERVER:PORT/". (the default is: https://127.0.0.1:6363/).
 
 ### Command Line
 
@@ -60,27 +52,22 @@ Interface](docs/CLI.md).
 ## Client
 
 In order to begin manipulating and querying your database you can
-start the TerminusDB server (using the CLI) and then simply point your
-browser to `"http://SERVER:PORT/"` which should allow you to manage
-and query your database.
-
-You can also perform all configuration, querying, and management
+start the TerminusDB server (using the CLI).
+You can perform all configuration, querying, and management
 functions via the RESTful API. We have a number of client libraries to
 help you get started:
 
 The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
 assistance with programmatic access.
 
-The [TerminusDB Console](https://github.com/terminusdb/terminusdb-console) allows low-code manipulation of the database.
-
 The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allows
 you to use a pythonic syntax to query the database.
 
+There are also [examples for CURL](https://docs.terminusdb.com/#/terminusx/curl-reference).
+
 ## Documentation
 
-In order to use your TerminusDB through the console rather than
-directly through clients, you should look at the documentation on our
-[TerminusDB documentation](https://terminusdb.github.io/terminusdb/) website.
+All reference documentation can be found on our [documentation site](https://docs.terminusdb.com/).
 
 ## Community
 
