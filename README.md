@@ -2,8 +2,14 @@
 
 # Beta
 
-[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg)](https://github.com/terminusdb/terminusdb/actions) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
+[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)](https://github.com/terminusdb/terminusdb/releases)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic)](https://github.com/terminusdb/terminusdb/graphs/contributors)
+[![Docker](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic)](https://hub.docker.com/r/terminusdb/terminusdb-server)
+[![License](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic)](https://github.com/terminusdb/terminusdb/blob/main/LICENSE)
 
+[![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic)](https://discord.gg/yTJKAma)
+[![Discourse](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic)](https://discuss.terminusdb.com/)
 
 TerminusDB is an open-source knowledge graph and document store. It is designed for collaboratively building data-intensive applications and data products. If you want to collaborate with colleagues, build data-intensive applications, if you want a document store where anything can link to anything else, TerminusDB is right for you.
 
