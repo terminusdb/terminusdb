@@ -757,12 +757,22 @@ is_context(JSON) :-
     get_dict('@type', JSON, "@context").
 
 % NOTE: We probably need the prefixes in play here...
-is_type_enum(JSON) :-
-    get_dict('@type', JSON, "Enum"),
+is_of_type(JSON, Type) :-
+    get_dict('@type', JSON, String),
+    atom_string(Type, String),
     !.
+is_of_type(JSON, Type) :-
+    global_prefix_expand(sys:Type, Expanded),
+    get_dict('@type', JSON, String),
+    atom_string(Expanded, String).
 is_type_enum(JSON) :-
-    global_prefix_expand(sys:'Enum', Enum),
-    get_dict('@type', JSON, Enum).
+    is_of_type(JSON, 'Enum').
+is_type_class(JSON) :-
+    is_of_type(JSON, 'Class').
+is_type_tagged_union(JSON) :-
+    is_of_type(JSON, 'TaggedUnion').
+is_type_foreign(JSON) :-
+    is_of_type(JSON, 'Foreign').
 
 context_triple(JSON,Triple) :-
     context_elaborate(JSON,Elaborated),
@@ -1045,8 +1055,13 @@ json_schema_elaborate(JSON,Context,Old_Path,Elaborated) :-
     (   is_type_family(JSON)
     ->  type_family_id(JSON,Context,Old_Path,ID),
         Pairs = ['@id'-ID|Pre_Pairs]
-    ;   Pairs = Pre_Pairs,
+    ;   (   is_type_class(JSON)
+        ;   is_type_tagged_union(JSON)
+        ;   is_type_foreign(JSON)
+        )
+    ->  Pairs = Pre_Pairs,
         get_dict('@id',JSON,ID)
+    ;   throw(error(schema_document_is_of_unknown_kind(JSON),_))
     ),
     Path = [type(ID)|Old_Path],
     findall(
@@ -5887,6 +5902,25 @@ test(insert_extra_array_value,
                      once(ask(Context,
                               (   t('Thing/a_thing', f, Array),
                                   insert(Array, sys:value, "extra entry"^^xsd:string)))),
+                     _).
+
+test(type_of_nonexistent_kind,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_document_is_of_unknown_kind(json{'@id':"Thing",'@type':"NonExistent"}),_)
+     ]) :-
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+                     insert_schema_document(Context,
+                                            _{'@type': "NonExistent",
+                                              '@id': "Thing"}),
                      _).
 
 :- end_tests(schema_checker).

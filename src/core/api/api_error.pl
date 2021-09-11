@@ -1206,6 +1206,24 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(schema_document_is_of_unknown_kind(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    (   get_dict('@id', Document, Id_Text)
+    ->  atom_string(Id_Text, Id)
+    ;   Id = "unknown"),
+    (   get_dict('@type', Document, Kind_Text)
+    ->  atom_string(Kind_Text, Kind)
+    ;   Kind = "unknown"),
+
+    format(string(Msg), "type document ~q is of unknown kind ~q", [Id, Kind]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnknownKind',
+                              'api:type' : Id,
+                              'api:kind' : Kind,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(get_documents, error(skip_is_not_an_integer(Skip_Atom), _), JSON) :-
     format(string(Msg), "specified skip count is not an integer: ~q", [Skip_Atom]),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
