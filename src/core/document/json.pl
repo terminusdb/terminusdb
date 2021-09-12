@@ -1084,7 +1084,9 @@ json_schema_elaborate(JSON,Context,JSON_Schema) :-
     json_schema_elaborate(JSON,Context,[],JSON_Schema).
 
 json_schema_triple(JSON,Context,Triple) :-
-    json_schema_elaborate(JSON,Context,[],JSON_Schema),
+    do_or_die(
+        json_schema_elaborate(JSON,Context,[],JSON_Schema),
+        error(unable_to_elaborate_schema_document(JSON))),
     json_triple_(JSON_Schema,Context,Triple).
 
 % Triple generator
