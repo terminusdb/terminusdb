@@ -1031,6 +1031,15 @@ document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
 document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 
+api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The submitted schema document could not be elaborated due to an unknown syntax error.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentElaborationImpossible',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type,error(unknown_graph_type(Graph_Type), _), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Unknown graph type specified: ~q", [Graph_Type]),
@@ -1518,5 +1527,16 @@ test(size_syntax,[]) :-
                                            'http://terminusdb.com/schema/woql#size':2}},
              'api:message':"Not well formed WOQL JSON-LD",
              'api:status':'api:failure'}.
+
+
+test(bad_schema_document, []) :-
+    api_error_jsonld(get_documents,
+                     error(unable_to_elaborate_schema_document(_{'@type' : 'Garbage'}),_),
+                     JSON),
+    JSON = _{'@type':'api:GetDocumentErrorResponse',
+             'api:error':_{'@type':'api:DocumentElaborationImpossible',
+                           'api:document':_{'@type':'Garbage'}},
+             'api:message':"The submitted schema document could not be elaborated due to an unknown syntax error.",
+             'api:status':"api:failure"}.
 
 :- end_tests(error_reporting).
