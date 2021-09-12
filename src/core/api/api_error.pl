@@ -1162,13 +1162,13 @@ api_document_error_jsonld(Type, error(no_id_in_document(Document),_),JSON) :-
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(Type, error(schema_type_unknown(Document),_),JSON) :-
+api_document_error_jsonld(Type, error(schema_type_unknown(Schema_Type),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "The '@type' field referred to an unimplemented schema type.", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:UnknownSchemaType',
-                              'api:document' : Document },
+                              'api:type' : Schema_Type },
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(id_could_not_be_elaborated(Document),_),JSON) :-
