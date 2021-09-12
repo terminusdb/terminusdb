@@ -1018,8 +1018,15 @@ json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
     prefix_expand_schema(P,Context,Prop),
     prefix_expand_schema(V,Context,VEx).
 
-json_schema_elaborate(JSON,Context,_,Elaborated) :-
-    is_type_enum(JSON),
+json_schema_elaborate(JSON,Context,Path,Elaborated) :-
+    get_dict('@type', JSON, Type),
+    compress_system_uri(Type,Context,Type_Min),
+    do_or_die(
+        json_schema_elaborate_(Type_Min,JSON,Context,Path,Elaborated),
+        error(schema_type_unknown(Type_Min),_)
+    ).
+
+json_schema_elaborate_('Enum',JSON,Context,_,Elaborated) :-
     !,
     get_dict('@id', JSON, ID),
     prefix_expand_schema(ID,Context,ID_Ex),
@@ -1038,15 +1045,19 @@ json_schema_elaborate(JSON,Context,_,Elaborated) :-
                               json{ '@container' : "@list",
                                     '@type' : "@id",
                                     '@value' : New_List })).
-json_schema_elaborate(JSON,Context,Old_Path,Elaborated) :-
+json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
+    memberchk(Type,['Class','TaggedUnion',
+                    'Set','List','Optional','Array', 'Cardinality',
+                    'Foreign']),
     is_dict(JSON),
     dict_pairs(JSON,json,Pre_Pairs),
     !,
     (   is_type_family(JSON)
     ->  type_family_id(JSON,Context,Old_Path,ID),
         Pairs = ['@id'-ID|Pre_Pairs]
-    ;   Pairs = Pre_Pairs,
-        get_dict('@id',JSON,ID)
+    ;   get_dict('@id',JSON,ID)
+    ->  Pairs = Pre_Pairs
+    ;   throw(error(no_id_in_document(JSON), _))
     ),
     Path = [type(ID)|Old_Path],
     findall(
@@ -1332,6 +1343,15 @@ type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,_,Prefixes,_Compress,_Unfol
         compress_dict_uri(T2,Prefixes,T2C),
         V = json{ '@type' : T2C, '@value' : D}
     ).
+
+
+compress_system_uri(IRI,Prefixes,IRI_Atom) :-
+    put_dict(_{'@base' : 'http://terminusdb.com/schema/sys#'}, Prefixes, Schema_Prefixes),
+    compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp),
+    atom_string(IRI_Atom, IRI_Comp),
+    !.
+compress_system_uri(IRI,_Prefixes,IRI_Atom) :-
+    atom_string(IRI_Atom, IRI).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     (   get_dict('@schema',Prefixes,Schema),
