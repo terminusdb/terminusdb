@@ -2233,7 +2233,8 @@ replace_schema_document(Transaction, Document, Id) :-
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
-        insert_context_document(Transaction, Document)
+        insert_context_document(Transaction, Document),
+        Id='@context'
     ;   throw(error(no_id_in_document(Document),_))
     ).
 replace_schema_document(Query_Context, Document, Id) :-
