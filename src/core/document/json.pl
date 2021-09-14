@@ -575,10 +575,6 @@ context_value_expand(_,_,[],json{},[]) :-
     !.
 context_value_expand(_,_,null,_,null) :-
     !.
-context_value_expand(_,_,true,_,{"@type" : "xsd:boolean", "@value" : true}) :-
-    !.
-context_value_expand(_,_,false,_,{"@type" : "xsd:boolean", "@value" : false}) :-
-    !.
 context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
@@ -5218,6 +5214,35 @@ test(elaborate_null,
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://somewhere.for.now/schema#Doc')
     ].
+
+schema10('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+{ "@type" : "Class",
+  "@id" : "Boolean",
+  "b" : "xsd:boolean" }
+').
+
+test(boolean_in_boolean_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema10, Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = _{ '@type': "Boolean", b: true },
+    create_context(Desc, _{ author: "a", message: "m" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
 
 :- end_tests(json).
 
