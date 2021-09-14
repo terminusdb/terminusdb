@@ -766,7 +766,7 @@ is_type_enum(JSON) :-
 
 context_triple(JSON,Triple) :-
     context_elaborate(JSON,Elaborated),
-    expand(Elaborated,JSON{
+    expand(Elaborated,json{
                           sys:'http://terminusdb.com/schema/sys#',
                           xsd:'http://www.w3.org/2001/XMLSchema#',
                           xdd:'http://terminusdb.com/schema/xdd#'
