@@ -33,13 +33,13 @@ ahead work we do intend to work on very soon, but which won't make it
 into the next minor release.
 
 ## Monday - planning
-Each monday, the team evaluates the work that needs to be done. The
+Each Monday, the team evaluates the work that needs to be done. The
 previous week is reviewed, newly submitted issues are read and
 assigned a priority, and a new set of work is decided upon.
 
 New issues are grouped into 'now', 'next' or 'later'. 'Now' is all the
-work we expect to go into either the upcoming thursday release, or
-next week's thursday release. 'next' is work we do not yet anticipate
+work we expect to go into either the upcoming Thursday release, or
+next week's Thursday release. 'next' is work we do not yet anticipate
 an exact version number for, but we expect it to be in the same minor
 release or the very next minor release (so for example, if we're
 currently on `10.2.3`, then 'next' means we anticipate it'll be in
@@ -62,14 +62,14 @@ issues in 'next' or even 'later' are considered for inclusion into
 'now'.
 
 ## Thursday - release
-On thursday, the team makes final decisions on what is to go into the
+On Thursday, the team makes final decisions on what is to go into the
 release. Any work not done by then, which is unlikely to be done in a
 very short time, is to be moved to the next release. In exceptional
 cases, it may be decided to postpone a release, but generally, even if
 there's just one minor change that can make it into the release, we'll
 get it released at this point.
 
-In the (european) afternoon, when everything should be done, we merge
+In the (European) afternoon, when everything should be done, we merge
 the work to the 'canary' branch. Generally this is just a fast-forward
 from main, but sometimes it may be a little bit more involved, if some
 work on main is not yet release-ready.
@@ -86,14 +86,14 @@ milestone without a meeting.
 # Releases
 
 As explained above, the team generally releases a patch release every
-thursday. In addition, there are minor and major releases.
+Thursday. In addition, there are minor and major releases.
 
 ## Minor releases
 A minor release is ready when there's no longer any issues under its
 milestone, and instead, they're all under a patch milestone. If we
-encounter this situation on thursday (or anticipate it on monday), we
+encounter this situation on Thursday (or anticipate it on Monday), we
 rename the patch milestone to the first release of the minor release,
-for example `10.2.0`. On thursday, this then gets released as the next
+for example `10.2.0`. On Thursday, this then gets released as the next
 minor release on a new version branch.
 
 After a minor release, the team reviews the state of the board,
