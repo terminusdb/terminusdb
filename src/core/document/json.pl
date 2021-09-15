@@ -893,6 +893,13 @@ json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     get_dict('@type', V, Random),
     expand_match_system(Random, 'Random', Type),
     !.
+json_schema_elaborate_key(V,_,_) :-
+    get_dict('@type', V, Type),
+    !,
+    throw(error(document_key_type_unknown(Type), _)).
+json_schema_elaborate_key(V,_,_) :-
+    atom_json_dict(Atom, V, []),
+    throw(error(document_key_type_missing(Atom), _)).
 
 json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
     global_prefix_expand(sys:'PropertyDocumentation',Property_Ex),
@@ -1074,18 +1081,21 @@ check_schema_document_restrictions(Elaborated) :-
     get_dict(AbsP, Elaborated, _),
     !.
 check_schema_document_restrictions(Elaborated) :-
+    global_prefix_expand(sys:key, KeyP),
+    do_or_die(get_dict(KeyP, Elaborated, Key),
+              error(subdocument_key_missing, _)),
+    % We currently don't reach the following checks because
+    % json_schema_elaborate_key throw errors for the same conditions.
+    do_or_die(get_dict('@type', Key, Key_Type_String),
+              error(subdocument_key_type_missing,_)),
+    atom_string(Key_Type, Key_Type_String),
     do_or_die(
-        (   global_prefix_expand(sys:key, KeyP),
-            get_dict(KeyP, Elaborated, Key),
-            % Is this not exhaustive?
-            (   global_prefix_expand(sys:'ValueHash',Key_Type)
-            ;   global_prefix_expand(sys:'Hash',Key_Type)
-            ;   global_prefix_expand(sys:'Lexical',Key_Type)
-            ;   global_prefix_expand(sys:'Random',Key_Type)),
-            get_dict('@type', Key, Key_Type_String),
-            atom_string(Key_Type, Key_Type_String)
-        ),
-        error(subdocument_key_type_restriction,_)).
+        % Is this exhaustive?
+        (   global_prefix_expand(sys:'ValueHash',Key_Type)
+        ;   global_prefix_expand(sys:'Hash',Key_Type)
+        ;   global_prefix_expand(sys:'Lexical',Key_Type)
+        ;   global_prefix_expand(sys:'Random',Key_Type)),
+        error(subdocument_key_type_unknown(Key_Type_String),_)).
 
 json_schema_elaborate(JSON,Context,JSON_Schema) :-
     json_schema_elaborate(JSON,Context,[],JSON_Schema).

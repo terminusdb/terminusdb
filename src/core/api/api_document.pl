@@ -156,6 +156,9 @@ known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
 known_document_error(submitted_id_does_not_match_generated_id(_,_)).
 known_document_error(submitted_document_id_does_not_have_expected_prefix(_,_)).
+known_document_error(document_key_type_unknown(_)).
+known_document_error(document_key_type_missing(_)).
+known_document_error(subdocument_key_missing).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
