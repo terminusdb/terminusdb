@@ -216,12 +216,7 @@ jobs:
         cd distribution/appimage
         wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
         chmod +x linuxdeploy-x86_64.AppImage
-        if [[ $(echo "${{ github.ref }}" | grep "refs/pull") ]]; then
-           BRANCH=$(echo "${{ github.base_ref }}" | sed -e 's,.*/\(.*\),\1,')
-        else
-           BRANCH=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        fi
-        ./build_script.sh "$BRANCH" "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
+        ./build_script.sh "$TERMINUSDB_STORE_PROLOG_VERSION" "$TUS_VERSION"
         mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
 
     - name: Run AppImage tests

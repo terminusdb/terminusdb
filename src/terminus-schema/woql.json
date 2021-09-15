@@ -630,7 +630,7 @@
   "left" : "ArithmeticExpression",
   "right" : "ArithmeticExpression" }
 
-{ "@Id" : "Times",
+{ "@id" : "Times",
   "@documentation" : {
       "@comment" : "Multiply two numbers.",
       "@properties" : { "left" : "First operand of times.",

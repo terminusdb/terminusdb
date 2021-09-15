@@ -1,3 +1,10 @@
+# TerminusDB Server v10.0.1 Beta Release Notes
+
+## Bug fixes
+
++ Numerous bug fixes
++ Error reporting improvements
+
 # TerminusDB Server v10.0.0 Beta Release Notes
 
 ## New

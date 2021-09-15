@@ -575,10 +575,6 @@ context_value_expand(_,_,[],json{},[]) :-
     !.
 context_value_expand(_,_,null,_,null) :-
     !.
-context_value_expand(_,_,true,_,{"@type" : "xsd:boolean", "@value" : true}) :-
-    !.
-context_value_expand(_,_,false,_,{"@type" : "xsd:boolean", "@value" : false}) :-
-    !.
 context_value_expand(DB,Context,Value,Expansion,V) :-
     get_dict('@container', Expansion, _),
     !,
@@ -766,7 +762,7 @@ is_type_enum(JSON) :-
 
 context_triple(JSON,Triple) :-
     context_elaborate(JSON,Elaborated),
-    expand(Elaborated,JSON{
+    expand(Elaborated,json{
                           sys:'http://terminusdb.com/schema/sys#',
                           xsd:'http://www.w3.org/2001/XMLSchema#',
                           xdd:'http://terminusdb.com/schema/xdd#'
@@ -1018,8 +1014,15 @@ json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
     prefix_expand_schema(P,Context,Prop),
     prefix_expand_schema(V,Context,VEx).
 
-json_schema_elaborate(JSON,Context,_,Elaborated) :-
-    is_type_enum(JSON),
+json_schema_elaborate(JSON,Context,Path,Elaborated) :-
+    get_dict('@type', JSON, Type),
+    compress_system_uri(Type,Context,Type_Min),
+    do_or_die(
+        json_schema_elaborate_(Type_Min,JSON,Context,Path,Elaborated),
+        error(schema_type_unknown(Type_Min),_)
+    ).
+
+json_schema_elaborate_('Enum',JSON,Context,_,Elaborated) :-
     !,
     get_dict('@id', JSON, ID),
     prefix_expand_schema(ID,Context,ID_Ex),
@@ -1038,15 +1041,19 @@ json_schema_elaborate(JSON,Context,_,Elaborated) :-
                               json{ '@container' : "@list",
                                     '@type' : "@id",
                                     '@value' : New_List })).
-json_schema_elaborate(JSON,Context,Old_Path,Elaborated) :-
+json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
+    memberchk(Type,['Class','TaggedUnion',
+                    'Set','List','Optional','Array', 'Cardinality',
+                    'Foreign']),
     is_dict(JSON),
     dict_pairs(JSON,json,Pre_Pairs),
     !,
     (   is_type_family(JSON)
     ->  type_family_id(JSON,Context,Old_Path,ID),
         Pairs = ['@id'-ID|Pre_Pairs]
-    ;   Pairs = Pre_Pairs,
-        get_dict('@id',JSON,ID)
+    ;   get_dict('@id',JSON,ID)
+    ->  Pairs = Pre_Pairs
+    ;   throw(error(no_id_in_document(JSON), _))
     ),
     Path = [type(ID)|Old_Path],
     findall(
@@ -1084,7 +1091,9 @@ json_schema_elaborate(JSON,Context,JSON_Schema) :-
     json_schema_elaborate(JSON,Context,[],JSON_Schema).
 
 json_schema_triple(JSON,Context,Triple) :-
-    json_schema_elaborate(JSON,Context,[],JSON_Schema),
+    do_or_die(
+        json_schema_elaborate(JSON,Context,[],JSON_Schema),
+        error(unable_to_elaborate_schema_document(JSON),_)),
     json_triple_(JSON_Schema,Context,Triple).
 
 % Triple generator
@@ -1330,6 +1339,15 @@ type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,_,Prefixes,_Compress,_Unfol
         compress_dict_uri(T2,Prefixes,T2C),
         V = json{ '@type' : T2C, '@value' : D}
     ).
+
+
+compress_system_uri(IRI,Prefixes,IRI_Atom) :-
+    put_dict(_{'@base' : 'http://terminusdb.com/schema/sys#'}, Prefixes, Schema_Prefixes),
+    compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp),
+    atom_string(IRI_Atom, IRI_Comp),
+    !.
+compress_system_uri(IRI,_Prefixes,IRI_Atom) :-
+    atom_string(IRI_Atom, IRI).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     (   get_dict('@schema',Prefixes,Schema),
@@ -2215,7 +2233,8 @@ replace_schema_document(Transaction, Document, Id) :-
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
-        insert_context_document(Transaction, Document)
+        insert_context_document(Transaction, Document),
+        Id='@context'
     ;   throw(error(no_id_in_document(Document),_))
     ).
 replace_schema_document(Query_Context, Document, Id) :-
@@ -5196,6 +5215,35 @@ test(elaborate_null,
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://somewhere.for.now/schema#Doc')
     ].
+
+schema10('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+{ "@type" : "Class",
+  "@id" : "Boolean",
+  "b" : "xsd:boolean" }
+').
+
+test(boolean_in_boolean_field,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema10, Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = _{ '@type': "Boolean", b: true },
+    create_context(Desc, _{ author: "a", message: "m" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
 
 :- end_tests(json).
 

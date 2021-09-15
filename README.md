@@ -1,73 +1,56 @@
-<img src="https://assets.terminusdb.com/images/main_lockup.png" width="700px" alt="TerminusDB" />
+<img src="https://assets.terminusdb.com/images/horizontal_lockup_(2).png" width="350px"/>
 
-# Beta
+## Build an ecosystem of versioned data products
 
-[![Build Status](https://github.com/terminusdb/terminusdb/workflows/Publish/badge.svg)](https://github.com/terminusdb/terminusdb/actions) ![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic) ![Docker Pulls](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic) ![Discourse topics](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic) ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/terminusdb/terminusdb?color=orange&logo=GitHub&style=plastic) ![GitHub](https://img.shields.io/github/license/terminusdb/terminusdb?color=pink&logo=apache&style=plastic) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/terminusdb/terminusdb?color=purple&style=plastic)
+[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic)](https://hub.docker.com/r/terminusdb/terminusdb-server)
+[![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic)](https://discord.gg/yTJKAma)
+[![Discourse](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic)](https://discuss.terminusdb.com/)
+
+TerminusDB is an open source knowledge graph and document store. Use it to build versioned data products. 
+
+TerminusX is a cloud self-service data platform built on TerminusDB. Use it to collaborate with colleagues to quickly build a vibrant ecosystem of domain data products. TerminusX is in **public beta** and you can [signup now](https://dashboard.terminusdb.com/).
+
+TerminusDB provides a [document API](https://github.com/terminusdb/terminusdb-docs/blob/beta/reference/DOCUMENT.md) for building via the JSON exchange format. The convienience of documents with the power of a knowledge graph.
 
 
-TerminusDB is an open-source knowledge graph and document store. It is designed for collaboratively building data-intensive applications and data products. If you want to collaborate with colleagues, build data-intensive applications, if you want a document store where anything can link to anything else, TerminusDB is right for you.
 
-TerminusDB has native revision control, using an approach that is similar to Git and other multi-master distributed version control systems.
+<img src="https://assets.terminusdb.com/images/tdb-dashboard-tablet.png" width="100%" height="auto" />
 
-TerminusDB provides a RESTful API for interacting via the JSON exchange format. You can easily compose applications within your own toolchain that utilise the powerful features of TerminusDB.
+
+TerminusDB allow you to build, deploy, execute, monitor, and share versioned data products. TerminusDB versions both data and schema allowing your team to deliver a consistent product to others while continuing to improve and innovate. Versioning is the enabler of collaboration and the future for all important data. TerminusDB brings software engineering best practices to data.
+
+If you want to build: a knowledge graph of interconnected data products; data-intensive applications; or collaborate with colleagues, TerminusDB and TerminusX are right for you.
+
+
+## Quick Links
+
+| [Quick Start](https://docs.terminusdb.com/v10.0/#/terminusx/quick-start-overview)     | [TerminusDB Documentation](https://docs.terminusdb.com/v10.0/#/)       | [Python Client](https://github.com/terminusdb/terminusdb-client-python)         | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) |
+| :--- | :--- | :--- | :--- |
+
 <br/><br/>
 
-![](https://assets.terminusdb.com/images/Git%20for%20GitHub-480p-210108.gif)
+<img src="https://assets.terminusdb.com/images/terminusdb-github-intro.gif" width="100%" height="auto" />
 
 <br/>
 
 TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible.
 
-Data collaboration is facilitated through [TerminusX](https://terminusdb.com), which is a managed database cloud service that allows users to access databases and collaboratively work on shared resources.
-
-## Why TerminusDB
+**Data collaboration is facilitated through [TerminusX](https://signup.terminusdb.com)**, which is a cloud self-service data platform enabling you to build, deploy, execute, monitor, and share versioned data products.
 
 
-* Get started in minutes. Whatever language you're using or if you prefer our low-code console, TerminusDB is easy - you can have your database running in just a few minutes.
-* Add, replace and query for documents using a simple RESTful API.
-* Powerful query allows you to search for repeating patterns using recursion
-* Generate forms, get data validation, and a flexible & surfable document interface (in the console)
-* Visual tool to build complex data models, which are easy, maintainable, and enforced
-* Data science/data engineering functionality directly in the database and via TerminusX
-* Clone the production database, branch, merge, collaboration, lineage, versioning, and time travel - Git-like revision control for large databases
-* New paradigm in data-centric application development
+## Why TerminusDB/TerminusX
 
+* Get started in minutes. Work using your preferred language, or use our low-code console to get your database running in just a few minutes.
+* Add, replace and query documents using our document interface.
+* Powerful query allows you to search for repeating patterns using recursion.
+* Generate forms, get data validation, and a flexible & surfable document interface (in the console).
+* Visual tool to build complex data models, which are easy, maintainable, and enforced.
+* Data science/data engineering functionality directly in the database and via TerminusX.
+* Versioning as a first class citizen. Commit graphs and data lineage out of the box. 
+* Clone the production database and associated schema to branch, merge, collaborate, and time travel.
+* New paradigm in data-centric, domain focused, and decentralized data product development.
 
-## Getting Started
-
-We encourage you to read our [Quick Start](https://docs.terminusdb.com/) guide to better understand how to get started with TerminusDB.
-
-### Building from source
-
-In order to build from the source, follow the [build from source](docs/BUILD.md) directions.
-
-### Command Line
-
-In order to start the terminusdb server or simply to explore a store
-from the command line, you can use the [TerminusDB Command Line
-Interface](docs/CLI.md).
-
-<img src="https://assets.terminusdb.com/images/cli-github.gif" width="500px"/>
-
-## Client
-
-In order to begin manipulating and querying your database you can
-start the TerminusDB server (using the CLI).
-You can perform all configuration, querying, and management
-functions via the RESTful API. We have a number of client libraries to
-help you get started:
-
-The [JavaScript client libraries](https://github.com/terminusdb/terminusdb-client) give you
-assistance with programmatic access.
-
-The [Python client libraries](https://github.com/terminusdb/terminusdb-client-python) allows
-you to use a pythonic syntax to query the database.
-
-There are also [examples for CURL](https://docs.terminusdb.com/#/terminusx/curl-reference).
-
-## Documentation
-
-All reference documentation can be found on our [documentation site](https://docs.terminusdb.com/).
 
 ## Community
 
@@ -85,3 +68,15 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
 ```
 http://www.apache.org/licenses/LICENSE-2.0
 ```
+
+<!DOCTYPE html>
+<html>
+   <head>
+   </head>
+   <body>
+      <a href="https://signup.terminusdb.com/">
+         <img alt="TerminusX" src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/sign-up-now-button.png"
+         width="150" height="auto">
+      </a>
+   </body>
+</html>
