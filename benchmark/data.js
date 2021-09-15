@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1631631277343,
+  "lastUpdate": 1631697779523,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -9263,6 +9263,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 42.212,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "robin@datachemist.com",
+            "name": "rrooij",
+            "username": "rrooij"
+          },
+          "distinct": true,
+          "id": "1c78db16f2879810fc79b5b5560f7ec3c39d4429",
+          "message": "appimage: dont clone our own repo\n\nThe AppImage is being created inside the TerminusDB repo itself.\nTherefore it does not make sense to clone it again!",
+          "timestamp": "2021-09-15T11:18:56+02:00",
+          "tree_id": "e98bd9c2f1a6d28cdc6ee1ef3bb4a4fcbd915d15",
+          "url": "https://github.com/terminusdb/terminusdb/commit/1c78db16f2879810fc79b5b5560f7ec3c39d4429"
+        },
+        "date": 1631697778870,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 102.442,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 275.801,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 291.204,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 168.829,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 193.398,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 104.648,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 37.678,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 35.179,
             "unit": "ms"
           }
         ]
