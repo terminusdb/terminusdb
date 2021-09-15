@@ -59,13 +59,20 @@
 encode_id_fragment(Elt, Encoded) :-
     ground(Elt),
     !,
-    format(atom(Fragment), '~w', [Elt]),
-    uri_encoded(segment, Fragment, Part_Encoded),
-    re_replace('\\+'/g, '%2B', Part_Encoded, Encoded).
+    (   Elt = optional(none)
+    ->  Encoded = "+"
+    ;   Elt = list(List)
+    ->  maplist(encode_id_fragment, List, List_Encoded),
+        merge_separator_split(Encoded, '++', List_Encoded)
+    ;   format(atom(Fragment), '~w', [Elt]),
+        uri_encoded(segment, Fragment, Part_Encoded),
+        re_replace('\\+'/g, '%2B', Part_Encoded, Encoded)).
 encode_id_fragment(Fragment, Encoded) :-
     ground(Encoded),
     !,
-    uri_encoded(segment, Fragment, Encoded).
+    (   Encoded = "+"
+    ->  Fragment = optional(none)
+    ;   uri_encoded(segment, Fragment, Encoded)).
 encode_id_fragment(_, _) :-
     throw(error(instantiation_error, _)).
 
@@ -191,14 +198,21 @@ get_path_value(Elaborated,[I|Path],Value) :-
     nth0(I, Sorted, Elt),
     get_path_value(Elt, Path, Value).
 
-get_field_values(JSON,Context,Fields,Values) :-
+get_field_values(JSON,DB,Context,Fields,Values) :-
     findall(
         Value,
         (   member(Field,Fields),
             prefix_expand_schema(Field,Context,Field_Ex),
             (   get_dict(Field_Ex,JSON,Value)
             ->  true
-            ;   throw(error(missing_key(Field,JSON),_))
+            %   key field not found! We'll have to find out if that's allowable or not
+            ;   get_dict('@type',JSON,Type),
+                prefix_expand_schema(Type, Context, Type_Ex),
+                prefix_expand_schema(Field, Context, Field_Ex),
+                class_predicate_type(DB, Type_Ex, Field_Ex, Field_Type),
+                memberchk(Field_Type, [optional(_), set(_), array(_)])
+            ->  Value = optional(none)
+            ;   throw(error(missing_key(Field, JSON),_))
             )
         ),
         Values).
@@ -208,21 +222,35 @@ raw(JValue,Value) :-
     !,
     (   get_dict('@type', JValue, "@id")
     ->  get_dict('@id', JValue, Value)
-    ;   get_dict('@value',JValue,Value)
+    ;   get_dict('@container', JValue, Container_Type)
+    ->  get_dict('@value', JValue, V),
+        (   [] = V
+        ->  Value = optional(none)
+        ;   [Single_Value] = V
+        ->  raw(Single_Value, Value)
+        ;   \+ is_list(V)
+        ->  Value = V
+        ;   (   Container_Type = "@set"
+            ->  sort(V, V_1)
+            ;   V_1 = V),
+            maplist(raw, V_1, V_Raw),
+            Value = list(V_Raw))
+    ;   get_dict('@value', JValue, Value)
     ).
 raw(JValue,JValue).
 
-idgen_lexical(Base,Values,ID) :-
+idgen_suffix(Values, Suffix) :-
     maplist(raw,Values,Raw),
     maplist(encode_id_fragment,Raw,Encoded),
-    merge_separator_split(Suffix, '+', Encoded),
+    merge_separator_split(Suffix, '+', Encoded).
+
+idgen_lexical(Base,Values,ID) :-
+    idgen_suffix(Values, Suffix),
     format(string(ID), '~w~w', [Base,Suffix]).
 
 idgen_hash(Base,Values,ID) :-
-    maplist(raw,Values,Raw),
-    maplist(encode_id_fragment,Raw,Encoded),
-    merge_separator_split(String, '+', Encoded),
-    crypto_data_hash(String, Hash, [algorithm(sha256)]),
+    idgen_suffix(Values, Suffix),
+    crypto_data_hash(Suffix, Hash, [algorithm(sha256)]),
     format(string(ID), "~w~w", [Base,Hash]).
 
 idgen_path_values_hash(Base,Path,ID) :-
@@ -282,11 +310,11 @@ json_idgen(JSON,DB,Context,Path,ID_Ex) :-
     get_dict('@type',JSON,Type),
     key_descriptor(DB,Context,Type,Descriptor),
     (   Descriptor = lexical(Base,Fields)
-    ->  get_field_values(JSON, Context, Fields, Values),
+    ->  get_field_values(JSON, DB, Context, Fields, Values),
         path_component([type(Base)|Path], Context, [Path_Base]),
         idgen_lexical(Path_Base,Values,ID)
     ;   Descriptor = hash(Base,Fields)
-    ->  get_field_values(JSON, Context, Fields, Values),
+    ->  get_field_values(JSON, DB, Context, Fields, Values),
         path_component([type(Base)|Path], Context, [Path_Base]),
         idgen_hash(Path_Base,Values,ID)
     ;   Descriptor = value_hash(Base)
@@ -2464,9 +2492,9 @@ test(get_field_values, []) :-
                          '@value':"1979-12-28"},
                     'http://s/name':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                          '@value':"jane"}},
-    get_field_values(Expanded, context{'@base':"http://i/",
-                                       '@schema':"http://s/",
-                                       '@type':'http://terminusdb.com/schema/sys#Context'},
+    get_field_values(Expanded, _, context{'@base':"http://i/",
+                                          '@schema':"http://s/",
+                                          '@type':'http://terminusdb.com/schema/sys#Context'},
                      [name, birthdate],
                      [ json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                             '@value':"jane"},
@@ -3073,6 +3101,191 @@ test(idgen_value_hash,
           '@type':'http://s/Task',
           'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
                                 '@value':"Groceries"}}.
+
+test(idgen_lexical_optional,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Optional",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "foo"},
+                                  Uri1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing"},
+                                  Uri2)
+                          )),
+
+    Uri1 = 'http://somewhere.for.now/document/Thing/foo',
+    Uri2 = 'http://somewhere.for.now/document/Thing/+'.
+
+test(idgen_lexical_set,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Set",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["foo", "bar"]},
+                                  Uri1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["bar", "foo"]},
+                                  Uri2),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["quux"]},
+                                  Uri3),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: []},
+                                  Uri4),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing"},
+                                  Uri5)
+                          )),
+
+    Uri1 = 'http://somewhere.for.now/document/Thing/bar++foo',
+    Uri2 = 'http://somewhere.for.now/document/Thing/bar++foo',
+    Uri3 = 'http://somewhere.for.now/document/Thing/quux',
+    Uri4 = 'http://somewhere.for.now/document/Thing/+',
+    Uri5 = 'http://somewhere.for.now/document/Thing/+'.
+
+test(idgen_lexical_list,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "List",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["foo", "bar"]},
+                                  Uri1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["bar", "foo"]},
+                                  Uri2),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["quux"]},
+                                  Uri3),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: []},
+                                  Uri4)
+                          )),
+
+    Uri1 = 'http://somewhere.for.now/document/Thing/foo++bar',
+    Uri2 = 'http://somewhere.for.now/document/Thing/bar++foo',
+    Uri3 = 'http://somewhere.for.now/document/Thing/quux',
+    Uri4 = 'http://somewhere.for.now/document/Thing/+'.
+
+test(idgen_lexical_array,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Array",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["foo", "bar"]},
+                                  Uri1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["bar", "foo"]},
+                                  Uri2),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["quux"]},
+                                  Uri3),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: []},
+                                  Uri4),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing"},
+                                  Uri5)
+                          )),
+
+    Uri1 = 'http://somewhere.for.now/document/Thing/foo++bar',
+    Uri2 = 'http://somewhere.for.now/document/Thing/bar++foo',
+    Uri3 = 'http://somewhere.for.now/document/Thing/quux',
+    Uri4 = 'http://somewhere.for.now/document/Thing/+',
+    Uri5 = 'http://somewhere.for.now/document/Thing/+'.
 
 test(idgen_random,
      [
