@@ -39,7 +39,10 @@
               test_document_label_descriptor/1,
               test_document_label_descriptor/2,
               test_woql_label_descriptor/1,
-              test_woql_label_descriptor/2
+              test_woql_label_descriptor/2,
+
+              with_test_transaction/3,
+              with_test_transaction/4
           ]).
 
 /** <module> Test Utilities
@@ -597,3 +600,14 @@ test_woql_label_descriptor(Name, Descriptor) :-
                      schema: WOQL_Name,
                      instance: Instance_Name
                  }.
+
+:- meta_predicate with_test_transaction(+, -, :).
+with_test_transaction(Descriptor, Context, Goal) :-
+    with_test_transaction(Descriptor, Context, Goal, _).
+:- meta_predicate with_test_transaction(+, -, :, -).
+with_test_transaction(Descriptor, Context, Goal, Result) :-
+    do_or_die(var(Context),
+              error(test_transaction_initiated_with_bound_context, _)),
+
+    create_context(Descriptor, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context, Goal, Result).

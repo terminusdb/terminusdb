@@ -84,14 +84,13 @@ expand_query_document_for_type(base_class(Type), _DB, Query, Query_Ex) :-
     Query_Ex = string_match_regex(Compiled).
 expand_query_document_for_type(base_class(Type), _DB, Query, _Query_Ex) :-
     throw(error(query_error(unknown_query_format_for_datatype(Type, Query)), _)).
-
 expand_query_document_for_type(class(_), _, _{}, _{}) :- !.
 expand_query_document_for_type(class(Type), DB, Query, Query_Ex) :-
     !,
     dict_pairs(Query, Query_Tag, Query_Pairs),
     findall(
         Prop_Ex-Prop_Query_Ex,
-        (   
+        (
             member(Prop-Prop_Query, Query_Pairs),
             expand_query_document_class_property(Prop, DB, Type, Prop_Query, Prop_Ex, Prop_Query_Ex)
         ),
@@ -99,6 +98,10 @@ expand_query_document_for_type(class(Type), DB, Query, Query_Ex) :-
 
     dict_pairs(Query_Ex, Query_Tag, Query_Pairs_Ex).
 expand_query_document_for_type(optional(_), _, _{}, _{}) :- !.
+expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
+    \+ is_dict(Query),
+    !,
+    expand_query_document_for_type(base_class(Type), DB, Query, Query_Ex).
 expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
     Query = _{'@if-exists': Inner_Query},
     !,
@@ -108,7 +111,6 @@ expand_query_document_for_type(optional(Type), DB, null, null) :-
     !,
     expand_query_document_(DB, Type, _{}, _).
 expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
-    !,
     expand_query_document_(DB, Type, Query, Query_Ex).
 expand_query_document_for_type(Type, _Db, _Query, _Query_Ex) :-
     throw(error(query_error(unknown_type(Type)), _)).
@@ -222,3 +224,53 @@ match_query_document_uri(DB, Type, Query, Uri) :-
     *->  true
     ;   get_document_uri(DB, Type, Uri)),
     match_query_document_uri_(Query_Ex, DB, Uri).
+
+:- begin_tests(query_document).
+:- use_module([core(util),
+               core(util/test_utils),
+               core(transaction),
+               json]).
+
+test(query_optional,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Optional",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "foo"},
+                                  _Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "bar"},
+                                  Doc2)
+                          )),
+
+    open_descriptor(Desc, Db),
+    findall(Uri,
+            match_query_document_uri(Db,
+                                     "Thing",
+                                     _{'field': "bar"},
+                                     Uri),
+            Uris),
+
+    Uris = [Doc2].
+
+:- end_tests(query_document).
