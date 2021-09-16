@@ -3325,7 +3325,7 @@ test(idgen_find_collision,
                           )),
     Uri1 = 'http://somewhere.for.now/document/Thing/++none++',
     Uri2 = 'http://somewhere.for.now/document/Thing/+none+',
-    Uri2 = 'http://somewhere.for.now/document/Thing/none'.
+    Uri3 = 'http://somewhere.for.now/document/Thing/none'.
 
 test(idgen_random,
      [
