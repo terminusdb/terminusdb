@@ -156,6 +156,10 @@ known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
 known_document_error(submitted_id_does_not_match_generated_id(_,_)).
 known_document_error(submitted_document_id_does_not_have_expected_prefix(_,_)).
+known_document_error(document_key_type_unknown(_)).
+known_document_error(document_key_type_missing(_)).
+known_document_error(subdocument_key_missing).
+known_document_error(key_missing_required_field(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -433,3 +437,62 @@ test(replace_objects_with_stream,
     Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
 
 :- end_tests(replace_document).
+
+
+:- begin_tests(document_error_reporting).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(document)).
+:- use_module(core(api/api_error)).
+
+test(key_missing, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Thing",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["field"]},
+              field: "xsd:string"})
+    ),
+
+    Document = _{'@type': "Thing"},
+
+    % GMG: this is clearly too elaborate to be an effective test...
+    catch(
+        call_catch_document_mutation(
+            Document,
+            with_test_transaction(
+                Desc,
+                C2,
+                insert_document(
+                    C2,
+                    Document,
+                    _)
+            )
+        ),
+        Error,
+        api_error_jsonld(
+            insert_documents,
+            Error,
+            JSON
+        )
+    ),
+    JSON = _{'@type':'api:InsertDocumentErrorResponse',
+             'api:error':
+             _{'@type':'api:RequiredKeyFieldMissing',
+               'api:document':json{'@type':"Thing"},
+               'api:field':'http://somewhere.for.now/schema#field'},
+             'api:message':"The required field 'http://somewhere.for.now/schema#field' is missing from the submitted document",
+             'api:status':"api:failure"
+            }.
+
+:- end_tests(document_error_reporting).

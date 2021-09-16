@@ -1313,6 +1313,45 @@ api_document_error_jsonld(delete_documents, error(not_a_proper_id_for_deletion(I
                               'api:invalid_document_id' : Id},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(document_key_type_unknown(Key_Type, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document @key type unknown: ~q. It must be ValueHash, Hash, Lexical, or Random.", [Key_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentKeyTypeUnknown',
+                              'api:key_type': Key_Type,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(document_key_type_missing(Key, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document @key missing @type: ~q", [Key]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentKeyTypeMissing',
+                              'api:key': Key,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(subdocument_key_missing(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Subdocument @key missing", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SubdocumentKeyMissing',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(key_missing_required_field(Field,Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The required field ~q is missing from the submitted document", [Field]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:RequiredKeyFieldMissing',
+                              'api:field' : Field,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
