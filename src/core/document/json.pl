@@ -60,7 +60,7 @@ encode_id_fragment(Elt, Encoded) :-
     ground(Elt),
     !,
     (   Elt = optional(none)
-    ->  Encoded = "+"
+    ->  Encoded = "+none+"
     ;   Elt = list(List)
     ->  maplist(encode_id_fragment, List, List_Encoded),
         merge_separator_split(Encoded, '++', List_Encoded)
@@ -3134,7 +3134,7 @@ test(idgen_lexical_optional,
                           )),
 
     Uri1 = 'http://somewhere.for.now/document/Thing/foo',
-    Uri2 = 'http://somewhere.for.now/document/Thing/+'.
+    Uri2 = 'http://somewhere.for.now/document/Thing/+none+'.
 
 test(idgen_lexical_set,
      [setup((setup_temp_store(State),
@@ -3185,8 +3185,8 @@ test(idgen_lexical_set,
     Uri1 = 'http://somewhere.for.now/document/Thing/bar++foo',
     Uri2 = 'http://somewhere.for.now/document/Thing/bar++foo',
     Uri3 = 'http://somewhere.for.now/document/Thing/quux',
-    Uri4 = 'http://somewhere.for.now/document/Thing/+',
-    Uri5 = 'http://somewhere.for.now/document/Thing/+'.
+    Uri4 = 'http://somewhere.for.now/document/Thing/+none+',
+    Uri5 = 'http://somewhere.for.now/document/Thing/+none+'.
 
 test(idgen_lexical_list,
      [setup((setup_temp_store(State),
@@ -3233,7 +3233,7 @@ test(idgen_lexical_list,
     Uri1 = 'http://somewhere.for.now/document/Thing/foo++bar',
     Uri2 = 'http://somewhere.for.now/document/Thing/bar++foo',
     Uri3 = 'http://somewhere.for.now/document/Thing/quux',
-    Uri4 = 'http://somewhere.for.now/document/Thing/+'.
+    Uri4 = 'http://somewhere.for.now/document/Thing/+none+'.
 
 test(idgen_lexical_array,
      [setup((setup_temp_store(State),
@@ -3284,8 +3284,8 @@ test(idgen_lexical_array,
     Uri1 = 'http://somewhere.for.now/document/Thing/foo++bar',
     Uri2 = 'http://somewhere.for.now/document/Thing/bar++foo',
     Uri3 = 'http://somewhere.for.now/document/Thing/quux',
-    Uri4 = 'http://somewhere.for.now/document/Thing/+',
-    Uri5 = 'http://somewhere.for.now/document/Thing/+'.
+    Uri4 = 'http://somewhere.for.now/document/Thing/+none+',
+    Uri5 = 'http://somewhere.for.now/document/Thing/+none+'.
 
 test(idgen_random,
      [
