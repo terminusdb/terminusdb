@@ -5507,6 +5507,55 @@ test(boolean_in_boolean_field,
         _
     ).
 
+test(round_trip_float,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Geo_Schema_Atom = '{ "@type" : "Class",
+      "@id" : "GeoCoordinate",
+      "@subdocument" : [],
+      "@key" : { "@type" : "Lexical",
+                 "@fields" : ["latitude", "longitude"] },
+      "latitude" : "xsd:decimal",
+      "longitude" : "xsd:decimal"
+    }',
+
+    atom_json_dict(Geo_Schema_Atom, Geo_Schema, []),
+
+    Geo_Atom = '{
+        "@type": "GeoCoordinate",
+        "latitude": "41.2008",
+        "longitude": "0.5679"
+    }',
+
+    atom_json_dict(Geo_Atom, Geo, []),
+
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              Geo_Schema)
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(
+                                  C2,
+                                  Geo,
+                                  Uri)),
+    get_document(Desc, Uri, Doc),
+
+    Doc = json{'@id':'GeoCoordinate/41.2008+0.5679','@type':'GeoCoordinate',latitude:41.2008,longitude:0.5679}.
+
 :- end_tests(json).
 
 :- begin_tests(schema_checker).
