@@ -889,4 +889,11 @@ test(gyear_to_string, []) :-
     typecast(gyear(1990,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear',
              'http://www.w3.org/2001/XMLSchema#string', [], "1990"^^'http://www.w3.org/2001/XMLSchema#string').
 
+
+test(float_cast, []) :-
+    typecast("0.5679"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [],
+             0.5679^^'http://www.w3.org/2001/XMLSchema#decimal').
+
 :- end_tests(typecast).

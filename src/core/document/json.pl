@@ -5554,7 +5554,10 @@ test(round_trip_float,
                                   Uri)),
     get_document(Desc, Uri, Doc),
 
-    Doc = json{'@id':'GeoCoordinate/41.2008+0.5679','@type':'GeoCoordinate',latitude:41.2008,longitude:0.5679}.
+    Doc = json{'@id':'GeoCoordinate/41.2008+0.5679',
+               '@type':'GeoCoordinate',
+               latitude:41.2008,
+               longitude:0.5679}.
 
 :- end_tests(json).
 
