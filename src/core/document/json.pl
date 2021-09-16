@@ -212,7 +212,7 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
                 class_predicate_type(DB, Type_Ex, Field_Ex, Field_Type),
                 memberchk(Field_Type, [optional(_), set(_), array(_)])
             ->  Value = optional(none)
-            ;   throw(error(missing_key(Field, JSON),_))
+            ;   throw(error(key_missing_required_field(Field),_))
             )
         ),
         Values).
@@ -4444,8 +4444,7 @@ test(partial_document_elaborate_list_without_required,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(missing_key('http://s/name',
-                           _),
+         error(key_missing_required_field('http://s/name'),
                _)
      ]) :-
 

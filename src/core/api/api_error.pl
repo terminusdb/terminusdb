@@ -1342,6 +1342,16 @@ api_document_error_jsonld(Type, error(subdocument_key_missing(Document),_),JSON)
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(key_missing_required_field(Field,Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The required field ~q is missing from the submitted document", [Field]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:RequiredKeyFieldMissing',
+                              'api:field' : Field,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
