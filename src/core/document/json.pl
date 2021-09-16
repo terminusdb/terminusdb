@@ -3287,6 +3287,46 @@ test(idgen_lexical_array,
     Uri4 = 'http://somewhere.for.now/document/Thing/+none+',
     Uri5 = 'http://somewhere.for.now/document/Thing/+none+'.
 
+test(idgen_find_collision,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Array",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["", "none", ""]},
+                                  Uri1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: []},
+                                  Uri2),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: ["none"]},
+                                  Uri3)
+                          )),
+    Uri1 = 'http://somewhere.for.now/document/Thing/++none++',
+    Uri2 = 'http://somewhere.for.now/document/Thing/+none+',
+    Uri2 = 'http://somewhere.for.now/document/Thing/none'.
+
 test(idgen_random,
      [
          setup(
