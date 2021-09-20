@@ -2270,7 +2270,8 @@ test(limit, [
 test(indexed_get,
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
     )
 :-
     Query =
@@ -2300,7 +2301,8 @@ test(indexed_get,
 test(named_get, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
      ])
 :-
     Query =
@@ -2334,7 +2336,8 @@ test(named_get, [
 test(named_get_two, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
      ])
 :-
     Query =
@@ -3401,7 +3404,8 @@ test(get_put, [
          setup((setup_temp_store(State),
                 tmp_file('test.csv', TestFile),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
      ]) :-
 
     Query = _{ '@type': "Put",
@@ -3562,7 +3566,8 @@ test(isa_node, [setup(setup_temp_store(State)),
 test(date_marshall, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Need to process Using prefixes')
      ]) :-
 
     AST = (get([as('Start date', v('Start date'), 'http://www.w3.org/2001/XMLSchema#dateTime')],
