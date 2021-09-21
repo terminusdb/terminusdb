@@ -99,7 +99,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Path, Destination_Descriptor),
-        error(invalid_target_absolute_descriptor(Path),_)),
+        error(invalid_target_absolute_path(Path),_)),
 
     do_or_die(
         (branch_descriptor{
@@ -111,7 +111,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
     (   Origin_Option = some(Origin_Path)
     ->  do_or_die(
             resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor),
-            error(invalid_source_absolute_descriptor(Origin_Path),_)),
+            error(invalid_origin_absolute_path(Origin_Path),_)),
 
         do_or_die(
             (   get_dict(repository_descriptor, Origin_Descriptor, Origin_Repository_Descriptor),
@@ -122,7 +122,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
 
         do_or_die(
             organization_database_name_uri(System_DB, Organization_Name, Database_Name, Scope_Iri),
-            error(origin_database_does_not_exist(Organization_Name, Database_Name),_))
+            error(unknown_origin_database(Organization_Name, Database_Name),_))
     ;   Origin_Option = none
     ->  Origin_Descriptor = empty
     ;   throw(error(bad_origin_path_option(Origin_Option),_))),
@@ -162,7 +162,7 @@ branch_delete(System_DB, Auth, Path) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_target_absolute_descriptor(Path),_)),
+        error(invalid_target_absolute_path(Path),_)),
 
     do_or_die(
         branch_descriptor{

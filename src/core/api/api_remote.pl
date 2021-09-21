@@ -16,7 +16,7 @@ add_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Repo_Path, Descriptor),
-        error(invalid_absolute_path(Repo_Path),_)),
+        error(invalid_absolute_path(Path),_)),
 
     check_descriptor_auth(SystemDB, Descriptor,
                           '@schema':'Action/meta_write_access', Auth),
@@ -40,7 +40,7 @@ remove_remote(SystemDB, Auth, Path, Remote_Name) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Repo_Path, Descriptor),
-        error(invalid_absolute_path(Repo_Path),_)),
+        error(invalid_absolute_path(Path),_)),
 
     check_descriptor_auth(SystemDB, Descriptor,
                           '@schema':'Action/meta_write_access', Auth),
@@ -64,7 +64,7 @@ update_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Repo_Path, Descriptor),
-        error(invalid_absolute_path(Repo_Path),_)),
+        error(invalid_absolute_path(Path),_)),
 
     check_descriptor_auth(SystemDB, Descriptor,
                           '@schema':'Action/meta_write_access', Auth),
@@ -88,7 +88,7 @@ show_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Repo_Path, Descriptor),
-        error(invalid_absolute_path(Repo_Path),_)),
+        error(invalid_absolute_path(Path),_)),
 
     check_descriptor_auth(SystemDB, Descriptor,
                           '@schema':'Action/meta_write_access', Auth),
@@ -108,7 +108,7 @@ list_remotes(SystemDB, Auth, Path, Remote_Names) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Repo_Path, Descriptor),
-        error(invalid_absolute_path(Repo_Path),_)),
+        error(invalid_absolute_path(Path),_)),
 
     check_descriptor_auth(SystemDB, Descriptor,
                           '@schema':'Action/meta_write_access', Auth),
