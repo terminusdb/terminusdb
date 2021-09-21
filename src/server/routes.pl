@@ -67,6 +67,17 @@
 http:location(root, '/', []).
 http:location(api, '/api', []).
 
+%%%%%%%%%%%%% Fallback Path %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler('/api', reply_404_not_found, [prefix]).
+
+reply_404_not_found(Request) :-
+    member(path(Path), Request),
+    format(string(Msg),'Path not found: ~w', [Path]),
+    reply_json(_{'api:status' : 'api:not_found',
+                 'api:path' : Path,
+                 'api:message' : Msg},
+               [status(404)]).
+
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(.), cors_handler(Method, connect_handler),
                 [method(Method),
@@ -124,7 +135,7 @@ test(connection_authorised_user_http_basic, [
          cleanup(teardown_temp_server(State))
      ]) :-
     admin_pass(Key),
-    atomic_list_concat([Server, '/api'], URL),
+    atomic_list_concat([Server, '/api/'], URL),
     http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
@@ -134,7 +145,7 @@ test(connection_result_dbs, [
      ])
 :-
     admin_pass(Key),
-    atomic_list_concat([Server, '/api'], URL),
+    atomic_list_concat([Server, '/api/'], URL),
     http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
     Result = [].
