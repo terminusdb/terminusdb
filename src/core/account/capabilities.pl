@@ -492,7 +492,7 @@ check_descriptor_auth_(database_descriptor{ database_name : Database,
                                             organization_name : Organization},
                        Action, Auth, System_DB) :-
     do_or_die(organization_database_name_uri(System_DB, Organization, Database, URI),
-              error(database_does_not_exist(Organization, Database),_)),
+              error(unknown_database(Organization, Database),_)),
 
     assert_auth_action_scope(System_DB,Auth,Action, URI).
 check_descriptor_auth_(repository_descriptor{ database_descriptor : DB,

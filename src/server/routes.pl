@@ -484,9 +484,9 @@ test(db_delete_nonexistent_errors, [
                  authorization(basic(admin, Key)),
                  status_code(Status)]),
 
-    Status = 400,
+    Status = 404,
 
-    _{'api:status' : "api:failure"} :< Result.
+    _{'api:status' : "api:not_found"} :< Result.
 
 
 test(db_auth_test, [

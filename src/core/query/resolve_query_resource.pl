@@ -103,6 +103,12 @@ resolve_absolute_descriptor([Organization, Database, Repository, "commit", Commi
     ->  Commit = Commit_String
     ;   text_to_string(Commit, Commit_String)),
     resolve_absolute_descriptor([Organization, Database, Repository, "_commits"], Repository_Descriptor).
+resolve_absolute_descriptor([_, "_meta"], _) :-
+    % This happens when we append '/_meta' to the incoming path before splitting
+    % it into segments. If the incoming path doesn't have a /, it doesn't get
+    % split, and we end up with two things in the list, one of which is _meta.
+    !,
+    fail.
 resolve_absolute_descriptor([Organization, Database],
                             Descriptor) :-
     !,

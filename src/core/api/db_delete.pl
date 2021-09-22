@@ -57,7 +57,7 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
             assert_auth_action_scope(System_Context, Auth, '@schema':'Action/delete_database', Organization_Uri),
 
             do_or_die(database_exists(System_Context,Organization,DB_Name),
-                      error(database_does_not_exist(Organization,DB_Name), _)),
+                      error(unknown_database(Organization,DB_Name), _)),
             % Do something here? User may need to know what went wrong
 
             (   Force \= true
