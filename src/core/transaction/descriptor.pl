@@ -19,7 +19,8 @@
               transactions_to_map/2,
               collection_descriptor_graph_filter_graph_descriptor/3,
               collection_descriptor_prefixes/2,
-              collection_descriptor_default_write_graph/2
+              collection_descriptor_default_write_graph/2,
+              descriptor_to_loggable/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -664,16 +665,26 @@ log_descriptor_open(Descriptor) :-
     (   resolve_absolute_string_descriptor(S, Descriptor)
     ->  format(string(Message), "open descriptor: ~w", [S])
     ;   Message = "open unprintable descriptor"),
-    do_or_die(sanitize_descriptor_for_log(Descriptor, Loggable),
+    do_or_die(descriptor_to_loggable(Descriptor, Loggable),
               error(descriptor_sanitize_failed(Descriptor), _)),
     json_log_trace(_{
                        message: Message,
-                       openDescriptor: Loggable
+                       descriptorAction: open,
+                       descriptor: Loggable
                    }).
 
-sanitize_descriptor_for_log(system_descriptor{}, json{descriptorType: system}) :-
+descriptor_to_loggable(system_descriptor{}, json{descriptorType: system}) :-
     !.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
+    label_descriptor{variety: Variety,
+                     instance: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: label,
+                   variety: Variety,
+                   instance: Instance
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
     label_descriptor{variety: Variety,
                      schema: Schema,
                      instance: Instance} = Descriptor,
@@ -684,7 +695,16 @@ sanitize_descriptor_for_log(Descriptor, Loggable) :-
                    schema: Schema,
                    instance: Instance
                }.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
+    id_descriptor{variety: Variety,
+                  instanceLabel: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: id,
+                   variety: Variety,
+                   instanceLayer: Instance
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
     id_descriptor{variety: Variety,
                   schemaLabel: Schema,
                   instanceLabel: Instance} = Descriptor,
@@ -695,7 +715,7 @@ sanitize_descriptor_for_log(Descriptor, Loggable) :-
                    schemaLayer: Schema,
                    instanceLayer: Instance
                }.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
     layer_descriptor{instance:Layer,
                      variety:Variety} = Descriptor,
     !,
@@ -703,14 +723,14 @@ sanitize_descriptor_for_log(Descriptor, Loggable) :-
     Loggable = json{descriptorType: layer,
                     instanceLayer: Id,
                     variety: Variety}.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
     database_descriptor{organization_name:Organization,
                         database_name:Database} = Descriptor,
     !,
     Loggable = json{descriptorType: database,
                     organization: Organization,
                     database: Database}.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
     repository_descriptor{database_descriptor:
                           database_descriptor{organization_name:Organization,
                                               database_name:Database},
@@ -720,7 +740,7 @@ sanitize_descriptor_for_log(Descriptor, Loggable) :-
                     organization: Organization,
                     database: Database,
                     repository: Repository}.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
     branch_descriptor{
         repository_descriptor:
         repository_descriptor{database_descriptor:
@@ -734,7 +754,7 @@ sanitize_descriptor_for_log(Descriptor, Loggable) :-
                     database: Database,
                     repository: Repository,
                     branch: Branch}.
-sanitize_descriptor_for_log(Descriptor, Loggable) :-
+descriptor_to_loggable(Descriptor, Loggable) :-
     commit_descriptor{
         repository_descriptor:
         repository_descriptor{database_descriptor:

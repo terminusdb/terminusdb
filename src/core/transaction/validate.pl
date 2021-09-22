@@ -414,7 +414,8 @@ commit_validation_objects_([Object|Objects]) :-
         ;   true),
         append(Validation_Objects, Objects, New_Objects),
         predsort(commit_order, New_Objects, Sorted_Objects),
-        commit_validation_objects_(Sorted_Objects)).
+        commit_validation_objects_(Sorted_Objects),
+        log_commits(Sorted_Objects)).
 commit_validation_objects_([Object|Objects]) :-
     % we know it is a validation object
     commit_validation_object(Object, Transaction_Objects),
@@ -431,6 +432,21 @@ commit_validation_objects(Unsorted_Objects) :-
     % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_objects_(Sorted_Objects).
+
+log_commits([]).
+log_commits([First|Rest]) :-
+    Descriptor = (First.descriptor),
+    (   resolve_absolute_string_descriptor(S, Descriptor)
+    ->  format(string(Message), "commit descriptor: ~w", [S])
+    ;   Message = "commit unprintable descriptor"),
+    descriptor_to_loggable(Descriptor, Loggable),
+    json_log_trace(_{
+                       message: Message,
+                       descriptorAction: commit,
+                       descriptor: Loggable
+                   }),
+
+    log_commits(Rest).
 
 validate_validation_objects(Validation_Objects, Witnesses) :-
     validate_validation_objects(Validation_Objects, true, Witnesses).
