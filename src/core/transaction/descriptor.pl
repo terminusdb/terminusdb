@@ -649,11 +649,105 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                          }.
 
 open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
-    open_descriptor(Descriptor, Commit_Info, Transaction_Object, [], _).
+    open_descriptor(Descriptor, Commit_Info, Transaction_Object, [], _),
+    log_descriptor_open(Descriptor).
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
 
+log_descriptor_open(Descriptor) :-
+    layer_descriptor{} :< Descriptor,
+    % We ignore this type as it's often used as part of an internal
+    % operation and not interesting for log observers
+    !.
+log_descriptor_open(Descriptor) :-
+    (   resolve_absolute_string_descriptor(S, Descriptor)
+    ->  format(string(Message), "open descriptor: ~w", [S])
+    ;   Message = "open unprintable descriptor"),
+    do_or_die(sanitize_descriptor_for_log(Descriptor, Loggable),
+              error(descriptor_sanitize_failed(Descriptor), _)),
+    json_log_trace(_{
+                       message: Message,
+                       openDescriptor: Loggable
+                   }).
+
+sanitize_descriptor_for_log(system_descriptor{}, json{descriptorType: system}) :-
+    !.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    label_descriptor{variety: Variety,
+                     schema: Schema,
+                     instance: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: label,
+                   variety: Variety,
+                   schema: Schema,
+                   instance: Instance
+               }.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    id_descriptor{variety: Variety,
+                  schemaLabel: Schema,
+                  instanceLabel: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: id,
+                   variety: Variety,
+                   schemaLayer: Schema,
+                   instanceLayer: Instance
+               }.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    layer_descriptor{instance:Layer,
+                     variety:Variety} = Descriptor,
+    !,
+    layer_to_id(Layer, Id),
+    Loggable = json{descriptorType: layer,
+                    instanceLayer: Id,
+                    variety: Variety}.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    database_descriptor{organization_name:Organization,
+                        database_name:Database} = Descriptor,
+    !,
+    Loggable = json{descriptorType: database,
+                    organization: Organization,
+                    database: Database}.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    repository_descriptor{database_descriptor:
+                          database_descriptor{organization_name:Organization,
+                                              database_name:Database},
+                          repository_name: Repository} = Descriptor,
+    !,
+    Loggable = json{descriptorType: repository,
+                    organization: Organization,
+                    database: Database,
+                    repository: Repository}.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    branch_descriptor{
+        repository_descriptor:
+        repository_descriptor{database_descriptor:
+                              database_descriptor{organization_name:Organization,
+                                                  database_name:Database},
+                              repository_name: Repository},
+        branch_name: Branch} = Descriptor,
+    !,
+    Loggable = json{descriptorType: branch,
+                    organization: Organization,
+                    database: Database,
+                    repository: Repository,
+                    branch: Branch}.
+sanitize_descriptor_for_log(Descriptor, Loggable) :-
+    commit_descriptor{
+        repository_descriptor:
+        repository_descriptor{database_descriptor:
+                              database_descriptor{organization_name:Organization,
+                                                  database_name:Database},
+                              repository_name: Repository},
+        commit_id: Commit} = Descriptor,
+    !,
+    Loggable = json{descriptorType: commit,
+                    organization: Organization,
+                    database: Database,
+                    repository: Repository,
+                    commit: Commit}.
 
 graph_descriptor_find_read_write_object(_, [], _) :-
         !,
