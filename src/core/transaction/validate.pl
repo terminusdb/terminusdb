@@ -35,9 +35,6 @@
 
 :- use_module(library(terminus_store)).
 
-% For debugging
-:- use_module(library(http/http_log)).
-
 /*
  * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
  *

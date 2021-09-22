@@ -36,8 +36,11 @@ initialize_system_ssl_certs :-
 server_protocol(Value) :-
     Value = http.
 
+:- table server_name/1 as shared.
 server_name(Value) :-
-    getenv_default('TERMINUSDB_SERVER_NAME', '127.0.0.1', Value).
+    (   getenv('TERMINUSDB_SERVER_NAME', Value)
+    ->  true
+    ;   random_string(Value)).
 
 server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
@@ -45,7 +48,7 @@ server_port(Value) :-
 worker_amount(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
 
-:- table max_transaction_retries/1.
+:- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-
     (   getenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', Atom_Value)
     ->  atom_number(Atom_Value, Value)

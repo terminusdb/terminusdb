@@ -190,7 +190,17 @@
               benchmark/0,
 
               % http_utils.pl
-              basic_authorization/3
+              basic_authorization/3,
+
+              % json_log.pl
+              json_log_error/1,
+              json_log_error_formatted/2,
+              json_log_warning/1,
+              json_log_warning_formatted/2,
+              json_log_info/1,
+              json_log_info_formatted/2,
+              json_log_trace/1,
+              json_log_trace_formatted/2
           ]).
 
 % note: test_utils is intentionally omitted
@@ -204,3 +214,5 @@
 :- use_module(util/benchmark).
 :- use_module(util/http_utils).
 %:- use_module(util/plunit_patch).
+
+:- use_module(util/json_log).

@@ -381,7 +381,7 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
         open_write(Store, Layer_Builder),
         Layer = (Read_Write_Obj.read),
         nb_apply_delta(Layer_Builder, Layer),
-        http_log("applied delta!~n", [])
+        json_log_trace_formatted("applied delta!~n", [])
     ;   open_write(Read_Write_Obj.read, Layer_Builder)),
 
     nb_set_dict(write,Read_Write_Obj,Layer_Builder).

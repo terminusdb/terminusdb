@@ -35,8 +35,6 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
-:- use_module(library(http/http_log)).
-
 
 :- use_module(library(csv)).
 :- use_module(library(isub)).
@@ -1609,7 +1607,7 @@ compile_wf(triple_count(Path,Count),Goal) -->
                     unliterally(Numerical_Count,CountE))
         )
     }.
-compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, ArgumentsE)) -->
+compile_wf(debug_log(Format_String, Arguments), json_log_info_formatted(Format_String, ArgumentsE)) -->
     resolve(Arguments, ArgumentsE).
 compile_wf(typeof(X,T), typeof(XE,TE)) -->
     resolve(X,XE),
