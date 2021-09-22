@@ -17,6 +17,7 @@
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(descriptor).
 :- use_module(database).
 :- use_module(layer_entity).
 :- use_module(repo_entity).
@@ -414,8 +415,7 @@ commit_validation_objects_([Object|Objects]) :-
         ;   true),
         append(Validation_Objects, Objects, New_Objects),
         predsort(commit_order, New_Objects, Sorted_Objects),
-        commit_validation_objects_(Sorted_Objects),
-        log_commits(Sorted_Objects)).
+        commit_validation_objects_(Sorted_Objects)).
 commit_validation_objects_([Object|Objects]) :-
     % we know it is a validation object
     commit_validation_object(Object, Transaction_Objects),
@@ -431,7 +431,8 @@ commit_validation_objects(Unsorted_Objects) :-
     % of a commit (adding commit information and repo change info for
     % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
-    commit_validation_objects_(Sorted_Objects).
+    commit_validation_objects_(Sorted_Objects),
+    log_commits(Sorted_Objects).
 
 log_commits([]).
 log_commits([First|Rest]) :-
