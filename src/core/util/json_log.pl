@@ -92,6 +92,9 @@ generate_time(Time) :-
     get_time(Now),
     format_time(string(Time), '%FT%T.%f%:z', Now).
 
+expand_operation_id(Operation_Id, _Dict) :-
+    var(Operation_Id),
+    !.
 expand_operation_id(first(Operation_Id), Dict) :-
     !,
     Dict = json{
@@ -105,12 +108,9 @@ expand_operation_id(last(Operation_Id), Dict) :-
                last: true
            }.
 expand_operation_id(Operation_Id, Dict) :-
-    ground(Operation_Id),
-    !,
     Dict = json{
                id: Operation_Id
            }.
-expand_operation_id(_,_).
 
 expand_json_log(Dict, Operation_Id, Severity, Output) :-
     generate_time(Time),
@@ -249,7 +249,7 @@ http_request_logger(request_start(Local_Id, Request)) :-
     dict_create(Http, json, Http_Pairs),
 
     generate_operation_id(Local_Id, Operation_Id),
-    format(string(Message), "Request ~w started", [Operation_Id]),
+    format(string(Message), "Request ~w started - ~w ~w", [Operation_Id, Method, Path]),
 
     include([_-V]>>(nonvar(V)), [httpRequest-Http,
                                  path-Path,
@@ -263,7 +263,7 @@ http_request_logger(request_start(Local_Id, Request)) :-
 http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
     term_string(Bytes, Bytes_String),
     generate_operation_id(Local_Id, Operation_Id),
-    format(string(Message), "Request ~w completed", [Operation_Id]),
+    format(string(Message), "Request ~w completed (~w)", [Operation_Id, Code]),
     json_log_info(last(Operation_Id),
                   json{
                       httpRequest: json{
