@@ -248,12 +248,14 @@ http_request_logger(request_start(Local_Id, Request)) :-
            Http_Pairs),
     dict_create(Http, json, Http_Pairs),
 
+    generate_operation_id(Local_Id, Operation_Id),
+    format(string(Message), "Request ~w started", [Operation_Id]),
+
     include([_-V]>>(nonvar(V)), [httpRequest-Http,
                                  path-Path,
-                                 message-"Request started"
+                                 message-Message
                                 ],
             Dict_Pairs),
-    generate_operation_id(Local_Id, Operation_Id),
     dict_create(Dict, json, Dict_Pairs),
     json_log_info(first(Operation_Id),
                   Dict).
@@ -261,13 +263,14 @@ http_request_logger(request_start(Local_Id, Request)) :-
 http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
     term_string(Bytes, Bytes_String),
     generate_operation_id(Local_Id, Operation_Id),
+    format(string(Message), "Request ~w completed", [Operation_Id]),
     json_log_info(last(Operation_Id),
                   json{
                       httpRequest: json{
                                        status: Code,
                                        responseSize: Bytes_String
                                    },
-                      message: "Request completed"
+                      message: Message
                   }).
 
 log_enabled_for_level(Severity) :-
