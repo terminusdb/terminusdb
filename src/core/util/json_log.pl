@@ -33,7 +33,7 @@ json_log_raw_text_error(E, Dict) :-
     term_string(Dict, Dict_String),
     term_string(E, E_String),
 
-    format(user_error, "Error while trying to write a log entry: ~w (~w)~n", [E_String, Dict_String]).
+    format(user_error, "[ERROR] Error while trying to write a log entry: ~w (~w)~n", [E_String, Dict_String]).
 
 
 json_log_raw_error(E, Dict) :-
