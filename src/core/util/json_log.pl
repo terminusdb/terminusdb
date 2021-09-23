@@ -263,7 +263,7 @@ http_request_logger(request_start(Local_Id, Request)) :-
 http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
     term_string(Bytes, Bytes_String),
     generate_operation_id(Local_Id, Operation_Id),
-    format(string(Message), "Request ~w completed", [Operation_Id]),
+    format(string(Message), "Request ~w completed (~w)", [Operation_Id, Code]),
     json_log_info(last(Operation_Id),
                   json{
                       httpRequest: json{
