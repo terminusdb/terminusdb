@@ -20,7 +20,6 @@
 :- use_module(core(account)).
 
 % http libraries
-:- use_module(library(http/http_log)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
@@ -66,6 +65,17 @@
 :- dynamic http:location/3.
 http:location(root, '/', []).
 http:location(api, '/api', []).
+
+%%%%%%%%%%%%% Fallback Path %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler('/api', reply_404_not_found, [prefix]).
+
+reply_404_not_found(Request) :-
+    member(path(Path), Request),
+    format(string(Msg),'Path not found: ~w', [Path]),
+    reply_json(_{'api:status' : 'api:not_found',
+                 'api:path' : Path,
+                 'api:message' : Msg},
+               [status(404)]).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(.), cors_handler(Method, connect_handler),
@@ -124,7 +134,7 @@ test(connection_authorised_user_http_basic, [
          cleanup(teardown_temp_server(State))
      ]) :-
     admin_pass(Key),
-    atomic_list_concat([Server, '/api'], URL),
+    atomic_list_concat([Server, '/api/'], URL),
     http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
@@ -134,7 +144,7 @@ test(connection_result_dbs, [
      ])
 :-
     admin_pass(Key),
-    atomic_list_concat([Server, '/api'], URL),
+    atomic_list_concat([Server, '/api/'], URL),
     http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
 
     Result = [].
@@ -157,7 +167,7 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
         json_write(current_output, Message, [])
     ),
 
-    http_log('~N[Message] ~s~n',[Payload]),
+    json_log_info_formatted('~N[Message] ~s~n',[Payload]),
 
     write_cors_headers(Request),
 
@@ -473,9 +483,9 @@ test(db_delete_nonexistent_errors, [
                  authorization(basic(admin, Key)),
                  status_code(Status)]),
 
-    Status = 400,
+    Status = 404,
 
-    _{'api:status' : "api:failure"} :< Result.
+    _{'api:status' : "api:not_found"} :< Result.
 
 
 test(db_auth_test, [
@@ -1856,7 +1866,7 @@ auth_wrapper(Goal,Request) :-
                  www_form_encode(Auth, Domain),
                  call(Goal, [domain(Domain)], Request)),
           error(authentication_incorrect(Reason),_),
-          (   http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+          (   json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
               reply_json(_{'@type' : 'api:ErrorResponse',
                            'api:status' : 'api:failure',
                            'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
@@ -3472,7 +3482,7 @@ cors_handler(Method, Goal, Options, R) :-
                   error(authentication_incorrect(Reason),_),
 
                   (   write_cors_headers(Request),
-                      http_log("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+                      json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
                       reply_json(_{'@type' : 'api:ErrorResponse',
                                    'api:status' : 'api:failure',
                                    'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
@@ -3551,7 +3561,7 @@ customise_exception(error(E)) :-
                  'api:message' : EM},
                [status(500)]).
 customise_exception(error(E, CTX)) :-
-    http_log('~N[Exception] ~q~n',[error(E,CTX)]),
+    json_log_error_formatted('~N[Exception] ~q~n',[error(E,CTX)]),
     (   CTX = context(prolog_stack(Stack),_)
     ->  with_output_to(
             string(Ctx_String),
@@ -3564,7 +3574,7 @@ customise_exception(error(E, CTX)) :-
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
 customise_exception(E) :-
-    http_log('~N[Exception] ~q~n',[E]),
+    json_log_error_formatted('~N[Exception] ~q~n',[E]),
     throw(E).
 
 /*
@@ -3703,7 +3713,6 @@ try_get_param(Key,Request,Value) :-
 
     http_parameters(Request, [], [form_data(Data)]),
 
-    http_log("request: ~q~n", [Request]),
     (   memberchk(Key=Value,Data)
     <>  throw(error(no_parameter_key_in_query_parameters(Key,Data)))),
     !.

@@ -19,7 +19,8 @@
               transactions_to_map/2,
               collection_descriptor_graph_filter_graph_descriptor/3,
               collection_descriptor_prefixes/2,
-              collection_descriptor_default_write_graph/2
+              collection_descriptor_default_write_graph/2,
+              descriptor_to_loggable/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -381,7 +382,7 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
         open_write(Store, Layer_Builder),
         Layer = (Read_Write_Obj.read),
         nb_apply_delta(Layer_Builder, Layer),
-        http_log("applied delta!~n", [])
+        json_log_debug_formatted("applied delta!~n", [])
     ;   open_write(Read_Write_Obj.read, Layer_Builder)),
 
     nb_set_dict(write,Read_Write_Obj,Layer_Builder).
@@ -649,11 +650,129 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                          }.
 
 open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
-    open_descriptor(Descriptor, Commit_Info, Transaction_Object, [], _).
+    open_descriptor(Descriptor, Commit_Info, Transaction_Object, [], _),
+    log_descriptor_open(Descriptor).
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
 
+log_descriptor_open(_Descriptor) :-
+    % Skip all work if the debug log is not enabled
+    \+ debug_log_enabled,
+    !,
+    true.
+log_descriptor_open(Descriptor) :-
+    layer_descriptor{} :< Descriptor,
+    % We ignore this type as it's often used as part of an internal
+    % operation and not interesting for log observers
+    !.
+log_descriptor_open(Descriptor) :-
+    (   resolve_absolute_string_descriptor(S, Descriptor)
+    ->  format(string(Message), "open descriptor: ~w", [S])
+    ;   Message = "open unprintable descriptor"),
+    do_or_die(descriptor_to_loggable(Descriptor, Loggable),
+              error(descriptor_sanitize_failed(Descriptor), _)),
+    json_log_debug(_{
+                       message: Message,
+                       descriptorAction: open,
+                       descriptor: Loggable
+                   }).
+
+descriptor_to_loggable(system_descriptor{}, json{descriptorType: system}) :-
+    !.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    label_descriptor{variety: Variety,
+                     instance: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: label,
+                   variety: Variety,
+                   instance: Instance
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    label_descriptor{variety: Variety,
+                     schema: Schema,
+                     instance: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: label,
+                   variety: Variety,
+                   schema: Schema,
+                   instance: Instance
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    id_descriptor{variety: Variety,
+                  instanceLabel: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: id,
+                   variety: Variety,
+                   instanceLayer: Instance
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    id_descriptor{variety: Variety,
+                  schemaLabel: Schema,
+                  instanceLabel: Instance} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: id,
+                   variety: Variety,
+                   schemaLayer: Schema,
+                   instanceLayer: Instance
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    layer_descriptor{instance:Layer,
+                     variety:Variety} = Descriptor,
+    !,
+    layer_to_id(Layer, Id),
+    Loggable = json{descriptorType: layer,
+                    instanceLayer: Id,
+                    variety: Variety}.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    database_descriptor{organization_name:Organization,
+                        database_name:Database} = Descriptor,
+    !,
+    Loggable = json{descriptorType: database,
+                    organization: Organization,
+                    database: Database}.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    repository_descriptor{database_descriptor:
+                          database_descriptor{organization_name:Organization,
+                                              database_name:Database},
+                          repository_name: Repository} = Descriptor,
+    !,
+    Loggable = json{descriptorType: repository,
+                    organization: Organization,
+                    database: Database,
+                    repository: Repository}.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    branch_descriptor{
+        repository_descriptor:
+        repository_descriptor{database_descriptor:
+                              database_descriptor{organization_name:Organization,
+                                                  database_name:Database},
+                              repository_name: Repository},
+        branch_name: Branch} = Descriptor,
+    !,
+    Loggable = json{descriptorType: branch,
+                    organization: Organization,
+                    database: Database,
+                    repository: Repository,
+                    branch: Branch}.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    commit_descriptor{
+        repository_descriptor:
+        repository_descriptor{database_descriptor:
+                              database_descriptor{organization_name:Organization,
+                                                  database_name:Database},
+                              repository_name: Repository},
+        commit_id: Commit} = Descriptor,
+    !,
+    Loggable = json{descriptorType: commit,
+                    organization: Organization,
+                    database: Database,
+                    repository: Repository,
+                    commit: Commit}.
 
 graph_descriptor_find_read_write_object(_, [], _) :-
         !,

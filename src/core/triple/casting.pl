@@ -221,8 +221,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:decimal
 typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
-    (   atom_codes(Val,C),
-        phrase(xsd_parser:decimal(Casted),C,[])
+    (   number_string(Casted, Val)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))).
 %%% xsd:decimal => xsd:string
@@ -888,5 +887,11 @@ test(positive_decimal_round_trip, []) :-
 test(gyear_to_string, []) :-
     typecast(gyear(1990,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear',
              'http://www.w3.org/2001/XMLSchema#string', [], "1990"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(float_cast, []) :-
+    typecast("0.5679"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [],
+             0.5679^^'http://www.w3.org/2001/XMLSchema#decimal').
 
 :- end_tests(typecast).

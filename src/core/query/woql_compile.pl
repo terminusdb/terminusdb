@@ -35,8 +35,6 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
-:- use_module(library(http/http_log)).
-
 
 :- use_module(library(csv)).
 :- use_module(library(isub)).
@@ -1609,7 +1607,7 @@ compile_wf(triple_count(Path,Count),Goal) -->
                     unliterally(Numerical_Count,CountE))
         )
     }.
-compile_wf(debug_log(Format_String, Arguments), http_log(Format_String, ArgumentsE)) -->
+compile_wf(debug_log(Format_String, Arguments), json_log_info_formatted(Format_String, ArgumentsE)) -->
     resolve(Arguments, ArgumentsE).
 compile_wf(typeof(X,T), typeof(XE,TE)) -->
     resolve(X,XE),
@@ -2270,7 +2268,8 @@ test(limit, [
 test(indexed_get,
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
     )
 :-
     Query =
@@ -2300,7 +2299,8 @@ test(indexed_get,
 test(named_get, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
      ])
 :-
     Query =
@@ -2334,7 +2334,8 @@ test(named_get, [
 test(named_get_two, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
      ])
 :-
     Query =
@@ -3401,7 +3402,8 @@ test(get_put, [
          setup((setup_temp_store(State),
                 tmp_file('test.csv', TestFile),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Depends on external URL')
      ]) :-
 
     Query = _{ '@type': "Put",
@@ -3562,7 +3564,8 @@ test(isa_node, [setup(setup_temp_store(State)),
 test(date_marshall, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
+         fixme('Need to process Using prefixes')
      ]) :-
 
     AST = (get([as('Start date', v('Start date'), 'http://www.w3.org/2001/XMLSchema#dateTime')],
