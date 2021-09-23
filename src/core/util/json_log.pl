@@ -61,9 +61,10 @@ json_log_raw(Dict) :-
     config:log_format(text),
     !,
     (   get_dict(message, Dict, Message),
-        get_dict(severity, Dict, Severity)
+        get_dict(severity, Dict, Severity),
+        get_dict(timestamp, Dict, Timestamp)
     ->  with_output_to(user_error,
-                       format("[~w] ~w~n", [Severity, Message]))
+                       format("[~w] ~w ~w~n", [Severity, Timestamp, Message]))
     ;   catch((with_output_to(string(Result),
                               json_write_dict(current_output,
                                               Dict,
