@@ -92,6 +92,9 @@ generate_time(Time) :-
     get_time(Now),
     format_time(string(Time), '%FT%T.%f%:z', Now).
 
+expand_operation_id(Operation_Id, _Dict) :-
+    var(Operation_Id),
+    !.
 expand_operation_id(first(Operation_Id), Dict) :-
     !,
     Dict = json{
@@ -105,12 +108,9 @@ expand_operation_id(last(Operation_Id), Dict) :-
                last: true
            }.
 expand_operation_id(Operation_Id, Dict) :-
-    ground(Operation_Id),
-    !,
     Dict = json{
                id: Operation_Id
            }.
-expand_operation_id(_,_).
 
 expand_json_log(Dict, Operation_Id, Severity, Output) :-
     generate_time(Time),
