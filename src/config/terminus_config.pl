@@ -18,7 +18,13 @@
               server_worker_options/1,
               http_options/1,
               ignore_ref_and_repo_schema/0,
-              file_upload_storage_path/1
+              file_upload_storage_path/1,
+              log_level/1,
+              set_log_level/1,
+              clear_log_level/0,
+              log_format/1,
+              set_log_format/1,
+              clear_log_format/0
           ]).
 
 :- use_module(core(util)).
@@ -36,8 +42,11 @@ initialize_system_ssl_certs :-
 server_protocol(Value) :-
     Value = http.
 
+:- table server_name/1 as shared.
 server_name(Value) :-
-    getenv_default('TERMINUSDB_SERVER_NAME', '127.0.0.1', Value).
+    (   getenv('TERMINUSDB_SERVER_NAME', Value)
+    ->  true
+    ;   random_string(Value)).
 
 server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
@@ -45,7 +54,7 @@ server_port(Value) :-
 worker_amount(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
 
-:- table max_transaction_retries/1.
+:- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-
     (   getenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', Atom_Value)
     ->  atom_number(Atom_Value, Value)
@@ -133,7 +142,7 @@ server_worker_options([]).
 
 http_options([]).
 
-:- table ignore_ref_and_repo_schema/0.
+:- table ignore_ref_and_repo_schema/0 as shared.
 ignore_ref_and_repo_schema :-
     getenv('TERMINUSDB_IGNORE_REF_AND_REPO_SCHEMA', true).
 
@@ -141,3 +150,55 @@ ignore_ref_and_repo_schema :-
 
 % Turn off mavis
 :- set_prolog_flag(optimise, true).
+
+:- dynamic log_level_override/1.
+
+:- table log_level_env/1 as shared.
+log_level_env(Log_Level) :-
+    getenv('TERMINUSDB_LOG_LEVEL', Log_Level_Lower),
+    upcase_atom(Log_Level_Lower, Log_Level),
+    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    !.
+log_level_env('INFO').
+
+log_level(Log_Level) :-
+    log_level_override(Found_Log_Level),
+    !,
+    Log_Level = Found_Log_Level.
+log_level(Log_Level) :-
+    log_level_env(Found_Log_Level),
+    Log_Level = Found_Log_Level.
+
+set_log_level(Log_Level) :-
+    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    clear_log_level,
+    asserta(log_level_override(Log_Level)).
+
+clear_log_level :-
+    retractall(log_level_override(_)).
+
+:- table log_format_env/1 as shared.
+log_format_env(Log_Format) :-
+    getenv('TERMINUSDB_LOG_FORMAT', Log_Format),
+    memberchk(Log_Format, [text, json]),
+    !.
+log_format_env(text).
+
+:- dynamic log_format_override/1.
+
+log_format(Log_Format) :-
+    log_format_override(Found_Log_Format),
+    !,
+    Log_Format = Found_Log_Format.
+log_format(Log_Format) :-
+    log_format_env(Found_Log_Format),
+    !,
+    Log_Format = Found_Log_Format.
+
+set_log_format(Log_Format) :-
+    memberchk(Log_Format, ['text', 'json']),
+    clear_log_format,
+    asserta(log_format_override(Log_Format)).
+
+clear_log_format :-
+    retractall(log_format_override(_)).

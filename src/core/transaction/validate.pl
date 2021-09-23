@@ -17,6 +17,7 @@
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+:- use_module(descriptor).
 :- use_module(database).
 :- use_module(layer_entity).
 :- use_module(repo_entity).
@@ -34,9 +35,6 @@
 :- use_module(library(semweb/turtle)).
 
 :- use_module(library(terminus_store)).
-
-% For debugging
-:- use_module(library(http/http_log)).
 
 /*
  * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
@@ -433,7 +431,28 @@ commit_validation_objects(Unsorted_Objects) :-
     % of a commit (adding commit information and repo change info for
     % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
-    commit_validation_objects_(Sorted_Objects).
+    commit_validation_objects_(Sorted_Objects),
+    log_commits(Sorted_Objects).
+
+log_commits(_) :-
+    % Skip logging work if debug log is not enabled
+    \+ debug_log_enabled,
+    !,
+    true.
+log_commits([]).
+log_commits([First|Rest]) :-
+    Descriptor = (First.descriptor),
+    (   resolve_absolute_string_descriptor(S, Descriptor)
+    ->  format(string(Message), "commit descriptor: ~w", [S])
+    ;   Message = "commit unprintable descriptor"),
+    descriptor_to_loggable(Descriptor, Loggable),
+    json_log_debug(_{
+                       message: Message,
+                       descriptorAction: commit,
+                       descriptor: Loggable
+                   }),
+
+    log_commits(Rest).
 
 validate_validation_objects(Validation_Objects, Witnesses) :-
     validate_validation_objects(Validation_Objects, true, Witnesses).

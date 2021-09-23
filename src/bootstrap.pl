@@ -18,7 +18,6 @@
 :- use_module(core(query)).
 :- use_module(core(api)).
 
-:- use_module(library(http/http_log)).
 :- use_module(library(qsave)).
 
 

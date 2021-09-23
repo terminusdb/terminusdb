@@ -24,10 +24,10 @@ run_context_ast_jsonld_response(Context, AST, JSON) :-
             findall(JSON_Binding,
                     (   woql_compile:Prog,
                         get_dict(bindings, Output_Context, Bindings),
-                        * http_log('~N[Bindings] ~q~n', [Bindings]),
+                        * json_log_info_formatted('~N[Bindings] ~q~n', [Bindings]),
                         json_transform_binding_set(Output_Context, Bindings, JSON_Binding)),
                     Binding_Set),
-            * http_log('~N[Binding Set] ~q~n', [Binding_Set])
+            * json_log_info_formatted('~N[Binding Set] ~q~n', [Binding_Set])
         ),
         Meta_Data
     ),
