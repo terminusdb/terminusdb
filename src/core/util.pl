@@ -197,6 +197,8 @@
               json_log_error_formatted/2,
               json_log_warning/1,
               json_log_warning_formatted/2,
+              json_log_notice/1,
+              json_log_notice_formatted/2,
               json_log_info/1,
               json_log_info_formatted/2,
               json_log_debug/1,

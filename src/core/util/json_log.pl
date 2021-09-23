@@ -3,6 +3,8 @@
               json_log_error_formatted/2,
               json_log_warning/1,
               json_log_warning_formatted/2,
+              json_log_notice/1,
+              json_log_notice_formatted/2,
               json_log_info/1,
               json_log_info_formatted/2,
               json_log_debug/1,
@@ -141,6 +143,15 @@ json_log_warning(Loggable) :-
 json_log_warning_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
     json_log_warning(Message).
+
+json_log_notice(Operation_Id, Loggable) :-
+    json_log(Operation_Id, 'NOTICE', Loggable).
+json_log_notice(Loggable) :-
+    json_log('NOTICE', Loggable).
+
+json_log_notice_formatted(Format, Arguments) :-
+    format(string(Message), Format, Arguments),
+    json_log_notice(Message).
 
 json_log_info(Operation_Id, Loggable) :-
     json_log(Operation_Id, 'INFO', Loggable).
