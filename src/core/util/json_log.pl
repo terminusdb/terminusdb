@@ -53,18 +53,36 @@ generate_time(Time) :-
     get_time(Now),
     format_time(string(Time), '%FT%T.%f%:z', Now).
 
+expand_operation_id(first(Operation_Id), Dict) :-
+    !,
+    Dict = json{
+               id: Operation_Id,
+               first: true
+           }.
+expand_operation_id(last(Operation_Id), Dict) :-
+    !,
+    Dict = json{
+               id: Operation_Id,
+               last: true
+           }.
+expand_operation_id(Operation_Id, Dict) :-
+    ground(Operation_Id),
+    !,
+    Dict = json{
+               id: Operation_Id
+           }.
+expand_operation_id(_,_).
+
 expand_json_log(Dict, Operation_Id, Severity, Output) :-
     generate_time(Time),
-    (   var(Operation_Id)
-    ->  Aux = _{
-                  severity: Severity,
-                  timestamp: Time
-              }
-    ;  Aux = _{
-              'logging.googleapis.com/operation': Operation_Id,
-              severity: Severity,
-              timestamp: Time
-          }),
+    expand_operation_id(Operation_Id, Operation_Dict),
+    include([_-V]>>(nonvar(V)), [severity-Severity,
+                                 timestamp-Time,
+                                 'logging.googleapis.com/operation'-Operation_Dict
+                                ],
+            Aux_Pairs),
+
+    dict_create(Aux, json, Aux_Pairs),
 
     put_dict(Dict, Aux, Output).
 
@@ -179,13 +197,13 @@ http_request_logger(request_start(Local_Id, Request)) :-
             Dict_Pairs),
     generate_operation_id(Local_Id, Operation_Id),
     dict_create(Dict, json, Dict_Pairs),
-    json_log_info(Operation_Id,
+    json_log_info(first(Operation_Id),
                   Dict).
 
 http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
     term_string(Bytes, Bytes_String),
     generate_operation_id(Local_Id, Operation_Id),
-    json_log_info(Operation_Id,
+    json_log_info(last(Operation_Id),
                   json{
                       httpRequest: json{
                                        status: Code,
