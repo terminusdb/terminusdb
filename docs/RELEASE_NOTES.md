@@ -1,3 +1,12 @@
+# TerminusDB Server v10.0.3 Beta Release Notes
+## New
++ Logging backend has been replaced with structured logging
+
+## Bug fixes
++ Floats not marshalled correctly
++ Fallback route handler for unknown paths
++ Improved error reporting
+
 # TerminusDB Server v10.0.2 Beta Release Notes
 
 ## New
