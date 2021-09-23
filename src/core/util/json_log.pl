@@ -249,7 +249,7 @@ http_request_logger(request_start(Local_Id, Request)) :-
     dict_create(Http, json, Http_Pairs),
 
     generate_operation_id(Local_Id, Operation_Id),
-    format(string(Message), "Request ~w started - ~w", [Operation_Id, Path]),
+    format(string(Message), "Request ~w started - ~w ~w", [Operation_Id, Method, Path]),
 
     include([_-V]>>(nonvar(V)), [httpRequest-Http,
                                  path-Path,
