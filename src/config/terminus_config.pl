@@ -21,7 +21,10 @@
               file_upload_storage_path/1,
               log_level/1,
               set_log_level/1,
-              clear_log_level/0
+              clear_log_level/0,
+              log_format/1,
+              set_log_format/1,
+              clear_log_format/0
           ]).
 
 :- use_module(core(util)).
@@ -152,14 +155,19 @@ ignore_ref_and_repo_schema :-
 
 :- table log_level_env/1 as shared.
 log_level_env(Log_Level) :-
-    getenv_default('TERMINUSDB_LOG_LEVEL', 'INFO', Log_Level_Lower),
-    upcase_atom(Log_Level_Lower, Log_Level).
+    getenv('TERMINUSDB_LOG_LEVEL', Log_Level_Lower),
+    upcase_atom(Log_Level_Lower, Log_Level),
+    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    !.
+log_level_env('INFO').
 
 log_level(Log_Level) :-
-    log_level_override(Log_Level),
-    !.
+    log_level_override(Found_Log_Level),
+    !,
+    Log_Level = Found_Log_Level.
 log_level(Log_Level) :-
-    log_level_env(Log_Level).
+    log_level_env(Found_Log_Level),
+    Log_Level = Found_Log_Level.
 
 set_log_level(Log_Level) :-
     memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
@@ -168,3 +176,29 @@ set_log_level(Log_Level) :-
 
 clear_log_level :-
     retractall(log_level_override(_)).
+
+:- table log_format_env/1 as shared.
+log_format_env(Log_Format) :-
+    getenv('TERMINUSDB_LOG_FORMAT', Log_Format),
+    memberchk(Log_Format, [text, json]),
+    !.
+log_format_env(text).
+
+:- dynamic log_format_override/1.
+
+log_format(Log_Format) :-
+    log_format_override(Found_Log_Format),
+    !,
+    Log_Format = Found_Log_Format.
+log_format(Log_Format) :-
+    log_format_env(Found_Log_Format),
+    !,
+    Log_Format = Found_Log_Format.
+
+set_log_format(Log_Format) :-
+    memberchk(Log_Format, ['text', 'json']),
+    clear_log_format,
+    asserta(log_format_override(Log_Format)).
+
+clear_log_format :-
+    retractall(log_format_override(_)).

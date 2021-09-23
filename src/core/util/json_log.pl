@@ -24,6 +24,18 @@
 
 :- listen(http(Term), http_request_logger(Term)).
 
+json_log_raw_text_error(E, Dict) :-
+    % oh no! something went wrong while writing a log entry!
+    % This is usually a programming error, where a variable is fed
+    % into the json writer. We'll log an error here in a known good
+    % format.
+
+    term_string(Dict, Dict_String),
+    term_string(E, E_String),
+
+    format(user_error, "Error while trying to write a log entry: ~w (~w)~n", [E_String, Dict_String]).
+
+
 json_log_raw_error(E, Dict) :-
     % oh no! something went wrong while writing a log entry!
     % This is usually a programming error, where a variable is fed
@@ -44,6 +56,25 @@ json_log_raw_error(E, Dict) :-
                     [width(0)]),
     with_output_to(user_error,
                    nl).
+
+json_log_raw(Dict) :-
+    config:log_format(text),
+    !,
+    (   get_dict(message, Dict, Message),
+        get_dict(severity, Dict, Severity)
+    ->  with_output_to(user_error,
+                       format("[~w] ~w~n", [Severity, Message]))
+    ;   catch((with_output_to(string(Result),
+                              json_write_dict(current_output,
+                                              Dict,
+                                              [width(0)])),
+               with_output_to(user_error,
+                              (   write("[WARNING] Log record without expected fields: "),
+                                  write(Result),
+                                  nl))),
+              E,
+              json_log_raw_text_error(E, Dict))).
+
 
 json_log_raw(Dict) :-
     catch((with_output_to(string(Result),
