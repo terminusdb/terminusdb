@@ -199,8 +199,13 @@
               json_log_warning_formatted/2,
               json_log_info/1,
               json_log_info_formatted/2,
-              json_log_trace/1,
-              json_log_trace_formatted/2
+              json_log_debug/1,
+              json_log_debug_formatted/2,
+              error_log_enabled/0,
+              warning_log_enabled/0,
+              notice_log_enabled/0,
+              info_log_enabled/0,
+              debug_log_enabled/0
           ]).
 
 % note: test_utils is intentionally omitted

@@ -434,6 +434,11 @@ commit_validation_objects(Unsorted_Objects) :-
     commit_validation_objects_(Sorted_Objects),
     log_commits(Sorted_Objects).
 
+log_commits(_) :-
+    % Skip logging work if debug log is not enabled
+    \+ debug_log_enabled,
+    !,
+    true.
 log_commits([]).
 log_commits([First|Rest]) :-
     Descriptor = (First.descriptor),
@@ -441,7 +446,7 @@ log_commits([First|Rest]) :-
     ->  format(string(Message), "commit descriptor: ~w", [S])
     ;   Message = "commit unprintable descriptor"),
     descriptor_to_loggable(Descriptor, Loggable),
-    json_log_trace(_{
+    json_log_debug(_{
                        message: Message,
                        descriptorAction: commit,
                        descriptor: Loggable

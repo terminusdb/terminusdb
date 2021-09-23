@@ -5,8 +5,13 @@
               json_log_warning_formatted/2,
               json_log_info/1,
               json_log_info_formatted/2,
-              json_log_trace/1,
-              json_log_trace_formatted/2
+              json_log_debug/1,
+              json_log_debug_formatted/2,
+              error_log_enabled/0,
+              warning_log_enabled/0,
+              notice_log_enabled/0,
+              info_log_enabled/0,
+              debug_log_enabled/0
           ]).
 
 :- use_module(utils).
@@ -101,6 +106,10 @@ generate_operation_id(Operation_Id) :-
     ->  generate_operation_id_from_stream(Stream, Operation_Id)
     ;   Operation_Id = _).
 
+json_log(_Operation_Id, Severity, _Dict) :-
+    \+ log_enabled_for_level(Severity),
+    !,
+    true.
 json_log(Operation_Id, Severity, Loggable) :-
     \+ is_dict(Loggable),
     !,
@@ -110,6 +119,7 @@ json_log(Operation_Id, Severity, Loggable) :-
 json_log(Operation_Id, Severity, Dict) :-
     expand_json_log(Dict, Operation_Id, Severity, Output),
     json_log_raw(Output).
+
 json_log(Severity, Loggable) :-
     generate_operation_id(Operation_Id),
     json_log(Operation_Id, Severity, Loggable).
@@ -141,14 +151,14 @@ json_log_info_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
     json_log_info(Message).
 
-json_log_trace(Operation_Id, Loggable) :-
-    json_log(Operation_Id, 'TRACE', Loggable).
-json_log_trace(Loggable) :-
-    json_log('TRACE', Loggable).
+json_log_debug(Operation_Id, Loggable) :-
+    json_log(Operation_Id, 'DEBUG', Loggable).
+json_log_debug(Loggable) :-
+    json_log('DEBUG', Loggable).
 
-json_log_trace_formatted(Format, Arguments) :-
+json_log_debug_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
-    json_log_trace(Message).
+    json_log_debug(Message).
 
 match_http_info(method(Method), Method_Upper, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size) :-
     string_upper(Method, Method_Upper).
@@ -179,6 +189,11 @@ extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size) :-
     ->  format(string(Url), "~w://~w~w", [Protocol, Host, Path])
     ;   format(string(Url), "~w://~w:~w~w", [Protocol, Host, Port, Path])).
 
+http_request_logger(_) :-
+    % Skip work if info log is not enabled
+    \+ info_log_enabled,
+    !,
+    true.
 http_request_logger(request_start(Local_Id, Request)) :-
     extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size),
     include([_-V]>>(nonvar(V)), [requestMethod-Method,
@@ -211,3 +226,38 @@ http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
                                    },
                       message: "Request completed"
                   }).
+
+log_enabled_for_level(Severity) :-
+    config:log_level(Level),
+    log_enabled_for_level(Severity, Level).
+
+log_enabled_for_level('ERROR', 'DEBUG').
+log_enabled_for_level('ERROR', 'INFO').
+log_enabled_for_level('ERROR', 'NOTICE').
+log_enabled_for_level('ERROR', 'WARNING').
+log_enabled_for_level('ERROR', 'ERROR').
+log_enabled_for_level('WARNING', 'DEBUG').
+log_enabled_for_level('WARNING', 'INFO').
+log_enabled_for_level('WARNING', 'NOTICE').
+log_enabled_for_level('WARNING', 'WARNING').
+log_enabled_for_level('NOTICE', 'DEBUG').
+log_enabled_for_level('NOTICE', 'INFO').
+log_enabled_for_level('NOTICE', 'NOTICE').
+log_enabled_for_level('INFO', 'DEBUG').
+log_enabled_for_level('INFO', 'INFO').
+log_enabled_for_level('DEBUG', 'DEBUG').
+
+error_log_enabled :-
+    log_enabled_for_level('ERROR').
+
+warning_log_enabled :-
+    log_enabled_for_level('WARNING').
+
+notice_log_enabled :-
+    log_enabled_for_level('NOTICE').
+
+info_log_enabled :-
+    log_enabled_for_level('INFO').
+
+debug_log_enabled :-
+    log_enabled_for_level('DEBUG').

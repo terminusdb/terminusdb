@@ -382,7 +382,7 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
         open_write(Store, Layer_Builder),
         Layer = (Read_Write_Obj.read),
         nb_apply_delta(Layer_Builder, Layer),
-        json_log_trace_formatted("applied delta!~n", [])
+        json_log_debug_formatted("applied delta!~n", [])
     ;   open_write(Read_Write_Obj.read, Layer_Builder)),
 
     nb_set_dict(write,Read_Write_Obj,Layer_Builder).
@@ -656,6 +656,11 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
 
+log_descriptor_open(_Descriptor) :-
+    % Skip all work if the debug log is not enabled
+    \+ debug_log_enabled,
+    !,
+    true.
 log_descriptor_open(Descriptor) :-
     layer_descriptor{} :< Descriptor,
     % We ignore this type as it's often used as part of an internal
@@ -667,7 +672,7 @@ log_descriptor_open(Descriptor) :-
     ;   Message = "open unprintable descriptor"),
     do_or_die(descriptor_to_loggable(Descriptor, Loggable),
               error(descriptor_sanitize_failed(Descriptor), _)),
-    json_log_trace(_{
+    json_log_debug(_{
                        message: Message,
                        descriptorAction: open,
                        descriptor: Loggable
