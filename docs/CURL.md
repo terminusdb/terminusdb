@@ -89,24 +89,24 @@ curl -X POST "http://127.0.0.1:6363/api/woql/admin/test_schema" -u "admin:root" 
 ## System
 
 ```bash
-curl -X POST "http://127.0.0.1:6363/api/optimize/_system" -u "admin:root" 
+curl -X POST "http://127.0.0.1:6363/api/optimize/_system" -u "admin:root"
 ```
 ## Meta
 
 ```bash
-curl -X POST "http://127.0.0.1:6363/api/optimize/admin/foo/_meta" -d '{}' -u "admin:root"  -H "Content-Type: application/json"
+curl -X POST "http://127.0.0.1:6363/api/optimize/admin/foo/_meta" -u "admin:root"
 ```
 
 ## Commit
 
 ```bash
-curl -X POST "http://127.0.0.1:6363/api/optimize/admin/foo/local/_commits" -d '{}' -u "admin:root"  -H "Content-Type: application/json"
+curl -X POST "http://127.0.0.1:6363/api/optimize/admin/foo/local/_commits" -u "admin:root"
 ```
 
 ## Branch
 
 ```bash
-curl -X POST "http://127.0.0.1:6363/api/optimize/admin/foo/local/branch/main" -d '{}' -u "admin:root"  -H "Content-Type: application/json"
+curl -X POST "http://127.0.0.1:6363/api/optimize/admin/foo/local/branch/main" -u "admin:root"
 ```
 
 # Clone
