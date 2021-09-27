@@ -25,8 +25,8 @@ If you want to build: a knowledge graph of interconnected data products; data-in
 
 ## Quick Links
 
-| [Quick Start](https://docs.terminusdb.com/v10.0/#/terminusx/quick-start-overview)     | [TerminusDB Documentation](https://docs.terminusdb.com/v10.0/#/)       | [Python Client](https://github.com/terminusdb/terminusdb-client-python)         | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) |
-| :--- | :--- | :--- | :--- |
+| [Quick Start](https://docs.terminusdb.com/v10.0/#/terminusx/quick-start-overview)     | [Bootstrap TerminusDB](https://github.com/terminusdb/terminusdb-bootstrap)       | [TerminusX Beta Docs](https://docs.terminusdb.com/#/)       |  [TerminusDB 10.0 Dev Docs](https://docs.terminusdb.com/next/#/)         | [Python Client](https://github.com/terminusdb/terminusdb-client-python)         | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) | 
+| :--- | :--- | :--- | :--- | :--- | :--- |
 
 <br/><br/>
 
