@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1632838238299,
+  "lastUpdate": 1632843878294,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -10223,6 +10223,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 42.466,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gavin@terminusdb.com",
+            "name": "Gavin Mendel-Gleason",
+            "username": "GavinMendelGleason"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "680e734243b640fbdb1208636bb2d74e74e97a7f",
+          "message": "Merge pull request #618 from terminusdb/normalize_values\n\nNormalize values",
+          "timestamp": "2021-09-28T17:41:03+02:00",
+          "tree_id": "58ba939aefe45b8cb4321a249f3286d6f812b1fa",
+          "url": "https://github.com/terminusdb/terminusdb/commit/680e734243b640fbdb1208636bb2d74e74e97a7f"
+        },
+        "date": 1632843877620,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 102.175,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 285.738,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 285.026,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 161.651,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 180.558,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 112.804,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 41.95,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 39.2,
             "unit": "ms"
           }
         ]
