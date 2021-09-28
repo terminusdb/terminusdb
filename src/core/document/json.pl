@@ -217,6 +217,24 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
         ),
         Values).
 
+untyped_typecast(V, Type, Val, Val_Type) :-
+    (   string(V)
+    ->  typecast(V^^xsd:string,
+                 Type, [], Val^^Val_Type)
+    ;   atom(V),
+        atom_string(V,String)
+    ->  typecast(String^^xsd:string,
+                 Type, [], Val^^Val_Type)
+    ;   number(V)
+    ->  typecast(V^^xsd:decimal,
+                 Type, [], Val^^Val_Type)).
+
+normalize_json_value(V, Type, Val) :-
+    global_prefix_expand_safe(Type, TE),
+
+    untyped_typecast(V, TE, Casted, Casted_Type),
+    typecast(Casted^^Casted_Type, xsd:string, [], Val^^_).
+
 raw(JValue,Value) :-
     is_dict(JValue),
     !,
@@ -229,12 +247,16 @@ raw(JValue,Value) :-
         ;   [Single_Value] = V
         ->  raw(Single_Value, Value)
         ;   \+ is_list(V)
-        ->  Value = V
+        ->  get_dict('@type', JValue, Value_Type),
+            normalize_json_value(V, Value_Type, Value)
         ;   (   Container_Type = "@set"
             ->  sort(V, V_1)
             ;   V_1 = V),
             maplist(raw, V_1, V_Raw),
             Value = list(V_Raw))
+    ;   get_dict('@type', JValue, Value_Type)
+    ->  get_dict('@value', JValue, Uncasted_Value),
+        normalize_json_value(Uncasted_Value, Value_Type, Value)
     ;   get_dict('@value', JValue, Value)
     ).
 raw(JValue,JValue).
@@ -7691,6 +7713,26 @@ test(underscore_space_slash_in_id,
            bar: (0.5),
            baz: "lo_there/buddy"},
         'Thing/hi_there%20buddy+0.5+lo_there%2Fbuddy').
+
+test(normalizable_float,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Lexical",
+                     '@fields': ["foo"]},
+           foo: "xsd:float"},
+
+        _{ '@type': "Thing",
+           foo: "0.5000000"},
+        'Thing/0.5').
 
 
 :- end_tests(document_id_generation).

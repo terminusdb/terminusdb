@@ -1,6 +1,7 @@
 :- module(global_prefixes, [
               global_prefixes/2,
               global_prefix_expand/2,
+              global_prefix_expand_safe/2,
               literal_expand/2,
               default_prefixes/1
           ]).
@@ -36,6 +37,11 @@ default_prefixes(Defaults) :-
 global_prefix_expand(Prefix:X, URI) :-
     global_prefixes(Prefix,Base),
     atomic_list_concat([Base,X],URI).
+
+global_prefix_expand_safe(Prefix:X, URI) :-
+    !,
+    global_prefix_expand(Prefix:X, URI).
+global_prefix_expand_safe(URI, URI).
 
 literal_expand(D^^T, D^^E) :-
     nonvar(T),
