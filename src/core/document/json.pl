@@ -217,6 +217,24 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
         ),
         Values).
 
+untyped_typecast(V, Type, Val, Val_Type) :-
+    (   string(V)
+    ->  typecast(V^^xsd:string,
+                 Type, [], Val^^Val_Type)
+    ;   atom(V),
+        atom_string(V,String)
+    ->  typecast(String^^xsd:string,
+                 Type, [], Val^^Val_Type)
+    ;   number(V)
+    ->  typecast(V^^xsd:decimal,
+                 Type, [], Val^^Val_Type)).
+
+normalize_json_value(V, Type, Val) :-
+    global_prefix_expand_safe(Type, TE),
+
+    untyped_typecast(V, TE, Casted, Casted_Type),
+    typecast(Casted^^Casted_Type, xsd:string, [], Val^^_).
+
 raw(JValue,Value) :-
     is_dict(JValue),
     !,
@@ -229,12 +247,16 @@ raw(JValue,Value) :-
         ;   [Single_Value] = V
         ->  raw(Single_Value, Value)
         ;   \+ is_list(V)
-        ->  Value = V
+        ->  get_dict('@type', JValue, Value_Type),
+            normalize_json_value(V, Value_Type, Value)
         ;   (   Container_Type = "@set"
             ->  sort(V, V_1)
             ;   V_1 = V),
             maplist(raw, V_1, V_Raw),
             Value = list(V_Raw))
+    ;   get_dict('@type', JValue, Value_Type)
+    ->  get_dict('@value', JValue, Uncasted_Value),
+        normalize_json_value(Uncasted_Value, Value_Type, Value)
     ;   get_dict('@value', JValue, Value)
     ).
 raw(JValue,JValue).
