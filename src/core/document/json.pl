@@ -7714,6 +7714,26 @@ test(underscore_space_slash_in_id,
            baz: "lo_there/buddy"},
         'Thing/hi_there%20buddy+0.5+lo_there%2Fbuddy').
 
+test(normalizable_float,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "Lexical",
+                     '@fields': ["foo"]},
+           foo: "xsd:float"},
+
+        _{ '@type': "Thing",
+           foo: "0.5000000"},
+        'Thing/0.5').
+
 
 :- end_tests(document_id_generation).
 
