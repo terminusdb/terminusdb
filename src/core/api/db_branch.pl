@@ -81,19 +81,18 @@ info_from_main(Repository_Context, Prefixes, Schema) :-
     ->  Schema = false
     ;   Schema = true).
 
-branch_create_(Repository_Descriptor, empty(Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
+branch_create_(Repository_Descriptor, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
     !,
     create_context(Repository_Descriptor, Context),
 
-    (   (   var(Prefixes)
-        ;   var(Schema))
-    ->  info_from_main(Context, Main_Prefixes, Main_Schema)
-    ;   Main_Prefixes = _,
-        Main_Schema = _),
+    info_from_main(Context, Main_Prefixes, Main_Schema),
 
-    (   var(Prefixes)
+    (   var(Input_Prefixes)
     ->  Prefixes = Main_Prefixes
-    ;   true),
+    ;   Default_Prefixes = _{'@base': _Base, '@schema': _Schema},
+        Default_Prefixes :< Main_Prefixes,
+        Prefixes = Default_Prefixes.put(Input_Prefixes)),
+
     (   var(Schema)
     ->  Schema = Main_Schema
     ;   true),
