@@ -217,7 +217,7 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     Default_Prefixes = _{ '@base' : "terminusdb:///data/",
                           '@schema' : "terminusdb:///schema#" },
     (   _{ prefixes : Input_Prefixes } :< Database_Document
-    ->  Prefixes = (Default_Prefixes.put(Input_Prefixes))
+    ->  Prefixes = Default_Prefixes.put(Input_Prefixes)
     ;   Prefixes = Default_Prefixes),
 
     (   _{ public : Public } :< Database_Document
@@ -1651,7 +1651,7 @@ test(rebase_divergent_history, [
                     _),
 
     Second_Path = "TERMINUSQA/foo/local/branch/second",
-    branch_create(system_descriptor{}, User_ID, Second_Path, some(Master_Path), _),
+    branch_create(system_descriptor{}, User_ID, Second_Path, branch(Master_Path), _),
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -2490,7 +2490,7 @@ test(pull_from_something_to_something_equal_other_branch,
         Store_Remote,
         (
             agent_name_uri(system_descriptor{}, "KarlKautsky", User_Uri),
-            branch_create(system_descriptor{}, User_Uri, "KarlKautsky/foo/local/branch/other", some("KarlKautsky/foo/local/branch/main"), _),
+            branch_create(system_descriptor{}, User_Uri, "KarlKautsky/foo/local/branch/other", branch("KarlKautsky/foo/local/branch/main"), _),
             repository_head(Remote_Database_Descriptor, "local", Head)
         )
     ),
@@ -2546,8 +2546,10 @@ branch_handler(post, Path, Request, System_DB, Auth) :-
         error(bad_api_document(Document, []),_)),
 
     (   get_dict(origin, Document, Origin_Path)
-    ->  Origin_Option = some(Origin_Path)
-    ;   Origin_Option = none),
+    ->  Origin_Option = branch(Origin_Path)
+    ;   ignore(get_dict(prefixes, Document, Input_Prefixes)),
+        ignore(get_dict(schema, Document, Schema)),
+        Origin_Option = empty(Input_Prefixes, Schema)),
 
     api_report_errors(
         branch,

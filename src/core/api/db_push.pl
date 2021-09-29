@@ -398,7 +398,7 @@ test(push_new_nonmaster_branch,
     Destination_Path = "admin/foo/local/branch/work",
 
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -428,7 +428,7 @@ test(push_new_nonmaster_branch_with_content,
 
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
     resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
     Prefixes = _{'@base' : 'http://somewhere_else/',
                  '@schema': 'http://somewhere/schema#',
@@ -497,7 +497,7 @@ test(push_without_repository,
 :-
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
 
@@ -520,7 +520,7 @@ test(push_local,
 :-
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
     Prefixes = _{'@base' : 'http://somewhere_else/',
@@ -565,7 +565,7 @@ test(push_headless_remote,
 :-
     Destination_Path = "admin/foo/local/branch/work",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Work_Branch_Descriptor),
     Prefixes = _{'@base' : 'http://somewhere_else/',
