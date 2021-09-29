@@ -364,4 +364,25 @@ test(create_branch_from_remote_commit,
     once(ask(Branch_Descriptor,
              (   t(foo, bar, baz),
                  t(baz, bar, foo)))).
+
+:- use_module(core(document)).
+test(create_empty_branch_and_insert_schema_doc,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/new_empty_branch", none, _),
+
+    resolve_absolute_string_descriptor("admin/foo/local/branch/new_empty_branch", D),
+
+    with_test_transaction(D,
+                          Context,
+                          insert_schema_document(Context,
+                                                 _{
+                                                     '@type': "Class",
+                                                     '@id': "Thing"
+                                                 })).
+
 :- end_tests(branch_api).
