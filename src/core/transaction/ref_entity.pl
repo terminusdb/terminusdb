@@ -1013,7 +1013,7 @@ test(common_ancestor_after_branch_and_some_commits,
 
     super_user_authority(Auth),
     Destination_Path = "admin/testdb/local/branch/second",
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
     with_transaction(Commit_C_Context,

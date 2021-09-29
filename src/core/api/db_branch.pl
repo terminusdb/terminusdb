@@ -4,10 +4,10 @@
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 :- use_module(core(triple)).
+:- use_module(core(document)).
 
 :- use_module(library(terminus_store)).
 :- use_module(core(transaction/validate), [commit_validation_object/2]).
-:- use_module(core(document), [insert_context_document/2]).
 
 create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes) :-
     query_context_transaction_objects(Repository_Context, [Repository_Transaction]),

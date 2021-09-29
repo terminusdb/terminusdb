@@ -311,7 +311,7 @@ test(rebase_fast_forward,
 
     Second_Path = "admin/foo/local/branch/second",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
 
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
@@ -375,7 +375,7 @@ test(rebase_fast_forward_from_commit,
 
     Second_Path = "admin/foo/local/branch/second",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
 
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
@@ -446,7 +446,7 @@ test(rebase_divergent_history,
                     _),
     Second_Path = "admin/foo/local/branch/second",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
@@ -535,7 +535,7 @@ test(rebase_conflicting_history_errors,
 
     Second_Path = "admin/test/local/branch/second",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Second_Path, some(Master_Path), _),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
     % create a commit on the master branch, diverging history
@@ -582,7 +582,7 @@ test(rebase_fast_forward_from_nothing,
     Main_Path = "admin/foo",
     Second_Path = "admin/foo/local/branch/second",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Second_Path, some(Main_Path), _),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Main_Path), _),
 
     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
 
@@ -660,7 +660,7 @@ test(rebase_conflict,
 
     super_user_authority(Auth),
     Path = "admin/foo/local/branch/moo",
-    branch_create(system_descriptor{}, Auth, Path, some("admin/foo"), _),
+    branch_create(system_descriptor{}, Auth, Path, branch("admin/foo"), _),
 
     resolve_absolute_string_descriptor(Path, Desc2),
     create_context(Desc2, commit{author: "me", message: "something"}, Context2),
