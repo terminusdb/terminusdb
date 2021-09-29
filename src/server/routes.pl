@@ -2546,8 +2546,10 @@ branch_handler(post, Path, Request, System_DB, Auth) :-
         error(bad_api_document(Document, []),_)),
 
     (   get_dict(origin, Document, Origin_Path)
-    ->  Origin_Option = some(Origin_Path)
-    ;   Origin_Option = none),
+    ->  Origin_Option = branch(Origin_Path)
+    ;   ignore(get_dict(prefixes, Document, Input_Prefixes)),
+        ignore(get_dict(schema, Document, Schema)),
+        Origin_Option = empty(Input_Prefixes, Schema)),
 
     api_report_errors(
         branch,

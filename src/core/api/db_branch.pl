@@ -3,15 +3,106 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
+:- use_module(core(triple)).
 
-branch_create_(Repository_Descriptor, empty, New_Branch_Name, Branch_Uri) :-
+:- use_module(library(terminus_store)).
+:- use_module(core(transaction/validate), [commit_validation_object/2]).
+:- use_module(core(document), [insert_context_document/2]).
+
+create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes) :-
+    query_context_transaction_objects(Repository_Context, [Repository_Transaction]),
+    Repository_Descriptor = (Repository_Transaction.descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    atom_string(New_Branch_Name, New_Branch_Name_String),
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", New_Branch_Name_String], Branch_Descriptor),
+
+    % let's create a cool new layer out of thin air but pretend it's actually a proper branch
+    % We can't just open the descriptor, cause the branch doesn't yet exist in the commit graph.
+    % Instead, we're gonna have to create a different sort of descriptor, and then bake a branch descriptor out of that.
+    triple_store(Store),
+    open_write(Store, Builder),
+
+    Prototype_Descriptor = branch_graph{
+              organization_name: (Database_Descriptor.organization_name),
+              database_name: (Database_Descriptor.database_name),
+              repository_name: (Repository_Descriptor.repository_name),
+              branch_name: New_Branch_Name_String
+          },
+    Schema_Descriptor = (Prototype_Descriptor.put(type, schema)),
+    Schema_RWO = read_write_obj{
+                     descriptor: Schema_Descriptor,
+                     read: _,
+                     write: Builder},
+
+    Commit_Info = commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'},
+
+    Branch_Transaction = transaction_object{
+                             parent: Repository_Transaction,
+                             descriptor: Branch_Descriptor,
+                             commit_info: Commit_Info,
+                             instance_objects: [],
+                             schema_objects: [Schema_RWO],
+                             inference_objects: []
+                         },
+
+    create_context(Branch_Transaction, Query_Context),
+    Prefix_Obj = (Prefixes.put('@type', "@context")),
+
+    insert_context_document(Query_Context, Prefix_Obj),
+
+    (   Schema = true
+    ->  true
+    ;   ask(Query_Context,
+            insert('terminusdb://data/Schema', rdf:type, rdf:nil, schema))),
+
+
+    transaction_objects_to_validation_objects([Branch_Transaction],
+                                              [Branch_Validation]),
+    validation_object{
+        schema_objects: [Schema_Validation]
+    } :< Branch_Validation,
+    layer_to_id(Schema_Validation.read, Schema_Layer_Id),
+    insert_initial_commit_object_on_branch(Repository_Transaction,
+                                           Commit_Info,
+                                           Branch_Uri,
+                                           Commit_Uri),
+    insert_layer_object(Repository_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
+    attach_layer_to_commit(Repository_Transaction, Commit_Uri, schema, Schema_Layer_Uri).
+
+info_from_main(Repository_Context, Prefixes, Schema) :-
+    query_context_transaction_objects(Repository_Context, [Repository_Transaction]),
+    Repository_Descriptor = (Repository_Transaction.descriptor),
+
+    resolve_relative_descriptor(Repository_Descriptor, ["branch", "main"], Branch_Descriptor),
+    open_descriptor(Branch_Descriptor, commit_info{}, Branch_Transaction, [Repository_Transaction], _),
+
+    database_prefixes(Branch_Transaction, Prefixes),
+    (   is_schemaless(Branch_Transaction)
+    ->  Schema = false
+    ;   Schema = true).
+
+branch_create_(Repository_Descriptor, empty(Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
     !,
-    % easy! just create the branch object and nothing else
     create_context(Repository_Descriptor, Context),
+
+    (   (   var(Prefixes)
+        ;   var(Schema))
+    ->  info_from_main(Context, Main_Prefixes, Main_Schema)
+    ;   Main_Prefixes = _,
+        Main_Schema = _),
+
+    (   var(Prefixes)
+    ->  Prefixes = Main_Prefixes
+    ;   true),
+    (   var(Schema)
+    ->  Schema = Main_Schema
+    ;   true),
+
     with_transaction(Context,
-                     insert_branch_object(Context,
-                                          New_Branch_Name,
-                                          Branch_Uri),
+                     (   insert_branch_object(Context,
+                                              New_Branch_Name,
+                                              Branch_Uri),
+                         create_schema(Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)),
                      _).
 branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
     branch_descriptor{} :< Branch_Descriptor,
@@ -108,7 +199,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
          } :< Destination_Descriptor),
         error(target_not_a_branch_descriptor(Destination_Descriptor),_)),
 
-    (   Origin_Option = some(Origin_Path)
+    (   Origin_Option = branch(Origin_Path)
     ->  do_or_die(
             resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor),
             error(invalid_origin_absolute_path(Origin_Path),_)),
@@ -123,8 +214,8 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
         do_or_die(
             organization_database_name_uri(System_DB, Organization_Name, Database_Name, Scope_Iri),
             error(unknown_origin_database(Organization_Name, Database_Name),_))
-    ;   Origin_Option = none
-    ->  Origin_Descriptor = empty
+    ;   Origin_Option = empty(_,_)
+    ->  Origin_Descriptor = Origin_Option
     ;   throw(error(bad_origin_path_option(Origin_Option),_))),
 
     assert_auth_action_scope(System_DB, Auth, '@schema':'Action/branch', Scope_Iri),
@@ -186,7 +277,7 @@ branch_delete(System_DB, Auth, Path) :-
 
 :- use_module(db_create).
 
-test(create_branch_from_nothing,
+test(create_branch_from_nothing_defaults_schemaless,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin","foo"))),
       cleanup(teardown_temp_store(State))
@@ -195,13 +286,80 @@ test(create_branch_from_nothing,
 
     Path = "admin/foo/local/branch/moo",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Path, none, _),
+    branch_create(system_descriptor{}, Auth, Path, empty(_,_), _),
     resolve_absolute_string_descriptor(Path, Descriptor),
 
     Repository_Descriptor = (Descriptor.repository_descriptor),
 
     has_branch(Repository_Descriptor, "moo"),
-    \+ branch_head_commit(Repository_Descriptor, "moo", _).
+    branch_head_commit(Repository_Descriptor, "moo", Commit),
+    commit_type(Repository_Descriptor, Commit, '@schema':'InitialCommit'),
+    open_descriptor(Descriptor, Transaction),
+    is_schemaless(Transaction).
+
+test(create_branch_from_nothing_defaults_schema,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    Path = "admin/foo/local/branch/moo",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Path, empty(_,_), _),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    has_branch(Repository_Descriptor, "moo"),
+    branch_head_commit(Repository_Descriptor, "moo", Commit),
+    commit_type(Repository_Descriptor, Commit, '@schema':'InitialCommit'),
+    open_descriptor(Descriptor, Transaction),
+    \+ is_schemaless(Transaction).
+
+test(create_branch_from_nothing_half_configured,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    Path = "admin/foo/local/branch/moo",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Path, empty(_{'@schema': 'http://alternative.schema/', '@base': 'http://alternative.instance/'},_), _),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    has_branch(Repository_Descriptor, "moo"),
+    branch_head_commit(Repository_Descriptor, "moo", Commit),
+    commit_type(Repository_Descriptor, Commit, '@schema':'InitialCommit'),
+    open_descriptor(Descriptor, Transaction),
+    is_schemaless(Transaction),
+    database_prefixes(Transaction, Prefixes),
+    _{'@base':"http://alternative.instance/",'@schema':"http://alternative.schema/"} :< Prefixes.
+
+test(create_branch_from_nothing_configured,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    Path = "admin/foo/local/branch/moo",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Path, empty(_{'@schema': 'http://alternative.schema/', '@base': 'http://alternative.instance/'},true), _),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+
+    has_branch(Repository_Descriptor, "moo"),
+    branch_head_commit(Repository_Descriptor, "moo", Commit),
+    commit_type(Repository_Descriptor, Commit, '@schema':'InitialCommit'),
+    open_descriptor(Descriptor, Transaction),
+    \+ is_schemaless(Transaction),
+    database_prefixes(Transaction, Prefixes),
+    _{'@base':"http://alternative.instance/",'@schema':"http://alternative.schema/"} :< Prefixes.
 
 test(create_branch_from_local_branch_with_commits,
      [setup((setup_temp_store(State),
@@ -225,7 +383,7 @@ test(create_branch_from_local_branch_with_commits,
 
     super_user_authority(Auth),
     Destination_Path = "admin/foo/local/branch/moo",
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Branch_Path),_),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Branch_Path),_),
 
     has_branch(Repository_Descriptor, "moo"),
     branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
@@ -253,7 +411,7 @@ test(create_branch_from_remote_branch,
 
     Destination_Path = "admin/bar/local/branch/moo",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Destination_Descriptor),
     Destination_Repository_Descriptor = (Destination_Descriptor.repository_descriptor),
@@ -301,7 +459,7 @@ test(create_branch_from_local_commit,
 
     Destination_Path = "admin/foo/local/branch/moo",
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Commit_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Commit_Path), _),
 
     has_branch(Repository_Descriptor, "moo"),
     branch_head_commit(Repository_Descriptor, "moo", Commit_Uri),
@@ -346,7 +504,7 @@ test(create_branch_from_remote_commit,
     Destination_Path = "admin/bar/local/branch/moo",
 
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Commit_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Commit_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Destination_Descriptor),
     Destination_Repository_Descriptor = (Destination_Descriptor.repository_descriptor),
@@ -368,12 +526,12 @@ test(create_branch_from_remote_commit,
 :- use_module(core(document)).
 test(create_empty_branch_and_insert_schema_doc,
      [setup((setup_temp_store(State),
-             create_db_without_schema("admin","foo"))),
+             create_db_with_empty_schema("admin","foo"))),
       cleanup(teardown_temp_store(State))
      ]
     ) :-
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/new_empty_branch", none, _),
+    branch_create(system_descriptor{}, Auth, "admin/foo/local/branch/new_empty_branch", empty(_,_), _),
 
     resolve_absolute_string_descriptor("admin/foo/local/branch/new_empty_branch", D),
 
