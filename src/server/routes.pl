@@ -32,10 +32,14 @@
 :- use_module(library(http/http_cors)).
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
+:- use_module(library(http/http_stream)).
+
 
 % multipart
 :- use_module(library(http/http_multipart_plugin)).
 :- use_module(library(http/mimepack)).
+
+:- use_module(library(broadcast)).
 
 % chunked
 %:- use_module(library(http/http_header)).
@@ -56,6 +60,8 @@
 :- if(config:jwt_enabled).
 :- use_module(library(jwt_io)).
 :- endif.
+
+:- listen(http(Term), http_request_logger(Term)).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -3894,3 +3900,101 @@ collect_posted_named_files(Request,Files) :-
                  )
              ),Parts,Files).
 collect_posted_named_files(_Request,[]).
+
+
+%% Logging
+
+match_http_info(method(Method), Method_Upper, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size) :-
+    string_upper(Method, Method_Upper).
+match_http_info(protocol(Protocol), _Method, Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size).
+match_http_info(host(Host), _Method, _Protocol, Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size).
+match_http_info(port(Port), _Method, _Protocol, _Host, Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size).
+match_http_info(request_uri(Url_Suffix), _Method, _Protocol, _Host, _Port, Url_Suffix, _Remote_Ip, _User_Agent, _Size).
+match_http_info(peer(Peer), _Method, _Protocol, _Host, _Port, _Url_Suffix, Remote_Ip, _User_Agent, _Size) :-
+    % what about ipv6 though?
+    % is there any other sort of peer possible?
+    Peer = ip(N1,N2,N3,N4),
+    format(string(Remote_Ip), "~w.~w.~w.~w", [N1, N2, N3, N4]).
+match_http_info(user_agent(User_Agent), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, User_Agent, _Size).
+match_http_info(content_length(Size), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, Size_String) :-
+    term_string(Size, Size_String).
+match_http_info(_, _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size).
+
+extract_http_info_([], _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size).
+extract_http_info_([First|Rest], Method, Protocol, Host, Port, Url_Suffix, Remote_Ip, User_Agent, Size) :-
+    match_http_info(First, Method, Protocol, Host, Port, Url_Suffix, Remote_Ip, User_Agent, Size),
+    !,
+    extract_http_info_(Rest, Method, Protocol, Host, Port, Url_Suffix, Remote_Ip, User_Agent, Size).
+
+extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size) :-
+    extract_http_info_(Request, Method, Protocol, Host, Port, Path, Remote_Ip, User_Agent, Size),
+
+    (   var(Port)
+    ->  format(string(Url), "~w://~w~w", [Protocol, Host, Path])
+    ;   format(string(Url), "~w://~w:~w~w", [Protocol, Host, Port, Path])).
+
+:- dynamic saved_request/3.
+
+get_current_id_from_stream(Id) :-
+    current_output(CGI),
+    cgi_property(CGI, id(Id)).
+
+save_request(Request) :-
+    get_time(Now),
+    get_current_id_from_stream(Id),
+    extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size),
+    include([_-V]>>(nonvar(V)), [requestMethod-Method,
+                                 requestUrl-Url,
+                                 requestSize-Size,
+                                 remoteIp-Remote_Ip,
+                                 userAgent-User_Agent
+                                ],
+           Http_Pairs),
+    assert(saved_request(Id, Now, Path, Http_Pairs)).
+
+:- multifile http:request_expansion/2.
+http:request_expansion(Request, Request) :-
+    save_request(Request).
+
+http_request_logger(_) :-
+    % Skip work if info log is not enabled
+    \+ info_log_enabled,
+    !,
+    true.
+http_request_logger(request_start(Local_Id, Request)) :-
+    generate_operation_id(Local_Id, Operation_Id),
+    extract_http_info(Request, Method, _Url, Path, _Remote_Ip, _User_Agent, _Size),
+    format(string(Message), "Request ~w started - ~w ~w", [Operation_Id, Method, Path]),
+
+    include([_-V]>>(nonvar(V)), [method-Method,
+                                 path-Path,
+                                 message-Message
+                                ],
+            Dict_Pairs),
+    dict_create(Dict, json, Dict_Pairs),
+    json_log_debug(first(Operation_Id),
+                   Dict).
+
+http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
+    term_string(Bytes, Bytes_String),
+
+    saved_request(Local_Id, Start, Path, Initial_Http_Pairs),
+    retract(saved_request(Local_Id, Start, Path, Initial_Http_Pairs)),
+    get_time(Now),
+    Latency is Now - Start,
+    format(string(Latency_String), "~9fs", [Latency]),
+    Http_Pairs = [
+        status-Code,
+        responseSize-Bytes_String,
+        latency-Latency_String
+        |Initial_Http_Pairs],
+
+    dict_create(Http, json, Http_Pairs),
+
+    generate_operation_id(Local_Id, Operation_Id),
+    format(string(Message), "~w ~w (~w)", [Http.requestMethod, Path, Code]),
+    json_log_info(last(Operation_Id),
+                  json{
+                      httpRequest: Http,
+                      message: Message
+                  }).

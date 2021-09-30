@@ -194,20 +194,26 @@
 
               % json_log.pl
               json_log_error/1,
+              json_log_error/2,
               json_log_error_formatted/2,
               json_log_warning/1,
+              json_log_warning/2,
               json_log_warning_formatted/2,
               json_log_notice/1,
+              json_log_notice/2,
               json_log_notice_formatted/2,
               json_log_info/1,
+              json_log_info/2,
               json_log_info_formatted/2,
               json_log_debug/1,
+              json_log_debug/2,
               json_log_debug_formatted/2,
               error_log_enabled/0,
               warning_log_enabled/0,
               notice_log_enabled/0,
               info_log_enabled/0,
-              debug_log_enabled/0
+              debug_log_enabled/0,
+              generate_operation_id/2
           ]).
 
 % note: test_utils is intentionally omitted
