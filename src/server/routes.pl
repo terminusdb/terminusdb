@@ -1871,9 +1871,8 @@ auth_wrapper(Goal,Request) :-
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
                  call(Goal, [domain(Domain)], Request)),
-          error(authentication_incorrect(Reason),_),
-          (   json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
-              reply_json(_{'@type' : 'api:ErrorResponse',
+          error(authentication_incorrect(_Reason),_),
+          (   reply_json(_{'@type' : 'api:ErrorResponse',
                            'api:status' : 'api:failure',
                            'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
@@ -3654,17 +3653,57 @@ fetch_jwt_data(_Token, _Username) :-
 authenticate(System_Askable, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
     !,
-    do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
-              error(authentication_incorrect(basic_auth(Username)),_)).
+
+    (   user_key_user_id(System_Askable, Username, KS, Auth)
+    ->  true
+    ;   format(string(Message), "User '~w' failed to authenticate through basic auth", Username),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: basic,
+                           authResult: failure,
+                           user: Username
+                       }),
+
+        throw(error(authentication_incorrect(basic_auth(Username)),_))),
+
+    format(string(Message), "User '~w' authenticated through basic auth", Username),
+    json_log_debug(_{
+                       message: Message,
+                       authMethod: basic,
+                       authResult: success,
+                       user: Username
+                   }).
 authenticate(System_Askable, Request, Auth) :-
     memberchk(authorization(Text), Request),
     pattern_string_split(" ", Text, ["Bearer", Token]),
     !,
     % Try JWT if no http keys
     fetch_jwt_data(Token, Username),
-    do_or_die(username_auth(System_Askable, Username, Auth),
-              error(authentication_incorrect(jwt_no_user_with_name(Username)),_)).
-authenticate(_, _, anonymous).
+    (   username_auth(System_Askable, Username, Auth)
+    ->  true
+    ;   format(string(Message), "User '~w' failed to authenticate through JWT", Username),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: jwt,
+                           authResult: failure,
+                           user: Username
+                       }),
+        throw(error(authentication_incorrect(jwt_no_user_with_name(Username)),_))),
+
+    format(string(Message), "User '~w' authenticated through JWT", Username),
+    json_log_debug(_{
+                       message: Message,
+                       authMethod: jwt,
+                       authResult: success,
+                       user: Username
+                   }).
+authenticate(_, _, anonymous) :-
+    json_log_debug(_{
+                       message: "User 'anonymous' authenticated as no authentication information was submitted",
+                       authMethod: anonymous,
+                       authResult: success,
+                       user: "anonymous"
+                   }).
 
 /*
  * write_cors_headers(Request) is det.
