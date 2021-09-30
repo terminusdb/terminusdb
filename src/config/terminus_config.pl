@@ -134,9 +134,8 @@ file_upload_storage_path(Path) :-
 
 server(Server) :-
     server_protocol(Protocol),
-    server_name(Name),
     server_port(Port),
-    atomic_list_concat([Protocol,'://',Name,':',Port],Server).
+    atomic_list_concat([Protocol,'://localhost',':',Port],Server).
 
 server_worker_options([]).
 
