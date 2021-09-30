@@ -19,7 +19,8 @@
               notice_log_enabled/0,
               info_log_enabled/0,
               debug_log_enabled/0,
-              generate_operation_id/2
+              generate_operation_id/2,
+              saved_request/5
           ]).
 
 :- use_module(utils).
@@ -101,17 +102,20 @@ expand_operation_id(first(Operation_Id), Dict) :-
     !,
     Dict = json{
                id: Operation_Id,
+               producer: "http://terminusdb.com/terminusdb-server",
                first: true
            }.
 expand_operation_id(last(Operation_Id), Dict) :-
     !,
     Dict = json{
                id: Operation_Id,
+               producer: "http://terminusdb.com/terminusdb-server",
                last: true
            }.
 expand_operation_id(Operation_Id, Dict) :-
     Dict = json{
-               id: Operation_Id
+               id: Operation_Id,
+               producer: "http://terminusdb.com/terminusdb-server"
            }.
 
 expand_json_log(Dict, Operation_Id, Severity, Output) :-
@@ -127,13 +131,17 @@ expand_json_log(Dict, Operation_Id, Severity, Output) :-
 
     put_dict(Dict, Aux, Output).
 
+:- dynamic saved_request/5.
+
 generate_operation_id(Local_Id, Operation_Id) :-
     server_name(Server_Name),
     format(string(Operation_Id), "~w-~w", [Server_Name, Local_Id]).
 generate_operation_id_from_stream(CGI, Operation_Id) :-
     cgi_property(CGI, id(Local_Id)),
     !,
-    generate_operation_id(Local_Id, Operation_Id).
+    (   saved_request(Local_Id, _, _, some(Operation_Id), _)
+    ->  true
+    ;   generate_operation_id(Local_Id, Operation_Id)).
 generate_operation_id_from_stream(_, _).
 
 generate_operation_id(Operation_Id) :-

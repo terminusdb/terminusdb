@@ -213,7 +213,8 @@
               notice_log_enabled/0,
               info_log_enabled/0,
               debug_log_enabled/0,
-              generate_operation_id/2
+              generate_operation_id/2,
+              saved_request/5
           ]).
 
 % note: test_utils is intentionally omitted
