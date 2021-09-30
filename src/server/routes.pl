@@ -3968,17 +3968,18 @@ http_request_logger(_) :-
     true.
 http_request_logger(request_start(Local_Id, Request)) :-
     extract_http_info(Request, Method, _Url, Path, _Remote_Ip, _User_Agent, _Size, Submitted_Operation_Id),
+    generate_request_id(Local_Id, Request_Id),
 
     (   var(Submitted_Operation_Id)
-    ->  generate_operation_id(Local_Id, Generated_Operation_Id),
-        Operation_Id = first(Generated_Operation_Id)
+    ->  Operation_Id = first(Request_Id)
     ;   Operation_Id = Submitted_Operation_Id),
 
     format(string(Message), "Request ~w started - ~w ~w", [Operation_Id, Method, Path]),
 
     include([_-V]>>(nonvar(V)), [method-Method,
                                  path-Path,
-                                 message-Message
+                                 message-Message,
+                                 requestId-Request_Id
                                 ],
             Dict_Pairs),
     dict_create(Dict, json, Dict_Pairs),
@@ -4001,14 +4002,15 @@ http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
 
     dict_create(Http, json, Http_Pairs),
 
+    generate_request_id(Local_Id, Request_Id),
     (   Submitted_Operation_Id = some(Operation_Id)
     ->  true
-    ;   generate_operation_id(Local_Id, Generated_Operation_Id),
-        Operation_Id = last(Generated_Operation_Id)),
+    ;   Operation_Id = last(Request_Id)),
 
     format(string(Message), "~w ~w (~w)", [Http.requestMethod, Path, Code]),
     json_log_info(Operation_Id,
                   json{
                       httpRequest: Http,
-                      message: Message
+                      message: Message,
+                      requestId: Request_Id
                   }).

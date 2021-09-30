@@ -19,7 +19,7 @@
               notice_log_enabled/0,
               info_log_enabled/0,
               debug_log_enabled/0,
-              generate_operation_id/2,
+              generate_request_id/2,
               saved_request/5
           ]).
 
@@ -133,22 +133,22 @@ expand_json_log(Dict, Operation_Id, Severity, Output) :-
 
 :- dynamic saved_request/5.
 
-generate_operation_id(Local_Id, Operation_Id) :-
+generate_request_id(Local_Id, Request_Id) :-
     server_name(Server_Name),
-    format(string(Operation_Id), "~w-~w", [Server_Name, Local_Id]).
-generate_operation_id_from_stream(CGI, Operation_Id) :-
+    format(string(Request_Id), "~w-~w", [Server_Name, Local_Id]).
+generate_request_id_from_stream(CGI, Request_Id) :-
     cgi_property(CGI, id(Local_Id)),
     !,
-    (   saved_request(Local_Id, _, _, some(Operation_Id), _)
+    (   saved_request(Local_Id, _, _, some(Request_Id), _)
     ->  true
-    ;   generate_operation_id(Local_Id, Operation_Id)).
-generate_operation_id_from_stream(_, _).
+    ;   generate_request_id(Local_Id, Request_Id)).
+generate_request_id_from_stream(_, _).
 
-generate_operation_id(Operation_Id) :-
+generate_request_id(Request_Id) :-
     current_output(Stream),
     (   is_cgi_stream(Stream)
-    ->  generate_operation_id_from_stream(Stream, Operation_Id)
-    ;   Operation_Id = _).
+    ->  generate_request_id_from_stream(Stream, Request_Id)
+    ;   Request_Id = _).
 
 json_log(_Operation_Id, Severity, _Dict) :-
     \+ log_enabled_for_level(Severity),
@@ -165,7 +165,7 @@ json_log(Operation_Id, Severity, Dict) :-
     json_log_raw(Output).
 
 json_log(Severity, Loggable) :-
-    generate_operation_id(Operation_Id),
+    generate_request_id(Operation_Id),
     json_log(Operation_Id, Severity, Loggable).
 
 json_log_error(Operation_Id, Loggable) :-
