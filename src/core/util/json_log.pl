@@ -1,18 +1,18 @@
 :- module(json_log, [
               json_log_error/1,
-              json_log_error/2,
+              json_log_error/3,
               json_log_error_formatted/2,
               json_log_warning/1,
-              json_log_warning/2,
+              json_log_warning/3,
               json_log_warning_formatted/2,
               json_log_notice/1,
-              json_log_notice/2,
+              json_log_notice/3,
               json_log_notice_formatted/2,
               json_log_info/1,
-              json_log_info/2,
+              json_log_info/3,
               json_log_info_formatted/2,
               json_log_debug/1,
-              json_log_debug/2,
+              json_log_debug/3,
               json_log_debug_formatted/2,
               error_log_enabled/0,
               warning_log_enabled/0,
@@ -118,11 +118,12 @@ expand_operation_id(Operation_Id, Dict) :-
                producer: "http://terminusdb.com/terminusdb-server"
            }.
 
-expand_json_log(Dict, Operation_Id, Severity, Output) :-
+expand_json_log(Dict, Operation_Id, Request_Id, Severity, Output) :-
     generate_time(Time),
     expand_operation_id(Operation_Id, Operation_Dict),
     include([_-V]>>(nonvar(V)), [severity-Severity,
                                  timestamp-Time,
+                                 requestId-Request_Id,
                                  'logging.googleapis.com/operation'-Operation_Dict
                                 ],
             Aux_Pairs),
@@ -136,13 +137,26 @@ expand_json_log(Dict, Operation_Id, Severity, Output) :-
 generate_request_id(Local_Id, Request_Id) :-
     server_name(Server_Name),
     format(string(Request_Id), "~w-~w", [Server_Name, Local_Id]).
-generate_request_id_from_stream(CGI, Request_Id) :-
+
+generate_operation_id_from_stream(CGI, Request_Id) :-
     cgi_property(CGI, id(Local_Id)),
     !,
     (   saved_request(Local_Id, _, _, some(Request_Id), _)
     ->  true
     ;   generate_request_id(Local_Id, Request_Id)).
+generate_operation_id_from_stream(_, _).
+
+generate_request_id_from_stream(CGI, Request_Id) :-
+    cgi_property(CGI, id(Local_Id)),
+    generate_request_id(Local_Id, Request_Id),
+    !.
 generate_request_id_from_stream(_, _).
+
+generate_operation_id(Operation_Id) :-
+    current_output(Stream),
+    (   is_cgi_stream(Stream)
+    ->  generate_operation_id_from_stream(Stream, Operation_Id)
+    ;   Operation_Id = _).
 
 generate_request_id(Request_Id) :-
     current_output(Stream),
@@ -150,26 +164,27 @@ generate_request_id(Request_Id) :-
     ->  generate_request_id_from_stream(Stream, Request_Id)
     ;   Request_Id = _).
 
-json_log(_Operation_Id, Severity, _Dict) :-
+json_log(_Operation_Id, _Request_Id, Severity, _Dict) :-
     \+ log_enabled_for_level(Severity),
     !,
     true.
-json_log(Operation_Id, Severity, Loggable) :-
+json_log(Operation_Id, Request_Id, Severity, Loggable) :-
     \+ is_dict(Loggable),
     !,
     format(string(Message), "~w", [Loggable]),
     Dict = _{message: Message},
-    json_log(Operation_Id, Severity, Dict).
-json_log(Operation_Id, Severity, Dict) :-
-    expand_json_log(Dict, Operation_Id, Severity, Output),
+    json_log(Operation_Id, Request_Id, Severity, Dict).
+json_log(Operation_Id, Request_Id, Severity, Dict) :-
+    expand_json_log(Dict, Operation_Id, Request_Id, Severity, Output),
     json_log_raw(Output).
 
 json_log(Severity, Loggable) :-
-    generate_request_id(Operation_Id),
-    json_log(Operation_Id, Severity, Loggable).
+    generate_operation_id(Operation_Id),
+    generate_request_id(Request_Id),
+    json_log(Operation_Id, Request_Id, Severity, Loggable).
 
-json_log_error(Operation_Id, Loggable) :-
-    json_log(Operation_Id, 'ERROR', Loggable).
+json_log_error(Operation_Id, Request_Id, Loggable) :-
+    json_log(Operation_Id, Request_Id, 'ERROR', Loggable).
 json_log_error(Loggable) :-
     json_log('ERROR', Loggable).
 
@@ -177,8 +192,8 @@ json_log_error_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
     json_log_error(Message).
 
-json_log_warning(Operation_Id, Loggable) :-
-    json_log(Operation_Id, 'WARNING', Loggable).
+json_log_warning(Operation_Id, Request_Id, Loggable) :-
+    json_log(Operation_Id, Request_Id, 'WARNING', Loggable).
 json_log_warning(Loggable) :-
     json_log('WARNING', Loggable).
 
@@ -186,8 +201,8 @@ json_log_warning_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
     json_log_warning(Message).
 
-json_log_notice(Operation_Id, Loggable) :-
-    json_log(Operation_Id, 'NOTICE', Loggable).
+json_log_notice(Operation_Id, Request_Id, Loggable) :-
+    json_log(Operation_Id, Request_Id, 'NOTICE', Loggable).
 json_log_notice(Loggable) :-
     json_log('NOTICE', Loggable).
 
@@ -195,8 +210,8 @@ json_log_notice_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
     json_log_notice(Message).
 
-json_log_info(Operation_Id, Loggable) :-
-    json_log(Operation_Id, 'INFO', Loggable).
+json_log_info(Operation_Id, Request_Id, Loggable) :-
+    json_log(Operation_Id, Request_Id, 'INFO', Loggable).
 json_log_info(Loggable) :-
     json_log('INFO', Loggable).
 
@@ -204,8 +219,8 @@ json_log_info_formatted(Format, Arguments) :-
     format(string(Message), Format, Arguments),
     json_log_info(Message).
 
-json_log_debug(Operation_Id, Loggable) :-
-    json_log(Operation_Id, 'DEBUG', Loggable).
+json_log_debug(Operation_Id, Request_Id, Loggable) :-
+    json_log(Operation_Id, Request_Id, 'DEBUG', Loggable).
 json_log_debug(Loggable) :-
     json_log('DEBUG', Loggable).
 

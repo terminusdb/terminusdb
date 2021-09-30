@@ -4017,12 +4017,12 @@ http_request_logger(request_start(Local_Id, Request)) :-
 
     include([_-V]>>(nonvar(V)), [method-Method,
                                  path-Path,
-                                 message-Message,
-                                 requestId-Request_Id
+                                 message-Message
                                 ],
             Dict_Pairs),
     dict_create(Dict, json, Dict_Pairs),
     json_log_debug(Operation_Id,
+                  Request_Id,
                    Dict).
 
 http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
@@ -4048,8 +4048,8 @@ http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
 
     format(string(Message), "~w ~w (~w)", [Http.requestMethod, Path, Code]),
     json_log_info(Operation_Id,
+                  Request_Id,
                   json{
                       httpRequest: Http,
-                      message: Message,
-                      requestId: Request_Id
+                      message: Message
                   }).
