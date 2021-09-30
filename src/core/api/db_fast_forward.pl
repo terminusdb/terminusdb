@@ -66,7 +66,7 @@ test(fast_forward_empty_branch_on_empty_from_same_repo,
 
     % create a branch off the master branch (which should result in an empty branch)
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
@@ -92,7 +92,7 @@ test(fast_forward_empty_branch_from_same_repo,
 
     % create a branch off the master branch (which should result in an empty branch)
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Origin_Path, Master_Descriptor),
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
@@ -144,7 +144,7 @@ test(fast_forward_nonempty_branch_from_same_repo,
 
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
@@ -195,7 +195,7 @@ test(fast_forward_branch_with_divergent_history_from_same_repo,
 
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
@@ -247,7 +247,7 @@ test(fast_forward_branch_from_empty_branch,
 
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
@@ -274,7 +274,7 @@ test(fast_forward_branch_from_unrelated_branch,
     Destination_Path = "admin/foo/local/branch/second",
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, none, _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, empty(_,_), _),
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
     Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
     create_schema(Second_Descriptor, false, Prefixes),
@@ -299,7 +299,7 @@ test(fast_forward_empty_branch_from_empty_branch,
     Destination_Path = "admin/foo/local/branch/second",
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
@@ -325,7 +325,7 @@ test(fast_forward_nonempty_branch_from_equal_branch,
     Destination_Path = "admin/foo/local/branch/second",
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
 
@@ -359,7 +359,7 @@ test(fast_forward_branch_from_other_repo,
     Destination_Path = "admin/bar/local/branch/second",
     % create a branch off the master branch
     super_user_authority(Auth),
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     resolve_absolute_string_descriptor(Destination_Path, Bar_Descriptor),
 

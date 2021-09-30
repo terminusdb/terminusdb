@@ -22,6 +22,8 @@
               insert_commit_object_on_branch/4,
               insert_commit_object_on_branch/5,
               insert_commit_object_on_branch/6,
+              insert_initial_commit_object_on_branch/4,
+              insert_initial_commit_object_on_branch/5,
               unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
               reset_branch_head/3,
@@ -31,6 +33,7 @@
               apply_commit_on_commit/7,
               apply_commit_on_commit/8,
               commit_is_valid/2,
+              commit_is_initial/2,
               invalidate_commit/2,
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
@@ -182,6 +185,14 @@ insert_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Name, Com
     ;   insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri)),
 
     % in both cases, we need to insert the new reference to the commit
+    link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
+
+insert_initial_commit_object_on_branch(Context, Commit_Info, Branch_Uri, Commit_Uri) :-
+    get_time(Now),
+    insert_initial_commit_object_on_branch(Context, Commit_Info, Now, Branch_Uri, Commit_Uri).
+insert_initial_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Uri, Commit_Uri) :-
+    Initial_Commit_Info = (Commit_Info.put(commit_type, 'InitialCommit')),
+    insert_base_commit_object(Context, Initial_Commit_Info, Timestamp, _, Commit_Uri),
     link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
 
 unlink_commit_object_from_branch(Context, Branch_Uri) :-
@@ -1002,7 +1013,7 @@ test(common_ancestor_after_branch_and_some_commits,
 
     super_user_authority(Auth),
     Destination_Path = "admin/testdb/local/branch/second",
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     create_context(Descriptor, commit_info{author:"test",message: "commit c"}, Commit_C_Context),
     with_transaction(Commit_C_Context,
@@ -1053,6 +1064,11 @@ commit_is_valid(Context, Commit_Id) :-
     commit_id_uri(Context, Commit_Id, Commit_Uri),
     once(ask(Context,
              t(Commit_Uri, rdf:type, '@schema':'ValidCommit'))).
+
+commit_is_initial(Context, Commit_Id) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    once(ask(Context,
+             t(Commit_Uri, rdf:type, '@schema':'InitialCommit'))).
 
 invalidate_commit(Context, Commit_Id) :-
     (   commit_is_valid(Context, Commit_Id)

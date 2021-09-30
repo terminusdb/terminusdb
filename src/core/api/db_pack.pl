@@ -175,7 +175,7 @@ test(context_repository_head_pack,
     Destination_Path = "admin/foo/local/branch/moo",
     super_user_authority(Auth),
 
-    branch_create(system_descriptor{}, Auth, Destination_Path, some(Origin_Path), _),
+    branch_create(system_descriptor{}, Auth, Destination_Path, branch(Origin_Path), _),
 
     pack(system_descriptor{}, Auth,
         "admin/foo",

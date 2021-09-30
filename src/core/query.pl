@@ -21,6 +21,7 @@
               % global_prefixes.pl
               global_prefixes/2,
               global_prefix_expand/2,
+              global_prefix_expand_safe/2,
               literal_expand/2,
               default_prefixes/1,
 

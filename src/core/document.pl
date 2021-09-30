@@ -48,6 +48,7 @@
               % schema.pl
               class_subsumed/3,
               class_frame/3,
+              is_schemaless/1,
 
               % query.pl
               match_query_document_uri/4

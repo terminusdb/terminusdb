@@ -107,7 +107,7 @@ loading_page -->
 welcome_banner(Server,Argv) :-
     % Test utils currently reads this so watch out if you change it!
     get_time(Now),
-    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now),
+    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
     format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
            [StrTime, Now, Argv]),
     format(user_error,'% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
