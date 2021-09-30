@@ -32,10 +32,14 @@
 :- use_module(library(http/http_cors)).
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
+:- use_module(library(http/http_stream)).
+
 
 % multipart
 :- use_module(library(http/http_multipart_plugin)).
 :- use_module(library(http/mimepack)).
+
+:- use_module(library(broadcast)).
 
 % chunked
 %:- use_module(library(http/http_header)).
@@ -56,6 +60,8 @@
 :- if(config:jwt_enabled).
 :- use_module(library(jwt_io)).
 :- endif.
+
+:- listen(http(Term), http_request_logger(Term)).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1865,9 +1871,8 @@ auth_wrapper(Goal,Request) :-
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
                  call(Goal, [domain(Domain)], Request)),
-          error(authentication_incorrect(Reason),_),
-          (   json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
-              reply_json(_{'@type' : 'api:ErrorResponse',
+          error(authentication_incorrect(_Reason),_),
+          (   reply_json(_{'@type' : 'api:ErrorResponse',
                            'api:status' : 'api:failure',
                            'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
@@ -3648,17 +3653,57 @@ fetch_jwt_data(_Token, _Username) :-
 authenticate(System_Askable, Request, Auth) :-
     fetch_authorization_data(Request, Username, KS),
     !,
-    do_or_die(user_key_user_id(System_Askable, Username, KS, Auth),
-              error(authentication_incorrect(basic_auth(Username)),_)).
+
+    (   user_key_user_id(System_Askable, Username, KS, Auth)
+    ->  true
+    ;   format(string(Message), "User '~w' failed to authenticate through basic auth", Username),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: basic,
+                           authResult: failure,
+                           user: Username
+                       }),
+
+        throw(error(authentication_incorrect(basic_auth(Username)),_))),
+
+    format(string(Message), "User '~w' authenticated through basic auth", Username),
+    json_log_debug(_{
+                       message: Message,
+                       authMethod: basic,
+                       authResult: success,
+                       user: Username
+                   }).
 authenticate(System_Askable, Request, Auth) :-
     memberchk(authorization(Text), Request),
     pattern_string_split(" ", Text, ["Bearer", Token]),
     !,
     % Try JWT if no http keys
     fetch_jwt_data(Token, Username),
-    do_or_die(username_auth(System_Askable, Username, Auth),
-              error(authentication_incorrect(jwt_no_user_with_name(Username)),_)).
-authenticate(_, _, anonymous).
+    (   username_auth(System_Askable, Username, Auth)
+    ->  true
+    ;   format(string(Message), "User '~w' failed to authenticate through JWT", Username),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: jwt,
+                           authResult: failure,
+                           user: Username
+                       }),
+        throw(error(authentication_incorrect(jwt_no_user_with_name(Username)),_))),
+
+    format(string(Message), "User '~w' authenticated through JWT", Username),
+    json_log_debug(_{
+                       message: Message,
+                       authMethod: jwt,
+                       authResult: success,
+                       user: Username
+                   }).
+authenticate(_, _, anonymous) :-
+    json_log_debug(_{
+                       message: "User 'anonymous' authenticated as no authentication information was submitted",
+                       authMethod: anonymous,
+                       authResult: success,
+                       user: "anonymous"
+                   }).
 
 /*
  * write_cors_headers(Request) is det.
@@ -3894,3 +3939,117 @@ collect_posted_named_files(Request,Files) :-
                  )
              ),Parts,Files).
 collect_posted_named_files(_Request,[]).
+
+
+%% Logging
+
+match_http_info(method(Method), Method_Upper, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id) :-
+    string_upper(Method, Method_Upper).
+match_http_info(protocol(Protocol), _Method, Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
+match_http_info(host(Host), _Method, _Protocol, Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
+match_http_info(port(Port), _Method, _Protocol, _Host, Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
+match_http_info(request_uri(Url_Suffix), _Method, _Protocol, _Host, _Port, Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
+match_http_info(peer(Peer), _Method, _Protocol, _Host, _Port, _Url_Suffix, Remote_Ip, _User_Agent, _Size, _Operation_Id) :-
+    % what about ipv6 though?
+    % is there any other sort of peer possible?
+    Peer = ip(N1,N2,N3,N4),
+    format(string(Remote_Ip), "~w.~w.~w.~w", [N1, N2, N3, N4]).
+match_http_info(user_agent(User_Agent), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, User_Agent, _Size, _Operation_Id).
+match_http_info(content_length(Size), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, Size_String, _Operation_Id) :-
+    term_string(Size, Size_String).
+match_http_info(x_operation_id(Operation_Id), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, Operation_Id_String) :-
+    term_string(Operation_Id, Operation_Id_String).
+match_http_info(_, _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
+
+extract_http_info_([], _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
+extract_http_info_([First|Rest], Method, Protocol, Host, Port, Url_Suffix, Remote_Ip, User_Agent, Size, Operation_Id) :-
+    match_http_info(First, Method, Protocol, Host, Port, Url_Suffix, Remote_Ip, User_Agent, Size, Operation_Id),
+    !,
+    extract_http_info_(Rest, Method, Protocol, Host, Port, Url_Suffix, Remote_Ip, User_Agent, Size, Operation_Id).
+
+extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size, Operation_Id) :-
+    extract_http_info_(Request, Method, Protocol, Host, Port, Path, Remote_Ip, User_Agent, Size, Operation_Id),
+
+    (   var(Port)
+    ->  format(string(Url), "~w://~w~w", [Protocol, Host, Path])
+    ;   format(string(Url), "~w://~w:~w~w", [Protocol, Host, Port, Path])).
+
+
+get_current_id_from_stream(Id) :-
+    current_output(CGI),
+    cgi_property(CGI, id(Id)).
+
+save_request(Request) :-
+    get_time(Now),
+    get_current_id_from_stream(Id),
+    extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size, Submitted_Operation_Id),
+    (   var(Submitted_Operation_Id)
+    ->  Operation_Id = none
+    ;   Operation_Id = some(Submitted_Operation_Id)),
+
+    include([_-V]>>(nonvar(V)), [requestMethod-Method,
+                                 requestUrl-Url,
+                                 requestSize-Size,
+                                 remoteIp-Remote_Ip,
+                                 userAgent-User_Agent
+                                ],
+           Http_Pairs),
+    assert(saved_request(Id, Now, Path, Operation_Id, Http_Pairs)).
+
+:- multifile http:request_expansion/2.
+http:request_expansion(Request, Request) :-
+    save_request(Request).
+
+http_request_logger(_) :-
+    % Skip work if info log is not enabled
+    \+ info_log_enabled,
+    !,
+    true.
+http_request_logger(request_start(Local_Id, Request)) :-
+    extract_http_info(Request, Method, _Url, Path, _Remote_Ip, _User_Agent, _Size, Submitted_Operation_Id),
+    generate_request_id(Local_Id, Request_Id),
+
+    (   var(Submitted_Operation_Id)
+    ->  Operation_Id = first(Request_Id)
+    ;   Operation_Id = Submitted_Operation_Id),
+
+    format(string(Message), "Request ~w started - ~w ~w", [Operation_Id, Method, Path]),
+
+    include([_-V]>>(nonvar(V)), [method-Method,
+                                 path-Path,
+                                 message-Message,
+                                 requestId-Request_Id
+                                ],
+            Dict_Pairs),
+    dict_create(Dict, json, Dict_Pairs),
+    json_log_debug(Operation_Id,
+                   Dict).
+
+http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
+    term_string(Bytes, Bytes_String),
+
+    saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs),
+    retract(saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs)),
+    get_time(Now),
+    Latency is Now - Start,
+    format(string(Latency_String), "~9fs", [Latency]),
+    Http_Pairs = [
+        status-Code,
+        responseSize-Bytes_String,
+        latency-Latency_String
+        |Initial_Http_Pairs],
+
+    dict_create(Http, json, Http_Pairs),
+
+    generate_request_id(Local_Id, Request_Id),
+    (   Submitted_Operation_Id = some(Operation_Id)
+    ->  true
+    ;   Operation_Id = last(Request_Id)),
+
+    format(string(Message), "~w ~w (~w)", [Http.requestMethod, Path, Code]),
+    json_log_info(Operation_Id,
+                  json{
+                      httpRequest: Http,
+                      message: Message,
+                      requestId: Request_Id
+                  }).
