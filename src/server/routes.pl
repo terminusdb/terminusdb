@@ -4013,7 +4013,7 @@ http_request_logger(request_start(Local_Id, Request)) :-
     ->  Operation_Id = first(Request_Id)
     ;   Operation_Id = Submitted_Operation_Id),
 
-    format(string(Message), "Request ~w started - ~w ~w", [Operation_Id, Method, Path]),
+    format(string(Message), "Request ~w started - ~w ~w", [Request_Id, Method, Path]),
 
     include([_-V]>>(nonvar(V)), [method-Method,
                                  path-Path,
