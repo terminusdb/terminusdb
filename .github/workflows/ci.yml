@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.19.1
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.19.2
   TUS_VERSION: v0.0.5
   DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
 
