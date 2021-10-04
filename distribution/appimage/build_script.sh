@@ -20,7 +20,7 @@ git clone https://github.com/terminusdb/tus.git --single-branch --branch "$TUS_V
 cd "$TERMINUSDB_STORE_PROLOG_DIR"
 export TERMINUSDB_SERVER_PACK_DIR=$(realpath "../")
 git checkout "$TERMINUSDB_STORE_PROLOG_VERSION"
-./make.sh
+make
 rm -rf rust/target/release/build
 rm -rf rust/target/release/deps
 cd $CURRENT_DIR/app_dir/usr/share/terminusdb && make
