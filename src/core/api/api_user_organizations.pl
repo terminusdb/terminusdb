@@ -8,7 +8,6 @@
 :- use_module(core(document)).
 
 user_organizations(System_DB, Auth, Result) :-
-    % TODO, need auth check.
     findall(
         _{ '@type' : 'Organization',
            '@id' : Organization,
