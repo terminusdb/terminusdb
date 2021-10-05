@@ -119,7 +119,10 @@
               api_delete_documents/7,
               api_delete_document/7,
               api_replace_documents/8,
-              api_nuke_documents/6
+              api_nuke_documents/6,
+
+              % api_user_organizations.pl
+              user_organizations/3
           ]).
 
 :- use_module(api/api_init).
@@ -150,3 +153,4 @@
 :- use_module(api/api_bundle).
 :- use_module(api/api_unbundle).
 :- use_module(api/api_document).
+:- use_module(api/api_user_organizations).
