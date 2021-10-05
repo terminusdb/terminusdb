@@ -38,10 +38,12 @@ user_organizations(System_DB, Auth, Result) :-
 
 :- begin_tests(user_organization).
 :- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
 :- use_module(db_branch).
 :- use_module(library(http/json)).
 
-test(context_repository_head_pack,
+test(retrieve_organization_databases,
      [setup((setup_temp_store(State),
              add_user("TERMINUSQA",some('password'),Auth),
              create_db_without_schema("TERMINUSQA",foo))),
@@ -52,8 +54,18 @@ test(context_repository_head_pack,
     open_descriptor(system_descriptor{}, System_DB),
     user_organizations(System_DB, Auth, Results),
 
-    with_output_to(atom(Atom),
-                   json_write_dict(current_output, Results, [width(0)])),
-    Atom = '[ {"@id":"Organization/TERMINUSQA", "@type":"Organization", "databases": [ {"@id":"UserDatabase/6ccca3d196c28464816aeec04f21264ecbe2c24debc4340d782a7e196c325a93", "@type":"UserDatabase", "comment":"a test db", "creation_date":"2021-10-05T13:23:10.226Z", "label":"test", "name":"foo", "state":"finalized"} ], "name":"TERMINUSQA"} ]'.
-
+    Results = [ _{ '@id':'Organization/TERMINUSQA',
+                   '@type':'Organization',
+                   databases:[ json{ '@id':_,
+                                     '@type':'UserDatabase',
+                                     comment:"a test db",
+                                     creation_date:_,
+                                     label:"test",
+		                     name:"foo",
+		                     state:finalized
+		                   }
+	                     ],
+                   name:"TERMINUSQA"
+                 }
+              ].
 :- end_tests(user_organization).
