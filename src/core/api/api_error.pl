@@ -1350,6 +1350,16 @@ api_document_error_jsonld(Type, error(subdocument_key_missing(Document),_),JSON)
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(document_key_not_object(Key_Value, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document @key value is not an object: ~q", [Key_Value]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentKeyNotObject',
+                              'api:key_value' : Key_Value,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(key_missing_required_field(Field,Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "The required field ~q is missing from the submitted document", [Field]),

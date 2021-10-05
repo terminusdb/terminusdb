@@ -1022,6 +1022,8 @@ json_schema_predicate_value('@cardinality',V,_,_,P,json{'@type' : Type,
 json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
     !,
     global_prefix_expand(sys:key, P),
+    do_or_die(is_dict(V),
+              error(document_key_not_object(V), _)),
     json_schema_elaborate_key(V,Context,Elab),
     key_id(V,Context,Path,ID),
     put_dict(_{'@id' : ID}, Elab, Value).
