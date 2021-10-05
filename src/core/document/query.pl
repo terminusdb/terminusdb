@@ -273,4 +273,46 @@ test(query_optional,
 
     Uris = [Doc2].
 
+test(query_set,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Set",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "foo"},
+                                  _Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "bar"},
+                                  Doc2)
+                          )),
+
+    open_descriptor(Desc, Db),
+    findall(Uri,
+            match_query_document_uri(Db,
+                                     "Thing",
+                                     _{'field': "bar"},
+                                     Uri),
+            Uris),
+
+    Uris = [Doc2].
+
 :- end_tests(query_document).
