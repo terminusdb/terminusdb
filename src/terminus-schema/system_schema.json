@@ -37,7 +37,7 @@
   "@documentation" : {
       "@comment" : "An organisation.",
       "@properties" : { "name" : "The name of the organization.",
-                        "child" : "The set of children of the organization.",
+                        "child" : "The set of organizations which are children of the current organization.",
                         "database" : "The set of databases controlled by the organization." }
   },
   "@inherits" : "Resource",
