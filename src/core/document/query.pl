@@ -141,13 +141,13 @@ expand_query_document_(DB, Type, Query, Query_Ex) :-
         do_or_die(prefix_expand_schema(Query_Type, Prefixes, Query_Type_Ex),
                   error(query_error(unknown_prefix(Query_Type)),_)),
         do_or_die(once(class_subsumed(DB, Type, Query_Type_Ex)),
-                  error(query_error(not_a_a_subclass(Type, Query_Type_Ex)), _))
+                  error(query_error(not_a_subclass(Type, Query_Type_Ex)), _))
     ;   var(Type)
     ->  throw(error(query_error(unknown_type_for_query(Query)), _))
     ;   Query_Type_Ex = Type),
 
     do_or_die(type_descriptor(DB, Query_Type_Ex, Query_Type_Descriptor),
-              error(query_error(type_not_found(Query_Type)), _)),
+              error(query_error(type_not_found(Query_Type_Ex)), _)),
 
     expand_query_document_for_type(Query_Type_Descriptor, DB, Query, Query_Ex).
 
@@ -229,6 +229,7 @@ match_query_document_uri(DB, Type, Query, Uri) :-
 :- use_module([core(util),
                core(util/test_utils),
                core(transaction),
+               core(api),
                json]).
 
 test(query_optional,
@@ -272,5 +273,54 @@ test(query_optional,
             Uris),
 
     Uris = [Doc2].
+
+test(query_type_not_found,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: _{'@type': "Optional",
+                                         '@class': "xsd:string"}})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "foo"},
+                                  _Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: "bar"},
+                                  _Doc2)
+                          )),
+
+    open_descriptor(Desc, Db),
+    catch(
+        findall(Uri,
+                match_query_document_uri(Db,
+                                         "Blah",
+                                         _{'field': "bar"},
+                                         Uri),
+                _Uris),
+        Error,
+        api_error_jsonld(get_documents,Error,JSON)
+    ),
+
+    JSON = _{'@type':'api:GetDocumentErrorResponse',
+             'api:error':_{'@type':'api:QueryTypeNotFound'},
+             'api:message':"Query provided a type 'http://somewhere.for.now/schema#Blah' which was not found in the schema.",
+             'api:status':'api:failure'}.
 
 :- end_tests(query_document).
