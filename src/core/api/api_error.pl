@@ -1419,6 +1419,11 @@ generic_exception_jsonld(syntax_error(M),JSON) :-
     JSON = _{'api:status' : 'api:failure',
              'system:witnesses' : [_{'@type' : 'vio:ViolationWithDatatypeObject',
                                      'vio:literal' : OM}]}.
+generic_exception_jsonld(duplicate_key(Key), JSON) :-
+    format(string(Msg), "Duplicate field in request: ~q", [Key]),
+    JSON = _{'@type' : 'api:DuplicateField',
+             'api:status' : 'api:failure',
+             'api:message' : Msg}.
 generic_exception_jsonld(woql_syntax_error(JSON,Path,Element),JSON) :-
     json_woql_path_element_error_message(JSON,Path,Element,Message),
     reverse(Path,Director),
