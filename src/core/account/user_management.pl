@@ -15,8 +15,9 @@
               add_organization/3,
               add_organization_transaction/3,
 
-              add_user_organization_transaction/4
+              add_user_organization_transaction/4,
 
+              user_organizations/3
           ]).
 
 :- use_module(core(util)).

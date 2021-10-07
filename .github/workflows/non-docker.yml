@@ -1,11 +1,9 @@
-# Build and run tests every night of the working week.
-#
-# These mainly exist to test installing TerminusDB on different systems.
-name: Nightly
+# Build and run tests every night on non-Docker systems.
+name: Non-Docker
 
 on:
   schedule:
-    - cron:  '45 1 * * MON-FRI'
+    - cron:  '45 1 * * *'
   workflow_dispatch:
 
 jobs:
@@ -22,6 +20,7 @@ jobs:
           sudo apt-add-repository ppa:swi-prolog/stable
           sudo apt-get update
           sudo apt-get install swi-prolog
+          swipl --version
 
       - name: Check out tus
         uses: actions/checkout@v2
@@ -50,6 +49,7 @@ jobs:
         run: |
           # Installing swipl on macOS: https://www.swi-prolog.org/build/macos.html
           brew install swi-prolog
+          swipl --version
 
       - name: Check out tus
         uses: actions/checkout@v2

@@ -2834,6 +2834,23 @@ user_handler(delete, Request, System_DB, Auth) :-
                             _{'@type' : "api:DeleteUserResponse",
                               'api:status' : "api:success"}))).
 
+%%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% THIS IS A *POTENTIALLY* TEMPORARY HANDLER - YOU SHOULD NOT RELY ON THIS YET
+%
+:- http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+user_organizations_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        user_organizations,
+        Request,
+        (   user_organizations(System_DB, Auth, Result),
+            cors_reply_json(Request, Result)
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(organization), cors_handler(Method, organization_handler),
