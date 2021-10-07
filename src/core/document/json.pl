@@ -5583,6 +5583,84 @@ test(round_trip_float,
                latitude:41.2008,
                longitude:0.5679}.
 
+:- use_module(core(query)).
+test(status_update,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [
+                       witness{'@type':instance_not_of_class,
+                               class:'http://somewhere.for.now/schema#Status',
+                               instance:'http://somewhere.for.now/document/Status/inactive'
+                              }
+                   ]),
+               _)
+     ]) :-
+
+    Enum_Atom = '
+      { "@type" : "Enum",
+        "@id" : "Status",
+        "@value" : [ "active", "inactive" ]
+      }',
+    Object_Atom = '
+      { "@type" : "Class",
+        "@id" : "Object",
+        "@key" : { "@type" : "Lexical",
+                   "@fields" : ["name"] },
+        "name" : "xsd:string",
+        "status" : "Status"
+      }',
+
+    atom_json_dict(Enum_Atom, Enum, []),
+    atom_json_dict(Object_Atom, Object, []),
+    writeq(here),
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(
+                                  C1,
+                                  Enum),
+                              insert_schema_document(
+                                  C1,
+                                  Object)
+                          )
+                         ),
+
+    Doc_Atom = '{
+        "@type": "Object",
+        "name": "foo",
+        "status": "active"
+    }',
+
+    atom_json_dict(Doc_Atom, Doc, []),
+
+
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(
+                                  C2,
+                                  Doc,
+                                  Uri)),
+
+    with_test_transaction(
+        Desc,
+        C3,
+        ask(C3,
+            (   t(Uri, name, "foo"^^xsd:string),
+                t(Uri, status, Status),
+                delete(Uri, status, Status),
+                % Note: Instance prefix is used by default and not @schema
+                insert(Uri, status, 'Status/inactive')
+            )
+           )
+    ).
+
 :- end_tests(json).
 
 :- begin_tests(schema_checker).
