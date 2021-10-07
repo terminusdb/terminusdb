@@ -29,7 +29,7 @@
 
 :- use_module(core(util)).
 
-version('10.0.6').
+version('10.0.7').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
