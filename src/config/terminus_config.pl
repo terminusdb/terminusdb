@@ -11,7 +11,6 @@
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
               registry_path/1,
-              console_base_url/1,
               pack_dir/1,
               autologin_enabled/0,
               tmp_path/1,
@@ -110,9 +109,6 @@ jwt_jwks_endpoint(Endpoint) :-
     (   Value = ''
     ->  false
     ;   Endpoint = Value).
-
-console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://cdn.terminusdb.com/js_libs/terminusdb_console/canary', Value).
 
 autologin_enabled :-
     getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', false, true).

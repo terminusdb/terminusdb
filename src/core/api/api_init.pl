@@ -104,15 +104,6 @@ write_config_file(Public_URL, Config_Tpl_Path, Config_Path, Server_Name, Port, W
     format(Stream, Tpl_String, [Server_Name, Port, Public_URL, Workers]),
     close(Stream).
 
-write_index_file(Index_Tpl_Path, Index_Path, Password) :-
-    open(Index_Tpl_Path, read, Tpl_Stream),
-    read_string(Tpl_Stream, _, Tpl_String),
-    close(Tpl_Stream),
-    open(Index_Path, write, Stream),
-    config:console_base_url(BaseURL),
-    format(Stream, Tpl_String, [BaseURL, Password, BaseURL]),
-    close(Stream).
-
 initialize_config(PUBLIC_URL, Server, Port, Workers) :-
     config_template_path( Config_Tpl_Path),
     config_path(Config_Path),
