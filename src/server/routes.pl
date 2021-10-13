@@ -905,7 +905,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             (   memberchk(nuke=true, Search)
             ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message)
             ;   memberchk(id=Id, Search)
-                ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
+            ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
             ;   http_read_data(Request, Data, [to(string)]),
                 open_string(Data, Stream),
                 api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
