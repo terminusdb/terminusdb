@@ -10,7 +10,6 @@
               create_ref_layer/1,
 
               % init.pl
-              initialize_config/4,
               initialize_database/2,
               initialize_database_with_store/2,
 
