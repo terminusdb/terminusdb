@@ -3539,9 +3539,7 @@ cors_catch(Request, _Goal) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'api:status' : 'api:failure',
-                 'api:message' :
-                 _{'@type' : 'xsd:string',
-                   '@value' : 'Unexpected failure in request handler'}},
+                 'api:message' :'Unexpected failure in request handler'},
                [status(500)]).
 
 call_http_handler(Method, Goal, Request, System_Database, Auth) :-
