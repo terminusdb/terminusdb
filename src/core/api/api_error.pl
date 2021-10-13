@@ -1323,7 +1323,7 @@ api_document_error_jsonld(get_documents,error(query_error(unknown_type(Type)),_)
     format(string(Msg), "Query has an unknown type ~q", [Type]),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
              'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:QueryUnkonwnType'},
+             'api:error' : _{ '@type' : 'api:QueryUnknownType'},
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents,error(query_error(not_a_query_document_list(Documents)),_), JSON) :-

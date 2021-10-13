@@ -69,7 +69,7 @@ expand_query_document_for_type(base_class(Type), _DB, Query, Query_Ex) :-
           error(casting_error(_,_),_),
           throw(error(query_error(casting_error(Query, Type)), _))),
     % todo check that the given value actually matches what we need here
-    Query_Ex = base_class_match_value(Casted).
+    Query_Ex = match_value(Casted).
 expand_query_document_for_type(base_class(Type), _DB, Query, Query_Ex) :-
     Query = _{'@regex': Regex},
     !,
@@ -86,6 +86,7 @@ expand_query_document_for_type(base_class(Type), _DB, Query, _Query_Ex) :-
     throw(error(query_error(unknown_query_format_for_datatype(Type, Query)), _)).
 expand_query_document_for_type(class(_), _, _{}, _{}) :- !.
 expand_query_document_for_type(class(Type), DB, Query, Query_Ex) :-
+    is_dict(Query),
     !,
     dict_pairs(Query, Query_Tag, Query_Pairs),
     findall(
@@ -97,6 +98,13 @@ expand_query_document_for_type(class(Type), DB, Query, Query_Ex) :-
         Query_Pairs_Ex),
 
     dict_pairs(Query_Ex, Query_Tag, Query_Pairs_Ex).
+expand_query_document_for_type(class(_Type), DB, Query, Query_Ex) :-
+    atomic(Query),
+    !,
+    database_prefixes(DB,Prefixes),
+    do_or_die(prefix_expand(Query, Prefixes, Expanded),
+              query_error(unknown_prefix(Query), _)),
+    Query_Ex = match_value(Expanded).
 expand_query_document_for_type(optional(_), _, _{}, _{}) :- !.
 expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
     \+ is_dict(Query),
@@ -112,6 +120,15 @@ expand_query_document_for_type(optional(Type), DB, null, null) :-
     expand_query_document_(DB, Type, _{}, _).
 expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
     expand_query_document_(DB, Type, Query, Query_Ex).
+expand_query_document_for_type(enum(Type, Values), _Db, Query, Query_Ex) :-
+    atomic(Query),
+    !,
+    atomic_list_concat([Type, '/', Query], Expanded_Enum_Value),
+    do_or_die(memberchk(Expanded_Enum_Value, Values),
+              error(query_error(value_not_in_enum(Type, Query)), _)),
+    Query_Ex = match_value(Expanded_Enum_Value).
+expand_query_document_for_type(enum(_Type, _Values), _Db, Query, _Query_Ex) :-
+    throw(error(query_error(unknown_query_format_for_enum(Query)), _)).
 expand_query_document_for_type(Type, _Db, _Query, _Query_Ex) :-
     throw(error(query_error(unknown_type(Type)), _)).
 
@@ -173,7 +190,7 @@ match_query_document_against_uri_property(type_subsumed(Type), DB, URI, '@type')
     database_instance(DB, Instance),
     xrdf(Instance, URI, rdf:type, Retrieved_Type),
     class_subsumed(DB, Retrieved_Type, Type).
-match_query_document_against_uri_property(base_class_match_value(Value), DB, URI, Property) :-
+match_query_document_against_uri_property(match_value(Value), DB, URI, Property) :-
     !,
     database_instance(DB, Instance),
     xrdf(Instance, URI, Property, Value).
@@ -322,5 +339,128 @@ test(query_type_not_found,
              'api:error':_{'@type':'api:QueryTypeNotFound'},
              'api:message':"Query provided a type 'http://somewhere.for.now/schema#Blah' which was not found in the schema.",
              'api:status':'api:failure'}.
+
+test(query_uri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          (
+                              insert_schema_document(
+                                  C1,
+                                  _{'@type': "Class",
+                                    '@id': "Color",
+                                    '@key': _{'@type': "Lexical",
+                                              '@fields': [name]},
+                                    'name': "xsd:string"}),
+                              insert_schema_document(
+                                  C1,
+                                  _{'@type': "Class",
+                                    '@id': "Thing",
+                                    color: "Color"})
+                          )),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Color",
+                                    name: "red"},
+                                  _),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Color",
+                                    name: "blue"},
+                                  _),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    color: "Color/red"},
+                                  Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    color: "Color/red"},
+                                  Doc2),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    color: "Color/blue"},
+                                  _Doc3)
+                          )),
+
+    open_descriptor(Desc, Db),
+    findall(Uri,
+            match_query_document_uri(Db,
+                                     "Thing",
+                                     _{'color': "Color/red"},
+                                     Uri),
+            Uris),
+
+
+    sort(Uris, Uris_Sorted),
+    sort([Doc1, Doc2], Expected_Uris_Sorted),
+
+    Uris_Sorted = Expected_Uris_Sorted.
+
+test(query_enum,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          (
+                              insert_schema_document(
+                                  C1,
+                                  _{'@type': "Enum",
+                                    '@id': "Color",
+                                    '@value': ["red",
+                                               "green",
+                                               "blue"]}),
+                              insert_schema_document(
+                                  C1,
+                                  _{'@type': "Class",
+                                    '@id': "Thing",
+                                    color: "Color"})
+                          )),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    color: "red"},
+                                  Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    color: "red"},
+                                  Doc2),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    color: "blue"},
+                                  _Doc3)
+                          )),
+
+    open_descriptor(Desc, Db),
+    findall(Uri,
+            match_query_document_uri(Db,
+                                     "Thing",
+                                     _{'color': "red"},
+                                     Uri),
+            Uris),
+
+    sort(Uris, Uris_Sorted),
+    sort([Doc1, Doc2], Expected_Uris_Sorted),
+
+    Uris_Sorted = Expected_Uris_Sorted.
+
 
 :- end_tests(query_document).
