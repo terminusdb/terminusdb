@@ -19,14 +19,8 @@ services:
       # Uncomment the option you decide on and comment out others.
       # Don't forget to change the default password!
 
-      # Security Option 1 (default): Assumes TerminusDB is only accessible from
-      # the machine it's running on and all access to port 6363 is considered
-      # authorized.
-      - TERMINUSDB_AUTOLOGIN=true
-
-      # Security Option 2: TerminusDB is set up behind a TLS-terminating reverse
+      # Security Option 1: TerminusDB is set up behind a TLS-terminating reverse
       # proxy with admin authentication provided by password.
-      # - TERMINUSDB_AUTOLOGIN=false
       # - TERMINUSDB_PUBLIC_URL=https://example.com
       # - TERMINUSDB_ADMIN_PASS=root  #  Change before exposing to the internet.
 

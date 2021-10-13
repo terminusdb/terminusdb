@@ -82,12 +82,6 @@ index_url(PublicUrl, PublicUrl, Opts) :-
     !.
 index_url(_, "", _).
 
-index_key(Key, Key, Opts) :-
-    memberchk(autologin(AutoLogin), Opts),
-    AutoLogin,
-    !.
-index_key(_, "", _).
-
 replace_in_file(Path, Pattern, With) :-
     read_file_to_string(Path, FileString, []),
     atomic_list_concat(Split, Pattern, FileString),
