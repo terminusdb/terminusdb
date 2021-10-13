@@ -72,17 +72,6 @@ woql_schema_json(Path) :-
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
 
-config_template_path(Path) :-
-    once(expand_file_search_path(template('config-template.tpl'), Path)).
-
-replace_in_file(Path, Pattern, With) :-
-    read_file_to_string(Path, FileString, []),
-    atomic_list_concat(Split, Pattern, FileString),
-    atomic_list_concat(Split, With, NewFileString),
-    open(Path, write, FileStream),
-    write(FileStream, NewFileString),
-    close(FileStream).
-
 initialize_database(Key,Force) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path, Force).
