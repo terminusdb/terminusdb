@@ -1457,7 +1457,7 @@ compile_wf(into(G,S),Goal) -->
         ;   resolve_filter(G,Filter),
             collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                      Transaction_Object),
-            (   Filter = type_name_filter{ type : _Type, names : [_Name]}
+            (   Filter = type_name_filter{ type : _Type }
             ->  filter_transaction_graph_descriptor(Filter, Transaction_Object, Graph_Descriptor)
             ;   throw(error(woql_syntax_error(unresolvable_write_filter(G)),_))
             )
@@ -4626,6 +4626,22 @@ test(using_resource_works, [
                     [],
                     false,
                     _JSON).
+
+test(quad_compilation, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),Auth),
+                create_db_with_test_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term = limit(10^^xsd:decimal,t(v('X'),v('Y'),v('Z'),schema)),
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    create_context(Descriptor, Commit_Info, Context),
+    Ctx_In = (Context.put(authorization, Auth)),
+
+    compile_query(Term, _Prog, Ctx_In, _Ctx_Out).
 
 :- end_tests(woql).
 

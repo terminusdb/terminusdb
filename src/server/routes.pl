@@ -905,7 +905,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             (   memberchk(nuke=true, Search)
             ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message)
             ;   memberchk(id=Id, Search)
-                ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
+            ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
             ;   http_read_data(Request, Data, [to(string)]),
                 open_string(Data, Stream),
                 api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
@@ -3381,16 +3381,6 @@ test(remote_list, [
 :- end_tests(remote_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root('worker.js'), cors_handler(Method, worker_handler),
-                [method(Method),
-                 methods([options,get])]).
-
-worker_handler(get, _Request, _System_DB, _Auth) :-
-    config:worker_js(Value),
-    throw(http_reply(bytes('text/html', Value))).
-
-
-%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
                 [method(Method),
                  methods([options,get])]).
@@ -3428,19 +3418,6 @@ worker_handler(get, _Request, _System_DB, _Auth) :-
  */
 console_handler(get, _Request, _System_DB, _Auth) :-
     config:index_template(Index),
-    /*
-    NOTE: Pending useable console....
-
-    config:index_template(Tpl_String),
-
-    config:console_base_url(BaseURL),
-    (   config:autologin_enabled
-    ->  Key = '"root"'
-    ;   Key = false),
-
-    format(string(Index), Tpl_String, [BaseURL, Key, BaseURL]),
-    */
-
     throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).
@@ -3539,9 +3516,7 @@ cors_catch(Request, _Goal) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'api:status' : 'api:failure',
-                 'api:message' :
-                 _{'@type' : 'xsd:string',
-                   '@value' : 'Unexpected failure in request handler'}},
+                 'api:message' :'Unexpected failure in request handler'},
                [status(500)]).
 
 call_http_handler(Method, Goal, Request, System_Database, Auth) :-

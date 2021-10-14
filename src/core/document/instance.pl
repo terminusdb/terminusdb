@@ -376,6 +376,11 @@ refute_object_type(Validation_Object, Class,Subject,Predicate,Witness) :-
                         subject: Subject }
     ).
 
+refute_object_type_(enum(C,List),_Validation_Object,Object,Witness) :-
+    \+ memberchk(Object, List),
+    Witness = witness{ '@type' : instance_not_of_class,
+                       class: C,
+                       instance: Object }.
 refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
     refute_basetype_elt(Object,C,Witness).
 refute_object_type_(foreign(C),Validation_Object,Object,Witness) :-

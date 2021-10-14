@@ -60,7 +60,7 @@
  *                                           name: string }
  *
  * graph_filter --> type_filter{ types : list(atom) } % instance, inference, schema
- *                | type_name_filter{ type : atom, names : list(string) }
+ *                | type_name_filter{ type : atom }
  *
  * A named_graph refers to a file in the store - this has to be made unique so we don't get
  * collisionI s between different databases. Currently only used for the terminus and database graph
