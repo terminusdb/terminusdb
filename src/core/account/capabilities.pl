@@ -294,7 +294,7 @@ read_type_access(instance,'@schema':'Action/instance_read_access').
 read_type_access(schema,'@schema':'Action/schema_read_access').
 
 filter_types(type_filter{types:Types}, Types).
-filter_types(type_name_filter{type : Type, names : _}, [Type]).
+filter_types(type_name_filter{type : Type}, [Type]).
 
 /**
  * assert_read_access(Context, Context) is det + error.

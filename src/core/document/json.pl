@@ -5620,7 +5620,7 @@ test(status_update,
 
     atom_json_dict(Enum_Atom, Enum, []),
     atom_json_dict(Object_Atom, Object, []),
-    writeq(here),
+
     with_test_transaction(Desc,
                           C1,
                           (   insert_schema_document(

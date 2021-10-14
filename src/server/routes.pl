@@ -905,7 +905,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             (   memberchk(nuke=true, Search)
             ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message)
             ;   memberchk(id=Id, Search)
-                ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
+            ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
             ;   http_read_data(Request, Data, [to(string)]),
                 open_string(Data, Stream),
                 api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
@@ -3539,9 +3539,7 @@ cors_catch(Request, _Goal) :-
     write_cors_headers(Request),
     % Probably should extract the path from Request
     reply_json(_{'api:status' : 'api:failure',
-                 'api:message' :
-                 _{'@type' : 'xsd:string',
-                   '@value' : 'Unexpected failure in request handler'}},
+                 'api:message' :'Unexpected failure in request handler'},
                [status(500)]).
 
 call_http_handler(Method, Goal, Request, System_Database, Auth) :-
