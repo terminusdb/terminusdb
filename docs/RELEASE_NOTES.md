@@ -1,3 +1,12 @@
+# TerminusDB Server v10.0.7 Beta Release Notes
+## Bug fixes
++ Enum triples were not properly type-checked
++ Authorization issues with graph filters
++ Document queries could not search for enums and uris
+
+## Other
++ Remove obsolete code concerning unmaintained console
+
 # TerminusDB Server v10.0.6 Beta Release Notes
 ## Bug fixes
 + Fix appimage build
