@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 TERMINUSDB_SERVER_PORT=${TERMINUSDB_SERVER_PORT:-6363}
-TERMINUSDB_AUTOLOGIN=${TERMINUSDB_AUTOLOGIN:-false}
-TERMINUSDB_ENABLE_WELCOME_SCREEN=${TERMINUSDB_WELCOME_SCREEN:-false}
 
 file_env() {
 	local var="$1"
@@ -23,7 +21,7 @@ file_env() {
 file_env 'TERMINUSDB_ADMIN_PASS'
 TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:-root}
 
-if [ ! -d /app/terminusdb/storage/db ] && [ "$TERMINUSDB_ENABLE_WELCOME_SCREEN" = false ]; then
+if [ ! -d /app/terminusdb/storage/db ]; then
     /app/terminusdb/terminusdb store init --key "$TERMINUSDB_ADMIN_PASS"
 fi
 

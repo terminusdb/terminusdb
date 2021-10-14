@@ -3381,16 +3381,6 @@ test(remote_list, [
 :- end_tests(remote_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root('worker.js'), cors_handler(Method, worker_handler),
-                [method(Method),
-                 methods([options,get])]).
-
-worker_handler(get, _Request, _System_DB, _Auth) :-
-    config:worker_js(Value),
-    throw(http_reply(bytes('text/html', Value))).
-
-
-%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
                 [method(Method),
                  methods([options,get])]).
@@ -3428,19 +3418,6 @@ worker_handler(get, _Request, _System_DB, _Auth) :-
  */
 console_handler(get, _Request, _System_DB, _Auth) :-
     config:index_template(Index),
-    /*
-    NOTE: Pending useable console....
-
-    config:index_template(Tpl_String),
-
-    config:console_base_url(BaseURL),
-    (   config:autologin_enabled
-    ->  Key = '"root"'
-    ;   Key = false),
-
-    format(string(Index), Tpl_String, [BaseURL, Key, BaseURL]),
-    */
-
     throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).

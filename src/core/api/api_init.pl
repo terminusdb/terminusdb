@@ -1,6 +1,5 @@
 :- module(api_init, [
               bootstrap_files/0,
-              initialize_config/4,
               initialize_database/2,
               initialize_database_with_store/2
           ]).
@@ -72,52 +71,6 @@ woql_schema_json(Path) :-
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
-
-config_template_path(Path) :-
-    once(expand_file_search_path(template('config-template.tpl'), Path)).
-
-index_url(PublicUrl, PublicUrl, Opts) :-
-    memberchk(autoattach(AutoAttach), Opts),
-    AutoAttach,
-    !.
-index_url(_, "", _).
-
-index_key(Key, Key, Opts) :-
-    memberchk(autologin(AutoLogin), Opts),
-    AutoLogin,
-    !.
-index_key(_, "", _).
-
-replace_in_file(Path, Pattern, With) :-
-    read_file_to_string(Path, FileString, []),
-    atomic_list_concat(Split, Pattern, FileString),
-    atomic_list_concat(Split, With, NewFileString),
-    open(Path, write, FileStream),
-    write(FileStream, NewFileString),
-    close(FileStream).
-
-write_config_file(Public_URL, Config_Tpl_Path, Config_Path, Server_Name, Port, Workers) :-
-    open(Config_Tpl_Path, read, Tpl_Stream),
-    read_string(Tpl_Stream, _, Tpl_String),
-    close(Tpl_Stream),
-    open(Config_Path, write, Stream),
-    format(Stream, Tpl_String, [Server_Name, Port, Public_URL, Workers]),
-    close(Stream).
-
-write_index_file(Index_Tpl_Path, Index_Path, Password) :-
-    open(Index_Tpl_Path, read, Tpl_Stream),
-    read_string(Tpl_Stream, _, Tpl_String),
-    close(Tpl_Stream),
-    open(Index_Path, write, Stream),
-    config:console_base_url(BaseURL),
-    format(Stream, Tpl_String, [BaseURL, Password, BaseURL]),
-    close(Stream).
-
-initialize_config(PUBLIC_URL, Server, Port, Workers) :-
-    config_template_path( Config_Tpl_Path),
-    config_path(Config_Path),
-    write_config_file(PUBLIC_URL, Config_Tpl_Path, Config_Path, Server,
-                      Port, Workers).
 
 initialize_database(Key,Force) :-
     db_path(DB_Path),

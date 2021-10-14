@@ -11,9 +11,7 @@
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
               registry_path/1,
-              console_base_url/1,
               pack_dir/1,
-              autologin_enabled/0,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -73,19 +71,6 @@ index_template(Value) :-
     assertz(index_template_(Value)),
     close(Template_Stream).
 
-:- dynamic worker_js_/1.
-
-worker_js(Value) :-
-    worker_js_(Value),
-    !.
-worker_js(Value) :-
-    once(expand_file_search_path(config('worker.js'), Template_Path)),
-    open(Template_Path, read, Template_Stream),
-    read_string(Template_Stream, _, Value),
-    assertz(worker_js_(Value)),
-    close(Template_Stream).
-
-
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
 
@@ -110,12 +95,6 @@ jwt_jwks_endpoint(Endpoint) :-
     (   Value = ''
     ->  false
     ;   Endpoint = Value).
-
-console_base_url(Value) :-
-    getenv_default('TERMINUSDB_CONSOLE_BASE_URL', 'https://cdn.terminusdb.com/js_libs/terminusdb_console/canary', Value).
-
-autologin_enabled :-
-    getenv_default('TERMINUSDB_AUTOLOGIN_ENABLED', false, true).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
