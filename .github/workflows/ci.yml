@@ -33,10 +33,8 @@ jobs:
           concurrent_skipping: same_content_newer
           do_not_skip: '["push", "workflow_dispatch", "schedule"]'
 
-  # Build the Docker image and run the unit tests.
-  #
-  # This should be a very quick job that runs for all events.
-  test:
+  # Build the Docker image.
+  build_docker:
     runs-on: ubuntu-latest
 
     # Check if this job needs to run. We skip a pull_request after a push.
@@ -47,21 +45,64 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Build Docker image
-        run: docker build . --file Dockerfile --tag $DOCKER_IMAGE_NAME:local
-
-      - name: Run unit tests
-        run: docker run --name terminusdb $DOCKER_IMAGE_NAME:local /app/terminusdb/terminusdb test
-
-      - name: Save Docker image
-        if: github.repository == 'terminusdb/terminusdb' && github.event_name == 'push'
-        run: docker save $DOCKER_IMAGE_NAME:local | gzip > terminusdb-server-docker-image.tar.gz
+        run: |
+          docker build . --file Dockerfile --tag $DOCKER_IMAGE_NAME:local
+          docker save $DOCKER_IMAGE_NAME:local | gzip > terminusdb-server-docker-image.tar.gz
 
       - name: Upload Docker image
-        if: github.repository == 'terminusdb/terminusdb' && github.event_name == 'push'
         uses: actions/upload-artifact@v2
         with:
             name: terminusdb-server-docker-image
             path: terminusdb-server-docker-image.tar.gz
+
+  # Unit tests
+  unit_tests:
+    runs-on: ubuntu-latest
+    needs: build_docker
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run unit tests
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run --name terminusdb $DOCKER_IMAGE_NAME:local /app/terminusdb/terminusdb test
+
+  # Integration tests
+  integration_tests:
+    runs-on: ubuntu-latest
+    needs: build_docker
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run server
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run --detach --publish 6363:6363 $DOCKER_IMAGE_NAME:local
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
+      - uses: actions/checkout@v2
+
+      - name: Run integration tests
+        working-directory: tests
+        env:
+          TERMINUSDB_USER: admin
+          TERMINUSDB_PASS: root
+        run: |
+          npm install
+          npm run check
+          npm test
 
   # Begin deployment only for push events and certain refs.
   #
@@ -69,7 +110,7 @@ jobs:
   # in their `needs`.
   begin_deploy:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [unit_tests, integration_tests]
     if: |
       github.repository == 'terminusdb/terminusdb' &&
       github.event_name == 'push' && (
@@ -93,7 +134,6 @@ jobs:
     needs: begin_deploy
 
     steps:
-
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
