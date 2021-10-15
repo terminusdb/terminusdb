@@ -1142,6 +1142,14 @@ api_document_error_jsonld(Type, error(syntax_error(json(What)), _), JSON) :-
              'api:message' : Msg,
              'api:what': What
             }.
+api_document_error_jsonld(Type, error(missing_type_field(Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Submitted document missing @type field.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:MissingTypeField',
+                              'api:document' : Document},
+             'api:message' : Msg}.
 api_document_error_jsonld(Type, error(type_not_found(Document_Type, Document), _), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Type in submitted document not found in the schema: ~q", [Document_Type]),

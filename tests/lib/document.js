@@ -36,6 +36,38 @@ function insert (agent, path, params) {
   return request
 }
 
+function replace (agent, path, params) {
+  params = new Params(params)
+  const author = params.string('author', 'default_author')
+  const message = params.string('message', 'default_message')
+  const schema = params.object('schema')
+  const instance = params.object('instance')
+  params.assertEmpty()
+
+  assert(
+    !(schema && instance),
+    'Both \'schema\' and \'instance\' parameters found. Only one allowed.',
+  )
+
+  const schemaOrInstance = schema || instance
+  assert(
+    schemaOrInstance,
+    'Missing \'schema\' or \'instance\' parameter. One is required.',
+  )
+  const graphType = schema ? 'schema' : 'instance'
+
+  const request = agent
+    .put(path)
+    .query({
+      graph_type: graphType,
+      author: author,
+      message: message,
+    })
+    .send(schemaOrInstance)
+
+  return request
+}
+
 function verifyInsertSuccess (r) {
   expect(r.status).to.equal(200)
   expect(r.body).to.be.an('array')
@@ -62,12 +94,20 @@ function verifyInsertSuccess (r) {
 
 function verifyInsertFailure (r) {
   expect(r.status).to.equal(400)
-  expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
   expect(r.body['api:status']).to.equal('api:failure')
+  expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
+}
+
+function verifyReplaceFailure (r) {
+  expect(r.status).to.equal(400)
+  expect(r.body['api:status']).to.equal('api:failure')
+  expect(r.body['@type']).to.equal('api:ReplaceDocumentErrorResponse')
 }
 
 module.exports = {
   insert,
+  replace,
   verifyInsertSuccess,
   verifyInsertFailure,
+  verifyReplaceFailure,
 }

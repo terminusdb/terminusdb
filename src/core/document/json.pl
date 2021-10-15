@@ -509,23 +509,30 @@ json_elaborate(DB,JSON,Context,Elaborated) :-
 json_elaborate_(DB,JSON,Context,Result) :-
     is_dict(JSON),
     !,
-    do_or_die(get_dict('@type',JSON,Type),
-              error(document_has_no_type(JSON), _)),
-    prefix_expand_schema(Type,Context,TypeEx),
 
+    % Look for @type. If there, expand it. If not there but @id is, assume that
+    % the expanded @type should be @id. If @id is not there, throw an error.
+    (    get_dict('@type', JSON, Type)
+    ->   (   prefix_expand_schema(Type, Context, TypeEx),
+             New_JSON = JSON)
+    ;    (   do_or_die(
+                 get_dict('@id', JSON, _Id),
+                 error(missing_type_field(JSON), _)),
+             put_dict('@type', JSON, "@id", New_JSON),
+             TypeEx = "@id")),
 
     do_or_die(
         type_context(DB,TypeEx,Context,Type_Context),
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
-    json_context_elaborate(DB,JSON,New_Context,Elaborated),
+    json_context_elaborate(DB,New_JSON,New_Context,Elaborated),
 
     % Insert an id. If id was part of the input document, it is
     % prefix-expanded. If not, it is kept as a variable, to be unified
     % with what it should be later on.
     (   get_dict('@value', Elaborated, _) % no id on values
-    ->  JSON = Result
+    ->  New_JSON = Result
     ;   (   get_dict('@id', Elaborated, Id)
         ->  prefix_expand(Id, Context, Id_Ex)
         ;   Id_Ex = _),
