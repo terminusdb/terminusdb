@@ -481,11 +481,11 @@ json_type_to_woql_ast('Eval',JSON,WOQL,Path) :-
     WOQL = is(V,Arith).
 json_type_to_woql_ast('IsA',JSON,WOQL,Path) :-
     _{element : X,
-      of_type : T
+      type : T
      } :< JSON,
     json_to_woql_ast(X, V, [element
                             |Path]),
-    json_to_woql_ast(T, Class,[of_type
+    json_to_woql_ast(T, Class,[type
                                |Path]),
     WOQL = isa(V,Class).
 json_type_to_woql_ast('Like',JSON,WOQL,Path) :-
@@ -1134,6 +1134,24 @@ test(post_marshalling, []) :-
 
     WOQL = get(['Start station' as v('Start_Station')],
                resource(post(bike_csv), csv, _{}), true).
+
+test(isa, []) :-
+    JSON_Atom = '{
+  "@type": "IsA",
+  "element": {
+    "@type": "NodeValue",
+    "variable": "X"
+  },
+  "type": {
+    "@type": "NodeValue",
+    "node": "xsd:string"
+  }
+}',
+
+    atom_json_dict(JSON_Atom, JSON, []),
+    json_woql(JSON,WOQL),
+
+    WOQL = isa(v('X'),xsd:string).
 
 :- end_tests(woql_jsonld).
 
