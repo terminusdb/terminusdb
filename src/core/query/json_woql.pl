@@ -481,11 +481,11 @@ json_type_to_woql_ast('Eval',JSON,WOQL,Path) :-
     WOQL = is(V,Arith).
 json_type_to_woql_ast('IsA',JSON,WOQL,Path) :-
     _{element : X,
-      of_type : T
+      type : T
      } :< JSON,
     json_to_woql_ast(X, V, [element
                             |Path]),
-    json_to_woql_ast(T, Class,[of_type
+    json_to_woql_ast(T, Class,[type
                                |Path]),
     WOQL = isa(V,Class).
 json_type_to_woql_ast('Like',JSON,WOQL,Path) :-
