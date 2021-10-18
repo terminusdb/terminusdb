@@ -1135,6 +1135,24 @@ test(post_marshalling, []) :-
     WOQL = get(['Start station' as v('Start_Station')],
                resource(post(bike_csv), csv, _{}), true).
 
+test(isa, []) :-
+    JSON_Atom = '{
+  "@type": "IsA",
+  "element": {
+    "@type": "NodeValue",
+    "variable": "X"
+  },
+  "type": {
+    "@type": "NodeValue",
+    "node": "xsd:string"
+  }
+}',
+
+    atom_json_dict(JSON_Atom, JSON, []),
+    json_woql(JSON,WOQL),
+
+    WOQL = isa(v('X'),xsd:string).
+
 :- end_tests(woql_jsonld).
 
 :- begin_tests(jsonld_ast).

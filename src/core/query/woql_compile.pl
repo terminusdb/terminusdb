@@ -3530,7 +3530,7 @@ test(isa_literal, [
       "@value": "test"
     }
   },
-  "of_type": {
+  "type": {
     "@type": "DataValue",
     "variable": "Type"
     }
@@ -3549,7 +3549,7 @@ test(isa_node, [setup(setup_temp_store(State)),
     "@type": "NodeValue",
     "node": "User/admin"
   },
-  "of_type": {
+  "type": {
     "@type": "NodeValue",
     "variable": "Type"
   }
