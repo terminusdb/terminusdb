@@ -1,7 +1,0 @@
-[Desktop Entry]
-Categories=Utility;
-Type=Application
-Icon=terminusdb
-Name=TerminusDB
-Exec=AppRun
-Terminal=true
