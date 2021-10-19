@@ -14,6 +14,7 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    if: github.repository_owner == 'terminusdb'
 
     steps:
       - name: Checkout
