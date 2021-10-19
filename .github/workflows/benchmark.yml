@@ -15,6 +15,8 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     if: github.repository_owner == 'terminusdb'
+    env:
+      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
       - name: Checkout
@@ -27,8 +29,6 @@ jobs:
           path: terminusdb-http-perf
 
       - name: Add SSH Key
-        env:
-          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
           mkdir -p ${HOME}/.ssh
           ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
@@ -39,8 +39,6 @@ jobs:
 
 
       - name: Run benchmark
-        env:
-          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
           ssh "${{ secrets.SSH_USER }}"@"${{ secrets.SSH_HOST }}" "benchmark $GITHUB_SHA" > data-points.json
 
