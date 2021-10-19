@@ -5668,6 +5668,172 @@ test(status_update,
            )
     ).
 
+
+test(status_update,
+     [
+         fixme('This is very strange'),
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+
+     Schema_Atom = '[{
+        "@id": "User",
+        "@inherits": "Entity",
+        "@key": {
+            "@fields": [
+                "user_id"
+            ],
+            "@type": "Lexical"
+        },
+        "@type": "Class",
+        "api_key": {
+            "@class": "APIKey",
+            "@type": "Set"
+        },
+        "company": "xsd:string",
+        "email": "xsd:string",
+        "first_name": "xsd:string",
+        "last_name": "xsd:string",
+        "picture": "xsd:string",
+        "registration_date": {
+            "@class": "xsd:dateTime",
+            "@type": "Optional"
+        },
+        "user_id": "xsd:string"
+    },
+    {
+        "@abstract": [],
+        "@id": "Entity",
+        "@type": "Class",
+        "status": "Status"
+    },
+    {
+        "@id": "Status",
+        "@type": "Enum",
+        "@value": [
+            "pending",
+            "inactive",
+            "active",
+            "needs_invite",
+            "invite_sent",
+            "accepted",
+            "rejected"
+        ]
+    },
+    {
+        "@id": "Invitation",
+        "@inherits": "Entity",
+        "@key": {
+            "@fields": [
+                "invited_by",
+                "email_to",
+                "creation_date"],
+            "@type": "Hash"
+        },
+        "@subdocument": [],
+        "@type": "Class",
+        "email_to": "xsd:string",
+        "invited_by": "User",
+        "note": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "role": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "creation_date":"xsd:dateTime"
+    }]',
+
+     atom_json_dict(Schema_Atom, Docs, []),
+
+     with_test_transaction(
+         Desc,
+         C1,
+         forall(member(Doc, Docs),
+                insert_schema_document(
+                    C1,
+                    Doc))
+     ),
+
+     User_Atom = '{
+        "@type": "User",
+        "company": "orgTest",
+        "email": "collaborator@gmail.com",
+        "first_name": "collaborator",
+        "last_name": "collaborator",
+        "picture": "https://s.gravatar.com/avatar/5d4d9906d3b46bdcaad9221ce335b754?s=480&r=pg&d=https%3A%2F%2Fcdn.auth0.com%2Favatars%2Fco.png",
+        "status": "active",
+        "user_id": "auth0|615462f8ab33f4006a6bee0c"
+    }',
+     atom_json_dict(User_Atom, User, []),
+
+     with_test_transaction(
+         Desc,
+         C2,
+         insert_document(
+             C2,
+             User,
+             User_Uri)
+     ),
+     nl,
+     writeq(User_Uri),
+     nl,
+     with_test_transaction(
+         Desc,
+         Read_C,
+         (   get_dict(transaction_objects,Read_C, [TR]),
+             class_predicate_type(TR, 'http://somewhere.for.now/schema#Entity', 'http://somewhere.for.now/schema#status', Result)
+         )
+     ),
+     nl,
+     writeq(Result),
+     nl,
+     Invitation_Atom = '{
+        "@id": "Invitation",
+        "@inherits": "Entity",
+        "@key": {
+            "@fields": [
+                "invited_by",
+                "email_to",
+                "creation_date"],
+            "@type": "Hash"
+        },
+        "@subdocument": [],
+        "@type": "Class",
+        "email_to": "xsd:string",
+        "invited_by": "User",
+        "note": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "role": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "creation_date":"xsd:dateTime"
+    }',
+     atom_json_dict(Invitation_Atom, Invitation, []),
+     nl,
+     writeq(i_am_here_1),
+     nl,
+     print_all_triples(Desc),
+     with_test_transaction(
+         Desc,
+         C3,
+         (   replace_schema_document(C3, Invitation),
+             print_all_triples(C3)
+         )
+     ),
+     writeq(i_am_here_2).
+
 :- end_tests(json).
 
 :- begin_tests(schema_checker).
