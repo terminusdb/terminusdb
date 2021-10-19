@@ -108,8 +108,8 @@ already_committed(Transaction_Object) :-
 partial_commits(Query_Context) :-
     exists(already_committed, Query_Context.transaction_objects).
 
-slot_size(4).
-slot_coefficient(0.25).
+slot_size(2).
+slot_coefficient(0.5).
 slot_time(0.1).
 
 /*
