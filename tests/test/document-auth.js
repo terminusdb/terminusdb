@@ -164,5 +164,23 @@ describe('document', function () {
         expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
       }
     })
+
+    it('fails for uexpected array value (#623)', async function () {
+      const type = util.randomString()
+      const expectedType = 'http://www.w3.org/2001/XMLSchema#string'
+      await document
+        .insert(agent, docPath, {
+          schema: { '@id': type, '@type': 'Class', s: expectedType },
+        })
+        .then(document.verifyInsertSuccess)
+      const badValue = ['a', 'b']
+      const r = await document.insert(agent, docPath, {
+        instance: { '@type': type, s: badValue },
+      })
+      document.verifyInsertFailure(r)
+      expect(r.body['api:error']['@type']).to.equal('api:UnexpectedArrayValue')
+      expect(r.body['api:error']['api:value']).to.deep.equal(badValue)
+      expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
+    })
   })
 })

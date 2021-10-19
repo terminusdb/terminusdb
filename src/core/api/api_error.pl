@@ -1160,6 +1160,16 @@ api_document_error_jsonld(Type, error(type_not_found(Document_Type, Document), _
                               'api:document' : Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(unexpected_array_value(Value, Expected_Type),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unexpected array value: ~q, expected type: ~q", [Value, Expected_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnexpectedArrayValue',
+                              'api:value' : Value,
+                              'api:expected_type' : Expected_Type },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(schema_check_failure(Witnesses),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Schema check failure", []),

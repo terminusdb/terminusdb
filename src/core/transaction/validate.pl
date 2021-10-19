@@ -673,7 +673,7 @@ test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(not_a_valid_datatype(["Dublin","Dubhlinn"],'http://www.w3.org/2001/XMLSchema#string'),_)])
+      error(unexpected_array_value(["Dublin","Dubhlinn"],'http://www.w3.org/2001/XMLSchema#string'),_)])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
@@ -699,7 +699,7 @@ test(cardinality_min_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(not_a_valid_datatype(["Duke","Doug"],'http://www.w3.org/2001/XMLSchema#string'),_)])
+      error(unexpected_array_value(["Duke","Doug"],'http://www.w3.org/2001/XMLSchema#string'),_)])
 :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
