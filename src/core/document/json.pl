@@ -1860,7 +1860,7 @@ write_json_string_to_instance(Context, String) :-
 json_to_database_type(D^^T, _) :-
     is_list(D),
     !,
-    throw(error(not_a_valid_datatype(D,T),_)).
+    throw(error(unexpected_array_value(D,T),_)).
 json_to_database_type(D^^T, OC) :-
     (   string(D)
     ;   atom(D)),
