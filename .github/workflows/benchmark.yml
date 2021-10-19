@@ -14,6 +14,9 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    if: github.repository_owner == 'terminusdb'
+    env:
+      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
       - name: Checkout
@@ -25,22 +28,19 @@ jobs:
           repository: terminusdb-labs/terminusdb-http-perf
           path: terminusdb-http-perf
 
-      - name: Install k6
+      - name: Add SSH Key
         run: |
-          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install k6
-          k6 version
+          mkdir -p ${HOME}/.ssh
+          ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
+          chmod 600 ${HOME}/.ssh/github_actions
+          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+          ssh-add ${HOME}/.ssh/github_actions
 
-      - name: Build Docker image
-        run: docker build . --file Dockerfile --tag terminusdb/terminusdb-server:local
-
-      - name: Run server
-        run: docker run --detach --name terminusdb -p 6363:6363 terminusdb/terminusdb-server:local
 
       - name: Run benchmark
-        run: k6 run --no-summary --no-usage-report --iterations 10 --out json=data-points.json terminusdb-http-perf/response/all.js
+        run: |
+          ssh "${{ secrets.SSH_USER }}"@"${{ secrets.SSH_HOST }}" "benchmark $GITHUB_SHA" > data-points.json
 
       - name: Transform results
         run: ./terminusdb-http-perf/metrics.sh data-points.json > results.json
