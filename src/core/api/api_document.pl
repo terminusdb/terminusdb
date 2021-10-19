@@ -214,11 +214,16 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
               error(unresolvable_collection(Descriptor), _)),
     query_default_collection(Context, Transaction),
 
+    stream_property(Stream, position(Pos)),
+
     with_transaction(Context,
-                     (   Full_Replace = true
+                     (   set_stream_position(Stream, Pos),
+                         Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id, api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id), Ids),
+                     ;   findall(Id,
+                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
+                                 Ids),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
 
@@ -238,16 +243,19 @@ api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
               error(unresolvable_collection(Descriptor), _)),
     query_default_collection(Context, Transaction),
 
+    stream_property(Stream, position(Pos)),
+
     with_transaction(Context,
-                     forall(
-                         (   json_read_dict_stream(Stream,JSON),
-                             (   is_list(JSON)
-                             ->  member(ID, JSON)
-                             ;   ID = JSON),
-                             do_or_die(
-                                 string(ID),
-                                 error(not_a_proper_id_for_deletion(ID), _))),
-                         api_delete_document_(Schema_Or_Instance, Transaction, ID)),
+                     (   set_stream_position(Stream, Pos),
+                         forall(
+                             (   json_read_dict_stream(Stream,JSON),
+                                 (   is_list(JSON)
+                                 ->  member(ID, JSON)
+                                 ;   ID = JSON),
+                                 do_or_die(
+                                     string(ID),
+                                     error(not_a_proper_id_for_deletion(ID), _))),
+                             api_delete_document_(Schema_Or_Instance, Transaction, ID))),
                      _).
 
 api_delete_document(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, ID) :-
@@ -303,8 +311,11 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
 
     query_default_collection(Context, Transaction),
 
+    stream_property(Stream, position(Pos)),
+
     with_transaction(Context,
-                     (   findall(Id,
+                     (   set_stream_position(Stream, Pos),
+                         findall(Id,
                                  (   json_read_dict_stream(Stream,JSON),
                                      (   is_list(JSON)
                                      ->  !,
