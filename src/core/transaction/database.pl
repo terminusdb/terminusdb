@@ -195,6 +195,13 @@ retry_transaction(Query_Context, Transaction_Retry_Count) :-
         sleep(BackOff)
     ;   true).
 
+
+pre_transaction_tabling :-
+    true.
+
+post_transaction_tabling :-
+    abolish_private_tables.
+
 /**
  * with_transaction(+Query_Context, +Body, -Meta_Data) is semidet.
  *
@@ -207,9 +214,9 @@ with_transaction(Query_Context,
                  Body,
                  Meta_Data) :-
     setup_call_cleanup(
-        true,
+        pre_transaction_tabling,
         with_transaction_(Query_Context,Body,Meta_Data),
-        true % Do some cleanup of schema compilation etc.
+        post_transaction_tabling % Do some cleanup of schema compilation etc.
     ).
 
 :- meta_predicate with_transaction(?,0,?).
