@@ -99,5 +99,70 @@ describe('document', function () {
       expect(r.body['api:error']['api:document']['@key']).to.equal(false)
       expect(r.body['api:error']['api:document']['@type']).to.equal('Class')
     })
+
+    it('handles different @id types (#622)', async function () {
+      const type1 = util.randomString()
+      const type2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            { '@type': 'Class', '@id': type1 },
+            { '@type': 'Class', '@id': type2, ref: type1 },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      await document
+        .insert(agent, docPath, {
+          instance: [
+            {
+              '@type': type1,
+              '@id': `terminusdb:///data/${type1}/1`,
+            },
+            {
+              '@type': type2,
+              '@id': `terminusdb:///data/${type2}/1`,
+              ref: `terminusdb:///data/${type1}/1`,
+            },
+            {
+              '@type': type2,
+              '@id': `terminusdb:///data/${type2}/2`,
+              ref: { '@id': `terminusdb:///data/${type1}/1` },
+            },
+            {
+              '@type': type2,
+              '@id': `terminusdb:///data/${type2}/3`,
+              ref: { '@id': `terminusdb:///data/${type1}/1`, '@type': '@id' },
+            },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const badValue = { field: 'abc' }
+      {
+        const r = await document
+          .insert(agent, docPath, {
+            instance: {
+              '@type': type2,
+              '@id': `terminusdb:///data/${type1}/4`,
+              ref: badValue,
+            },
+          })
+        document.verifyInsertFailure(r)
+        expect(r.body['api:error']['@type']).to.equal('api:MissingTypeField')
+        expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
+      }
+      {
+        const r = await document
+          .replace(agent, docPath, {
+            instance: {
+              '@type': type2,
+              '@id': `terminusdb:///data/${type1}/1`,
+              ref: badValue,
+            },
+          })
+        document.verifyReplaceFailure(r)
+        expect(r.body['api:error']['@type']).to.equal('api:MissingTypeField')
+        expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
+      }
+    })
   })
 })
