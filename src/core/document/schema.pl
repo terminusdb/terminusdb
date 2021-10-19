@@ -87,6 +87,7 @@ class_super(Validation_Object,Class,Super) :-
     subclass_of(Validation_Object, Class, Intermediate),
     class_super(Validation_Object,Intermediate,Super).
 
+:- table class_predicate_type/4 as private.
 class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     is_simple_class(Validation_Object,Class),
     database_schema(Validation_Object,Schema),
@@ -601,6 +602,7 @@ refute_type(Validation_Object,Type,Witness) :-
                         type : Type }
     ).
 
+:- table type_descriptor/3 as private.
 type_descriptor(_Validation_Object, Class, unit) :-
     is_unit(Class),
     !.
@@ -671,6 +673,7 @@ key_base(_Validation_Object, Context, Type, Base) :-
     compress_dict_uri(Type,New_Context,Type_Compressed),
     atomic_list_concat([Type_Compressed,'/'],Base).
 
+:- table key_descriptor/3 as private.
 key_descriptor(Validation_Object, Type, Descriptor) :-
     database_prefixes(Validation_Object, Prefixes),
     key_descriptor(Validation_Object, Prefixes, Type, Descriptor).
