@@ -29,12 +29,12 @@ jobs:
         env:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
-          mkdir -p /home/runner/.ssh
-          ssh-keyscan "${{ secrets.SSH_HOST }}" >> /home/runner/.ssh/known_hosts
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /home/runner/.ssh/github_actions
-          chmod 600 /home/runner/.ssh/github_actions
+          mkdir -p ${HOME}/.ssh
+          ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
+          chmod 600 ${HOME}/.ssh/github_actions
           ssh-agent -a $SSH_AUTH_SOCK > /dev/null
-          ssh-add /home/runner/.ssh/github_actions
+          ssh-add ${HOME}/.ssh/github_actions
 
 
       - name: Run benchmark
