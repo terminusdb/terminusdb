@@ -204,6 +204,8 @@ replace_existing_graph(instance, Transaction, Stream) :-
            true).
 
 api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
+    do_or_die(stream_property(Stream, reposition(true)),
+              error(stream_not_seekable(Stream), _)),
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -233,6 +235,8 @@ api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
 api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
+    do_or_die(stream_property(Stream, reposition(true)),
+              error(stream_not_seekable(Stream), _)),
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -299,6 +303,8 @@ api_replace_document_(schema, Transaction, Document, Id):-
     replace_schema_document(Transaction, Document, Id).
 
 api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
+    do_or_die(stream_property(Stream, reposition(true)),
+              error(stream_not_seekable(Stream), _)),
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
