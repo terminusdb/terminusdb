@@ -1,5 +1,5 @@
 <img src="https://assets.terminusdb.com/images/horizontal_lockup_(2).png" width="350px"/>
-fasdfasdfasdfa
+
 ## Build an ecosystem of versioned data products
 
 [![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
