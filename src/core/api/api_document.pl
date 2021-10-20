@@ -161,6 +161,7 @@ known_document_error(document_key_type_missing(_)).
 known_document_error(subdocument_key_missing).
 known_document_error(key_missing_required_field(_)).
 known_document_error(document_key_not_object(_)).
+known_document_error(empty_key).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
