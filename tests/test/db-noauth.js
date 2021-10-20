@@ -8,26 +8,6 @@ describe('db-noauth', function () {
     agent = new Agent()
   })
 
-  it('fails on missing content-type', async function () {
-    const { path } = endpoint.db(agent.defaults())
-    const r = await agent.post(path)
-    expect(r.status).to.equal(400)
-    expect(r.body['api:status']).to.equal('api:failure')
-    expect(r.body['@type']).to.equal('api:MissingContentTypeErrorResponse')
-  })
-
-  it('fails on invalid JSON', async function () {
-    const { path } = endpoint.db(agent.defaults())
-    const body = '{'
-    const r = await agent
-      .post(path)
-      .type('application/json')
-      .send(body)
-    expect(r.status).to.equal(400)
-    expect(r.body['api:status']).to.equal('api:failure')
-    expect(r.body['system:object']).to.equal(body)
-  })
-
   it('fails on missing comment and label', async function () {
     const { path } = endpoint.db(agent.defaults())
     const bodies = [
