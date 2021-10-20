@@ -2245,22 +2245,25 @@ delete_schema_subdocument(Transaction, Context, Id) :-
     database_schema(Transaction, [Schema]),
     (   atom(Id)
     ->  (   xrdf([Schema], Id, rdf:type, C),
-            (   (   is_system_class(C)
-                ;   is_key(C)
-                ;   is_documentation(C)
-                )
-            ->  xrdf([Schema], Id, P, R),
-                \+ global_prefix_expand(rdf:type, P),
-                delete(Schema, Id, P, R, _),
-                delete_schema_subdocument(Transaction, Context, R)
-            ;   is_list_type(C)
+            (   is_list_type(C)
             ->  delete_schema_list(Transaction,Context,Id)
+            ;   (   is_key(C)
+                ;   is_documentation(C)
+                ;   type_family_constructor(C)
+                )
+            ->  forall(
+                    xrdf([Schema], Id, P, R),
+                    (   delete(Schema, Id, P, R, _),
+                        delete_schema_subdocument(Transaction, Context, R))
+                )
             ;   true
             )
         % Enum
         % NOTE: This should probably have an ENUM type field.
-        ;   true)
-    ;   true).
+        ;   true
+        )
+    ;   true
+    ).
 
 % NOTE: This leaves garbage! We need a way to collect the leaves which
 % link to array elements or lists.
@@ -5667,6 +5670,166 @@ test(status_update,
             )
            )
     ).
+
+
+test(status_update,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+
+     Schema_Atom = '[{
+        "@id": "User",
+        "@inherits": "Entity",
+        "@key": {
+            "@fields": [
+                "user_id"
+            ],
+            "@type": "Lexical"
+        },
+        "@type": "Class",
+        "api_key": {
+            "@class": "APIKey",
+            "@type": "Set"
+        },
+        "company": "xsd:string",
+        "email": "xsd:string",
+        "first_name": "xsd:string",
+        "last_name": "xsd:string",
+        "picture": "xsd:string",
+        "registration_date": {
+            "@class": "xsd:dateTime",
+            "@type": "Optional"
+        },
+        "user_id": "xsd:string"
+    },
+    {
+        "@abstract": [],
+        "@id": "Entity",
+        "@type": "Class",
+        "status": "Status"
+    },
+    {
+        "@id": "Status",
+        "@type": "Enum",
+        "@value": [
+            "pending",
+            "inactive",
+            "active",
+            "needs_invite",
+            "invite_sent",
+            "accepted",
+            "rejected"
+        ]
+    },
+    {
+        "@id": "Invitation",
+        "@inherits": "Entity",
+        "@key": {
+            "@fields": [
+                "invited_by",
+                "email_to",
+                "creation_date"],
+            "@type": "Hash"
+        },
+        "@subdocument": [],
+        "@type": "Class",
+        "email_to": "xsd:string",
+        "invited_by": "User",
+        "note": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "role": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "creation_date":"xsd:dateTime"
+    }]',
+
+     atom_json_dict(Schema_Atom, Docs, []),
+
+     with_test_transaction(
+         Desc,
+         C1,
+         forall(member(Doc, Docs),
+                insert_schema_document(
+                    C1,
+                    Doc))
+     ),
+
+     User_Atom = '{
+        "@type": "User",
+        "company": "orgTest",
+        "email": "collaborator@gmail.com",
+        "first_name": "collaborator",
+        "last_name": "collaborator",
+        "picture": "https://s.gravatar.com/avatar/5d4d9906d3b46bdcaad9221ce335b754?s=480&r=pg&d=https%3A%2F%2Fcdn.auth0.com%2Favatars%2Fco.png",
+        "status": "active",
+        "user_id": "auth0|615462f8ab33f4006a6bee0c"
+    }',
+     atom_json_dict(User_Atom, User, []),
+
+     with_test_transaction(
+         Desc,
+         C2,
+         insert_document(
+             C2,
+             User,
+             _User_Uri)
+     ),
+
+     Invitation_Atom = '{
+        "@id": "Invitation",
+        "@inherits": "Entity",
+        "@key": {
+            "@fields": [
+                "invited_by",
+                "email_to",
+                "creation_date"],
+            "@type": "Hash"
+        },
+        "@subdocument": [],
+        "@type": "Class",
+        "email_to": "xsd:string",
+        "invited_by": "User",
+        "note": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "role": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "creation_date":"xsd:dateTime"
+    }',
+     atom_json_dict(Invitation_Atom, Invitation, []),
+
+     with_test_transaction(
+         Desc,
+         C3,
+         delete_schema_document(C3, "Invitation")
+     ),
+     % print_all_triples(Desc, schema),
+     with_test_transaction(
+         Desc,
+         C4,
+         insert_schema_document(C4, Invitation)
+     ),
+
+     with_test_transaction(
+         Desc,
+         C5,
+         replace_schema_document(C5, Invitation)
+     ).
+
 
 :- end_tests(json).
 
