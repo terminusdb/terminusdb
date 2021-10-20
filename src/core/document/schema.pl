@@ -12,10 +12,13 @@
               refute_class/3,
               class_predicate_type/4,
               type_descriptor/3,
+              schema_type_descriptor/3,
               class_subsumed/3,
               key_descriptor/3,
               key_descriptor/4,
+              schema_key_descriptor/4,
               documentation_descriptor/3,
+              schema_documentation_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
               drop_schemaless_mode/1,
@@ -44,14 +47,23 @@ is_unit(Class) :-
 
 is_enum(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
+    is_schema_enum(Schema, Class).
+
+is_schema_enum(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Enum').
 
 is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
+    is_schema_foreign(Schema, Class).
+
+is_schema_foreign(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Foreign').
 
 is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
+    is_schema_tagged_union(Schema, Class).
+
+is_schema_tagged_union(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
 
 is_system_class(Class) :-
@@ -67,6 +79,9 @@ is_system_class(Class) :-
 
 is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
+    is_schema_simple_class(Schema, Class).
+
+is_schema_simple_class(Schema, Class) :-
     xrdf(Schema,Class, rdf:type, C),
     is_system_class(C).
 
@@ -82,24 +97,31 @@ class_subsumed(Validation_Object,Class,Subsumed) :-
     class_super(Validation_Object,Class,Subsumed).
 
 class_super(Validation_Object,Class,Super) :-
-    subclass_of(Validation_Object, Class, Super).
-class_super(Validation_Object,Class,Super) :-
-    subclass_of(Validation_Object, Class, Intermediate),
-    class_super(Validation_Object,Intermediate,Super).
-
-:- table class_predicate_type/4 as private.
-class_predicate_type(Validation_Object,Class,Predicate,Type) :-
-    is_simple_class(Validation_Object,Class),
     database_schema(Validation_Object,Schema),
+    schema_class_super(Schema,Class,Super).
+
+schema_class_super(Schema,Class,Super) :-
+    schema_subclass_of(Schema, Class, Super).
+schema_class_super(Schema,Class,Super) :-
+    schema_subclass_of(Schema, Class, Intermediate),
+    schema_class_super(Schema,Intermediate,Super).
+
+class_predicate_type(Validation_Object,Class,Predicate,Type) :-
+    database_schema(Validation_Object,Schema),
+    schema_class_predicate_type(Schema, Class, Predicate, Type).
+
+:- table schema_class_predicate_type/4 as private.
+schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+    is_schema_simple_class(Schema,Class),
     xrdf(Schema,Class,Predicate,Range),
     \+ is_built_in(Predicate),
     do_or_die(
         \+ has_at(Predicate),
         throw(error(not_a_valid_keyword(Predicate), _))),
-    type_descriptor(Validation_Object,Range,Type).
-class_predicate_type(Validation_Object,Class,Predicate,Type) :-
-    class_super(Validation_Object,Class,Super),
-    class_predicate_type(Validation_Object,Super,Predicate,Type).
+    schema_type_descriptor(Schema,Range,Type).
+schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+    schema_class_super(Schema,Class,Super),
+    schema_class_predicate_type(Schema,Super,Predicate,Type).
 
 refute_schema_context_documentation(Validation_Object, Documentation, Witness) :-
     database_schema(Validation_Object,Schema),
@@ -288,6 +310,9 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
 
 subclass_of(Validation_Object,Subclass,Class) :-
     database_schema(Validation_Object,Schema),
+    schema_subclass_of(Schema,Subclass,Class).
+
+schema_subclass_of(Schema,Subclass,Class) :-
     xrdf(Schema,Subclass,sys:inherits,Class).
 
 repeats([X|T]) :-
@@ -537,15 +562,18 @@ refute_class(Validation_Object,Class, Witness) :-
 refute_class(Validation_Object,Class,Witness) :-
     refute_simple_class(Validation_Object,Class,Witness).
 
-rdf_list(_,P,[]) :-
+rdf_list(Validation_Object,Cell,List) :-
+    database_schema(Validation_Object,Schema),
+    schema_rdf_list(Schema, Cell, List).
+
+schema_rdf_list(_,P,[]) :-
     prefix_list([rdf:nil],List),
     memberchk(P,List),
     !.
-rdf_list(Validation_Object,Cell,[First|Rest]) :-
-    database_schema(Validation_Object,Schema),
+schema_rdf_list(Schema,Cell,[First|Rest]) :-
     xrdf(Schema, Cell, rdf:first, First),
     xrdf(Schema, Cell, rdf:rest, Next_Cell),
-    rdf_list(Validation_Object, Next_Cell,Rest).
+    schema_rdf_list(Schema, Next_Cell,Rest).
 
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
@@ -602,17 +630,20 @@ refute_type(Validation_Object,Type,Witness) :-
                         type : Type }
     ).
 
-:- table type_descriptor/3 as private.
-type_descriptor(_Validation_Object, Class, unit) :-
+type_descriptor(Validation_Object, Class, Descriptor) :-
+    database_schema(Validation_Object, Schema),
+    schema_type_descriptor(Schema, Class, Descriptor).
+
+:- table schema_type_descriptor/3 as private.
+schema_type_descriptor(_Schema, Class, unit) :-
     is_unit(Class),
     !.
-type_descriptor(Validation_Object, Class, foreign(Class)) :-
-    is_foreign(Validation_Object,Class),
+schema_type_descriptor(Schema, Class, foreign(Class)) :-
+    is_schema_foreign(Schema,Class),
     !.
-type_descriptor(Validation_Object, Class, tagged_union(Class,Map)) :-
-    is_tagged_union(Validation_Object, Class),
+schema_type_descriptor(Schema, Class, tagged_union(Class,Map)) :-
+    is_schema_tagged_union(Schema, Class),
     !,
-    database_schema(Validation_Object,Schema),
     findall(P-C,
             (
                 distinct(P,(
@@ -622,91 +653,86 @@ type_descriptor(Validation_Object, Class, tagged_union(Class,Map)) :-
             ),
             Data),
     dict_create(Map,tagged_union,Data).
-type_descriptor(Validation_Object, Class, enum(Class,List)) :-
-    is_enum(Validation_Object,Class),
+schema_type_descriptor(Schema, Class, enum(Class,List)) :-
+    is_schema_enum(Schema,Class),
     !,
-    database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:value, Cons),
-    rdf_list(Validation_Object, Cons, List).
-type_descriptor(_Validation_Object, Class, base_class(Class)) :-
+    schema_rdf_list(Schema, Cons, List).
+schema_type_descriptor(_Schema, Class, base_class(Class)) :-
     % Not sure these should be conflated...
     is_base_type(Class),
     !.
-type_descriptor(Validation_Object, Class, class(Class)) :-
+schema_type_descriptor(Schema, Class, class(Class)) :-
     % Not sure these should be conflated...
-    is_simple_class(Validation_Object, Class),
+    is_schema_simple_class(Schema, Class),
     !.
-type_descriptor(Validation_Object, Type, set(Class)) :-
-    database_schema(Validation_Object, Schema),
+schema_type_descriptor(Schema, Type, set(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Set'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-type_descriptor(Validation_Object, Type, list(Class)) :-
-    database_schema(Validation_Object, Schema),
+schema_type_descriptor(Schema, Type, list(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'List'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-type_descriptor(Validation_Object, Type, array(Class)) :-
-    database_schema(Validation_Object, Schema),
+schema_type_descriptor(Schema, Type, array(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Array'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-type_descriptor(Validation_Object, Type, card(Class,N)) :-
-    database_schema(Validation_Object, Schema),
+schema_type_descriptor(Schema, Type, card(Class,N)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
     xrdf(Schema, Type, sys:cardinality, N^^xsd:nonNegativeInteger).
-type_descriptor(Validation_Object, Type, optional(Class)) :-
-    database_schema(Validation_Object, Schema),
+schema_type_descriptor(Schema, Type, optional(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
     xrdf(Schema, Type, sys:class, Class).
 
-key_base(Validation_Object, _, Type, Base) :-
+key_base(Validation_Object, Context, Type, Base) :-
     database_schema(Validation_Object, Schema),
+    schema_key_base(Schema, Context, Type, Base).
+
+schema_key_base(Schema, _, Type, Base) :-
     xrdf(Schema, Type, sys:base, Base^^xsd:string),
     !.
-key_base(_Validation_Object, Context, Type, Base) :-
+schema_key_base(_Schema, Context, Type, Base) :-
     get_dict('@schema', Context, Schema),
     put_dict(_{'@base' : Schema}, Context, New_Context),
     compress_dict_uri(Type,New_Context,Type_Compressed),
     atomic_list_concat([Type_Compressed,'/'],Base).
 
-:- table key_descriptor/3 as private.
 key_descriptor(Validation_Object, Type, Descriptor) :-
     database_prefixes(Validation_Object, Prefixes),
     key_descriptor(Validation_Object, Prefixes, Type, Descriptor).
 
-% should refactor to do key lookup once.
 key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, sys:key, Obj),
-    key_descriptor_(Validation_Object,Prefixes,Type,Obj,Descriptor),
-    !.
-key_descriptor(Validation_Object, Prefixes, Type, base(Base)) :-
-    key_base(Validation_Object,Prefixes,Type,Base).
+    schema_key_descriptor(Schema, Prefixes, Type, Descriptor).
 
-key_descriptor_(Validation_Object, Prefixes, Type, Obj, lexical(Base,Fields)) :-
-    database_schema(Validation_Object, Schema),
+:- table schema_key_descriptor/4 as private.
+schema_key_descriptor(Schema, Prefixes, Type, Descriptor) :-
+    xrdf(Schema, Type, sys:key, Obj),
+    key_descriptor_(Schema,Prefixes,Type,Obj,Descriptor),
+    !.
+schema_key_descriptor(Schema, Prefixes, Type, base(Base)) :-
+    schema_key_base(Schema,Prefixes,Type,Base).
+
+key_descriptor_(Schema, Prefixes, Type, Obj, lexical(Base,Fields)) :-
     xrdf(Schema, Obj,rdf:type, sys:'Lexical'),
     xrdf(Schema, Obj, sys:fields, L),
-    rdf_list(Validation_Object,L,Fields),
-    key_base(Validation_Object,Prefixes,Type,Base).
-key_descriptor_(Validation_Object, Prefixes, Type, Obj, hash(Base,Fields)) :-
-    database_schema(Validation_Object,Schema),
+    schema_rdf_list(Schema,L,Fields),
+    schema_key_base(Schema,Prefixes,Type,Base).
+key_descriptor_(Schema, Prefixes, Type, Obj, hash(Base,Fields)) :-
     xrdf(Schema, Obj, rdf:type, sys:'Hash'),
     xrdf(Schema, Obj, sys:fields, L),
-    rdf_list(Validation_Object,L,Fields),
-    key_base(Validation_Object,Prefixes,Type,Base).
-key_descriptor_(Validation_Object, Prefixes, Type, Obj, value_hash(Base)) :-
-    database_schema(Validation_Object,Schema),
+    schema_rdf_list(Schema,L,Fields),
+    schema_key_base(Schema,Prefixes,Type,Base).
+key_descriptor_(Schema, Prefixes, Type, Obj, value_hash(Base)) :-
     xrdf(Schema, Obj, rdf:type, sys:'ValueHash'),
-    key_base(Validation_Object,Prefixes,Type,Base).
-key_descriptor_(Validation_Object, Prefixes, Type, Obj, random(Base)) :-
-    database_schema(Validation_Object,Schema),
+    schema_key_base(Schema,Prefixes,Type,Base).
+key_descriptor_(Schema, Prefixes, Type, Obj, random(Base)) :-
     xrdf(Schema, Obj, rdf:type, sys:'Random'),
-    key_base(Validation_Object,Prefixes,Type,Base).
+    schema_key_base(Schema,Prefixes,Type,Base).
 
 is_schemaless(Validation_Object) :-
     database_schema(Validation_Object, Schema),
@@ -720,21 +746,22 @@ drop_schemaless_mode(Transaction) :-
 
 documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, Type, sys:documentation, Obj),
-    documentation_descriptor_(Validation_Object,Obj,Descriptor).
+    schema_documentation_descriptor(Schema, Type, Descriptor).
 
-documentation_property_obj(Validation_Object, Obj, Properties) :-
-    database_schema(Validation_Object, Schema),
+schema_documentation_descriptor(Schema, Type, Descriptor) :-
+    xrdf(Schema, Type, sys:documentation, Obj),
+    documentation_descriptor_(Schema,Obj,Descriptor).
+
+documentation_property_obj(Schema, Obj, Properties) :-
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:properties, Property),
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
             Pairs),
     dict_pairs(Properties,json,Pairs).
 
-documentation_descriptor_(Validation_Object, Obj, documentation(Comment,Property_Obj)) :-
-    database_schema(Validation_Object, Schema),
+documentation_descriptor_(Schema, Obj, documentation(Comment,Property_Obj)) :-
     xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
-    documentation_property_obj(Validation_Object,Obj,Property_Obj).
+    documentation_property_obj(Schema,Obj,Property_Obj).
 
 refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
