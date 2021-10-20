@@ -2245,22 +2245,25 @@ delete_schema_subdocument(Transaction, Context, Id) :-
     database_schema(Transaction, [Schema]),
     (   atom(Id)
     ->  (   xrdf([Schema], Id, rdf:type, C),
-            (   (   is_system_class(C)
-                ;   is_key(C)
-                ;   is_documentation(C)
-                )
-            ->  xrdf([Schema], Id, P, R),
-                \+ global_prefix_expand(rdf:type, P),
-                delete(Schema, Id, P, R, _),
-                delete_schema_subdocument(Transaction, Context, R)
-            ;   is_list_type(C)
+            (   is_list_type(C)
             ->  delete_schema_list(Transaction,Context,Id)
+            ;   (   is_key(C)
+                ;   is_documentation(C)
+                ;   type_family_constructor(C)
+                )
+            ->  forall(
+                    xrdf([Schema], Id, P, R),
+                    (   delete(Schema, Id, P, R, _),
+                        delete_schema_subdocument(Transaction, Context, R))
+                )
             ;   true
             )
         % Enum
         % NOTE: This should probably have an ENUM type field.
-        ;   true)
-    ;   true).
+        ;   true
+        )
+    ;   true
+    ).
 
 % NOTE: This leaves garbage! We need a way to collect the leaves which
 % link to array elements or lists.
@@ -5814,12 +5817,19 @@ test(status_update,
          C3,
          delete_schema_document(C3, "Invitation")
      ),
+     % print_all_triples(Desc, schema),
+     with_test_transaction(
+         Desc,
+         C4,
+         insert_schema_document(C4, Invitation)
+     ),
 
      with_test_transaction(
          Desc,
-         C3,
-         insert_schema_document(C3, Invitation)
+         C5,
+         replace_schema_document(C5, Invitation)
      ).
+
 
 :- end_tests(json).
 
