@@ -1042,6 +1042,7 @@ woql_handler(post, Path, Request, System_DB, Auth) :-
     woql_handler_helper(Request, System_DB, Auth, some(Path)).
 
 woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
+    check_content_type_json(Request),
     try_get_param('query',Request,Query),
 
     (   get_param('commit_info', Request, Commit_Info)
