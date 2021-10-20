@@ -1486,6 +1486,15 @@ api_document_error_jsonld(Type, error(key_missing_required_field(Field,Document)
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(empty_key(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Empty key found in the submitted document", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmptyKey',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

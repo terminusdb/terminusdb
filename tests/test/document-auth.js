@@ -24,6 +24,14 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
+    it('disallows Class with empty @id string (#647)', async function () {
+      const schema = { '@id': '', '@type': 'Class' }
+      const r = await document.insert(agent, docPath, { schema: schema })
+      document.verifyInsertFailure(r)
+      expect(r.body['api:error']['@type']).to.equal('api:EmptyKey')
+      expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+    })
+
     it('responds with expected @id values (object)', async function () {
       const id = util.randomString()
       await document

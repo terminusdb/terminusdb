@@ -186,6 +186,9 @@ context_prefix_expand(K,Context,Key) :-
     ).
 
 prefix_expand(K,Context,Key) :-
+    do_or_die(
+        \+ memberchk(K, ['', ""]),
+        error(empty_key, _)),
     %   Is already qualified
     (   uri_has_protocol(K)
     ->  K = Key
