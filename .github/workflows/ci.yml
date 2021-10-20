@@ -149,8 +149,6 @@ jobs:
           # Strip git ref prefix from version
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
 
-          # Use Docker `latest` tag convention
-          [ "$VERSION" == "stable" ] && VERSION=latest
           [ "$VERSION" == "main" ] && VERSION=dev
 
           echo IMAGE_ID=$IMAGE_ID
@@ -159,6 +157,12 @@ jobs:
           docker load < terminusdb-server-docker-image.tar.gz
           docker tag $DOCKER_IMAGE_NAME:local $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
+
+          # Use Docker `latest` tag convention when a version tag is pushed
+          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v") ]; then
+             docker tag $IMAGE_ID:$VERSION ${IMAGE_ID}:latest
+             docker push ${IMAGE_ID}:latest
+          fi
 
   deploy:
     runs-on: ubuntu-latest
