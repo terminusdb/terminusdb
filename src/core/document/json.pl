@@ -445,7 +445,8 @@ database_schema_prefixes(Schema,Context) :-
     ).
 
 database_prefixes(DB,Context) :-
-    is_transaction(DB),
+    (   is_transaction(DB)
+    ;   is_validation_object(DB)),
     !,
     database_schema(DB,Schema),
     database_schema_prefixes(Schema,Context).
