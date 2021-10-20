@@ -49,6 +49,7 @@ is_enum(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_enum(Schema, Class).
 
+:- table is_schema_enum/2 as private.
 is_schema_enum(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Enum').
 
