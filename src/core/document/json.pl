@@ -5671,7 +5671,6 @@ test(status_update,
 
 test(status_update,
      [
-         fixme('This is very strange'),
          setup(
              (   setup_temp_store(State),
                  create_db_with_empty_schema("admin", "foo"),
@@ -5781,21 +5780,9 @@ test(status_update,
          insert_document(
              C2,
              User,
-             User_Uri)
+             _User_Uri)
      ),
-     nl,
-     writeq(User_Uri),
-     nl,
-     with_test_transaction(
-         Desc,
-         Read_C,
-         (   get_dict(transaction_objects,Read_C, [TR]),
-             class_predicate_type(TR, 'http://somewhere.for.now/schema#Entity', 'http://somewhere.for.now/schema#status', Result)
-         )
-     ),
-     nl,
-     writeq(Result),
-     nl,
+
      Invitation_Atom = '{
         "@id": "Invitation",
         "@inherits": "Entity",
@@ -5821,18 +5808,18 @@ test(status_update,
         "creation_date":"xsd:dateTime"
     }',
      atom_json_dict(Invitation_Atom, Invitation, []),
-     nl,
-     writeq(i_am_here_1),
-     nl,
-     print_all_triples(Desc),
+
      with_test_transaction(
          Desc,
          C3,
-         (   replace_schema_document(C3, Invitation),
-             print_all_triples(C3)
-         )
+         delete_schema_document(C3, "Invitation")
      ),
-     writeq(i_am_here_2).
+
+     with_test_transaction(
+         Desc,
+         C3,
+         insert_schema_document(C3, Invitation)
+     ).
 
 :- end_tests(json).
 
