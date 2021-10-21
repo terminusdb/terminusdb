@@ -191,36 +191,27 @@ describe('document', function () {
       expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
     })
 
-    it('fails when true, false used in strings (#515)', async function () {
+    it('fails for unexpected boolean values (#515)', async function () {
       const type = util.randomString()
+      const expectedType = 'http://www.w3.org/2001/XMLSchema#string'
       await document
         .insert(agent, docPath, {
-          schema: { '@id': type, '@type': 'Class', s: 'xsd:string' },
+          schema: { '@id': type, '@type': 'Class', s: expectedType },
         })
         .then(document.verifyInsertSuccess)
-      {
+      for (const value of [false, true]) {
         const r = await document
           .insert(agent, docPath, {
-            instance: { '@type': type, s: false },
+            instance: { '@type': type, s: value },
           })
-        // FIXME: remove console.error when done
-        console.error(r.body)
         document.verifyInsertFailure(r)
-        // FIXME: check content of response
-      }
-      {
-        const r = await document
-          .insert(agent, docPath, {
-            instance: { '@type': type, s: true },
-          })
-        // FIXME: remove console.error when done
-        console.error(r.body)
-        document.verifyInsertFailure(r)
-        // FIXME: check content of response
+        expect(r.body['api:error']['@type']).to.equal('api:UnexpectedBooleanValue')
+        expect(r.body['api:error']['api:value']).to.equal(value)
+        expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
       }
     })
 
-    it('does not stringify true, false (#723)', async function () {
+    it('does not stringify boolean literals (#723)', async function () {
       const type = util.randomString()
       const id = type + '/' + util.randomString()
       const schema = {
@@ -243,8 +234,6 @@ describe('document', function () {
         .get(agent, docPath, {
           id: id,
         })
-      // FIXME: remove console.error when done
-      console.error(r.body)
       expect(r.body['@id']).to.equal(id)
       expect(r.body['@type']).to.equal(type)
       expect(r.body.bfalse).to.equal(false)
