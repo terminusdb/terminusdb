@@ -5833,6 +5833,54 @@ test(status_update,
          replace_schema_document(C5, Invitation)
      ).
 
+test(property_documentation_mismatch,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure([witness{'@type':invalid_property_in_property_documentation_object,class:'http://somewhere.for.now/schema#User',predicate:'http://somewhere.for.now/schema#times',subject:'http://somewhere.for.now/schema#User/documentation/Documentation/properties/times'}]), _)
+     ]) :-
+
+    Schema_Atom = '{
+        "@id": "User",
+        "@documentation" : {
+        "@comment" : "A user",
+        "@properties" : { "times" : "Wrong documentation." }
+  },
+        "@key": {
+            "@fields": [
+                "user_id"
+            ],
+            "@type": "Lexical"
+        },
+        "@type": "Class",
+        "company": "xsd:string",
+        "email": "xsd:string",
+        "first_name": "xsd:string",
+        "last_name": "xsd:string",
+        "picture": "xsd:string",
+        "registration_date": {
+            "@class": "xsd:dateTime",
+            "@type": "Optional"
+        },
+        "user_id": "xsd:string"
+    }',
+
+    atom_json_dict(Schema_Atom, Doc, []),
+
+     with_test_transaction(
+         Desc,
+         C1,
+         insert_schema_document(
+                    C1,
+                    Doc)
+     ).
+
 
 :- end_tests(json).
 
