@@ -306,8 +306,8 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "True whenever 'left' is the same as 'right'. Performs unification.",
-      "@properties" : { "child" : "A URI, data value or variable.",
-                        "parent" : "A URI, data value or variable."}
+      "@properties" : { "left" : "A URI, data value or variable.",
+                        "right" : "A URI, data value or variable."}
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
@@ -802,7 +802,7 @@
   "@documentation" : {
       "@comment" : "Uppercase a string.",
       "@properties" : { "mixed" : "The mixed case string.",
-                        "uppser" : "The upper case string."
+                        "upper" : "The upper case string."
                       }
   },
   "@key" : { "@type" : "ValueHash" },
@@ -815,7 +815,7 @@
   "@documentation" : {
       "@comment" : "Lowercase a string.",
       "@properties" : { "mixed" : "The mixed case string.",
-                        "uppser" : "The lower case string."
+                        "lower" : "The lower case string."
                       }
   },
   "@key" : { "@type" : "ValueHash" },
@@ -1157,7 +1157,7 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "The path pattern specified by 'star' may hold zero or more times in succession.",
-      "@properties" : { "star" : "A path patterns." }
+      "@properties" : { "star" : "A path pattern." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "PathPattern",
@@ -1167,7 +1167,9 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "The path pattern specified by 'times' may hold 'from' to 'to' times in succession.",
-      "@properties" : { "star" : "A path patterns." }
+      "@properties" : { "times" : "A path pattern.",
+                        "from" : "The number of times to start the repetition of the pattern",
+                        "to" : "The number of times after which to end the repeition of the pattern." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "PathPattern",
@@ -1179,7 +1181,9 @@
   "@type" : "Class",
   "@documentation" : {
       "@comment" : "Extract the value of a key in a bound document.",
-      "@properties" : { "star" : "A path patterns." }
+      "@properties" : { "document" : "Document which is being accessed.",
+                        "key" : "The field from which the document which is being accessed.",
+                        "value" : "The value for the document and field." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",

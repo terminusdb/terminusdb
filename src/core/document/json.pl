@@ -424,13 +424,11 @@ database_context_object(Askable,Context) :-
     create_context(Askable, Query_Context),
     database_context_object(Query_Context, Context).
 
-database_prefixes(DB,Context) :-
-    is_transaction(DB),
-    !,
-    database_schema(DB,Schema),
+:- table database_schema_prefixes/2 as private.
+database_schema_prefixes(Schema,Context) :-
     once(
         (   xrdf(Schema, ID, rdf:type, sys:'Context')
-        ->  id_schema_json(DB,ID,Pre_Context),
+        ->  id_schema_json(Schema,ID,Pre_Context),
             findall(
                 Key-URI,
                 (   xrdf(Schema, ID, sys:prefix_pair, Prefix_Pair),
@@ -445,6 +443,13 @@ database_prefixes(DB,Context) :-
             select_dict(json{'@id' : _ }, Context_With_ID, Context)
         ;   Context = _{})
     ).
+
+database_prefixes(DB,Context) :-
+    (   is_transaction(DB)
+    ;   is_validation_object(DB)),
+    !,
+    database_schema(DB,Schema),
+    database_schema_prefixes(Schema,Context).
 database_prefixes(Query_Context, Context) :-
     is_query_context(Query_Context),
     !,
@@ -1590,9 +1595,8 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@subdocument',[]) :-
     global_prefix_expand(sys:subdocument,P),
     !.
-schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@inherits',V) :-
+schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@inherits',V) :-
     global_prefix_expand(sys:inherits,P),
-    database_schema(DB,Schema),
     findall(Parent,
             (   xrdf(Schema, Id, sys:inherits, O),
                 compress_schema_uri(O, Prefixes, Parent)
@@ -1611,27 +1615,26 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@abstract',[]) :-
 schema_subject_predicate_object_key_value(_,_,_Id,P,O,'@class',O) :-
     global_prefix_expand(sys:class,P),
     !.
-schema_subject_predicate_object_key_value(DB,_,Id,P,O,'@value',Enum_List) :-
+schema_subject_predicate_object_key_value(Schema,_,Id,P,O,'@value',Enum_List) :-
     global_prefix_expand(sys:value,P),
     !,
-    database_schema(DB,Schema),
     rdf_list_list(Schema, O, L),
     maplist({Id}/[V,Enum]>>(
                 enum_value(Id,Enum,V)
             ), L, Enum_List).
-schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@key',V) :-
+schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@key',V) :-
     global_prefix_expand(sys:key,P),
     !,
-    key_descriptor(DB, Prefixes, Id, Key),
+    schema_key_descriptor(Schema, Prefixes, Id, Key),
     key_descriptor_json(Key,Prefixes,V).
-schema_subject_predicate_object_key_value(DB,Prefixes,Id,P,_,'@documentation',V) :-
+schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@documentation',V) :-
     global_prefix_expand(sys:documentation,P),
     !,
-    documentation_descriptor(DB, Id, Documentation_Desc),
+    schema_documentation_descriptor(Schema, Id, Documentation_Desc),
     documentation_descriptor_json(Documentation_Desc,Prefixes,V).
-schema_subject_predicate_object_key_value(DB,Prefixes,_Id,P,O,K,JSON) :-
+schema_subject_predicate_object_key_value(Schema,Prefixes,_Id,P,O,K,JSON) :-
     compress_schema_uri(P, Prefixes, K),
-    type_descriptor(DB, O, Descriptor),
+    schema_type_descriptor(Schema, O, Descriptor),
     type_descriptor_json(Descriptor,Prefixes,JSON).
 
 get_schema_document_uri(Query_Context, ID) :-
@@ -1657,7 +1660,8 @@ get_schema_document(DB, Id, Document) :-
     database_prefixes(DB, DB_Prefixes),
     default_prefixes(Defaults),
     Prefixes = (Defaults.put(DB_Prefixes)),
-    id_schema_json(DB, Prefixes, Id, Document).
+    database_schema(DB,Schema),
+    id_schema_json(Schema, Prefixes, Id, Document).
 
 get_schema_document_uri_by_type(DB, Type, Uri) :-
     default_prefixes(Prefixes),
@@ -1678,14 +1682,13 @@ get_schema_document_by_type(DB, Type, Document) :-
     ),
 
     xrdf(Schema, Id_Ex, rdf:type, Type_Ex),
-    id_schema_json(DB, Prefixes, Id_Ex, Document).
+    id_schema_json(Schema, Prefixes, Id_Ex, Document).
 
-id_schema_json(DB, Id, JSON) :-
+id_schema_json(Schema, Id, JSON) :-
     default_prefixes(Defaults),
-    id_schema_json(DB, Defaults, Id, JSON).
+    id_schema_json(Schema, Defaults, Id, JSON).
 
-id_schema_json(DB, Prefixes, Id, JSON) :-
-    database_schema(DB,Schema),
+id_schema_json(Schema, Prefixes, Id, JSON) :-
     (   ground(Id)
     ->  prefix_expand_schema(Id, Prefixes, Id_Ex)
     ;   Id = Id_Ex
@@ -1696,7 +1699,7 @@ id_schema_json(DB, Prefixes, Id, JSON) :-
     findall(
         K-V,
         (   distinct([P],xrdf(Schema,Id_Ex,P,O)),
-            schema_subject_predicate_object_key_value(DB,Prefixes,Id_Ex,P,O,K,V)
+            schema_subject_predicate_object_key_value(Schema,Prefixes,Id_Ex,P,O,K,V)
         ),
         Data),
     !,
@@ -5828,6 +5831,54 @@ test(status_update,
          Desc,
          C5,
          replace_schema_document(C5, Invitation)
+     ).
+
+test(property_documentation_mismatch,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure([witness{'@type':invalid_property_in_property_documentation_object,class:'http://somewhere.for.now/schema#User',predicate:'http://somewhere.for.now/schema#times',subject:'http://somewhere.for.now/schema#User/documentation/Documentation/properties/times'}]), _)
+     ]) :-
+
+    Schema_Atom = '{
+        "@id": "User",
+        "@documentation" : {
+        "@comment" : "A user",
+        "@properties" : { "times" : "Wrong documentation." }
+  },
+        "@key": {
+            "@fields": [
+                "user_id"
+            ],
+            "@type": "Lexical"
+        },
+        "@type": "Class",
+        "company": "xsd:string",
+        "email": "xsd:string",
+        "first_name": "xsd:string",
+        "last_name": "xsd:string",
+        "picture": "xsd:string",
+        "registration_date": {
+            "@class": "xsd:dateTime",
+            "@type": "Optional"
+        },
+        "user_id": "xsd:string"
+    }',
+
+    atom_json_dict(Schema_Atom, Doc, []),
+
+     with_test_transaction(
+         Desc,
+         C1,
+         insert_schema_document(
+                    C1,
+                    Doc)
      ).
 
 
