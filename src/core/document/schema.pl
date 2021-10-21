@@ -713,25 +713,25 @@ key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
 :- table schema_key_descriptor/4 as private.
 schema_key_descriptor(Schema, Prefixes, Type, Descriptor) :-
     xrdf(Schema, Type, sys:key, Obj),
-    key_descriptor_(Schema,Prefixes,Type,Obj,Descriptor),
+    schema_key_descriptor_(Schema,Prefixes,Type,Obj,Descriptor),
     !.
 schema_key_descriptor(Schema, Prefixes, Type, base(Base)) :-
     schema_key_base(Schema,Prefixes,Type,Base).
 
-key_descriptor_(Schema, Prefixes, Type, Obj, lexical(Base,Fields)) :-
+schema_key_descriptor_(Schema, Prefixes, Type, Obj, lexical(Base,Fields)) :-
     xrdf(Schema, Obj,rdf:type, sys:'Lexical'),
     xrdf(Schema, Obj, sys:fields, L),
     schema_rdf_list(Schema,L,Fields),
     schema_key_base(Schema,Prefixes,Type,Base).
-key_descriptor_(Schema, Prefixes, Type, Obj, hash(Base,Fields)) :-
+schema_key_descriptor_(Schema, Prefixes, Type, Obj, hash(Base,Fields)) :-
     xrdf(Schema, Obj, rdf:type, sys:'Hash'),
     xrdf(Schema, Obj, sys:fields, L),
     schema_rdf_list(Schema,L,Fields),
     schema_key_base(Schema,Prefixes,Type,Base).
-key_descriptor_(Schema, Prefixes, Type, Obj, value_hash(Base)) :-
+schema_key_descriptor_(Schema, Prefixes, Type, Obj, value_hash(Base)) :-
     xrdf(Schema, Obj, rdf:type, sys:'ValueHash'),
     schema_key_base(Schema,Prefixes,Type,Base).
-key_descriptor_(Schema, Prefixes, Type, Obj, random(Base)) :-
+schema_key_descriptor_(Schema, Prefixes, Type, Obj, random(Base)) :-
     xrdf(Schema, Obj, rdf:type, sys:'Random'),
     schema_key_base(Schema,Prefixes,Type,Base).
 
@@ -749,20 +749,14 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_documentation_descriptor(Schema, Type, Descriptor).
 
-schema_documentation_descriptor(Schema, Type, Descriptor) :-
+schema_documentation_descriptor(Schema, Type, documentation(Comment, Properties)) :-
     xrdf(Schema, Type, sys:documentation, Obj),
-    documentation_descriptor_(Schema,Obj,Descriptor).
-
-documentation_property_obj(Schema, Obj, Properties) :-
+    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:properties, Property),
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
             Pairs),
     dict_pairs(Properties,json,Pairs).
-
-documentation_descriptor_(Schema, Obj, documentation(Comment,Property_Obj)) :-
-    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
-    documentation_property_obj(Schema,Obj,Property_Obj).
 
 refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
