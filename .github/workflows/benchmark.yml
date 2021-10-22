@@ -10,6 +10,9 @@ on:
     # Don't run if only the docs are changed.
     paths-ignore:
       - 'docs/**'
+      - LICENSE
+      - README.md
+  workflow_dispatch:
 
 jobs:
   benchmark:
