@@ -454,8 +454,8 @@ partition(into(C,P), Reads, Writes) :-
         Reads = [into(C,A)],
         Writes = [into(C,B)]
     ).
-partition(group_by(L,S), [group_by(L,S)], []) :-
-    partition(S, _, []),
+partition(group_by(G,T,Q,A), [group_by(G,T,Q,A)], []) :-
+    partition(Q, _, []),
     !.
 partition(insert(A,B,C), Reads, Writes) :-
     !,
