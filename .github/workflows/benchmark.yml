@@ -12,6 +12,7 @@ on:
       - 'docs/**'
       - LICENSE
       - README.md
+  workflow_dispatch:
 
 jobs:
   benchmark:
