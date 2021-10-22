@@ -4,6 +4,21 @@ const { expect } = require('chai')
 const { Params } = require('./params.js')
 const util = require('./util.js')
 
+function get (agent, path, params) {
+  params = new Params(params)
+  const query = {}
+  query.graph_type = params.string('graph_type')
+  query.type = params.string('type')
+  query.id = params.string('id')
+  params.assertEmpty()
+
+  const request = agent
+    .get(path)
+    .query(query)
+
+  return request
+}
+
 function insert (agent, path, params) {
   params = new Params(params)
   const author = params.string('author', 'default_author')
@@ -68,27 +83,28 @@ function replace (agent, path, params) {
   return request
 }
 
+// Verify that, if a request includes an `@id`, that value is the suffix of the
+// value in the response.
+function verifyId (requestId, responseId) {
+  if (requestId) {
+    expect(responseId).to.match(new RegExp(requestId + '$'))
+  }
+}
+
 function verifyInsertSuccess (r) {
   expect(r.status).to.equal(200)
   expect(r.body).to.be.an('array')
 
-  // Verify that the `@id` values in the request equal those in the response.
+  // Verify the `@id` values are the ones expected.
   if (Array.isArray(r.request._data)) {
     expect(r.body.length).to.equal(r.request._data.length)
 
     for (let i = 0; i < r.body.length; i++) {
-      const id = r.request._data[i]['@id']
-      if (id) {
-        expect(r.body[i]).to.equal(id)
-      }
+      verifyId(r.request._data[i]['@id'], r.body[i])
     }
   } else if (util.isObject(r.request._data)) {
     expect(r.body.length).to.equal(1)
-
-    const id = r.request._data['@id']
-    if (id) {
-      expect(r.body[0]).to.equal(id)
-    }
+    verifyId(r.request._data['@id'], r.body[0])
   }
 }
 
@@ -105,6 +121,7 @@ function verifyReplaceFailure (r) {
 }
 
 module.exports = {
+  get,
   insert,
   replace,
   verifyInsertSuccess,

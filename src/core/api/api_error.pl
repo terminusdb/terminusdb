@@ -1170,6 +1170,16 @@ api_document_error_jsonld(Type, error(unexpected_array_value(Value, Expected_Typ
                               'api:expected_type' : Expected_Type },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(unexpected_boolean_value(Value, Expected_Type),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unexpected boolean value: ~q, expected type: ~q", [Value, Expected_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnexpectedBooleanValue',
+                              'api:value' : Value,
+                              'api:expected_type' : Expected_Type },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(schema_check_failure(Witnesses),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Schema check failure", []),

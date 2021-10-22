@@ -80,8 +80,7 @@ value_type_to_json_type(X, T, X, T) :-
     number(X),
     !.
 value_type_to_json_type(X, T, S, T) :-
-    (   string(X)
-    ;   atom(X)),
+    string(X),
     !,
     atom_string(X, S).
 value_type_to_json_type(X, T, X, T) :-
@@ -94,8 +93,11 @@ json_type_to_value_type(J, T, J, T) :-
     number(J),
     !.
 json_type_to_value_type(J, T, J, T) :-
-    T = 'http://www.w3.org/2001/XMLSchema#boolean',
-    !.
+    memberchk(J, [false, true]),
+    !,
+    do_or_die(
+        T = 'http://www.w3.org/2001/XMLSchema#boolean',
+        error(unexpected_boolean_value(J, T), _)).
 json_type_to_value_type(J, T, X, T) :-
     typecast(J^^'http://www.w3.org/2001/XMLSchema#string', T, [], X^^_).
 
@@ -1865,8 +1867,7 @@ json_to_database_type(D^^T, _) :-
     !,
     throw(error(unexpected_array_value(D,T),_)).
 json_to_database_type(D^^T, OC) :-
-    (   string(D)
-    ;   atom(D)),
+    string(D),
     !,
     typecast(D^^'http://www.w3.org/2001/XMLSchema#string', T, [], OC).
 json_to_database_type(D^^T, OC) :-

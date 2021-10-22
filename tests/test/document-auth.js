@@ -190,5 +190,54 @@ describe('document', function () {
       expect(r.body['api:error']['api:value']).to.deep.equal(badValue)
       expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
     })
+
+    it('fails for unexpected boolean values (#515)', async function () {
+      const type = util.randomString()
+      const expectedType = 'http://www.w3.org/2001/XMLSchema#string'
+      await document
+        .insert(agent, docPath, {
+          schema: { '@id': type, '@type': 'Class', s: expectedType },
+        })
+        .then(document.verifyInsertSuccess)
+      for (const value of [false, true]) {
+        const r = await document
+          .insert(agent, docPath, {
+            instance: { '@type': type, s: value },
+          })
+        document.verifyInsertFailure(r)
+        expect(r.body['api:error']['@type']).to.equal('api:UnexpectedBooleanValue')
+        expect(r.body['api:error']['api:value']).to.equal(value)
+        expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
+      }
+    })
+
+    it('does not stringify boolean literals (#723)', async function () {
+      const type = util.randomString()
+      const id = type + '/' + util.randomString()
+      const schema = {
+        '@id': type,
+        '@type': 'Class',
+        bfalse: 'xsd:boolean',
+        btrue: 'xsd:boolean',
+      }
+      await document
+        .insert(agent, docPath, {
+          schema: schema,
+        })
+        .then(document.verifyInsertSuccess)
+      await document
+        .insert(agent, docPath, {
+          instance: { '@type': type, '@id': id, bfalse: false, btrue: true },
+        })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, {
+          id: id,
+        })
+      expect(r.body['@id']).to.equal(id)
+      expect(r.body['@type']).to.equal(type)
+      expect(r.body.bfalse).to.equal(false)
+      expect(r.body.btrue).to.equal(true)
+    })
   })
 })
