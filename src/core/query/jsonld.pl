@@ -77,24 +77,12 @@ expand(json{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     JSON = json{'@language' : Lang, '@value' : Value}.
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
-    % \+ select_dict(json{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
-    select_dict(json{}, JSON_LD, _),
     dict_keys(JSON_LD,Keys),
-    findall(Key-Value,
-            (
-                member(K,Keys),
-                get_dict(K,JSON_LD,V),
-
-                (   member(K,['@id','@type'])
-                ->  prefix_expand(V,Context,Value),
-                    Key = K
-                ;   expand_key(K,Context,Key,Key_Context),
-                    expand_value(V,Key_Context,Context,Value)
-                )
-            ),
-            Data),
-    dict_create(JSON,json,Data).
+    setof(Key-Value,
+          expand_dict_keys(JSON_LD, Context, Keys, Key, Value),
+          Data),
+    dict_pairs(JSON,json,Data).
 expand(JSON_LD, Context, JSON) :-
     is_list(JSON_LD),
     !,
@@ -104,6 +92,17 @@ expand(JSON, _, JSON) :-
     !.
 expand(JSON, _, JSON) :-
     string(JSON).
+
+expand_dict_keys(JSON_LD, Context, Keys, Key, Value) :-
+    member(K,Keys),
+    get_dict(K,JSON_LD,V),
+
+    (   member(K,['@id','@type'])
+    ->  prefix_expand(V,Context,Value),
+        Key = K
+    ;   expand_key(K,Context,Key,Key_Context),
+        expand_value(V,Key_Context,Context,Value)
+    ).
 
 expand_value(V,Key_Ctx,Ctx,Value) :-
     is_list(V),
@@ -146,14 +145,18 @@ expand_value(V,Key_Ctx,Ctx,Value) :-
 expand_value(V,_Key_Ctx,_Ctx,V) :-
     number(V),
     !.
+expand_value(V, _, _, V) :-
+    var(V), % For dictionary matching in WOQL
+    !.
 expand_value(true,_Key_Ctx,_Ctx,true) :-
+    !.
+expand_value(null,_Key_Ctx,_Ctx,null) :-
     !.
 %expand_value(V,_Key_Ctx,_Ctx,V) :-
 %    atom(V),
 %    !.
 expand_value(V,Key_Ctx,_Ctx,_Value) :-
-    format(atom(M),'Unknown key context ~q for value ~q', [Key_Ctx,V]),
-    throw(error(M)).
+    throw(error(unknown_key_context(Key_Ctx,V))).
 
 has_at(K) :-
     re_match('^@.*',K).

@@ -227,7 +227,7 @@ resolve_prefix(Pre,Suf,URI) -->
 
 is_boolean_type('http://www.w3.org/2001/XMLSchema#boolean').
 
-resolve_predicate(ignore,_Something) -->
+resolve_predicate(null,_Something) -->
     !,
     [].
 resolve_predicate(P,PE) -->
@@ -246,12 +246,31 @@ resolve_variable(v(Var_Name),Var) -->
 resolve_variable(Not_Var,Not_Var) -->
     [].
 
+resolve_dictionary(Dict, Expanded) -->
+    view(prefixes,Prefixes),
+    resolve_dictionary_(Dict,Dict_Resolved),
+    {
+        expand(Dict_Resolved,Prefixes,Expanded)
+    }.
+
+resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
+    is_dict(Dict),
+    !,
+    dict_keys(Dict,Keys),
+    mapm({Dict}/[Key,Key-Value,CA,CB]>>(
+             get_dict(Key,Dict,V),
+             resolve_dictionary_(V,Value,CA,CB)
+         ), Keys, Pairs, C1, C2),
+    dict_pairs(Dict_Resolved,json,Pairs).
+resolve_dictionary_(Val, New_Val, C1, C2) :-
+    resolve(Val, New_Val, C1, C2).
+
 /*
  * resolve(ID,Resolution, S0, S1) is det.
  *
  * TODO: This needs a good going over. Way too much duplication of effort.
  */
-resolve(ignore,_Something) -->
+resolve(null,_Something) -->
     !,
     [].
 resolve(X,XEx) -->
@@ -268,12 +287,11 @@ resolve(v(Var_Name),Var) -->
     !,
     lookup_or_extend(Var_Name,Var).
 resolve(X,XEx) -->
-    view(prefixes,Prefixes),
     {
         is_dict(X),
-        !,
-        expand(X,Prefixes,XEx)
-    }.
+        !
+    },
+    resolve_dictionary(X, XEx).
 resolve(X@L,XS@L) -->
     resolve(X,XE),
     {
@@ -4679,23 +4697,85 @@ test(document_path, [
         _
     ),
     Seeds = [Ua, Ub],
-
-    AST = select(
-              [v('Nodes')],
-              group_by(
-                  true,
-                  v('Object'),
-                  (   member(v('Seed'), Seeds),
-                      path(v('Seed'),p(edge),v('ID')),
-                      t(v('ID'), rdf:type, v('Type')),
-                      t(v('Type'), rdf:type, sys:'Class', schema),
-                      get_document(v('ID'), v('Object'))),
-                  v('Nodes'))),
+    AST = (
+        select(
+            [v('Links'), v('Document')],
+            group_by(
+                true,
+                [v('Seed'), v('ID')],
+                (   member(v('Seed'), Seeds),
+                    path(v('Seed'),p(edge),v('ID')),
+                    t(v('ID'), rdf:type, v('Type')),
+                    t(v('Type'), rdf:type, sys:'Class', schema)),
+                v('Links'))),
+        select(
+            [v('Nodes')],
+            group_by(
+                true,
+                v('Document'),
+                (   distinct(
+                        [v('Node')],
+                        (   member(v('Link'),v('Links')),
+                            [v('Seed'), v('ID')] = v('Link'),
+                            (   v('Node') = v('Seed')
+                            ;   v('Node') = v('ID'))
+                        )
+                    ),
+                    get_document(v('Node'), v('Document'))
+                ),
+                v('Nodes')
+            )
+        )
+    ),
 
     create_context(Descriptor, Commit_Info, C3),
     query_response:run_context_ast_jsonld_response(C3, AST, Response),
     nl,
-    json_write_dict(current_output, Response, []).
+    json_write_dict(current_output, Response, []),
+    true.
+
+test(test_matching, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+
+    AST = (_{ a : 1, b : v('X')} = _{ a : v('Y'), b : 2}),
+
+    create_context(Descriptor, Commit_Info, C1),
+    query_response:run_context_ast_jsonld_response(C1, AST, Response),
+    (Response.bindings) = [ _{'X':2, 'Y':1} ].
+
+test(test_json_dict_vars, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{ '@type': "Equals",
+               left: _{ '@type': "DataValue",
+                        data: _{ '@value': "2021-02-23T21:12:58Z",
+                                 '@type': "xsd:dateTime" }
+                      },
+               right: _{ '@type': "DataValue",
+                         data: _{ a: 1,
+                                  b : _{ '@type' : "Variable", 
+                       }
+             },
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+
+    AST = (_{ a : 1, b : v('X')} = _{ a : v('Y'), b : 2}),
+
+    create_context(Descriptor, Commit_Info, C1),
+    query_response:run_context_ast_jsonld_response(C1, AST, Response),
+    (Response.bindings) = [ _{'X':2, 'Y':1} ].
 
 :- end_tests(woql).
 
