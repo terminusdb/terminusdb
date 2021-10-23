@@ -4764,7 +4764,7 @@ test(test_json_dict_vars, [
                       },
                right: _{ '@type': "DataValue",
                          data: _{ a: 1,
-                                  b : _{ '@type' : "Variable", 
+                                  b : _{ '@type' : "Variable",
                        }
              },
 
