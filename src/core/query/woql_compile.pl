@@ -4630,7 +4630,7 @@ test(using_resource_works, [
 test(quad_compilation, [
          setup((setup_temp_store(State),
                 add_user("TERMINUSQA",some('password'),Auth),
-                create_db_with_test_schema("TERMINUSQA", "test"))),
+                create_db_without_schema("TERMINUSQA", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
@@ -4642,6 +4642,60 @@ test(quad_compilation, [
     Ctx_In = (Context.put(authorization, Auth)),
 
     compile_query(Term, _Prog, Ctx_In, _Ctx_Out).
+
+:- use_module(core(document)).
+test(document_path, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    Edge =
+    _{ '@type' : "Class",
+       '@id' : "Node",
+       '@key' : _{ '@type' : "Lexical", '@fields' : [ "name" ] },
+       name : "xsd:string",
+       edge : _{ '@type' : "Set",
+                 '@class' : "Node"}},
+
+    create_context(Descriptor, Commit_Info, C1),
+    with_transaction(
+        C1,
+        insert_schema_document(C1,Edge),
+        _
+    ),
+
+    create_context(Descriptor, Commit_Info, C2),
+    with_transaction(
+        C2,
+        (
+            insert_document(C2, _{ '@type' : "Node", name : "a", edge : ["Node/b", "Node/c"]}, Ua),
+            insert_document(C2, _{ '@type' : "Node", name : "b", edge : ["Node/a", "Node/c"]}, Ub),
+            insert_document(C2, _{ '@type' : "Node", name : "c", edge : []}, _Uc)
+        ),
+        _
+    ),
+    Seeds = [Ua, Ub],
+
+    AST = select(
+              [v('Nodes')],
+              group_by(
+                  true,
+                  v('Object'),
+                  (   member(v('Seed'), Seeds),
+                      path(v('Seed'),p(edge),v('ID')),
+                      t(v('ID'), rdf:type, v('Type')),
+                      t(v('Type'), rdf:type, sys:'Class', schema),
+                      get_document(v('ID'), v('Object'))),
+                  v('Nodes'))),
+
+    create_context(Descriptor, Commit_Info, C3),
+    query_response:run_context_ast_jsonld_response(C3, AST, Response),
+    nl,
+    json_write_dict(current_output, Response, []).
 
 :- end_tests(woql).
 
