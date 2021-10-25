@@ -83,15 +83,14 @@ json_data_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = true
     ).
 json_data_to_woql_ast(JSON,WOQL) :-
-    (   atom(JSON)
-    ;   string(JSON)
-    ),
+    atom(JSON),
     !,
-    atom_string(A,JSON),
-    (   member(A,[true,false])
-    ->  WOQL = A^^xsd:boolean
-    ;   WOQL = A^^xsd:string
-    ).
+    member(JSON,[true,false]),
+    WOQL = JSON^^xsd:boolean.
+json_data_to_woql_ast(JSON,WOQL) :-
+    string(JSON),
+    !,
+    WOQL = JSON^^xsd:string.
 json_data_to_woql_ast(JSON,WOQL) :-
     number(JSON),
     !,
@@ -862,7 +861,7 @@ json_type_to_woql_ast('DataValue',JSON,WOQL,Path) :-
     ;   _{list: List} :< JSON
     ->  json_to_woql_ast(List,WOQL,[list|Path])
     ).
-json_type_to_woql_ast('Value',JSON,WOQL,_) :-
+json_type_to_woql_ast('Value',JSON,WOQL,Path) :-
     (   _{node: Node} :< JSON
     ->  prefix_split(Node, WOQL)
     ;   _{variable: Var} :< JSON
@@ -873,6 +872,8 @@ json_type_to_woql_ast('Value',JSON,WOQL,_) :-
     ->  json_data_to_woql_ast(Data,WOQL)
     ;   _{list: List} :< JSON
     ->  json_data_to_woql_ast(List,WOQL)
+    ;   _{dictionary: Dictionary} :< JSON
+    ->  dictionary_template_to_woql_ast(Dictionary,WOQL,Path)
     ).
 json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
     _{value : Value,
@@ -1041,6 +1042,25 @@ json_type_to_woql_arith('ArithmeticValue',JSON,WOQL,_) :-
     ->   atom_string(Var_Atom, Var),
          WOQL = v(Var_Atom)
     ).
+
+dictionary_template_to_woql_ast(Template, WOQL, Path) :-
+    get_dict(data, Template, Pairs),
+    length(Pairs, Len),
+    (   Len >= 1
+    ->  N is Len - 1,
+        numlist(0, N, Indexes)
+    ;   Indexes = []
+    ),
+    maplist({Path}/[Pair, I, Key-Value]>>(
+                get_dict(field, Pair, Key_String),
+                get_dict(value, Pair, V),
+                atom_string(Key,Key_String),
+                json_to_woql_ast(V, WOQL_Value, [value,I|Path]),
+                (   WOQL_Value = Value^^_ % unnecessary specificity
+                ->  true
+                ;   WOQL_Value = Value)
+            ), Pairs, Indexes, NewPairs),
+   dict_create(WOQL, json, NewPairs).
 
 json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     (   Path = [Head|_Path],
@@ -1530,5 +1550,30 @@ test(base64binary, []) :-
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
     WOQL = (v('X')="YXNkZg=="^^'http://www.w3.org/2001/XMLSchema#base64Binary').
+
+test(dictionary_template_to_woql_ast, []) :-
+    JSON_Atom=
+    '{"@type": "Value",
+      "dictionary" : {"@type": "DictionaryTemplate",
+                      "data": [ { "@type" : "FieldValuePair",
+                                  "field" : "@type",
+                                  "value" : { "@type" : "Value",
+                                              "data" : "User"}},
+                                { "@type" : "FieldValuePair",
+                                  "field" : "name",
+                                  "value" : { "@type" : "Value",
+                                              "data" : "Jim"}},
+                                { "@type" : "FieldValuePair",
+                                  "field" : "employed",
+                                  "value" : { "@type" : "Value",
+                                              "data" : true }},
+                                { "@type" : "FieldValuePair",
+                                  "field" : "father",
+                                  "value" : { "@type" : "Value",
+                                              "variable" : "Father"}}]}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    json_woql(JSON,WOQL),
+    writeq(WOQL),
+    WOQL = json{'@type':"User",employed:true,father:v('Father'),name:"Jim"}.
 
 :- end_tests(jsonld_ast).

@@ -422,6 +422,9 @@ term_jsonld(Term,JSON) :-
 term_jsonld(URI,URI).
 
 /* With prefix compression */
+term_jsonld(Var,_,null) :-
+    var(Var), % Tranform unbound variables to null
+    !.
 term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
     (   compound(D) % check if not bool, number, atom, string
     ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',

@@ -5,7 +5,8 @@
               compile_query/4,
               empty_context/1,
               empty_context/2,
-              filter_transaction_object_read_write_objects/3
+              filter_transaction_object_read_write_objects/3,
+              not_literal/1
           ]).
 
 /** <module> WOQL Compile
@@ -262,6 +263,12 @@ resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
              resolve_dictionary_(V,Value,CA,CB)
          ), Keys, Pairs, C1, C2),
     dict_pairs(Dict_Resolved,json,Pairs).
+resolve_dictionary_(true, true, C, C) :-
+    !.
+resolve_dictionary_(false, false, C, C) :-
+    !.
+resolve_dictionary_(null, null, C, C) :-
+    !.
 resolve_dictionary_(Val, New_Val, C1, C2) :-
     resolve(Val, New_Val, C1, C2).
 
@@ -2803,10 +2810,10 @@ test(group_by, [
     [_{'Grouped': [['@schema:p',q],
                    ['@schema:p',w],
                    ['@schema:p',z]],
-       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
+       'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': [['@schema:p',w],
                    ['@schema:p',z]],
-       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
+       'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
 
 test(group_by_simple_template, [
          setup((setup_temp_store(State),
@@ -2845,9 +2852,9 @@ test(group_by_simple_template, [
     query_test_response(Descriptor, Query_Out, JSON),
 
     [_{'Grouped': ['@schema:p','@schema:p','@schema:p'],
-       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':x},
+       'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': ['@schema:p','@schema:p'],
-       'Object':"system:unknown",'Predicate':"system:unknown",'Subject':y}] = JSON.bindings.
+       'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
 
 test(select, [setup(setup_temp_store(State)),
               cleanup(teardown_temp_store(State))
@@ -4699,10 +4706,10 @@ test(document_path, [
     Seeds = [Ua, Ub],
     AST = (
         select(
-            [v('Links'), v('Document')],
+            [v('Links')],
             group_by(
                 true,
-                [v('Seed'), v('ID')],
+                _{ source : v('Seed'), target: v('ID') },
                 (   member(v('Seed'), Seeds),
                     path(v('Seed'),p(edge),v('ID')),
                     t(v('ID'), rdf:type, v('Type')),
@@ -4716,9 +4723,10 @@ test(document_path, [
                 (   distinct(
                         [v('Node')],
                         (   member(v('Link'),v('Links')),
-                            [v('Seed'), v('ID')] = v('Link'),
-                            (   v('Node') = v('Seed')
-                            ;   v('Node') = v('ID'))
+                            dot(v('Link'), source, v('Source')),
+                            dot(v('Link'), target, v('Target')),
+                            (   v('Node') = v('Source')
+                            ;   v('Node') = v('Target'))
                         )
                     ),
                     get_document(v('Node'), v('Document'))
@@ -4730,9 +4738,14 @@ test(document_path, [
 
     create_context(Descriptor, Commit_Info, C3),
     query_response:run_context_ast_jsonld_response(C3, AST, Response),
-    nl,
-    json_write_dict(current_output, Response, []),
-    true.
+    (Response.bindings) =
+    [_{'Links':[_{source:'Node/a',target:'Node/b'},
+                _{source:'Node/a',target:'Node/c'},
+                _{source:'Node/b',target:'Node/a'},
+                _{source:'Node/b',target:'Node/c'}],
+       'Nodes':[_{'@id':'Node/a','@type':'Node',edge:['Node/b','Node/c'],name:"a"},
+                _{'@id':'Node/b','@type':'Node',edge:['Node/a','Node/c'],name:"b"},
+                _{'@id':'Node/c','@type':'Node',name:"c"}]}].
 
 test(test_matching, [
          setup((setup_temp_store(State),
@@ -4750,32 +4763,95 @@ test(test_matching, [
     query_response:run_context_ast_jsonld_response(C1, AST, Response),
     (Response.bindings) = [ _{'X':2, 'Y':1} ].
 
-test(test_json_dict_vars, [
+test(json_dict_vars, [
          setup((setup_temp_store(State),
                 add_user("TERMINUSQA",some('password'),_Auth),
                 create_db_without_schema("TERMINUSQA", "test"))),
          cleanup(teardown_temp_store(State))
      ]) :-
 
-    Query = _{ '@type': "Equals",
-               left: _{ '@type': "DataValue",
-                        data: _{ '@value': "2021-02-23T21:12:58Z",
-                                 '@type': "xsd:dateTime" }
-                      },
-               right: _{ '@type': "DataValue",
-                         data: _{ a: 1,
-                                  b : _{ '@type' : "Variable",
-                       }
-             },
+    Query_Atom =
+    '{ "@type" : "Equals",
+       "left" : { "@type" : "Value",
+                  "dictionary" : {"@type": "DictionaryTemplate",
+                                  "data": [ { "@type" : "FieldValuePair",
+                                               "field" : "a",
+                                               "value" : { "@type" : "Value",
+                                                           "data" : 1 }},
+                                             { "@type" : "FieldValuePair",
+                                               "field" : "b",
+                                               "value" : { "@type" : "Value",
+                                                           "variable" : "X" }}]}},
+       "right" : { "@type" : "Value",
+                   "dictionary" : {"@type": "DictionaryTemplate",
+                                   "data": [ { "@type" : "FieldValuePair",
+                                                "field" : "a",
+                                                "value" : { "@type" : "Value",
+                                                            "variable" : "Y" }},
+                                              { "@type" : "FieldValuePair",
+                                                "field" : "b",
+                                                "value" : { "@type" : "Value",
+                                                            "data" : true }}]}}}',
 
+    atom_json_dict(Query_Atom, Query, []),
     resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
-    Commit_Info = commit_info{author: "a", message: "m"},
+    query_test_response(Descriptor, Query, Response),
+    (Response.bindings) = [_{'X':true, 'Y':1}].
 
-    AST = (_{ a : 1, b : v('X')} = _{ a : v('Y'), b : 2}),
+test(json_capture_dict, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
 
-    create_context(Descriptor, Commit_Info, C1),
-    query_response:run_context_ast_jsonld_response(C1, AST, Response),
-    (Response.bindings) = [ _{'X':2, 'Y':1} ].
+    Query_Atom =
+    '{ "@type" : "Equals",
+       "left" : { "@type" : "Value",
+                  "dictionary" : {"@type": "DictionaryTemplate",
+                                  "data": [ { "@type" : "FieldValuePair",
+                                               "field" : "a",
+                                               "value" : { "@type" : "Value",
+                                                           "data" : 1 }},
+                                             { "@type" : "FieldValuePair",
+                                               "field" : "b",
+                                               "value" : { "@type" : "Value",
+                                                           "data" : { "@type" : "xsd:string",
+                                                                      "@value" : "test" }}}]}},
+       "right" : { "@type" : "Value",
+                   "variable" : "Y" }}',
+
+    atom_json_dict(Query_Atom, Query, []),
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    query_test_response(Descriptor, Query, Response),
+    (Response.bindings) = [_{'Y':_{a:1,b:"test"}}].
+
+test(json_unbound_capture, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query_Atom =
+    '{ "@type" : "Equals",
+       "left" : { "@type" : "Value",
+                  "dictionary" : {"@type": "DictionaryTemplate",
+                                  "data": [ { "@type" : "FieldValuePair",
+                                               "field" : "a",
+                                               "value" : { "@type" : "Value",
+                                                           "data" : 1 }},
+                                             { "@type" : "FieldValuePair",
+                                               "field" : "b",
+                                               "value" : { "@type" : "Value",
+                                                           "variable" : "asdf"}}]}},
+       "right" : { "@type" : "Value",
+                   "variable" : "Y" }}',
+
+    atom_json_dict(Query_Atom, Query, []),
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    query_test_response(Descriptor, Query, Response),
+    (Response.bindings) = [_{'Y':_{a:1,b:null},asdf:null}].
 
 :- end_tests(woql).
 

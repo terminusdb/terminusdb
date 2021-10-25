@@ -3,16 +3,17 @@
               calculate_path_solutions/6
           ]).
 
+:- use_module(woql_compile, [not_literal/1]).
 :- use_module(core(util)).
 :- use_module(core(triple)).
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),
-    atom(X),
+    not_literal(X),
     xrdf(Transaction_Object.instance_objects,X,P,Y).
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(schema,Types),
-    atom(X),
+    not_literal(X),
     xrdf(Transaction_Object.schema_objects, X, P, Y).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-

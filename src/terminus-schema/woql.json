@@ -43,6 +43,29 @@
   "@subdocument" : [],
   "@abstract" : [] }
 
+{ "@id" : "DictionaryTemplate",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A representation of a JSON style dictionary, but with free variables. It is similar to an interpolated string in that it is a template with quoted data and substituted values.",
+      "@properties" : { "data" : "Pairs of Key-Values to be constructed into a dictionary" }
+  },
+  "@subdocument" : [],
+  "@key" : { "@type" : "ValueHash" },
+  "data" : { "@type" : "Set",
+             "@class" : "FieldValuePair" }}
+
+{ "@id" : "FieldValuePair",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "A representation of a JSON style dictionary, but with free variables. It is similar to an interpolated string in that it is a template with quoted data and substituted values.",
+      "@properties" : { "field" : "The field or key of a dictionary value pair",
+                        "value" : "The value of a dictionary value pair." }
+  },
+  "@subdocument" : [],
+  "@key" : { "@type" : "ValueHash" },
+  "field" : "xsd:string",
+  "value" : "Value" }
+
 { "@id" : "Value",
   "@type" : "TaggedUnion",
   "@documentation" : {
@@ -54,6 +77,7 @@
   },
   "@subdocument" : [],
   "@key" : { "@type" : "ValueHash" },
+  "dictionary" : "DictionaryTemplate",
   "list" : { "@type" : "List",
              "@class" : "Value" },
   "node" : "xsd:string",
