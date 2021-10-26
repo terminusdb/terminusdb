@@ -188,6 +188,10 @@ context_prefix_expand(K,Context,Key) :-
     ;   K = Key
     ).
 
+% For document templating
+prefix_expand(K,_Context,K) :-
+    var(K),
+    !.
 prefix_expand(K,Context,Key) :-
     do_or_die(
         \+ memberchk(K, ['', ""]),
