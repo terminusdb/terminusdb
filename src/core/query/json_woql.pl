@@ -179,17 +179,19 @@ json_type_to_woql_ast('Distinct',JSON,WOQL,Path) :-
     WOQL = distinct(WOQL_Args,Sub_WOQL).
 json_type_to_woql_ast('And',JSON,WOQL,Path) :-
     _{and : Query_List} :< JSON,
-    maplist({Path}/[Q,W]>>(
-                json_to_woql_ast(Q,W,[and
+    index_list(Query_List, Indexes),
+    maplist({Path}/[Q,I,W]>>(
+                json_to_woql_ast(Q,W,[and,I
                                       |Path])
-            ), Query_List, WOQL_Queries),
+            ), Query_List, Indexes, WOQL_Queries),
     xfy_list(',',WOQL,WOQL_Queries).
 json_type_to_woql_ast('Or',JSON,WOQL,Path) :-
     _{or : Query_List} :< JSON,
-    maplist({Path}/[Q,W]>>(
-                json_to_woql_ast(Q,W,[or
+    index_list(Query_List, Indexes),
+    maplist({Path}/[Q,I,W]>>(
+                json_to_woql_ast(Q,W,[or,I
                                       |Path])
-            ), Query_List, WOQL_Queries),
+            ), Query_List, Indexes, WOQL_Queries),
     xfy_list(';',WOQL,WOQL_Queries).
 json_type_to_woql_ast('Using',JSON,WOQL,Path) :-
     _{collection : Collection,
@@ -758,16 +760,15 @@ json_type_to_woql_ast('OrderTemplate',JSON,WOQL,_Path) :-
     ).
 json_type_to_woql_ast('GroupBy',JSON,WOQL,Path) :-
     _{group_by : Spec,
-      template : Obj,
+      template : Template,
       query : Query,
       grouped : Collector
      } :< JSON,
     variable_list(Spec,WSpec),
-    variable_list(Obj,Template),
-    % Add only one variable if only one in template
-    (   Template = [V]
-    ->  WObj = V
-    ;   WObj = Template),
+    % Backwards compat with "variable list"
+    (   variable_list(Template,WObj)
+    ->  true
+    ;   json_to_woql_ast(Template,WObj,[template|Path])),
     json_to_woql_ast(Query,WQuery,[query
                                    |Path]),
     json_to_woql_ast(Collector,WCollector,[grouped
@@ -813,15 +814,15 @@ json_type_to_woql_ast('Immediately',JSON,WOQL,Path) :-
                            |Path]),
     WOQL = immediately(WQ).
 json_type_to_woql_ast('Dot',JSON,WOQL,Path) :-
-    _{dictionary : Dictionary,
-      dictionary_key : Key,
-      dictionary_value : Value
+    _{document : Dictionary,
+      field : Key,
+      value : Value
      } :< JSON,
-    json_to_woql_ast(Dictionary, WDictionary, [dictionary_key
+    json_to_woql_ast(Dictionary, WDictionary, [document
                                                |Path]),
-    json_to_woql_ast(Key, WKey, [dictionary_key
+    json_to_woql_ast(Key, WKey, [field
                                  |Path]),
-    json_to_woql_ast(Value,WValue,[dictionary_value
+    json_to_woql_ast(Value,WValue,[value
                                    |Path]),
     WOQL = dot(WDictionary,WKey,WValue).
 json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
@@ -1045,12 +1046,7 @@ json_type_to_woql_arith('ArithmeticValue',JSON,WOQL,_) :-
 
 dictionary_template_to_woql_ast(Template, WOQL, Path) :-
     get_dict(data, Template, Pairs),
-    length(Pairs, Len),
-    (   Len >= 1
-    ->  N is Len - 1,
-        numlist(0, N, Indexes)
-    ;   Indexes = []
-    ),
+    index_list(Pairs,Indexes),
     maplist({Path}/[Pair, I, Key-Value]>>(
                 get_dict(field, Pair, Key_String),
                 get_dict(value, Pair, V),
@@ -1573,7 +1569,6 @@ test(dictionary_template_to_woql_ast, []) :-
                                               "variable" : "Father"}}]}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    writeq(WOQL),
     WOQL = json{'@type':"User",employed:true,father:v('Father'),name:"Jim"}.
 
 :- end_tests(jsonld_ast).

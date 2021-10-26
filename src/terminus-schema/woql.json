@@ -1027,8 +1027,7 @@
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
-  "template" : { "@type" : "List",
-                 "@class" : "xsd:string" },
+  "template" : "Value",
   "group_by" : { "@type" : "List",
                  "@class" : "xsd:string" },
   "query" : "Query",
@@ -1206,13 +1205,13 @@
   "@documentation" : {
       "@comment" : "Extract the value of a key in a bound document.",
       "@properties" : { "document" : "Document which is being accessed.",
-                        "key" : "The field from which the document which is being accessed.",
+                        "field" : "The field from which the document which is being accessed.",
                         "value" : "The value for the document and field." }
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
   "document" : "DataValue",
-  "key" : "DataValue",
+  "field" : "DataValue",
   "value" : "DataValue" }
 
 { "@id" : "Size",

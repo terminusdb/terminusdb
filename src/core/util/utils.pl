@@ -67,7 +67,8 @@
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
-              has_duplicates/2
+              has_duplicates/2,
+              index_list/2
           ]).
 
 /** <module> Utils
@@ -938,3 +939,11 @@ duplicates_([First|Rest], _, Duplicates) :-
 has_duplicates(List, Duplicates) :-
     duplicates(List, Duplicates),
     Duplicates \= [].
+
+index_list(List,Indexes) :-
+    length(List, Len),
+    (   Len >= 1
+    ->  N is Len - 1,
+        numlist(0, N, Indexes)
+    ;   Indexes = []
+    ).

@@ -2836,7 +2836,8 @@ test(group_by_simple_template, [
 
     Query = _{'@type' : "GroupBy",
               group_by : ["Subject"],
-              template:  ["Predicate"],
+              template:  _{ '@type' : 'Value',
+                            'variable' : "Predicate"},
               query : _{ '@type' : "Triple",
                          subject : _{'@type' : "NodeValue",
                                      variable : "Subject"},
