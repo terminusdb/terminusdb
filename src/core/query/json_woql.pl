@@ -872,7 +872,7 @@ json_type_to_woql_ast('Value',JSON,WOQL,Path) :-
     ;   _{data: Data} :< JSON
     ->  json_data_to_woql_ast(Data,WOQL)
     ;   _{list: List} :< JSON
-    ->  json_data_to_woql_ast(List,WOQL)
+    ->  json_to_woql_ast(List,WOQL,Path)
     ;   _{dictionary: Dictionary} :< JSON
     ->  dictionary_template_to_woql_ast(Dictionary,WOQL,Path)
     ).
