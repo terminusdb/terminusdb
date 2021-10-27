@@ -1899,7 +1899,7 @@ delete_subdocument(DB, Prefixes, V) :-
         )
     ;   true).
 
-delete_document(DB, Prefixes, Id) :-
+delete_document(DB, Prefixes, Unlink, Id) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
     (   xrdf(Instance, Id_Ex, rdf:type, _)
@@ -1912,18 +1912,23 @@ delete_document(DB, Prefixes, Id) :-
             delete_subdocument(DB,Prefixes,V)
         )
     ),
-    unlink_object(Instance, Id_Ex).
+    (   Unlink = true
+    ->  unlink_object(Instance, Id_Ex)
+    ;   true).
 
-delete_document(DB, Id) :-
+delete_document(DB, Unlink, Id) :-
     is_transaction(DB),
     !,
     database_prefixes(DB,Prefixes),
-    delete_document(DB, Prefixes, Id).
-delete_document(Query_Context, Id) :-
+    delete_document(DB, Prefixes, Unlink, Id).
+delete_document(Query_Context, Unlink, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    delete_document(TO, Id).
+    delete_document(TO, Unlink, Id).
+
+delete_document(DB, Id) :-
+    delete_document(DB, true, Id).
 
 nuke_documents(Transaction) :-
     is_transaction(Transaction),
@@ -2011,7 +2016,7 @@ replace_document(Transaction, Document, Id) :-
     !,
     json_elaborate(Transaction, Document, Elaborated),
     get_dict('@id', Elaborated, Id),
-    catch(delete_document(Transaction, Id),
+    catch(delete_document(Transaction, false, Id),
           error(document_does_not_exist(_),_),
           throw(error(document_does_not_exist(Id, Document),_))),
     insert_document_expanded(Transaction, Elaborated, Id).

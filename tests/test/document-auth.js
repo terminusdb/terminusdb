@@ -276,8 +276,6 @@ describe('document', function () {
         .get(agent, docPath, {
           id: 'Person/Fidel',
         })
-      // Remove after testing
-      console.log(r.body)
       expect(r.body['placeOfBirth']).to.equal("Place/Berlin")
     })
 
