@@ -239,5 +239,47 @@ describe('document', function () {
       expect(r.body.bfalse).to.equal(false)
       expect(r.body.btrue).to.equal(true)
     })
+
+
+    it('does not drop incoming links (#736)', async function () {
+      const id1 = util.randomString()
+      const id2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+              { '@type': 'Class',
+                '@id': 'Person',
+                'placeOfBirth' : { '@class' : 'Place',
+                                   '@type' : 'Optional' }},
+              { '@type': 'Class',
+                '@id': 'Place' },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      await document
+        .insert(agent, docPath, {
+            instance: [
+            { "@type": "Person", "@id": "Person/Fidel", "placeOfBirth": "Place/Berlin" },
+            { "@type": "Place", "@id": "Place/Berlin" }
+          ],
+        })
+         .then(document.verifyInsertSuccess)
+
+      await document
+          .replace(agent, docPath, {
+            instance: {
+              '@type': "Place",
+              '@id': "Place/Berlin"
+            },
+          })
+      var r = await document
+        .get(agent, docPath, {
+          id: 'Person/Fidel',
+        })
+      // Remove after testing
+      console.log(r.body)
+      expect(r.body['placeOfBirth']).to.equal("Place/Berlin")
+    })
+
   })
 })
