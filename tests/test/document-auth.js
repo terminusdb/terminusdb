@@ -273,5 +273,45 @@ describe('document', function () {
       // Even though doc1 was replaced, doc2 should still have the same reference.
       expect(r.body).to.deep.equal(doc2)
     })
+
+    describe('key @fields', function () {
+      const schema = { '@type': 'Class' }
+      const keyTypes = [
+        'Hash',
+        'Lexical',
+      ]
+
+      beforeEach(function () {
+        schema['@id'] = util.randomString()
+      })
+
+      for (const keyType of keyTypes) {
+        it(`fails when @fields is missing for ${keyType}`, async function () {
+          schema['@key'] = { '@type': keyType }
+          const r = await document.insert(agent, docPath, { schema: schema })
+          document.verifyInsertFailure(r)
+          expect(r.body['api:error']['@type']).to.equal('api:KeyMissingFields')
+          expect(r.body['api:error']['api:key_type']).to.equal(keyType)
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+
+        it(`fails when @fields value is not an array for ${keyType}`, async function () {
+          schema['@key'] = { '@type': keyType, '@fields': { key: 'value' } }
+          const r = await document.insert(agent, docPath, { schema: schema })
+          document.verifyInsertFailure(r)
+          expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsNotAnArray')
+          expect(r.body['api:error']['api:fields']).to.deep.equal(schema['@key']['@fields'])
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+
+        it(`fails when @fields value is empty array for ${keyType} (#727)`, async function () {
+          schema['@key'] = { '@type': keyType, '@fields': [] }
+          const r = await document.insert(agent, docPath, { schema: schema })
+          document.verifyInsertFailure(r)
+          expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsIsEmpty')
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+      }
+    })
   })
 })
