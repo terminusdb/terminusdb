@@ -239,5 +239,39 @@ describe('document', function () {
       expect(r.body.bfalse).to.equal(false)
       expect(r.body.btrue).to.equal(true)
     })
+
+    it('does not drop incoming links (#736)', async function () {
+      const type1 = util.randomString()
+      const type2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            {
+              '@type': 'Class',
+              '@id': type1,
+            },
+            {
+              '@type': 'Class',
+              '@id': type2,
+              // This class has a reference to the previous class.
+              id1: { '@type': 'Optional', '@class': type1 },
+            },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const doc1 = { '@type': type1, '@id': type1 + '/1' }
+      const doc2 = { '@type': type2, '@id': type2 + '/2', id1: doc1['@id'] }
+      await document
+        .insert(agent, docPath, { instance: [doc1, doc2] })
+        .then(document.verifyInsertSuccess)
+      await document
+        .replace(agent, docPath, { instance: doc1 })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { id: doc2['@id'] })
+        .then(document.verifyGetSuccess)
+      // Even though doc1 was replaced, doc2 should still have the same reference.
+      expect(r.body).to.deep.equal(doc2)
+    })
   })
 })

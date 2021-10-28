@@ -91,6 +91,11 @@ function verifyId (requestId, responseId) {
   }
 }
 
+function verifyGetSuccess (r) {
+  expect(r.status).to.equal(200)
+  return r
+}
+
 function verifyInsertSuccess (r) {
   expect(r.status).to.equal(200)
   expect(r.body).to.be.an('array')
@@ -124,6 +129,7 @@ module.exports = {
   get,
   insert,
   replace,
+  verifyGetSuccess,
   verifyInsertSuccess,
   verifyInsertFailure,
   verifyReplaceFailure,
