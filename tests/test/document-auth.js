@@ -269,6 +269,7 @@ describe('document', function () {
         .then(document.verifyInsertSuccess)
       const r = await document
         .get(agent, docPath, { id: doc2['@id'] })
+        .then(document.verifyGetSuccess)
       // Even though doc1 was replaced, doc2 should still have the same reference.
       expect(r.body).to.deep.equal(doc2)
     })
