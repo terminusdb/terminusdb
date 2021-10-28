@@ -111,18 +111,21 @@ function verifyInsertSuccess (r) {
     expect(r.body.length).to.equal(1)
     verifyId(r.request._data['@id'], r.body[0])
   }
+  return r
 }
 
 function verifyInsertFailure (r) {
   expect(r.status).to.equal(400)
   expect(r.body['api:status']).to.equal('api:failure')
   expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
+  return r
 }
 
 function verifyReplaceFailure (r) {
   expect(r.status).to.equal(400)
   expect(r.body['api:status']).to.equal('api:failure')
   expect(r.body['@type']).to.equal('api:ReplaceDocumentErrorResponse')
+  return r
 }
 
 module.exports = {

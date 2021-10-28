@@ -12,7 +12,7 @@ describe('branch-noauth', function () {
     const r = await agent
       .post('/api/branch/unknowndesc')
       .send({})
-    branch.verifyFailure(r)
+      .then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:BadTargetAbsoluteDescriptor')
     expect(r.body['api:error']['api:absolute_descriptor']).to.equal('unknowndesc')
   })

@@ -14,7 +14,7 @@ describe('branch', function () {
     const r = await agent
       .post(path)
       .send({ origin: originDescriptor })
-    branch.verifyFailure(r)
+      .then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:BadOriginAbsoluteDescriptor')
     expect(r.body['api:error']['api:absolute_descriptor']).to.equal(originDescriptor)
   })
@@ -25,7 +25,7 @@ describe('branch', function () {
     const r = await agent
       .post(path)
       .send({ origin: `${orgName}/${originDbName}` })
-    branch.verifyFailure(r)
+      .then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:UnknownOriginDatabase')
     expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
     expect(r.body['api:error']['api:database_name']).to.equal(originDbName)
