@@ -1170,6 +1170,16 @@ api_document_error_jsonld(Type, error(unexpected_array_value(Value, Expected_Typ
                               'api:expected_type' : Expected_Type },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(unexpected_boolean_value(Value, Expected_Type),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unexpected boolean value: ~q, expected type: ~q", [Value, Expected_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnexpectedBooleanValue',
+                              'api:value' : Value,
+                              'api:expected_type' : Expected_Type },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(schema_check_failure(Witnesses),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Schema check failure", []),
@@ -1483,6 +1493,44 @@ api_document_error_jsonld(Type, error(key_missing_required_field(Field,Document)
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:RequiredKeyFieldMissing',
                               'api:field' : Field,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(empty_key(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Empty key found in the submitted document", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmptyKey',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(key_missing_fields(Key_Type, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Missing required @fields array for key type ~q", [Key_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:KeyMissingFields',
+                              'api:key_type' : Key_Type,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(key_fields_not_an_array(Fields, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Key @fields value is not an array.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:KeyFieldsNotAnArray',
+                              'api:fields' : Fields,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(key_fields_is_empty(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Key @fields value is empty.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:KeyFieldsIsEmpty',
                               'api:document' : Document },
              'api:message' : Msg
             }.

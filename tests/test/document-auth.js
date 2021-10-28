@@ -24,6 +24,14 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
+    it('disallows Class with empty @id string (#647)', async function () {
+      const schema = { '@id': '', '@type': 'Class' }
+      const r = await document.insert(agent, docPath, { schema: schema })
+      document.verifyInsertFailure(r)
+      expect(r.body['api:error']['@type']).to.equal('api:EmptyKey')
+      expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+    })
+
     it('responds with expected @id values (object)', async function () {
       const id = util.randomString()
       await document
@@ -181,6 +189,129 @@ describe('document', function () {
       expect(r.body['api:error']['@type']).to.equal('api:UnexpectedArrayValue')
       expect(r.body['api:error']['api:value']).to.deep.equal(badValue)
       expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
+    })
+
+    it('fails for unexpected boolean values (#515)', async function () {
+      const type = util.randomString()
+      const expectedType = 'http://www.w3.org/2001/XMLSchema#string'
+      await document
+        .insert(agent, docPath, {
+          schema: { '@id': type, '@type': 'Class', s: expectedType },
+        })
+        .then(document.verifyInsertSuccess)
+      for (const value of [false, true]) {
+        const r = await document
+          .insert(agent, docPath, {
+            instance: { '@type': type, s: value },
+          })
+        document.verifyInsertFailure(r)
+        expect(r.body['api:error']['@type']).to.equal('api:UnexpectedBooleanValue')
+        expect(r.body['api:error']['api:value']).to.equal(value)
+        expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
+      }
+    })
+
+    it('does not stringify boolean literals (#723)', async function () {
+      const type = util.randomString()
+      const id = type + '/' + util.randomString()
+      const schema = {
+        '@id': type,
+        '@type': 'Class',
+        bfalse: 'xsd:boolean',
+        btrue: 'xsd:boolean',
+      }
+      await document
+        .insert(agent, docPath, {
+          schema: schema,
+        })
+        .then(document.verifyInsertSuccess)
+      await document
+        .insert(agent, docPath, {
+          instance: { '@type': type, '@id': id, bfalse: false, btrue: true },
+        })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, {
+          id: id,
+        })
+      expect(r.body['@id']).to.equal(id)
+      expect(r.body['@type']).to.equal(type)
+      expect(r.body.bfalse).to.equal(false)
+      expect(r.body.btrue).to.equal(true)
+    })
+
+    it('does not drop incoming links (#736)', async function () {
+      const type1 = util.randomString()
+      const type2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            {
+              '@type': 'Class',
+              '@id': type1,
+            },
+            {
+              '@type': 'Class',
+              '@id': type2,
+              // This class has a reference to the previous class.
+              id1: { '@type': 'Optional', '@class': type1 },
+            },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const doc1 = { '@type': type1, '@id': type1 + '/1' }
+      const doc2 = { '@type': type2, '@id': type2 + '/2', id1: doc1['@id'] }
+      await document
+        .insert(agent, docPath, { instance: [doc1, doc2] })
+        .then(document.verifyInsertSuccess)
+      await document
+        .replace(agent, docPath, { instance: doc1 })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { id: doc2['@id'] })
+        .then(document.verifyGetSuccess)
+      // Even though doc1 was replaced, doc2 should still have the same reference.
+      expect(r.body).to.deep.equal(doc2)
+    })
+
+    describe('key @fields', function () {
+      const schema = { '@type': 'Class' }
+      const keyTypes = [
+        'Hash',
+        'Lexical',
+      ]
+
+      beforeEach(function () {
+        schema['@id'] = util.randomString()
+      })
+
+      for (const keyType of keyTypes) {
+        it(`fails when @fields is missing for ${keyType}`, async function () {
+          schema['@key'] = { '@type': keyType }
+          const r = await document.insert(agent, docPath, { schema: schema })
+          document.verifyInsertFailure(r)
+          expect(r.body['api:error']['@type']).to.equal('api:KeyMissingFields')
+          expect(r.body['api:error']['api:key_type']).to.equal(keyType)
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+
+        it(`fails when @fields value is not an array for ${keyType}`, async function () {
+          schema['@key'] = { '@type': keyType, '@fields': { key: 'value' } }
+          const r = await document.insert(agent, docPath, { schema: schema })
+          document.verifyInsertFailure(r)
+          expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsNotAnArray')
+          expect(r.body['api:error']['api:fields']).to.deep.equal(schema['@key']['@fields'])
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+
+        it(`fails when @fields value is empty array for ${keyType} (#727)`, async function () {
+          schema['@key'] = { '@type': keyType, '@fields': [] }
+          const r = await document.insert(agent, docPath, { schema: schema })
+          document.verifyInsertFailure(r)
+          expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsIsEmpty')
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+      }
     })
   })
 })

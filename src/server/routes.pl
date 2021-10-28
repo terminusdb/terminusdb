@@ -170,7 +170,7 @@ message_handler(_Method, Request, _System_DB, _Auth) :-
 
     with_output_to(
         string(Payload),
-        json_write(current_output, Message, [])
+        json_write_dict(current_output, Message, [])
     ),
 
     json_log_info_formatted('~N[Message] ~s~n',[Payload]),
@@ -749,7 +749,7 @@ json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
         As_List = true
     ->  format(",~n")
     ;   true),
-    json_write(current_output, Document, JSON_Options),
+    json_write_dict(current_output, Document, JSON_Options),
 
     % only print the newline here if we're not printing as a list.
     % In the case of list printing, the separators handle the newlines.
