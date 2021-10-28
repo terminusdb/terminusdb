@@ -11,6 +11,8 @@ jobs:
   build-and-test:
 
     strategy:
+      # Run all jobs even when some jobs fail.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
