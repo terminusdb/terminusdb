@@ -57,6 +57,7 @@ function replace (agent, path, params) {
   const message = params.string('message', 'default_message')
   const schema = params.object('schema')
   const instance = params.object('instance')
+  const create = params.string('create', 'false')
   params.assertEmpty()
 
   assert(
@@ -77,6 +78,7 @@ function replace (agent, path, params) {
       graph_type: graphType,
       author: author,
       message: message,
+      create: create,
     })
     .send(schemaOrInstance)
 

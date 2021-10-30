@@ -274,6 +274,34 @@ describe('document', function () {
       expect(r.body).to.deep.equal(doc2)
     })
 
+    it('it inserts if does not exist (#705)', async function () {
+      const type1 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            {
+              '@type': 'Class',
+              '@id': type1,
+            },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const doc1 = { '@type': type1, '@id': type1 + '/1' }
+      await document
+        .replace(agent, docPath, {
+          instance: [
+            doc1,
+          ],
+          create: 'true',
+        })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { id: doc1['@id'] })
+        .then(document.verifyGetSuccess)
+      // We have inserted doc1
+      expect(r.body).to.deep.equal(doc1)
+    })
+
     describe('key @fields', function () {
       const schema = { '@type': 'Class' }
       const keyTypes = [
