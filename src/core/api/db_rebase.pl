@@ -548,7 +548,7 @@ test(rebase_conflicting_history_errors,
                  },
 
     with_transaction(Master_Context3,
-                     replace_document(Master_Context3,false,Document2),
+                     replace_document(Master_Context3,Document2),
                      _),
 
     branch_head_commit(Repository_Descriptor, "main", Failure_Commit_Uri),
@@ -564,7 +564,7 @@ test(rebase_conflicting_history_errors,
                  },
 
     with_transaction(Second_Context,
-                     replace_document(Second_Context,false,Document3),
+                     replace_document(Second_Context,Document3),
                      _),
 
     % rebase time!
