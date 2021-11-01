@@ -856,6 +856,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
         insert_documents,
         Request,
         (
+            check_content_type_json(Request),
+
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
@@ -920,6 +922,8 @@ document_handler(put, Path, Request, System_DB, Auth) :-
         replace_documents,
         Request,
         (
+            check_content_type_json(Request),
+
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),

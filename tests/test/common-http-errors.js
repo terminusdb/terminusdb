@@ -40,8 +40,8 @@ describe('common-http-errors', function () {
     const requestPairs = [
       ['post', '/api/ok'],
       ['put', '/api/ok'],
-      ['get', '/api/db/' + util.randomString + '/' + util.randomString()],
-      ['put', '/api/db/' + util.randomString + '/' + util.randomString()],
+      ['get', '/api/db/' + util.randomString() + '/' + util.randomString()],
+      ['put', '/api/db/' + util.randomString() + '/' + util.randomString()],
       ['get', '/api/optimize/'],
       ['put', '/api/optimize/'],
       ['get', '/api/reset/'],
@@ -57,7 +57,9 @@ describe('common-http-errors', function () {
 
   it('reports missing content type', async function () {
     const requestPairs = [
-      ['post', '/api/db/' + util.randomString + '/' + util.randomString()],
+      ['post', '/api/db/' + util.randomString() + '/' + util.randomString()],
+      ['post', '/api/document/' + util.randomString() + '/' + util.randomString()],
+      ['put', '/api/document/' + util.randomString() + '/' + util.randomString()],
       ['post', '/api/rebase/' + util.randomString()],
       ['post', '/api/woql'],
     ]
@@ -71,7 +73,7 @@ describe('common-http-errors', function () {
 
   it('reports invalid JSON', async function () {
     const requestPairs = [
-      ['post', '/api/db/' + util.randomString + '/' + util.randomString()],
+      ['post', '/api/db/' + util.randomString() + '/' + util.randomString()],
       ['post', '/api/rebase/' + util.randomString()],
       ['post', '/api/woql'],
     ]
