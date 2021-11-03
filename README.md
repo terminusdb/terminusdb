@@ -55,7 +55,7 @@ TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding]
 ## Community
 
 Come visit us [Discord](https://discord.gg/yTJKAma)
-or our [forum](https://discuss.terminusdb.com). We are also on [twitter](https://twitter.com/TerminusDB)
+or our [forum](https://discuss.terminusdb.com). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
 <img align="right" src="https://assets.terminusdb.com/images/TerminusDB%20color%20mascot.png" width="256px"/>
 
 ## Changes in this Version
