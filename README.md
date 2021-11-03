@@ -9,7 +9,7 @@
 
 TerminusDB is an open source knowledge graph and document store. Use it to build versioned data products.
 
-TerminusX is a cloud self-service data platform built on TerminusDB. Use it to collaborate with colleagues to quickly build a vibrant ecosystem of domain data products. TerminusX is in **public beta** and you can [signup now](https://dashboard.terminusdb.com/).
+TerminusX is a cloud self-service data platform built on TerminusDB. Use it to collaborate with colleagues to quickly build a vibrant ecosystem of domain data products. TerminusX is in **public beta** and you can [sign up now](https://dashboard.terminusdb.com/).
 
 TerminusDB provides a [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface) for building via the JSON exchange format. The convenience of documents with the power of a knowledge graph.
 
@@ -25,8 +25,8 @@ If you want to build: a knowledge graph of interconnected data products; data-in
 
 ## Quick Links
 
-| [Quick Start](https://terminusdb.com/docs/v10.0/#/terminusx/introduction)     | [Bootstrap TerminusDB](https://github.com/terminusdb/terminusdb-bootstrap)       | [TerminusX and TerminusDB Technical Docs](https://terminusdb.com/docs/v10.0/#/)         | [Python Client](https://github.com/terminusdb/terminusdb-client-python)         | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) |
-| :--- | :--- | :--- | :--- | :--- |
+| [TerminusDB and TerminusX Documentation](https://terminusdb.com/docs/) | [Bootstrap TerminusDB](https://github.com/terminusdb/terminusdb-bootstrap) | [Python Client](https://github.com/terminusdb/terminusdb-client-python) | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) |
+| :--- | :--- | :--- | :--- |
 
 <br/><br/>
 
@@ -34,7 +34,7 @@ If you want to build: a knowledge graph of interconnected data products; data-in
 
 <br/>
 
-TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](https://github.com/terminusdb/terminusdb/blob/dev/docs/whitepaper/terminusdb.pdf) approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible.
+TerminusDB is a lightweight, high-speed immutable database. Our [delta-encoding](https://assets.terminusdb.com/research/succinct-data-structures-and-delta-encoding.pdf) approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible.
 
 **Data collaboration is facilitated through [TerminusX](https://terminusdb.com)**, which is a cloud self-service data platform enabling you to build, deploy, execute, monitor, and share versioned data products.
 
@@ -74,8 +74,8 @@ http://www.apache.org/licenses/LICENSE-2.0
    <head>
    </head>
    <body>
-      <a href="https://terminusdb.com/community">
-         <img alt="TerminusX" src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/sign-up-now-button.png"
+      <a href="https://dashboard.terminusdb.com/">
+         <img alt="TerminusX" src="https://assets.terminusdb.com/images/sign-up-now-button.png"
          width="150" height="auto">
       </a>
    </body>
