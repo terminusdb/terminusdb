@@ -282,11 +282,14 @@ describe('document', function () {
             {
               '@type': 'Class',
               '@id': type1,
+              '@key' : { '@type' : 'Lexical',
+                         '@fields' : ['name'] },
+              'name' : 'xsd:string'
             },
           ],
         })
         .then(document.verifyInsertSuccess)
-      const doc1 = { '@type': type1, '@id': type1 + '/1' }
+      const doc1 = { '@type': type1, 'name': type1 + '/1' }
       await document
         .replace(agent, docPath, {
           instance: [
@@ -296,10 +299,10 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { id: doc1['@id'] })
+        .get(agent, docPath, { type: type1 })
         .then(document.verifyGetSuccess)
       // We have inserted doc1
-      expect(r.body).to.deep.equal(doc1)
+      expect(r.body.name == type1 + '/1' )
     })
 
     describe('key @fields', function () {
