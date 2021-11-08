@@ -532,8 +532,8 @@ json_type_to_woql_ast('Eval',JSON,WOQL,Path) :-
      } :< JSON,
     json_to_woql_arith(A, Arith, [expression
                                   |Path]),
-    json_value_to_woql_ast(X, V, [result
-                                  |Path]),
+    json_to_woql_arith(X, V, [result
+                              |Path]),
     WOQL = is(V,Arith).
 json_type_to_woql_ast('IsA',JSON,WOQL,Path) :-
     _{element : X,
@@ -839,8 +839,8 @@ json_type_to_woql_ast('Length',JSON,WOQL,Path) :-
     _{list : A,
       length : B
      } :< JSON,
-    json_list_value_to_woql_ast(A,WA,[list
-                                      |Path]),
+    json_value_to_woql_ast(A,WA,[list
+                                 |Path]),
     json_value_to_woql_ast(B,WB,[length
                                  |Path]),
     WOQL = length(WA,WB).
