@@ -19,11 +19,13 @@
               insert_document/3,
               replace_document/2,
               replace_document/3,
+              replace_document/4,
               nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,
+              replace_schema_document/4,
               nuke_schema_documents/1,
               database_prefixes/2,
               insert_context_document/2,
@@ -2019,28 +2021,33 @@ run_insert_document(Desc, Commit, Document, ID) :-
         _).
 
 replace_document(DB, Document) :-
-    replace_document(DB, Document, _).
+    replace_document(DB, Document, false, _).
 
-replace_document(Transaction, Document, Id) :-
+replace_document(DB, Document, Id) :-
+    replace_document(DB, Document, false, Id).
+
+replace_document(Transaction, Document, Create, Id) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
     get_dict('@id', Elaborated, Id),
     catch(delete_document(Transaction, false, Id),
           error(document_does_not_exist(_),_),
-          throw(error(document_does_not_exist(Id, Document),_))),
+          (   Create = true
+          ->  true
+          ;   throw(error(document_does_not_exist(Id, Document),_)))),
     insert_document_expanded(Transaction, Elaborated, Id).
-replace_document(Query_Context, Document, Id) :-
+replace_document(Query_Context, Document, Create, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Id).
+    replace_document(TO, Document, Create, Id).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        replace_document(Context, Document, Id),
+        replace_document(Context, Document, false, Id),
         _).
 
 % Frames
@@ -2312,15 +2319,20 @@ delete_schema_document(Query_Context, Id) :-
     delete_schema_document(TO, Id).
 
 replace_schema_document(DB, Document) :-
-    replace_schema_document(DB, Document, _Id).
+    replace_schema_document(DB, Document, false, _Id).
 
-replace_schema_document(Transaction, Document, Id) :-
+replace_schema_document(DB, Document, Id) :-
+    replace_schema_document(DB, Document, false, Id).
+
+replace_schema_document(Transaction, Document, Create, Id) :-
     is_transaction(Transaction),
     !,
     (   get_dict('@id', Document, Id)
     ->  catch(delete_schema_document(Transaction, Id),
               error(document_does_not_exist(_),_),
-              throw(error(document_does_not_exist(Id, Document),_))),
+              (   Create = true
+              ->  true
+              ;   throw(error(document_does_not_exist(Id, Document),_)))),
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
@@ -2328,11 +2340,11 @@ replace_schema_document(Transaction, Document, Id) :-
         Id='@context'
     ;   throw(error(no_id_in_document(Document),_))
     ).
-replace_schema_document(Query_Context, Document, Id) :-
+replace_schema_document(Query_Context, Document, Create, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_schema_document(TO, Document, Id).
+    replace_schema_document(TO, Document, Create, Id).
 
 write_schema_string(Schema, Desc) :-
     create_context(Desc, commit{author: "a", message: "m"}, Context),

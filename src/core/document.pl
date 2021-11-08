@@ -35,11 +35,13 @@
               insert_document/3,
               replace_document/2,
               replace_document/3,
+              replace_document/4,
               nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,
+              replace_schema_document/4,
               nuke_schema_documents/1,
 
               % instance.pl

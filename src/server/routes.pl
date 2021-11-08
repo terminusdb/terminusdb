@@ -928,6 +928,10 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Search = []),
 
+            (   memberchk(create=true, Search)
+            ->  Create = true
+            ;   Create = false),
+
             (   memberchk(graph_type=Graph_Type, Search)
             ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
                           error(unknown_graph_type(Graph_Type),_))
@@ -940,7 +944,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 
             http_read_data(Request, Data, [to(string)]),
             open_string(Data, Stream),
-            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Ids),
+            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Create, Ids),
 
             write_cors_headers(Request),
             reply_json(Ids),

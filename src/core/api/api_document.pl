@@ -6,7 +6,7 @@
               api_insert_documents/9,
               api_delete_documents/7,
               api_delete_document/7,
-              api_replace_documents/8,
+              api_replace_documents/9,
               api_nuke_documents/6
           ]).
 
@@ -297,12 +297,12 @@ api_nuke_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message) :-
                      api_nuke_documents_(Schema_Or_Instance, Transaction),
                     _).
 
-api_replace_document_(instance, Transaction, Document, Id):-
-    replace_document(Transaction, Document, Id).
-api_replace_document_(schema, Transaction, Document, Id):-
-    replace_schema_document(Transaction, Document, Id).
+api_replace_document_(instance, Transaction, Document, Create, Id):-
+    replace_document(Transaction, Document, Create, Id).
+api_replace_document_(schema, Transaction, Document, Create, Id):-
+    replace_schema_document(Transaction, Document, Create, Id).
 
-api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Ids) :-
+api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Create, Ids) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -328,7 +328,10 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
                                      call_catch_document_mutation(
                                          Document,
                                          api_replace_document_(Schema_Or_Instance,
-                                                               Transaction,Document, Id))
+                                                               Transaction,
+                                                               Document,
+                                                               Create,
+                                                               Id))
                                  ),
                                  Ids),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
@@ -448,7 +451,7 @@ test(replace_objects_with_stream,
 { "@type": "City",
   "@id" : "City/Pretoria",
   "name" : "Tshwane" }', Stream),
-    api_replace_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream, Ids),
+    api_replace_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream, false, Ids),
 
     Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
 
