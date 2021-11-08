@@ -384,6 +384,35 @@ json_type_to_woql_ast('DeleteDocument',JSON,WOQL,Path) :-
                                 [identifier|Path],
                                 Doc), _)),
     WOQL = delete_document(ID).
+json_type_to_woql_ast('ReadObject',JSON,WOQL,Path) :-
+    _{identifier : Doc_ID,
+      document : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc_ID, WID, [identifier
+                                         |Path]),
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    WOQL = get_document(WID,WDoc).
+json_type_to_woql_ast('UpdateObject',JSON,WOQL,Path) :-
+    _{document : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    WOQL = update_document(WDoc).
+json_type_to_woql_ast('DeleteObject',JSON,WOQL,Path) :-
+    _{identifier : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc,WDoc,[identifier|Path]),
+    do_or_die(
+        (   _{'@id' : ID} :< WDoc
+        ->  true
+        ;   atom(WDoc)
+        ->  ID = Doc
+        ),
+        error(woql_syntax_error(JSON,
+                                [identifier|Path],
+                                Doc), _)),
+    WOQL = delete_document(ID).
 json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
