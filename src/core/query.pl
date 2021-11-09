@@ -71,6 +71,7 @@
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,
+              not_literal/1,
 
               % path.pl
               compile_pattern/4,

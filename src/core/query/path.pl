@@ -3,14 +3,17 @@
               calculate_path_solutions/6
           ]).
 
+:- use_module(woql_compile, [not_literal/1]).
 :- use_module(core(util)).
 :- use_module(core(triple)).
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),
+    not_literal(X),
     xrdf(Transaction_Object.instance_objects,X,P,Y).
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(schema,Types),
+    not_literal(X),
     xrdf(Transaction_Object.schema_objects, X, P, Y).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-
@@ -45,6 +48,14 @@ run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
 run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     run_pattern_forward(P,X,Y,Path,Path-[],Filter,Transaction_Object).
 
+run_pattern_forward(n,X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
+    make_edge(X,_P,Y,Edge),
+    in_open_set(Edge,Open_Set),
+    !,
+    fail.
+run_pattern_forward(n,X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    make_edge(X,P,Y,Edge),
+    hop(Filter,Y,P,X,Transaction_Object).
 run_pattern_forward(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     in_open_set(Edge,Open_Set),
@@ -53,6 +64,14 @@ run_pattern_forward(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
 run_pattern_forward(n(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     hop(Filter,Y,P,X,Transaction_Object).
+run_pattern_forward(p,X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
+    make_edge(X,_P,Y,Edge),
+    in_open_set(Edge,Open_Set),
+    !,
+    fail.
+run_pattern_forward(p,X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    make_edge(X,P,Y,Edge),
+    hop(Filter,X,P,Y,Transaction_Object).
 run_pattern_forward(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     in_open_set(Edge,Open_Set),
@@ -85,6 +104,14 @@ run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) 
     run_pattern_forward(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object),
     run_pattern_n_m_forward(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
 
+run_pattern_backward(n,X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
+    make_edge(X,_P,Y,Edge),
+    in_open_set(Edge,Open_Set),
+    !,
+    fail.
+run_pattern_backward(n,X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    make_edge(X,P,Y,Edge),
+    hop(Filter,Y,P,X,Transaction_Object).
 run_pattern_backward(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     in_open_set(Edge,Open_Set),
@@ -93,6 +120,14 @@ run_pattern_backward(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
 run_pattern_backward(n(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     hop(Filter,Y,P,X,Transaction_Object).
+run_pattern_backward(p,X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
+    make_edge(X,_P,Y,Edge),
+    in_open_set(Edge,Open_Set),
+    !,
+    fail.
+run_pattern_backward(p,X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    make_edge(X,P,Y,Edge),
+    hop(Filter,X,P,Y,Transaction_Object).
 run_pattern_backward(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     in_open_set(Edge,Open_Set),
@@ -132,6 +167,8 @@ run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
  *
  * foo>,<baz,bar>
  */
+compile_pattern(n, n, _Prefixes, _Transaction_Object).
+compile_pattern(p, p, _Prefixes, _Transaction_Object).
 compile_pattern(n(Pred), n(Pred_Expanded), Prefixes, _Transaction_Object) :-
     prefixed_to_property(Pred,Prefixes,Pred_Expanded).
 compile_pattern(p(Pred), p(Pred_Expanded), Prefixes, _Transaction_Object) :-

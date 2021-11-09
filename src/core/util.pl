@@ -130,6 +130,7 @@
               input_to_integer/2,
               duplicates/2,
               has_duplicates/2,
+              index_list/2,
 
               % speculative_parse.pl
               %guess_date/2,
