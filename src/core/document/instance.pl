@@ -298,28 +298,111 @@ subject_changed(Validation_Object, Subject) :-
 
 subject_inserted(Validation_Object, Subject) :-
     database_instance(Validation_Object, Instance),
-    xrdf_added(Instance, Subject,rdf:type,_),
-    \+ xrdf_deleted(Instance, Subject,_,_),
-    !.
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+
+    triplestore:pre_convert_node(Subject,Subject_Element),
+
+    (   ground(Subject_Element)
+    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
+    ;   true),
+
+    terminus_store:id_triple_addition(Layer, S_Id,_,_),
+    \+ terminus_store:id_triple_removal(Layer, S_Id,_,_),
+    !,
+
+    (   ground(Subject)
+    ->  true
+    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
+        triplestore:post_convert_node(Subject_Candidate, Subject)
+    ).
 
 subject_updated(Validation_Object, Subject) :-
     database_instance(Validation_Object, Instance),
-    distinct(Subject,(xrdf_deleted(Instance, Subject,_,_),
-                      xrdf_added(Instance, Subject,_,_))).
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+
+    triplestore:pre_convert_node(Subject,Subject_Element),
+
+    (   ground(Subject_Element)
+    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
+    ;   true),
+
+    distinct(S_Id,(terminus_store:id_triple_removal(Layer, S_Id,_,_),
+                   terminus_store:id_triple_addition(Layer, S_Id,_,_))),
+
+    (   ground(Subject)
+    ->  true
+    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
+        triplestore:post_convert_node(Subject_Candidate, Subject)
+    ).
 
 subject_deleted(Validation_Object, Subject) :-
     database_instance(Validation_Object, Instance),
     xrdf_deleted(Instance, Subject,rdf:type,_).
 
-subject_predicate_changed(Validation_Object, Subject,Predicate) :-
+subject_predicate_changed(Validation_Object, Subject, Predicate) :-
     database_instance(Validation_Object, Instance),
-    distinct(Subject-Predicate,(   xrdf_deleted(Instance, Subject,Predicate,_)
-                               ;   xrdf_added(Instance, Subject,Predicate,_))).
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
 
-subject_predicate_updated(Validation_Object, Subject,Predicate) :-
+    triplestore:pre_convert_node(Subject,Subject_Element),
+    triplestore:pre_convert_node(Predicate,Predicate_Element),
+
+    (   ground(Subject_Element)
+    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
+    ;   true),
+
+    (   ground(Predicate_Element)
+    ->  terminus_store:predicate_id(Layer, Predicate_Element, P_Id)
+    ;   true),
+
+    distinct(S_Id-P_Id,(   terminus_store:id_triple_removal(Layer, S_Id, P_Id,_)
+                       ;   terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))),
+
+    (   ground(Subject)
+    ->  true
+    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
+        triplestore:post_convert_node(Subject_Candidate, Subject)
+    ),
+
+    (   ground(Predicate)
+    ->  true
+    ;   terminus_store:predicate_id(Layer, Predicate_Candidate, P_Id),
+        triplestore:post_convert_node(Predicate_Candidate, Predicate)
+    ).
+
+
+subject_predicate_updated(Validation_Object, Subject, Predicate) :-
     database_instance(Validation_Object, Instance),
-    distinct(Subject-Predicate,(xrdf_deleted(Instance, Subject,Predicate,_),
-                                xrdf_added(Instance, Subject,Predicate,_))).
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+
+    triplestore:pre_convert_node(Subject,Subject_Element),
+    triplestore:pre_convert_node(Predicate,Predicate_Element),
+
+    (   ground(Subject_Element)
+    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
+    ;   true),
+
+    (   ground(Predicate_Element)
+    ->  terminus_store:predicate_id(Layer, Predicate_Element, P_Id)
+    ;   true),
+
+    distinct(S_Id-P_Id,(terminus_store:id_triple_removal(Layer, S_Id, P_Id,_),
+                        terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))),
+
+    (   ground(Subject)
+    ->  true
+    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
+        triplestore:post_convert_node(Subject_Candidate, Subject)
+    ),
+
+    (   ground(Predicate)
+    ->  true
+    ;   terminus_store:predicate_id(Layer, Predicate_Candidate, P_Id),
+        triplestore:post_convert_node(Predicate_Candidate, Predicate)
+    ).
 
 refute_key(Validation_Object, Subject,Predicate,Class,Witness) :-
     key_descriptor(Validation_Object, Class,Desc),
@@ -551,7 +634,7 @@ refute_basetype_elt(L,T,R) :-
     ->  R = json{
                 '@type' : 'vio:DataTypeSubsumptionViolation',
                 'vio:message' : 'Could not subsume type1:required_type with type2:found_type',
-			    'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : T},
+o			    'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : T},
 			    'vio:parent_type' : json{ '@type' : 'xsd:string', '@value' : T2}
             }
     ;   refute_basetype_elt_(T,L,R)
