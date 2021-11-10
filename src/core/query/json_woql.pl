@@ -896,13 +896,17 @@ json_to_woql_path_pattern(JSON,_Pattern,Path) :-
     throw(error(woql_syntax_error(JSON,Path,JSON), _)).
 
 json_type_to_woql_path_pattern('PathPredicate',JSON,Pattern,_Path) :-
-    _{predicate : Node} :< JSON,
-    prefix_split(Node,WNode),
-    Pattern = p(WNode).
+    (   _{predicate : Node} :< JSON
+    ->  prefix_split(Node,WNode),
+        Pattern = p(WNode)
+    ;   Pattern = p
+    ).
 json_type_to_woql_path_pattern('InversePathPredicate',JSON,Pattern,_Path) :-
-    _{predicate : Node} :< JSON,
-    prefix_split(Node,WNode),
-    Pattern = n(WNode).
+    (   _{predicate : Node} :< JSON
+    ->  prefix_split(Node,WNode),
+        Pattern = n(WNode)
+    ;   Pattern = n
+    ).
 json_type_to_woql_path_pattern('PathSequence',JSON,Pattern,Path) :-
     _{sequence : List} :< JSON,
     json_list_to_woql_path_pattern(List,WList,[sequence|Path]),

@@ -3760,6 +3760,82 @@ test(negative_path_pattern, [
     once(ask(Descriptor,
              path(a, plus((p(b),n(b))), f, _Path))).
 
+test(any_path_pattern, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(d,b,c),
+           insert(d,b,e),
+           insert(f,b,e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+    once(ask(Descriptor,
+             path(a, plus((p,n)), f, _Path))).
+
+test(any_two_path_pattern, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,first,c),
+           insert(a,second,c)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+    findall(
+        Path,
+        ask(Descriptor,
+            path(a, p, c, Path)),
+        Paths),
+    length(Paths,2).
+
+test(list_path_pattern, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,first,alpha),
+           insert(a,rest,c),
+           insert(c,first,beta),
+           insert(c,rest,d),
+           insert(d,first,delta),
+           insert(d,rest,nil)
+          ),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+
+    query_response:run_context_ast_jsonld_response(Context, AST, _),
+    findall(
+        Path0,
+        ask(Descriptor,
+            path(a, (star(p),p(first)), alpha, Path0)),
+        Paths0),
+    length(Paths0,1),
+    findall(
+        Path1,
+        ask(Descriptor,
+            path(a, (star(p),p(first)), delta, Path1)),
+        Paths1),
+    length(Paths1,1).
+
+
 test(using_sequence, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),

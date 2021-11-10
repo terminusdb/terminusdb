@@ -128,10 +128,12 @@ run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
 /*
  * patterns have the following syntax:
  *
- * P,Q,R := p(P) | n(P) | P,Q | P;Q | plus(P) | times(P,N,M)
+ * P,Q,R := p | n | p(P) | n(P) | P,Q | P;Q | plus(P) | star(P) | times(P,N,M)
  *
  * foo>,<baz,bar>
  */
+compile_pattern(n, n(_), _Prefixes, _Transaction_Object).
+compile_pattern(p, p(_), _Prefixes, _Transaction_Object).
 compile_pattern(n(Pred), n(Pred_Expanded), Prefixes, _Transaction_Object) :-
     prefixed_to_property(Pred,Prefixes,Pred_Expanded).
 compile_pattern(p(Pred), p(Pred_Expanded), Prefixes, _Transaction_Object) :-
