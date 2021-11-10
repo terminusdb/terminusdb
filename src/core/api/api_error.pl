@@ -1505,6 +1505,17 @@ api_document_error_jsonld(Type, error(empty_key(Document),_),JSON) :-
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(bad_field_value(Field, Value, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unexpected value ~q found in the field ~q of the submitted document", [Value, Field]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadFieldValue',
+                              'api:field' : Field,
+                              'api:value' : Value,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(key_missing_fields(Key_Type, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Missing required @fields array for key type ~q", [Key_Type]),

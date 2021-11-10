@@ -85,11 +85,31 @@ function replace (agent, path, params) {
   return request
 }
 
+function del (agent, path, params) {
+  params = new Params(params)
+  const query = {}
+  query.author = params.string('author', 'default_author')
+  query.message = params.string('message', 'default_message')
+  query.graph_type = params.string('graph_type')
+  query.id = params.string('id')
+  params.assertEmpty()
+
+  const request = agent
+    .delete(path)
+    .query(query)
+
+  return request
+}
+
 // Verify that, if a request includes an `@id`, that value is the suffix of the
 // value in the response.
 function verifyId (requestId, responseId) {
   if (requestId) {
-    expect(responseId).to.match(new RegExp(requestId + '$'))
+    // The request ID may contain regular expression symbols, so we escape them
+    // according to:
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#escaping
+    requestId = requestId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'
+    expect(responseId).to.match(new RegExp(requestId))
   }
 }
 
@@ -130,12 +150,19 @@ function verifyReplaceFailure (r) {
   return r
 }
 
+function verifyDelSuccess (r) {
+  expect(r.status).to.equal(200)
+  return r
+}
+
 module.exports = {
   get,
   insert,
   replace,
+  del,
   verifyGetSuccess,
   verifyInsertSuccess,
   verifyInsertFailure,
   verifyReplaceFailure,
+  verifyDelSuccess,
 }
