@@ -454,8 +454,17 @@ refute_subject_deletion_(Validation_Object, Subject,Witness) :-
 
 refute_subject_type_change(Validation_Object,Subject,Witness) :-
     database_instance(Validation_Object, Instance),
-    xrdf_added(Instance, Subject,rdf:type,Old_Type),
-    xrdf_deleted(Instance, Subject,rdf:type,New_Type),
+    member(G,Instance),
+    read_write_obj_reader(G, Layer),
+
+    terminus_store:subject_id(Layer,Subject, S_Id),
+    global_prefix_expand(rdf:type,Rdf_Type),
+    terminus_store:predicate_id(Layer,Rdf_Type, Rdf_Type_Id),
+    terminus_store:id_triple_removal(Layer,S_Id,Rdf_Type_Id,Old_Type_Id),
+    terminus_store:id_triple_addition(Layer,S_Id,Rdf_Type_Id,New_Type_Id),
+
+    terminus_store:object_id(Layer,Old_Type_Id,node(Old_Type)),
+    terminus_store:object_id(Layer,New_Type_Id,node(New_Type)),
     Witness = json{ '@type' : subject_type_has_changed,
                     old_type : Old_Type,
                     new_type : New_Type}.
