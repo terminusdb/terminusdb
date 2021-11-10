@@ -172,7 +172,7 @@ context_prefix_expand(K,Context,Key) :-
         ->  atom_concat(Expanded,Suffix,Key)
         ;   throw(error(key_has_unknown_prefix(K),_)))
     %   Keyword
-    ;   has_at(K)
+    ;   is_at(K)
     ->  K = Key
     %   This is a value expansion
     ;   get_dict(K,Context,Obj),
@@ -192,10 +192,11 @@ context_prefix_expand(K,Context,Key) :-
 prefix_expand(K,_Context,K) :-
     var(K),
     !.
+prefix_expand('',_,_) :-
+    throw(error(empty_key, _)).
+prefix_expand("",_,_) :-
+    throw(error(empty_key, _)).
 prefix_expand(K,Context,Key) :-
-    do_or_die(
-        \+ memberchk(K, ['', ""]),
-        error(empty_key, _)),
     %   Is already qualified
     (   uri_has_protocol(K)
     ->  K = Key
@@ -205,7 +206,7 @@ prefix_expand(K,Context,Key) :-
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
         ;   throw(error(key_has_unknown_prefix(K), _)))
-    ;   has_at(K)
+    ;   is_at(K)
     ->  K = Key
     ;   (   get_dict('@base', Context, Base)
         ->  true

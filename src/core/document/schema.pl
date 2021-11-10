@@ -57,6 +57,7 @@ is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_foreign(Schema, Class).
 
+:- table is_schema_foreign/2 as private.
 is_schema_foreign(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Foreign').
 
@@ -64,6 +65,7 @@ is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_tagged_union(Schema, Class).
 
+:- table is_schema_tagged_union/2 as private.
 is_schema_tagged_union(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
 
@@ -82,6 +84,7 @@ is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_simple_class(Schema, Class).
 
+:- table is_schema_simple_class/2 as private.
 is_schema_simple_class(Schema, Class) :-
     xrdf(Schema,Class, rdf:type, C),
     is_system_class(C).
