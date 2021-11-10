@@ -634,7 +634,7 @@ refute_basetype_elt(L,T,R) :-
     ->  R = json{
                 '@type' : 'vio:DataTypeSubsumptionViolation',
                 'vio:message' : 'Could not subsume type1:required_type with type2:found_type',
-o			    'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : T},
+			    'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : T},
 			    'vio:parent_type' : json{ '@type' : 'xsd:string', '@value' : T2}
             }
     ;   refute_basetype_elt_(T,L,R)
