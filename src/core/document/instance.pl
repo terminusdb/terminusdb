@@ -106,43 +106,60 @@ member_list(Validation_Object, O, L) :-
     database_instance(Validation_Object, Instance),
     graph_member_list(Instance, O, L).
 
-card_count(Validation_Object,S,P,O,N) :-
+card_count(Validation_Object,S,P,N) :-
     % choose as existential anything free
     database_instance(Validation_Object, Instance),
-    (   aggregate(count,[S,P,O]^xrdf(Instance,S,P,O),N)
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+
+    triplestore:pre_convert_node(S,Subject),
+    triplestore:pre_convert_node(P,Predicate),
+
+    (   (   ground(Subject)
+        ->  terminus_store:subject_id(Layer, Subject, S_Id)
+        ;   true),
+
+        (   ground(Predicate)
+        ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
+        ;   true),
+
+        aggregate(count,[S_Id,P_Id,O_Id]^(terminus_store:id_triple(Layer,S_Id,P_Id,O_Id)),N)
+
     ->  true
-    ;   N = 0).
+    % If no triples, or either P or S is missing from the dictionary then it is empty.
+    ;   N = 0
+    ).
 
 refute_cardinality_(class(C),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object, S,P,_,1),
+    \+ card_count(Validation_Object, S,P,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(base_class(C),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object, S,P,_,1),
+    \+ card_count(Validation_Object, S,P,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(enum(C,_),Validation_Object, S,P,Witness) :-
-    \+ card_count(Validation_Object, S,P,_,1),
+    \+ card_count(Validation_Object, S,P,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(tagged_union(C,_),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object,S,P,_,1),
+    \+ card_count(Validation_Object,S,P,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: S,
                        class: C,
                        predicate: P
                      }.
 refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object,S,P,_,0),
+    \+ card_count(Validation_Object,S,P,0),
     Witness = witness{ '@type': instance_not_cardinality_zero,
                        instance: S,
                        class: C,
@@ -157,14 +174,14 @@ refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
     fail.
 refute_cardinality_(array,Validation_Object,S,P,Witness) :-
     % a property inside an array element
-    \+ card_count(Validation_Object,S,P,_,1),
+    \+ card_count(Validation_Object,S,P,1),
     Witness = witness{ '@type': array_predicate_not_cardinality_one,
                        instance: S,
                        predicate: P
                      }.
 refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
     % a property whose value is a list
-    \+ card_count(Validation_Object,S,P,_,1),
+    \+ card_count(Validation_Object,S,P,1),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: S,
                        class: C,
@@ -172,13 +189,13 @@ refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
                      }.
 refute_cardinality_(list,Validation_Object,S,P,Witness) :-
     % a property inside a list cell
-    \+ card_count(Validation_Object,S,P,_,1),
+    \+ card_count(Validation_Object,S,P,1),
     Witness = witness{ '@type': list_predicate_not_cardinality_one,
                        instance: S,
                        predicate: P
                      }.
 refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
-    card_count(Validation_Object,S,P,_,N),
+    card_count(Validation_Object,S,P,N),
     (   \+ memberchk(N, [0,1])
     ->  range_term_list(Validation_Object,S,P,L),
         Witness = witness{ '@type': instance_has_wrong_cardinality,
@@ -190,7 +207,7 @@ refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
                          }
     ).
 refute_cardinality_(cardinality(C,N),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object,S,P,_,N),
+    \+ card_count(Validation_Object,S,P,N),
     range_term_list(Validation_Object,S,P,L),
     Witness = witness{ '@type': instance_has_wrong_cardinality,
                        class: C,
@@ -261,8 +278,23 @@ refute_built_in_value(_Validation_Object, rdfs:label,O@L,Witness) :-
 
 subject_changed(Validation_Object, Subject) :-
     database_instance(Validation_Object, Instance),
-    distinct(Subject,(   xrdf_deleted(Instance, Subject,_,_)
-                     ;   xrdf_added(Instance, Subject,_,_))).
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+
+    triplestore:pre_convert_node(Subject,Subject_Element),
+
+    (   ground(Subject_Element)
+    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
+    ;   true),
+
+    distinct(S_Id,(   terminus_store:id_triple_removal(Layer, S_Id,_,_)
+                  ;   terminus_store:id_triple_addition(Layer, S_Id,_,_))),
+
+    (   ground(Subject)
+    ->  true
+    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
+        triplestore:post_convert_node(Subject_Candidate, Subject)
+    ).
 
 subject_inserted(Validation_Object, Subject) :-
     database_instance(Validation_Object, Instance),
