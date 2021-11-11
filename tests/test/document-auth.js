@@ -24,13 +24,79 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
-    it('disallows Class with empty @id string (#647)', async function () {
-      const schema = { '@id': '', '@type': 'Class' }
-      const r = await document
-        .insert(agent, docPath, { schema: schema })
-        .then(document.verifyInsertFailure)
-      expect(r.body['api:error']['@type']).to.equal('api:EmptyKey')
-      expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+    describe('fails on bad schema @id (#647)', function () {
+      const identifiers = [
+        '',
+        13,
+        {},
+        ['b'],
+        false,
+        true,
+        null,
+      ]
+      for (const id of identifiers) {
+        it(JSON.stringify(id), async function () {
+          const schema = { '@id': id, '@type': 'Class' }
+          const r = await document
+            .insert(agent, docPath, { schema: schema })
+            .then(document.verifyInsertFailure)
+          expect(r.body['api:error']['@type']).to.equal('api:BadFieldValue')
+          expect(r.body['api:error']['api:field']).to.equal('@id')
+          expect(r.body['api:error']['api:value']).to.deep.equal(id)
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+      }
+    })
+
+    describe('fails on bad schema @type', function () {
+      const types = [
+        '',
+        13,
+        {},
+        ['b'],
+        false,
+        true,
+        null,
+      ]
+      for (const type of types) {
+        it(JSON.stringify(type), async function () {
+          const schema = { '@id': util.randomString(), '@type': type }
+          const r = await document
+            .insert(agent, docPath, { schema: schema })
+            .then(document.verifyInsertFailure)
+          expect(r.body['api:error']['@type']).to.equal('api:BadFieldValue')
+          expect(r.body['api:error']['api:field']).to.equal('@type')
+          expect(r.body['api:error']['api:value']).to.deep.equal(type)
+          expect(r.body['api:error']['api:document']).to.deep.equal(schema)
+        })
+      }
+    })
+
+    describe('handles strange schema @id', function () {
+      const keys = [
+        'false',
+        'true',
+        'null',
+        '8',
+        '[]',
+        '{}',
+        '/',
+      ]
+      for (const id of keys) {
+        it(id, async function () {
+          const schema = { '@id': id, '@type': 'Class' }
+          await document
+            .insert(agent, docPath, { schema: schema })
+            .then(document.verifyInsertSuccess)
+          const r = await document
+            .get(agent, docPath, { graph_type: 'schema', id: schema['@id'] })
+            .then(document.verifyGetSuccess)
+          await document
+            .del(agent, docPath, { graph_type: 'schema', id: id })
+            .then(document.verifyDelSuccess)
+          expect(r.body).to.deep.equal(schema)
+        })
+      }
     })
 
     it('responds with expected @id values (object)', async function () {

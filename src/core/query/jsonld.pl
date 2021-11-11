@@ -12,7 +12,8 @@
               compress_dict_uri/3,
               compress_uri/4,
               context_prefix_expand/3,
-              has_at/1
+              has_at/1,
+              json_dict_create/2
           ]).
 
 /** <module> JSON-LD
@@ -506,3 +507,25 @@ get_key_document(Key,Ctx,Document,Value) :-
     %   operator which uses an expanded canonical form
     %   modulo adornments (like '@context').
     ;   Value1 = Value).
+
+/*
+ * Convert JSON literals (null, false, true) to strings when found in the values
+ * of keywords.
+ */
+stringify_json_literals(Key-Val_In, Key-Val_Out) :-
+    is_at(Key),
+    atom(Val_In),
+    memberchk(Val_In, [null, false, true]),
+    !,
+    atom_string(Val_In, Val_Out).
+stringify_json_literals(Key-Val, Key-Val).
+
+/*
+ * Build a JSON dict safely.
+ *
+ * Use this instead of dict_create to avoid problems converting between atoms
+ * and strings.
+ */
+json_dict_create(JSON, Pairs) :-
+    maplist(stringify_json_literals, Pairs, Pairs_Fixed),
+    dict_create(JSON, json, Pairs_Fixed).

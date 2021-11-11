@@ -162,6 +162,7 @@ known_document_error(subdocument_key_missing).
 known_document_error(key_missing_required_field(_)).
 known_document_error(document_key_not_object(_)).
 known_document_error(empty_key).
+known_document_error(bad_field_value(_, _)).
 known_document_error(key_missing_fields(_)).
 known_document_error(key_fields_not_an_array(_)).
 known_document_error(key_fields_is_empty).
