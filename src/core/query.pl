@@ -40,6 +40,7 @@
               compress_dict_uri/3,
               has_at/1,
               compress_uri/4,
+              json_dict_create/2,
 
               % json_woql.pl
               woql_context/1,

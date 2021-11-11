@@ -491,7 +491,7 @@ type_context(DB,Type,Prefixes,Context) :-
     % eliminate duplicates
     sort(Edges,Sorted_Edges),
     catch(
-        dict_create(Context,json,Sorted_Edges),
+        json_dict_create(Context,Sorted_Edges),
         error(duplicate_key(P),_),
         throw(error(violation_of_diamond_property(Type,P)))
     ).
@@ -521,6 +521,20 @@ json_elaborate(DB,JSON,Elaborated) :-
 json_elaborate(DB,JSON,Context,Elaborated) :-
     json_elaborate_(DB,JSON,Context,Elaborated),
     json_assign_ids(DB,Context,Elaborated).
+
+/*
+ * Check for JSON values that should not found in a string field.
+ */
+check_json_string(_, Val) :-
+    atom(Val),
+    \+ memberchk(Val, ['', null, false, true]),
+    !.
+check_json_string(_, Val) :-
+    string(Val),
+    Val \= "",
+    !.
+check_json_string(Field, Val) :-
+    throw(error(bad_field_value(Field, Val), _)).
 
 json_elaborate_(DB,JSON,Context,Result) :-
     is_dict(JSON),
@@ -1108,6 +1122,7 @@ json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
 
 json_schema_elaborate(JSON,Context,Path,Elaborated) :-
     get_dict('@type', JSON, Type),
+    check_json_string('@type', Type),
     compress_system_uri(Type,Context,Type_Min),
     do_or_die(
         json_schema_elaborate_(Type_Min,JSON,Context,Path,Elaborated),
@@ -1550,10 +1565,10 @@ get_document(DB, Prefixes, Compress, Unfold, Id, Document) :-
     (   Compress = true
     ->  compress_dict_uri(Id_Ex, Prefixes, Id_comp),
         compress_schema_uri(Class, Prefixes, Class_comp),
-        dict_create(Document,json,['@id'-Id_comp,
+        json_dict_create(Document,['@id'-Id_comp,
                                    '@type'-Class_comp
                                    |Data])
-    ;   dict_create(Document,json,['@id'-Id_Ex,
+    ;   json_dict_create(Document,['@id'-Id_Ex,
                                    '@type'-Class
                                    |Data])).
 
@@ -1729,7 +1744,7 @@ id_schema_json(Schema, Prefixes, Id, JSON) :-
     (   atom_concat('sys:',Small_Class, Class_Compressed)
     ->  true
     ;   Small_Class = Class_Compressed),
-    dict_create(JSON,json,['@id'-Id_Compressed,
+    json_dict_create(JSON,['@id'-Id_Compressed,
                            '@type'-Small_Class
                            |Data]).
 
@@ -2144,7 +2159,7 @@ class_frame(Transaction, Class, Frame) :-
 
     sort(Pairs5, Sorted_Pairs),
     catch(
-        dict_create(Frame,json,Sorted_Pairs),
+        json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
@@ -2170,7 +2185,7 @@ class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
         Pairs),
     sort(Pairs, Sorted_Pairs),
     catch(
-        dict_create(Frame,json,Sorted_Pairs),
+        json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
@@ -2222,7 +2237,7 @@ insert_schema_document(Transaction, Document) :-
     !,
 
     (   get_dict('@id', Document, Id)
-    ->  true
+    ->  check_json_string('@id', Id)
     ;   throw(error(no_id_in_document(Document), _))
     ),
     database_schema(Transaction, Schema),
