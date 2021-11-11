@@ -48,8 +48,12 @@
 :- use_module(schema).
 
 :- use_module(library(pcre)).
+
+% performance
+:- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
 
@@ -350,9 +354,12 @@ json_idgen(JSON,DB,Context,Path,ID_Ex) :-
         ;   Descriptor = base(Base))
     ->  (   get_dict('@id', JSON, Submitted_ID),
             ground(Submitted_ID)
-        ->  idgen_check_base(Submitted_ID, Base, Context),
+        ->  path_component([type(Base)|Path], Context, [Path_Base]),
+            idgen_check_base(Submitted_ID, Path_Base, Context),
             ID = Submitted_ID
-        ;   idgen_random(Base,ID))
+        ;   path_component([type(Base)|Path], Context, [Path_Base]),
+            idgen_random(Path_Base,ID)
+        )
     ),
     prefix_expand(ID, Context, ID_Ex).
 
@@ -5717,8 +5724,7 @@ test(status_update,
            )
     ).
 
-
-test(status_update,
+test(status_update2,
      [
          setup(
              (   setup_temp_store(State),
@@ -6022,13 +6028,14 @@ test(check_for_cycles_bad,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':cycle_in_class,
-                          from_class:'http://s/Employee',
-                          path:['http://s/Employee',
-                                'http://s/Person',
-                                'http://s/Engineer',
-                                'http://s/Employee'],
-                          to_class:'http://s/Employee'}]),
+                 [
+                     witness{'@type':cycle_in_class,
+                             from_class:_,
+                             path:[_,
+                                   _,
+                                   _,
+                                   _],
+                             to_class:_}]),
              _)
      ]) :-
 
