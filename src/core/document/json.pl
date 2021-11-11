@@ -19,11 +19,13 @@
               insert_document/3,
               replace_document/2,
               replace_document/3,
+              replace_document/4,
               nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,
+              replace_schema_document/4,
               nuke_schema_documents/1,
               database_prefixes/2,
               insert_context_document/2,
@@ -482,7 +484,7 @@ type_context(DB,Type,Prefixes,Context) :-
     % eliminate duplicates
     sort(Edges,Sorted_Edges),
     catch(
-        dict_create(Context,json,Sorted_Edges),
+        json_dict_create(Context,Sorted_Edges),
         error(duplicate_key(P),_),
         throw(error(violation_of_diamond_property(Type,P)))
     ).
@@ -512,6 +514,20 @@ json_elaborate(DB,JSON,Elaborated) :-
 json_elaborate(DB,JSON,Context,Elaborated) :-
     json_elaborate_(DB,JSON,Context,Elaborated),
     json_assign_ids(DB,Context,Elaborated).
+
+/*
+ * Check for JSON values that should not found in a string field.
+ */
+check_json_string(_, Val) :-
+    atom(Val),
+    \+ memberchk(Val, ['', null, false, true]),
+    !.
+check_json_string(_, Val) :-
+    string(Val),
+    Val \= "",
+    !.
+check_json_string(Field, Val) :-
+    throw(error(bad_field_value(Field, Val), _)).
 
 json_elaborate_(DB,JSON,Context,Result) :-
     is_dict(JSON),
@@ -1099,6 +1115,7 @@ json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
 
 json_schema_elaborate(JSON,Context,Path,Elaborated) :-
     get_dict('@type', JSON, Type),
+    check_json_string('@type', Type),
     compress_system_uri(Type,Context,Type_Min),
     do_or_die(
         json_schema_elaborate_(Type_Min,JSON,Context,Path,Elaborated),
@@ -1541,10 +1558,10 @@ get_document(DB, Prefixes, Compress, Unfold, Id, Document) :-
     (   Compress = true
     ->  compress_dict_uri(Id_Ex, Prefixes, Id_comp),
         compress_schema_uri(Class, Prefixes, Class_comp),
-        dict_create(Document,json,['@id'-Id_comp,
+        json_dict_create(Document,['@id'-Id_comp,
                                    '@type'-Class_comp
                                    |Data])
-    ;   dict_create(Document,json,['@id'-Id_Ex,
+    ;   json_dict_create(Document,['@id'-Id_Ex,
                                    '@type'-Class
                                    |Data])).
 
@@ -1720,7 +1737,7 @@ id_schema_json(Schema, Prefixes, Id, JSON) :-
     (   atom_concat('sys:',Small_Class, Class_Compressed)
     ->  true
     ;   Small_Class = Class_Compressed),
-    dict_create(JSON,json,['@id'-Id_Compressed,
+    json_dict_create(JSON,['@id'-Id_Compressed,
                            '@type'-Small_Class
                            |Data]).
 
@@ -2019,28 +2036,33 @@ run_insert_document(Desc, Commit, Document, ID) :-
         _).
 
 replace_document(DB, Document) :-
-    replace_document(DB, Document, _).
+    replace_document(DB, Document, false, _).
 
-replace_document(Transaction, Document, Id) :-
+replace_document(DB, Document, Id) :-
+    replace_document(DB, Document, false, Id).
+
+replace_document(Transaction, Document, Create, Id) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Elaborated),
     get_dict('@id', Elaborated, Id),
     catch(delete_document(Transaction, false, Id),
           error(document_does_not_exist(_),_),
-          throw(error(document_does_not_exist(Id, Document),_))),
+          (   Create = true
+          ->  true
+          ;   throw(error(document_does_not_exist(Id, Document),_)))),
     insert_document_expanded(Transaction, Elaborated, Id).
-replace_document(Query_Context, Document, Id) :-
+replace_document(Query_Context, Document, Create, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Id).
+    replace_document(TO, Document, Create, Id).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        replace_document(Context, Document, Id),
+        replace_document(Context, Document, false, Id),
         _).
 
 % Frames
@@ -2130,7 +2152,7 @@ class_frame(Transaction, Class, Frame) :-
 
     sort(Pairs5, Sorted_Pairs),
     catch(
-        dict_create(Frame,json,Sorted_Pairs),
+        json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
@@ -2156,7 +2178,7 @@ class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
         Pairs),
     sort(Pairs, Sorted_Pairs),
     catch(
-        dict_create(Frame,json,Sorted_Pairs),
+        json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
@@ -2208,7 +2230,7 @@ insert_schema_document(Transaction, Document) :-
     !,
 
     (   get_dict('@id', Document, Id)
-    ->  true
+    ->  check_json_string('@id', Id)
     ;   throw(error(no_id_in_document(Document), _))
     ),
     database_schema(Transaction, Schema),
@@ -2312,15 +2334,20 @@ delete_schema_document(Query_Context, Id) :-
     delete_schema_document(TO, Id).
 
 replace_schema_document(DB, Document) :-
-    replace_schema_document(DB, Document, _Id).
+    replace_schema_document(DB, Document, false, _Id).
 
-replace_schema_document(Transaction, Document, Id) :-
+replace_schema_document(DB, Document, Id) :-
+    replace_schema_document(DB, Document, false, Id).
+
+replace_schema_document(Transaction, Document, Create, Id) :-
     is_transaction(Transaction),
     !,
     (   get_dict('@id', Document, Id)
     ->  catch(delete_schema_document(Transaction, Id),
               error(document_does_not_exist(_),_),
-              throw(error(document_does_not_exist(Id, Document),_))),
+              (   Create = true
+              ->  true
+              ;   throw(error(document_does_not_exist(Id, Document),_)))),
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
@@ -2328,11 +2355,11 @@ replace_schema_document(Transaction, Document, Id) :-
         Id='@context'
     ;   throw(error(no_id_in_document(Document),_))
     ).
-replace_schema_document(Query_Context, Document, Id) :-
+replace_schema_document(Query_Context, Document, Create, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_schema_document(TO, Document, Id).
+    replace_schema_document(TO, Document, Create, Id).
 
 write_schema_string(Schema, Desc) :-
     create_context(Desc, commit{author: "a", message: "m"}, Context),

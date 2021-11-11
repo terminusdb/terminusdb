@@ -40,6 +40,7 @@
               compress_dict_uri/3,
               has_at/1,
               compress_uri/4,
+              json_dict_create/2,
 
               % json_woql.pl
               woql_context/1,
@@ -71,6 +72,7 @@
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,
+              not_literal/1,
 
               % path.pl
               compile_pattern/4,

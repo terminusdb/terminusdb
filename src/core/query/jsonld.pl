@@ -12,7 +12,8 @@
               compress_dict_uri/3,
               compress_uri/4,
               context_prefix_expand/3,
-              has_at/1
+              has_at/1,
+              json_dict_create/2
           ]).
 
 /** <module> JSON-LD
@@ -77,24 +78,12 @@ expand(json{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     JSON = json{'@language' : Lang, '@value' : Value}.
 expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
-    % \+ select_dict(json{'@context' : New_Context}, JSON_LD, JSON_Ctx_Free),
     !,
-    select_dict(json{}, JSON_LD, _),
     dict_keys(JSON_LD,Keys),
-    findall(Key-Value,
-            (
-                member(K,Keys),
-                get_dict(K,JSON_LD,V),
-
-                (   member(K,['@id','@type'])
-                ->  prefix_expand(V,Context,Value),
-                    Key = K
-                ;   expand_key(K,Context,Key,Key_Context),
-                    expand_value(V,Key_Context,Context,Value)
-                )
-            ),
-            Data),
-    dict_create(JSON,json,Data).
+    setof(Key-Value,
+          expand_dict_keys(JSON_LD, Context, Keys, Key, Value),
+          Data),
+    dict_pairs(JSON,json,Data).
 expand(JSON_LD, Context, JSON) :-
     is_list(JSON_LD),
     !,
@@ -104,6 +93,17 @@ expand(JSON, _, JSON) :-
     !.
 expand(JSON, _, JSON) :-
     string(JSON).
+
+expand_dict_keys(JSON_LD, Context, Keys, Key, Value) :-
+    member(K,Keys),
+    get_dict(K,JSON_LD,V),
+
+    (   member(K,['@id','@type'])
+    ->  prefix_expand(V,Context,Value),
+        Key = K
+    ;   expand_key(K,Context,Key,Key_Context),
+        expand_value(V,Key_Context,Context,Value)
+    ).
 
 expand_value(V,Key_Ctx,Ctx,Value) :-
     is_list(V),
@@ -146,14 +146,18 @@ expand_value(V,Key_Ctx,Ctx,Value) :-
 expand_value(V,_Key_Ctx,_Ctx,V) :-
     number(V),
     !.
+expand_value(V, _, _, V) :-
+    var(V), % For dictionary matching in WOQL
+    !.
 expand_value(true,_Key_Ctx,_Ctx,true) :-
+    !.
+expand_value(null,_Key_Ctx,_Ctx,null) :-
     !.
 %expand_value(V,_Key_Ctx,_Ctx,V) :-
 %    atom(V),
 %    !.
 expand_value(V,Key_Ctx,_Ctx,_Value) :-
-    format(atom(M),'Unknown key context ~q for value ~q', [Key_Ctx,V]),
-    throw(error(M)).
+    throw(error(unknown_key_context(Key_Ctx,V))).
 
 has_at(K) :-
     re_match('^@.*',K).
@@ -185,6 +189,10 @@ context_prefix_expand(K,Context,Key) :-
     ;   K = Key
     ).
 
+% For document templating
+prefix_expand(K,_Context,K) :-
+    var(K),
+    !.
 prefix_expand(K,Context,Key) :-
     do_or_die(
         \+ memberchk(K, ['', ""]),
@@ -419,6 +427,9 @@ term_jsonld(Term,JSON) :-
 term_jsonld(URI,URI).
 
 /* With prefix compression */
+term_jsonld(Var,_,null) :-
+    var(Var), % Tranform unbound variables to null
+    !.
 term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
     (   compound(D) % check if not bool, number, atom, string
     ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
@@ -496,3 +507,25 @@ get_key_document(Key,Ctx,Document,Value) :-
     %   operator which uses an expanded canonical form
     %   modulo adornments (like '@context').
     ;   Value1 = Value).
+
+/*
+ * Convert JSON literals (null, false, true) to strings when found in the values
+ * of keywords.
+ */
+stringify_json_literals(Key-Val_In, Key-Val_Out) :-
+    is_at(Key),
+    atom(Val_In),
+    memberchk(Val_In, [null, false, true]),
+    !,
+    atom_string(Val_In, Val_Out).
+stringify_json_literals(Key-Val, Key-Val).
+
+/*
+ * Build a JSON dict safely.
+ *
+ * Use this instead of dict_create to avoid problems converting between atoms
+ * and strings.
+ */
+json_dict_create(JSON, Pairs) :-
+    maplist(stringify_json_literals, Pairs, Pairs_Fixed),
+    dict_create(JSON, json, Pairs_Fixed).
