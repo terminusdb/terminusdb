@@ -47,14 +47,16 @@ describe('db-noauth', function () {
     )
 
     {
-      const r = await db.create(agent, path)
-      db.verifyCreateFailure(r)
+      const r = await db
+        .create(agent, path)
+        .then(db.verifyCreateFailure)
       expect(r.body['api:error']['@type']).to.equal('api:UnknownOrganization')
       expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
     }
     {
-      const r = await db.del(agent, path)
-      db.verifyDeleteFailure(r)
+      const r = await db
+        .del(agent, path)
+        .then(db.verifyDeleteFailure)
       expect(r.body['api:error']['@type']).to.equal('api:UnknownOrganization')
       expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
     }

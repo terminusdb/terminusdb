@@ -856,6 +856,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
         insert_documents,
         Request,
         (
+            check_content_type_json(Request),
+
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
@@ -920,9 +922,15 @@ document_handler(put, Path, Request, System_DB, Auth) :-
         replace_documents,
         Request,
         (
+            check_content_type_json(Request),
+
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
+
+            (   memberchk(create=true, Search)
+            ->  Create = true
+            ;   Create = false),
 
             (   memberchk(graph_type=Graph_Type, Search)
             ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
@@ -936,7 +944,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 
             http_read_data(Request, Data, [to(string)]),
             open_string(Data, Stream),
-            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Ids),
+            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Create, Ids),
 
             write_cors_headers(Request),
             reply_json(Ids),

@@ -3,14 +3,17 @@
               calculate_path_solutions/6
           ]).
 
+:- use_module(woql_compile, [not_literal/1]).
 :- use_module(core(util)).
 :- use_module(core(triple)).
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),
+    not_literal(X),
     xrdf(Transaction_Object.instance_objects,X,P,Y).
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(schema,Types),
+    not_literal(X),
     xrdf(Transaction_Object.schema_objects, X, P, Y).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-
@@ -128,10 +131,12 @@ run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
 /*
  * patterns have the following syntax:
  *
- * P,Q,R := p(P) | n(P) | P,Q | P;Q | plus(P) | times(P,N,M)
+ * P,Q,R := p | n | p(P) | n(P) | P,Q | P;Q | plus(P) | star(P) | times(P,N,M)
  *
  * foo>,<baz,bar>
  */
+compile_pattern(n, n(_), _Prefixes, _Transaction_Object).
+compile_pattern(p, p(_), _Prefixes, _Transaction_Object).
 compile_pattern(n(Pred), n(Pred_Expanded), Prefixes, _Transaction_Object) :-
     prefixed_to_property(Pred,Prefixes,Pred_Expanded).
 compile_pattern(p(Pred), p(Pred_Expanded), Prefixes, _Transaction_Object) :-

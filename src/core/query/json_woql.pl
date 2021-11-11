@@ -83,20 +83,76 @@ json_data_to_woql_ast(JSON,WOQL) :-
     ->  WOQL = true
     ).
 json_data_to_woql_ast(JSON,WOQL) :-
-    (   atom(JSON)
-    ;   string(JSON)
-    ),
+    atom(JSON),
     !,
-    atom_string(A,JSON),
-    (   member(A,[true,false])
-    ->  WOQL = A^^xsd:boolean
-    ;   WOQL = A^^xsd:string
-    ).
+    member(JSON,[true,false]),
+    WOQL = JSON^^xsd:boolean.
+json_data_to_woql_ast(JSON,WOQL) :-
+    string(JSON),
+    !,
+    WOQL = JSON^^xsd:string.
 json_data_to_woql_ast(JSON,WOQL) :-
     number(JSON),
     !,
     WOQL = JSON^^xsd:decimal.
 
+json_list_value_to_woql_ast(JSON,WOQL,Path) :-
+    json_list_value_to_woql_ast(JSON,0,WOQL,Path).
+
+json_list_value_to_woql_ast([],_,[],_).
+json_list_value_to_woql_ast([JSON|J_Rest],N,[WOQL|W_Rest],Path) :-
+    json_value_to_woql_ast(JSON,WOQL,[N|Path]),
+    M is N+1,
+    json_list_value_to_woql_ast(J_Rest,M,W_Rest,Path).
+
+json_value_to_woql_ast(JSON,WOQL,Path) :-
+    is_dict(JSON),
+    !,
+    _{'@type' : Pre_Type} :< JSON,
+    atom_string(Type,Pre_Type),
+    json_value_to_woql_ast(Type,JSON,WOQL,Path).
+json_value_to_woql_ast(JSON,WOQL,Path) :-
+    is_list(JSON),
+    !,
+    json_list_value_to_woql_ast(JSON,WOQL,Path).
+json_value_to_woql_ast(JSON,_,Path) :-
+    reverse(Path, Director),
+    throw(error(woql_syntax_error(JSON,Director,JSON), _)).
+
+json_value_to_woql_ast('True',_,WOQL,_) :-
+    WOQL = true.
+json_value_to_woql_ast('NodeValue',JSON,WOQL,_) :-
+    (   _{node: Node} :< JSON
+    ->  prefix_split(Node, WOQL)
+    ;   _{variable: Var} :< JSON
+    ->  json_data_to_woql_ast(Var,Var_String^^_),
+        atom_string(Var_Atom, Var_String),
+        WOQL = v(Var_Atom)
+    ).
+json_value_to_woql_ast('DataValue',JSON,WOQL,Path) :-
+    (   _{data: Data} :< JSON
+    ->  json_data_to_woql_ast(Data,WOQL)
+    ;   _{variable: Var} :< JSON
+    ->  json_data_to_woql_ast(Var,Var_String^^_),
+        atom_string(Var_Atom, Var_String),
+        WOQL = v(Var_Atom)
+    ;   _{list: List} :< JSON
+    ->  json_list_value_to_woql_ast(List,WOQL,[list|Path])
+    ).
+json_value_to_woql_ast('Value',JSON,WOQL,Path) :-
+    (   _{node: Node} :< JSON
+    ->  prefix_split(Node, WOQL)
+    ;   _{variable: Var} :< JSON
+    ->  json_data_to_woql_ast(Var,Var_String^^_),
+        atom_string(Var_Atom, Var_String),
+        WOQL = v(Var_Atom)
+    ;   _{data: Data} :< JSON
+    ->  json_data_to_woql_ast(Data,WOQL)
+    ;   _{list: List} :< JSON
+    ->  json_list_value_to_woql_ast(List,WOQL,Path)
+    ;   _{dictionary: Dictionary} :< JSON
+    ->  dictionary_template_to_woql_ast(Dictionary,WOQL,Path)
+    ).
 
 /*
  * json_to_woql_ast(+JSON:dict,-AST:any) is det.
@@ -150,9 +206,9 @@ json_type_to_woql_ast('TripleCount',JSON,WOQL,Path) :-
      } :< JSON,
     json_data_to_woql_ast(Resource,Resource_String^^_),
     atom_string(Resource_Atom, Resource_String),
-    json_to_woql_ast(Count,WOQL_Count,
-                     [count
-                      |Path]),
+    json_value_to_woql_ast(Count,WOQL_Count,
+                           [count
+                            |Path]),
     WOQL = triple_count(Resource_Atom,WOQL_Count).
 json_type_to_woql_ast('Size',JSON,WOQL,Path) :-
     _{  resource : Resource,
@@ -160,9 +216,9 @@ json_type_to_woql_ast('Size',JSON,WOQL,Path) :-
     } :< JSON,
     json_data_to_woql_ast(Resource,Resource_String^^_),
     atom_string(WResource,Resource_String),
-    json_to_woql_ast(Size,WOQL_Size,
-                     [size
-                      |Path]),
+    json_value_to_woql_ast(Size,WOQL_Size,
+                           [size
+                            |Path]),
     WOQL = size(WResource,WOQL_Size).
 json_type_to_woql_ast('Select',JSON,WOQL,Path) :-
     _{variables : Variables,
@@ -180,17 +236,19 @@ json_type_to_woql_ast('Distinct',JSON,WOQL,Path) :-
     WOQL = distinct(WOQL_Args,Sub_WOQL).
 json_type_to_woql_ast('And',JSON,WOQL,Path) :-
     _{and : Query_List} :< JSON,
-    maplist({Path}/[Q,W]>>(
-                json_to_woql_ast(Q,W,[and
+    index_list(Query_List, Indexes),
+    maplist({Path}/[Q,I,W]>>(
+                json_to_woql_ast(Q,W,[and,I
                                       |Path])
-            ), Query_List, WOQL_Queries),
+            ), Query_List, Indexes, WOQL_Queries),
     xfy_list(',',WOQL,WOQL_Queries).
 json_type_to_woql_ast('Or',JSON,WOQL,Path) :-
     _{or : Query_List} :< JSON,
-    maplist({Path}/[Q,W]>>(
-                json_to_woql_ast(Q,W,[or
+    index_list(Query_List, Indexes),
+    maplist({Path}/[Q,I,W]>>(
+                json_to_woql_ast(Q,W,[or,I
                                       |Path])
-            ), Query_List, WOQL_Queries),
+            ), Query_List, Indexes, WOQL_Queries),
     xfy_list(';',WOQL,WOQL_Queries).
 json_type_to_woql_ast('Using',JSON,WOQL,Path) :-
     _{collection : Collection,
@@ -234,12 +292,12 @@ json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
       object : Object,
       graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     json_data_to_woql_ast(Graph,WG),
 
     do_or_die(
@@ -254,30 +312,30 @@ json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
       predicate : Predicate,
       object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     WOQL = t(WQA,WQB,WQC).
 json_type_to_woql_ast('Subsumption',JSON,WOQL,Path) :-
     _{ child : Class_A,
        parent : Class_B
      } :< JSON,
-    json_to_woql_ast(Class_A,WQA,[child
-                                  |Path]),
-    json_to_woql_ast(Class_B,WQB,[parent
-                                  |Path]),
+    json_value_to_woql_ast(Class_A,WQA,[child
+                                        |Path]),
+    json_value_to_woql_ast(Class_B,WQB,[parent
+                                        |Path]),
     WOQL = '<<'(WQA,WQB).
 json_type_to_woql_ast('Equals',JSON,WOQL,Path) :-
     _{ left: A,
        right : B
      } :< JSON,
-    json_to_woql_ast(A,WQA,[left
-                            |Path]),
-    json_to_woql_ast(B,WQB,[right
-                            |Path]),
+    json_value_to_woql_ast(A,WQA,[left
+                                  |Path]),
+    json_value_to_woql_ast(B,WQB,[right
+                                  |Path]),
     WOQL = '='(WQA,WQB).
 json_type_to_woql_ast('Substring',JSON,WOQL,Path) :-
     _{  string : String,
@@ -286,46 +344,73 @@ json_type_to_woql_ast('Substring',JSON,WOQL,Path) :-
         after : After,
         substring : Substring
      } :< JSON,
-    json_to_woql_ast(String, WString,[string
-                                      |Path]),
-    json_to_woql_ast(Before, WBefore,[before
-                                      |Path]),
-    json_to_woql_ast(Length, WLength,[length
-                                      |Path]),
-    json_to_woql_ast(After, WAfter,[after
-                                    |Path]),
-    json_to_woql_ast(Substring, WSubstring,[substring
+    json_value_to_woql_ast(String, WString,[string
                                             |Path]),
+    json_value_to_woql_ast(Before, WBefore,[before
+                                            |Path]),
+    json_value_to_woql_ast(Length, WLength,[length
+                                            |Path]),
+    json_value_to_woql_ast(After, WAfter,[after
+                                          |Path]),
+    json_value_to_woql_ast(Substring, WSubstring,[substring
+                                                  |Path]),
     WOQL = sub_string(WString,WBefore,WLength,WAfter,WSubstring).
-json_type_to_woql_ast('ReadObject',JSON,WOQL,Path) :-
-    _{document_uri : Doc_ID,
+json_type_to_woql_ast('ReadDocument',JSON,WOQL,Path) :-
+    _{identifier : Doc_ID,
       document : Doc
      } :< JSON,
-    json_to_woql_ast(Doc_ID, WID, [document_id
-                                   |Path]),
-    json_to_woql_ast(Doc, WDoc, [document
-                                 |Path]),
+    json_value_to_woql_ast(Doc_ID, WID, [identifier
+                                         |Path]),
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
     WOQL = get_document(WID,WDoc).
-json_type_to_woql_ast('UpdateObject',JSON,WOQL,_) :-
+json_type_to_woql_ast('UpdateDocument',JSON,WOQL,Path) :-
     _{document : Doc
      } :< JSON,
-    /*
-    do_or_die(
-        (_{'@id' : _ID} :< Doc),
-        error(woql_syntax_error(JSON,
-                                ['@id'|Path],
-                                Doc), _)),
-    */
-    WOQL = update_document(Doc).
-json_type_to_woql_ast('DeleteObject',JSON,WOQL,Path) :-
-    _{document_uri : Doc
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    WOQL = update_document(WDoc).
+json_type_to_woql_ast('DeleteDocument',JSON,WOQL,Path) :-
+    _{identifier : Doc
      } :< JSON,
+    json_value_to_woql_ast(Doc,WDoc,[identifier|Path]),
     do_or_die(
-        (   _{'@id' : ID} :< Doc
+        (   _{'@id' : ID} :< WDoc
         ->  true
-        ;   json_to_woql_ast(Doc,ID,[document_uri|Path])),
+        ;   atom(WDoc)
+        ->  ID = Doc
+        ),
         error(woql_syntax_error(JSON,
-                                [document_uri|Path],
+                                [identifier|Path],
+                                Doc), _)),
+    WOQL = delete_document(ID).
+json_type_to_woql_ast('ReadObject',JSON,WOQL,Path) :-
+    _{identifier : Doc_ID,
+      document : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc_ID, WID, [identifier
+                                         |Path]),
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    WOQL = get_document(WID,WDoc).
+json_type_to_woql_ast('UpdateObject',JSON,WOQL,Path) :-
+    _{document : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    WOQL = update_document(WDoc).
+json_type_to_woql_ast('DeleteObject',JSON,WOQL,Path) :-
+    _{identifier : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc,WDoc,[identifier|Path]),
+    do_or_die(
+        (   _{'@id' : ID} :< WDoc
+        ->  true
+        ;   atom(WDoc)
+        ->  ID = Doc
+        ),
+        error(woql_syntax_error(JSON,
+                                [identifier|Path],
                                 Doc), _)),
     WOQL = delete_document(ID).
 json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
@@ -333,36 +418,36 @@ json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
       predicate : Predicate,
       object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     WOQL = insert(WQA,WQB,WQC).
 json_type_to_woql_ast('AddedTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     WOQL = addition(WQA,WQB,WQC).
 json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     WOQL = removal(WQA,WQB,WQC).
 json_type_to_woql_ast('AddQuad',JSON,WOQL,Path) :-
     _{subject : Subject,
@@ -370,12 +455,12 @@ json_type_to_woql_ast('AddQuad',JSON,WOQL,Path) :-
       object : Object,
       graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
@@ -389,12 +474,12 @@ json_type_to_woql_ast('AddedQuad',JSON,WOQL,Path) :-
       object : Object,
       graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
@@ -408,12 +493,12 @@ json_type_to_woql_ast('RemovedQuad',JSON,WOQL,Path) :-
       object : Object,
       graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
@@ -427,12 +512,12 @@ json_type_to_woql_ast('DeleteTriple',JSON,WOQL,Path) :-
       object : Object,
       graph : Graph
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     json_data_to_woql_ast(Graph,WG),
     do_or_die(
         (WG = Graph_String^^_),
@@ -445,12 +530,12 @@ json_type_to_woql_ast('DeleteTriple',JSON,WOQL,Path) :-
       predicate : Predicate,
       object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WQA,[subject
-                                  |Path]),
-    json_to_woql_ast(Predicate,WQB,[predicate
-                                    |Path]),
-    json_to_woql_ast(Object,WQC,[object
-                                 |Path]),
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
     WOQL = delete(WQA,WQB,WQC).
 json_type_to_woql_ast('When',JSON,WOQL,Path) :-
     _{query : Q,
@@ -465,10 +550,10 @@ json_type_to_woql_ast('Trim',JSON,WOQL,Path) :-
     _{untrimmed :  A,
       trimmed : T
      } :< JSON,
-    json_to_woql_ast(A,WA,[untrimmed
-                           |Path]),
-    json_to_woql_ast(T,WT,[trimmed
-                           |Path]),
+    json_value_to_woql_ast(A,WA,[untrimmed
+                                 |Path]),
+    json_value_to_woql_ast(T,WT,[trimmed
+                                 |Path]),
     WOQL = trim(WA,WT).
 json_type_to_woql_ast('Eval',JSON,WOQL,Path) :-
     _{expression : A,
@@ -483,40 +568,40 @@ json_type_to_woql_ast('IsA',JSON,WOQL,Path) :-
     _{element : X,
       type : T
      } :< JSON,
-    json_to_woql_ast(X, V, [element
-                            |Path]),
-    json_to_woql_ast(T, Class,[type
-                               |Path]),
+    json_value_to_woql_ast(X, V, [element
+                                  |Path]),
+    json_value_to_woql_ast(T, Class,[type
+                                     |Path]),
     WOQL = isa(V,Class).
 json_type_to_woql_ast('Like',JSON,WOQL,Path) :-
     _{left :  A,
       right : B,
       similarity : F
      } :< JSON,
-    json_to_woql_ast(A,WA,[left
-                           |Path]),
-    json_to_woql_ast(B,WB,[right
-                           |Path]),
-    json_to_woql_ast(F,WF,[like_similarity
-                           |Path]),
+    json_value_to_woql_ast(A,WA,[left
+                                 |Path]),
+    json_value_to_woql_ast(B,WB,[right
+                                 |Path]),
+    json_value_to_woql_ast(F,WF,[like_similarity
+                                 |Path]),
     WOQL = like(WA,WB,WF).
 json_type_to_woql_ast('Less',JSON,WOQL,Path) :-
     _{left : A,
       right : B
      } :< JSON,
-    json_to_woql_ast(A,WA,[left
-                           |Path]),
-    json_to_woql_ast(B,WB,[right
-                           |Path]),
+    json_value_to_woql_ast(A,WA,[left
+                                 |Path]),
+    json_value_to_woql_ast(B,WB,[right
+                                 |Path]),
     WOQL = '<'(WA,WB).
 json_type_to_woql_ast('Greater',JSON,WOQL,Path) :-
     _{left : A,
       right : B
      } :< JSON,
-    json_to_woql_ast(A,WA,[left
-                           |Path]),
-    json_to_woql_ast(B,WB,[right
-                           |Path]),
+    json_value_to_woql_ast(A,WA,[left
+                                 |Path]),
+    json_value_to_woql_ast(B,WB,[right
+                                 |Path]),
     WOQL = '>'(WA,WB).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
@@ -591,42 +676,42 @@ json_type_to_woql_ast('LexicalKey',JSON,WOQL,Path) :-
       key_list : Key,
       uri : URI
      } :< JSON,
-    json_to_woql_ast(Base,WBase,[base
-                                 |Path]),
-    json_to_woql_ast(Key,WKey,[key_list
-                               |Path]),
-    json_to_woql_ast(URI,WURI,[uri
-                               |Path]),
+    json_value_to_woql_ast(Base,WBase,[base
+                                       |Path]),
+    json_value_to_woql_ast(Key,WKey,[key_list
+                                     |Path]),
+    json_value_to_woql_ast(URI,WURI,[uri
+                                     |Path]),
     WOQL = idgen(WBase,WKey,WURI).
 json_type_to_woql_ast('HashKey',JSON,WOQL,Path) :-
     _{base : Base,
       key_list : Key,
       uri : URI
      } :< JSON,
-    json_to_woql_ast(Base,WBase,[base
-                                 |Path]),
-    json_to_woql_ast(Key,WKey,[key_list
-                               |Path]),
-    json_to_woql_ast(URI,WURI,[uri
-                               |Path]),
+    json_value_to_woql_ast(Base,WBase,[base
+                                       |Path]),
+    json_value_to_woql_ast(Key,WKey,[key_list
+                                     |Path]),
+    json_value_to_woql_ast(URI,WURI,[uri
+                                     |Path]),
     WOQL = hash(WBase,WKey,WURI).
 json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
     _{mixed :  S,
       upper : V
      } :< JSON,
-    json_to_woql_ast(S,WS,[left
-                           |Path]),
-    json_to_woql_ast(V,WV,[right
-                           |Path]),
+    json_value_to_woql_ast(S,WS,[left
+                                 |Path]),
+    json_value_to_woql_ast(V,WV,[right
+                                 |Path]),
     WOQL = upper(WS,WV).
 json_type_to_woql_ast('Lower',JSON,WOQL,Path) :-
     _{mixed : S,
       lower : V
      } :< JSON,
-    json_to_woql_ast(S,WS,[left
-                           |Path]),
-    json_to_woql_ast(V,WV,[right
-                           |Path]),
+    json_value_to_woql_ast(S,WS,[left
+                                 |Path]),
+    json_value_to_woql_ast(V,WV,[right
+                                 |Path]),
     WOQL = lower(WS,WV).
 json_type_to_woql_ast('Pad',JSON,WOQL,Path) :-
     _{string : S,
@@ -634,65 +719,65 @@ json_type_to_woql_ast('Pad',JSON,WOQL,Path) :-
       times : N,
       result : V
      } :< JSON,
-    json_to_woql_ast(S,WS,[string
-                           |Path]),
-    json_to_woql_ast(C,WC,[char
-                           |Path]),
-    json_to_woql_ast(N,WN,[times
-                           |Path]),
-    json_to_woql_ast(V,WV,[result
-                           |Path]),
+    json_value_to_woql_ast(S,WS,[string
+                                 |Path]),
+    json_value_to_woql_ast(C,WC,[char
+                                 |Path]),
+    json_value_to_woql_ast(N,WN,[times
+                                 |Path]),
+    json_value_to_woql_ast(V,WV,[result
+                                 |Path]),
     WOQL = pad(WS,WC,WN,WV).
 json_type_to_woql_ast('Split',JSON,WOQL,Path) :-
     _{string : S,
       pattern : P,
       list : L
      } :< JSON,
-    json_to_woql_ast(S,WS,[string
-                           |Path]),
-    json_to_woql_ast(P,WP,[pattern
-                           |Path]),
-    json_to_woql_ast(L,WL,[list
-                           |Path]),
+    json_value_to_woql_ast(S,WS,[string
+                                 |Path]),
+    json_value_to_woql_ast(P,WP,[pattern
+                                 |Path]),
+    json_value_to_woql_ast(L,WL,[list
+                                 |Path]),
     WOQL = split(WS,WP,WL).
 json_type_to_woql_ast('Member',JSON,WOQL,Path) :-
     _{member : S,
       list : L
      } :< JSON,
-    json_to_woql_ast(S,WS,[member
-                           |Path]),
-    json_to_woql_ast(L,WL,[list
-                           |Path]),
+    json_value_to_woql_ast(S,WS,[member
+                                 |Path]),
+    json_value_to_woql_ast(L,WL,[list
+                                 |Path]),
     WOQL = member(WS,WL).
 json_type_to_woql_ast('Concatenate',JSON,WOQL,Path) :-
     _{list :  List,
       result : Value
      } :< JSON,
-    json_to_woql_ast(List,WList,[list
-                                 |Path]),
-    json_to_woql_ast(Value,WValue,[result
-                                   |Path]),
+    json_value_to_woql_ast(List,WList,[list
+                                       |Path]),
+    json_value_to_woql_ast(Value,WValue,[result
+                                         |Path]),
     WOQL = concat(WList,WValue).
 json_type_to_woql_ast('Join',JSON,WOQL,Path) :-
     _{list : List,
       separator : Sep,
       result : Value
      } :< JSON,
-    json_to_woql_ast(List,WList,[list
-                                 |Path]),
-    json_to_woql_ast(Sep,WSep,[separator
-                               |Path]),
-    json_to_woql_ast(Value,WValue,[result
-                                   |Path]),
+    json_value_to_woql_ast(List,WList,[list
+                                       |Path]),
+    json_value_to_woql_ast(Sep,WSep,[separator
+                                     |Path]),
+    json_value_to_woql_ast(Value,WValue,[result
+                                         |Path]),
     WOQL = join(WList,WSep,WValue).
 json_type_to_woql_ast('Sum',JSON,WOQL,Path) :-
     _{list : List,
       result : Value
      } :< JSON,
-    json_to_woql_ast(List,WList,[list
-                                 |Path]),
-    json_to_woql_ast(Value,WValue,[result
-                                   |Path]),
+    json_value_to_woql_ast(List,WList,[list
+                                       |Path]),
+    json_value_to_woql_ast(Value,WValue,[result
+                                         |Path]),
     WOQL = sum(WList,WValue).
 json_type_to_woql_ast('Count',JSON,WOQL,Path) :-
     _{query : Query,
@@ -700,15 +785,14 @@ json_type_to_woql_ast('Count',JSON,WOQL,Path) :-
      } :< JSON,
     json_to_woql_ast(Query,WQuery,[query
                                   |Path]),
-    json_to_woql_ast(Count,WCount,[count
-                                   |Path]),
+    json_value_to_woql_ast(Count,WCount,[count
+                                         |Path]),
     WOQL = count(WQuery,WCount).
 json_type_to_woql_ast('Start',JSON,WOQL,Path) :-
     _{start : N,
       query : Q
      } :< JSON,
-    json_to_woql_ast(N,WN,[start
-                           |Path]),
+    json_data_to_woql_ast(N,WN),
     json_to_woql_ast(Q,WQ,[query
                            |Path]),
     do_or_die(
@@ -724,23 +808,30 @@ json_type_to_woql_ast('Limit',JSON,WOQL,Path) :-
     json_data_to_woql_ast(N,WN),
     json_to_woql_ast(Q,WQ,[query
                            |Path]),
-    WOQL = limit(WN, WQ).
+    do_or_die(
+        (WN = Num^^_),
+        error(woql_syntax_error(JSON,
+                                [limit|Path],
+                                N), _)),
+    WOQL = limit(Num, WQ).
 json_type_to_woql_ast('Regexp',JSON,WOQL,Path) :-
     _{pattern : Pat,
       string : String,
       result : List
      } :< JSON,
-    json_to_woql_ast(Pat,WPat,[pattern
-                               |Path]),
-    json_to_woql_ast(String,WString,[string
+    json_value_to_woql_ast(Pat,WPat,[pattern
                                      |Path]),
-    json_to_woql_ast(List,WList,[result
-                                 |Path]),
+    json_value_to_woql_ast(String,WString,[string
+                                           |Path]),
+    json_value_to_woql_ast(List,WList,[result
+                                       |Path]),
     WOQL = re(WPat, WString, WList).
 json_type_to_woql_ast('OrderBy',JSON,WOQL,Path) :-
     _{ordering : Templates,
       query : Query
      } :< JSON,
+    % This should be written as a seperate predicate with the
+    % OrderTemplate
     json_to_woql_ast(Templates,WTemplates,[ordering
                                            |Path]),
     json_to_woql_ast(Query,WQuery,[query
@@ -759,41 +850,40 @@ json_type_to_woql_ast('OrderTemplate',JSON,WOQL,_Path) :-
     ).
 json_type_to_woql_ast('GroupBy',JSON,WOQL,Path) :-
     _{group_by : Spec,
-      template : Obj,
+      template : Template,
       query : Query,
       grouped : Collector
      } :< JSON,
     variable_list(Spec,WSpec),
-    variable_list(Obj,Template),
-    % Add only one variable if only one in template
-    (   Template = [V]
-    ->  WObj = V
-    ;   WObj = Template),
+    % Backwards compat with "variable list"
+    (   variable_list(Template,WObj)
+    ->  true
+    ;   json_value_to_woql_ast(Template,WObj,[template|Path])),
     json_to_woql_ast(Query,WQuery,[query
                                    |Path]),
-    json_to_woql_ast(Collector,WCollector,[grouped
-                                           |Path]),
+    json_value_to_woql_ast(Collector,WCollector,[grouped
+                                                 |Path]),
     WOQL = group_by(WSpec,WObj,WQuery,WCollector).
 json_type_to_woql_ast('Length',JSON,WOQL,Path) :-
     _{list : A,
       length : B
      } :< JSON,
-    json_to_woql_ast(A,WA,[list
-                           |Path]),
-    json_to_woql_ast(B,WB,[length
-                           |Path]),
+    json_value_to_woql_ast(A,WA,[list
+                                 |Path]),
+    json_value_to_woql_ast(B,WB,[length
+                                 |Path]),
     WOQL = length(WA,WB).
 json_type_to_woql_ast('Typecast',JSON,WOQL,Path) :-
     _{value : Val,
       type : Type,
       result : Var
      } :< JSON,
-    json_to_woql_ast(Val,WVal,[value
-                               |Path]),
-    json_to_woql_ast(Type,WType,[type
-                                 |Path]),
-    json_to_woql_ast(Var,WVar,[result
-                               |Path]),
+    json_value_to_woql_ast(Val,WVal,[value
+                                     |Path]),
+    json_value_to_woql_ast(Type,WType,[type
+                                       |Path]),
+    json_value_to_woql_ast(Var,WVar,[result
+                                     |Path]),
     WOQL = typecast(WVal,WType,[],WVar).
 json_type_to_woql_ast('Not',JSON,WOQL,Path) :-
     _{query : Q
@@ -814,76 +904,44 @@ json_type_to_woql_ast('Immediately',JSON,WOQL,Path) :-
                            |Path]),
     WOQL = immediately(WQ).
 json_type_to_woql_ast('Dot',JSON,WOQL,Path) :-
-    _{dictionary : Dictionary,
-      dictionary_key : Key,
-      dictionary_value : Value
+    _{document : Dictionary,
+      field : Key,
+      value : Value
      } :< JSON,
-    json_to_woql_ast(Dictionary, WDictionary, [dictionary_key
-                                               |Path]),
-    json_to_woql_ast(Key, WKey, [dictionary_key
-                                 |Path]),
-    json_to_woql_ast(Value,WValue,[dictionary_value
-                                   |Path]),
+    json_value_to_woql_ast(Dictionary, WDictionary, [document
+                                                     |Path]),
+    json_value_to_woql_ast(Key, WKey, [field
+                                       |Path]),
+    json_value_to_woql_ast(Value,WValue,[value
+                                         |Path]),
     WOQL = dot(WDictionary,WKey,WValue).
 json_type_to_woql_ast('Path',JSON,WOQL,Path) :-
     _{subject : Subject,
       pattern : Pattern,
       object : Object
      } :< JSON,
-    json_to_woql_ast(Subject,WSubject,[subject
-                                       |Path]),
+    json_value_to_woql_ast(Subject,WSubject,[subject
+                                             |Path]),
     json_to_woql_path_pattern(Pattern,WPattern,[pattern
                                                 |Path]),
-    json_to_woql_ast(Object,WObject,[object
-                                     |Path]),
+    json_value_to_woql_ast(Object,WObject,[object
+                                           |Path]),
 
     (   _{path : Edge_Path} :< JSON
-    ->  json_to_woql_ast(Edge_Path,WEdge_Path,[path
-                                               |Path]),
+    ->  json_value_to_woql_ast(Edge_Path,WEdge_Path,[path
+                                                     |Path]),
         WOQL = path(WSubject,WPattern,WObject,WEdge_Path)
     ;   WOQL = path(WSubject,WPattern,WObject)).
-json_type_to_woql_ast('True',_,WOQL,_) :-
-    WOQL = true.
-json_type_to_woql_ast('NodeValue',JSON,WOQL,_) :-
-    (   _{node: Node} :< JSON
-    ->  prefix_split(Node, WOQL)
-    ;   _{variable: Var} :< JSON
-    ->  json_data_to_woql_ast(Var,Var_String^^_),
-        atom_string(Var_Atom, Var_String),
-        WOQL = v(Var_Atom)
-    ).
-json_type_to_woql_ast('DataValue',JSON,WOQL,Path) :-
-    (   _{data: Data} :< JSON
-    ->  json_data_to_woql_ast(Data,WOQL)
-    ;   _{variable: Var} :< JSON
-    ->  json_data_to_woql_ast(Var,Var_String^^_),
-        atom_string(Var_Atom, Var_String),
-        WOQL = v(Var_Atom)
-    ;   _{list: List} :< JSON
-    ->  json_to_woql_ast(List,WOQL,[list|Path])
-    ).
-json_type_to_woql_ast('Value',JSON,WOQL,_) :-
-    (   _{node: Node} :< JSON
-    ->  prefix_split(Node, WOQL)
-    ;   _{variable: Var} :< JSON
-    ->  json_data_to_woql_ast(Var,Var_String^^_),
-        atom_string(Var_Atom, Var_String),
-        WOQL = v(Var_Atom)
-    ;   _{data: Data} :< JSON
-    ->  json_data_to_woql_ast(Data,WOQL)
-    ;   _{list: List} :< JSON
-    ->  json_data_to_woql_ast(List,WOQL)
-    ).
 json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
     _{value : Value,
       type : Type
      } :< JSON,
-    json_to_woql_ast(Value,WOQL_Value,
-                     [value
-                      |Path]),
-    json_to_woql_ast(Type,WOQL_Type,
-                     [type
-                      |Path]),
+    json_value_to_woql_ast(Value,WOQL_Value,
+                           [value
+                            |Path]),
+    json_value_to_woql_ast(Type,WOQL_Type,
+                           [type
+                            |Path]),
 
     WOQL = typeof(WOQL_Value,WOQL_Type).
 
@@ -896,13 +954,17 @@ json_to_woql_path_pattern(JSON,_Pattern,Path) :-
     throw(error(woql_syntax_error(JSON,Path,JSON), _)).
 
 json_type_to_woql_path_pattern('PathPredicate',JSON,Pattern,_Path) :-
-    _{predicate : Node} :< JSON,
-    prefix_split(Node,WNode),
-    Pattern = p(WNode).
+    (   _{predicate : Node} :< JSON
+    ->  prefix_split(Node,WNode),
+        Pattern = p(WNode)
+    ;   Pattern = p
+    ).
 json_type_to_woql_path_pattern('InversePathPredicate',JSON,Pattern,_Path) :-
-    _{predicate : Node} :< JSON,
-    prefix_split(Node,WNode),
-    Pattern = n(WNode).
+    (   _{predicate : Node} :< JSON
+    ->  prefix_split(Node,WNode),
+        Pattern = n(WNode)
+    ;   Pattern = n
+    ).
 json_type_to_woql_path_pattern('PathSequence',JSON,Pattern,Path) :-
     _{sequence : List} :< JSON,
     json_list_to_woql_path_pattern(List,WList,[sequence|Path]),
@@ -1041,6 +1103,21 @@ json_type_to_woql_arith('ArithmeticValue',JSON,WOQL,_) :-
     ->   atom_string(Var_Atom, Var),
          WOQL = v(Var_Atom)
     ).
+
+dictionary_template_to_woql_ast(Template, WOQL, Path) :-
+    get_dict(data, Template, Pairs),
+    index_list(Pairs,Indexes),
+    maplist({Path}/[Pair, I, Key-Value]>>(
+                get_dict(field, Pair, Key_String),
+                get_dict(value, Pair, V),
+                atom_string(Key,Key_String),
+                json_value_to_woql_ast(V, WOQL_Value, [value,I|Path]),
+                (   WOQL_Value = Value^^_ % unnecessary specificity
+                ->  true
+                ;   WOQL_Value = Value)
+            ), Pairs, Indexes, NewPairs),
+   !,
+   dict_create(WOQL, json, NewPairs).
 
 json_woql_path_element_error_message(_JSON,Path,Element,Message) :-
     (   Path = [Head|_Path],
@@ -1530,5 +1607,29 @@ test(base64binary, []) :-
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
     WOQL = (v('X')="YXNkZg=="^^'http://www.w3.org/2001/XMLSchema#base64Binary').
+
+test(dictionary_template_to_woql_ast, []) :-
+    JSON_Atom=
+    '{"@type": "Value",
+      "dictionary" : {"@type": "DictionaryTemplate",
+                      "data": [ { "@type" : "FieldValuePair",
+                                  "field" : "@type",
+                                  "value" : { "@type" : "Value",
+                                              "data" : "User"}},
+                                { "@type" : "FieldValuePair",
+                                  "field" : "name",
+                                  "value" : { "@type" : "Value",
+                                              "data" : "Jim"}},
+                                { "@type" : "FieldValuePair",
+                                  "field" : "employed",
+                                  "value" : { "@type" : "Value",
+                                              "data" : true }},
+                                { "@type" : "FieldValuePair",
+                                  "field" : "father",
+                                  "value" : { "@type" : "Value",
+                                              "variable" : "Father"}}]}}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    json_value_to_woql_ast(JSON,WOQL,[]),
+    WOQL = json{'@type':"User",employed:true,father:v('Father'),name:"Jim"}.
 
 :- end_tests(jsonld_ast).
