@@ -84,6 +84,8 @@ is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_simple_class(Schema, Class).
 
+% NOTE
+% This generator is no longer stable under ordering!
 :- table is_schema_simple_class/2 as private.
 is_schema_simple_class(Schema, Class) :-
     xrdf(Schema,Class, rdf:type, C),
