@@ -1132,7 +1132,8 @@
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "PathPattern",
-  "predicate" : "xsd:string" }
+  "predicate" : { "@type" : "Optional",
+                  "@class" : "xsd:string" }}
 
 { "@id" : "InversePathPredicate",
   "@type" : "Class",
@@ -1142,7 +1143,8 @@
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "PathPattern",
-  "predicate" : "xsd:string" }
+  "predicate" : { "@type" : "Optional",
+                  "@class" : "xsd:string" }}
 
 { "@id" : "PathSequence",
   "@type" : "Class",
