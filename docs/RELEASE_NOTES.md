@@ -1,3 +1,16 @@
+# TerminusDB Server v10.0.10 Beta Release Notes
+
+## Bug fixes
++ Improved handling of '@id' and '@type' for strange, non string
+  values.
+
+## Enhancements
++ Optimizations to improvement performance of the document interface.
++ Document paths now include an "any-forward" and "any-backward" by
+  omiting the predicate from the 'PathPredicate' or 'InversePathPredicate'
++ Insert or Update functionality added to the document interface.
+  which allows updating or inserting.
+
 # TerminusDB Server v10.0.9 Beta Release Notes
 ## Bug fixes
 + References to documents were dropped on document replacement
