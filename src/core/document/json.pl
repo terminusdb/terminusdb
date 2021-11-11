@@ -6006,13 +6006,14 @@ test(check_for_cycles_bad,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':cycle_in_class,
-                          from_class:'http://s/Person',
-                          path:['http://s/Person',
-                                'http://s/Engineer',
-                                'http://s/Employee',
-                                'http://s/Person'],
-                          to_class:'http://s/Person'}]),
+                 [
+                     witness{'@type':cycle_in_class,
+                             from_class:'http://s/Employee',
+                             path:['http://s/Employee',
+                                   'http://s/Person',
+                                   'http://s/Engineer',
+                                   'http://s/Employee'],
+                             to_class:'http://s/Employee'}]),
              _)
      ]) :-
 
