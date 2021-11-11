@@ -39,6 +39,11 @@
 :- use_module(core(triple/literals)).
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
+% performance
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 :- use_module(json). % This feels very circular.
 :- use_module(instance). % This is most definitely circular.
 

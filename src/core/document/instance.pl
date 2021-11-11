@@ -12,6 +12,11 @@
  *
  */
 
+% performance
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 :- use_module(core(util)).
 :- use_module(core(util/xsd_parser)).
 :- use_module(core(triple)).
@@ -110,7 +115,9 @@ card_count(Validation_Object,S_Id,P_Id,N) :-
     % choose as existential anything free
     instance_layer(Validation_Object, Layer),
 
-    (   aggregate(count,[S_Id,P_Id,O_Id]^(terminus_store:id_triple(Layer,S_Id,P_Id,O_Id)),N)
+    (   integer(S_Id),
+        integer(P_Id),
+        terminus_store:sp_card(Layer,S_Id,P_Id,N)
     ->  true
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
