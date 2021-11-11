@@ -106,25 +106,11 @@ member_list(Validation_Object, O, L) :-
     database_instance(Validation_Object, Instance),
     graph_member_list(Instance, O, L).
 
-card_count(Validation_Object,S,P,N) :-
+card_count(Validation_Object,S_Id,P_Id,N) :-
     % choose as existential anything free
-    database_instance(Validation_Object, Instance),
-    member(G, Instance),
-    read_write_obj_reader(G, Layer),
+    instance_layer(Validation_Object, Layer),
 
-    triplestore:pre_convert_node(S,Subject),
-    triplestore:pre_convert_node(P,Predicate),
-
-    (   (   ground(Subject)
-        ->  terminus_store:subject_id(Layer, Subject, S_Id)
-        ;   true),
-
-        (   ground(Predicate)
-        ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
-        ;   true),
-
-        aggregate(count,[S_Id,P_Id,O_Id]^(terminus_store:id_triple(Layer,S_Id,P_Id,O_Id)),N)
-
+    (   aggregate(count,[S_Id,P_Id,O_Id]^(terminus_store:id_triple(Layer,S_Id,P_Id,O_Id)),N)
     ->  true
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
@@ -132,38 +118,75 @@ card_count(Validation_Object,S,P,N) :-
 
 refute_cardinality_(class(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    terminus_store:predicate_id(Layer, Predicate_String, P),
+    atom_string(Subject, Subject_String),
+    atom_string(Predicate, Predicate_String),
     Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: S,
+                       instance: Subject,
                        class: C,
-                       predicate: P
+                       predicate: Predicate
                      }.
 refute_cardinality_(base_class(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: S,
+                       instance: Subject,
                        class: C,
-                       predicate: P
+                       predicate: Predicate
                      }.
 refute_cardinality_(enum(C,_),Validation_Object, S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: S,
+                       instance: Subject,
                        class: C,
-                       predicate: P
+                       predicate: Predicate
                      }.
 refute_cardinality_(tagged_union(C,_),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: S,
+                       instance: Subject,
                        class: C,
-                       predicate: P
+                       predicate: Predicate
                      }.
 refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,0),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': instance_not_cardinality_zero,
-                       instance: S,
+                       instance: Subject,
                        class: C,
-                       predicate: P
+                       predicate: Predicate
                      }.
 refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
@@ -175,45 +198,84 @@ refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
 refute_cardinality_(array,Validation_Object,S,P,Witness) :-
     % a property inside an array element
     \+ card_count(Validation_Object,S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': array_predicate_not_cardinality_one,
-                       instance: S,
-                       predicate: P
+                       instance: Subject,
+                       predicate: Predicate
                      }.
 refute_cardinality_(list(C),Validation_Object,S,P,Witness) :-
     % a property whose value is a list
     \+ card_count(Validation_Object,S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: S,
+                       instance: Subject,
                        class: C,
-                       predicate: P
+                       predicate: Predicate
                      }.
 refute_cardinality_(list,Validation_Object,S,P,Witness) :-
     % a property inside a list cell
     \+ card_count(Validation_Object,S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     Witness = witness{ '@type': list_predicate_not_cardinality_one,
-                       instance: S,
-                       predicate: P
+                       instance: Subject,
+                       predicate: Predicate
                      }.
 refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
     card_count(Validation_Object,S,P,N),
     (   \+ memberchk(N, [0,1])
-    ->  range_term_list(Validation_Object,S,P,L),
+    ->  instance_layer(Validation_Object, Layer),
+        terminus_store:subject_id(Layer, Subject_String, S),
+        atom_string(Subject, Subject_String),
+        (   atom(P)
+        ->  P = Predicate
+        ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+            atom_string(Predicate, Predicate_String)
+        ),
+        range_term_list(Validation_Object,Subject,Predicate,L),
         Witness = witness{ '@type': instance_has_wrong_cardinality,
                            class: C,
-                           instance: S,
-                           predicate: P,
+                           instance: Subject,
+                           predicate: Predicate,
                            cardinality: N,
                            object_list: L
                          }
     ).
 refute_cardinality_(cardinality(C,N),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,N),
-    range_term_list(Validation_Object,S,P,L),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject, S),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
+    range_term_list(Validation_Object,Subject,Predicate,L),
     Witness = witness{ '@type': instance_has_wrong_cardinality,
                        class: C,
-                       instance: S,
+                       instance: Subject,
                        object_list: L,
-                       predicate: P,
+                       predicate: Predicate,
                        cardinality: N
                      }.
 
@@ -247,14 +309,22 @@ refute_cardinality(Validation_Object,S,P,C,Witness) :-
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
     !,
-    class_predicate_type(Validation_Object,C,P,_),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:predicate_id(Layer, Predicate, P),
+    class_predicate_type(Validation_Object,C,Predicate,_),
     (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
     ;   class_predicate_type(Validation_Object,C,Q,_),
         P \= Q,
-        refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S,Q,Witness)
+        terminus_store:predicate_id(Layer, Q, Q_Id),
+        refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S,Q_Id,Witness)
     ).
 refute_cardinality(Validation_Object,S,_,C,Witness) :-
-    class_predicate_type(Validation_Object, C,P,Desc),
+    instance_layer(Validation_Object, Layer),
+    class_predicate_type(Validation_Object, C, Predicate, Desc),
+    (   terminus_store:predicate_id(Layer, Predicate, P)
+    ->  true
+    ;   P = Predicate
+    ),
     refute_cardinality_(Desc,Validation_Object,S,P,Witness).
 
 refute_built_in_value(Validation_Object, rdf:type,O,Witness) :-
@@ -276,137 +346,47 @@ refute_built_in_value(_Validation_Object, rdfs:label,O@L,Witness) :-
                   comment: Atom
               }.
 
-subject_changed(Validation_Object, Subject) :-
-    database_instance(Validation_Object, Instance),
-    member(G, Instance),
-    read_write_obj_reader(G, Layer),
-
-    triplestore:pre_convert_node(Subject,Subject_Element),
-
-    (   ground(Subject_Element)
-    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
-    ;   true),
-
+subject_changed(Validation_Object, S_Id) :-
+    instance_layer(Validation_Object, Layer),
     distinct(S_Id,(   terminus_store:id_triple_removal(Layer, S_Id,_,_)
-                  ;   terminus_store:id_triple_addition(Layer, S_Id,_,_))),
+                  ;   terminus_store:id_triple_addition(Layer, S_Id,_,_))).
 
-    (   ground(Subject)
-    ->  true
-    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
-        triplestore:post_convert_node(Subject_Candidate, Subject)
-    ).
-
-subject_inserted(Validation_Object, Subject) :-
-    database_instance(Validation_Object, Instance),
-    member(G, Instance),
-    read_write_obj_reader(G, Layer),
-
-    triplestore:pre_convert_node(Subject,Subject_Element),
-
-    (   ground(Subject_Element)
-    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
-    ;   true),
-
+subject_inserted(Validation_Object, S_Id) :-
+    instance_layer(Validation_Object, Layer),
     terminus_store:id_triple_addition(Layer, S_Id,_,_),
     \+ terminus_store:id_triple_removal(Layer, S_Id,_,_),
-    !,
+    !.
 
-    (   ground(Subject)
-    ->  true
-    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
-        triplestore:post_convert_node(Subject_Candidate, Subject)
-    ).
-
-subject_updated(Validation_Object, Subject) :-
-    database_instance(Validation_Object, Instance),
-    member(G, Instance),
-    read_write_obj_reader(G, Layer),
-
-    triplestore:pre_convert_node(Subject,Subject_Element),
-
-    (   ground(Subject_Element)
-    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
-    ;   true),
-
+subject_updated(Validation_Object, S_Id) :-
+    instance_layer(Validation_Object, Layer),
     distinct(S_Id,(terminus_store:id_triple_removal(Layer, S_Id,_,_),
-                   terminus_store:id_triple_addition(Layer, S_Id,_,_))),
+                   terminus_store:id_triple_addition(Layer, S_Id,_,_))).
 
-    (   ground(Subject)
-    ->  true
-    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
-        triplestore:post_convert_node(Subject_Candidate, Subject)
-    ).
+subject_deleted(Validation_Object, S_Id) :-
+    instance_layer(Validation_Object, Layer),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
+    terminus_store:id_triple_removal(Layer, S_Id, Rdf_Type_Id, _).
 
-subject_deleted(Validation_Object, Subject) :-
-    database_instance(Validation_Object, Instance),
-    xrdf_deleted(Instance, Subject,rdf:type,_).
 
-subject_predicate_changed(Validation_Object, Subject, Predicate) :-
-    database_instance(Validation_Object, Instance),
-    member(G, Instance),
-    read_write_obj_reader(G, Layer),
-
-    triplestore:pre_convert_node(Subject,Subject_Element),
-    triplestore:pre_convert_node(Predicate,Predicate_Element),
-
-    (   ground(Subject_Element)
-    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
-    ;   true),
-
-    (   ground(Predicate_Element)
-    ->  terminus_store:predicate_id(Layer, Predicate_Element, P_Id)
-    ;   true),
-
+subject_predicate_changed(Validation_Object, S_Id, P_Id) :-
+    instance_layer(Validation_Object, Layer),
     distinct(S_Id-P_Id,(   terminus_store:id_triple_removal(Layer, S_Id, P_Id,_)
-                       ;   terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))),
+                       ;   terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))).
 
-    (   ground(Subject)
-    ->  true
-    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
-        triplestore:post_convert_node(Subject_Candidate, Subject)
-    ),
-
-    (   ground(Predicate)
-    ->  true
-    ;   terminus_store:predicate_id(Layer, Predicate_Candidate, P_Id),
-        triplestore:post_convert_node(Predicate_Candidate, Predicate)
-    ).
-
-
-subject_predicate_updated(Validation_Object, Subject, Predicate) :-
-    database_instance(Validation_Object, Instance),
-    member(G, Instance),
-    read_write_obj_reader(G, Layer),
-
-    triplestore:pre_convert_node(Subject,Subject_Element),
-    triplestore:pre_convert_node(Predicate,Predicate_Element),
-
-    (   ground(Subject_Element)
-    ->  terminus_store:subject_id(Layer, Subject_Element, S_Id)
-    ;   true),
-
-    (   ground(Predicate_Element)
-    ->  terminus_store:predicate_id(Layer, Predicate_Element, P_Id)
-    ;   true),
-
+subject_predicate_updated(Validation_Object, S_Id, P_Id) :-
+    instance_layer(Validation_Object, Layer),
     distinct(S_Id-P_Id,(terminus_store:id_triple_removal(Layer, S_Id, P_Id,_),
-                        terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))),
+                        terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))).
 
-    (   ground(Subject)
-    ->  true
-    ;   terminus_store:subject_id(Layer, Subject_Candidate, S_Id),
-        triplestore:post_convert_node(Subject_Candidate, Subject)
-    ),
-
-    (   ground(Predicate)
-    ->  true
-    ;   terminus_store:predicate_id(Layer, Predicate_Candidate, P_Id),
-        triplestore:post_convert_node(Predicate_Candidate, Predicate)
-    ).
-
-refute_key(Validation_Object, Subject,Predicate,Class,Witness) :-
+refute_key(Validation_Object, S_Id,P_Id,Class,Witness) :-
     key_descriptor(Validation_Object, Class,Desc),
-    subject_predicate_updated(Validation_Object,Subject,Predicate),
+    subject_predicate_updated(Validation_Object,S_Id,P_Id),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S_Id),
+    atom_string(Subject, Subject_String),
+    terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+    atom_string(Predicate, Predicate_String),
     refute_key_(Desc,Subject,Predicate,Witness).
 
 refute_key_(lexical(_,Fields),Subject,Predicate,Witness) :-
@@ -424,40 +404,63 @@ refute_key_(hash(_,Fields),Subject,Predicate,Witness) :-
                     subject: Subject,
                     predicate: Predicate}.
 
+instance_layer(Validation_Object, Layer) :-
+    database_instance(Validation_Object, Instance),
+    member(G, Instance),
+    read_write_obj_reader(G, Layer).
+
 refute_existing_object_keys(Validation_Object,Class,Witness) :-
     % this is just wrong
     key_descriptor(Validation_Object, Class,Desc),
-    database_instance(Validation_Object, Instance),
+    instance_layer(Validation_Object, Layer),
     global_prefix_expand(rdf:type, Rdf_Type),
-    distinct(Subject-Predicate,
-             (   xrdf(Instance, Subject, Rdf_Type, Class),
-                 xrdf(Instance, Subject, Predicate, _))),
+    terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
+    terminus_store:object_id(Layer, node(Class), Class_Id),
+    distinct(S_Id-P_Id,
+             (   terminus_store:id_triple(Layer, S_Id,Rdf_Type_Id,Class_Id),
+                 terminus_store:id_triple(Layer, S_Id,P_Id,_))),
+
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S_Id),
+    atom_string(Subject, Subject_String),
+    terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+    atom_string(Predicate, Predicate_String),
+
     refute_key_(Desc,Subject,Predicate,Witness).
 
 
-refute_subject_deletion(Validation_Object, Subject,Witness) :-
-    subject_deleted(Validation_Object, Subject),
-    refute_subject_deletion_(Validation_Object, Subject, Witness).
+refute_subject_deletion(Validation_Object, S_Id, Witness) :-
+    subject_deleted(Validation_Object, S_Id),
+    refute_subject_deletion_(Validation_Object, S_Id, Witness).
 
-refute_subject_deletion_(Validation_Object, Subject,Witness) :-
-    database_instance(Validation_Object, Instance),
-    (   xrdf(Instance,Subject,Predicate,Object),
+refute_subject_deletion_(Validation_Object, S_Id,Witness) :-
+    instance_layer(Validation_Object, Layer),
+    (   terminus_store:id_triple(Layer,S_Id,P_Id,O_Id),
+        terminus_store:subject_id(Layer, Subject_String, S_Id),
+        terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+        terminus_store:object_id(Layer, node(Object_String), O_Id),
+        atom_string(Subject, Subject_String),
+        atom_string(Predicate, Predicate_String),
+        atom_string(Object, Object_String),
         Witness = json{ '@type' : entire_object_not_deleted,
                         subject : Subject,
                         predicate : Predicate,
                         object : Object }
-    ;   xrdf(Instance, Other_Subject, Predicate, Subject),
+    ;   terminus_store:id_triple(Layer,OS_Id,P_Id,S_Id),
+        terminus_store:subject_id(Layer, Other_Subject_String, OS_Id),
+        terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+        terminus_store:object_id(Layer, node(Subject_String), S_Id),
+        atom_string(Other_Subject, Other_Subject_String),
+        atom_string(Subject, Subject_String),
+        atom_string(Predicate, Predicate_String),
         Witness = json{ '@type' : deleted_object_still_referenced,
                         subject : Other_Subject,
                         predicate : Predicate,
                         object : Subject }).
 
-refute_subject_type_change(Validation_Object,Subject,Witness) :-
-    database_instance(Validation_Object, Instance),
-    member(G,Instance),
-    read_write_obj_reader(G, Layer),
+refute_subject_type_change(Validation_Object,S_Id,Witness) :-
+    instance_layer(Validation_Object, Layer),
 
-    terminus_store:subject_id(Layer,Subject, S_Id),
     global_prefix_expand(rdf:type,Rdf_Type),
     terminus_store:predicate_id(Layer,Rdf_Type, Rdf_Type_Id),
     terminus_store:id_triple_removal(Layer,S_Id,Rdf_Type_Id,Old_Type_Id),
@@ -469,32 +472,46 @@ refute_subject_type_change(Validation_Object,Subject,Witness) :-
                     old_type : Old_Type,
                     new_type : New_Type}.
 
-refute_object_type(_,Class,Subject,Predicate,Witness) :-
+refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_array_type(Class),
     !,
+    instance_layer(Validation_Object, Layer),
+    terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+    atom_string(Predicate, Predicate_String),
     \+ (   global_prefix_expand(sys:index, SYS_Index),
            global_prefix_expand(sys:value, SYS_Value),
            global_prefix_expand(rdf:type, RDF_Type),
            memberchk(Predicate, [SYS_Index, SYS_Value, RDF_Type])),
+    terminus_store:subject_id(Layer, Subject, S_Id),
     Witness = json{ '@type' : invalid_array_type,
                     subject: Subject,
                     class: Class }.
-refute_object_type(_,Class,Subject,Predicate,Witness) :-
+refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_list_type(Class),
     !,
+    instance_layer(Validation_Object, Layer),
+    terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+    atom_string(Predicate, Predicate_String),
     \+ (   global_prefix_expand(rdf:first, RDF_First),
            global_prefix_expand(rdf:rest, RDF_Rest),
            global_prefix_expand(rdf:type, RDF_Type),
            memberchk(Predicate, [RDF_First, RDF_Rest, RDF_Type])),
+    terminus_store:subject_id(Layer, Subject, S_Id),
     Witness = json{ '@type' : invalid_list_type,
                     subject: Subject,
                     class: Class }.
-refute_object_type(Validation_Object, Class,Subject,Predicate,Witness) :-
-    database_instance(Validation_Object, Instance),
-    (   class_predicate_type(Validation_Object, Class,Predicate,Type)
-    ->  xrdf_added(Instance, Subject,Predicate,Object),
+refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
+    instance_layer(Validation_Object, Layer),
+    terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+    atom_string(Predicate, Predicate_String),
+    (   class_predicate_type(Validation_Object, Class, Predicate, Type)
+    ->  terminus_store:id_triple_addition(Layer,S_Id,P_Id,O_Id),
+        terminus_store:object_id(Layer,O,O_Id),
+        storage_object(O,Object),
         refute_object_type_(Type,Validation_Object,Object,Witness)
-    ;   Witness = json{ '@type' : invalid_predicate,
+    ;   terminus_store:subject_id(Layer, Subject_String, S_Id),
+        atom_string(Subject, Subject_String),
+        Witness = json{ '@type' : invalid_predicate,
                         class: Class,
                         predicate: Predicate,
                         subject: Subject }
@@ -569,35 +586,40 @@ refute_abstract(Subject, Class, Witness) :-
                   subject: Subject
               }.
 
-refute_typed_subject(Validation_Object,Subject,Class,Witness) :-
-    subject_predicate_changed(Validation_Object,Subject,Predicate),
+refute_typed_subject(Validation_Object,S_Id,Class,Witness) :-
+    subject_predicate_changed(Validation_Object,S_Id,P_Id),
     % We also need to check arrays / lists for coherence here?
-    (   is_built_in(Predicate)
-    ->  (   refute_built_in(Validation_Object,Subject,Predicate,Witness)
+    (   instance_layer(Validation_Object, Layer),
+        terminus_store:predicate_id(Layer, Predicate_String, P_Id),
+        atom_string(Predicate,Predicate_String),
+        is_built_in(Predicate)
+    ->  (   refute_built_in(Validation_Object,S_Id,P_Id,Witness)
         ;   global_prefix_expand(rdf:type, Predicate),
-            (   refute_subject_deletion(Validation_Object, Subject, Witness)
-            ;   refute_subject_type_change(Validation_Object,Subject,Witness)
-            ;   refute_cardinality(Validation_Object,Subject,Predicate,Class,Witness)))
+            (   refute_subject_deletion(Validation_Object, S_Id, Witness)
+            ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
+            ;   refute_cardinality(Validation_Object,S_Id,P_Id,Class,Witness)))
     ;   is_abstract(Validation_Object,Class)
-    ->  refute_abstract(Subject, Class, Witness)
-    ;   refute_subject_type_change(Validation_Object,Subject,Witness)
-    ;   refute_key(Validation_Object,Subject,Predicate,Class,Witness)
+    ->  refute_abstract(S_Id, Class, Witness)
+    ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
+    ;   refute_key(Validation_Object,S_Id,P_Id,Class,Witness)
         % NOTE: Perhaps this can be more intelligence predicates
-    ;   refute_cardinality(Validation_Object,Subject,Predicate,Class,Witness)
-    ;   refute_object_type(Validation_Object,Class,Subject,Predicate,Witness)
+    ;   refute_cardinality(Validation_Object,S_Id,P_Id,Class,Witness)
+    ;   refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness)
     ).
 
-refute_subject(Validation_Object,Subject,Witness) :-
-    (   refute_subject_deletion(Validation_Object,Subject,Witness)
+refute_subject(Validation_Object,S_Id,Witness) :-
+    (   refute_subject_deletion(Validation_Object,S_Id,Witness)
     *-> true
-    ;   refute_subject_1(Validation_Object, Subject, Witness)).
+    ;   refute_subject_1(Validation_Object, S_Id, Witness)).
 
-refute_subject_1(Validation_Object,Subject,_Witness) :-
-    database_instance(Validation_Object, Instance),
-    \+ xrdf(Instance, Subject, _, _),
+refute_subject_1(Validation_Object,S_Id,_Witness) :-
+    instance_layer(Validation_Object, Layer),
+    \+ terminus_store:id_triple(Layer,S_Id, _,_),
     !,
     fail.
-refute_subject_1(Validation_Object,Subject,Witness) :-
+refute_subject_1(Validation_Object,S_Id,Witness) :-
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject, S_Id),
     foreign_instance_of(Validation_Object, Subject, Class),
     !,
     database_instance(Validation_Object, Instance),
@@ -610,9 +632,11 @@ refute_subject_1(Validation_Object,Subject,Witness) :-
                   foreign_type: Class,
                   instance: Subject
               }.
-refute_subject_1(Validation_Object,Subject,Witness) :-
+refute_subject_1(Validation_Object,S_Id,Witness) :-
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject, S_Id),
     (   instance_of(Validation_Object, Subject, Class)
-    ->  refute_typed_subject(Validation_Object, Subject, Class, Witness)
+    ->  refute_typed_subject(Validation_Object, S_Id, Class, Witness)
     ;   Witness = witness{
                       '@type': subject_has_no_type,
                       subject: Subject

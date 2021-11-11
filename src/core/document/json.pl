@@ -5702,8 +5702,7 @@ test(status_update,
            )
     ).
 
-
-test(status_update,
+test(status_update2,
      [
          setup(
              (   setup_temp_store(State),
