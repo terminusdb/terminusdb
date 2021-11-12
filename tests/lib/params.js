@@ -31,6 +31,22 @@ class Params {
     return val
   }
 
+  // Extract an integer value.
+  integer (key, def) {
+    const val = this.params[key]
+    delete this.params[key]
+
+    if (val === undefined || val === null) {
+      return def
+    }
+
+    if (!util.isInteger(val)) {
+      throw new Error(`Unexpected type for parameter '${key}'. Expected integer, got: ${val.constructor.name || typeof val}`)
+    }
+
+    return val
+  }
+
   // Extract a string value.
   string (key, def) {
     const val = this.params[key]

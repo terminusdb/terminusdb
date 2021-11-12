@@ -987,14 +987,6 @@ api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, J
                               'api:absolute_graph_descriptor' : Path},
              'api:message' : Msg
             }.
-api_error_jsonld(graph,error(bad_graph_type(Graph_Type),_), Type, JSON) :-
-    format(string(Msg), "Not a valid graph type: ~q", [Graph_Type]),
-    JSON = _{'@type' : Type,
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadGraphType',
-                              'api:graph_type' : Graph_Type},
-             'api:message' : Msg
-            }.
 api_error_jsonld(graph,error(not_a_branch_descriptor(Descriptor),_), Type, JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The path ~s is not a branch descriptor", [Path]),
@@ -1046,15 +1038,6 @@ api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Documen
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:DocumentElaborationImpossible',
                               'api:document' : Document },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(Type,error(unknown_graph_type(Graph_Type), _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "Unknown graph type specified: ~q", [Graph_Type]),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:UnknownGraphType',
-                              'api:graph_type' : Graph_Type },
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(invalid_path(Path), _), JSON) :-
@@ -1260,20 +1243,27 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents, error(skip_is_not_an_integer(Skip_Atom), _), JSON) :-
-    format(string(Msg), "specified skip count is not an integer: ~q", [Skip_Atom]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+api_document_error_jsonld(Type, error(bad_parameter_type(Param, Expected_Type_In, Value), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    (   Expected_Type_In = atom
+    ->  Expected_Type = string
+    ;   Expected_Type = Expected_Type_In),
+    (   Expected_Type = boolean
+    ->  Type_Msg = "to be 'true' or 'false'"
+    ;   Expected_Type = graph
+    ->  Type_Msg = "to be 'schema' or 'instance'"
+    ;   Expected_Type = integer
+    ->  Type_Msg = "to be an integer"
+    ;   Expected_Type = nonnegative_integer
+    ->  Type_Msg = "to be a non-negative integer"
+    ;   format(string(Type_Msg), "to be a ~q", [Expected_Type])),
+    format(string(Msg), "Expected parameter '~s' ~s but found: ~q", [Param, Type_Msg, Value]),
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:SkipNotAnInteger',
-                              'api:skip' : Skip_Atom },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(get_documents, error(count_is_not_an_integer(Count_Atom), _), JSON) :-
-    format(string(Msg), "specified retrieval count is not an integer: ~q", [Count_Atom]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:CountNotAnInteger',
-                              'api:count' : Count_Atom },
+             'api:error' : _{ '@type' : 'api:BadParameterType',
+                              'api:parameter' : Param,
+                              'api:expected_type' : Expected_Type,
+                              'api:value' : Value },
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents,error(document_not_found(Id),_), JSON) :-
@@ -1439,13 +1429,11 @@ api_document_error_jsonld(delete_documents, error(document_does_not_exist(Id), _
                               'api:document_id' : Id},
              'api:message' : Msg
             }.
-api_document_error_jsonld(delete_documents, error(not_a_proper_id_for_deletion(Id), _), JSON) :-
-    format(string(Msg), "not a document id: ~q", [Id]),
+api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
     JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:NotADocumentId',
-                              'api:invalid_document_id' : Id},
-             'api:message' : Msg
+             'api:error' : _{ '@type' : 'api:MissingTargets' },
+             'api:message' : "Missing target(s) for deletion"
             }.
 api_document_error_jsonld(Type, error(document_key_type_unknown(Key_Type, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),

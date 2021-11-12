@@ -215,7 +215,20 @@
               info_log_enabled/0,
               debug_log_enabled/0,
               generate_request_id/2,
-              saved_request/5
+              saved_request/5,
+
+              % param.pl
+              param_check_json/4,
+              param_check_search/4,
+              param_value_search/4,
+              param_value_search_optional/5,
+              param_value_json/4,
+              param_value_json_optional/5,
+              param_value_search_or_json/5,
+              param_value_search_or_json_optional/6,
+              param_value_search_author/2,
+              param_value_search_message/2,
+              param_value_search_graph_type/2
           ]).
 
 % note: test_utils is intentionally omitted
@@ -229,5 +242,5 @@
 :- use_module(util/benchmark).
 :- use_module(util/http_utils).
 %:- use_module(util/plunit_patch).
-
+:- use_module(util/param).
 :- use_module(util/json_log).
