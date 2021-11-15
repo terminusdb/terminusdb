@@ -195,7 +195,6 @@ api_error_jsonld(frame,error(could_not_create_class_frame(Class),_), JSON) :-
             }.
 api_error_jsonld(frame,error(could_not_create_class_frame,_), JSON) :-
     format(string(Msg), "Could not create class frames for all classes", []),
-    term_string(Class, Class_String),
     JSON = _{'@type' : 'api:FrameErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:CouldNotCreateClassFrames' },
