@@ -975,13 +975,16 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
     ;   Search = []),
 
     (   get_dict(type, Posted, Class_Uri)
-    ->  true
-    ;   memberchk(type=Class_Uri, Search)),
+    ->  Class = uri(Class_Uri)
+    ;   memberchk(type=Class_Uri, Search)
+    ->  Class = uri(Class_Uri)
+    ;   Class = all
+    ),
 
     api_report_errors(
         frame,
         Request,
-        api_class_frame(System_DB, Auth, Path, Class_Uri, Frame)),
+        api_class_frame(System_DB, Auth, Path, Class, Frame)),
 
     write_cors_headers(Request),
     reply_json(Frame).
