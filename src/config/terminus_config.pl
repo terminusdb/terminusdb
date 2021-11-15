@@ -27,7 +27,7 @@
 
 :- use_module(core(util)).
 
-version('10.0.10').
+version('10.0.11').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
