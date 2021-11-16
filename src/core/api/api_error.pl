@@ -193,6 +193,13 @@ api_error_jsonld(frame,error(could_not_create_class_frame(Class),_), JSON) :-
                               'api:class_uri' : Class_String},
              'api:message' : Msg
             }.
+api_error_jsonld(frame,error(could_not_create_class_frame,_), JSON) :-
+    format(string(Msg), "Could not create class frames for all classes", []),
+    JSON = _{'@type' : 'api:FrameErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:CouldNotCreateClassFrames' },
+             'api:message' : Msg
+            }.
 api_error_jsonld(frame,error(could_not_create_filled_class_frame(Instance),_), JSON) :-
     format(string(Msg), "Could not create filled class frame for instance: ~q", [Instance]),
     term_string(Instance, Instance_String),

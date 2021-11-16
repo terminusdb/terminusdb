@@ -38,6 +38,7 @@
               write_json_string_to_instance/2,
               replace_json_schema/2,
               class_frame/3,
+              all_class_frames/2,
               class_property_dictionary/3,
               class_property_dictionary/4,
               prefix_expand_schema/3,
@@ -2121,6 +2122,22 @@ type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : "Enum",
     maplist({C}/[V,Enum]>>(
                 enum_value(C,Enum,V)
             ), List, Enum_List).
+
+all_class_frames(Transaction, Frames) :-
+    (   is_transaction(Transaction)
+    ;   is_validation_object(Transaction)
+    ),
+    !,
+    findall(
+        Frame,
+        (   is_simple_class(Transaction, Class),
+            class_frame(Transaction, Class, Frame)),
+        Frames).
+all_class_frames(Query_Context, Frames) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    all_class_frames(TO, Frames).
 
 class_frame(Transaction, Class, Frame) :-
     (   is_transaction(Transaction)
