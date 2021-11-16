@@ -4,18 +4,37 @@ const { expect } = require('chai')
 const { Params } = require('./params.js')
 const util = require('./util.js')
 
+function commonGetParams (params) {
+  const result = {}
+  result.graph_type = params.string('graph_type')
+  result.as_list = params.boolean('as_list')
+  result.type = params.string('type')
+  result.id = params.string('id')
+  result.count = params.integer('count')
+  result.skip = params.integer('skip')
+  params.assertEmpty()
+  return result
+}
+
 function get (agent, path, params) {
   params = new Params(params)
-  const query = {}
-  query.graph_type = params.string('graph_type')
-  query.type = params.string('type')
-  query.id = params.string('id')
+  const queryString = params.string('queryString')
+  const query = commonGetParams(new Params(params.object('query')))
+  const bodyString = params.string('bodyString')
+  const body = commonGetParams(new Params(params.object('body')))
   params.assertEmpty()
 
-  const request = agent
-    .get(path)
-    .query(query)
-
+  const request = agent.get(path)
+  if (queryString) {
+    request.query(queryString)
+  } else if (Object.keys(query).length) {
+    request.query(query)
+  }
+  if (bodyString) {
+    request.type('json').send(bodyString)
+  } else if (Object.keys(body).length) {
+    request.send(body)
+  }
   return request
 }
 
@@ -87,17 +106,26 @@ function replace (agent, path, params) {
 
 function del (agent, path, params) {
   params = new Params(params)
+  const queryString = params.string('queryString')
+  const queryParams = new Params(params.object('query'))
   const query = {}
-  query.author = params.string('author', 'default_author')
-  query.message = params.string('message', 'default_message')
-  query.graph_type = params.string('graph_type')
-  query.id = params.string('id')
+  query.author = queryParams.string('author', 'default_author')
+  query.message = queryParams.string('message', 'default_message')
+  query.graph_type = queryParams.string('graph_type')
+  query.id = queryParams.string('id')
+  queryParams.assertEmpty()
+  const bodyString = params.string('bodyString')
   params.assertEmpty()
 
-  const request = agent
-    .delete(path)
-    .query(query)
-
+  const request = agent.delete(path)
+  if (queryString) {
+    request.query(queryString)
+  } else {
+    request.query(query)
+  }
+  if (bodyString) {
+    request.type('json').send(bodyString)
+  }
   return request
 }
 
@@ -115,6 +143,13 @@ function verifyId (requestId, responseId) {
 
 function verifyGetSuccess (r) {
   expect(r.status).to.equal(200)
+  return r
+}
+
+function verifyGetFailure (r) {
+  expect(r.status).to.equal(400)
+  expect(r.body['api:status']).to.equal('api:failure')
+  expect(r.body['@type']).to.equal('api:GetDocumentErrorResponse')
   return r
 }
 
@@ -161,6 +196,7 @@ module.exports = {
   replace,
   del,
   verifyGetSuccess,
+  verifyGetFailure,
   verifyInsertSuccess,
   verifyInsertFailure,
   verifyReplaceFailure,

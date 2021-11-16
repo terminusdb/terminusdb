@@ -760,11 +760,11 @@ json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
 document_handler(get, Path, Request, System_DB, Auth) :-
     (   json_content_type(Request),
         memberchk(content_length(_), Request)
-    ->  http_read_json_data(Request, Posted)
-    ;   Posted = _{}),
+    ->  http_read_json_data(Request, JSON)
+    ;   JSON = json{}),
 
-    do_or_die(is_dict(Posted),
-              error(malformed_api_document(Posted), _)),
+    do_or_die(is_dict(JSON),
+              error(malformed_api_document(JSON), _)),
 
     api_report_errors(
         get_documents,
@@ -774,60 +774,24 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Search = []),
 
-            (   get_dict(graph_type, Posted, Graph_Type_String)
-            ->  atom_string(Graph_Type, Graph_Type_String)
-            ;   memberchk(graph_type=Graph_Type, Search)
-            ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
-                          error(unknown_graph_type(Graph_Type),_))
-            ;   Graph_Type = instance),
+            param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
+            param_value_search_or_json_optional(Search, JSON, skip, nonnegative_integer, 0, Skip),
+            param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
+            param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
+            param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
+            param_value_search_or_json_optional(Search, JSON, prefixed, boolean, true, Prefixed),
+            param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
+            param_value_search_or_json_optional(Search, JSON, id, atom, _, Id),
+            param_value_search_or_json_optional(Search, JSON, type, atom, _, Type),
 
-            (   (   get_dict(skip, Posted, Skip_Atom)
-                ->  true
-                ;   memberchk(skip=Skip_Atom, Search))
-            ->  do_or_die(input_to_integer(Skip_Atom, Skip),
-                          error(skip_is_not_an_integer(Skip_Atom),_))
-            ;   Skip = 0),
-            (   (   get_dict(count, Posted, Count_Atom)
-                ->  true
-                ;   memberchk(count=Count_Atom, Search))
-            ->  do_or_die(input_to_integer(Count_Atom, Count),
-                          error(count_is_not_an_integer(Count_Atom),_))
-            ;   Count = unlimited),
+            param_value_json_optional(JSON, query, object, _, Query),
 
-            (   (   get_dict(minimized, Posted, false)
-                ->  true
-                ;   memberchk(minimized=false, Search))
-            ->  JSON_Options = []
-            ;   JSON_Options = [width(0)]),
-
-            (   (   get_dict(as_list, Posted, true)
-                ->  true
-                ;   memberchk(as_list=true, Search))
-            ->  As_List = true
-            ;   As_List = false),
-
-            (   (   get_dict(prefixed, Posted, false)
-                ->  true
-                ;   memberchk(prefixed=false, Search))
-            ->  Prefixed = false
-            ;   Prefixed = true),
-
-            (   (   get_dict(unfold, Posted, false)
-                ->  true
-                ;   memberchk(unfold=false, Search))
-            ->  Unfold = false
-            ;   Unfold = true),
-
-            ignore((   get_dict(id, Posted, Id)
-                   ;   memberchk(id=Id, Search))),
-
-            ignore((   get_dict(type, Posted, Type)
-                   ;   memberchk(type=Type, Search))),
-
-            ignore(get_dict(query, Posted, Query)),
+            (   Minimized = true
+            ->  JSON_Options = [width(0)]
+            ;   JSON_Options = []),
 
             Header_Written = written(_),
-            (   nonvar(Query)
+            (   ground(Query)
             ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
             ;   ground(Id)
@@ -862,19 +826,10 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Search = []),
 
-            (   memberchk(graph_type=Graph_Type, Search)
-            ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
-                          error(unknown_graph_type(Graph_Type),_))
-            ;   Graph_Type = instance),
-
-            do_or_die(memberchk(author=Author, Search),
-                      error(no_commit_author, _)),
-            do_or_die(memberchk(message=Message, Search),
-                      error(no_commit_message, _)),
-
-            (   memberchk(full_replace=Full_Replace, Search)
-            ->  true
-            ;   Full_Replace = false),
+            param_value_search_author(Search, Author),
+            param_value_search_message(Search, Message),
+            param_value_search_graph_type(Search, Graph_Type),
+            param_value_search_optional(Search, full_replace, boolean, false, Full_Replace),
 
             http_read_data(Request, Data, [to(string)]),
             open_string(Data, Stream),
@@ -894,23 +849,22 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Search = []),
 
-            (   memberchk(graph_type=Graph_Type, Search)
-            ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
-                          error(unknown_graph_type(Graph_Type),_))
-            ;   Graph_Type = instance),
+            param_value_search_author(Search, Author),
+            param_value_search_message(Search, Message),
+            param_value_search_graph_type(Search, Graph_Type),
+            param_value_search_optional(Search, nuke, boolean, false, Nuke),
+            param_value_search_optional(Search, id, atom, _, Id),
 
-            do_or_die(memberchk(author=Author, Search),
-                      error(no_commit_author, _)),
-            do_or_die(memberchk(message=Message, Search),
-                      error(no_commit_message, _)),
-
-            (   memberchk(nuke=true, Search)
+            (   Nuke = true
             ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message)
-            ;   memberchk(id=Id, Search)
+            ;   ground(Id)
             ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
-            ;   http_read_data(Request, Data, [to(string)]),
+            ;   json_content_type(Request),
+                memberchk(content_length(_), Request)
+            ->  http_read_data(Request, Data, [to(string)]),
                 open_string(Data, Stream),
                 api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
+            ;   throw(error(missing_targets, _))
             ),
 
             write_cors_headers(Request),
@@ -928,19 +882,10 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Search = []),
 
-            (   memberchk(create=true, Search)
-            ->  Create = true
-            ;   Create = false),
-
-            (   memberchk(graph_type=Graph_Type, Search)
-            ->  do_or_die(memberchk(Graph_Type, [schema, instance]),
-                          error(unknown_graph_type(Graph_Type),_))
-            ;   Graph_Type = instance),
-
-            do_or_die(memberchk(author=Author, Search),
-                      error(no_commit_author, _)),
-            do_or_die(memberchk(message=Message, Search),
-                      error(no_commit_message, _)),
+            param_value_search_author(Search, Author),
+            param_value_search_message(Search, Message),
+            param_value_search_graph_type(Search, Graph_Type),
+            param_value_search_optional(Search, create, boolean, false, Create),
 
             http_read_data(Request, Data, [to(string)]),
             open_string(Data, Stream),

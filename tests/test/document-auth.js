@@ -89,10 +89,10 @@ describe('document', function () {
             .insert(agent, docPath, { schema: schema })
             .then(document.verifyInsertSuccess)
           const r = await document
-            .get(agent, docPath, { graph_type: 'schema', id: schema['@id'] })
+            .get(agent, docPath, { query: { graph_type: 'schema', id: id } })
             .then(document.verifyGetSuccess)
           await document
-            .del(agent, docPath, { graph_type: 'schema', id: id })
+            .del(agent, docPath, { query: { graph_type: 'schema', id: id } })
             .then(document.verifyDelSuccess)
           expect(r.body).to.deep.equal(schema)
         })
@@ -302,9 +302,7 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, {
-          id: id,
-        })
+        .get(agent, docPath, { query: { id: id } })
         .then(document.verifyGetSuccess)
       expect(r.body['@id']).to.equal(id)
       expect(r.body['@type']).to.equal(type)
@@ -340,7 +338,7 @@ describe('document', function () {
         .replace(agent, docPath, { instance: doc1 })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { id: doc2['@id'] })
+        .get(agent, docPath, { body: { id: doc2['@id'] } })
         .then(document.verifyGetSuccess)
       // Even though doc1 was replaced, doc2 should still have the same reference.
       expect(r.body).to.deep.equal(doc2)
@@ -373,7 +371,7 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { type: type1 })
+        .get(agent, docPath, { query: { type: type1 } })
         .then(document.verifyGetSuccess)
       // We have inserted doc1
       expect(r.body.name === type1 + '/1')

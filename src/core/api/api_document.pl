@@ -255,11 +255,9 @@ api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                          forall(
                              (   json_read_dict_stream(Stream,JSON),
                                  (   is_list(JSON)
-                                 ->  member(ID, JSON)
-                                 ;   ID = JSON),
-                                 do_or_die(
-                                     string(ID),
-                                     error(not_a_proper_id_for_deletion(ID), _))),
+                                 ->  member(ID_Unchecked, JSON)
+                                 ;   ID_Unchecked = JSON),
+                                 param_check_json(string, id, ID_Unchecked, ID)),
                              api_delete_document_(Schema_Or_Instance, Transaction, ID))),
                      _).
 
