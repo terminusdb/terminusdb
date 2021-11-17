@@ -1075,6 +1075,23 @@ json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
     json_schema_elaborate_key(V,Context,Elab),
     key_id(V,Context,Path,ID),
     put_dict(_{'@id' : ID}, Elab, Value).
+json_schema_predicate_value('@oneOf',V,Context,Path,P,Value) :-
+    !,
+    global_prefix_expand(sys:oneOf, P),
+    do_or_die(is_dict(V),
+              error(document_oneof_not_object(V), _)),
+    dict_pairs(V,json,Pairs),
+    !,
+    append(Path,[property('oneOf')],NewPath),
+    findall(
+        Prop-Val,
+        (   member(P_Choice-V_Choice,Pairs),
+            json_schema_predicate_value(P_Choice,V_Choice,Context,NewPath,Prop,Val)
+        ),
+        PVs),
+    dict_pairs(Elaborated,json,PVs),
+    property_id(V,Context,NewPath,ID),
+    put_dict(_{'@id' : ID}, Elaborated, Value).
 json_schema_predicate_value('@documentation',V,Context,Path,P,Value) :-
     !,
     global_prefix_expand(sys:documentation, P),
@@ -1604,6 +1621,16 @@ documentation_descriptor_json(documentation(Comment, Properties), Prefixes, Resu
         Result = (Template.put('@properties', JSONs))
     ).
 
+oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON) :-
+    dict_pairs(Map, _, Pairs),
+    maplist({Prefixes}/[Prop-Val,Small-Small_Val]>>(
+                compress_schema_uri(Prop, Prefixes, Small),
+                compress_schema_uri(Val, Prefixes, Small_Val)
+            ),
+            Pairs,
+            JSON_Pairs),
+    dict_pairs(JSON,json,JSON_Pairs).
+
 type_descriptor_json(unit, _Prefix, "Unit").
 type_descriptor_json(class(C), Prefixes, Class_Comp) :-
     compress_schema_uri(C, Prefixes, Class_Comp).
@@ -1669,6 +1696,11 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@documentation
     !,
     schema_documentation_descriptor(Schema, Id, Documentation_Desc),
     documentation_descriptor_json(Documentation_Desc,Prefixes,V).
+schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@oneOf',V) :-
+    global_prefix_expand(sys:oneOf,P),
+    !,
+    schema_oneof_descriptor(Schema, Id, Descriptor),
+    oneof_descriptor_json(Descriptor, Prefixes, V).
 schema_subject_predicate_object_key_value(Schema,Prefixes,_Id,P,O,K,JSON) :-
     compress_schema_uri(P, Prefixes, K),
     schema_type_descriptor(Schema, O, Descriptor),
@@ -2108,13 +2140,6 @@ type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : "List",
                                                        '@class' : Frame }) :-
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
-type_descriptor_sub_frame(tagged_union(C,_), DB, Prefixes, Frame) :-
-    (   is_subdocument(DB,C)
-    ->  compress_schema_uri(C, Prefixes, Class_Comp),
-        Frame = json{ '@class' : Class_Comp,
-                      '@subdocument' : []}
-    ;   compress_schema_uri(C, Prefixes, Frame)
-    ).
 type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : "Enum",
                                                            '@id' : Class_Comp,
                                                            '@values' : Enum_List}) :-
@@ -2168,13 +2193,18 @@ class_frame(Transaction, Class, Frame) :-
         key_descriptor_json(Key_Desc,Prefixes,Key_JSON)
     ->  Pairs4 = ['@key'-Key_JSON|Pairs3]
     ;   Pairs4 = Pairs3),
+    % oneOf
+    (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
+        oneof_descriptor_json(OneOf_Desc,Prefixes,OneOf_JSON)
+    ->  Pairs5 = ['@oneOf'-OneOf_JSON|Pairs4]
+    ;   Pairs5 = Pairs4),
     % documentation
     (   documentation_descriptor(Transaction, Class_Ex, Documentation_Desc),
-	documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
-    ->  Pairs5 = ['@documentation'-Documentation_Json|Pairs4]
-    ;   Pairs5 = Pairs4),
+	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
+    ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
+    ;   Pairs6 = Pairs5),
 
-    sort(Pairs5, Sorted_Pairs),
+    sort(Pairs6, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -3027,6 +3057,27 @@ schema2('
 { "@id" : "Moo",
   "@type" : "Class",
   "name" : "xsd:string" }
+
+{ "@id" : "Choice",
+  "@type" : "TaggedUnion",
+  "a" : "xsd:string",
+  "b" : "xsd:integer" }
+
+{ "@id" : "InheritsChoice",
+  "@type" : "Class",
+  "@inherits" : ["Choice"],
+  "c" : "xsd:string" }
+
+{ "@id" : "Choice2",
+  "@type" : "Class",
+  "@oneOf" : { "a" : "xsd:string",
+               "b" : "xsd:integer" }}
+
+{ "@id" : "Choice3",
+  "@type" : "Class",
+  "c" : "xsd:string",
+  "@oneOf" : { "a" : "xsd:string",
+               "b" : "xsd:integer" }}
 
 ').
 
@@ -5991,6 +6042,91 @@ test(empty_test_for_optional,
 
     get_document(Desc, Uri, Result),
     writeq(Result).
+
+test(elaborate_one_of,
+     []) :-
+    Doc = _{ '@id' : "Choice2",
+             '@type' : "Class",
+             '@oneOf' : _{ a : "xsd:string",
+                           b : "xsd:integer" }},
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+    json_schema_elaborate(Doc, Context, Elaborated),
+
+    Elaborated = json{
+                     '@id':'https://s/Choice2',
+                     '@type':'http://terminusdb.com/schema/sys#Class',
+                     'http://terminusdb.com/schema/sys#oneOf':
+                     json{'@id':'https://s/oneOf/Choice2/a+b',
+                          'https://s/a':json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                             '@type':"@id"},
+                          'https://s/b':json{'@id':'http://www.w3.org/2001/XMLSchema#integer',
+                                             '@type':"@id"}}}.
+
+test(extract_one_of,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Choice2', JSON),
+    JSON = json{'@id':'Choice2',
+                '@oneOf':json{a:'xsd:string',
+                              b:'xsd:integer'},
+                '@type':'Class'}.
+
+test(two_oneof_an_error,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         error(
+             schema_check_failure([witness{'@type':instance_not_cardinality_zero,
+                                           class:'http://s/Choice2',
+                                           instance:_,
+                                           predicate:'http://s/a'}]),
+             _),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'Choice2',
+                    a : "asdf",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _Id).
+
+
+test(inheritence_of_tagged_union,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'InheritsChoice',
+                    a : "asdf",
+                    c : "boo"},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, Id),
+    writeq(Id).
 
 :- end_tests(json).
 

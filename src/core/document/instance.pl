@@ -114,7 +114,6 @@ member_list(Validation_Object, O, L) :-
 card_count(Validation_Object,S_Id,P_Id,N) :-
     % choose as existential anything free
     instance_layer(Validation_Object, Layer),
-
     (   integer(S_Id),
         integer(P_Id)
     ->  terminus_store:sp_card(Layer,S_Id,P_Id,N)
@@ -313,7 +312,12 @@ refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     !,
     refute_cardinality_(list, Validation_Object, S_Id, P_Id, Witness).
 refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
-    type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
+    oneof_descriptor(Validation_Object, C, tagged_union(TU,TC)),
+    (   is_tagged_union(Validation_Object,C)
+    ->  !
+    ;   % No cut because we may have other edges...
+        true
+    ),
     !,
     instance_layer(Validation_Object, Layer),
     terminus_store:predicate_id(Layer, Predicate, P_Id),
