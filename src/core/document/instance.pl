@@ -116,9 +116,8 @@ card_count(Validation_Object,S_Id,P_Id,N) :-
     instance_layer(Validation_Object, Layer),
 
     (   integer(S_Id),
-        integer(P_Id),
-        terminus_store:sp_card(Layer,S_Id,P_Id,M)
-    ->  M = N
+        integer(P_Id)
+    ->  terminus_store:sp_card(Layer,S_Id,P_Id,N)
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
     ).
