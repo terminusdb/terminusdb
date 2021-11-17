@@ -21,6 +21,8 @@
               param_value_search_graph_type/2
           ]).
 
+:- use_module(utils).
+
 /*
  * Check a JSON dict parameter value against an expected type. If it's wrong,
  * throw an error. Otherwise, convert it if necessary.

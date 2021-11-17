@@ -116,9 +116,8 @@ card_count(Validation_Object,S_Id,P_Id,N) :-
     instance_layer(Validation_Object, Layer),
 
     (   integer(S_Id),
-        integer(P_Id),
-        terminus_store:sp_card(Layer,S_Id,P_Id,N)
-    ->  true
+        integer(P_Id)
+    ->  terminus_store:sp_card(Layer,S_Id,P_Id,N)
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
     ).
@@ -305,34 +304,35 @@ range_term_list(Validation_Object, S, P, L) :-
             ),
             L).
 
-refute_cardinality(Validation_Object,S,P,C,Witness) :-
+refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     is_array_type(C),
     !,
-    refute_cardinality_(array, Validation_Object, S, P, Witness).
-refute_cardinality(Validation_Object,S,P,C,Witness) :-
+    refute_cardinality_(array, Validation_Object, S_Id, P_Id, Witness).
+refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     is_list_type(C),
     !,
-    refute_cardinality_(list, Validation_Object, S, P, Witness).
-refute_cardinality(Validation_Object,S,P,C,Witness) :-
+    refute_cardinality_(list, Validation_Object, S_Id, P_Id, Witness).
+refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
     !,
     instance_layer(Validation_Object, Layer),
-    terminus_store:predicate_id(Layer, Predicate, P),
+    terminus_store:predicate_id(Layer, Predicate, P_Id),
     class_predicate_type(Validation_Object,C,Predicate,_),
-    (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
+    (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S_Id,P_Id,Witness)
     ;   class_predicate_type(Validation_Object,C,Q,_),
-        P \= Q,
+        % If it isn't in the dictionary, it isn't in the object and we're done...
         terminus_store:predicate_id(Layer, Q, Q_Id),
-        refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S,Q_Id,Witness)
+        P_Id \= Q_Id,
+        refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S_Id,Q_Id,Witness)
     ).
-refute_cardinality(Validation_Object,S,_,C,Witness) :-
+refute_cardinality(Validation_Object,S_Id,_,C,Witness) :-
     instance_layer(Validation_Object, Layer),
     class_predicate_type(Validation_Object, C, Predicate, Desc),
-    (   terminus_store:predicate_id(Layer, Predicate, P)
+    (   terminus_store:predicate_id(Layer, Predicate, P_Id)
     ->  true
-    ;   P = Predicate
+    ;   P_Id = Predicate % out of band value, but reportable
     ),
-    refute_cardinality_(Desc,Validation_Object,S,P,Witness).
+    refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness).
 
 refute_built_in_value(Validation_Object, rdf:type,O,Witness) :-
     refute_class(Validation_Object, O,Witness).
@@ -656,10 +656,10 @@ refute_instance(Validation_Object, Witness) :-
 refute_instance_schema(Validation_Object, Witness) :-
     refute_schema(Validation_Object,Witness).
 refute_instance_schema(Validation_Object, Witness) :-
-    database_instance(Validation_Object, Instance),
-    distinct(Subject,
-             xrdf(Instance, Subject, _, _)),
-    refute_subject(Validation_Object,Subject,Witness).
+    instance_layer(Validation_Object, Layer),
+    distinct(S_Id,
+             terminus_store:id_triple(Layer, S_Id, _, _)),
+    refute_subject(Validation_Object,S_Id,Witness).
 
 %%%%%%%%%%%%%%%%%%%%%%
 %%  BASETYPES ONLY  %%
