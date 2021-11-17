@@ -117,8 +117,8 @@ card_count(Validation_Object,S_Id,P_Id,N) :-
 
     (   integer(S_Id),
         integer(P_Id),
-        terminus_store:sp_card(Layer,S_Id,P_Id,N)
-    ->  true
+        terminus_store:sp_card(Layer,S_Id,P_Id,M)
+    ->  M = N
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
     ).
@@ -315,10 +315,10 @@ refute_cardinality(Validation_Object,S,P,C,Witness) :-
     refute_cardinality_(list, Validation_Object, S, P, Witness).
 refute_cardinality(Validation_Object,S,P,C,Witness) :-
     type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
-    !,
     instance_layer(Validation_Object, Layer),
     terminus_store:predicate_id(Layer, Predicate, P),
     class_predicate_type(Validation_Object,C,Predicate,_),
+    !,
     (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S,P,Witness)
     ;   class_predicate_type(Validation_Object,C,Q,_),
         P \= Q,
@@ -656,10 +656,10 @@ refute_instance(Validation_Object, Witness) :-
 refute_instance_schema(Validation_Object, Witness) :-
     refute_schema(Validation_Object,Witness).
 refute_instance_schema(Validation_Object, Witness) :-
-    database_instance(Validation_Object, Instance),
-    distinct(Subject,
-             xrdf(Instance, Subject, _, _)),
-    refute_subject(Validation_Object,Subject,Witness).
+    instance_layer(Validation_Object, Layer),
+    distinct(S_Id,
+             terminus_store:id_triple(Layer, S_Id, _, _)),
+    refute_subject(Validation_Object,S_Id,Witness).
 
 %%%%%%%%%%%%%%%%%%%%%%
 %%  BASETYPES ONLY  %%

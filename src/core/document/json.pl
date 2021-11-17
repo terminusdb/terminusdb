@@ -5939,7 +5939,7 @@ test(property_documentation_mismatch,
 
     atom_json_dict(Schema_Atom, Doc, []),
 
-     with_test_transaction(
+    with_test_transaction(
          Desc,
          C1,
          insert_schema_document(
@@ -5947,6 +5947,50 @@ test(property_documentation_mismatch,
                     Doc)
      ).
 
+test(empty_test_for_optional,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':instance_not_cardinality_one,
+                          class:'http://www.w3.org/2001/XMLSchema#string',
+                          instance:_,
+                          predicate:'http://somewhere.for.now/schema#name'}
+                 ]),
+             _)
+     ]) :-
+
+    Schema = _{ '@id': 'Foo', '@type': 'Class' },
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            Schema)
+    ),
+    Doc = _{ '@type': 'Foo' },
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(
+                              C2,
+                              Doc,
+                              Uri)),
+    Schema2 = _{ '@id' : 'Foo', '@type': 'Class', name : 'xsd:string' },
+    with_test_transaction(Desc,
+                          C3,
+                          replace_schema_document(
+                              C3,
+                              Schema2)),
+
+    get_document(Desc, Uri, Result),
+    writeq(Result).
 
 :- end_tests(json).
 
