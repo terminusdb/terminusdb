@@ -2218,7 +2218,8 @@ class_frame(Transaction, Class, Frame) :-
     (   findall(JSON,
                 (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
                     oneof_descriptor_json(OneOf_Desc,Prefixes,JSON)),
-                OneOf_JSONs)
+                OneOf_JSONs),
+        OneOf_JSONs \= []
     ->  Pairs5 = ['@oneOf'-OneOf_JSONs|Pairs4]
     ;   Pairs5 = Pairs4),
     % documentation
