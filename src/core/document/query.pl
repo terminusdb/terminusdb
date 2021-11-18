@@ -132,7 +132,7 @@ expand_query_document_for_type(enum(_Type, _Values), _Db, Query, _Query_Ex) :-
 expand_query_document_for_type(Type, _Db, _Query, _Query_Ex) :-
     throw(error(query_error(unknown_type(Type)), _)).
 
-expand_query_document_(DB, Type, Query, Query_Ex) :-
+expand_query_document_(DB, Type, Query, Query_Ex, Type) :-
     _{'@one-of': Documents} = Query,
     !,
     do_or_die(is_list(Documents),
@@ -141,8 +141,7 @@ expand_query_document_(DB, Type, Query, Query_Ex) :-
     maplist(expand_query_document_(DB, Type),
             Documents,
             Documents_Ex).
-
-expand_query_document_(DB, Type, Query, Query_Ex) :-
+expand_query_document_(DB, Type, Query, Query_Ex, Type) :-
     _{'@all': Documents} = Query,
     !,
     do_or_die(is_list(Documents),
@@ -151,8 +150,7 @@ expand_query_document_(DB, Type, Query, Query_Ex) :-
     maplist(expand_query_document_(DB, Type),
             Documents,
             Documents_Ex).
-
-expand_query_document_(DB, Type, Query, Query_Ex) :-
+expand_query_document_(DB, Type, Query, Query_Ex, Query_Type_Ex) :-
     (   get_dict('@type', Query, Query_Type)
     ->  database_prefixes(DB, Prefixes),
         do_or_die(prefix_expand_schema(Query_Type, Prefixes, Query_Type_Ex),
@@ -168,14 +166,14 @@ expand_query_document_(DB, Type, Query, Query_Ex) :-
 
     expand_query_document_for_type(Query_Type_Descriptor, DB, Query, Query_Ex).
 
-expand_query_document(DB, Type, Query, Query_Ex) :-
+expand_query_document(DB, Type, Query, Query_Ex, Query_Type_Ex) :-
     database_prefixes(DB,Prefixes),
     (   var(Type)
     ->  Type_Ex = _
     ;   do_or_die(prefix_expand_schema(Type, Prefixes, Type_Ex),
                   error(query_error(unknown_prefix(Type)), _))),
 
-    expand_query_document_(DB, Type_Ex, Query, Query_Ex).
+    expand_query_document_(DB, Type_Ex, Query, Query_Ex, Query_Type_Ex).
 
 % todo rather than check, we should have shortcutted earlier and not retrieve subdocuments with any other URI in the first place.
 match_query_document_against_uri_property(id_exact(_Type,URI), _DB, URI, '@id') :-
@@ -231,7 +229,7 @@ match_query_document_uri_(Query, DB, Uri) :-
     !.
 
 match_query_document_uri(DB, Type, Query, Uri) :-
-    expand_query_document(DB, Type, Query, Query_Ex),
+    expand_query_document(DB, Type, Query, Query_Ex, Type_Ex),
 
     (   (   is_dict(Query_Ex)
         ->  (   get_dict('@id', Query_Ex, id_exact(_,Uri))
@@ -239,7 +237,7 @@ match_query_document_uri(DB, Type, Query, Uri) :-
             ;   get_dict('@id', Query_Ex, id_one_of(_, Uris))
             ->  member(Uri, Uris)))
     *->  true
-    ;   get_document_uri(DB, Type, Uri)),
+    ;   get_document_uri_by_type(DB, Type_Ex, Uri)),
     match_query_document_uri_(Query_Ex, DB, Uri).
 
 :- begin_tests(query_document).
