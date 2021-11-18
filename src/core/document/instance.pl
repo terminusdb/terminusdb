@@ -114,7 +114,6 @@ member_list(Validation_Object, O, L) :-
 card_count(Validation_Object,S_Id,P_Id,N) :-
     % choose as existential anything free
     instance_layer(Validation_Object, Layer),
-
     (   integer(S_Id),
         integer(P_Id)
     ->  terminus_store:sp_card(Layer,S_Id,P_Id,N)
@@ -313,26 +312,55 @@ refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     !,
     refute_cardinality_(list, Validation_Object, S_Id, P_Id, Witness).
 refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
-    type_descriptor(Validation_Object, C, tagged_union(TU,TC)),
-    !,
+    oneof_descriptor(Validation_Object, C, tagged_union(TU,TC)),
     instance_layer(Validation_Object, Layer),
     terminus_store:predicate_id(Layer, Predicate, P_Id),
     class_predicate_type(Validation_Object,C,Predicate,_),
+    atom_string(P,Predicate),
+    dict_keys(TC,Keys),
+    member(P,Keys),
+    !,
     (   refute_cardinality_(tagged_union(TU,TC),Validation_Object,S_Id,P_Id,Witness)
-    ;   class_predicate_type(Validation_Object,C,Q,_),
+    ;   member(Q,Keys),
         % If it isn't in the dictionary, it isn't in the object and we're done...
         terminus_store:predicate_id(Layer, Q, Q_Id),
         P_Id \= Q_Id,
         refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S_Id,Q_Id,Witness)
     ).
-refute_cardinality(Validation_Object,S_Id,_,C,Witness) :-
+refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
-    class_predicate_type(Validation_Object, C, Predicate, Desc),
-    (   terminus_store:predicate_id(Layer, Predicate, P_Id)
-    ->  true
-    ;   P_Id = Predicate % out of band value, but reportable
+    (   integer(P_Id)
+    ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
+    ;   Predicate = P_Id
     ),
+    class_predicate_conjunctive_type(Validation_Object, C, Predicate, Desc),
     refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness).
+
+refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
+    instance_layer(Validation_Object, Layer),
+    class_predicate_conjunctive_type(Validation_Object, C, Predicate, _),
+    (   terminus_store:predicate_id(Layer, Predicate, P_Id)
+    ->  \+ terminus_store:id_triple_addition(Layer, S_Id, P_Id, _) % unchecking
+    ;   P_Id = Predicate % doesn't exist in the dictionary
+    ),
+    refute_cardinality(Validation_Object, S_Id, P_Id, C, Witness).
+refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
+    instance_layer(Validation_Object, Layer),
+    oneof_descriptor(Validation_Object, C, tagged_union(_TU,TC)),
+    dict_keys(TC,Keys),
+    (   member(Predicate,Keys),
+        terminus_store:predicate_id(Layer, Predicate, P_Id),
+        terminus_store:id_triple_addition(Layer, S_Id, P_Id, _)
+    % We only need one right answer
+    ->  fail
+    ;   terminus_store:subject_id(Layer, Subject, S_Id),
+        Witness = witness{ '@type': no_choice_is_cardinality_one,
+                           instance: Subject,
+                           class: C,
+                           choices: Keys
+                         }
+    ).
+
 
 refute_built_in_value(Validation_Object, rdf:type,O,Witness) :-
     refute_class(Validation_Object, O,Witness).
@@ -604,7 +632,7 @@ refute_typed_subject(Validation_Object,S_Id,Class,Witness) :-
         ;   global_prefix_expand(rdf:type, Predicate),
             (   refute_subject_deletion(Validation_Object, S_Id, Witness)
             ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
-            ;   refute_cardinality(Validation_Object,S_Id,P_Id,Class,Witness)))
+            ;   refute_cardinality_new(Validation_Object,S_Id,Class,Witness)))
     ;   is_abstract(Validation_Object,Class)
     ->  refute_abstract(S_Id, Class, Witness)
     ;   refute_subject_type_change(Validation_Object,S_Id,Witness)

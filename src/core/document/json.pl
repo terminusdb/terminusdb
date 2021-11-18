@@ -733,6 +733,19 @@ enum_value(Type,Value,ID) :-
     encode_id_fragment(Value, Encoded_Value).
 
 
+oneof_value(Val,Context,NewPath,Transformed) :-
+    dict_pairs(Val,json,Pairs),
+    findall(
+        Prop-Value,
+        (   member(P_Choice-V_Choice,Pairs),
+            json_schema_predicate_value(P_Choice,V_Choice,Context,NewPath,Prop,Value)
+        ),
+        PVs),
+    dict_pairs(Elaborated,json,PVs),
+    property_id(Val,Context,NewPath,ID),
+    global_prefix_expand(sys:'Choice',Choice_Type),
+    put_dict(_{'@id' : ID, '@type' : Choice_Type}, Elaborated, Transformed).
+
 json_context_elaborate(DB, JSON, Context, Expanded) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
@@ -1077,6 +1090,24 @@ json_schema_predicate_value('@key',V,Context,Path,P,Value) :-
     json_schema_elaborate_key(V,Context,Elab),
     key_id(V,Context,Path,ID),
     put_dict(_{'@id' : ID}, Elab, Value).
+json_schema_predicate_value('@oneOf',V,Context,Path,P,Set) :-
+    !,
+    global_prefix_expand(sys:oneOf, P),
+    do_or_die((   is_dict(V)
+              ->  Vs = [V]
+              ;   is_list(V)
+              ->  Vs = V),
+              error(document_oneof_not_set(V), _)),
+    NewPath = [property('oneOf')|Path],
+    maplist({Context,NewPath}/[Val,Transformed]>>(
+                oneof_value(Val,Context,NewPath,Transformed)
+            ),
+            Vs,
+            Value_List),
+    global_prefix_expand(sys:'Choice',Choice_Type),
+    Set = json{ '@container' : "@set",
+                '@type' : Choice_Type,
+                '@value' : Value_List }.
 json_schema_predicate_value('@documentation',V,Context,Path,P,Value) :-
     !,
     global_prefix_expand(sys:documentation, P),
@@ -1115,7 +1146,7 @@ json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
     prefix_expand_schema(P,Context,Prop),
     maplist({Context}/[V,Value]>>prefix_expand_schema(V,Context,Value),
             List, Value_List),
-    Set = json{ '@collection' : "@set",
+    Set = json{ '@container' : "@set",
                 '@type' : "@id",
                 '@value' : Value_List }.
 json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
@@ -1607,6 +1638,16 @@ documentation_descriptor_json(documentation(Comment, Properties), Prefixes, Resu
         Result = (Template.put('@properties', JSONs))
     ).
 
+oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON) :-
+    dict_pairs(Map, _, Pairs),
+    maplist({Prefixes}/[Prop-Val,Small-Small_Val]>>(
+                compress_schema_uri(Prop, Prefixes, Small),
+                compress_schema_uri(Val, Prefixes, Small_Val)
+            ),
+            Pairs,
+            JSON_Pairs),
+    dict_pairs(JSON,json,JSON_Pairs).
+
 type_descriptor_json(unit, _Prefix, "Unit").
 type_descriptor_json(class(C), Prefixes, Class_Comp) :-
     compress_schema_uri(C, Prefixes, Class_Comp).
@@ -1672,6 +1713,17 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@documentation
     !,
     schema_documentation_descriptor(Schema, Id, Documentation_Desc),
     documentation_descriptor_json(Documentation_Desc,Prefixes,V).
+schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@oneOf',V) :-
+    global_prefix_expand(sys:oneOf,P),
+    !,
+    findall(
+        Val,
+        (   schema_oneof_descriptor(Schema, Id, Descriptor),
+            oneof_descriptor_json(Descriptor, Prefixes, Val)),
+        Vs),
+    (   Vs = [V]
+    ->  true
+    ;   V = Vs).
 schema_subject_predicate_object_key_value(Schema,Prefixes,_Id,P,O,K,JSON) :-
     compress_schema_uri(P, Prefixes, K),
     schema_type_descriptor(Schema, O, Descriptor),
@@ -1743,6 +1795,7 @@ id_schema_json(Schema, Prefixes, Id, JSON) :-
         ),
         Data),
     !,
+
     compress_schema_uri(Id_Ex, Prefixes, Id_Compressed),
     compress_schema_uri(Class, Prefixes, Class_Compressed),
     (   atom_concat('sys:',Small_Class, Class_Compressed)
@@ -2111,13 +2164,6 @@ type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : "List",
                                                        '@class' : Frame }) :-
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
-type_descriptor_sub_frame(tagged_union(C,_), DB, Prefixes, Frame) :-
-    (   is_subdocument(DB,C)
-    ->  compress_schema_uri(C, Prefixes, Class_Comp),
-        Frame = json{ '@class' : Class_Comp,
-                      '@subdocument' : []}
-    ;   compress_schema_uri(C, Prefixes, Frame)
-    ).
 type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : "Enum",
                                                            '@id' : Class_Comp,
                                                            '@values' : Enum_List}) :-
@@ -2153,7 +2199,7 @@ class_frame(Transaction, Class, Frame) :-
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     findall(
         Predicate_Comp-Subframe,
-        (   class_predicate_type(Transaction, Class_Ex, Predicate, Type_Desc),
+        (   class_predicate_conjunctive_type(Transaction, Class_Ex, Predicate, Type_Desc),
             type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Subframe),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
@@ -2171,13 +2217,21 @@ class_frame(Transaction, Class, Frame) :-
         key_descriptor_json(Key_Desc,Prefixes,Key_JSON)
     ->  Pairs4 = ['@key'-Key_JSON|Pairs3]
     ;   Pairs4 = Pairs3),
+    % oneOf
+    (   findall(JSON,
+                (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
+                    oneof_descriptor_json(OneOf_Desc,Prefixes,JSON)),
+                OneOf_JSONs),
+        OneOf_JSONs \= []
+    ->  Pairs5 = ['@oneOf'-OneOf_JSONs|Pairs4]
+    ;   Pairs5 = Pairs4),
     % documentation
     (   documentation_descriptor(Transaction, Class_Ex, Documentation_Desc),
-	documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
-    ->  Pairs5 = ['@documentation'-Documentation_Json|Pairs4]
-    ;   Pairs5 = Pairs4),
+	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
+    ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
+    ;   Pairs6 = Pairs5),
 
-    sort(Pairs5, Sorted_Pairs),
+    sort(Pairs6, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -3031,6 +3085,48 @@ schema2('
   "@type" : "Class",
   "name" : "xsd:string" }
 
+{ "@id" : "Choice",
+  "@type" : "TaggedUnion",
+  "a" : "xsd:string",
+  "b" : "xsd:integer" }
+
+{ "@id" : "InheritsChoice",
+  "@type" : "Class",
+  "@inherits" : ["Choice"],
+  "c" : "xsd:string" }
+
+{ "@id" : "Choice2",
+  "@type" : "Class",
+  "@oneOf" : { "a" : "xsd:string",
+               "b" : "xsd:integer" }}
+
+{ "@id" : "Choice3",
+  "@type" : "Class",
+  "c" : "xsd:string",
+  "@oneOf" : { "a" : "xsd:string",
+               "b" : "xsd:integer" }}
+
+{ "@id" : "InheritsChoice2",
+  "@type" : "Class",
+  "@inherits" : ["Choice2"],
+  "c" : "xsd:string" }
+
+{ "@id" : "Choice4",
+  "@type" : "Class",
+  "@inherits" : ["Choice2"],
+  "@oneOf" : { "c" : "xsd:string",
+               "d" : "xsd:integer" } }
+
+{ "@id" : "InheritsChoices",
+  "@type" : "Class",
+  "@inherits" : ["Choice2", "Choice4"] }
+
+{ "@id" : "DoubleChoice",
+  "@type" : "Class",
+  "@oneOf" : [ { "a" : "xsd:string",
+                 "b" : "xsd:integer" },
+               { "c" : "xsd:string",
+                 "d" : "xsd:integer" }] }
 ').
 
 test(schema_key_elaboration1, []) :-
@@ -5992,8 +6088,370 @@ test(empty_test_for_optional,
                               C3,
                               Schema2)),
 
-    get_document(Desc, Uri, Result),
-    writeq(Result).
+    get_document(Desc, Uri, _).
+
+test(elaborate_one_of,
+     []) :-
+    Doc = _{ '@id' : "Choice2",
+             '@type' : "Class",
+             '@oneOf' : _{ a : "xsd:string",
+                           b : "xsd:integer" }},
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+    json_schema_elaborate(Doc, Context, Elaborated),
+
+    Elaborated =
+    json{'@id':'https://s/Choice2',
+         '@type':'http://terminusdb.com/schema/sys#Class',
+         'http://terminusdb.com/schema/sys#oneOf':
+         json{'@container':"@set",
+              '@type':'http://terminusdb.com/schema/sys#Choice',
+              '@value':[json{'@id':'https://s/Choice2/oneOf/a+b',
+                             '@type':'http://terminusdb.com/schema/sys#Choice',
+                             'https://s/a':
+                             json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                  '@type':"@id"},
+                             'https://s/b':
+                             json{'@id':'http://www.w3.org/2001/XMLSchema#integer',
+                                  '@type':"@id"}}]}}.
+
+test(extract_one_of,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Choice2', JSON),
+    JSON = json{'@id':'Choice2',
+                '@oneOf':json{a:'xsd:string',
+                              b:'xsd:integer'},
+                '@type':'Class'}.
+
+test(two_oneof_an_error,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         error(
+             schema_check_failure([witness{'@type':instance_not_cardinality_zero,
+                                           class:'http://s/Choice2',
+                                           instance:_,
+                                           predicate:_}]),
+             _),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'Choice2',
+                    a : "asdf",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _Id).
+
+test(no_oneof_an_error,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure([witness{'@type':no_choice_is_cardinality_one,choices:['http://s/a','http://s/b'],class:'http://s/Choice2',instance:_}]),
+             _)
+     ]) :-
+
+    Document = json{'@type' : 'Choice2'},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _Id).
+
+test(inheritence_of_tagged_union,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'InheritsChoice',
+                    a : "asdf",
+                    c : "boo"},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(inheritence_of_tagged_union_fails,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':instance_not_cardinality_zero,
+                          class:'http://s/Choice',
+                          instance:_,
+                          predicate:_}
+                 ]),
+             _)
+     ]) :-
+
+    Document = json{'@type' : 'InheritsChoice',
+                    a : "asdf",
+                    c : "fdsa",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(mixed_anyof,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'Choice3',
+                    c : "some_string",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(inherits_oneof,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'InheritsChoice2',
+                    c : "some_string",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(inherits_two_oneofs,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Document = json{'@type' : 'InheritsChoices',
+                    c : "some_string",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(inherits_two_oneofs_error,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':instance_not_cardinality_zero,
+                          class:'http://s/Choice2',
+                          instance:_,
+                          predicate:_}
+                 ]),
+             _)
+     ]) :-
+
+    Document = json{'@type' : 'InheritsChoices',
+                    a : "beep",
+                    c : "some_string",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(double_choice_round_trip,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'DoubleChoice', JSON),
+    JSON = json{'@id':'DoubleChoice',
+                '@oneOf':[json{a:'xsd:string',
+                               b:'xsd:integer'},
+                          json{c:'xsd:string',
+                               d:'xsd:integer'}],
+                '@type':'Class'}.
+
+test(double_choice_error,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':instance_not_cardinality_zero,
+                          class:'http://s/DoubleChoice',
+                          instance:_,
+                          predicate:_}
+                 ]),
+             _)
+     ]) :-
+
+    Document = json{'@type' : 'DoubleChoice',
+                    a : "beep",
+                    c : "some_string",
+                    b : 1},
+    run_insert_document(Desc, commit_info{ author: "Luke Skywalker",
+                                           message: "foo" },
+                        Document, _).
+
+test(double_choice_triples,[]) :-
+    Document = json{'@id':'http://s/DoubleChoice',
+                    '@type':'http://terminusdb.com/schema/sys#Class',
+                    'http://terminusdb.com/schema/sys#oneOf':
+                    json{'@container':"@set",
+                         '@type':"@id",
+                         '@value':[
+                             json{'@id':'http://s/oneOf/DoubleChoice/a+b',
+                                  'http://s/a':
+                                  json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@type':"@id"},
+                                  'http://s/b':
+                                  json{'@id':'http://www.w3.org/2001/XMLSchema#integer',
+                                       '@type':"@id"}},
+                             json{'@id':'http://s/oneOf/DoubleChoice/c+d',
+                                  'http://s/c':
+                                  json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@type':"@id"},
+                                  'http://s/d':
+                                  json{'@id':'http://www.w3.org/2001/XMLSchema#integer',
+                                       '@type':"@id"}}]}},
+    Context = _{'@base':"http://i/",
+                '@schema':"http://s/",
+                '@type':"@context",
+                api:'http://terminusdb.com/schema/api#',
+                owl:'http://www.w3.org/2002/07/owl#',
+                rdf:'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+                rdfs:'http://www.w3.org/2000/01/rdf-schema#',
+                sys:'http://terminusdb.com/schema/sys#',
+                vio:'http://terminusdb.com/schema/vio#',
+                woql:'http://terminusdb.com/schema/woql#',
+                xdd:'http://terminusdb.com/schema/xdd#',
+                xsd:'http://www.w3.org/2001/XMLSchema#'},
+    findall(
+        Triple,
+        json_triple_(Document, Context, Triple),
+        Triples),
+    Triples = [
+        t('http://s/DoubleChoice',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://terminusdb.com/schema/sys#Class'),
+        t('http://s/DoubleChoice',
+          'http://terminusdb.com/schema/sys#oneOf',
+          'http://s/oneOf/DoubleChoice/a+b'),
+        t('http://s/DoubleChoice',
+          'http://terminusdb.com/schema/sys#oneOf',
+          'http://s/oneOf/DoubleChoice/c+d'),
+        t('http://s/oneOf/DoubleChoice/c+d',
+          'http://s/c',
+          'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://s/oneOf/DoubleChoice/c+d',
+          'http://s/d',
+          'http://www.w3.org/2001/XMLSchema#integer'),
+        t('http://s/oneOf/DoubleChoice/a+b',
+          'http://s/a',
+          'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://s/oneOf/DoubleChoice/a+b',
+          'http://s/b',
+          'http://www.w3.org/2001/XMLSchema#integer')
+    ].
+
+test(double_choice_frame,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc,'DoubleChoice',Frame),
+    Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'},
+                           json{c:'xsd:string',d:'xsd:integer'}]}.
+
+test(mixed_frame,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc,'Choice3',Frame),
+    Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
+                 c:'xsd:string'}.
 
 :- end_tests(json).
 
@@ -6148,7 +6606,7 @@ test(elaborate_multiple_inheritance, []) :-
 
     Result = json{'@id':'http://s/Bottom',
                   '@inherits':
-                  json{'@collection':"@set",
+                  json{'@container':"@set",
                        '@type':"@id",
                        '@value':['http://s/Right','http://s/Left']},
                   '@type':'http://terminusdb.com/schema/sys#Class'},
@@ -8125,7 +8583,6 @@ test(normalizable_float,
         _{ '@type': "Thing",
            foo: "0.5000000"},
         'Thing/0.5').
-
 
 :- end_tests(document_id_generation).
 
