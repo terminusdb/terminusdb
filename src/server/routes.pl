@@ -791,7 +791,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             ;   JSON_Options = []),
 
             Header_Written = written(_),
-            (   ground(Query)
+            (   nonvar(Query) % dictionaries do not need tags to be bound
             ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
             ;   ground(Id)
