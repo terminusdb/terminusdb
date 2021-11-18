@@ -4,6 +4,10 @@ on:
   push:
     branches:
     tags:
+    paths-ignore:
+      - 'docs/**'
+      - LICENSE
+      - README.md
   pull_request:
     # Don't run if only the docs are changed.
     paths-ignore:
