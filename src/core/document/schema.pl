@@ -1,4 +1,5 @@
 :- module('document/schema', [
+              graph_member_list/3,
               is_system_class/1,
               refute_schema/2,
               is_enum/2,
@@ -50,6 +51,12 @@
 
 :- use_module(json). % This feels very circular.
 :- use_module(instance). % This is most definitely circular.
+
+graph_member_list(Instance, O,L) :-
+    xrdf(Instance, L, rdf:first, O).
+graph_member_list(Instance, O,L) :-
+    xrdf(Instance, L, rdf:rest, Cdr),
+    graph_member_list(Instance,O,Cdr).
 
 is_unit(Class) :-
     global_prefix_expand(sys:'Unit', Class).
@@ -469,12 +476,34 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
 refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Doc, Prop, _),
-    prefix_list([sys:comment, sys:properties, rdf:type], List),
+    prefix_list([sys:comment, sys:properties, sys:values, rdf:type], List),
     (   \+ memberchk(Prop, List)
     ->  Witness = witness{ '@type' : not_a_valid_documentation_object,
                            predicate: Prop,
                            class: Class,
                            subject: Doc }
+    ;   is_enum(Validation_Object,Class)
+    ->  (   xrdf(Schema, Doc, sys:properties, Val_Obj)
+        ->  Witness = witness{ '@type' : enum_has_no_properties,
+                               class: Class,
+                               subject: Val_Obj }
+        ;   xrdf(Schema, Doc, sys:values, Val_Obj)
+        ->  xrdf(Schema, Val_Obj, Key, Result),
+            \+ global_prefix_expand(rdf:type, Key),
+            global_prefix_expand(xsd:string, XSD),
+            (   Result \= _^^XSD
+            ->  Witness = witness{ '@type' : not_a_valid_enum_documentation_object,
+                                   value: Key,
+                                   class: Class,
+                                   subject: Val_Obj }
+            ;   xrdf(Schema, Class, sys:value, Cons),
+                \+ graph_member_list(Schema, Key, Cons)
+            ->   Witness = witness{ '@type' : invalid_enum_in_documentation_object,
+                                    value: Key,
+                                    class: Class,
+                                    subject: Val_Obj }
+            )
+        )
     ;   xrdf(Schema, Doc, sys:properties, Prop_Obj),
         xrdf(Schema, Prop_Obj, Key, Result),
         \+ global_prefix_expand(rdf:type, Key),
@@ -794,14 +823,24 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_documentation_descriptor(Schema, Type, Descriptor).
 
-schema_documentation_descriptor(Schema, Type, documentation(Comment, Properties)) :-
+schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment, Elements)) :-
+    xrdf(Schema, Type, sys:documentation, Obj),
+    is_schema_enum(Schema,Type),
+    !,
+    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
+    findall(Key-Value,
+            (   xrdf(Schema, Obj, sys:values, Enum),
+                xrdf(Schema, Enum, Key, Value^^xsd:string)),
+            Pairs),
+    dict_pairs(Elements,json,Pairs).
+schema_documentation_descriptor(Schema, Type, property_documentation(Comment, Elements)) :-
     xrdf(Schema, Type, sys:documentation, Obj),
     xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:properties, Property),
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
             Pairs),
-    dict_pairs(Properties,json,Pairs).
+    dict_pairs(Elements,json,Pairs).
 
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),

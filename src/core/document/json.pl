@@ -1036,24 +1036,49 @@ json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
         Pairs),
     dict_pairs(Out, json, ['@id'-Id,'@type'-Property_Ex|Pairs]).
 
-json_schema_elaborate_documenation(V,Context,Path,json{'@type' : Documentation_Ex,
-                                                       '@id' : ID,
-                                                       '@comment' :
-                                                       json{ '@type' : XSD,
-                                                             '@value' : V}}) :-
+json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
+    global_prefix_expand(sys:'EnumDocumentation',Enum_Ex),
+    property_id(Dict, Context, Path, Id),
+    dict_pairs(Dict, json, In_Pairs),
+    reverse(Path,[type(Type)|_]),
+    findall(
+        Key-Value,
+        (
+            member(K-V, In_Pairs),
+            (   K = '@id'
+            ->  fail
+            ;   K = '@type'
+            ->  fail
+            ;   is_dict(V)
+            ->  enum_value(Type,K,Enum_Value),
+                prefix_expand_schema(Enum_Value, Context, Key),
+                Value = V
+            ;   enum_value(Type,K,Enum_Value),
+                prefix_expand_schema(Enum_Value, Context, Key),
+                wrap_text(V,Value)
+            )
+        ),
+        Pairs),
+    dict_pairs(Out, json, ['@id'-Id,'@type'-Enum_Ex|Pairs]).
+
+json_schema_elaborate_documentation(Type,V,Context,Path,json{'@type' : Documentation_Ex,
+                                                             '@id' : ID,
+                                                             '@comment' :
+                                                             json{ '@type' : XSD,
+                                                                   '@value' : V}}) :-
     string(V),
     !,
     global_prefix_expand(xsd:string, XSD),
-    global_prefix_expand(sys:'Documentation',Documentation_Ex),
+    global_prefix_expand(Type,Documentation_Ex),
     documentation_id(Context,Path,ID).
-json_schema_elaborate_documentation(V,Context,Path,Result2) :-
+json_schema_elaborate_documentation(V,Context,Path,Result3) :-
     is_dict(V),
     !,
     global_prefix_expand(sys:'Documentation',Documentation_Ex),
 
     documentation_id(Context,Path,Doc_Id),
     Result = json{'@id' : Doc_Id,
-                   '@type' : Documentation_Ex},
+                  '@type' : Documentation_Ex},
 
     (   get_dict('@comment', V, Comment_Text)
     ->  wrap_text(Comment_Text, Comment),
@@ -1072,7 +1097,19 @@ json_schema_elaborate_documentation(V,Context,Path,Result2) :-
                                                      Property_Obj,
                                                      Property_Obj2),
         Result2 = (Result1.put(PropertiesP,Property_Obj2))
-    ;   Result2 = Result1).
+    ;   Result2 = Result1),
+
+    (   get_dict('@values',V,Property_Obj)
+    ->  global_prefix_expand(sys:'values',PropertiesP),
+        json_schema_elaborate_enum_documentation(Context,
+                                                 [property('values'),
+                                                  type('Documentation'),
+                                                  property('documentation')
+                                                  |Path],
+                                                 Property_Obj,
+                                                 Property_Obj2),
+        Result3 = (Result2.put(PropertiesP,Property_Obj2))
+    ;   Result3 = Result2).
 
 json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
     !,
@@ -1165,7 +1202,7 @@ json_schema_elaborate(JSON,Context,Path,Elaborated) :-
         error(schema_type_unknown(Type_Min),_)
     ).
 
-json_schema_elaborate_('Enum',JSON,Context,_,Elaborated) :-
+json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
     !,
     get_dict('@id', JSON, ID),
     prefix_expand_schema(ID,Context,ID_Ex),
@@ -1179,11 +1216,18 @@ json_schema_elaborate_('Enum',JSON,Context,_,Elaborated) :-
     Type_ID = json{ '@id' : ID_Ex,
                     '@type' : Expanded
                   },
+    (   get_dict('@documentation', JSON, Documentation)
+    ->  json_schema_predicate_value('@documentation', Documentation,
+                                    Context,[type(ID_Ex)|Old_Path],
+                                    Doc_Prop,Elaborated_Docs),
+        put_dict(Doc_Prop, Type_ID, Elaborated_Docs, Schema_Obj)
+    ;   Schema_Obj = Type_ID),
+
     global_prefix_expand(sys:value, Sys_Value),
-    Elaborated = (Type_ID.put(Sys_Value,
-                              json{ '@container' : "@list",
-                                    '@type' : "@id",
-                                    '@value' : New_List })).
+    Elaborated = (Schema_Obj.put(Sys_Value,
+                                 json{ '@container' : "@list",
+                                       '@type' : "@id",
+                                       '@value' : New_List })).
 json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
     memberchk(Type,['Class','TaggedUnion',
                     'Set','List','Optional','Array', 'Cardinality',
@@ -1624,11 +1668,25 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
-documentation_descriptor_json(documentation(Comment, Properties), Prefixes, Result) :-
+documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefixes, Result) :-
     Template = json{ '@comment' : Comment},
-    (   Properties = json{}
-    ->  Result = Template
-    ;   dict_pairs(Properties, _, Pairs),
+    (   Elements = json{}
+    ->  Elements = Result
+    ;   dict_pairs(Elements, _, Pairs),
+        maplist({Type,Prefixes}/[Enum-Comment,Small-Comment]>>(
+                    enum_value(Type,Val,Enum),
+                    compress_schema_uri(Val, Prefixes, Small)
+                ),
+                Pairs,
+                JSON_Pairs),
+        dict_pairs(JSONs,json,JSON_Pairs),
+        Result = (Template.put('@values', JSONs))
+    ).
+documentation_descriptor_json(property_documentation(Comment, Elements), Prefixes, Result) :-
+    Template = json{ '@comment' : Comment},
+    (   Elements = json{}
+    ->  Elements = Result
+    ;   dict_pairs(Elements, _, Pairs),
         maplist({Prefixes}/[Prop-Comment,Small-Comment]>>(
                     compress_schema_uri(Prop, Prefixes, Small)
                 ),
@@ -6452,6 +6510,50 @@ test(mixed_frame,
     class_frame(Desc,'Choice3',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
                  c:'xsd:string'}.
+
+test(enum_documentation,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Schema = _{ '@id': 'Pet',
+                '@type': 'Enum',
+                '@value' : ["dog","cat"],
+                '@documentation' : _{ '@comment' : "What kind of pet?",
+                                      '@values' : _{dog : "A doggie",
+                                                    cat : "A kitty" }
+                                    }
+              },
+
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+    json_schema_elaborate(Schema, Context, Elaborate),
+    writeq(Elaborate),
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            Schema)
+    ),
+
+    open_descriptor(Desc, Trans),
+    get_schema_document(Trans, 'Pet', Result),
+    Result = json{'@documentation':
+                  json{'@comment':"What kind of pet?",
+                       '@values':json{cat:"A kitty",
+                                      dog:"A doggie"}},
+                  '@id':'Pet',
+                  '@type':'Enum',
+                  '@value':[dog,cat]}.
 
 :- end_tests(json).
 
