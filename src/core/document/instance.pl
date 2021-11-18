@@ -333,7 +333,7 @@ refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
     ;   Predicate = P_Id
     ),
-    class_predicate_type(Validation_Object, C, Predicate, Desc),
+    class_predicate_conjunctive_type(Validation_Object, C, Predicate, Desc),
     refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness).
 
 refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
