@@ -548,7 +548,9 @@ json_elaborate_(DB,JSON,Context,Result) :-
              New_JSON = JSON)
     ;    (   do_or_die(
                  get_dict('@id', JSON, _Id),
-                 error(missing_type_field(JSON), _)),
+                 % Note that, even though we check for @id here, we primarily
+                 % expect a @type, so that is the reported error.
+                 error(missing_field('@type', JSON), _)),
              put_dict('@type', JSON, "@id", New_JSON),
              TypeEx = "@id")),
 
@@ -1122,7 +1124,9 @@ json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
     prefix_expand_schema(V,Context,VEx).
 
 json_schema_elaborate(JSON,Context,Path,Elaborated) :-
-    get_dict('@type', JSON, Type),
+    do_or_die(
+        get_dict('@type', JSON, Type),
+        error(missing_field('@type', JSON), _)),
     check_json_string('@type', Type),
     compress_system_uri(Type,Context,Type_Min),
     do_or_die(
@@ -1161,7 +1165,7 @@ json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
         Pairs = ['@id'-ID|Pre_Pairs]
     ;   get_dict('@id',JSON,ID)
     ->  Pairs = Pre_Pairs
-    ;   throw(error(no_id_in_document(JSON), _))
+    ;   throw(error(missing_field('@id', JSON), _))
     ),
     Path = [type(ID)|Old_Path],
     findall(
@@ -1235,10 +1239,9 @@ json_triple_(JSON,Context,Triple) :-
     % NOTE: Need to do something with containers separately
     dict_keys(JSON,Keys),
 
-    (   get_dict('@id', JSON, ID)
-    ->  true
-    ;   throw(error(no_id_in_document(JSON), _))
-    ),
+    do_or_die(
+        get_dict('@id', JSON, ID),
+        error(missing_field('@id', JSON), _)),
 
     member(Key, Keys),
     get_dict(Key,JSON,Value),
@@ -2253,10 +2256,10 @@ insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
 
-    (   get_dict('@id', Document, Id)
-    ->  check_json_string('@id', Id)
-    ;   throw(error(no_id_in_document(Document), _))
-    ),
+    do_or_die(
+        get_dict('@id', Document, Id),
+        error(missing_field('@id', Document), _)),
+    check_json_string('@id', Id),
     database_schema(Transaction, Schema),
 
     database_prefixes(Transaction, Context),
@@ -2377,7 +2380,7 @@ replace_schema_document(Transaction, Document, Create, Id) :-
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
         insert_context_document(Transaction, Document),
         Id='@context'
-    ;   throw(error(no_id_in_document(Document),_))
+    ;   throw(error(missing_field('@id', Document), _))
     ).
 replace_schema_document(Query_Context, Document, Create, Id) :-
     is_query_context(Query_Context),
