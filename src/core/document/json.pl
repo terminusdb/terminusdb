@@ -6535,7 +6535,31 @@ test(enum_documentation,
     default_prefixes(Prefixes),
     Context = (Prefixes.put('@schema', 'https://s/')),
     json_schema_elaborate(Schema, Context, Elaborate),
-    writeq(Elaborate),
+    Elaborate =
+    json{'@id':'https://s/Pet',
+         '@type':'http://terminusdb.com/schema/sys#Enum',
+         'http://terminusdb.com/schema/sys#documentation':
+         json{'@id':'https://s/Pet/documentation/Documentation',
+              '@type':'http://terminusdb.com/schema/sys#Documentation',
+              'http://terminusdb.com/schema/sys#comment':
+              json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"What kind of pet?"},
+              'http://terminusdb.com/schema/sys#values':
+              json{'@id':'https://s/Pet/documentation/Documentation/values/cat+dog',
+                   '@type':'http://terminusdb.com/schema/sys#EnumDocumentation',
+                   'https://s/Pet/cat':
+                   json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"A kitty"},
+                   'https://s/Pet/dog':
+                   json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"A doggie"}}},
+         'http://terminusdb.com/schema/sys#value':
+         json{'@container':"@list",
+              '@type':"@id",
+              '@value':[json{'@id':'https://s/Pet/dog',
+                             '@type':"@id"},
+                        json{'@id':'https://s/Pet/cat',
+                             '@type':"@id"}]}},
 
     with_test_transaction(
         Desc,
