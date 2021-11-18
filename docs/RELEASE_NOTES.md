@@ -1,3 +1,9 @@
+# TerminusDB Server v10.0.12 Beta Release Notes
+## Bug fixes
++ Query parameter is ignored.
++ Type parameter is ignored for queries.
++ Subsumption check between specified type and match document type is reversed.
+
 # TerminusDB Server v10.0.11 Beta Release Notes
 ## New
 + `@oneOf` property in type definitions for disjoint properties as a
