@@ -5,7 +5,7 @@
 :- use_module(core(account)).
 :- use_module(core(document)).
 
-api_class_frame(System_DB, Auth, Path, Class_Uri, Frame) :-
+api_class_frame(System_DB, Auth, Path, Class, Frame) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
@@ -16,8 +16,12 @@ api_class_frame(System_DB, Auth, Path, Class_Uri, Frame) :-
 
     assert_read_access(Context),
 
-    do_or_die(class_frame(Context,Class_Uri,Frame),
-              error(could_not_create_class_frame(Class_Uri))).
+    (   Class = uri(Class_Uri)
+    ->  do_or_die(class_frame(Context,Class_Uri,Frame),
+                  error(could_not_create_class_frame(Class_Uri)))
+    ;   do_or_die(all_class_frames(Context,Frame),
+                  error(could_not_create_class_frames))
+    ).
 
 api_filled_frame(System_DB, Auth, Path, Instance_Uri, Filled_Frame) :-
     do_or_die(

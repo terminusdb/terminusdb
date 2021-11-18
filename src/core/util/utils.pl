@@ -910,11 +910,17 @@ skip_generate_nsols(Goal, Skip, Count) :-
     ->  offset(Skip, Goal)
     ;   limit(Count, offset(Skip, Goal))).
 
+/*
+ * Convert unknown input to an integer.
+ *
+ * We don't throw exceptions here because the error will depend on the context.
+ * Instead, we just fail and interpret failure as a type error.
+ */
 input_to_integer(Atom, Integer) :-
     (   integer(Atom)
     ->  Integer = Atom
     ;   error:text(Atom)
-    ->  atom_number(Atom, Integer),
+    ->  catch(atom_number(Atom, Integer), _, fail),
         integer(Integer)).
 
 :- use_module(library(lists)).

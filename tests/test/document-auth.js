@@ -48,6 +48,24 @@ describe('document', function () {
       }
     })
 
+    describe('fails on missing fields in schema', function () {
+      const schemas = [
+        [{ '@id': true }, '@type'],
+        [{ '@type': 'Class' }, '@id'],
+      ]
+      for (const [schema, missingField] of schemas) {
+        it(JSON.stringify(schema), async function () {
+          if (schema['@id']) {
+            schema['@id'] = util.randomString()
+          }
+          const r = await document
+            .insert(agent, docPath, { schema: schema })
+            .then(document.verifyInsertFailure)
+          document.expectMissingField(r, missingField, schema)
+        })
+      }
+    })
+
     describe('fails on bad schema @type', function () {
       const types = [
         '',
@@ -89,10 +107,10 @@ describe('document', function () {
             .insert(agent, docPath, { schema: schema })
             .then(document.verifyInsertSuccess)
           const r = await document
-            .get(agent, docPath, { graph_type: 'schema', id: schema['@id'] })
+            .get(agent, docPath, { query: { graph_type: 'schema', id: id } })
             .then(document.verifyGetSuccess)
           await document
-            .del(agent, docPath, { graph_type: 'schema', id: id })
+            .del(agent, docPath, { query: { graph_type: 'schema', id: id } })
             .then(document.verifyDelSuccess)
           expect(r.body).to.deep.equal(schema)
         })
@@ -225,8 +243,7 @@ describe('document', function () {
             },
           })
           .then(document.verifyInsertFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:MissingTypeField')
-        expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
+        document.expectMissingField(r, '@type', badValue)
       }
       {
         const r = await document
@@ -238,8 +255,7 @@ describe('document', function () {
             },
           })
           .then(document.verifyReplaceFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:MissingTypeField')
-        expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
+        document.expectMissingField(r, '@type', badValue)
       }
     })
 
@@ -302,9 +318,7 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, {
-          id: id,
-        })
+        .get(agent, docPath, { query: { id: id } })
         .then(document.verifyGetSuccess)
       expect(r.body['@id']).to.equal(id)
       expect(r.body['@type']).to.equal(type)
@@ -340,7 +354,7 @@ describe('document', function () {
         .replace(agent, docPath, { instance: doc1 })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { id: doc2['@id'] })
+        .get(agent, docPath, { body: { id: doc2['@id'] } })
         .then(document.verifyGetSuccess)
       // Even though doc1 was replaced, doc2 should still have the same reference.
       expect(r.body).to.deep.equal(doc2)
@@ -373,7 +387,7 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { type: type1 })
+        .get(agent, docPath, { query: { type: type1 } })
         .then(document.verifyGetSuccess)
       // We have inserted doc1
       expect(r.body.name === type1 + '/1')
@@ -417,6 +431,29 @@ describe('document', function () {
           expect(r.body['api:error']['api:document']).to.deep.equal(schema)
         })
       }
+    })
+
+    it('fails when adding non-optional field to schema (#780)', async function () {
+      // Insert an initial schema.
+      const schema = { '@id': util.randomString(), '@type': 'Class' }
+      await document
+        .insert(agent, docPath, { schema: schema })
+        .then(document.verifyInsertSuccess)
+      // Insert an initial instance.
+      const instance = { '@type': schema['@id'] }
+      await document
+        .insert(agent, docPath, { instance: instance })
+        .then(document.verifyInsertSuccess)
+      // Update the schema with a new field that is not Optional.
+      schema.name = 'xsd:string'
+      const r = await document
+        .replace(agent, docPath, { schema: schema })
+        .then(document.verifyReplaceFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
+      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('instance_not_cardinality_one')
+      expect(r.body['api:error']['api:witnesses'][0].class).to.equal('http://www.w3.org/2001/XMLSchema#string')
+      expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#name')
     })
   })
 })

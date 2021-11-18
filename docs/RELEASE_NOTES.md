@@ -1,3 +1,17 @@
+# TerminusDB Server v10.0.11 Beta Release Notes
+## New
++ `@oneOf` property in type definitions for disjoint properties as a
+  generalization of tagged unions.
+
+## Bug fixes
++ Cardinality bug fixes.
++ More robust request parameter checking.
+
+## Enhancements
++ Frame generation can now generate frames for all classes at once.
++ Speed improvements in schema checking.
++ Tagged unions can now be inherited.
+
 # TerminusDB Server v10.0.10 Beta Release Notes
 
 ## Bug fixes

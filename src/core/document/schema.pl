@@ -3,6 +3,7 @@
               refute_schema/2,
               is_enum/2,
               is_simple_class/2,
+              is_tagged_union/2,
               is_base_type/1,
               is_built_in/1,
               is_list_type/1,
@@ -11,6 +12,7 @@
               is_documentation/1,
               refute_class/3,
               class_predicate_type/4,
+              class_predicate_conjunctive_type/4,
               type_descriptor/3,
               schema_type_descriptor/3,
               class_subsumed/3,
@@ -19,6 +21,8 @@
               schema_key_descriptor/4,
               documentation_descriptor/3,
               schema_documentation_descriptor/3,
+              oneof_descriptor/3,
+              schema_oneof_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
               drop_schemaless_mode/1,
@@ -117,12 +121,19 @@ schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Intermediate),
     schema_class_super(Schema,Intermediate,Super).
 
-class_predicate_type(Validation_Object,Class,Predicate,Type) :-
+class_predicate_conjunctive_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
-    schema_class_predicate_type(Schema, Class, Predicate, Type).
+    schema_class_predicate_conjunctive_type(Schema, Class, Predicate, Type).
 
-:- table schema_class_predicate_type/4 as private.
-schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+:- table schema_class_predicate_conjunctive_type/4 as private.
+schema_class_predicate_conjunctive_type(Schema,Class,Predicate,Type) :-
+    schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type).
+schema_class_predicate_conjunctive_type(Schema,Class,Predicate,Type) :-
+    schema_class_super(Schema,Class,Super),
+    schema_class_predicate_conjunctive_type(Schema,Super,Predicate,Type).
+
+schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type) :-
+    \+ is_schema_tagged_union(Schema,Class),
     is_schema_simple_class(Schema,Class),
     xrdf(Schema,Class,Predicate,Range),
     \+ is_built_in(Predicate),
@@ -130,6 +141,41 @@ schema_class_predicate_type(Schema,Class,Predicate,Type) :-
         \+ has_at(Predicate),
         throw(error(not_a_valid_keyword(Predicate), _))),
     schema_type_descriptor(Schema,Range,Type).
+
+class_predicate_oneof(Validation_Object,Class,Predicate,Type) :-
+    database_schema(Validation_Object,Schema),
+    schema_class_predicate_oneof(Schema, Class, Predicate, Type).
+
+:- table schema_class_predicate_oneof/4 as private.
+schema_class_predicate_oneof(Schema,Class,Predicate,Type) :-
+    schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
+schema_class_predicate_oneof(Schema,Class,Predicate,Type) :-
+    schema_class_super(Schema,Class,Super),
+    schema_class_predicate_oneof(Schema,Super,Predicate,Type).
+
+schema_class_predicate_oneof_step(Schema,Class,Predicate,Type) :-
+    is_schema_tagged_union(Schema,Class),
+    xrdf(Schema,Class,Predicate,Range),
+    \+ is_built_in(Predicate),
+    do_or_die(
+        \+ has_at(Predicate),
+        throw(error(not_a_valid_keyword(Predicate), _))),
+    schema_type_descriptor(Schema,Range,Type).
+schema_class_predicate_oneof_step(Schema,Class,Predicate,Type) :-
+    is_schema_simple_class(Schema,Class),
+    xrdf(Schema,Class,sys:oneOf,R),
+    xrdf(Schema,R,Predicate,Range),
+    schema_type_descriptor(Schema,Range,Type).
+
+class_predicate_type(Validation_Object,Class,Predicate,Type) :-
+    database_schema(Validation_Object,Schema),
+    schema_class_predicate_type(Schema, Class, Predicate, Type).
+
+:- table schema_class_predicate_type/4 as private.
+schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+    schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
+schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+    schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type).
 schema_class_predicate_type(Schema,Class,Predicate,Type) :-
     schema_class_super(Schema,Class,Super),
     schema_class_predicate_type(Schema,Super,Predicate,Type).
@@ -352,6 +398,7 @@ is_built_in(P) :-
             sys:documentation,
             sys:inherits,
             sys:key,
+            sys:oneOf,
             sys:base,
             sys:class,
             sys:abstract,
@@ -652,18 +699,6 @@ schema_type_descriptor(_Schema, Class, unit) :-
 schema_type_descriptor(Schema, Class, foreign(Class)) :-
     is_schema_foreign(Schema,Class),
     !.
-schema_type_descriptor(Schema, Class, tagged_union(Class,Map)) :-
-    is_schema_tagged_union(Schema, Class),
-    !,
-    findall(P-C,
-            (
-                distinct(P,(
-                             xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
-                         ))
-            ),
-            Data),
-    dict_create(Map,tagged_union,Data).
 schema_type_descriptor(Schema, Class, enum(Class,List)) :-
     is_schema_enum(Schema,Class),
     !,
@@ -767,6 +802,38 @@ schema_documentation_descriptor(Schema, Type, documentation(Comment, Properties)
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
             Pairs),
     dict_pairs(Properties,json,Pairs).
+
+schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
+    is_schema_tagged_union(Schema, Class),
+    !,
+    findall(P-C,
+            (
+                distinct(P,(
+                             xrdf(Schema, Class, P, C),
+                             \+ is_built_in(P)
+                         ))
+            ),
+            Data),
+    dict_create(Map,tagged_union,Data).
+schema_oneof_descriptor(Schema, Type, tagged_union(Type, Map)) :-
+    xrdf(Schema, Type, sys:oneOf, Class),
+    findall(P-C,
+            (
+                distinct(P,(
+                             xrdf(Schema, Class, P, C),
+                             \+ is_built_in(P)
+                         ))
+            ),
+            Data),
+    dict_create(Map,tagged_union,Data).
+
+oneof_descriptor(Validation_Object, Type, Descriptor) :-
+    database_schema(Validation_Object, Schema),
+    schema_oneof_descriptor(Schema, Type, Descriptor).
+oneof_descriptor(Validation_Object, Type, Descriptor) :-
+    database_schema(Validation_Object, Schema),
+    schema_subclass_of(Schema,Type,Super),
+    schema_oneof_descriptor(Schema, Super, Descriptor).
 
 refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
