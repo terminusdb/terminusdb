@@ -155,7 +155,7 @@ expand_query_document_(DB, Type, Query, Query_Ex, Query_Type_Ex) :-
     ->  database_prefixes(DB, Prefixes),
         do_or_die(prefix_expand_schema(Query_Type, Prefixes, Query_Type_Ex),
                   error(query_error(unknown_prefix(Query_Type)),_)),
-        do_or_die(once(class_subsumed(DB, Type, Query_Type_Ex)),
+        do_or_die(once(class_subsumed(DB, Query_Type_Ex, Type)),
                   error(query_error(not_a_subclass(Type, Query_Type_Ex)), _))
     ;   var(Type)
     ->  throw(error(query_error(unknown_type_for_query(Query)), _))
