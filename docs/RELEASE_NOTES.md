@@ -1,3 +1,5 @@
+**This is a test of CI. IGNORE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!**
+
 # TerminusDB Server v10.0.11 Beta Release Notes
 ## New
 + `@oneOf` property in type definitions for disjoint properties as a
