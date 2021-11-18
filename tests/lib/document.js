@@ -190,6 +190,13 @@ function verifyDelSuccess (r) {
   return r
 }
 
+function expectMissingField (r, field, object) {
+  expect(r.body['api:error']['@type']).to.equal('api:MissingField')
+  expect(r.body['api:error']['api:field']).to.equal(field)
+  expect(r.body['api:error']['api:document']).to.deep.equal(object)
+  return r
+}
+
 module.exports = {
   get,
   insert,
@@ -201,4 +208,5 @@ module.exports = {
   verifyInsertFailure,
   verifyReplaceFailure,
   verifyDelSuccess,
+  expectMissingField,
 }

@@ -48,6 +48,24 @@ describe('document', function () {
       }
     })
 
+    describe('fails on missing fields in schema', function () {
+      const schemas = [
+        [{ '@id': true }, '@type'],
+        [{ '@type': 'Class' }, '@id'],
+      ]
+      for (const [schema, missingField] of schemas) {
+        it(JSON.stringify(schema), async function () {
+          if (schema['@id']) {
+            schema['@id'] = util.randomString()
+          }
+          const r = await document
+            .insert(agent, docPath, { schema: schema })
+            .then(document.verifyInsertFailure)
+          document.expectMissingField(r, missingField, schema)
+        })
+      }
+    })
+
     describe('fails on bad schema @type', function () {
       const types = [
         '',
@@ -225,8 +243,7 @@ describe('document', function () {
             },
           })
           .then(document.verifyInsertFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:MissingTypeField')
-        expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
+        document.expectMissingField(r, '@type', badValue)
       }
       {
         const r = await document
@@ -238,8 +255,7 @@ describe('document', function () {
             },
           })
           .then(document.verifyReplaceFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:MissingTypeField')
-        expect(r.body['api:error']['api:document']).to.deep.equal(badValue)
+        document.expectMissingField(r, '@type', badValue)
       }
     })
 

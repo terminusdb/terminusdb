@@ -1132,12 +1132,13 @@ api_document_error_jsonld(Type, error(syntax_error(json(What)), _), JSON) :-
              'api:message' : Msg,
              'api:what': What
             }.
-api_document_error_jsonld(Type, error(missing_type_field(Document), _), JSON) :-
+api_document_error_jsonld(Type, error(missing_field(Field, Document), _), JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Submitted document missing @type field.", []),
+    format(string(Msg), "Missing '~s' field in submitted document.", [Field]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:MissingTypeField',
+             'api:error' : _{ '@type' : 'api:MissingField',
+                              'api:field' : Field,
                               'api:document' : Document},
              'api:message' : Msg}.
 api_document_error_jsonld(Type, error(type_not_found(Document_Type, Document), _), JSON) :-
@@ -1177,15 +1178,6 @@ api_document_error_jsonld(Type, error(schema_check_failure(Witnesses),_),JSON) :
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SchemaCheckFailure',
                               'api:witnesses' : Witnesses },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(Type, error(no_id_in_document(Document),_),JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "No '@id' field found in document, but it was required", []),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:NoIdInDocument',
-                              'api:document' : Document },
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(schema_type_unknown(Schema_Type),_),JSON) :-
