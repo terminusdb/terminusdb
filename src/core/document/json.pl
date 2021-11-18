@@ -1061,21 +1061,20 @@ json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
         Pairs),
     dict_pairs(Out, json, ['@id'-Id,'@type'-Enum_Ex|Pairs]).
 
-json_schema_elaborate_documentation(Type,V,Context,Path,json{'@type' : Documentation_Ex,
-                                                             '@id' : ID,
-                                                             '@comment' :
-                                                             json{ '@type' : XSD,
-                                                                   '@value' : V}}) :-
+json_schema_elaborate_documentation(V,Context,Path,json{'@type' : Documentation_Ex,
+                                                        '@id' : ID,
+                                                        '@comment' :
+                                                        json{ '@type' : XSD,
+                                                              '@value' : V}}) :-
     string(V),
     !,
+    global_prefix_expand(sys:'Documentation',Documentation_Ex),
     global_prefix_expand(xsd:string, XSD),
-    global_prefix_expand(Type,Documentation_Ex),
     documentation_id(Context,Path,ID).
 json_schema_elaborate_documentation(V,Context,Path,Result3) :-
     is_dict(V),
     !,
     global_prefix_expand(sys:'Documentation',Documentation_Ex),
-
     documentation_id(Context,Path,Doc_Id),
     Result = json{'@id' : Doc_Id,
                   '@type' : Documentation_Ex},
@@ -1671,7 +1670,7 @@ key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefixes, Result) :-
     Template = json{ '@comment' : Comment},
     (   Elements = json{}
-    ->  Elements = Result
+    ->  Result = Template
     ;   dict_pairs(Elements, _, Pairs),
         maplist({Type,Prefixes}/[Enum-Comment,Small-Comment]>>(
                     enum_value(Type,Val,Enum),
@@ -1685,7 +1684,7 @@ documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefix
 documentation_descriptor_json(property_documentation(Comment, Elements), Prefixes, Result) :-
     Template = json{ '@comment' : Comment},
     (   Elements = json{}
-    ->  Elements = Result
+    ->  Result = Template
     ;   dict_pairs(Elements, _, Pairs),
         maplist({Prefixes}/[Prop-Comment,Small-Comment]>>(
                     compress_schema_uri(Prop, Prefixes, Small)
