@@ -779,7 +779,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
-            param_value_search_or_json_optional(Search, JSON, prefixed, boolean, true, Prefixed),
+            param_value_search_or_json_optional(Search, JSON, prefixed, boolean, true, Compress),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
             param_value_search_or_json_optional(Search, JSON, id, atom, _, Id),
             param_value_search_or_json_optional(Search, JSON, type, atom, _, Type),
@@ -792,15 +792,15 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             Header_Written = written(_),
             (   nonvar(Query) % dictionaries do not need tags to be bound
-            ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document),
+            ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Type, Query, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
             ;   ground(Id)
-            ->  api_get_document(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Id, Document),
+            ->  api_get_document(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Id, Document),
                 json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
             ;   ground(Type)
-            ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Skip, Count, Document),
+            ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Type, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
-            ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Skip, Count, Document),
+            ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))),
 
             % ensure the header has been written by now.
