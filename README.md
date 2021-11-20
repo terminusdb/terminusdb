@@ -1,6 +1,8 @@
 <img src="https://assets.terminusdb.com/images/horizontal_lockup_(2).png" width="350px"/>
 
-## Build an ecosystem of versioned data products
+## The easiest way  
+
+## A toolkit for building collaborative applications
 
 [![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
 [![Docker](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic)](https://hub.docker.com/r/terminusdb/terminusdb-server)
