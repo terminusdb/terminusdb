@@ -1,4 +1,4 @@
-<img src="https://assets.terminusdb.com/images/horizontal_lockup_(2).png" width="350px"/>
+<img src="https://assets.terminusdb.com/images/TerminusDB.gif" width="350px"/>
 
 ## The easiest way to build a knowledge graph
 
@@ -84,3 +84,6 @@ http://www.apache.org/licenses/LICENSE-2.0
       </a>
    </body>
 </html>
+
+
+<img src="https://assets.terminusdb.com/images/horizontal_lockup_(2).png" width="350px"/> 
