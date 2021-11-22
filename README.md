@@ -1,7 +1,6 @@
-<img src="https://assets.terminusdb.com/images/TerminusDB-Pop.gif"> 
+<img src="https://assets.terminusdb.com/images/TerminusDB-Pop.gif">
 
 ## A toolkit for building collaborative applications
-
 
 [![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
 [![Docker](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic)](https://hub.docker.com/r/terminusdb/terminusdb-server)
@@ -19,6 +18,20 @@ TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public
 Our delta-encoding approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible. TerminusDB versions both data and schema allowing your team to deliver a consistent product to others while continuing to improve and innovate. 
 
 If you want to build a data-intensive applications, TerminusDB and TerminusX are right for you.
+
+
+## [Installation Guide](https://terminusdb.com/docs/v10.0/#/overviews/get-started)
+
+| <p align="center"><a href="https://pypi.org/project/terminusdb-client/">🐍 Python | <p align="center"><a href="https://hub.docker.com/r/terminusdb/terminusdb-server">🐋 Docker (Universal) | <p align="center"><a href="https://github.com/terminusdb/terminusdb-client">🌐 JavaScript (macOS) | <p align="center"><a href="https://formulae.brew.sh/formula/ciphey">🍺 Homebrew (macOS/Linux) |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |--------------------------------------------------------------------------------- |
+| <p align="center"><img src="https://github.com/Ciphey/Ciphey/raw/master/Pictures_for_README/python.png" /></p>    | <p align="center"><img src="https://github.com/Ciphey/Ciphey/raw/master/Pictures_for_README/docker.png" /></p> | <p align="center"><img src="https://github.com/Ciphey/Ciphey/raw/master/Pictures_for_README/macports.png" /></p> | <p align="center"><img src="https://github.com/Ciphey/Ciphey/raw/master/Pictures_for_README/homebrew.png" /></p> |
+| `python3 -m pip install ciphey --upgrade` | `docker run -it --rm remnux/ciphey` | `sudo port install ciphey` | `brew install ciphey` |
+
+| Linux                                                                                                                   | Mac OS                                                                                                                     | Windows                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ciphey/ciphey/Python%20application?label=Linux) | ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ciphey/ciphey/Python%20application?label=Mac%20OS) | ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ciphey/ciphey/Python%20application?label=Windows) |
+
+<hr>
 
 
 ## Quick Links
