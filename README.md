@@ -9,7 +9,7 @@
 
 TerminusDB is an open source graph database and document store. It is lightweight, temporal, & immutable. TerminusDB allows you to link JSON documents in a powerful knowledge graph all through a simple [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). 
 
-Use TerminusDB to build powerful applications with collaboration at thier core. Allow your users to branch and merge their data and to collaborate in a controlled way.
+Use TerminusDB to build powerful applications with collaboration at their core. Allow your users to branch and merge their data and to collaborate in a controlled way.
 
 TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public beta** and you can [sign up now](https://dashboard.terminusdb.com/).
 
