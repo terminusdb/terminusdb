@@ -1,34 +1,24 @@
-<img src="https://assets.terminusdb.com/images/horizontal_lockup_(2).png" width="350px"/> 
-
-## The easiest way to build a knowledge graph
+<img src="https://assets.terminusdb.com/images/TerminusDB-Pop.gif"> 
 
 ## A toolkit for building collaborative applications
 
-## Document-oriented knowledge graph database
 
 [![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml)
 [![Docker](https://img.shields.io/docker/pulls/terminusdb/terminusdb-server?logo=Docker&style=plastic)](https://hub.docker.com/r/terminusdb/terminusdb-server)
 [![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic)](https://discord.gg/yTJKAma)
 [![Discourse](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic)](https://discuss.terminusdb.com/)
 
-TerminusDB is an open source graph database and document store. We like to think of it as a document graph. 
+TerminusDB is an open source graph database and document store. It is lightweight, temporal, & immutable. TerminusDB allows you to link JSON documents in a powerful knowledge graph all through a simple [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). 
 
-Use TerminusDB to create rich connected knowledge graphs and use documents to organize data in meaningful ways. The result is a knowledge graph of JSON documents that can refer to each other to build a vibrant picture in data.
+Use TerminusDB to build powerful applications with collaboration at thier core. Allow your users to branch and merge their data and to collaborate in a controlled way.
 
-Build powerful applications with collaboration as a core idea. Allow your users to branch and merge their data and to collaborate at the same time in a controlled way, and added the ability to link JSON documents in a powerful knowledge graph all through a radically simplified interface. We are excited to bring this revolutionary open-sourced data management tool to our growing community of users.
-
-TerminusX is a cloud self-service data platform built on TerminusDB. Use it to collaborate with colleagues to quickly build a vibrant ecosystem of domain data products. TerminusX is in **public beta** and you can [sign up now](https://dashboard.terminusdb.com/).
-
-TerminusDB provides a [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface) for building via the JSON exchange format. The convenience of documents with the power of a knowledge graph.
-
-TerminusDB is a lightweight, high-speed immutable database. Our delta-encoding approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible.
+TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public beta** and you can [sign up now](https://dashboard.terminusdb.com/).
 
 <img src="https://assets.terminusdb.com/images/tdb-dashboard-tablet.png" width="100%" height="auto" />
 
+Our delta-encoding approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible. TerminusDB versions both data and schema allowing your team to deliver a consistent product to others while continuing to improve and innovate. 
 
-TerminusDB allow you to build, deploy, execute, monitor, and share versioned data products. TerminusDB versions both data and schema allowing your team to deliver a consistent product to others while continuing to improve and innovate. Versioning is the enabler of collaboration and the future for all important data. TerminusDB brings software engineering best practices to data.
-
-If you want to build: a knowledge graph of interconnected data products; data-intensive applications; or collaborate with colleagues, TerminusDB and TerminusX are right for you.
+If you want to build a data-intensive applications, TerminusDB and TerminusX are right for you.
 
 
 ## Quick Links
