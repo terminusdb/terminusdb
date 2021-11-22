@@ -3127,6 +3127,13 @@ schema2('
                  "b" : "xsd:integer" },
                { "c" : "xsd:string",
                  "d" : "xsd:integer" }] }
+
+{ "@id" : "EnumChoice",
+  "@type" : "Class",
+  "@oneOf" : { "a" : "sys:Unit",
+               "b" : "sys:Unit",
+               "c" : "sys:Unit",
+               "d" : "sys:Unit" }}
 ').
 
 test(schema_key_elaboration1, []) :-
@@ -6452,6 +6459,21 @@ test(mixed_frame,
     class_frame(Desc,'Choice3',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
                  c:'xsd:string'}.
+
+test(oneof_unit,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc,'EnumChoice',Frame),
+    Frame = json{'@oneOf':[json{a:'sys:Unit',b:'sys:Unit',c:'sys:Unit',d:'sys:Unit'}]}.
 
 :- end_tests(json).
 
