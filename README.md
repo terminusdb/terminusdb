@@ -9,18 +9,34 @@
 
 TerminusDB is an open source graph database and document store. It is lightweight, temporal, & immutable. TerminusDB allows you to link JSON documents in a powerful knowledge graph all through a simple [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). 
 
+<img
+  src="https://assets.terminusdb.com/images/tdb-dashboard-tablet.png"
+  alt="TerminusDB Dashboard"
+  width="50%"
+  align="right"
+/>
+
+
+It is lightweight, temporal, & immutable:
+
+- **Fast:** it's fast – _really_ fast - build an application MVP is a single sprint! 🚀
+- **Customizable:** configure every aspect of your prompt.
+- **Universal:** works on any shell, on any operating system.
+- **Like Git but for Data:** shows relevant information at a glance.
+- **Feature rich:** support for all your favorite tools.
+- **Easy:** quick to install – start using it in minutes.
+
+
+
+
 Use TerminusDB to build powerful applications with collaboration at their core. Allow your users to branch and merge their data and to collaborate in a controlled way.
-
-TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public beta** and you can [sign up now](https://dashboard.terminusdb.com/).
-
-<img src="https://assets.terminusdb.com/images/tdb-dashboard-tablet.png" width="100%" height="auto" />
 
 Our delta-encoding approach makes branch, merge, push, pull, clone, time-travel, and other git-like operations possible. TerminusDB versions both data and schema allowing your team to deliver a consistent product to others while continuing to improve and innovate. 
 
-If you want to build a data-intensive applications, TerminusDB and TerminusX are right for you.
+TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public beta** and you can [sign up now](https://dashboard.terminusdb.com/). If you want to build a data-intensive applications, TerminusDB and TerminusX are right for you.
 
 
-## [Installation Guide](https://terminusdb.com/docs/v10.0/#/overviews/get-started)
+## [🚀 Installation Guide](https://terminusdb.com/docs/v10.0/#/overviews/get-started)
 
 | <p align="center"><a href="https://pypi.org/project/terminusdb-client/">🐍 Python | <p align="center"><a href="https://hub.docker.com/r/terminusdb/terminusdb-server">🐋 Docker (Universal) | <p align="center"><a href="https://github.com/terminusdb/terminusdb-client">🌐 JavaScript (macOS) | <p align="center"><a href="https://formulae.brew.sh/formula/ciphey">🍺 Homebrew (macOS/Linux) |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |--------------------------------------------------------------------------------- |
