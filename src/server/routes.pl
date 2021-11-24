@@ -2810,41 +2810,41 @@ user_organizations_handler(get, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(organization), cors_handler(Method, organization_handler),
+:- http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name)),
+:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,delete])]).
 
 organization_handler(post, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ organization_name : Org,
-                 user_name : User } :< Document,
-              error(bad_api_document(Document, [organization_name, user_name]))
-             ),
-
     api_report_errors(
         add_organization,
         Request,
-        (   add_user_organization_transaction(System_DB, Auth, User, Org),
+        (   check_content_type_json(Request),
+            check_content_length(Request),
+            http_read_json_data(Request, JSON),
+
+            param_value_json_required(JSON, organization_name, string, Org),
+            param_value_json_required(JSON, user_name, string, User),
+
+            add_user_organization_transaction(System_DB, Auth, User, Org),
             cors_reply_json(Request,
                             _{'@type' : "api:AddOrganizationResponse",
                               'api:status' : "api:success"}))).
 organization_handler(delete, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ organization_name : Name },
-              error(malformed_organization_deletion_document(Document))
-             ),
-
     api_report_errors(
         delete_organization,
         Request,
-        (   delete_organization_transaction(System_DB, Auth, Name),
+        (   check_content_type_json(Request),
+            check_content_length(Request),
+            http_read_json_data(Request, JSON),
+
+            param_value_json_required(JSON, organization_name, string, Name),
+
+            delete_organization_transaction(System_DB, Auth, Name),
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteOrganizationResponse",
                               'api:status' : "api:success"}))).
@@ -3754,6 +3754,11 @@ check_content_type_json(Request) :-
 json_mime_type(Mime) :-
     memberchk(type(CT),Mime),
     re_match('^application/json', CT, []).
+
+check_content_length(Request) :-
+    do_or_die(
+        memberchk(content_length(_), Request),
+        error(missing_content_length, _)).
 
 /*
  * get_param_default(Key,Request:request,Value,Default) is semidet.
