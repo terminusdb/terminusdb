@@ -2178,10 +2178,11 @@ all_class_frames(Transaction, Frames) :-
     ),
     !,
     findall(
-        Frame,
+        Class-Frame,
         (   is_simple_class(Transaction, Class),
             class_frame(Transaction, Class, Frame)),
-        Frames).
+        Data),
+    dict_pairs(Frames, json, Data).
 all_class_frames(Query_Context, Frames) :-
     is_query_context(Query_Context),
     !,
@@ -7714,6 +7715,20 @@ schema6('
                 "@type": "Set"},
   "name": "xsd:string" }
 ').
+
+test(all_class_frames, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema6,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )]) :-
+    open_descriptor(Desc, DB),
+    all_class_frames(DB,  Frames),
+    writeq(Frames).
+
 
 test(doc_frame, [
          setup(
