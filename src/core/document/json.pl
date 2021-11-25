@@ -2231,8 +2231,16 @@ class_frame(Transaction, Class, Frame) :-
 	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
+    % enum
+    (   is_enum(Transaction,Class_Ex)
+    ->  database_schema(Transaction, Schema),
+        schema_type_descriptor(Schema, Class, enum(Class,List)),
+        maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
+                List, Enum_List),
+        Pairs7 = ['@type'-'Enum','@values'-Enum_List|Pairs6]
+    ;   Pairs7 = ['@type'-'Class'|Pairs6]),
 
-    sort(Pairs6, Sorted_Pairs),
+    sort(Pairs7, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -7725,10 +7733,54 @@ test(all_class_frames, [
          cleanup(
              teardown_temp_store(State)
          )]) :-
+
     open_descriptor(Desc, DB),
     all_class_frames(DB,  Frames),
-    writeq(Frames).
 
+    Frames = json{'http://s/Address':
+                  json{'@type':'Class',
+                       '@documentation':json{'@comment':"This is address"},
+                       '@key':json{'@type':"Random"},
+                       '@subdocument':[],
+                       country:'Country',
+                       postal_code:'xsd:string',
+                       street:'xsd:string'},
+                  'http://s/Coordinate':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"Random"},
+                       x:'xsd:decimal',
+                       y:'xsd:decimal'},
+                  'http://s/Country':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"ValueHash"},
+                       name:'xsd:string',
+                       perimeter:json{'@class':'Coordinate',
+                                      '@type':"List"}},
+                  'http://s/Employee':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"Random"},
+                       address_of:json{'@class':'Address',
+                                       '@subdocument':[]},
+                       age:'xsd:integer',
+                       contact_number:json{'@class':'xsd:string',
+                                           '@type':"Optional"},
+                       friend_of:json{'@class':'Person','@type':"Set"},
+                       managed_by:'Employee',
+                       name:'xsd:string'},
+                  'http://s/Person':
+                  json{'@type':'Class',
+                       '@documentation':
+                       json{'@comment':"This is a person",
+                            '@properties':json{age:"Age of the person.",
+                                               name:"Name of the person."}},
+                       '@key':json{'@type':"Random"},
+                       age:'xsd:integer',
+                       friend_of:json{'@class':'Person',
+                                      '@type':"Set"},
+                       name:'xsd:string'},
+                  'http://s/Team':
+                  json{'@type':'Enum',
+                       '@values':['IT','Marketing']}}.
 
 test(doc_frame, [
          setup(
