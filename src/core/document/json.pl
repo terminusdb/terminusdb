@@ -6444,7 +6444,8 @@ test(double_choice_frame,
 
     class_frame(Desc,'DoubleChoice',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'},
-                           json{c:'xsd:string',d:'xsd:integer'}]}.
+                           json{c:'xsd:string',d:'xsd:integer'}],
+                 '@type':'Class'}.
 
 test(mixed_frame,
      [
@@ -6460,7 +6461,8 @@ test(mixed_frame,
 
     class_frame(Desc,'Choice3',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
-                 c:'xsd:string'}.
+                 c:'xsd:string',
+                 '@type':'Class'}.
 
 :- end_tests(json).
 
@@ -6650,6 +6652,7 @@ test(diamond_ok,
     class_frame(Transaction, "Bottom", Frame),
 
     Frame = json{
+                '@type':'Class',
                 bottom_face:json{'@class':'Bottom',
                                  '@type':"Optional"},
                 left_face:json{'@class':'Left','@type':"Set"},
@@ -7619,7 +7622,8 @@ test(arithmetic_frame, [
      ]) :-
 
     class_frame(Desc, 'Plus2', JSON),
-    JSON = json{'@key':json{'@type':"Random"},
+    JSON = json{'@type':'Class',
+                '@key':json{'@type':"Random"},
                 '@subdocument':[],
                 left:[json{'@class':'Plus2','@subdocument':[]},
                       json{'@class':'Value2','@subdocument':[]}],
@@ -7640,7 +7644,8 @@ test(outer_frame, [
 
     class_frame(Desc, 'NewOuter', JSON),
 
-    JSON = json{'@key':json{'@fields':[name],'@type':"Lexical"},
+    JSON = json{'@type':'Class',
+                '@key':json{'@fields':[name],'@type':"Lexical"},
                 inner:json{'@class':'Inner',
                            '@subdocument':[]},
                 inners:json{'@class':json{'@class':'Inner',
@@ -7793,7 +7798,8 @@ test(doc_frame, [
          )]) :-
     open_descriptor(Desc, DB),
     class_frame(DB, 'Address', Frame),
-    Frame = json{'@documentation':json{'@comment':"This is address"},
+    Frame = json{'@type':'Class',
+                 '@documentation':json{'@comment':"This is address"},
 	             '@key':json{'@type':"Random"},
 	             '@subdocument':[],
                  country:'Country',
