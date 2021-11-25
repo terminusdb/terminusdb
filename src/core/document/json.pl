@@ -521,7 +521,9 @@ json_elaborate(DB,JSON,Elaborated) :-
 
 json_elaborate(DB,JSON,Context,Elaborated) :-
     json_elaborate_(DB,JSON,Context,Elaborated),
-    json_assign_ids(DB,Context,Elaborated).
+    do_or_die(
+        json_assign_ids(DB,Context,Elaborated),
+        error(unable_to_assign_ids)).
 
 /*
  * Check for JSON values that should not found in a string field.

@@ -125,9 +125,12 @@ refute_cardinality_(class(C),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object, S,P,1),
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject_String, S),
-    terminus_store:predicate_id(Layer, Predicate_String, P),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
     atom_string(Subject, Subject_String),
-    atom_string(Predicate, Predicate_String),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: Subject,
                        class: C,
@@ -188,7 +191,7 @@ refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
     ;   terminus_store:predicate_id(Layer, Predicate_String, P),
         atom_string(Predicate, Predicate_String)
     ),
-    Witness = witness{ '@type': instance_not_cardinality_zero,
+    Witness = witness{ '@type': forbidden_oneof_property_present,
                        instance: Subject,
                        class: C,
                        predicate: Predicate
