@@ -7670,7 +7670,7 @@ test(points_to_abstract, [
      ]) :-
 
     class_frame(Desc, 'Points_To_Abstract', JSON),
-    JSON = json{points:['A','B']}.
+    JSON = json{'@type' : 'Class', points:['A','B']}.
 
 :- end_tests(arithmetic_document).
 
