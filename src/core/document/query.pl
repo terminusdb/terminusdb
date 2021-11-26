@@ -114,12 +114,12 @@ expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
     Query = _{'@if-exists': Inner_Query},
     !,
     Query_Ex = _{'@optional-if-exists': Inner_Query_Ex},
-    expand_query_document_(DB, Type, Inner_Query, Inner_Query_Ex).
+    expand_query_document_(DB, Type, Inner_Query, Inner_Query_Ex,_).
 expand_query_document_for_type(optional(Type), DB, null, null) :-
     !,
-    expand_query_document_(DB, Type, _{}, _).
+    expand_query_document_(DB, Type, _{}, _,_).
 expand_query_document_for_type(optional(Type), DB, Query, Query_Ex) :-
-    expand_query_document_(DB, Type, Query, Query_Ex).
+    expand_query_document_(DB, Type, Query, Query_Ex,_).
 expand_query_document_for_type(enum(Type, Values), _Db, Query, Query_Ex) :-
     atomic(Query),
     !,
@@ -138,7 +138,8 @@ expand_query_document_(DB, Type, Query, Query_Ex, Type) :-
     do_or_die(is_list(Documents),
               error(query_error(not_a_query_document_list(Documents)))),
     Query_Ex = class_one_of(Documents_Ex),
-    maplist(expand_query_document_(DB, Type),
+    maplist([Documents,Documents_Ex]>>
+            expand_query_document_(DB, Type, Documents, Documents_Ex,_),
             Documents,
             Documents_Ex).
 expand_query_document_(DB, Type, Query, Query_Ex, Type) :-
@@ -147,7 +148,8 @@ expand_query_document_(DB, Type, Query, Query_Ex, Type) :-
     do_or_die(is_list(Documents),
               error(query_error(not_a_query_document_list(Documents)))),
     Query_Ex = class_all(Documents_Ex),
-    maplist(expand_query_document_(DB, Type),
+    maplist([Documents,Documents_Ex]>>
+            expand_query_document_(DB, Type, Documents, Documents_Ex,_),
             Documents,
             Documents_Ex).
 expand_query_document_(DB, Type, Query, Query_Ex, Query_Type_Ex) :-
