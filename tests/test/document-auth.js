@@ -24,6 +24,36 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
+    describe('fails insert with missing parameters', function () {
+      const options = [
+        [{ queryString: '', bodyString: '' }, 'author'],
+        [{ queryString: 'author=a', bodyString: '' }, 'message'],
+      ]
+      for (const [option, missingParam] of options) {
+        it(missingParam, async function () {
+          const r = await document
+            .insert(agent, docPath, option)
+            .then(document.verifyInsertFailure)
+          document.expectMissingParameter(r, missingParam)
+        })
+      }
+    })
+
+    describe('fails replace with missing parameters', function () {
+      const options = [
+        [{ queryString: '', bodyString: '' }, 'author'],
+        [{ queryString: 'author=a', bodyString: '' }, 'message'],
+      ]
+      for (const [option, missingParam] of options) {
+        it(missingParam, async function () {
+          const r = await document
+            .replace(agent, docPath, option)
+            .then(document.verifyReplaceFailure)
+          document.expectMissingParameter(r, missingParam)
+        })
+      }
+    })
+
     describe('fails on bad schema @id (#647)', function () {
       const identifiers = [
         '',
@@ -383,7 +413,7 @@ describe('document', function () {
           instance: [
             doc1,
           ],
-          create: 'true',
+          create: true,
         })
         .then(document.verifyInsertSuccess)
       const r = await document

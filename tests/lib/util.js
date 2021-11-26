@@ -6,6 +6,10 @@ function isBoolean (val) {
   return typeof val === 'boolean'
 }
 
+function isDefined (val) {
+  return val !== undefined
+}
+
 function isInteger (val) {
   return Number.isInteger(val)
 }
@@ -28,6 +32,7 @@ function randomString () {
 
 module.exports = {
   isBoolean,
+  isDefined,
   isInteger,
   isNonNegativeInteger,
   isString,

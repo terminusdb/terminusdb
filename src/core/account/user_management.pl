@@ -55,7 +55,8 @@ delete_organization(Name) :-
         _).
 
 delete_organization(Context,Name) :-
-    organization_name_uri(Context, Name, Organization_Uri),
+    do_or_die(organization_name_uri(Context, Name, Organization_Uri),
+              error(unknown_organization(Name),_)),
     delete_document(Context, Organization_Uri).
 
 add_user_organization_transaction(System_DB, Auth, Nick, Org) :-
@@ -75,7 +76,7 @@ add_user_organization_transaction(System_DB, Auth, Nick, Org) :-
 add_user_organization(Context, Nick, Org, Organization_URI) :-
 
     do_or_die(agent_name_exists(Context, Nick),
-              error(agent_name_does_not_exist(Nick))),
+              error(unknown_user(Nick), _)),
 
     (   organization_name_exists(Context, Org)
     ->  throw(error(organization_already_exists(Org),_))
