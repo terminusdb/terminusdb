@@ -964,6 +964,7 @@ test(get_frame, [
           key_hash:"An optional key hash for authentication.",
           name:"The users name."}},
       '@key':_{'@fields':["name"],'@type':"Lexical"},
+      '@type':"Class",
       capability:_{'@class':"Capability",'@type':"Set"},
       key_hash:_{'@class':"xsd:string",'@type':"Optional"},
       name:"xsd:string"}.

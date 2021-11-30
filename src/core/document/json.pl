@@ -2178,10 +2178,11 @@ all_class_frames(Transaction, Frames) :-
     ),
     !,
     findall(
-        Frame,
+        Class-Frame,
         (   is_simple_class(Transaction, Class),
             class_frame(Transaction, Class, Frame)),
-        Frames).
+        Data),
+    dict_pairs(Frames, json, Data).
 all_class_frames(Query_Context, Frames) :-
     is_query_context(Query_Context),
     !,
@@ -2230,8 +2231,16 @@ class_frame(Transaction, Class, Frame) :-
 	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
+    % enum
+    (   is_enum(Transaction,Class_Ex)
+    ->  database_schema(Transaction, Schema),
+        schema_type_descriptor(Schema, Class, enum(Class,List)),
+        maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
+                List, Enum_List),
+        Pairs7 = ['@type'-'Enum','@values'-Enum_List|Pairs6]
+    ;   Pairs7 = ['@type'-'Class'|Pairs6]),
 
-    sort(Pairs6, Sorted_Pairs),
+    sort(Pairs7, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -6435,7 +6444,8 @@ test(double_choice_frame,
 
     class_frame(Desc,'DoubleChoice',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'},
-                           json{c:'xsd:string',d:'xsd:integer'}]}.
+                           json{c:'xsd:string',d:'xsd:integer'}],
+                 '@type':'Class'}.
 
 test(mixed_frame,
      [
@@ -6451,7 +6461,8 @@ test(mixed_frame,
 
     class_frame(Desc,'Choice3',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
-                 c:'xsd:string'}.
+                 c:'xsd:string',
+                 '@type':'Class'}.
 
 :- end_tests(json).
 
@@ -6641,6 +6652,7 @@ test(diamond_ok,
     class_frame(Transaction, "Bottom", Frame),
 
     Frame = json{
+                '@type':'Class',
                 bottom_face:json{'@class':'Bottom',
                                  '@type':"Optional"},
                 left_face:json{'@class':'Left','@type':"Set"},
@@ -7610,7 +7622,8 @@ test(arithmetic_frame, [
      ]) :-
 
     class_frame(Desc, 'Plus2', JSON),
-    JSON = json{'@key':json{'@type':"Random"},
+    JSON = json{'@type':'Class',
+                '@key':json{'@type':"Random"},
                 '@subdocument':[],
                 left:[json{'@class':'Plus2','@subdocument':[]},
                       json{'@class':'Value2','@subdocument':[]}],
@@ -7631,7 +7644,8 @@ test(outer_frame, [
 
     class_frame(Desc, 'NewOuter', JSON),
 
-    JSON = json{'@key':json{'@fields':[name],'@type':"Lexical"},
+    JSON = json{'@type':'Class',
+                '@key':json{'@fields':[name],'@type':"Lexical"},
                 inner:json{'@class':'Inner',
                            '@subdocument':[]},
                 inners:json{'@class':json{'@class':'Inner',
@@ -7656,7 +7670,7 @@ test(points_to_abstract, [
      ]) :-
 
     class_frame(Desc, 'Points_To_Abstract', JSON),
-    JSON = json{points:['A','B']}.
+    JSON = json{'@type' : 'Class', points:['A','B']}.
 
 :- end_tests(arithmetic_document).
 
@@ -7715,6 +7729,64 @@ schema6('
   "name": "xsd:string" }
 ').
 
+test(all_class_frames, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema6,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )]) :-
+
+    open_descriptor(Desc, DB),
+    all_class_frames(DB,  Frames),
+
+    Frames = json{'http://s/Address':
+                  json{'@type':'Class',
+                       '@documentation':json{'@comment':"This is address"},
+                       '@key':json{'@type':"Random"},
+                       '@subdocument':[],
+                       country:'Country',
+                       postal_code:'xsd:string',
+                       street:'xsd:string'},
+                  'http://s/Coordinate':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"Random"},
+                       x:'xsd:decimal',
+                       y:'xsd:decimal'},
+                  'http://s/Country':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"ValueHash"},
+                       name:'xsd:string',
+                       perimeter:json{'@class':'Coordinate',
+                                      '@type':"List"}},
+                  'http://s/Employee':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"Random"},
+                       address_of:json{'@class':'Address',
+                                       '@subdocument':[]},
+                       age:'xsd:integer',
+                       contact_number:json{'@class':'xsd:string',
+                                           '@type':"Optional"},
+                       friend_of:json{'@class':'Person','@type':"Set"},
+                       managed_by:'Employee',
+                       name:'xsd:string'},
+                  'http://s/Person':
+                  json{'@type':'Class',
+                       '@documentation':
+                       json{'@comment':"This is a person",
+                            '@properties':json{age:"Age of the person.",
+                                               name:"Name of the person."}},
+                       '@key':json{'@type':"Random"},
+                       age:'xsd:integer',
+                       friend_of:json{'@class':'Person',
+                                      '@type':"Set"},
+                       name:'xsd:string'},
+                  'http://s/Team':
+                  json{'@type':'Enum',
+                       '@values':['IT','Marketing']}}.
+
 test(doc_frame, [
          setup(
              (   setup_temp_store(State),
@@ -7726,7 +7798,8 @@ test(doc_frame, [
          )]) :-
     open_descriptor(Desc, DB),
     class_frame(DB, 'Address', Frame),
-    Frame = json{'@documentation':json{'@comment':"This is address"},
+    Frame = json{'@type':'Class',
+                 '@documentation':json{'@comment':"This is address"},
 	             '@key':json{'@type':"Random"},
 	             '@subdocument':[],
                  country:'Country',
