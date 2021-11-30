@@ -166,6 +166,7 @@ known_document_error(bad_field_value(_, _)).
 known_document_error(key_missing_fields(_)).
 known_document_error(key_fields_not_an_array(_)).
 known_document_error(key_fields_is_empty).
+known_document_error(unable_to_assign_ids).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-

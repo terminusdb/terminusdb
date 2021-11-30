@@ -521,7 +521,9 @@ json_elaborate(DB,JSON,Elaborated) :-
 
 json_elaborate(DB,JSON,Context,Elaborated) :-
     json_elaborate_(DB,JSON,Context,Elaborated),
-    json_assign_ids(DB,Context,Elaborated).
+    do_or_die(
+        json_assign_ids(DB,Context,Elaborated),
+        error(unable_to_assign_ids)).
 
 /*
  * Check for JSON values that should not found in a string field.
@@ -3136,6 +3138,13 @@ schema2('
                  "b" : "xsd:integer" },
                { "c" : "xsd:string",
                  "d" : "xsd:integer" }] }
+
+{ "@id" : "EnumChoice",
+  "@type" : "Class",
+  "@oneOf" : { "a" : "sys:Unit",
+               "b" : "sys:Unit",
+               "c" : "sys:Unit",
+               "d" : "sys:Unit" }}
 ').
 
 test(schema_key_elaboration1, []) :-
@@ -6151,7 +6160,7 @@ test(two_oneof_an_error,
                  write_schema(schema2,Desc)
              )),
          error(
-             schema_check_failure([witness{'@type':instance_not_cardinality_zero,
+             schema_check_failure([witness{'@type':forbidden_oneof_property_present,
                                            class:'http://s/Choice2',
                                            instance:_,
                                            predicate:_}]),
@@ -6179,7 +6188,8 @@ test(no_oneof_an_error,
              teardown_temp_store(State)
          ),
          error(
-             schema_check_failure([witness{'@type':no_choice_is_cardinality_one,choices:['http://s/a','http://s/b'],class:'http://s/Choice2',instance:_}]),
+             schema_check_failure([witness{'@type':no_choice_is_cardinality_one,
+                                           choices:['http://s/a','http://s/b'],class:'http://s/Choice2',instance:_}]),
              _)
      ]) :-
 
@@ -6219,7 +6229,7 @@ test(inheritence_of_tagged_union_fails,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_zero,
+                 [witness{'@type':forbidden_oneof_property_present,
                           class:'http://s/Choice',
                           instance:_,
                           predicate:_}
@@ -6304,7 +6314,7 @@ test(inherits_two_oneofs_error,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_zero,
+                 [witness{'@type':forbidden_oneof_property_present,
                           class:'http://s/Choice2',
                           instance:_,
                           predicate:_}
@@ -6353,7 +6363,7 @@ test(double_choice_error,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_zero,
+                 [witness{'@type':forbidden_oneof_property_present,
                           class:'http://s/DoubleChoice',
                           instance:_,
                           predicate:_}
@@ -6463,6 +6473,21 @@ test(mixed_frame,
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
                  c:'xsd:string',
                  '@type':'Class'}.
+
+test(oneof_unit,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc,'EnumChoice',Frame),
+    Frame = json{'@oneOf':[json{a:'sys:Unit',b:'sys:Unit',c:'sys:Unit',d:'sys:Unit'}]}.
 
 :- end_tests(json).
 
