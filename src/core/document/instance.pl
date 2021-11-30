@@ -101,12 +101,6 @@ array_object(Validation_Object, S,I,O) :-
             xrdf(Instance, S,sys:object,O),
             [t(S,object,O)]).
 
-graph_member_list(Instance, O,L) :-
-    xrdf(Instance, L, rdf:first, O).
-graph_member_list(Instance, O,L) :-
-    xrdf(Instance, L, rdf:rest, Cdr),
-    graph_member_list(Instance,O,Cdr).
-
 member_list(Validation_Object, O, L) :-
     database_instance(Validation_Object, Instance),
     graph_member_list(Instance, O, L).
