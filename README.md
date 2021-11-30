@@ -26,7 +26,7 @@ It is lightweight, temporal, & immutable:
 - **Document Oriented:** work with JSON documents.
 - **Easy:** quick to install – start using it in minutes.
 <br />
-
+<br />
 
 Use TerminusDB to build powerful applications with collaboration at their core. Allow your users to branch and merge their data and to collaborate in a controlled way.
 
