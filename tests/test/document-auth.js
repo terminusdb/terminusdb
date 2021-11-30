@@ -485,5 +485,27 @@ describe('document', function () {
       expect(r.body['api:error']['api:witnesses'][0].class).to.equal('http://www.w3.org/2001/XMLSchema#string')
       expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#name')
     })
+
+    it('accepts & returns subdocument schema with @documentation (#670)', async function () {
+      const schema =
+        {
+          '@id': util.randomString(),
+          '@type': 'Class',
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+          '@documentation': {
+            '@comment': 'A random subdocument number?',
+            '@properties': { n: 'A number!' },
+          },
+          n: 'xsd:integer',
+        }
+      await document
+        .insert(agent, docPath, { schema: schema })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { query: { graph_type: 'schema', id: schema['@id'] } })
+        .then(document.verifyGetSuccess)
+      expect(r.body).to.deep.equal(schema)
+    })
   })
 })
