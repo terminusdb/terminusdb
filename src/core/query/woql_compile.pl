@@ -248,11 +248,7 @@ resolve_variable(Not_Var,Not_Var) -->
     [].
 
 resolve_dictionary(Dict, Expanded) -->
-    view(prefixes,Prefixes),
-    resolve_dictionary_(Dict,Dict_Resolved),
-    {
-        expand(Dict_Resolved,Prefixes,Expanded)
-    }.
+    resolve_dictionary_(Dict, Expanded).
 
 resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
     is_dict(Dict),
@@ -1546,7 +1542,7 @@ compile_wf(X is Arith, (Pre_Term,
     compile_arith(Arith,Pre_Term,ArithE).
 compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
     resolve(Dict,DictE),
-    resolve(Key,KeyE),
+    {atom_string(KeyE,Key)},
     resolve(Value,ValueE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
     resolve(WGroup,Group),
@@ -4946,13 +4942,13 @@ test(insert_read_document, [
                                       "data": [ { "@type" : "FieldValuePair",
                                                   "field" : "@type",
                                                   "value" : { "@type" : "Value",
-                                                              "data" : "@schema:City" }},
+                                                              "data" : "City" }},
                                                 { "@type" : "FieldValuePair",
                                                   "field" : "@id",
                                                   "value" : { "@type" : "Value",
                                                               "variable" : "City/Dublin"}},
                                                 { "@type" : "FieldValuePair",
-                                                  "field" : "@schema:name",
+                                                  "field" : "name",
                                                   "value" : { "@type" : "Value",
                                                               "data" : "Dublin"}}
                                                ]}},
