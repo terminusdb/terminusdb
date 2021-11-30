@@ -6544,7 +6544,8 @@ test(oneof_unit,
      ]) :-
 
     class_frame(Desc,'EnumChoice',Frame),
-    Frame = json{'@oneOf':[json{a:'sys:Unit',b:'sys:Unit',c:'sys:Unit',d:'sys:Unit'}]}.
+    Frame = json{'@oneOf':[json{a:'sys:Unit',b:'sys:Unit',c:'sys:Unit',d:'sys:Unit'}],
+                 '@type':'Class'}.
 
 test(enum_documentation,
      [
