@@ -1,4 +1,4 @@
-<img src="https://assets.terminusdb.com/images/TerminusDB-Pop.gif"> 
+<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/TerminusDB-Pop2.gif">
 
 ## A toolkit for building collaborative applications
 
