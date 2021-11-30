@@ -4933,6 +4933,46 @@ test(json_unbound_capture, [
     query_test_response(Descriptor, Query, Response),
     (Response.bindings) = [_{'Y':_{a:1,b:null},asdf:null}].
 
+test(insert_read_document, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Insert_Atom =
+    '{ "@type" : "InsertDocument",
+       "document" : { "@type" : "Value",
+                      "dictionary" : {"@type": "DictionaryTemplate",
+                                      "data": [ { "@type" : "FieldValuePair",
+                                                  "field" : "@type",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "@schema:City" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "@id",
+                                                  "value" : { "@type" : "Value",
+                                                              "variable" : "City/Dublin"}},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "@schema:name",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "Dublin"}}
+                                               ]}},
+       "identifier" : { "@type" : "NodeValue", "variable" : "id" }
+     }',
+    atom_json_dict(Insert_Atom, Query, []),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [Res] = (JSON.bindings),
+    ID = (Res.id),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    Read_AST = get_document(ID,v('Doc')),
+    query_response:run_context_ast_jsonld_response(Context2, Read_AST, Response),
+    [Res2] = (Response.bindings),
+    _{'@id':_,
+      '@type':'City',
+      name:"Dublin"} = Res2.'Doc'.
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data).

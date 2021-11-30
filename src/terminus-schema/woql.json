@@ -367,7 +367,7 @@
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
-  "document" : "DataValue",
+  "document" : "Value",
   "identifier" : "NodeValue" }
 
 { "@id" : "UpdateDocument",
@@ -380,7 +380,21 @@
   },
   "@key" : { "@type" : "ValueHash" },
   "@inherits" : "Query",
-  "document" : "DataValue",
+  "document" : "Value",
+  "identifier" : { "@type" : "Optional",
+                   "@class" : "NodeValue" } }
+
+{ "@id" : "InsertDocument",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "Insert a document in the graph.",
+      "@properties" : { "document" : "The document to insert. Must either have an '@id' or have a class specified key.",
+                        "identifier" : "An optional returned identifier specifying the documentation location."
+                      }
+  },
+  "@key" : { "@type" : "ValueHash" },
+  "@inherits" : "Query",
+  "document" : "Value",
   "identifier" : { "@type" : "Optional",
                    "@class" : "NodeValue" } }
 
