@@ -2,6 +2,11 @@
           []).
 
 :- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(schema).
+:- use_module(json).
+
 
 %% format: document_id(<component>, <parent_id>, <id>)
 %%
@@ -31,8 +36,35 @@
 %%           | nested_field(field)
 
 %% Given a type, we should be able to generate a stub document_id structure
-document_id_for_type(_Transaction, _Type, _Document_Id) :-
-    true.
+
+document_id_for_type(Transaction, Type, document_id(Type_Component, Prefixes, _Id)) :-
+    do_or_die(\+ is_subdocument(Transaction, Type),
+              error(unexpected_subdocument(Type))),
+
+    database_schema(Transaction, Schema),
+    database_schema_prefixes(Schema, Context),
+    Prefixes = prefix(Base_Prefix, Schema_Prefix),
+    Base_Prefix = (Context.'@base'),
+    Schema_Prefix = (Context.'@schema'),
+
+    schema_key_descriptor(Schema, Context, Type, Descriptor),
+    key_descriptor_to_id_component(Schema, Type, Descriptor, Type_Component).
+
+key_descriptor_to_id_component(_Schema, Type, base(_), base(Type, _)).
+key_descriptor_to_id_component(_Schema, Type, random(_), random(Type, _)).
+key_descriptor_to_id_component(Schema, Type, lexical(_, Fields), lexical(Type, Component_Fields, _, _)) :-
+    maplist(key_descriptor_field_to_component_field(Schema, Type), Fields, Component_Fields).
+
+key_descriptor_field_to_component_field(Schema, Type, Field, Component_Field) :-
+    schema_class_predicate_conjunctive_type(Schema, Type, Field, Property_Type),
+
+    key_descriptor_field_to_component_field_(Property_Type, Schema, Field, Component_Field).
+
+key_descriptor_field_to_component_field_(base_class(Base_Type), _Schema, Property, property(Property, Base_Type, _, _)).
+key_descriptor_field_to_component_field_(optional(Type), _Schema, Property, optional_property(Property, Type, _, _)).
+key_descriptor_field_to_component_field_(set(Type), _Schema, Property, set_property(Property, Type, _, _)).
+key_descriptor_field_to_component_field_(list(Type), _Schema, Property, list_property(Property, Type, _, _)).
+key_descriptor_field_to_component_field_(array(Type), _Schema, Property, array_property(Property, Type, _, _)).
 
 %% Given a document and a type, it should be possible to generate a list of document_id structures
 document_ids_for_document(_Transaction, _Type, _Document, _Document_Ids) :-
@@ -85,6 +117,16 @@ resolve_document_id_component(array_index(Index, Inner_Component, Id_Fragment), 
     resolve_document_id_indexed_component(Schema_Prefix, Index, Inner_Component, Id_Fragment).
 resolve_document_id_component(list_index(Index, Inner_Component, Id_Fragment), Schema_Prefix) :-
     resolve_document_id_indexed_component(Schema_Prefix, Index, Inner_Component, Id_Fragment).
+resolve_document_id_component(base(Base, Id_Fragment), Schema_Prefix) :-
+    do_or_die(ground(Id_Fragment),
+              error(base_not_ground(Base), _)),
+
+    (   string_concat(Schema_Prefix, Contracted_Base, Base)
+    ->  true
+    ;   Contracted_Base = Base),
+
+    do_or_die(string_concat(Contracted_Base, _, Id_Fragment),
+              error(id_fragment_does_not_start_with_base(Base, Id_Fragment))).
 resolve_document_id_component(random(Base, Id_Fragment), Schema_Prefix) :-
     random(X),
     format(string(S), '~w', [X]),
@@ -141,6 +183,7 @@ resolve_document_field_(array_property(_, _, Values, Value)) :-
     merge_separator_split(Value, "++", Encoded_Values).
 
 
+component_fragment(base(_, Fragment), Fragment).
 component_fragment(random(_, Fragment), Fragment).
 component_fragment(lexical(_, _, _, Fragment), Fragment).
 component_fragment(hash(_, _, _, Fragment), Fragment).
