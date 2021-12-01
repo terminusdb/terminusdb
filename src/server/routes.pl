@@ -779,7 +779,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
-            param_value_search_or_json_optional(Search, JSON, prefixed, boolean, true, Prefixed),
+            param_value_search_or_json_optional(Search, JSON, prefixed, boolean, true, Compress),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
             param_value_search_or_json_optional(Search, JSON, id, atom, _, Id),
             param_value_search_or_json_optional(Search, JSON, type, atom, _, Type),
@@ -792,15 +792,15 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             Header_Written = written(_),
             (   nonvar(Query) % dictionaries do not need tags to be bound
-            ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document),
+            ->  forall(api_generate_documents_by_query(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Type, Query, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
             ;   ground(Id)
-            ->  api_get_document(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Id, Document),
+            ->  api_get_document(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Id, Document),
                 json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
             ;   ground(Type)
-            ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Skip, Count, Document),
+            ->  forall(api_generate_documents_by_type(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Type, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))
-            ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Prefixed, Unfold, Skip, Count, Document),
+            ;   forall(api_generate_documents(System_DB, Auth, Path, Graph_Type, Compress, Unfold, Skip, Count, Document),
                        json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options))),
 
             % ensure the header has been written by now.
@@ -964,6 +964,7 @@ test(get_frame, [
           key_hash:"An optional key hash for authentication.",
           name:"The users name."}},
       '@key':_{'@fields':["name"],'@type':"Lexical"},
+      '@type':"Class",
       capability:_{'@class':"Capability",'@type':"Set"},
       key_hash:_{'@class':"xsd:string",'@type':"Optional"},
       name:"xsd:string"}.
@@ -2810,41 +2811,41 @@ user_organizations_handler(get, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(organization), cors_handler(Method, organization_handler),
+:- http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name)),
+:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,delete])]).
 
 organization_handler(post, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ organization_name : Org,
-                 user_name : User } :< Document,
-              error(bad_api_document(Document, [organization_name, user_name]))
-             ),
-
     api_report_errors(
         add_organization,
         Request,
-        (   add_user_organization_transaction(System_DB, Auth, User, Org),
+        (   check_content_type_json(Request),
+            check_content_length(Request),
+            http_read_json_data(Request, JSON),
+
+            param_value_json_required(JSON, organization_name, string, Org),
+            param_value_json_required(JSON, user_name, string, User),
+
+            add_user_organization_transaction(System_DB, Auth, User, Org),
             cors_reply_json(Request,
                             _{'@type' : "api:AddOrganizationResponse",
                               'api:status' : "api:success"}))).
 organization_handler(delete, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ organization_name : Name },
-              error(malformed_organization_deletion_document(Document))
-             ),
-
     api_report_errors(
         delete_organization,
         Request,
-        (   delete_organization_transaction(System_DB, Auth, Name),
+        (   check_content_type_json(Request),
+            check_content_length(Request),
+            http_read_json_data(Request, JSON),
+
+            param_value_json_required(JSON, organization_name, string, Name),
+
+            delete_organization_transaction(System_DB, Auth, Name),
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteOrganizationResponse",
                               'api:status' : "api:success"}))).
@@ -3754,6 +3755,11 @@ check_content_type_json(Request) :-
 json_mime_type(Mime) :-
     memberchk(type(CT),Mime),
     re_match('^application/json', CT, []).
+
+check_content_length(Request) :-
+    do_or_die(
+        memberchk(content_length(_), Request),
+        error(missing_content_length, _)).
 
 /*
  * get_param_default(Key,Request:request,Value,Default) is semidet.

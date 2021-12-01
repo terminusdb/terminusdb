@@ -68,15 +68,15 @@ api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri)
         Skip,
         Count).
 
-api_generate_documents_(instance, Transaction, Prefixed, Unfold, Skip, Count, Document) :-
+api_generate_documents_(instance, Transaction, Compress, Unfold, Skip, Count, Document) :-
     api_generate_document_uris_(instance, Transaction, Unfold, Skip, Count, Uri),
-    get_document(Transaction, Prefixed, Unfold, Uri, Document).
+    get_document(Transaction, Compress, Unfold, Uri, Document).
 
 api_generate_documents_(schema, Transaction, _Prefixed, Unfold, Skip, Count, Document) :-
     api_generate_document_uris_(schema, Transaction, Unfold, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
 
-api_generate_documents(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Skip, Count, Document) :-
+api_generate_documents(SystemDB, Auth, Path, Schema_Or_Instance, Compress, Unfold, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -86,16 +86,16 @@ api_generate_documents(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfol
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
 
-    api_generate_documents_(Schema_Or_Instance, Transaction, Prefixed, Unfold, Skip, Count, Document).
+    api_generate_documents_(Schema_Or_Instance, Transaction, Compress, Unfold, Skip, Count, Document).
 
 api_generate_documents_by_type_(schema, Transaction, Type, _Prefixed, _Unfold, Skip, Count, Document) :-
     api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri),
     get_schema_document(Transaction, Uri, Document).
-api_generate_documents_by_type_(instance, Transaction, Type, Prefixed, Unfold, Skip, Count, Document) :-
+api_generate_documents_by_type_(instance, Transaction, Type, Compress, Unfold, Skip, Count, Document) :-
     api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri),
-    get_document(Transaction, Prefixed, Unfold, Uri, Document).
+    get_document(Transaction, Compress, Unfold, Uri, Document).
 
-api_generate_documents_by_type(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Skip, Count, Document) :-
+api_generate_documents_by_type(SystemDB, Auth, Path, Graph_Type, Compress, Unfold, Type, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -105,9 +105,9 @@ api_generate_documents_by_type(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfol
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
 
-    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Prefixed, Unfold, Skip, Count, Document).
+    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Compress, Unfold, Skip, Count, Document).
 
-api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfold, Type, Query, Skip, Count, Document) :-
+api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Compress, Unfold, Type, Query, Skip, Count, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -124,17 +124,17 @@ api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Prefixed, Unfo
         match_query_document_uri(Transaction, Type, Query, Uri),
         Skip,
         Count),
-    get_document(Transaction, Prefixed, Unfold, Uri, Document).
+    get_document(Transaction, Compress, Unfold, Uri, Document).
 
-api_get_document_(instance, Transaction, Prefixed, Unfold, Id, Document) :-
-    do_or_die(get_document(Transaction, Prefixed, Unfold, Id, Document),
+api_get_document_(instance, Transaction, Compress, Unfold, Id, Document) :-
+    do_or_die(get_document(Transaction, Compress, Unfold, Id, Document),
               error(document_not_found(Id), _)).
 
 api_get_document_(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Id, Document) :-
+api_get_document(SystemDB, Auth, Path, Schema_Or_Instance, Compress, Unfold, Id, Document) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path),_)),
@@ -143,7 +143,7 @@ api_get_document(SystemDB, Auth, Path, Schema_Or_Instance, Prefixed, Unfold, Id,
 
     do_or_die(open_descriptor(Descriptor, Transaction),
               error(unresolvable_collection(Descriptor), _)),
-    api_get_document_(Schema_Or_Instance, Transaction, Prefixed, Unfold, Id, Document).
+    api_get_document_(Schema_Or_Instance, Transaction, Compress, Unfold, Id, Document).
 
 embed_document_in_error(Error, Document, New_Error) :-
     Error =.. Error_List,
@@ -166,6 +166,7 @@ known_document_error(bad_field_value(_, _)).
 known_document_error(key_missing_fields(_)).
 known_document_error(key_fields_not_an_array(_)).
 known_document_error(key_fields_is_empty).
+known_document_error(unable_to_assign_ids).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-

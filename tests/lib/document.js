@@ -12,6 +12,7 @@ function commonGetParams (params) {
   result.id = params.string('id')
   result.count = params.integer('count')
   result.skip = params.integer('skip')
+  result.prefixed = params.boolean('prefixed')
   params.assertEmpty()
   return result
 }
@@ -38,68 +39,81 @@ function get (agent, path, params) {
   return request
 }
 
+function schemaOrInstance (schema, instance) {
+  assert(
+    !(schema && instance),
+    'Both \'schema\' and \'instance\' parameters found. Only one allowed.',
+  )
+  const result = schema || instance
+  assert(
+    result,
+    'Missing \'schema\' or \'instance\' parameter. One is required.',
+  )
+  return result
+}
+
 function insert (agent, path, params) {
   params = new Params(params)
+  const queryString = params.string('queryString')
+  const bodyString = params.string('bodyString')
   const author = params.string('author', 'default_author')
   const message = params.string('message', 'default_message')
   const schema = params.object('schema')
   const instance = params.object('instance')
   params.assertEmpty()
 
-  assert(
-    !(schema && instance),
-    'Both \'schema\' and \'instance\' parameters found. Only one allowed.',
-  )
+  const request = agent.post(path)
 
-  const schemaOrInstance = schema || instance
-  assert(
-    schemaOrInstance,
-    'Missing \'schema\' or \'instance\' parameter. One is required.',
-  )
-  const graphType = schema ? 'schema' : 'instance'
-
-  const request = agent
-    .post(path)
-    .query({
-      graph_type: graphType,
+  if (util.isDefined(queryString)) {
+    request.query(queryString)
+  } else {
+    request.query({
+      graph_type: schema ? 'schema' : 'instance',
       author: author,
       message: message,
     })
-    .send(schemaOrInstance)
+  }
+
+  if (util.isDefined(bodyString)) {
+    request.type('json').send(bodyString)
+  } else {
+    request.send(schemaOrInstance(schema, instance))
+  }
 
   return request
 }
 
 function replace (agent, path, params) {
   params = new Params(params)
+  const queryString = params.string('queryString')
+  const bodyString = params.string('bodyString')
   const author = params.string('author', 'default_author')
   const message = params.string('message', 'default_message')
   const schema = params.object('schema')
   const instance = params.object('instance')
-  const create = params.string('create', 'false')
+  const create = params.boolean('create')
   params.assertEmpty()
 
-  assert(
-    !(schema && instance),
-    'Both \'schema\' and \'instance\' parameters found. Only one allowed.',
-  )
+  const request = agent.put(path)
 
-  const schemaOrInstance = schema || instance
-  assert(
-    schemaOrInstance,
-    'Missing \'schema\' or \'instance\' parameter. One is required.',
-  )
-  const graphType = schema ? 'schema' : 'instance'
-
-  const request = agent
-    .put(path)
-    .query({
-      graph_type: graphType,
+  if (util.isDefined(queryString)) {
+    request.query(queryString)
+  } else {
+    request.query({
+      graph_type: schema ? 'schema' : 'instance',
       author: author,
       message: message,
-      create: create,
     })
-    .send(schemaOrInstance)
+    if (util.isDefined(create)) {
+      request.query({ create: create })
+    }
+  }
+
+  if (util.isDefined(bodyString)) {
+    request.type('json').send(bodyString)
+  } else {
+    request.send(schemaOrInstance(schema, instance))
+  }
 
   return request
 }
@@ -197,6 +211,12 @@ function expectMissingField (r, field, object) {
   return r
 }
 
+function expectMissingParameter (r, param) {
+  expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
+  expect(r.body['api:error']['api:parameter']).to.equal(param)
+  return r
+}
+
 module.exports = {
   get,
   insert,
@@ -209,4 +229,5 @@ module.exports = {
   verifyReplaceFailure,
   verifyDelSuccess,
   expectMissingField,
+  expectMissingParameter,
 }

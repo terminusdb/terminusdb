@@ -761,6 +761,22 @@ api_error_jsonld(user_delete,error(user_delete_failed_without_error(Name),_),JSO
              'api:error' : _{ '@type' : "api:UserDeleteFailedWithoutError",
                               'api:user_name' : Name}
             }.
+api_error_jsonld(add_organization, error(missing_parameter(Param), _), JSON) :-
+    format(string(Msg), "Missing parameter: ~s", [Param]),
+    JSON = _{'@type' : "api:AddOrganizationErrorResponse",
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MissingParameter',
+                              'api:parameter' : Param },
+             'api:message' : Msg
+            }.
+api_error_jsonld(add_organization,error(unknown_user(Name),_), JSON) :-
+    format(string(Msg), "Unknown user: ~q", [Name]),
+    JSON = _{'@type' : "api:AddOrganizationErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownUser",
+                              'api:user_name' : Name}
+            }.
 api_error_jsonld(add_organization,error(organization_already_exists(Name),_), JSON) :-
     format(string(Msg), "The organization ~q already exists", [Name]),
     JSON = _{'@type' : "api:AddOrganizationErrorResponse",
@@ -783,6 +799,13 @@ api_error_jsonld(update_organization,error(organization_update_requires_superuse
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
             }.
+api_error_jsonld(delete_organization,error(unknown_organization(Organization_Name),_),JSON) :-
+    format(string(Msg), "Organization '~s' does not exist.", [Organization_Name]),
+    JSON = _{'@type' : 'api:DeleteOrganizationErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:UnknownOrganization',
+                             'api:organization_name' : Organization_Name},
+             'api:message' : Msg}.
 api_error_jsonld(delete_organization,error(delete_organization_requires_superuser,_), JSON) :-
     format(string(Msg), "Organization deletion requires super user authority", []),
     JSON = _{'@type' : "api:DeleteOrganizationErrorResponse",
@@ -1085,22 +1108,6 @@ api_document_error_jsonld(Type,error(branch_does_not_exist(Descriptor), _), JSON
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
-api_document_error_jsonld(Type, error(no_commit_author, _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "No commit author specified", []),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:NoCommitAuthorSpecified' },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(Type, error(no_commit_message, _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "No commit message specified", []),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:NoCommitMessageSpecified' },
-             'api:message' : Msg
-            }.
 api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids), _), JSON) :-
     document_error_type(Type, JSON_Type),
 
@@ -1240,6 +1247,15 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:value' : Value,
                               'api:type' : Destination_Type,
                               'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(missing_parameter(Param), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Missing parameter: ~s", [Param]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MissingParameter',
+                              'api:parameter' : Param },
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(bad_parameter_type(Param, Expected_Type_In, Value), _), JSON) :-
@@ -1434,6 +1450,15 @@ api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
              'api:error' : _{ '@type' : 'api:MissingTargets' },
              'api:message' : "Missing target(s) for deletion"
             }.
+api_document_error_jsonld(Type, error(unable_to_assign_ids(Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unable to assign ids for document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnableToAssignIdsToDocument',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(document_key_type_unknown(Key_Type, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Document @key type unknown: ~q. It must be ValueHash, Hash, Lexical, or Random.", [Key_Type]),
@@ -1571,6 +1596,10 @@ generic_exception_jsonld(missing_content_type(Expected), JSON) :-
     JSON = _{'@type' : 'api:MissingContentTypeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(missing_content_length, JSON) :-
+    JSON = _{'@type' : 'api:MissingContentLengthErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : "Missing 'Content-Length' header."}.
 generic_exception_jsonld(bad_content_type(ContentType, Expected), JSON) :-
     format(string(Msg), "Bad 'Content-Type' header value: ~q. Expected value: ~q", [ContentType, Expected]),
     JSON = _{'@type' : 'api:BadContentTypeErrorResponse',

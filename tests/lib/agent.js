@@ -28,8 +28,8 @@ class Agent {
 
   // Add authentication
   auth () {
-    const user = process.env.TERMINUSDB_USER
-    assert(user, 'Missing environment variable: TERMINUSDB_USER')
+    this.userName = process.env.TERMINUSDB_USER
+    assert(this.userName, 'Missing environment variable: TERMINUSDB_USER')
 
     const token = process.env.TERMINUSDB_ACCESS_TOKEN
     if (token) {
@@ -40,7 +40,7 @@ class Agent {
       const pass = process.env.TERMINUSDB_PASS
       assert(pass, 'Missing environment variable: TERMINUSDB_ACCESS_TOKEN or TERMINUSDB_PASS')
       this.agent.use((request) => {
-        request.auth(user, pass)
+        request.auth(this.userName, pass)
       })
     }
     return this
@@ -50,6 +50,7 @@ class Agent {
     return {
       orgName: this.orgName,
       dbName: this.dbName,
+      userName: this.userName,
     }
   }
 

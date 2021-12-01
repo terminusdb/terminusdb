@@ -24,6 +24,36 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
+    describe('fails insert with missing parameters', function () {
+      const options = [
+        [{ queryString: '', bodyString: '' }, 'author'],
+        [{ queryString: 'author=a', bodyString: '' }, 'message'],
+      ]
+      for (const [option, missingParam] of options) {
+        it(missingParam, async function () {
+          const r = await document
+            .insert(agent, docPath, option)
+            .then(document.verifyInsertFailure)
+          document.expectMissingParameter(r, missingParam)
+        })
+      }
+    })
+
+    describe('fails replace with missing parameters', function () {
+      const options = [
+        [{ queryString: '', bodyString: '' }, 'author'],
+        [{ queryString: 'author=a', bodyString: '' }, 'message'],
+      ]
+      for (const [option, missingParam] of options) {
+        it(missingParam, async function () {
+          const r = await document
+            .replace(agent, docPath, option)
+            .then(document.verifyReplaceFailure)
+          document.expectMissingParameter(r, missingParam)
+        })
+      }
+    })
+
     describe('fails on bad schema @id (#647)', function () {
       const identifiers = [
         '',
@@ -383,7 +413,7 @@ describe('document', function () {
           instance: [
             doc1,
           ],
-          create: 'true',
+          create: true,
         })
         .then(document.verifyInsertSuccess)
       const r = await document
@@ -454,6 +484,28 @@ describe('document', function () {
       expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('instance_not_cardinality_one')
       expect(r.body['api:error']['api:witnesses'][0].class).to.equal('http://www.w3.org/2001/XMLSchema#string')
       expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#name')
+    })
+
+    it('accepts & returns subdocument schema with @documentation (#670)', async function () {
+      const schema =
+        {
+          '@id': util.randomString(),
+          '@type': 'Class',
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+          '@documentation': {
+            '@comment': 'A random subdocument number?',
+            '@properties': { n: 'A number!' },
+          },
+          n: 'xsd:integer',
+        }
+      await document
+        .insert(agent, docPath, { schema: schema })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { query: { graph_type: 'schema', id: schema['@id'] } })
+        .then(document.verifyGetSuccess)
+      expect(r.body).to.deep.equal(schema)
     })
   })
 })

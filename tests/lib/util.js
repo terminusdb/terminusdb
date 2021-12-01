@@ -2,8 +2,16 @@
 
 const crypto = require('crypto')
 
+function deepClone (object) {
+  return JSON.parse(JSON.stringify(object))
+}
+
 function isBoolean (val) {
   return typeof val === 'boolean'
+}
+
+function isDefined (val) {
+  return val !== undefined
 }
 
 function isInteger (val) {
@@ -27,7 +35,9 @@ function randomString () {
 }
 
 module.exports = {
+  deepClone,
   isBoolean,
+  isDefined,
   isInteger,
   isNonNegativeInteger,
   isString,

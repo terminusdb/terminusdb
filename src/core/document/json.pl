@@ -521,7 +521,9 @@ json_elaborate(DB,JSON,Elaborated) :-
 
 json_elaborate(DB,JSON,Context,Elaborated) :-
     json_elaborate_(DB,JSON,Context,Elaborated),
-    json_assign_ids(DB,Context,Elaborated).
+    do_or_die(
+        json_assign_ids(DB,Context,Elaborated),
+        error(unable_to_assign_ids)).
 
 /*
  * Check for JSON values that should not found in a string field.
@@ -1036,24 +1038,48 @@ json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
         Pairs),
     dict_pairs(Out, json, ['@id'-Id,'@type'-Property_Ex|Pairs]).
 
-json_schema_elaborate_documenation(V,Context,Path,json{'@type' : Documentation_Ex,
-                                                       '@id' : ID,
-                                                       '@comment' :
-                                                       json{ '@type' : XSD,
-                                                             '@value' : V}}) :-
+json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
+    global_prefix_expand(sys:'EnumDocumentation',Enum_Ex),
+    property_id(Dict, Context, Path, Id),
+    dict_pairs(Dict, json, In_Pairs),
+    reverse(Path,[type(Type)|_]),
+    findall(
+        Key-Value,
+        (
+            member(K-V, In_Pairs),
+            (   K = '@id'
+            ->  fail
+            ;   K = '@type'
+            ->  fail
+            ;   is_dict(V)
+            ->  enum_value(Type,K,Enum_Value),
+                prefix_expand_schema(Enum_Value, Context, Key),
+                Value = V
+            ;   enum_value(Type,K,Enum_Value),
+                prefix_expand_schema(Enum_Value, Context, Key),
+                wrap_text(V,Value)
+            )
+        ),
+        Pairs),
+    dict_pairs(Out, json, ['@id'-Id,'@type'-Enum_Ex|Pairs]).
+
+json_schema_elaborate_documentation(V,Context,Path,json{'@type' : Documentation_Ex,
+                                                        '@id' : ID,
+                                                        '@comment' :
+                                                        json{ '@type' : XSD,
+                                                              '@value' : V}}) :-
     string(V),
     !,
-    global_prefix_expand(xsd:string, XSD),
     global_prefix_expand(sys:'Documentation',Documentation_Ex),
+    global_prefix_expand(xsd:string, XSD),
     documentation_id(Context,Path,ID).
-json_schema_elaborate_documentation(V,Context,Path,Result2) :-
+json_schema_elaborate_documentation(V,Context,Path,Result3) :-
     is_dict(V),
     !,
     global_prefix_expand(sys:'Documentation',Documentation_Ex),
-
     documentation_id(Context,Path,Doc_Id),
     Result = json{'@id' : Doc_Id,
-                   '@type' : Documentation_Ex},
+                  '@type' : Documentation_Ex},
 
     (   get_dict('@comment', V, Comment_Text)
     ->  wrap_text(Comment_Text, Comment),
@@ -1072,7 +1098,19 @@ json_schema_elaborate_documentation(V,Context,Path,Result2) :-
                                                      Property_Obj,
                                                      Property_Obj2),
         Result2 = (Result1.put(PropertiesP,Property_Obj2))
-    ;   Result2 = Result1).
+    ;   Result2 = Result1),
+
+    (   get_dict('@values',V,Property_Obj)
+    ->  global_prefix_expand(sys:'values',PropertiesP),
+        json_schema_elaborate_enum_documentation(Context,
+                                                 [property('values'),
+                                                  type('Documentation'),
+                                                  property('documentation')
+                                                  |Path],
+                                                 Property_Obj,
+                                                 Property_Obj2),
+        Result3 = (Result2.put(PropertiesP,Property_Obj2))
+    ;   Result3 = Result2).
 
 json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
     !,
@@ -1165,7 +1203,7 @@ json_schema_elaborate(JSON,Context,Path,Elaborated) :-
         error(schema_type_unknown(Type_Min),_)
     ).
 
-json_schema_elaborate_('Enum',JSON,Context,_,Elaborated) :-
+json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
     !,
     get_dict('@id', JSON, ID),
     prefix_expand_schema(ID,Context,ID_Ex),
@@ -1179,11 +1217,18 @@ json_schema_elaborate_('Enum',JSON,Context,_,Elaborated) :-
     Type_ID = json{ '@id' : ID_Ex,
                     '@type' : Expanded
                   },
+    (   get_dict('@documentation', JSON, Documentation)
+    ->  json_schema_predicate_value('@documentation', Documentation,
+                                    Context,[type(ID_Ex)|Old_Path],
+                                    Doc_Prop,Elaborated_Docs),
+        put_dict(Doc_Prop, Type_ID, Elaborated_Docs, Schema_Obj)
+    ;   Schema_Obj = Type_ID),
+
     global_prefix_expand(sys:value, Sys_Value),
-    Elaborated = (Type_ID.put(Sys_Value,
-                              json{ '@container' : "@list",
-                                    '@type' : "@id",
-                                    '@value' : New_List })).
+    Elaborated = (Schema_Obj.put(Sys_Value,
+                                 json{ '@container' : "@list",
+                                       '@type' : "@id",
+                                       '@value' : New_List })).
 json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
     memberchk(Type,['Class','TaggedUnion',
                     'Set','List','Optional','Array', 'Cardinality',
@@ -1624,11 +1669,25 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
-documentation_descriptor_json(documentation(Comment, Properties), Prefixes, Result) :-
+documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefixes, Result) :-
     Template = json{ '@comment' : Comment},
-    (   Properties = json{}
+    (   Elements = json{}
     ->  Result = Template
-    ;   dict_pairs(Properties, _, Pairs),
+    ;   dict_pairs(Elements, _, Pairs),
+        maplist({Type,Prefixes}/[Enum-Comment,Small-Comment]>>(
+                    enum_value(Type,Val,Enum),
+                    compress_schema_uri(Val, Prefixes, Small)
+                ),
+                Pairs,
+                JSON_Pairs),
+        dict_pairs(JSONs,json,JSON_Pairs),
+        Result = (Template.put('@values', JSONs))
+    ).
+documentation_descriptor_json(property_documentation(Comment, Elements), Prefixes, Result) :-
+    Template = json{ '@comment' : Comment},
+    (   Elements = json{}
+    ->  Result = Template
+    ;   dict_pairs(Elements, _, Pairs),
         maplist({Prefixes}/[Prop-Comment,Small-Comment]>>(
                     compress_schema_uri(Prop, Prefixes, Small)
                 ),
@@ -2178,10 +2237,11 @@ all_class_frames(Transaction, Frames) :-
     ),
     !,
     findall(
-        Frame,
+        Class-Frame,
         (   is_simple_class(Transaction, Class),
             class_frame(Transaction, Class, Frame)),
-        Frames).
+        Data),
+    dict_pairs(Frames, json, Data).
 all_class_frames(Query_Context, Frames) :-
     is_query_context(Query_Context),
     !,
@@ -2230,8 +2290,16 @@ class_frame(Transaction, Class, Frame) :-
 	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
+    % enum
+    (   is_enum(Transaction,Class_Ex)
+    ->  database_schema(Transaction, Schema),
+        schema_type_descriptor(Schema, Class, enum(Class,List)),
+        maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
+                List, Enum_List),
+        Pairs7 = ['@type'-'Enum','@values'-Enum_List|Pairs6]
+    ;   Pairs7 = ['@type'-'Class'|Pairs6]),
 
-    sort(Pairs6, Sorted_Pairs),
+    sort(Pairs7, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -3127,6 +3195,13 @@ schema2('
                  "b" : "xsd:integer" },
                { "c" : "xsd:string",
                  "d" : "xsd:integer" }] }
+
+{ "@id" : "EnumChoice",
+  "@type" : "Class",
+  "@oneOf" : { "a" : "sys:Unit",
+               "b" : "sys:Unit",
+               "c" : "sys:Unit",
+               "d" : "sys:Unit" }}
 ').
 
 test(schema_key_elaboration1, []) :-
@@ -6142,7 +6217,7 @@ test(two_oneof_an_error,
                  write_schema(schema2,Desc)
              )),
          error(
-             schema_check_failure([witness{'@type':instance_not_cardinality_zero,
+             schema_check_failure([witness{'@type':forbidden_oneof_property_present,
                                            class:'http://s/Choice2',
                                            instance:_,
                                            predicate:_}]),
@@ -6170,7 +6245,8 @@ test(no_oneof_an_error,
              teardown_temp_store(State)
          ),
          error(
-             schema_check_failure([witness{'@type':no_choice_is_cardinality_one,choices:['http://s/a','http://s/b'],class:'http://s/Choice2',instance:_}]),
+             schema_check_failure([witness{'@type':no_choice_is_cardinality_one,
+                                           choices:['http://s/a','http://s/b'],class:'http://s/Choice2',instance:_}]),
              _)
      ]) :-
 
@@ -6210,7 +6286,7 @@ test(inheritence_of_tagged_union_fails,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_zero,
+                 [witness{'@type':forbidden_oneof_property_present,
                           class:'http://s/Choice',
                           instance:_,
                           predicate:_}
@@ -6295,7 +6371,7 @@ test(inherits_two_oneofs_error,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_zero,
+                 [witness{'@type':forbidden_oneof_property_present,
                           class:'http://s/Choice2',
                           instance:_,
                           predicate:_}
@@ -6344,7 +6420,7 @@ test(double_choice_error,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_zero,
+                 [witness{'@type':forbidden_oneof_property_present,
                           class:'http://s/DoubleChoice',
                           instance:_,
                           predicate:_}
@@ -6435,7 +6511,8 @@ test(double_choice_frame,
 
     class_frame(Desc,'DoubleChoice',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'},
-                           json{c:'xsd:string',d:'xsd:integer'}]}.
+                           json{c:'xsd:string',d:'xsd:integer'}],
+                 '@type':'Class'}.
 
 test(mixed_frame,
      [
@@ -6451,7 +6528,92 @@ test(mixed_frame,
 
     class_frame(Desc,'Choice3',Frame),
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'}],
-                 c:'xsd:string'}.
+                 c:'xsd:string',
+                 '@type':'Class'}.
+
+test(oneof_unit,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc,'EnumChoice',Frame),
+    Frame = json{'@oneOf':[json{a:'sys:Unit',b:'sys:Unit',c:'sys:Unit',d:'sys:Unit'}],
+                 '@type':'Class'}.
+
+test(enum_documentation,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Schema = _{ '@id': 'Pet',
+                '@type': 'Enum',
+                '@value' : ["dog","cat"],
+                '@documentation' : _{ '@comment' : "What kind of pet?",
+                                      '@values' : _{dog : "A doggie",
+                                                    cat : "A kitty" }
+                                    }
+              },
+
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+    json_schema_elaborate(Schema, Context, Elaborate),
+    Elaborate =
+    json{'@id':'https://s/Pet',
+         '@type':'http://terminusdb.com/schema/sys#Enum',
+         'http://terminusdb.com/schema/sys#documentation':
+         json{'@id':'https://s/Pet/documentation/Documentation',
+              '@type':'http://terminusdb.com/schema/sys#Documentation',
+              'http://terminusdb.com/schema/sys#comment':
+              json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                   '@value':"What kind of pet?"},
+              'http://terminusdb.com/schema/sys#values':
+              json{'@id':'https://s/Pet/documentation/Documentation/values/cat+dog',
+                   '@type':'http://terminusdb.com/schema/sys#EnumDocumentation',
+                   'https://s/Pet/cat':
+                   json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"A kitty"},
+                   'https://s/Pet/dog':
+                   json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                        '@value':"A doggie"}}},
+         'http://terminusdb.com/schema/sys#value':
+         json{'@container':"@list",
+              '@type':"@id",
+              '@value':[json{'@id':'https://s/Pet/dog',
+                             '@type':"@id"},
+                        json{'@id':'https://s/Pet/cat',
+                             '@type':"@id"}]}},
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            Schema)
+    ),
+
+    open_descriptor(Desc, Trans),
+    get_schema_document(Trans, 'Pet', Result),
+    Result = json{'@documentation':
+                  json{'@comment':"What kind of pet?",
+                       '@values':json{cat:"A kitty",
+                                      dog:"A doggie"}},
+                  '@id':'Pet',
+                  '@type':'Enum',
+                  '@value':[dog,cat]}.
 
 :- end_tests(json).
 
@@ -6641,6 +6803,7 @@ test(diamond_ok,
     class_frame(Transaction, "Bottom", Frame),
 
     Frame = json{
+                '@type':'Class',
                 bottom_face:json{'@class':'Bottom',
                                  '@type':"Optional"},
                 left_face:json{'@class':'Left','@type':"Set"},
@@ -7610,7 +7773,8 @@ test(arithmetic_frame, [
      ]) :-
 
     class_frame(Desc, 'Plus2', JSON),
-    JSON = json{'@key':json{'@type':"Random"},
+    JSON = json{'@type':'Class',
+                '@key':json{'@type':"Random"},
                 '@subdocument':[],
                 left:[json{'@class':'Plus2','@subdocument':[]},
                       json{'@class':'Value2','@subdocument':[]}],
@@ -7631,7 +7795,8 @@ test(outer_frame, [
 
     class_frame(Desc, 'NewOuter', JSON),
 
-    JSON = json{'@key':json{'@fields':[name],'@type':"Lexical"},
+    JSON = json{'@type':'Class',
+                '@key':json{'@fields':[name],'@type':"Lexical"},
                 inner:json{'@class':'Inner',
                            '@subdocument':[]},
                 inners:json{'@class':json{'@class':'Inner',
@@ -7656,7 +7821,7 @@ test(points_to_abstract, [
      ]) :-
 
     class_frame(Desc, 'Points_To_Abstract', JSON),
-    JSON = json{points:['A','B']}.
+    JSON = json{'@type' : 'Class', points:['A','B']}.
 
 :- end_tests(arithmetic_document).
 
@@ -7715,6 +7880,64 @@ schema6('
   "name": "xsd:string" }
 ').
 
+test(all_class_frames, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema6,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )]) :-
+
+    open_descriptor(Desc, DB),
+    all_class_frames(DB,  Frames),
+
+    Frames = json{'http://s/Address':
+                  json{'@type':'Class',
+                       '@documentation':json{'@comment':"This is address"},
+                       '@key':json{'@type':"Random"},
+                       '@subdocument':[],
+                       country:'Country',
+                       postal_code:'xsd:string',
+                       street:'xsd:string'},
+                  'http://s/Coordinate':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"Random"},
+                       x:'xsd:decimal',
+                       y:'xsd:decimal'},
+                  'http://s/Country':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"ValueHash"},
+                       name:'xsd:string',
+                       perimeter:json{'@class':'Coordinate',
+                                      '@type':"List"}},
+                  'http://s/Employee':
+                  json{'@type':'Class',
+                       '@key':json{'@type':"Random"},
+                       address_of:json{'@class':'Address',
+                                       '@subdocument':[]},
+                       age:'xsd:integer',
+                       contact_number:json{'@class':'xsd:string',
+                                           '@type':"Optional"},
+                       friend_of:json{'@class':'Person','@type':"Set"},
+                       managed_by:'Employee',
+                       name:'xsd:string'},
+                  'http://s/Person':
+                  json{'@type':'Class',
+                       '@documentation':
+                       json{'@comment':"This is a person",
+                            '@properties':json{age:"Age of the person.",
+                                               name:"Name of the person."}},
+                       '@key':json{'@type':"Random"},
+                       age:'xsd:integer',
+                       friend_of:json{'@class':'Person',
+                                      '@type':"Set"},
+                       name:'xsd:string'},
+                  'http://s/Team':
+                  json{'@type':'Enum',
+                       '@values':['IT','Marketing']}}.
+
 test(doc_frame, [
          setup(
              (   setup_temp_store(State),
@@ -7726,7 +7949,8 @@ test(doc_frame, [
          )]) :-
     open_descriptor(Desc, DB),
     class_frame(DB, 'Address', Frame),
-    Frame = json{'@documentation':json{'@comment':"This is address"},
+    Frame = json{'@type':'Class',
+                 '@documentation':json{'@comment':"This is address"},
 	             '@key':json{'@type':"Random"},
 	             '@subdocument':[],
                  country:'Country',
