@@ -7,7 +7,7 @@
 [![Discord](https://img.shields.io/discord/689805612053168129?label=Discord&logo=Discord&style=plastic)](https://discord.gg/yTJKAma)
 [![Discourse](https://img.shields.io/discourse/topics?color=yellow&logo=Discourse&server=https%3A%2F%2Fdiscuss.terminusdb.com%2F&style=plastic)](https://discuss.terminusdb.com/)
 
-TerminusDB is an open source graph database and document store. TerminusDB allows you to link JSON documents in a powerful knowledge graph all through a simple [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). Use TerminusDB to enable Git-like collaborative workflows in your application.  
+TerminusDB is an open-source graph database and document store. TerminusDB allows you to link JSON documents in a powerful knowledge graph all through a simple [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). Use TerminusDB to enable Git-like collaborative workflows in your application.  
 
 <img
   src="https://assets.terminusdb.com/images/tdb-dashboard-tablet.png"
@@ -17,15 +17,15 @@ TerminusDB is an open source graph database and document store. TerminusDB allow
 />
 <br />
 
-It is lightweight, flexible, temporal, & immutable:
+It is lightweight, flexible, bitemporal, & immutable:
 
 - **Fast:** it's fast – _really_ fast - build an application MVP in a single sprint! 🚀
 - **Customizable:** generate UIs & forms, get data validation for free
 - **Schema Support:** tools to build complex data models - extend schema when you want
 - **Like Git but for Data:**  versioning-first database you can fork, clone, branch, merge, just like Git
-- **Document Oriented:** work with JSON documents.
-- **Scaleable:** domain sharding provides serious scale.
-- **Easy:** quick to install – start using it in minutes.
+- **Document Oriented:** work with JSON documents
+- **Scalable:** [domain sharding](https://github.com/terminusdb/terminusdb/discussions/527) provides scale
+- **Easy:** quick to install – start using it in minutes
 <br />
 
 
@@ -56,10 +56,12 @@ TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public
   
 <br/><br/>
 
-<img src="https://assets.terminusdb.com/images/terminusdb-github-intro.gif" width="75%" height="auto" align="center" />
+  <p align="center">
+  <img width="65%" height="auto" src="https://assets.terminusdb.com/images/terminusdb-github-intro.gif">
+</p>
 
 <br/>
-TerminusDB is a powerful document-oreinted graph database that provides version control features. If Neo4j, MongoDB, and Git had a superpowered baby, that would be TerminusDB. We want to facilitate users in building data-intense applications with collaborative workflows. The JSON format is now ubiqutous in application development but other systems - such as MongoDB - lack the easy ability to link documents. A schema-driven document graph opens up new possibilities for building applications and working with data.  
+TerminusDB is a powerful document-oriented graph database that provides version control features. If Neo4j, MongoDB, and Git had a superpowered baby, that would be TerminusDB. We want to facilitate users in building data-intense applications with collaborative workflows. The JSON format is now ubiquitous in application development but other systems - such as MongoDB - lack the easy ability to link documents. A schema-driven document graph opens new possibilities for building applications and working with data.  
   
 Data-centric, domain focused, and decentralized application development.
 <br />
@@ -73,7 +75,7 @@ align="right"
 <br />
 
 - **Schema Design:** build schemas using a simple JSON format in a client or with our visual schema tool  🚀
-- **Scehma Dvolution:** continue to evolve your scehma as your application grows 
+- **Schema Evolution:** continue to evolve your schema as your application grows 
 - **Data Ingestion:** ingest data from anywhere 
 - **UI Config:** use our [UI library](https://github.com/terminusdb/terminusdb-documents-ui) to generate a custom UI (under active development)
 - **Authentication & Authorization:** simple set up using JWT (tutorial under active development)
@@ -93,7 +95,7 @@ align="right"
   align="right"
 />
   
-Workflow for your users. Allow users to make changes to the data on a seperate branch, have those changes approved, and then merge the branch into the production database and application. If there are conflicts, these can be resolved when merging (under active development). 
+Workflow for your users. Allow users to make changes to the data on a separate branch, have those changes approved, and then merge the branch into the production database and application. If there are conflicts, these can be resolved when merging (under active development). 
   
 <br />  
 Commit graph
@@ -104,7 +106,7 @@ Commit graph
   align="left"
 />
   
-Full audit log of changes. Allow users to track the data flow and changes in your system. Set up alerts so you can take action.
+Full audit log of changes. Allow users to track the data flow and changes in your system. Set up alerts so you can act.
 
 <br />
   
@@ -117,7 +119,7 @@ Commit graph
   align="right"
 />
     
-If corrupt or erronous data is infecting your application, you can immediatly roll back to a working version. 
+If corrupt or erroneous data is infecting your application, you can immediately roll back to a working version. 
   
 
 
