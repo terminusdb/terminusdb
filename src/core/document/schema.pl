@@ -30,7 +30,8 @@
               class_subsumed/3,
               concrete_subclass/3,
               is_abstract/2,
-              is_subdocument/2
+              is_subdocument/2,
+              schema_class_predicate_conjunctive_type/4
           ]).
 
 /*
