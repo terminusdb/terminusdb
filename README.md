@@ -103,6 +103,8 @@ align="right"
 <br />
 <br />  
 <br />
+<br />  
+<br />  
   
 <img
   src="https://assets.terminusdb.com/images/terminusdb-commit-graph-diagram.png"
@@ -111,15 +113,13 @@ align="right"
   align="left"
 />
   
-Full audit log of changes with the TerminusDB **commit graph**. Allow users to track the data flow and changes in your system. Set up alerts so you can act.
-
-<br />
-<br />  
-<br />
-<br /> 
-<br />
+Full audit log of changes with the TerminusDB **commit graph**. Track data flows and changes in your system. Power your application with the ability to see who mades specific changes. 
+  
+Expose this functionality to your users so they can audit their application data with ease. 
+ 
 <br />
 <br /> 
+<br />
 <br />
 <br /> 
 
@@ -135,6 +135,8 @@ Full audit log of changes with the TerminusDB **commit graph**. Allow users to t
 <br />   
   
 If corrupt or erroneous data is infecting your application, you can immediately roll back to a working version. 
+
+You can allow your users much more freedom to interact with the application safe in the knowledge that you easily roll back to an earlier working version. Immutability provides freedom without trust.
   
 <br />
   
