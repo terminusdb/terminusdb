@@ -65,7 +65,7 @@ expand_query_document_for_type(base_class(_), _, _{}, _{}) :- !.
 expand_query_document_for_type(base_class(Type), _DB, Query, Query_Ex) :-
     atomic(Query),
     !,
-    catch(typecast(Query^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Casted),
+    catch(json_value_cast_type(Query,Type,Casted),
           error(casting_error(_,_),_),
           throw(error(query_error(casting_error(Query, Type)), _))),
     % todo check that the given value actually matches what we need here
@@ -286,6 +286,88 @@ test(query_optional,
             match_query_document_uri(Db,
                                      "Thing",
                                      _{'field': "bar"},
+                                     Uri),
+            Uris),
+
+    Uris = [Doc2].
+
+test(query_int,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: "xsd:integer"})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: 1},
+                                  _Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: 2},
+                                  Doc2)
+                          )),
+
+    open_descriptor(Desc, Db),
+    findall(Uri,
+            match_query_document_uri(Db,
+                                     "Thing",
+                                     _{'field': 2},
+                                     Uri),
+            Uris),
+
+    Uris = [Doc2].
+
+test(query_float,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{'@type': "Class",
+                                '@id': "Thing",
+                                '@key': _{'@type': "Lexical",
+                                          '@fields': ["field"]},
+                                field: "xsd:decimal"})
+                          ),
+
+    with_test_transaction(Desc,
+                          C2,
+                          (   insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: 1.2},
+                                  _Doc1),
+                              insert_document(
+                                  C2,
+                                  _{'@type': "Thing",
+                                    field: 2.3},
+                                  Doc2)
+                          )),
+
+    open_descriptor(Desc, Db),
+    findall(Uri,
+            match_query_document_uri(Db,
+                                     "Thing",
+                                     _{'field': 2.3},
                                      Uri),
             Uris),
 
