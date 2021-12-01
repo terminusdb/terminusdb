@@ -78,7 +78,7 @@ Rich query language for complexity  Datalog query interface that can be used to 
 Python client so you can work with those objects and process (fluent python)
   
 HTTP
-
+<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/build-collaborative-apps-terminusx.png">
   
 Superpowers of application  
   
