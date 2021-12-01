@@ -65,6 +65,9 @@ TerminusDB is a powerful document-oriented graph database that provides version 
   
 Data-centric, domain focused, and decentralized application development.
 <br />
+<br /> 
+<br />  
+  
   
 <img
 src="https://assets.terminusdb.com/images/build-collaborative-apps-terminusx.png"
@@ -89,39 +92,58 @@ align="right"
  ## Highlighted Features 
   
 <img
-  src="https://assets.terminusdb.com/master/images/like-git-for-data-terminusx-V2.png"
-  alt="TerminusDB Dashboard"
+  src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/like-git-for-data-terminusx-V2.png"
+  alt="TerminusDB DWorkflow"
   width="50%"
   align="right"
 />
   
-Workflow for your users. Allow users to make changes to the data on a separate branch, have those changes approved, and then merge the branch into the production database and application. If there are conflicts, these can be resolved when merging (under active development). 
+**Workflow** for your users. Allow users to make changes to the data on a separate branch, have those changes approved, and then merge the branch into the production database and application. If there are conflicts, these can be resolved when merging (under active development). 
   
+<br />
 <br />  
-Commit graph
+<br />
+  
 <img
   src="https://assets.terminusdb.com/images/terminusdb-commit-graph-diagram.png"
-  alt="TerminusDB Dashboard"
+  alt="TerminusDB Commit Graph"
   width="50%"
   align="left"
 />
   
-Full audit log of changes. Allow users to track the data flow and changes in your system. Set up alerts so you can act.
+Full audit log of changes with the TerminusDB **commit graph**. Allow users to track the data flow and changes in your system. Set up alerts so you can act.
 
+<br />
+<br />  
+<br />
+<br /> 
+<br />
+<br />
+<br /> 
+<br />
+<br /> 
+
+<img
+  src="https://assets.terminusdb.com/images/godundo.JPG"
+  alt="Power of Undo"
+  width="40%"
+  align="right"
+/>
+  
+<br /> 
+<br />
+<br />   
+  
+If corrupt or erroneous data is infecting your application, you can immediately roll back to a working version. 
+  
+<br />
+  
+<br /> 
+
+  
 <br />
   
 <br />  
-Commit graph
-<img
-  src="https://assets.terminusdb.com/images/godundo.JPG"
-  alt="TerminusDB Dashboard"
-  width="50%"
-  align="right"
-/>
-    
-If corrupt or erroneous data is infecting your application, you can immediately roll back to a working version. 
-  
-
 
 ## Community
 
