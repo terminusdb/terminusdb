@@ -68,7 +68,8 @@
               input_to_integer/2,
               duplicates/2,
               has_duplicates/2,
-              index_list/2
+              index_list/2,
+              uri_encoded_string/3
           ]).
 
 /** <module> Utils
@@ -953,3 +954,7 @@ index_list(List,Indexes) :-
         numlist(0, N, Indexes)
     ;   Indexes = []
     ).
+
+uri_encoded_string(Component, Value, Encoded_String) :-
+    uri_encoded(Component, Value, Encoded),
+    atom_string(Encoded, Encoded_String).
