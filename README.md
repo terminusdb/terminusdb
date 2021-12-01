@@ -52,46 +52,74 @@ TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public
 | [TerminusDB and TerminusX Documentation](https://terminusdb.com/docs/) | [Bootstrap TerminusDB](https://github.com/terminusdb/terminusdb-bootstrap) | [Python Client](https://github.com/terminusdb/terminusdb-client-python) | [JavaScript Client](https://github.com/terminusdb/terminusdb-client-js) | [Quick Start](https://terminusdb.com/docs/v10.0/#/landing/quick-start) |
 | :--- | :--- | :--- | :--- | :--- |
 
+## Data-Centric Applications  
+  
 <br/><br/>
 
-<img src="https://assets.terminusdb.com/images/terminusdb-github-intro.gif" width="100%" height="auto" />
+<img src="https://assets.terminusdb.com/images/terminusdb-github-intro.gif" width="75%" height="auto" align="center" />
 
 <br/>
- 
+TerminusDB is a powerful document-oreinted graph database that provides version control features. If Neo4j, MongoDB, and Git had a superpowered baby, that would be TerminusDB. We want to facilitate users in building data-intense applications with collaborative workflows. The JSON format is now ubiqutous in application development but other systems - such as MongoDB - lack the easy ability to link documents. A schema-driven document graph opens up new possibilities for building applications and working with data.  
+  
 Data-centric, domain focused, and decentralized application development.
+<br />
+  
+<img
+src="https://assets.terminusdb.com/images/build-collaborative-apps-terminusx.png"
+alt="TerminusDB Build App"
+width="75%"
+align="right"
+/>
+<br />
 
-TerminusDB is a powerful document-oreinted graph database that provides version control features. If Neo4j, MongoDB, and Git had a superpowered baby, that would be TerminusDB. We want to facilitate users in building data-intense applications with collaborative workflows. The JSON format is now ubiqutous in application development but it typically lacks the easy ability to link documents. A document graph opens up many new possibilities for building applications and working with data.  
+- **Schema Design:** build schemas using a simple JSON format in a client or with our visual schema tool  🚀
+- **Scehma Dvolution:** continue to evolve your scehma as your application grows 
+- **Data Ingestion:** ingest data from anywhere 
+- **UI Config:** use our [UI library](https://github.com/terminusdb/terminusdb-documents-ui) to generate a custom UI (under active development)
+- **Authentication & Authorization:** simple set up using JWT (tutorial under active development)
+- **HTTP Client:** easily allow your users to interact with your application
+- **Rich Query Language:** [Datalog](https://en.wikipedia.org/wiki/Datalog) (WOQL) query interface that can be used to express complex joins and recursive graph traversals
+- **Python Client:** process data in TerminusDB python client
+- **Fast:** build an application MVP in a single sprint! 🚀
+<br />
   
-Schema design
-  
-Data injestion 
-  
-  
-UI Config Dashboard - UI SDK
 
-Authentication and authorisation   Create an access token
-
-Document API 
-
-Rich query language for complexity  Datalog query interface that can be used to express complex joins and recursive graph traversals.
-
-Python client so you can work with those objects and process (fluent python)
+ ## Highlighted Features 
   
-HTTP
-<img src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/build-collaborative-apps-terminusx.png">
+<img
+  src="https://assets.terminusdb.com/master/images/like-git-for-data-terminusx-V2.png"
+  alt="TerminusDB Dashboard"
+  width="50%"
+  align="right"
+/>
   
-Superpowers of application  
+Workflow for your users. Allow users to make changes to the data on a seperate branch, have those changes approved, and then merge the branch into the production database and application. If there are conflicts, these can be resolved when merging (under active development). 
   
-Power of Undo  
-  
+<br />  
 Commit graph
 <img
   src="https://assets.terminusdb.com/images/terminusdb-commit-graph-diagram.png"
   alt="TerminusDB Dashboard"
   width="50%"
+  align="left"
+/>
+  
+Full audit log of changes. Allow users to track the data flow and changes in your system. Set up alerts so you can take action.
+
+<br />
+  
+<br />  
+Commit graph
+<img
+  src="https://assets.terminusdb.com/images/godundo.JPG"
+  alt="TerminusDB Dashboard"
+  width="50%"
   align="right"
 />
-<br />
+    
+If corrupt or erronous data is infecting your application, you can immediatly roll back to a working version. 
+  
+
 
 ## Community
 
@@ -101,10 +129,9 @@ or our [forum](https://discuss.terminusdb.com). On Twitter, we're [@TerminusDB](
 
 ## Documentation
 
-In order to use your TerminusDB through the console rather than
-directly through clients, you should look at the documentation on our
-[TerminusDB documentation](https://terminusdb.com/docs/terminusdb/) website.
-
+Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/terminusdb/) website. 
+  
+We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs). 
 
 ## Changes in this Version
 
