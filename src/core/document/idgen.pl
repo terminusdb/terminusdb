@@ -81,12 +81,13 @@ document_prefix_parent_id(Schema, Prefixes) :-
 
 %% Given a document and a type, it should be possible to generate a list of document_id structures
 document_ids_for_document(Schema, Document, Document_Ids) :-
+    get_dict('@type', Document, Type),
     do_or_die(\+ schema_is_subdocument(Schema, Type),
               error(unexpected_subdocument(Type))),
 
     document_prefix_parent_id(Schema, Prefixes),
 
-    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, _, _).
+    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, A, A).
 
 
 
@@ -98,25 +99,26 @@ document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _,
     \+ prefix(_,_) = Parent_Document_Id,
     !,
     document_prefix_parent_id(Schema, Prefixes),
-    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, _, _).
-document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _, _) :-
+    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, A, A).
+document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, Id_Component, Full_Component) :-
     get_dict('@id', Document, Id),
     !,
     Type = (Document.'@type'),
     database_schema_prefixes(Schema, Prefixes),
     document_id_component_for_type(Schema, Prefixes, Type, Id_Component),
     fill_document_id_component(Id_Component, Document),
-    Document_Id = document_id(Id_Component, Parent_Document_Id, Id),
+    Document_Id = document_id(Full_Component, Parent_Document_Id, Id),
 
     dict_pairs(Document, _, Pairs),
-    findall(Inner_Document_Ids,
-            (   member(Property-Value, Pairs),
-                \+ memberchk(Property, ['@id', '@type']),
+    maplist({Schema, Document_Id}/[Property-Value, Inner_Document_Ids]>>(
+                (   memberchk(Property, ['@id', '@type'])
+                ->  Inner_Document_Ids = []
+                ;   Rest = property(Property, Inner_Component, _),
 
-                Rest = property(Property, Inner_Component, _),
-
-                document_ids_for_document(Schema, Document_Id, Value, Inner_Document_Ids, Inner_Component, Rest)),
+                    document_ids_for_document(Schema, Document_Id, Value, Inner_Document_Ids, Inner_Component, Rest))),
+            Pairs,
             Inner_Document_Ids_Lists),
+
     append([[Document_Id]|Inner_Document_Ids_Lists], Document_Ids).
 document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Cur, Rest) :-
     get_dict('@container', Document, "@set"),
@@ -147,7 +149,7 @@ document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Id
             Indexes,
             Inner_Document_Ids_List),
     append(Inner_Document_Ids_List, Document_Ids).
-document_ids_for_document(_Transaction, _Parent_Document_Id, _Document, []).
+document_ids_for_document(_Transaction, _Parent_Document_Id, _Document, [], _, _).
 
 fill_document_id_component(base(_, _), _Document).
 fill_document_id_component(random(_, _), _Document).
