@@ -31,6 +31,7 @@
               concrete_subclass/3,
               is_abstract/2,
               is_subdocument/2,
+              schema_is_subdocument/2,
               schema_class_predicate_conjunctive_type/4
           ]).
 
@@ -117,9 +118,12 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
     class_super(Validation_Object,Concrete,Class),
     \+ is_abstract(Validation_Object,Concrete).
 
-class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
-    class_super(Validation_Object,Class,Subsumed).
+    database_schema(Validation_Object,Schema),
+    schema_class_subsumed(Schema,Class,Subsumed).
+schema_class_subsumed(_Schema,Class,Class).
+schema_class_subsumed(Schema,Class,Subsumed) :-
+    schema_class_super(Schema,Class,Subsumed).
 
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
@@ -421,13 +425,16 @@ is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, C, sys:abstract, rdf:nil).
 
-is_direct_subdocument(Validation_Object, C) :-
-    database_schema(Validation_Object,Schema),
+is_direct_subdocument(Schema, C) :-
     xrdf(Schema, C, sys:subdocument, rdf:nil).
 
 is_subdocument(Validation_Object, C) :-
-    class_subsumed(Validation_Object, C, D),
-    is_direct_subdocument(Validation_Object, D).
+    database_schema(Validation_Object,Schema),
+    schema_is_subdocument(Schema, C).
+:- table schema_is_subdocument/2.
+schema_is_subdocument(Schema, C) :-
+    schema_class_subsumed(Schema, C, D),
+    is_direct_subdocument(Schema, D).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
