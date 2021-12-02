@@ -90,7 +90,7 @@ align="right"
   
 
  ## Highlighted Features 
-  
+<br />  
 <img
   src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/like-git-for-data-terminusx-V2.png"
   alt="TerminusDB DWorkflow"
@@ -120,7 +120,6 @@ Expose this functionality to your users so they can audit their application data
 <br />
 <br /> 
 <br />
-<br />
 <br /> 
 
 <img
@@ -132,7 +131,6 @@ Expose this functionality to your users so they can audit their application data
   
 <br /> 
 <br />
-<br />   
   
 If corrupt or erroneous data is infecting your application, you can immediately roll back to a working version. 
 
