@@ -42,7 +42,10 @@
               test_woql_label_descriptor/2,
 
               with_test_transaction/3,
-              with_test_transaction/4
+              with_test_transaction/4,
+
+              write_schema_string/2,
+              write_schema/2
           ]).
 
 /** <module> Test Utilities
@@ -628,3 +631,12 @@ with_test_transaction(Descriptor, Context, Goal, Result) :-
 
     create_context(Descriptor, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context, Goal, Result).
+
+write_schema_string(Schema, Desc) :-
+    create_context(Desc, commit{author: "a", message: "m"}, Context),
+    with_transaction(Context, write_json_string_to_schema(Context, Schema), _).
+
+:- meta_predicate write_schema(1,+).
+write_schema(P,Desc) :-
+    call(P,Schema),
+    write_schema_string(Schema, Desc).

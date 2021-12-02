@@ -41,9 +41,15 @@
 
 %% Given a type, we should be able to generate a stub document_id structure
 
+resolve_ids_in_document(Transaction, Document) :-
+    database_schema(Transaction, Schema),
+    document_ids_for_document(Schema, Document, Document_Ids),
+    maplist(resolve_document_id, Document_Ids).
+
 document_id_component_for_type(Schema, Prefixes, Type, Type_Component) :-
     schema_key_descriptor(Schema, Prefixes, Type, Descriptor),
-    key_descriptor_to_id_component(Schema, Type, Descriptor, Type_Component).
+    key_descriptor_to_id_component(Schema, Type, Descriptor, Type_Component),
+    !.
 
 document_id_for_type(Transaction, Type, document_id(Type_Component, Prefixes, _Id)) :-
     do_or_die(\+ is_subdocument(Transaction, Type),
@@ -60,6 +66,8 @@ document_id_for_type(Transaction, Type, document_id(Type_Component, Prefixes, _I
 key_descriptor_to_id_component(_Schema, Type, base(_), base(Type, _)) :- !.
 key_descriptor_to_id_component(_Schema, Type, random(_), random(Type, _)) :- !.
 key_descriptor_to_id_component(Schema, Type, lexical(_, Fields), lexical(Type, Component_Fields, _, _)) :-
+    maplist(key_descriptor_field_to_component_field(Schema, Type), Fields, Component_Fields).
+key_descriptor_to_id_component(Schema, Type, hash(_, Fields), hash(Type, Component_Fields, _, _)) :-
     maplist(key_descriptor_field_to_component_field(Schema, Type), Fields, Component_Fields).
 
 key_descriptor_field_to_component_field(Schema, Type, Field, Component_Field) :-
@@ -88,8 +96,6 @@ document_ids_for_document(Schema, Document, Document_Ids) :-
     document_prefix_parent_id(Schema, Prefixes),
 
     document_ids_for_document(Schema, Prefixes, Document, Document_Ids, A, A).
-
-
 
 document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _, _) :-
     % If this is not a subdocument, ensure that parent document id is the prefix parent
@@ -121,12 +127,14 @@ document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, Id
 
     append([[Document_Id]|Inner_Document_Ids_Lists], Document_Ids).
 document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Cur, Rest) :-
+    % Sets are transparent as far as the path is concerned, meaning they contribute no component. We just pass on what we already got.
     get_dict('@container', Document, "@set"),
     !,
     get_dict('@value', Document, Values),
 
     maplist({Transaction, Parent_Document_Id, Cur, Rest}/[Value,Inner_Document_Ids]>>(
-                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Cur, Rest)),
+                copy_term(Cur-Rest, Template_Cur-Template_Rest),
+                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Template_Cur, Template_Rest)),
              Values,
              Inner_Document_Ids),
     append(Inner_Document_Ids, Document_Ids).
@@ -365,20 +373,269 @@ schema_prefix_from_type(Type, Type).
 
 schema_prefix_from_component(random(Type, _), Prefix) :-
     schema_prefix_from_type(Type, Prefix).
-schema_prefix_from_component(lexical(Type, _), Prefix) :-
+schema_prefix_from_component(lexical(Type, _, _, _), Prefix) :-
     schema_prefix_from_type(Type, Prefix).
-schema_prefix_from_component(hash(Type, _), Prefix) :-
+schema_prefix_from_component(hash(Type, _, _, _), Prefix) :-
     schema_prefix_from_type(Type, Prefix).
 schema_prefix_from_component(valuehash(Type, _), Prefix) :-
     schema_prefix_from_type(Type, Prefix).
-schema_prefix_from_component(array_index(_, Inner), Prefix) :-
+schema_prefix_from_component(array_index(_, Inner, _), Prefix) :-
     schema_prefix_from_component(Inner, Prefix).
-schema_prefix_from_component(list_index(_, Inner), Prefix) :-
+schema_prefix_from_component(list_index(_, Inner, _), Prefix) :-
     schema_prefix_from_component(Inner, Prefix).
-schema_prefix_from_component(property(_, Inner), Prefix) :-
+schema_prefix_from_component(property(_, Inner, _), Prefix) :-
     schema_prefix_from_component(Inner, Prefix).
 
 schema_prefix_from_document_id(prefix(_Base, Schema), Schema).
 schema_prefix_from_document_id(document_id(Component, _, _), Prefix) :-
     schema_prefix_from_component(Component, Prefix).
 
+:- begin_tests(idgen_integration).
+:- use_module(core(util/test_utils)).
+:- use_module(core(util)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+schema1('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s#" }
+{"@type": "Class",
+ "@id": "Foo",
+ "@key": {"@type":"Random"}
+}
+').
+
+test(random_document,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema1,Desc),
+                 open_descriptor(Desc, DB),
+                 database_prefixes(DB, Prefixes)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = json{'@type': "Foo"},
+    'document/json':json_elaborate_(DB, Document, Prefixes, Elaborated),
+    resolve_ids_in_document(DB, Elaborated),
+
+    Id = (Elaborated.'@id'),
+    ground(Id),
+    string_concat("http://i/Foo/", _, Id).
+
+schema2('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s#" }
+{"@type": "Class",
+ "@id": "Foo",
+ "@key": {"@type":"Lexical",
+          "@fields":["a","b","c"]},
+ "a" : "xsd:string",
+ "b" : {"@type":"Optional", "@class": "xsd:decimal"},
+ "c" : {"@type":"Array", "@class": "xsd:string"},
+ "d" : "xsd:integer"
+}
+').
+
+test(lexical_document_1,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc),
+                 open_descriptor(Desc, DB),
+                 database_prefixes(DB, Prefixes)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = json{'@type': "Foo",
+                    a: "hi",
+                    c: [],
+                    d: 42},
+
+    'document/json':json_elaborate_(DB, Document, Prefixes, Elaborated),
+    resolve_ids_in_document(DB, Elaborated),
+
+    Id = (Elaborated.'@id'),
+    ground(Id),
+    Id = "http://i/Foo/hi++none++".
+
+test(lexical_document_2,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc),
+                 open_descriptor(Desc, DB),
+                 database_prefixes(DB, Prefixes)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = json{'@type': "Foo",
+                    a: "hi",
+                    b: "23.45",
+                    c: ["cow", "duck", "horse"],
+                    d: 42},
+
+    'document/json':json_elaborate_(DB, Document, Prefixes, Elaborated),
+    resolve_ids_in_document(DB, Elaborated),
+
+    Id = (Elaborated.'@id'),
+    ground(Id),
+    Id = "http://i/Foo/hi+23.45+cow++duck++horse".
+
+schema3('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s#" }
+{"@type": "Class",
+ "@id": "Foo",
+ "@key": {"@type":"Hash",
+          "@fields":["a","b","c"]},
+ "a" : "xsd:string",
+ "b" : {"@type":"Optional", "@class": "xsd:decimal"},
+ "c" : {"@type":"Array", "@class": "xsd:string"},
+ "d" : "xsd:integer"
+}
+').
+
+test(hash_document,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema3,Desc),
+                 open_descriptor(Desc, DB),
+                 database_prefixes(DB, Prefixes)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = json{'@type': "Foo",
+                    a: "hi",
+                    b: "23.45",
+                    c: ["cow", "duck", "horse"],
+                    d: 42},
+
+    'document/json':json_elaborate_(DB, Document, Prefixes, Elaborated),
+    resolve_ids_in_document(DB, Elaborated),
+
+    Id = (Elaborated.'@id'),
+    ground(Id),
+    writeq(Id),nl,
+    Id = "http://i/Foo/96c805cec839d0d6408cdda216cc0b4659804c406d5a893646ddc267f8c68db6".
+
+schema4('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s#" }
+{"@type": "Class",
+ "@id": "Foo",
+ "@key": {"@type":"Lexical",
+          "@fields":["name"]},
+ "name": "xsd:string",
+ "bar": "Bar"
+}
+{"@type": "Class",
+ "@id": "Bar",
+ "@key": {"@type":"Lexical",
+          "@fields":["name"]},
+ "@subdocument": [],
+ "name": "xsd:string",
+ "baz" : {"@type": "List",
+          "@class": "Baz"}
+}
+{"@type": "Class",
+ "@id": "Baz",
+ "@key": {"@type":"Lexical",
+          "@fields":["name"]},
+ "@subdocument": [],
+ "name": "xsd:string",
+ "quux": {"@type": "Set",
+          "@class": "Quux"}
+}
+{"@type": "Class",
+ "@id": "Quux",
+ "@key": {"@type":"Lexical",
+          "@fields":["name"]},
+ "@subdocument": [],
+ "name": "xsd:string",
+ "quux": {"@type": "Optional",
+          "@class": "Quux"}
+}
+').
+
+test(nested_subdocument,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema4,Desc),
+                 open_descriptor(Desc, DB),
+                 database_prefixes(DB, Prefixes)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Document = json{'@type': "Foo",
+                    name: "foo1",
+                    bar: json{'@type': "Bar",
+                              name: "bar1",
+                              baz: [json{'@type': "Baz",
+                                         name: "baz1",
+                                         quux: [json{'@type': "Quux",
+                                                     name: "quux1",
+                                                     quux: json{'@type': "Quux",
+                                                                name: "quux2"}}]},
+                                    json{'@type': "Baz",
+                                         name: "baz2",
+                                         quux: [json{'@type': "Quux",
+                                                     name: "quux3"},
+                                                json{'@type': "Quux",
+                                                     name: "quux4"}]},
+                                    json{'@type': "Baz",
+                                         name: "baz3",
+                                         quux: []}]}},
+
+    'document/json':json_elaborate_(DB, Document, Prefixes, Elaborated),
+    resolve_ids_in_document(DB, Elaborated),
+
+    Foo1_Id = (Elaborated.'@id'),
+    Bar1_Id = (Elaborated.'http://s#bar'.'@id'),
+    [Baz1, Baz2, Baz3] = (Elaborated.'http://s#bar'.'http://s#baz'.'@value'),
+    Baz1_Id = (Baz1.'@id'),
+    Baz2_Id = (Baz2.'@id'),
+    Baz3_Id = (Baz3.'@id'),
+    [Quux1] = (Baz1.'http://s#quux'.'@value'),
+    Quux1_Id = (Quux1.'@id'),
+    Quux2_Id = (Quux1.'http://s#quux'.'@id'),
+
+    [Quux3, Quux4] = (Baz2.'http://s#quux'.'@value'),
+    Quux3_Id = (Quux3.'@id'),
+    Quux4_Id = (Quux4.'@id'),
+
+
+    Foo1_Id == "http://i/Foo/foo1",
+    Bar1_Id == "http://i/Foo/foo1/bar/Bar/bar1",
+    Baz1_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/0/Baz/baz1",
+    Baz2_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/1/Baz/baz2",
+    Baz3_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/2/Baz/baz3",
+    Quux1_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/0/Baz/baz1/quux/Quux/quux1",
+    Quux2_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/0/Baz/baz1/quux/Quux/quux1/quux/Quux/quux2",
+    Quux3_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/1/Baz/baz2/quux/Quux/quux3",
+    Quux4_Id == "http://i/Foo/foo1/bar/Bar/bar1/baz/1/Baz/baz2/quux/Quux/quux4".
+
+:- end_tests(idgen_integration).

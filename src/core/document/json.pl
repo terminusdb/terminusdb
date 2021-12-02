@@ -2624,15 +2624,6 @@ replace_schema_document(Query_Context, Document, Create, Id) :-
     query_default_collection(Query_Context, TO),
     replace_schema_document(TO, Document, Create, Id).
 
-write_schema_string(Schema, Desc) :-
-    create_context(Desc, commit{author: "a", message: "m"}, Context),
-    with_transaction(Context, write_json_string_to_schema(Context, Schema), _).
-
-:- meta_predicate write_schema(1,+).
-write_schema(P,Desc) :-
-    call(P,Schema),
-    write_schema_string(Schema, Desc).
-
 :- begin_tests(json_stream).
 :- use_module(core(util)).
 :- use_module(library(terminus_store)).
