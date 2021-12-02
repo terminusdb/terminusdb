@@ -3,6 +3,7 @@
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
+:- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(schema).
 :- use_module(json).
@@ -22,7 +23,9 @@
 %%            | set_property(Property, Inner_Component, Id_Fragment)
 %%            | optional_property(Property, Inner_Component, Id_Fragment)
 %%            | property(Property, Inner_Component, Id_Fragment)
-%%
+%% http://asdfasdf/documents/Foo/asdfasdf/stuff/3/Bar/asdfasdfa
+%% property(stuff, Inner_Component, _),
+%% property(stuff, array_index(3, random(Bar, _), _), _)
 %% Fields point at a data type or collection of data types.
 %% It's possible that this happens in a nested way.
 %%
@@ -32,10 +35,15 @@
 %%      | set_property(Property_Name, Field_Type, Values, Value_String)
 %%      | array_property(Property_Name, Field_Type, Values, Value_String)
 %%
+%% Hypothetical future thing, but currently field_type is just an atom for the datatype:
 %% field_type: data_type(Type)
 %%           | nested_field(field)
 
 %% Given a type, we should be able to generate a stub document_id structure
+
+document_id_component_for_type(Schema, Prefixes, Type, Type_Component) :-
+    schema_key_descriptor(Schema, Prefixes, Type, Descriptor),
+    key_descriptor_to_id_component(Schema, Type, Descriptor, Type_Component).
 
 document_id_for_type(Transaction, Type, document_id(Type_Component, Prefixes, _Id)) :-
     do_or_die(\+ is_subdocument(Transaction, Type),
@@ -47,11 +55,10 @@ document_id_for_type(Transaction, Type, document_id(Type_Component, Prefixes, _I
     Base_Prefix = (Context.'@base'),
     Schema_Prefix = (Context.'@schema'),
 
-    schema_key_descriptor(Schema, Context, Type, Descriptor),
-    key_descriptor_to_id_component(Schema, Type, Descriptor, Type_Component).
+    document_id_component_for_type(Schema, Prefixes, Type, Type_Component).
 
-key_descriptor_to_id_component(_Schema, Type, base(_), base(Type, _)).
-key_descriptor_to_id_component(_Schema, Type, random(_), random(Type, _)).
+key_descriptor_to_id_component(_Schema, Type, base(_), base(Type, _)) :- !.
+key_descriptor_to_id_component(_Schema, Type, random(_), random(Type, _)) :- !.
 key_descriptor_to_id_component(Schema, Type, lexical(_, Fields), lexical(Type, Component_Fields, _, _)) :-
     maplist(key_descriptor_field_to_component_field(Schema, Type), Fields, Component_Fields).
 
@@ -66,12 +73,145 @@ key_descriptor_field_to_component_field_(set(Type), _Schema, Property, set_prope
 key_descriptor_field_to_component_field_(list(Type), _Schema, Property, list_property(Property, Type, _, _)).
 key_descriptor_field_to_component_field_(array(Type), _Schema, Property, array_property(Property, Type, _, _)).
 
+document_prefix_parent_id(Schema, Prefixes) :-
+    database_schema_prefixes(Schema, Context),
+    Prefixes = prefix(Base_Prefix, Schema_Prefix),
+    Base_Prefix = (Context.'@base'),
+    Schema_Prefix = (Context.'@schema').
+
 %% Given a document and a type, it should be possible to generate a list of document_id structures
-document_ids_for_document(_Transaction, _Type, _Document, _Document_Ids) :-
-    true.
+document_ids_for_document(Schema, Document, Document_Ids) :-
+    do_or_die(\+ schema_is_subdocument(Schema, Type),
+              error(unexpected_subdocument(Type))),
+
+    document_prefix_parent_id(Schema, Prefixes),
+
+    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, _, _).
+
+
+
+document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _, _) :-
+    % If this is not a subdocument, ensure that parent document id is the prefix parent
+    get_dict('@id', Document, _),
+    Type = (Document.'@type'),
+    \+ schema_is_subdocument(Schema, Type),
+    \+ prefix(_,_) = Parent_Document_Id,
+    !,
+    document_prefix_parent_id(Schema, Prefixes),
+    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, _, _).
+document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _, _) :-
+    get_dict('@id', Document, Id),
+    !,
+    Type = (Document.'@type'),
+    database_schema_prefixes(Schema, Prefixes),
+    document_id_component_for_type(Schema, Prefixes, Type, Id_Component),
+    fill_document_id_component(Id_Component, Document),
+    Document_Id = document_id(Id_Component, Parent_Document_Id, Id),
+
+    dict_pairs(Document, _, Pairs),
+    findall(Inner_Document_Ids,
+            (   member(Property-Value, Pairs),
+                \+ memberchk(Property, ['@id', '@type']),
+
+                Rest = property(Property, Inner_Component, _),
+
+                document_ids_for_document(Schema, Document_Id, Value, Inner_Document_Ids, Inner_Component, Rest)),
+            Inner_Document_Ids_Lists),
+    append([[Document_Id]|Inner_Document_Ids_Lists], Document_Ids).
+document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Cur, Rest) :-
+    get_dict('@container', Document, "@set"),
+    !,
+    get_dict('@value', Document, Values),
+
+    maplist({Transaction, Parent_Document_Id, Cur, Rest}/[Value,Inner_Document_Ids]>>(
+                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Cur, Rest)),
+             Values,
+             Inner_Document_Ids),
+    append(Inner_Document_Ids, Document_Ids).
+document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Cur, Rest) :-
+    get_dict('@container', Document, Container_Type),
+    !,
+    get_dict('@value', Document, Values),
+
+    index_list(Values, Indexes),
+    maplist({Transaction, Parent_Document_Id, Container_Type, Cur, Rest}/[Value,Index,Inner_Document_Ids]>>(
+                copy_term(Cur-Rest, Template_Cur-Template_Rest),
+                (   Container_Type = "@array"
+                ->  Template_Cur = array_index(Index, Inner_Component, _)
+                ;   Container_Type = "@list"
+                ->  Template_Cur = list_index(Index, Inner_Component, _)
+                ;   throw(error(unknown_container_type(Container_Type), _))),
+
+                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Inner_Component, Template_Rest)),
+            Values,
+            Indexes,
+            Inner_Document_Ids_List),
+    append(Inner_Document_Ids_List, Document_Ids).
+document_ids_for_document(_Transaction, _Parent_Document_Id, _Document, []).
+
+fill_document_id_component(base(_, _), _Document).
+fill_document_id_component(random(_, _), _Document).
+fill_document_id_component(lexical(_, Fields, _, _), Document) :-
+    fill_fields(Fields, Document).
+fill_document_id_component(hash(_, Fields, _, _), Document) :-
+    fill_fields(Fields, Document).
+
+fill_fields([], _Document).
+fill_fields([Field|Fields], Document) :-
+    fill_field(Field, Document),
+    fill_fields(Fields, Document).
+
+fill_field(property(Property, Field_Type, Value, _), Document) :-
+    get_dict(Property, Document, Value_Container),
+    get_dict('@value', Value_Container, Untyped_Value),
+    normalize_json_value(Untyped_Value, Field_Type, Value).
+fill_field(optional_property(Property, Field_Type, Value, _), Document) :-
+    (   get_dict(Property, Document, Value_Container)
+    ->  get_dict('@value', Value_Container, Untyped_Value),
+        normalize_json_value(Untyped_Value, Field_Type, Inner_Value),
+        Value = some(Inner_Value)
+    ;   Value = none).
+fill_field(set_property(Property, Field_Type, Values, _), Document) :-
+    fill_field_with_container(Property, Field_Type, Values, Document).
+fill_field(list_property(Property, Field_Type, Values, _), Document) :-
+    fill_field_with_container(Property, Field_Type, Values, Document).
+fill_field(array_property(Property, Field_Type, Values, _), Document) :-
+    fill_field_with_container(Property, Field_Type, Values, Document).
+
+fill_field_with_container(Property, Field_Type, Values, Document) :-
+        get_dict(Property, Document, Container),
+    get_dict('@value', Container, Untyped_Values),
+
+    maplist({Field_Type}/[Value_Container, Value]>>(
+                get_dict('@value', Value_Container, Untyped_Value),
+                normalize_json_value(Untyped_Value, Field_Type, Value)),
+            Untyped_Values,
+            Values).
+
+untyped_typecast(V, Type, Val, Val_Type) :-
+    (   string(V)
+    ->  typecast(V^^xsd:string,
+                 Type, [], Val^^Val_Type)
+    ;   atom(V),
+        atom_string(V,String)
+    ->  typecast(String^^xsd:string,
+                 Type, [], Val^^Val_Type)
+    ;   number(V)
+    ->  typecast(V^^xsd:decimal,
+                 Type, [], Val^^Val_Type)).
+
+normalize_json_value(V, Type, Val) :-
+    global_prefix_expand_safe(Type, TE),
+
+    untyped_typecast(V, TE, Casted, Casted_Type),
+    typecast(Casted^^Casted_Type, xsd:string, [], Val^^_).
 
 
 %% if parent_component is not yet ground, we resolve that first.
+resolve_document_id(Id) :-
+    var(Id),
+    !,
+    throw(error(document_id_not_bound(Id), _)).
 resolve_document_id(document_id(Component, Parent_Id, Id)) :-
     \+ ground(Parent_Id),
     !,
