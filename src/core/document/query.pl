@@ -160,7 +160,7 @@ expand_query_document_(DB, Type, Query, Query_Ex, Query_Type_Ex) :-
         do_or_die(once(class_subsumed(DB, Query_Type_Ex, Type)),
                   error(query_error(not_a_subclass(Type, Query_Type_Ex)), _))
     ;   var(Type)
-    ->  throw(error(query_error(unknown_type_for_query(Query)), _))
+    ->  throw(error(query_error(missing_type(Query)), _))
     ;   Query_Type_Ex = Type),
 
     do_or_die(type_descriptor(DB, Query_Type_Ex, Query_Type_Descriptor),
