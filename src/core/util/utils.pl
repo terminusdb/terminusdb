@@ -252,7 +252,8 @@ unique_solutions(Template, Goal, Collection) :-
  *
  * Repeats a term A, N times.
  */
-repeat_term(_A,0,[]).
+repeat_term(_A,0,[]) :-
+    !.
 repeat_term(A,N,[A|Z]) :-
 	N > 0,
 	N2 is N - 1,
