@@ -8899,6 +8899,7 @@ test(underscore_space_slash_in_id,
            foo: "hi_there buddy",
            bar: (0.5),
            baz: "lo_there/buddy"},
+
         'Thing/hi_there%20buddy+0.5+lo_there%2Fbuddy').
 
 test(normalizable_float,
