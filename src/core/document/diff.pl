@@ -21,7 +21,7 @@ patch(copy(N,M,Diff_TR,Diff_BL,Diff_BR), In, Out) :-
 patch(swap(N1,M1,N2,M2,Old,New,Diff_TR,Diff_BL,Diff_BR), In, Out) :-
     split_matrix(In, N1, M1, Old, TR, BL, BR),
     patch(Diff_TR, TR, TR_New),
-    patch(Diff_BL, BL, BL_New),
+         patch(Diff_BL, BL, BL_New),
     patch(Diff_BR, BR, BR_New),
     split_matrix(Out, N2, M2, New, TR_New, BL_New, BR_New).
 patch(keep, T, T).
@@ -54,32 +54,44 @@ infimum(DiffX, DiffY, Diff) :-
     ->  Diff = DiffX
     ;   Diff = DiffY).
 
-diff_(T,T,keep).
+%:- table diff_/3 as private.
+diff_(M,M,keep) :-
+    !.
+diff_([],M2,swap(0,0,R2,C2,[],M2,keep,keep,keep)) :-
+    !,
+    row_length(M2,R2),
+    column_length(M2,C2).
+diff_(M1,[],swap(R1,C1,0,0,M1,[],keep,keep,keep)) :-
+    !,
+    row_length(M1,R1),
+    column_length(M1,C1).
 diff_(T1,T2,Diff) :-
     row_length(T1,R1),
     column_length(T1,C1),
     row_length(T2,R2),
     column_length(T2,C2),
     !,
-    between(0,R1,N1),
-    between(0,R2,N2),
-    between(0,C1,M1),
-    between(0,C2,M2),
-    once((   member(X, [N1,N2]),
-             X \= 0
-         ;   member(Y, [M1,M2]),
-             Y \= 0)),
-    split_matrix(T1, N1, M1, TL1, TR1, BL1, BR1),
-    split_matrix(T2, N2, M2, TL2, TR2, BL2, BR2),
+    between(0,R1,I1),
+    between(0,R2,I2),
+    between(0,C1,J1),
+    between(0,C2,J2),
+    % *Some* matrix gets smaller
+    once((   Size1 is I1 * J1,
+             Size1 >= 1
+         ;   Size2 is I2 * J2,
+             Size2 >= 1)),
+    % the same section has advanced in both row and column
+    split_matrix(T1, I1, J1, TL1, TR1, BL1, BR1),
+    split_matrix(T2, I2, J2, TL2, TR2, BL2, BR2),
     (   TL1 = TL2
     ->  diff_(TR1,TR2,Diff_TR),
         diff_(BL1,BL2,Diff_BL),
         diff_(BR1,BR2,Diff_BR),
-        Diff = copy(N1,M1,Diff_TR,Diff_BL,Diff_BR)
+        Diff = copy(I1,J1,Diff_TR,Diff_BL,Diff_BR)
     ;   diff_(TR1,TR2,Diff_TR),
         diff_(BL1,BL2,Diff_BL),
         diff_(BR1,BR2,Diff_BR),
-        Diff = swap(N1,M1,N2,M2,TL1,TL2,Diff_TR,Diff_BL,Diff_BR)
+        Diff = swap(I1,J1,I2,J2,TL1,TL2,Diff_TR,Diff_BL,Diff_BR)
     ).
 
 row_length(T, Length) :-
@@ -110,17 +122,15 @@ split_matrix(In, N, M, Top_Left, Right, Bottom, Bottom_Right) :-
     split_column(Rows_Top, M, Top_Left, Right),
     split_column(Rows_Bottom, M, Bottom, Bottom_Right).
 
-/*
-split_row([[]], 0, [[]], [[]]) :- !.
-split_row(T, 0, [[]], T) :- !.
-split_row(T, N, T, [[]]) :-
-    length(T,N),
-    !.
-*/
 split_row(In, N, Top, Bottom) :-
     split(N, In, Top, Bottom).
 
 split_column([], _, [], []).
+split_column(L, 0, [], L) :-
+    !.
+split_column([R|Rows], N, [R|Rows], []) :-
+    length(R,N),
+    !.
 split_column([R|Rows], N, [Left|Top], [Right|Bottom]) :-
     split(N, R, Left, Right),
     split_column(Rows, N, Top, Bottom).
@@ -246,6 +256,28 @@ test(patch_col, []) :-
 
     patch(Diff,T1,T2).
 
+test(patch_row, []) :-
+    T1 = [[1,2],
+          [3,4],
+          [o,o]],
+
+    T2 = [[1,2],
+          [3,4]],
+
+    Diff = copy(2,2,
+                keep,
+                swap(2,1,
+                     2,0,
+                     [[o,o]],
+                     [[]],
+                     keep,
+                     keep,
+                     keep),
+                keep,
+                keep),
+
+    patch(Diff,T1,T2).
+
 test(diff_col, []) :-
     T1 = [[o,1,2],
           [o,3,4]],
@@ -254,7 +286,7 @@ test(diff_col, []) :-
           [3,4]],
 
     diff(T1,T2,Diff),
-    writeq(Diff),
+
     Diff = swap(2,1,2,0,
                 [[o],[o]],
                 [[],[]],keep,keep,keep),
@@ -267,6 +299,35 @@ test(diff_empty_row, []) :-
     T2 = [ ],
 
     diff_(T1,T2,Diff),
+
+    Diff = swap(1, 3, 0, 3,
+                [[1, 2, 3]],
+                [], keep, keep, keep).
+
+test(diff_empty_col, []) :-
+    T1 = [ [ 1, 2, 3 ] ],
+
+    T2 = [ [ ] ],
+
+    diff_(T1,T2,Diff),
+
+    Diff = swap(1,3,1,0,
+                [[1,2,3]],
+                [[]],keep,keep,keep).
+
+test(diff_shared_corner, []) :-
+    M1 = [[a,b],
+          [c,1]],
+    M2 = [[1]],
+    diff(M1,M2, Diff),
+    writeq(Diff).
+
+test(diff_shared_middle_row, []) :-
+    M1 = [[a,b,d,3],
+          [x,1,2,x],
+          [o,o,o,o]],
+    M2 = [[1,2]],
+    diff(M1,M2, Diff),
     writeq(Diff).
 
 test(diff_shared_middle, []) :-
@@ -284,6 +345,25 @@ test(diff_shared_middle, []) :-
     writeq(Diff).
 
 
+test(diff_row_col_simple, []) :-
+    T1 = [ [ 1, x ] ],
+
+    T2 = [ [ "gaz" ],
+           [ "gar" ] ],
+    diff(T1,T2,Diff),
+    writeq(Diff),
+    Diff = swap(1,2,2,1,[[1,x]],[["gaz"],["gar"]],
+                swap(1,0,2,0,[[]],[[],[]],
+                     keep,
+                     keep,
+                     keep),
+                keep,
+                keep),
+
+    patch(Diff, T1, X),
+    writeq(X).
+
+
 test(diff_row_col, []) :-
     T1 = [ [ 1, 2, 3 ],
            [ 4, 5, 6 ],
@@ -295,7 +375,7 @@ test(diff_row_col, []) :-
            [ 7, 8, 9, "gaz" ] ],
 
     diff(T1,T2,Diff),
-
+    writeq(Diff),
     Diff = copy(3,3,
                 swap(3,1,
                      [[null],[null],[null]],
