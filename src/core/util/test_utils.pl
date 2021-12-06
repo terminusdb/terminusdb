@@ -430,7 +430,11 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
     ],
 
-    inherit_env_vars(Env_List_1,
+    (   memberchk(env_vars(Env_List_User), Options)
+    ->  append(Env_List_1, Env_List_User, Combined_Env_List)
+    ;   Combined_Env_List = Env_List_1),
+
+    inherit_env_vars(Combined_Env_List,
                      [
                          'HOME',
                          'SystemRoot', % Windows specific stuff...
