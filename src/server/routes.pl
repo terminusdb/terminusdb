@@ -3691,7 +3691,7 @@ authenticate(System_Askable, Request, Auth) :-
     format(string(Message), "User '~w' authenticated through the header ~w", [Username, Functor]),
     json_log_debug(_{
                        message: Message,
-                       authMethod: jwt,
+                       authMethod: forwarded_user_header,
                        authResult: success,
                        user: Username
                    }).
