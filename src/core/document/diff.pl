@@ -40,6 +40,7 @@ diff(T1,T2,Diff,Cost) :-
     (   diff_(T1,T2,New_Diff,0,New_Cost,State),
         nb_setarg(1,State,New_Cost),
         nb_setarg(2,State,New_Diff),
+        format(user_error,'~nNew_Cost: ~q', [New_Cost]),
         fail
     ;   best_cost(State, Cost),
         best_diff(State, Diff)
@@ -61,6 +62,7 @@ down_from(From,To,X) :-
     between(To,From,Y),
     X is From - Y.
 
+%:- table diff_/6.
 diff_(M,M,keep,
       Current_Cost,Cost,State) :-
     !,
@@ -99,22 +101,41 @@ diff_(T1,T2,Diff,
              Size1 >= 1
          ;   Size2 is I2 * J2,
              Size2 >= 1)),
-    % the same section has advanced in both row and column
     split_matrix(T1, I1, J1, TL1, TR1, BL1, BR1),
     split_matrix(T2, I2, J2, TL2, TR2, BL2, BR2),
     best_cost(State, Best_Cost),
     (   TL1 = TL2
     ->  New_Cost is Current_Cost + 1,
-        New_Cost < Best_Cost,
+        % 3 because that's absolutely minimal from the next 3 diffs.
+        Cost1_LB is New_Cost + 3,
+        Cost1_LB < Best_Cost,
         diff_(TR1,TR2,Diff_TR,New_Cost,Cost1,State),
+        % 2 to go
+        Cost2_LB is Cost1 + 2,
+        Cost2_LB < Best_Cost,
         diff_(BL1,BL2,Diff_BL,Cost1,Cost2,State),
+        % 1 left
+        Cost_LB is Cost2 + 1,
+        Cost_LB < Best_Cost,
         diff_(BR1,BR2,Diff_BR,Cost2,Cost,State),
+        % Best be less than best
+        Cost < Best_Cost,
         Diff = copy(I1,J1,Diff_TR,Diff_BL,Diff_BR)
     ;   New_Cost is Current_Cost + I1 * J1 + I2 * J2 + 1,
-        New_Cost < Best_Cost,
+        % 3 because that's absolutely minimal from the next 3 diffs.
+        Cost1_LB is New_Cost + 3,
+        Cost1_LB < Best_Cost,
         diff_(TR1,TR2,Diff_TR,New_Cost,Cost1,State),
+        % 2 to go
+        Cost2_LB is Cost1 + 2,
+        Cost2_LB < Best_Cost,
         diff_(BL1,BL2,Diff_BL,Cost1,Cost2,State),
+        % 1 left
+        Cost_LB is Cost2 + 1,
+        Cost_LB < Best_Cost,
         diff_(BR1,BR2,Diff_BR,Cost2,Cost,State),
+        % Best be less than best
+        Cost < Best_Cost,
         Diff = swap(I1, J1, I2, J2,
                     TL1,TL2,Diff_TR,Diff_BL,Diff_BR)
     ).
@@ -194,7 +215,7 @@ hash_blocks(N,M,T1,T2) :-
                 I =< R,
                 In is I + N,
                 In =< R,
-                findall(Print,
+                findall(Print-I-J,
                         (   between(0,C,J),
                             J =< C,
                             Jn is J + M,
@@ -208,6 +229,83 @@ hash_blocks(N,M,T1,T2) :-
                 \+ Columns = []
             ),
             T2).
+
+fingerprint_compare(Delta,X-_-_,Y-_-_) :-
+    compare(Delta,X,Y).
+
+index_match_compare(Delta,M1,M2) :-
+    compare(Delta,M1,M2).
+
+collect_match_indices([],_,[]) :- !.
+collect_match_indices(_,[],[]) :- !.
+collect_match_indices([X-IX-JX|XR],[X-IY-JY|YR],[match(IX-JX,IY-JY)|R]) :-
+    !,
+    collect_match_indices(XR,YR,R).
+collect_match_indices([X-IX-JX|XR],[Y-IY-JY|YR],Rest) :-
+    compare(Delta,X,Y),
+    (   Delta = (<)
+    ->  collect_match_indices(XR,[Y-IY-JY|YR],Rest)
+    ;   Delta = (>)
+    ->  collect_match_indices([X-IX-JX|XR],YR,Rest)
+    ).
+
+match(Blocks1,Blocks2,Match_Indices) :-
+    append(Blocks1,Prints1),
+    predsort(fingerprint_compare,Prints1,Sorted_Prints1),
+    append(Blocks2,Prints2),
+    predsort(fingerprint_compare,Prints2,Sorted_Prints2),
+    collect_match_indices(Sorted_Prints1,Sorted_Prints2,Unsorted_Indices),
+    predsort(index_match_compare,Unsorted_Indices,Match_Indices).
+
+/*
+block(Rows,Cols,[match(IX-JX,IY-JY)|Match_Indices],Block) :-
+    (   block_(Rows,Cols,IX,JX,IY,JY,Match_Indices,Block)
+    ;   block(Rows,Cols,Match_Indices,Block)
+    ).
+
+block_(Rows,Cols,IX,JX,IY,JY,Match_Indices,block(IX,JX,IX_BR,JX_BR,
+                                                 IY,JY,IY_BR,JY_BR)) :-
+    seek_top_right(Rows,Cols,IX,IY,Match_Indices,IX_TR,IY_TR),
+    seek_bottom_left(Rows,Cols,IX,IY,IXTR,IYTR,Match_Indices,JX_BL,JY_BL),
+    IX_BR is IX_TR + Rows,
+    IY_BR is IY_TR + Rows,
+    JX_BR is JX_BL + Cols,
+    JY_BR is JY_BL + Cols.
+
+seek_top_right(Rows,Cols,IX,IY,[],ITR,IY) :- !.
+seek_top_right(Rows,Cols,IX,IY,[match(IXN-JXN,IYN,JYN)|Match_Indices],
+               IXTR,IYTR) :-
+    (   IXN is IX + 1,
+        IYN is IY + 1
+    ->  seek_top_right(Rows,Cols,IXN,IYN,Match_Indices,Match_Indices,
+                       IXTR,IYTR)
+    ;   IXTR = IX,
+        IYTR = IY
+    ).
+
+%seek_bottom_left
+
+copy_blocks(Rows,Cols,Match_Indices,Blocks) :-
+    findall(
+        Block,
+        block(Rows, Cols, Match_Indices, Block),
+        Blocks).
+
+% an approximate diff
+adiff(T1,T2,Match_Indices,Blocks) :-
+    row_length(T1,R1),
+    column_length(T1,C1),
+    row_length(T2,R2),
+    column_length(T2,C2),
+    R is min(R1,R2),
+    C is min(C1,C2),
+    Rows is R div 2,
+    Cols is C div 2,
+    hash_blocks(Rows,Cols,T1,Blocks1),
+    hash_blocks(Rows,Cols,T2,Blocks2),
+    match(Blocks1,Blocks2,Match_Indices),
+    copy_blocks(Rows,Cols,Match_Indices,Blocks).
+*/
 
 :- begin_tests(matrix).
 
@@ -452,8 +550,21 @@ test(diff_shared_middle_row, []) :-
     cost(Diff,Cost),
     patch(Diff, M1, M2).
 
+test(diff_pathological, []) :-
+    M1	= [[o, o],
+           [2, 3],
+           [5, 6],
+           [8, 9],
+           [x, x]],
+    M2	= [[2, 3, "goo"],
+           [5, 6, "gar"],
+           [8, 9, "gaz"]],
+    diff(M1,M2, Diff, Cost),
+    nl,writeq(Diff),nl,
+    writeq(Cost).
+
 test(diff_shared_middle, [
-         blocked('heat death of the universe anyone?')
+         % blocked('heat death of the universe anyone?')
      ]) :-
     T1 = [ [ o, o, o, o ],
            [ a, 1, 2, 3 ],
@@ -505,13 +616,13 @@ test(hash_shared_middle, [
            [ b, 4, 5, 6 ],
            [ c, 7, 8, 9 ],
            [ d, x, x, x ] ],
-    hash_blocks(3,3,T1,Blocks1),
+    hash_blocks(2,2,T1,Blocks1),
 
     T2 = [ [ 1, 2, 3, "goo" ],
            [ 4, 5, 6, "gar" ],
            [ 7, 8, 9, "gaz" ] ],
 
-    hash_blocks(3,3,T2,Blocks2),
+    hash_blocks(2,2,T2,Blocks2),
 
     writeq(Blocks1),
     writeq(Blocks2),
@@ -520,6 +631,37 @@ test(hash_shared_middle, [
     %writeq(Diff),
     %cost(Diff, Cost),
     true.
+
+
+test(block_match, []) :-
+    Block1 = [['8688d301ebf8db90a862fc7ca2563276'-0-0,
+               '9ad8d0dff9efe6243ef1028ee37d6255'-0-1,
+               fa3690fa244566858f98fcc0bc1d4d6c-0-2],
+              [bb3f8faf1064e167a7a8e1e96009da5c-1-0,
+               '1f7d30ed644028dc78ee383d1935f7e5'-1-1,
+               a7266ce2951c6247099f5489477f3d60-1-2],
+              ['133b497528dc3a573ccc7b8c4850cf01'-2-0,
+               '8651c12360cbcb4807bbe0e71cc6f091'-2-1,
+               '439b71ef21da2f4f789af951fe6e25e2'-2-2],
+              [f957370098b3f5a36a5bb821aa83dceb-3-0,
+               '60ba7c730ae5713a6b2d6a1cc56697d2'-3-1,
+               '93092b4e18d0e77439ce599b9697f3b2'-3-2]],
+
+    Block2 = [['1f7d30ed644028dc78ee383d1935f7e5'-0-0,
+               a7266ce2951c6247099f5489477f3d60-0-1,
+               '88746a60a6baab9e79a8246496581c64'-0-2],
+              ['8651c12360cbcb4807bbe0e71cc6f091'-1-0,
+               '439b71ef21da2f4f789af951fe6e25e2'-1-1,
+               e02cb232d6677d62e3b1c91dba9d53f8-1-2]],
+
+    match(Block1,Block2,Match_Indices),
+    writeq(Match_Indices),
+    Match_Indices = [match(1-1,0-0),
+                     match(1-2,0-1),
+                     match(2-1,1-0),
+                     match(2-2,1-1)],
+    writeq(Match_Indices).
+
 
 :- end_tests(matrix).
 
@@ -555,6 +697,37 @@ T4 = [ [ x, 2, 3],
        [ 4, 5, 6],
        [ 7, 8, 9] ]
 
+
+
+Index walking:
+
+
+Match could be as:
+
+    0  1  2  3  4  5  6
+0   x  x  x  x  x  x  x
+1   x  x  x  x  x  x  x
+2   x        x  x  x  x
+3   x  x  x  x  x  x  x  x
+4            x  x  x  x
+5            x  x  x  x
+
+Walk should be:
+
+    1  2  4  7 10 13 15      block(0,0,1,6)
+    3  5  8 11 14 16 17
+    6
+    9
+    12
+
+
+[['8688d301ebf8db90a862fc7ca2563276'-0-0,'9ad8d0dff9efe6243ef1028ee37d6255'-0-1,fa3690fa244566858f98fcc0bc1d4d6c-0-2],
+ [bb3f8faf1064e167a7a8e1e96009da5c-1-0,'1f7d30ed644028dc78ee383d1935f7e5'-1-1,a7266ce2951c6247099f5489477f3d60-1-2],
+ ['133b497528dc3a573ccc7b8c4850cf01'-2-0,'8651c12360cbcb4807bbe0e71cc6f091'-2-1,'439b71ef21da2f4f789af951fe6e25e2'-2-2],
+ [f957370098b3f5a36a5bb821aa83dceb-3-0,'60ba7c730ae5713a6b2d6a1cc56697d2'-3-1,'93092b4e18d0e77439ce599b9697f3b2'-3-2]]
+
+[['1f7d30ed644028dc78ee383d1935f7e5'-0-0,a7266ce2951c6247099f5489477f3d60-0-1,'88746a60a6baab9e79a8246496581c64'-0-2],
+ ['8651c12360cbcb4807bbe0e71cc6f091'-1-0,'439b71ef21da2f4f789af951fe6e25e2'-1-1,e02cb232d6677d62e3b1c91dba9d53f8-1-2]]
 
 */
 
