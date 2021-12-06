@@ -144,6 +144,33 @@ test(connection_authorised_user_http_basic, [
     http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
+test(connection_authorised_user_forwarded_header, [
+         setup(setup_temp_server(State, Server, [env_vars([
+                                     'TERMINUSDB_INSECURE_MODE'=1,
+                                     'TERMINUSDB_FORWARDED_USER_HEADER'='X-Forwarded-User'
+                                 ])])),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_db_without_schema("admin", "TEST_DB"),
+    atomic_list_concat([Server, '/api/'], URL),
+    http_get(URL, [json(Request_Data)], [request_header('X-Forwarded-User'='admin')]),
+    memberchk(name=DB_Name, Request_Data),
+    DB_Name = 'TEST_DB'.
+
+
+test(connection_unauthorised_user_forwarded_header, [
+         setup(setup_temp_server(State, Server, [env_vars([
+                                     'TERMINUSDB_INSECURE_MODE'=1,
+                                     'TERMINUSDB_FORWARDED_USER_HEADER'='X-Forwarded-User'
+                                 ])])),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_db_without_schema("admin", "TEST_DB"),
+    atomic_list_concat([Server, '/api/'], URL),
+    http_get(URL, _, [request_header('X-Forwarded-User'='adminlolz'), status_code(Status)]),
+    Status = 401.
+
+
 test(connection_result_dbs, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
@@ -3641,6 +3668,27 @@ authenticate(System_Askable, Request, Auth) :-
         throw(error(authentication_incorrect(jwt_no_user_with_name(Username)),_))),
 
     format(string(Message), "User '~w' authenticated through JWT", Username),
+    json_log_debug(_{
+                       message: Message,
+                       authMethod: jwt,
+                       authResult: success,
+                       user: Username
+                   }).
+authenticate(System_Askable, Request, Auth) :-
+    user_forwarded_header(Functor),
+    Term =.. [Functor, Username],
+    memberchk(Term, Request),
+    (   username_auth(System_Askable, Username, Auth)
+    ->  true
+    ;   format(string(Message), "User and header '~w and ~w' failed to authenticate", [Functor, Username]),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: forwarded_user_header,
+                           authResult: failure,
+                           user: Username
+                       }),
+        throw(error(authentication_incorrect(forwarded_header_no_user_with_name(Username)),_))),
+    format(string(Message), "User '~w' authenticated through the header ~w", [Username, Functor]),
     json_log_debug(_{
                        message: Message,
                        authMethod: jwt,
