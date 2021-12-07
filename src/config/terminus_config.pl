@@ -5,7 +5,7 @@
               server_name/1,
               server_port/1,
               worker_amount/1,
-              user_forwarded_header/1,
+              insecure_user_header/1,
               max_transaction_retries/1,
               index_template/1,
               default_database_path/1,
@@ -53,12 +53,12 @@ server_port(Value) :-
 worker_amount(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
 
-user_forwarded_header(Functor) :-
-    getenv('TERMINUSDB_INSECURE_MODE', _),
-    getenv('TERMINUSDB_FORWARDED_USER_HEADER', Value),
-    string_lower(Value, LowerString),
-    re_replace("-"/g, "_", LowerString, LowerStringNoDashes),
-    atom_string(Functor, LowerStringNoDashes).
+insecure_user_header(Header_Key) :-
+    getenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
+    getenv('TERMINUSDB_INSECURE_USER_HEADER', Value),
+    string_lower(Value, Lower_String),
+    re_replace("-"/g, "_", Lower_String, Lower_String_No_Dashes),
+    atom_string(Header_Key, Lower_String_No_Dashes).
 
 :- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-

@@ -146,8 +146,8 @@ test(connection_authorised_user_http_basic, [
 
 test(connection_authorised_user_forwarded_header, [
          setup(setup_temp_server(State, Server, [env_vars([
-                                     'TERMINUSDB_INSECURE_MODE'=1,
-                                     'TERMINUSDB_FORWARDED_USER_HEADER'='X-Forwarded-User'
+                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
+                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
                                  ])])),
          cleanup(teardown_temp_server(State))
      ]) :-
@@ -160,8 +160,8 @@ test(connection_authorised_user_forwarded_header, [
 
 test(connection_unauthorised_user_forwarded_header, [
          setup(setup_temp_server(State, Server, [env_vars([
-                                     'TERMINUSDB_INSECURE_MODE'=1,
-                                     'TERMINUSDB_FORWARDED_USER_HEADER'='X-Forwarded-User'
+                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
+                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
                                  ])])),
          cleanup(teardown_temp_server(State))
      ]) :-
@@ -3675,23 +3675,23 @@ authenticate(System_Askable, Request, Auth) :-
                        user: Username
                    }).
 authenticate(System_Askable, Request, Auth) :-
-    user_forwarded_header(Functor),
-    Term =.. [Functor, Username],
+    insecure_user_header(Header_Key),
+    Term =.. [Header_Key, Username],
     memberchk(Term, Request),
     (   username_auth(System_Askable, Username, Auth)
     ->  true
-    ;   format(string(Message), "User and header '~w and ~w' failed to authenticate", [Functor, Username]),
+    ;   format(string(Message), "User '~w' failed to authenticate with header '~w'", [Username, Header_Key]),
         json_log_debug(_{
                            message: Message,
-                           authMethod: forwarded_user_header,
+                           authMethod: insecure_user_header,
                            authResult: failure,
                            user: Username
                        }),
-        throw(error(authentication_incorrect(forwarded_header_no_user_with_name(Username)),_))),
-    format(string(Message), "User '~w' authenticated through the header ~w", [Username, Functor]),
+        throw(error(authentication_incorrect(insecure_user_header_no_user_with_name(Username)),_))),
+    format(string(Message), "User '~w' authenticated with header '~w'", [Username, Header_Key]),
     json_log_debug(_{
                        message: Message,
-                       authMethod: forwarded_user_header,
+                       authMethod: insecure_user_header,
                        authResult: success,
                        user: Username
                    }).
