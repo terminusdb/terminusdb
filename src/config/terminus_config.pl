@@ -23,7 +23,8 @@
               clear_log_level/0,
               log_format/1,
               set_log_format/1,
-              clear_log_format/0
+              clear_log_format/0,
+              check_env_vars/0
           ]).
 
 :- use_module(core(util)).
@@ -188,3 +189,14 @@ set_log_format(Log_Format) :-
 
 clear_log_format :-
     retractall(log_format_override(_)).
+
+check_insecure_user_header :-
+    getenv('TERMINUSDB_INSECURE_USER_HEADER', Value),
+    (   re_match("[A-Za-z0-9-]+", Value)
+    ->  true
+    ;   throw(error(invalid_insecure_user_header(Value)))).
+
+check_env_vars :-
+    (   getenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+    ->  check_insecure_user_header
+    ;   true).
