@@ -120,7 +120,7 @@ describe('document', function () {
       }
     })
 
-    describe('handles strange schema @id', function () {
+    describe('inserts, queries, and deletes schema with @id', function () {
       const keys = [
         'false',
         'true',
@@ -129,6 +129,7 @@ describe('document', function () {
         '[]',
         '{}',
         '/',
+        '逆手道',
       ]
       for (const id of keys) {
         it(id, async function () {
