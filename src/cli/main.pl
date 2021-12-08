@@ -561,7 +561,6 @@ command_subcommand(Command,Subcommand) :-
     opt_spec(Command,Subcommand,_,_,_).
 
 run(Argv) :-
-    check_env_vars,
     (   (   Argv = [Cmd|_],
             member(Cmd, [help, store, test])
         ;   open_descriptor(system_descriptor{}, _))

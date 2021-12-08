@@ -49,6 +49,7 @@ load_jwt_conditionally :-
 
 
 terminus_server(Argv,Wait) :-
+    check_env_vars,
     config:server(Server),
     config:server_port(Port),
     config:worker_amount(Workers),
