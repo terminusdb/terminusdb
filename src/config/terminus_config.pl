@@ -30,6 +30,8 @@
 :- use_module(core(util)).
 
 version('10.0.13').
+env_insecure_user_header('TERMINUSDB_INSECURE_USER_HEADER').
+env_insecure_user_header_enabled('TERMINUSDB_INSECURE_USER_HEADER_ENABLED').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
@@ -55,8 +57,10 @@ worker_amount(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
 
 insecure_user_header(Header_Key) :-
-    getenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
-    getenv('TERMINUSDB_INSECURE_USER_HEADER', Value),
+    env_insecure_user_header_enabled(Env_Insecure_User_Header_Enabled),
+    getenv(Env_Insecure_User_Header_Enabled, true),
+    env_insecure_user_header(Env_Insecure_User_Header),
+    getenv(Env_Insecure_User_Header, Value),
     string_lower(Value, Lower_String),
     re_replace("-"/g, "_", Lower_String, Lower_String_No_Dashes),
     atom_string(Header_Key, Lower_String_No_Dashes).
@@ -191,12 +195,14 @@ clear_log_format :-
     retractall(log_format_override(_)).
 
 check_insecure_user_header :-
-    getenv('TERMINUSDB_INSECURE_USER_HEADER', Value),
+    env_insecure_user_header(Env_Insecure_User_Header),
+    getenv(Env_Insecure_User_Header, Value),
     (   re_match("[A-Za-z0-9-]+", Value)
     ->  true
     ;   throw(error(invalid_insecure_user_header(Value)))).
 
 check_env_vars :-
-    (   getenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+    env_insecure_user_header_enabled(Env_Insecure_User_Header_Enabled),
+    (   getenv(Env_Insecure_User_Header_Enabled, true)
     ->  check_insecure_user_header
     ;   true).
