@@ -305,7 +305,127 @@ adiff(T1,T2,Match_Indices,Blocks) :-
     hash_blocks(Rows,Cols,T2,Blocks2),
     match(Blocks1,Blocks2,Match_Indices),
     copy_blocks(Rows,Cols,Match_Indices,Blocks).
+
+
+X X X X
+X X X X
+X X X X
+X X X X
+
+--------
+
+X X X
+X X X
+X X X
+
+X X X X +
+
+X X
+X X +
+
+X
+X
+X
+X
+
+
 */
+
+% I_Max is the maximum size in rows before running into the edge of one matrix
+% J_Max is the maximum size in columns before running into the edge of one matrix
+% A is the size of the area we are interested in.
+rectangle(I_Max,J_Max,A,I,J) :-
+    between(1,I_Max,I),
+    between(1,J_Max,J),
+    A is I * J.
+
+/* Fast(er) table diff
+
+Optimal diffs for tables is NP-Hard so we need to find an approximate
+solution that feels "reasonable".
+
+An approximate window-comparison algorithm
+
+Start with two matrices M1 and M2
+
+Keep track of all matches in a bit vector
+F = [0,0,0,0,0,0,0...]
+
+1) Find the min row (i) and column (j) parameters of M1 and M2
+2) Create all windows of size A = i * j
+   a) If maximal match has been found (boundary of no match / match found) in F
+      go to 5
+   b) If A < 2 then return swap M1 for M2 and return calculated score
+   c) If there are no more windows, use "search_down" procedure which
+   cuts i,j in two and repeats from 2
+3) Create matices H1 and H2 of all hashes of the values in the i*j
+window convolved over M1 and M2 (respectively)
+4) Search for matches of hash-values in H1 and H2
+   a) If there are no matches, return to 2
+   b) If there are matches
+       i) Record in F at index i*j
+       ii) increase A by .5 and repeat 2
+5) Cut non-overlaping maximal match(es) from M1 and M2 (choose
+arbitrarily from top-left preference)
+
+6) Decompose M1 and M2 into 4 overlaping matrices:
+
+  a) Left
+  b) Top
+  c) Bottom
+  d) Right
+
+7) Return to 1 for each of Left, Top, Bottom, Right
+
+  a) Choose the maximal match from the alternatives starting with
+  Left, Top, Bottom and then Right.
+  b) Use best match scores to paste back together M1 and M2
+
+
+M1:
+   |     |
+---|-----|---
+   |X....|
+   |....X|....
+---|-----|----
+   |    .|....
+   |    X|....
+   |    .|....
+
+M2:
+
+   |     |
+---|-----|----=
+   |X....|
+   |....X|....
+---|-----|-----
+   |    .|....
+   |     |X....
+   |     |.....
+
+
+
+ */
+fast_diff(T1,T2,Diff) :-
+    row_length(T1,R1),
+    column_length(T1,C1),
+    row_length(T2,R2),
+    column_length(T2,C2),
+    I_Max is min(R1,R2),
+    J_Max is min(C1,C2),
+    max_blocks(I_Max,J_Max,Blocks),
+
+    1.
+
+test2 :-
+    A is I_Max + J_Max,
+    rectangle(I_Max,J_Max,A,I,J),
+    match_blocks(I,J,T1,T2,Match_Blocks).
+
+match_blocks(I,J,T1,T2,Match_Blocks) :-
+    convolve(I,J,T1,H1),
+    convolve(I,J,T2,H2),
+    match(H1,H2,Match_Blocks).
 
 :- begin_tests(matrix).
 
@@ -564,7 +684,7 @@ test(diff_pathological, []) :-
     writeq(Cost).
 
 test(diff_shared_middle, [
-         % blocked('heat death of the universe anyone?')
+         blocked('heat death of the universe anyone?')
      ]) :-
     T1 = [ [ o, o, o, o ],
            [ a, 1, 2, 3 ],
@@ -577,7 +697,23 @@ test(diff_shared_middle, [
            [ 7, 8, 9, "gaz" ] ],
 
     diff(T1,T2,Diff,Cost),
-    writeq(Diff),
+    Diff = swap(5,1,3,0,[[o],[a],[b],[c],[d]],[],
+                swap(1,3,0,4,[[o,o,o]],[],
+                     keep,
+                     copy(3,3,
+                          swap(0,0,3,1,[],[["goo"],["gar"],["gaz"]],
+                               keep,
+                               keep,
+                               keep),
+                          swap(1,3,0,0,[[x,x,x]],[],
+                               keep,
+                               keep,
+                               keep),
+                          keep),
+                     keep),
+                keep,
+                keep),
+
     cost(Diff, Cost).
 
 test(diff_row_col_simple, []) :-
@@ -655,13 +791,11 @@ test(block_match, []) :-
                e02cb232d6677d62e3b1c91dba9d53f8-1-2]],
 
     match(Block1,Block2,Match_Indices),
-    writeq(Match_Indices),
+
     Match_Indices = [match(1-1,0-0),
                      match(1-2,0-1),
                      match(2-1,1-0),
-                     match(2-2,1-1)],
-    writeq(Match_Indices).
-
+                     match(2-2,1-1)].
 
 :- end_tests(matrix).
 
