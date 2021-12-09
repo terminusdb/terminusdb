@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1638883266774,
+  "lastUpdate": 1639054442061,
   "repoUrl": "https://github.com/terminusdb/terminusdb",
   "entries": {
     "Benchmark": [
@@ -3007,6 +3007,70 @@ window.BENCHMARK_DATA = {
           {
             "name": "/api/ok::GET:http_req_duration:p(90)",
             "value": 41.861,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "rrooij@users.noreply.github.com",
+            "name": "Robin de Rooij",
+            "username": "rrooij"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f364c513d03d23740e1cfbc463bb33520af9edc4",
+          "message": "Merge pull request #836 from terminusdb/insecure-user-header\n\nAdd insecure user header for authentication",
+          "timestamp": "2021-12-09T13:50:09+01:00",
+          "tree_id": "02752bdda31dcce489899617b13cbc47b866abbc",
+          "url": "https://github.com/terminusdb/terminusdb/commit/f364c513d03d23740e1cfbc463bb33520af9edc4"
+        },
+        "date": 1639054440656,
+        "tool": "generic",
+        "benches": [
+          {
+            "name": "/api/db::DELETE:http_req_duration:p(90)",
+            "value": 221.475,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db::POST:http_req_duration:p(90)",
+            "value": 673.499,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/db:prefixes:POST:http_req_duration:p(90)",
+            "value": 686.776,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:one:POST:http_req_duration:p(90)",
+            "value": 356.875,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:person:POST:http_req_duration:p(90)",
+            "value": 380.932,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/document:woql:POST:http_req_duration:p(90)",
+            "value": 465.759,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/info::GET:http_req_duration:p(90)",
+            "value": 44.542,
+            "unit": "ms"
+          },
+          {
+            "name": "/api/ok::GET:http_req_duration:p(90)",
+            "value": 44.55,
             "unit": "ms"
           }
         ]
