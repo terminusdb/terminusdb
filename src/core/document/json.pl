@@ -4,6 +4,7 @@
               idgen_lexical/3,
               context_triple/2,
               json_elaborate/3,
+              json_elaborate/6,
               json_triple/3,
               json_schema_triple/3,
               json_schema_elaborate/3,
@@ -504,23 +505,26 @@ prefix_expand_schema(Node,Context,NodeEx) :-
     ;   Context = New_Context),
     prefix_expand(Node, New_Context, NodeEx).
 
-property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     get_dict(Prop, Context, Full_Expansion),
     is_dict(Full_Expansion),
     !,
     expansion_key(Prop,Full_Expansion,P,Expansion),
-    context_value_expand(DB,Context,Value,Expansion,V).
-property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+    context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out).
+property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     prefix_expand_schema(Prop, Context, Prop_Ex),
     Prop \= Prop_Ex,
-    property_expand_key_value(Prop_Ex,Value,DB,Context,P,V).
+    property_expand_key_value(Prop_Ex,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out).
 
 json_elaborate(DB,JSON,Elaborated) :-
+    empty_assoc(Captures_In),
+    json_elaborate(DB,JSON,Captures_In,Elaborated,_Dependencies,_Captures_Out).
+json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     database_prefixes(DB,Context),
-    json_elaborate(DB,JSON,Context,Elaborated).
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies, Captures_Out).
 
-json_elaborate(DB,JSON,Context,Elaborated) :-
-    json_elaborate_(DB,JSON,Context,Elaborated),
+json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out) :-
+    json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
     do_or_die(
         json_assign_ids(DB,Context,Elaborated),
         error(unable_to_assign_ids)).
@@ -539,7 +543,7 @@ check_json_string(_, Val) :-
 check_json_string(Field, Val) :-
     throw(error(bad_field_value(Field, Val), _)).
 
-json_elaborate_(DB,JSON,Context,Result) :-
+json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) :-
     is_dict(JSON),
     !,
 
@@ -549,7 +553,7 @@ json_elaborate_(DB,JSON,Context,Result) :-
     ->   (   prefix_expand_schema(Type, Context, TypeEx),
              New_JSON = JSON)
     ;    (   do_or_die(
-                 get_dict('@id', JSON, _Id),
+                 get_dict('@id', JSON, Id),
                  % Note that, even though we check for @id here, we primarily
                  % expect a @type, so that is the reported error.
                  error(missing_field('@type', JSON), _)),
@@ -561,7 +565,7 @@ json_elaborate_(DB,JSON,Context,Result) :-
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
-    json_context_elaborate(DB,New_JSON,New_Context,Elaborated),
+    json_context_elaborate(DB,New_JSON,New_Context,Captures_In,Elaborated,Dependencies,Captures_Out),
 
     % Insert an id. If id was part of the input document, it is
     % prefix-expanded. If not, it is kept as a variable, to be unified
@@ -573,7 +577,18 @@ json_elaborate_(DB,JSON,Context,Result) :-
         ;   Id_Ex = _),
 
         put_dict('@id', Elaborated, Id_Ex, Result)
-    ).
+    ),
+
+    %% do we need to capture soomething?
+    (   get_dict('@capture', Elaborated, Capture_Group)
+    ->  do_or_die(string(Capture_Group),
+                  error(capture_is_not_a_string(Capture_Group), _)),
+        (   get_assoc(Capture_Group, Captures_In, Capture_Var)
+        ->  do_or_die(var(Capture_Var),
+                      error(capture_already_bound(Capture_Group), _)),
+            Capture_Var = Id_Ex
+        ;   put_assoc(Capture_Group, Captures_In, Id_Ex, Captures_Out))
+    ;   true).
 
 json_assign_ids(DB,Context,JSON) :-
     json_assign_ids(DB,Context,JSON,[]).
@@ -643,8 +658,8 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
     ).
 
 
-value_expand_list([], _DB, _Context, _Elt_Type, []).
-value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
+value_expand_list([], _DB, _Context, _Elt_Type, Captures, [], [], Captures).
+value_expand_list([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs], Dependencies, Captures_Out) :-
     (   is_enum(DB,Elt_Type)
     ->  enum_value(Elt_Type,Value,Enum_Value),
         prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
@@ -659,15 +674,16 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
                         '@type': Elt_Type}
     ;   Prepared = json{'@id' : Value,
                         '@type': "@id"}),
-    json_elaborate_(DB, Prepared, Context, Expanded),
-    value_expand_list(Vs, DB, Context, Elt_Type, Exs).
+    json_elaborate_(DB, Prepared, Context, Captures_In, Expanded, Dependencies_1, New_Captures_In),
+    value_expand_list(Vs, DB, Context, Elt_Type, New_Captures_In, Exs, Dependencies_2, Captures_Out),
+    append(Dependencies_1, Dependencies_2, Dependencies).
 
 % Unit type expansion
-context_value_expand(_,_,[],json{},[]) :-
+context_value_expand(_,_,[],json{},Captures,[],[],Captures) :-
     !.
-context_value_expand(_,_,null,_,null) :-
+context_value_expand(_,_,null,_,Captures,null,[],Captures) :-
     !.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     get_dict('@container', Expansion, _),
     !,
     % Container type
@@ -677,21 +693,32 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     ;   string(Value)
     ->  Value_List = [Value]
     ;   get_dict('@value',Value,Value_List)),
-    value_expand_list(Value_List, DB, Context, Elt_Type, Expanded_List),
+    value_expand_list(Value_List, DB, Context, Elt_Type, Captures_In, Expanded_List, Dependencies, Captures_Out),
     V = (Expansion.put(json{'@value' : Expanded_List})).
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     % A possible reference
     get_dict('@type', Expansion, "@id"),
     !,
     (   is_dict(Value)
-    ->  json_elaborate_(DB, Value, Context, V)
+    ->  (   get_dict('@ref', Value, Ref)
+        % This is a capture reference
+        ->  do_or_die(string(Ref),
+                      error(capture_is_not_a_string(Ref), _)),
+            (   get_assoc(Ref, Captures_In, Capture_Var)
+            ->  Captures_In = Captures_Out
+            ;   put_assoc(Ref, Captures_In, Capture_Var, Captures_Out)),
+            V = _{'@id' : Capture_Var, '@type': "@id"},
+            Dependencies = [Capture_Var]
+        ;   json_elaborate_(DB, Value, Context, Captures_In, V, Dependencies,Captures_Out))
     ;   is_list(Value)
     ->  Value = [Val],
-        context_value_expand(DB,Context,Val,Expansion,V)
+        context_value_expand(DB,Context,Val,Expansion,Captures_In,V,Dependencies,Captures_Out)
     ;   prefix_expand(Value,Context,Value_Ex),
-        put_dict(_{'@id' : Value_Ex},Expansion,V)
+        put_dict(_{'@id' : Value_Ex},Expansion,V),
+        Dependencies = [],
+        Captures_Out = Captures_In
     ).
-context_value_expand(_,Context,Value,_Expansion,V) :-
+context_value_expand(_,Context,Value,_Expansion,Captures,V,[],Captures) :-
     % An already expanded typed value
     is_dict(Value),
     get_dict('@value',Value, Elt),
@@ -699,7 +726,7 @@ context_value_expand(_,Context,Value,_Expansion,V) :-
     prefix_expand(Type,Context,Type_Ex),
     !,
     V = json{'@value' : Elt, '@type' : Type_Ex}.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures,V,[],Captures) :-
     get_dict('@type', Expansion, Type),
     is_enum(DB,Type),
     !,
@@ -707,19 +734,22 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
     V = json{'@id' : Enum_Value_Ex,
              '@type' : "@id"}.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     get_dict('@type', Expansion, Type),
     \+ is_base_type(Type),
     !,
     (   is_dict(Value)
-    ->  json_elaborate_(DB, Value, Context, V)
-    ;   prefix_expand(Value,Context,Value_Ex),
-        V = json{ '@type' : "@id", '@id' : Value_Ex}
+    ->  json_elaborate_(DB, Value, Context, Captures_In, V, Dependencies,Captures_Out)
+    ;   throw(error(this_case_should_not_exist,_)), % while reading this code it seems like this case should not exist. At this point value should have been a dictionary always
+        prefix_expand(Value,Context,Value_Ex),
+        V = json{ '@type' : "@id", '@id' : Value_Ex},
+        Captures_Out = Captures_In,
+        Dependencies = []
     ).
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
-    json_elaborate_(DB,New_Expansion, Context, V).
+    json_elaborate_(DB,New_Expansion, Context, Captures_In,V,Dependencies,Captures_Out).
 
 enum_value(Type,Value,ID) :-
     ground(Type),
@@ -748,7 +778,7 @@ oneof_value(Val,Context,NewPath,Transformed) :-
     global_prefix_expand(sys:'Choice',Choice_Type),
     put_dict(_{'@id' : ID, '@type' : Choice_Type}, Elaborated, Transformed).
 
-json_context_elaborate(DB, JSON, Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, _Dependencies, Captures_In) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
     prefix_expand_schema(Type,Context,Type_Ex),
@@ -758,27 +788,31 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
     enum_value(Type,Value,Full_ID),
     Expanded = json{ '@type' : "@id",
                      '@id' : Full_ID }.
-json_context_elaborate(DB, JSON, Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, Dependencies, Captures_Out) :-
     is_dict(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
-    findall(
-        P-V,
-        (   member(Prop-Value,Pairs),
-            (   property_expand_key_value(Prop,Value,DB,Context,P,V)
-            ->  true
-            ;   Prop = '@type'
-            ->  P = Prop,
-                prefix_expand_schema(Value, Context, V)
-            ;   has_at(Prop)
-            ->  P = Prop,
-                V = Value
-            ;   (   get_dict('@type', JSON, Type)
-                ->  throw(error(unrecognized_property(Type,Prop,Value), _))
-                ;   throw(error(unrecognized_untyped_property(Prop,Value), _)))
-            )
-        ),
-        PVs),
+    mapm({DB,JSON,Context}/[Prop-Value,P-V,Dependencies,Captures, New_Captures]>>
+         (   member(Prop-Value,Pairs),
+             (   property_expand_key_value(Prop,Value,DB,Context,Captures,P,V,Dependencies,New_Captures)
+             ->  true
+             ;   Prop = '@type'
+             ->  P = Prop,
+                 prefix_expand_schema(Value, Context, V)
+             ;   has_at(Prop)
+             ->  P = Prop,
+                 V = Value
+             ;   (   get_dict('@type', JSON, Type)
+                 ->  throw(error(unrecognized_property(Type,Prop,Value), _))
+                 ;   throw(error(unrecognized_untyped_property(Prop,Value), _)))
+             )
+         ),
+         Pairs,
+         PVs,
+         Dependencies_List,
+         Captures_In,
+         Captures_Out),
+    append(Dependencies_List, Dependencies),
     dict_pairs(Expanded,json,PVs).
 
 json_prefix_access(JSON,Edge,Type) :-
@@ -2120,25 +2154,31 @@ check_existing_document_status(Transaction, Document, Status) :-
     ).
 
 insert_document(Transaction, Document, ID) :-
+    empty_assoc(Captures_In),
+    insert_document(Transaction, Document, Captures_In, ID, _Dependencies, _Captures_Out).
+insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
-    json_elaborate(Transaction, Document, Elaborated),
+    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
     % After elaboration, the Elaborated document will have an '@id'
     get_dict('@id', Elaborated, ID),
 
-    check_existing_document_status(Transaction, Elaborated, Status),
-    (   Status = not_present
-    ->  insert_document_expanded(Transaction, Elaborated, ID)
-    ;   Status = equivalent
-    ->  true
-    ;   Status = present
-    ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
-    ).
-insert_document(Query_Context, Document, ID) :-
+    when(ground(Dependencies),
+         (
+             check_existing_document_status(Transaction, Elaborated, Status),
+             (   Status = not_present
+             ->  insert_document_expanded(Transaction, Elaborated, ID)
+             ;   Status = equivalent
+             ->  true
+             ;   Status = present
+             ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
+             )
+         )).
+insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, ID).
+    insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
