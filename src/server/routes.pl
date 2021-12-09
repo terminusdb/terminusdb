@@ -144,6 +144,33 @@ test(connection_authorised_user_http_basic, [
     http_get(URL, _, [authorization(basic(admin, Key))]).
 
 
+test(connection_authorised_insecure_user_header, [
+         setup(setup_temp_server(State, Server, [env_vars([
+                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
+                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
+                                 ])])),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_db_without_schema("admin", "TEST_DB"),
+    atomic_list_concat([Server, '/api/'], URL),
+    http_get(URL, [json(Request_Data)], [request_header('X-Forwarded-User'='admin')]),
+    memberchk(name=DB_Name, Request_Data),
+    DB_Name = 'TEST_DB'.
+
+
+test(connection_unauthorised_insecure_user_header, [
+         setup(setup_temp_server(State, Server, [env_vars([
+                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
+                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
+                                 ])])),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_db_without_schema("admin", "TEST_DB"),
+    atomic_list_concat([Server, '/api/'], URL),
+    http_get(URL, _, [request_header('X-Forwarded-User'='adminlolz'), status_code(Status)]),
+    Status = 401.
+
+
 test(connection_result_dbs, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
@@ -3644,6 +3671,27 @@ authenticate(System_Askable, Request, Auth) :-
     json_log_debug(_{
                        message: Message,
                        authMethod: jwt,
+                       authResult: success,
+                       user: Username
+                   }).
+authenticate(System_Askable, Request, Auth) :-
+    insecure_user_header_key(Header_Key),
+    Header =.. [Header_Key, Username],
+    memberchk(Header, Request),
+    (   username_auth(System_Askable, Username, Auth)
+    ->  true
+    ;   format(string(Message), "User '~w' failed to authenticate with header '~w'", [Username, Header_Key]),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: insecure_user_header,
+                           authResult: failure,
+                           user: Username
+                       }),
+        throw(error(authentication_incorrect(insecure_user_header_no_user_with_name(Username)),_))),
+    format(string(Message), "User '~w' authenticated with header '~w'", [Username, Header_Key]),
+    json_log_debug(_{
+                       message: Message,
+                       authMethod: insecure_user_header,
                        authResult: success,
                        user: Username
                    }).

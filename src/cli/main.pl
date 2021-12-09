@@ -561,6 +561,8 @@ command_subcommand(Command,Subcommand) :-
     opt_spec(Command,Subcommand,_,_,_).
 
 run(Argv) :-
+    % Check env vars to report errors as soon as possible.
+    check_all_env_vars,
     (   (   Argv = [Cmd|_],
             member(Cmd, [help, store, test])
         ;   open_descriptor(system_descriptor{}, _))

@@ -22,7 +22,9 @@
               clear_log_level/0,
               log_format/1,
               set_log_format/1,
-              clear_log_format/0
+              clear_log_format/0,
+              insecure_user_header_key/1,
+              check_all_env_vars/0
           ]).
 
 :- use_module(core(util)).
@@ -180,3 +182,66 @@ set_log_format(Log_Format) :-
 
 clear_log_format :-
     retractall(log_format_override(_)).
+
+:- dynamic check_insecure_user_header_enabled_/1.
+
+/* Retract the dynamic predicate for testing. */
+clear_check_insecure_user_header_enabled :-
+    retractall(check_insecure_user_header_enabled_(_)).
+
+/**
+ * check_insecure_user_header_enabled(-Enabled) is semidet.
+ *
+ * Look up the env var for enabling the insecure user header.
+ */
+check_insecure_user_header_enabled(Enabled) :-
+    check_insecure_user_header_enabled_(Enabled),
+    !.
+check_insecure_user_header_enabled(Enabled) :-
+    Env_Var = 'TERMINUSDB_INSECURE_USER_HEADER_ENABLED',
+    getenv_default(Env_Var, false, Enabled),
+    die_if(\+ memberchk(Enabled, [false, true]),
+           error(bad_env_var_value(Env_Var, Enabled), _)),
+    assertz(check_insecure_user_header_enabled_(Enabled)).
+
+:- dynamic insecure_user_header_key_/1.
+
+/* Retract the dynamic predicate for testing. */
+clear_insecure_user_header_key :-
+    retractall(insecure_user_header_key_(_)).
+
+/**
+ * insecure_user_header_key(-Header_Key) is semidet.
+ *
+ * Check if the insecure user header is enabled, look up the env var for the
+ * insecure user header, and convert it to a key for checking an HTTP request.
+ */
+insecure_user_header_key(Header_Key) :-
+    insecure_user_header_key_(Header_Key),
+    !.
+insecure_user_header_key(Header_Key) :-
+    check_insecure_user_header_enabled(true),
+    Env_Var = 'TERMINUSDB_INSECURE_USER_HEADER',
+    do_or_die(getenv(Env_Var, Value),
+              error(missing_env_var(Env_Var), _)),
+    die_if(\+ re_match("[A-Za-z0-9-]+", Value),
+           error(bad_env_var_value(Env_Var, Value), _)),
+    string_lower(Value, Lower_String),
+    re_replace("-"/g, "_", Lower_String, Lower_String_No_Dashes),
+    atom_string(Header_Key, Lower_String_No_Dashes),
+    assertz(insecure_user_header_key_(Header_Key)).
+
+/**
+ * check_all_env_vars is det.
+ *
+ * Load and check all env vars.
+ *
+ * This should be done at initialization, so that the error-checking is
+ * performed as soon as possible and the the user is notified of any errors.
+ *
+ * Note that nothing should go wrong if this is not called. All of the
+ * predicates referenced here can be called at any time. This is only done to
+ * improve the user experience.
+ */
+check_all_env_vars :-
+    ignore(insecure_user_header_key(_)).
