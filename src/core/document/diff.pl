@@ -97,25 +97,34 @@ diff_(T1,T2,Diff,
     down_from(C1,0,J1),
     down_from(C2,0,J2),
     % *Some* matrix gets smaller
-    once((   Size1 is I1 * J1,
-             Size1 >= 1
-         ;   Size2 is I2 * J2,
-             Size2 >= 1)),
+    Size1 is I1 * J1,
+    Size2 is I2 * J2,
+    once((   Size1 >= 1
+         ;   Size2 >= 1)),
+    once((   Size1 < R1 * C1
+         ;   Size2 < R2 * C2)),
     split_matrix(T1, I1, J1, TL1, TR1, BL1, BR1),
     split_matrix(T2, I2, J2, TL2, TR2, BL2, BR2),
     best_cost(State, Best_Cost),
     (   TL1 = TL2
     ->  New_Cost is Current_Cost + 1,
+        % Add cost of minimum difference based on dimensions
         % 3 because that's absolutely minimal from the next 3 diffs.
-        Cost1_LB is New_Cost + 3,
+        Size_TR1 is I1 * (C1  - J1),
+        Size_TR2 is I2 * (C2 - J2),
+        Cost1_LB is New_Cost + abs(Size_TR1 - Size_TR2) + 3,
         Cost1_LB < Best_Cost,
         diff_(TR1,TR2,Diff_TR,New_Cost,Cost1,State),
         % 2 to go
-        Cost2_LB is Cost1 + 2,
+        Size_BL1 is (R1 - I1) * J1,
+        Size_BL2 is (R2 - I2) * J2,
+        Cost2_LB is Cost1 + abs(Size_BL1 - Size_BL2) + 2,
         Cost2_LB < Best_Cost,
         diff_(BL1,BL2,Diff_BL,Cost1,Cost2,State),
         % 1 left
-        Cost_LB is Cost2 + 1,
+        Size_BR1 is (R1 - I1) * (C1 - J1),
+        Size_BR2 is (R2 - I2) * (C2 - J2),
+        Cost_LB is Cost2 + abs(Size_BR1 - Size_BR2) + 1,
         Cost_LB < Best_Cost,
         diff_(BR1,BR2,Diff_BR,Cost2,Cost,State),
         % Best be less than best
@@ -123,15 +132,21 @@ diff_(T1,T2,Diff,
         Diff = copy(I1,J1,Diff_TR,Diff_BL,Diff_BR)
     ;   New_Cost is Current_Cost + I1 * J1 + I2 * J2 + 1,
         % 3 because that's absolutely minimal from the next 3 diffs.
-        Cost1_LB is New_Cost + 3,
+        Size_TR1 is I1 * (C1  - J1),
+        Size_TR2 is I2 * (C2 - J2),
+        Cost1_LB is New_Cost + abs(Size_TR1 - Size_TR2) + 3,
         Cost1_LB < Best_Cost,
         diff_(TR1,TR2,Diff_TR,New_Cost,Cost1,State),
         % 2 to go
-        Cost2_LB is Cost1 + 2,
+        Size_BL1 is (R1 - I1) * J1,
+        Size_BL2 is (R2 - I2) * J2,
+        Cost2_LB is Cost1 + abs(Size_BL1 - Size_BL2) + 2,
         Cost2_LB < Best_Cost,
         diff_(BL1,BL2,Diff_BL,Cost1,Cost2,State),
         % 1 left
-        Cost_LB is Cost2 + 1,
+        Size_BR1 is (R1 - I1) * (C1 - J1),
+        Size_BR2 is (R2 - I2) * (C2 - J2),
+        Cost_LB is Cost2 + abs(Size_BR1 - Size_BR2) + 1,
         Cost_LB < Best_Cost,
         diff_(BR1,BR2,Diff_BR,Cost2,Cost,State),
         % Best be less than best
@@ -331,13 +346,6 @@ X
 
 */
 
-% I_Max is the maximum size in rows before running into the edge of one matrix
-% J_Max is the maximum size in columns before running into the edge of one matrix
-% A is the size of the area we are interested in.
-rectangle(I_Max,J_Max,A,I,J) :-
-    between(1,I_Max,I),
-    between(1,J_Max,J),
-    A is I * J.
 
 /* Fast(er) table diff
 
@@ -405,7 +413,18 @@ M2:
 
 
 
- */
+*/
+
+% I_Max is the maximum size in rows before running into the edge of one matrix
+% J_Max is the maximum size in columns before running into the edge of one matrix
+% A is the size of the area we are interested in.
+
+/*
+rectangle(I_Max,J_Max,A,I,J) :-
+    between(1,I_Max,I),
+    between(1,J_Max,J),
+    A is I * J.
+
 fast_diff(T1,T2,Diff) :-
     row_length(T1,R1),
     column_length(T1,C1),
@@ -413,9 +432,26 @@ fast_diff(T1,T2,Diff) :-
     column_length(T2,C2),
     I_Max is min(R1,R2),
     J_Max is min(C1,C2),
-    max_blocks(I_Max,J_Max,Blocks),
-
+    A is I_Max * J_Max,
+    max_blocks(A,I_Max,J_Max,Blocks),
+    split_at_max_blocks(Blocks),
+    maplist
     1.
+
+match_vector(A,[]).
+
+max_blocks(A,I_Max,J_Max,Blocks) :-
+    match_vector(A,F),
+    search_max_blocks(A,I_Max,J_Max,Max_Vector,Blocks,F),
+    rectangle(I_Max,J_Max,A,I,J).
+
+
+search_max_blocks(A,Max_Vector,Blocks) :-
+    (   A <= 2
+    ->  Blocks = []
+    ;   New_A is A div 2
+    ->  search_max_blocks(New_A
+    match(
 
 test2 :-
     A is I_Max + J_Max,
@@ -426,6 +462,8 @@ match_blocks(I,J,T1,T2,Match_Blocks) :-
     convolve(I,J,T1,H1),
     convolve(I,J,T2,H2),
     match(H1,H2,Match_Blocks).
+
+*/
 
 :- begin_tests(matrix).
 
@@ -665,6 +703,7 @@ test(diff_shared_middle_row, []) :-
     M2 = [[1,2]],
     diff(M1,M2, Diff, Cost),
     % Not ideal
+    writeq(Diff),
     Diff = swap(3,4,1,2,[[a,b,d,3],[x,1,2,x],[o,o,o,o]],[[1,2]],
                 keep,keep,keep),
     cost(Diff,Cost),
