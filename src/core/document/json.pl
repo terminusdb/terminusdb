@@ -778,7 +778,7 @@ oneof_value(Val,Context,NewPath,Transformed) :-
     global_prefix_expand(sys:'Choice',Choice_Type),
     put_dict(_{'@id' : ID, '@type' : Choice_Type}, Elaborated, Transformed).
 
-json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, _Dependencies, Captures_In) :-
+json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, [], Captures_In) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
     prefix_expand_schema(Type,Context,Type_Ex),
@@ -805,7 +805,13 @@ json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, Dependencies, C
              ;   (   get_dict('@type', JSON, Type)
                  ->  throw(error(unrecognized_property(Type,Prop,Value), _))
                  ;   throw(error(unrecognized_untyped_property(Prop,Value), _)))
-             )
+             ),
+             (   var(Dependencies)
+             ->  Dependencies = []
+             ;   true),
+             (   var(New_Captures)
+             ->  New_Captures = Captures
+             ;   true)
          ),
          Pairs,
          PVs,
@@ -1327,15 +1333,21 @@ json_triple(DB,JSON,Triple) :-
     json_triple(DB,Context,JSON,Triple).
 
 json_triple(DB,Context,JSON,Triple) :-
-    json_elaborate(DB,JSON,Context,Elaborated),
-    json_triple_(Elaborated,Context,Triple).
+    empty_assoc(Captures),
+    json_triple(DB, Context, JSON, Captures, Triple, _Dependencies, _Captures_Out).
+json_triple(DB,Context,JSON,Captures_In, Triple, Dependencies, Captures_Out) :-
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies, Captures_Out),
+    when(ground(Dependencies),
+         json_triple_(Elaborated,Context,Triple)).
 
 json_triples(DB,JSON,Triples) :-
     database_prefixes(DB,Context),
-    findall(
-        Triple,
-        json_triple(DB, Context, JSON, Triple),
-        Triples).
+    empty_assoc(Captures_In),
+    mapm({DB,JSON,Context}/[Triple,Captures_In,Captures_Out]>>
+         (json_triple(DB, Context, JSON, Captures_In,Triple,_Dependencies,Captures_Out)),
+         Triples,
+         Captures_In,
+         Captures_Out).
 
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
