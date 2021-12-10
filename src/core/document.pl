@@ -9,7 +9,6 @@
               idgen_lexical/3,
 
               json_elaborate/3,
-              json_triple/3,
               json_schema_triple/3,
               json_schema_elaborate/3,
               context_triple/2,
@@ -33,6 +32,7 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_document/6,
               replace_document/2,
               replace_document/3,
               replace_document/4,

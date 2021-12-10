@@ -5,7 +5,6 @@
               context_triple/2,
               json_elaborate/3,
               json_elaborate/6,
-              json_triple/3,
               json_schema_triple/3,
               json_schema_elaborate/3,
               get_document/3,
@@ -18,6 +17,7 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_document/6,
               replace_document/2,
               replace_document/3,
               replace_document/4,
@@ -547,6 +547,8 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     is_dict(JSON),
     !,
 
+    json_log_info_formatted("incoming captures: ~q", [Captures_In]),
+
     % Look for @type. If there, expand it. If not there but @id is, assume that
     % the expanded @type should be @id. If @id is not there, throw an error.
     (    get_dict('@type', JSON, Type)
@@ -565,7 +567,7 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
-    json_context_elaborate(DB,New_JSON,New_Context,Captures_In,Elaborated,Dependencies,Captures_Out),
+    json_context_elaborate(DB,New_JSON,New_Context,Captures_In,Elaborated,Dependencies,Captures_Out_1),
 
     % Insert an id. If id was part of the input document, it is
     % prefix-expanded. If not, it is kept as a variable, to be unified
@@ -583,11 +585,13 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     (   get_dict('@capture', Elaborated, Capture_Group)
     ->  do_or_die(string(Capture_Group),
                   error(capture_is_not_a_string(Capture_Group), _)),
-        (   get_assoc(Capture_Group, Captures_In, Capture_Var)
+        (   get_assoc(Capture_Group, Captures_Out_1, Capture_Var)
         ->  do_or_die(var(Capture_Var),
                       error(capture_already_bound(Capture_Group), _)),
+            json_log_info_formatted("found existing ref ~q, unifying", [Capture_Group]),
             Capture_Var = Id_Ex
-        ;   put_assoc(Capture_Group, Captures_In, Id_Ex, Captures_Out))
+        ;   json_log_info_formatted("found no existing ref ~q, putting (~q)", [Capture_Group, Captures_Out_1]),
+            put_assoc(Capture_Group, Captures_Out_1, Id_Ex, Captures_Out))
     ;   true).
 
 json_assign_ids(DB,Context,JSON) :-
@@ -793,8 +797,7 @@ json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, Dependencies, C
     !,
     dict_pairs(JSON,json,Pairs),
     mapm({DB,JSON,Context}/[Prop-Value,P-V,Dependencies,Captures, New_Captures]>>
-         (   member(Prop-Value,Pairs),
-             (   property_expand_key_value(Prop,Value,DB,Context,Captures,P,V,Dependencies,New_Captures)
+         (   (   property_expand_key_value(Prop,Value,DB,Context,Captures,P,V,Dependencies,New_Captures)
              ->  true
              ;   Prop = '@type'
              ->  P = Prop,
@@ -1327,6 +1330,7 @@ json_schema_triple(JSON,Context,Triple) :-
         error(unable_to_elaborate_schema_document(JSON),_)),
     json_triple_(JSON_Schema,Context,Triple).
 
+/*
 % Triple generator
 json_triple(DB,JSON,Triple) :-
     database_prefixes(DB,Context),
@@ -1339,15 +1343,17 @@ json_triple(DB,Context,JSON,Captures_In, Triple, Dependencies, Captures_Out) :-
     json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies, Captures_Out),
     when(ground(Dependencies),
          json_triple_(Elaborated,Context,Triple)).
+*/
 
 json_triples(DB,JSON,Triples) :-
     database_prefixes(DB,Context),
-    empty_assoc(Captures_In),
-    mapm({DB,JSON,Context}/[Triple,Captures_In,Captures_Out]>>
-         (json_triple(DB, Context, JSON, Captures_In,Triple,_Dependencies,Captures_Out)),
-         Triples,
-         Captures_In,
-         Captures_Out).
+    empty_assoc(Captures),
+    json_elaborate(DB,JSON,Context,Captures,Elaborated,Dependencies,_Captures_Out),
+    do_or_die(ground(Dependencies),
+              error(unbound_capture_groups(Dependencies),_)),
+    findall(Triple,
+            json_triple_(Elaborated,Context,Triple),
+            Triples).
 
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
@@ -1368,6 +1374,8 @@ json_triple_(JSON,Context,Triple) :-
     member(Key, Keys),
     get_dict(Key,JSON,Value),
     (   Key = '@id'
+    ->  fail
+    ;   Key = '@capture'
     ->  fail
     ;   Key = '@type', % this is a leaf
         Value = "@id"
@@ -2013,18 +2021,27 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
     database_prefixes(DB,Context),
-    forall(
-        json_read_dict_stream(JSON_Stream, Dict),
-        (
-            forall(
-                json_triple(DB,Context,Dict,t(S,P,O)),
-                (
-                    object_storage(O,OS),
-                    nb_add_triple(Builder, S, P, OS)
-                )
-            )
-        )
-    ).
+    empty_assoc(Captures_In),
+    write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
+    do_or_die(ground(Captures_Out),
+              error(not_all_captures_ground(Captures_Out),_)).
+write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
+    json_stream_read_single_dict(JSON_Stream, Dict),
+    !,
+    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,New_Captures_In),
+
+    ensure_transaction_has_builder(instance, DB),
+    when(ground(Dependencies),
+         forall(
+             json_triple_(Elaborated,Context,t(S,P,O)),
+             (
+                 object_storage(O,OS),
+                 nb_add_triple(Builder, S, P, OS)
+             )
+         )),
+
+    write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, New_Captures_In, Captures_Out).
+write_json_instance_stream_to_builder(_JSON_Stream, _Builder, _DB, _Context, Captures, Captures).
 
 write_json_stream_to_schema(Transaction, Stream) :-
     transaction_object{} :< Transaction,
@@ -2175,8 +2192,10 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
     % After elaboration, the Elaborated document will have an '@id'
     get_dict('@id', Elaborated, ID),
 
+    ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          (
+             json_log_info_formatted("Grounded for ~q!", [ID]),
              check_existing_document_status(Transaction, Elaborated, Status),
              (   Status = not_present
              ->  insert_document_expanded(Transaction, Elaborated, ID)
@@ -2185,7 +2204,8 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
              ;   Status = present
              ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
              )
-         )).
+         )),
+    json_log_info_formatted("yo, ~q ~q", [Dependencies, Captures_Out]).
 insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,

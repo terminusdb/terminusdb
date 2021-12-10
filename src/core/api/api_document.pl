@@ -177,7 +177,7 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, Transaction, Stream, Id) :-
+api_insert_document_(schema, Transaction, Stream, state(Captures), Id, Captures) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
     ->  !,
@@ -190,15 +190,16 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Transaction, Stream, Id) :-
+api_insert_document_(instance, Transaction, Stream, State, Id, Captures_Out) :-
     json_read_dict_stream(Stream, JSON),
+    State = state(Captures_In),
     (   is_list(JSON)
     ->  !,
         member(Document, JSON)
     ;   Document = JSON),
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Id),
+        do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 replace_existing_graph(schema, Transaction, Stream) :-
@@ -206,7 +207,9 @@ replace_existing_graph(schema, Transaction, Stream) :-
 replace_existing_graph(instance, Transaction, Stream) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
-    forall(api_insert_document_(instance, Transaction, Stream, _),
+    empty_assoc(Captures),
+    forall(nb_thread_var({Transaction,Stream}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Stream, State, _, Captures_Out)),
+                         state(Captures)),
            true).
 
 api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
@@ -227,8 +230,10 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                          Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id,
-                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
+                     ;   empty_assoc(Captures),
+                         findall(Id,
+                                 nb_thread_var({Schema_Or_Instance,Transaction,Stream,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Stream, State, Id, Captures_Out)),
+                                               state(Captures)),
                                  Ids),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
