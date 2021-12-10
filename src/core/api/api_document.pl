@@ -225,6 +225,7 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
 
     stream_property(Stream, position(Pos)),
 
+    ensure_transaction_has_builder(instance, Transaction),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          Full_Replace = true

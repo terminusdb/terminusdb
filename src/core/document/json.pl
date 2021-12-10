@@ -2022,6 +2022,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
     database_prefixes(DB,Context),
     empty_assoc(Captures_In),
+    ensure_transaction_has_builder(instance, DB),
     write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
     do_or_die(ground(Captures_Out),
               error(not_all_captures_ground(Captures_Out),_)).
@@ -2030,7 +2031,6 @@ write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Capture
     !,
     json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,New_Captures_In),
 
-    ensure_transaction_has_builder(instance, DB),
     when(ground(Dependencies),
          forall(
              json_triple_(Elaborated,Context,t(S,P,O)),

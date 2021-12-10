@@ -249,8 +249,6 @@ with_transaction_(_,
  */
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    forall(member(V,Validations),
-           print_all_triples(V)),
     validate_validation_objects(Validations, All_Witnesses, Witnesses),
     /*
     with_output_to(
