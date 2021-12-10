@@ -1310,6 +1310,13 @@ api_document_error_jsonld(get_documents,error(query_error(unrecognized_query_doc
              'api:error' : _{ '@type' : 'api:QueryUnrecognized'},
              'api:message' : Msg
             }.
+api_document_error_jsonld(get_documents,error(query_error(missing_type(Query)),_), JSON) :-
+    format(string(Msg), "Missing type for query: ~q", [Query]),
+    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:QueryMissingType'},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(get_documents,error(query_error(unknown_property_for_type(Type, Prop)),_), JSON) :-
     format(string(Msg), "Query contains an unrecognised property ~q for type ~q", [Prop, Type]),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
