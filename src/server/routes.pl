@@ -785,18 +785,13 @@ json_write_with_header(Request, Document, Header_Written, As_List, JSON_Options)
     ;   nl).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
-    (   json_content_type(Request),
-        memberchk(content_length(_), Request)
-    ->  http_read_json_data(Request, JSON)
-    ;   JSON = json{}),
-
-    do_or_die(is_dict(JSON),
-              error(malformed_api_document(JSON), _)),
-
     api_report_errors(
         get_documents,
         Request,
-        (
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = json{}),
+
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
@@ -846,8 +841,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         insert_documents,
         Request,
-        (
-            check_content_type_json(Request),
+        (   http_read_json_required(stream(Stream), Request),
 
             (   memberchk(search(Search), Request)
             ->  true
@@ -858,8 +852,6 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, full_replace, boolean, false, Full_Replace),
 
-            http_read_data(Request, Data, [to(string)]),
-            open_string(Data, Stream),
             api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Ids),
 
             write_cors_headers(Request),
@@ -886,11 +878,8 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message)
             ;   ground(Id)
             ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id)
-            ;   json_content_type(Request),
-                memberchk(content_length(_), Request)
-            ->  http_read_data(Request, Data, [to(string)]),
-                open_string(Data, Stream),
-                api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
+            ;   http_read_json_semidet(stream(Stream), Request)
+            ->  api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream)
             ;   throw(error(missing_targets, _))
             ),
 
@@ -902,8 +891,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
     api_report_errors(
         replace_documents,
         Request,
-        (
-            check_content_type_json(Request),
+        (   http_read_json_required(stream(Stream), Request),
 
             (   memberchk(search(Search), Request)
             ->  true
@@ -914,8 +902,6 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, create, boolean, false, Create),
 
-            http_read_data(Request, Data, [to(string)]),
-            open_string(Data, Stream),
             api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Create, Ids),
 
             write_cors_headers(Request),
@@ -937,9 +923,8 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 frame_handler(get, Path, Request, System_DB, Auth) :-
     % TODO This possibly throws a json error, which gets reinterpreted
     % as a schema check failure for some reason. gotta fix that.
-    (   json_content_type(Request),
-        memberchk(content_length(_), Request)
-    ->  http_read_json_data(Request, Posted)
+    (   http_read_json_semidet(json_dict(Posted), Request)
+    ->  true
     ;   Posted = _{}),
 
     (   memberchk(search(Search), Request)
@@ -2851,9 +2836,7 @@ organization_handler(post, Request, System_DB, Auth) :-
     api_report_errors(
         add_organization,
         Request,
-        (   check_content_type_json(Request),
-            check_content_length(Request),
-            http_read_json_data(Request, JSON),
+        (   http_read_json_required(json_dict(JSON), Request),
 
             param_value_json_required(JSON, organization_name, string, Org),
             param_value_json_required(JSON, user_name, string, User),
@@ -2866,9 +2849,7 @@ organization_handler(delete, Request, System_DB, Auth) :-
     api_report_errors(
         delete_organization,
         Request,
-        (   check_content_type_json(Request),
-            check_content_length(Request),
-            http_read_json_data(Request, JSON),
+        (   http_read_json_required(json_dict(JSON), Request),
 
             param_value_json_required(JSON, organization_name, string, Name),
 
@@ -3845,12 +3826,53 @@ get_param(Key,Request,Value) :-
     memberchk(payload(Document), Request),
     Value = Document.get(Key).
 
-http_read_json_data(Request, JSON) :-
-    http_read_data(Request, JSON_String, [to(string)]),
-    catch(atom_json_dict(JSON_String, JSON, []),
-          error(syntax_error(json(_Kind)),_),
-          throw(error(malformed_json_payload(JSON_String), _))
-         ).
+/*
+ * http_read_utf8(-Output, Request) is det.
+ *
+ * - Read the request payload into Output.
+ * - Output can be one of:
+ *   - stream(Stream) to read into a stream
+ *   - string(String) to read into a string
+ *   - json_dict(JSON) to read into a JSON dict
+ */
+http_read_utf8(string(String), Request) :-
+    % Force the input encoding to be UTF-8 to avoid the default octet encoding.
+    % TODO: SWI-Prolog v8.4.1 allows us to set the encoding using the `input_encoding`
+    % option as follows. When we upgrade, we can change this.
+    %http_read_data(Request, String, [to(string), input_encoding(utf8)]).
+    % But, for now, we just override it:
+    http_read_data([content_type('application/json; charset=UTF-8')|Request], String, [to(string)]).
+http_read_utf8(stream(Stream), Request) :-
+    http_read_utf8(string(String), Request),
+    open_string(String, Stream).
+http_read_utf8(json_dict(JSON), Request) :-
+    http_read_utf8(string(String), Request),
+    open_string(String, Stream),
+    catch(json_read_dict(Stream, JSON, [tag(json)]),
+          error(syntax_error(json(_Kind)), _),
+          throw(error(malformed_json_payload(String), _))).
+
+/*
+ * http_read_json_required(-Output, +Request) is det.
+ *
+ * - Throw exceptions if the minimal requirements for JSON input are not met.
+ * - Read the request payload into a stream.
+ */
+http_read_json_required(Output, Request) :-
+    check_content_type_json(Request),
+    check_content_length(Request),
+    http_read_utf8(Output, Request).
+
+/*
+ * http_read_json_semidet(-Output, +Request) is semidet.
+ *
+ * - Fail if the minimal requirements for JSON input are not met.
+ * - Read the request payload into a stream.
+ */
+http_read_json_semidet(Output, Request) :-
+    json_content_type(Request),
+    memberchk(content_length(_), Request),
+    http_read_utf8(Output, Request).
 
 /*
  * add_payload_to_request(Request:request,JSON:json) is det.
@@ -3868,9 +3890,8 @@ add_payload_to_request(Request,[multipart(Form_Data)|Request]) :-
     !,
     http_read_data(Request, Form_Data, [on_filename(save_post_file),form_data(mime)]).
 add_payload_to_request(Request,[payload(Document)|Request]) :-
-    json_content_type(Request),
-    !,
-    http_read_json_data(Request, Document).
+    http_read_json_semidet(json_dict(Document), Request),
+    !.
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     memberchk(content_type(_Some_Other_Type), Request),
     !,
