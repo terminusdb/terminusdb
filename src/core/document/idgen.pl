@@ -13,7 +13,7 @@
 %%
 %% parent_id: prefix(Base, Schema)
 %%          | document_id
-%%
+%% 
 %% component: random(Type_Name, Id_Fragment)
 %%            | lexical(Type_Name, +Fields, -Suffix, -Id_Fragment)
 %%            | hash(Type_Name, +Fields, -Suffix, -Id_Fragment)
@@ -95,9 +95,9 @@ document_ids_for_document(Schema, Document, Document_Ids) :-
 
     document_prefix_parent_id(Schema, Prefixes),
 
-    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, A, A).
+    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, _Immediate_Document_Ids, A, A).
 
-document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _, _) :-
+document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, Immediate_Document_Ids, _, _) :-
     % If this is not a subdocument, ensure that parent document id is the prefix parent
     get_dict('@id', Document, _),
     Type = (Document.'@type'),
@@ -105,8 +105,8 @@ document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, _,
     \+ prefix(_,_) = Parent_Document_Id,
     !,
     document_prefix_parent_id(Schema, Prefixes),
-    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, A, A).
-document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, Id_Component, Full_Component) :-
+    document_ids_for_document(Schema, Prefixes, Document, Document_Ids, Immediate_Document_Ids, A, A).
+document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, [Document_Id], Id_Component, Full_Component) :-
     get_dict('@id', Document, Id),
     !,
     Type = (Document.'@type'),
@@ -114,37 +114,45 @@ document_ids_for_document(Schema, Parent_Document_Id, Document, Document_Ids, Id
     document_id_component_for_type(Schema, Prefixes, Type, Id_Component),
     fill_document_id_component(Id_Component, Document),
     Document_Id = document_id(Full_Component, Parent_Document_Id, Id),
+    % property("http://aasdfasdfas#bar_document", "http://asdfasdf#Bar", nested(Fragment), _)
+    % set_property("http://aasdfasdfas#bar_document", "http://asdfasdf#Bar", [nested(Fragment)...], _)
+    % list of Property-Fragment
 
     dict_pairs(Document, _, Pairs),
     maplist({Schema, Document_Id}/[Property-Value, Inner_Document_Ids]>>(
                 (   memberchk(Property, ['@id', '@type'])
                 ->  Inner_Document_Ids = []
                 ;   Rest = property(Property, Inner_Component, _),
+                    % check if property matches one of the nested keys, if so we need to unify id fragment
 
-                    document_ids_for_document(Schema, Document_Id, Value, Inner_Document_Ids, Inner_Component, Rest))),
+                    % document id for this particular child is the first
+                    % (only for single property)
+                    document_ids_for_document(Schema, Document_Id, Value, Inner_Document_Ids, _Immediate_Document_Ids, Inner_Component, Rest))),
             Pairs,
             Inner_Document_Ids_Lists),
 
     append([[Document_Id]|Inner_Document_Ids_Lists], Document_Ids).
-document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Cur, Rest) :-
+document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Immediate_Document_Ids, Cur, Rest) :-
     % Sets are transparent as far as the path is concerned, meaning they contribute no component. We just pass on what we already got.
     get_dict('@container', Document, "@set"),
     !,
     get_dict('@value', Document, Values),
 
-    maplist({Transaction, Parent_Document_Id, Cur, Rest}/[Value,Inner_Document_Ids]>>(
+    maplist({Transaction, Parent_Document_Id, Cur, Rest}/[Value,Inner_Document_Ids, Immediate_Document_Ids]>>(
                 copy_term(Cur-Rest, Template_Cur-Template_Rest),
-                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Template_Cur, Template_Rest)),
+                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Immediate_Document_Ids, Template_Cur, Template_Rest)),
              Values,
-             Inner_Document_Ids),
-    append(Inner_Document_Ids, Document_Ids).
-document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Cur, Rest) :-
+             Inner_Document_Ids_List,
+             Immediate_Document_Ids_List),
+    append(Inner_Document_Ids_List, Document_Ids),
+    append(Immediate_Document_Ids_List, Immediate_Document_Ids).
+document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Ids, Immediate_Document_Ids, Cur, Rest) :-
     get_dict('@container', Document, Container_Type),
     !,
     get_dict('@value', Document, Values),
 
     index_list(Values, Indexes),
-    maplist({Transaction, Parent_Document_Id, Container_Type, Cur, Rest}/[Value,Index,Inner_Document_Ids]>>(
+    maplist({Transaction, Parent_Document_Id, Container_Type, Cur, Rest}/[Value,Index,Inner_Document_Ids, Immediate_Document_Ids]>>(
                 copy_term(Cur-Rest, Template_Cur-Template_Rest),
                 (   Container_Type = "@array"
                 ->  Template_Cur = array_index(Index, Inner_Component, _)
@@ -152,12 +160,14 @@ document_ids_for_document(Transaction, Parent_Document_Id, Document, Document_Id
                 ->  Template_Cur = list_index(Index, Inner_Component, _)
                 ;   throw(error(unknown_container_type(Container_Type), _))),
 
-                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Inner_Component, Template_Rest)),
+                document_ids_for_document(Transaction, Parent_Document_Id, Value, Inner_Document_Ids, Immediate_Document_Ids, Inner_Component, Template_Rest)),
             Values,
             Indexes,
-            Inner_Document_Ids_List),
-    append(Inner_Document_Ids_List, Document_Ids).
-document_ids_for_document(_Transaction, _Parent_Document_Id, _Document, [], _, _).
+            Inner_Document_Ids_List,
+            Immediate_Document_Ids_List),
+    append(Inner_Document_Ids_List, Document_Ids),
+    append(Immediate_Document_Ids_List, Immediate_Document_Ids).
+document_ids_for_document(_Transaction, _Parent_Document_Id, _Document, [], [], _, _).
 
 fill_document_id_component(base(_, _), _Document).
 fill_document_id_component(random(_, _), _Document).
@@ -534,7 +544,6 @@ test(hash_document,
 
     Id = (Elaborated.'@id'),
     ground(Id),
-    writeq(Id),nl,
     Id = "http://i/Foo/96c805cec839d0d6408cdda216cc0b4659804c406d5a893646ddc267f8c68db6".
 
 schema4('
