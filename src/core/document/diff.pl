@@ -60,7 +60,7 @@ cost(keep, 1).
 
 down_from(From,To,X) :-
     between(To,From,Y),
-    X is From - Y.
+    X is From - Y + 1.
 
 %:- table diff_/6.
 diff_(M,M,keep,
@@ -272,7 +272,6 @@ match(Blocks1,Blocks2,Match_Indices) :-
     collect_match_indices(Sorted_Prints1,Sorted_Prints2,Unsorted_Indices),
     predsort(index_match_compare,Unsorted_Indices,Match_Indices).
 
-/*
 block(Rows,Cols,[match(IX-JX,IY-JY)|Match_Indices],Block) :-
     (   block_(Rows,Cols,IX,JX,IY,JY,Match_Indices,Block)
     ;   block(Rows,Cols,Match_Indices,Block)
@@ -297,6 +296,38 @@ seek_top_right(Rows,Cols,IX,IY,[match(IXN-JXN,IYN,JYN)|Match_Indices],
     ;   IXTR = IX,
         IYTR = IY
     ).
+
+rectangle(I_Max,J_Max,A,I,J) :-
+    between(1,I_Max,I),
+    between(1,J_Max,J),
+    A is I * J.
+
+areas(I_Max,J_Max,Areas) :-
+    findall(A-I-J,
+            (
+                down_from(I_Max,1,I),
+                down_from(J_Max,1,J),
+                A is I * J
+            ),
+            AIJs),
+    findall(A-Group, group_by(A, I-J, member(A-I-J,AIJs), Group), As),
+    sort(1,>,As,Areas).
+
+adiff(T1,T2,Diff,Cost) :-
+    row_length(T1,R1),
+    column_length(T1,C1),
+    row_length(T2,R2),
+    column_length(T2,C2),
+    R is min(R1,R2),
+    C is min(C1,C2),
+    Rows is R div 2,
+    Cols is C div 2,
+    hash_blocks(Rows,Cols,T1,Blocks1),
+    hash_blocks(Rows,Cols,T2,Blocks2),
+    match(Blocks1,Blocks2,Match_Indices),
+    copy_blocks(Rows,Cols,Match_Indices,Blocks).
+
+/*
 
 %seek_bottom_left
 
@@ -361,8 +392,8 @@ F = [0,0,0,0,0,0,0...]
 
 1) Find the min row (i) and column (j) parameters of M1 and M2
 2) Create all windows of size A = i * j
-   a) If maximal match has been found (boundary of no match / match found) in F
-      go to 5
+   a) If maximal match (greatest number of non-overlapping matches)
+      has been found (boundary of no match / match found) in F go to 5
    b) If A < 2 then return swap M1 for M2 and return calculated score
    c) If there are no more windows, use "search_down" procedure which
    cuts i,j in two and repeats from 2
@@ -419,12 +450,6 @@ M2:
 % J_Max is the maximum size in columns before running into the edge of one matrix
 % A is the size of the area we are interested in.
 
-/*
-rectangle(I_Max,J_Max,A,I,J) :-
-    between(1,I_Max,I),
-    between(1,J_Max,J),
-    A is I * J.
-
 fast_diff(T1,T2,Diff) :-
     row_length(T1,R1),
     column_length(T1,C1),
@@ -432,12 +457,36 @@ fast_diff(T1,T2,Diff) :-
     column_length(T2,C2),
     I_Max is min(R1,R2),
     J_Max is min(C1,C2),
-    A is I_Max * J_Max,
-    max_blocks(A,I_Max,J_Max,Blocks),
-    split_at_max_blocks(Blocks),
-    maplist
-    1.
+    areas(I_Max,J_Max,Areas),
+    length(Areas, Length),
+    length(Max_Area, Length),
+    Area = I_Max * J_Max,
+    binary_area_search(T1,T2,Area,Areas,Max_Area,Bounding_Boxes).
 
+all_hash_matches(T1,T2,IJs,Matches) :-
+    hash_blocks(Rows,Cols,T1,Blocks1),
+    hash_blocks(Rows,Cols,T2,Blocks2),
+    match(Blocks1,Blocks2,Matches).
+
+binary_area_search(T1,T2,Area,Areas,Max_Area,Bounding_Boxes) :-
+    all_hash_matches(T1,T2,IJs,Matches),
+    (   maximum_match(Matches,Match)
+    %   No match means we need to get smaller
+    ->  nth(Area, Max_Area, Match),
+        Previous is Area - 1,
+        nth(Previous, Max_Area, Max),
+        (   var(Max)
+        ->  Next_Area = 
+            binary_area_search()
+        %   Boundary between max and non max is 
+        ;   
+    ;   true
+    ).
+
+maximum_match(Matches,Match) :-
+    true.
+
+/*
 match_vector(A,[]).
 
 max_blocks(A,I_Max,J_Max,Blocks) :-
@@ -692,6 +741,7 @@ test(diff_shared_corner, []) :-
           [c,1]],
     M2 = [[1]],
     diff(M1,M2, Diff, Cost),
+    writeq(Diff),
     Diff = swap(2,2,1,1,[[a,b],[c,1]],[[1]],keep,keep,keep),
     cost(Diff,Cost),
     patch(Diff, M1, M2).
@@ -703,9 +753,8 @@ test(diff_shared_middle_row, []) :-
     M2 = [[1,2]],
     diff(M1,M2, Diff, Cost),
     % Not ideal
-    writeq(Diff),
-    Diff = swap(3,4,1,2,[[a,b,d,3],[x,1,2,x],[o,o,o,o]],[[1,2]],
-                keep,keep,keep),
+    Diff = swap(2,1,1,0,[[a],[c]],[],
+                swap(1,1,0,1,[[b]],[],keep,keep,keep),keep,keep),
     cost(Diff,Cost),
     patch(Diff, M1, M2).
 
@@ -723,8 +772,9 @@ test(diff_pathological, []) :-
     writeq(Cost).
 
 test(diff_shared_middle, [
-         blocked('heat death of the universe anyone?')
+         %blocked('heat death of the universe anyone?')
      ]) :-
+
     T1 = [ [ o, o, o, o ],
            [ a, 1, 2, 3 ],
            [ b, 4, 5, 6 ],
@@ -861,16 +911,59 @@ T2 = [ [ 1, 2, 3, "goo" ],
 
 
 
-T3 = [ [ 1, 2, 3],
-       [ 4, 5, 6],
-       [ 7, 8, 9] ]
+T3 = [ [ 1, |2, 3],
+       [ 4, |5, 6],
+       [ 7, |8, 9] ]
 
 
-T4 = [ [ x, 2, 3],
-       [ 4, 5, 6],
-       [ 7, 8, 9] ]
+T4 = [ [ x, |2, 3],
+       [ 4, |5, 6],
+       [ 7, |8, 9] ]
+
+generate_area(I_Max,J_Max, As),
+member(I-J,As),
+
+     A   (A-1)
+F = [ 0 ,  1  , .. ]
+This is maximal [ [], [[1,0,2,3],[0,1,3,2]], ......]
+
+As = [ [3-3] , [2-3 , 3-2], [2-2], [1-3 , 3-1], [1-2 , 2-1] ]
+
+A = 9  [ x ]  [ y ]
+fails
+
+A = 4, [2-2]
+Two answers T = [ [ 4, 5],
+                  [ 7, 8]]
+ or
+
+     T = [ [2, 3],
+           [5, 6]]]
+
+     T = [ [5, 6],
+           [8, 9]]]
+
+               A = 6                  A = 4
+F = [ [], [[1,0,2,3],[0,1,3,2]], [[ ... ],[..]], ......]
 
 
+[ 2, 3
+  5, 6
+  8, 9 ]
+
+Cut_Left1 = [ 1,
+              4,
+              7 ]
+
+
+As
+list(BBs, Size_As),
+
+
+5 rectangle generator fails
+
+A := ( 9 + 5) div 2
+7 rectangle generator fails
 
 Index walking:
 
