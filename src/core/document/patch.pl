@@ -47,7 +47,7 @@ Optionals also contain @before/@after designations, but potentially
              '@after' : "Jim" }}
 ```
 
-# Set Diff / Cardinality Diff
+## Set Diff / Cardinality Diff
 
 Set requires the ability to explicitly remove or add elements - we can do this by maintaining a @@before/@after with a list of those which exist *only* on the left, and *only* on the right.
 
@@ -56,15 +56,49 @@ Set requires the ability to explicitly remove or add elements - we can do this b
 
 The list diff requires swaps at a position.  We use, @copy, @swap and @keep.
 
+### Copy
+
+Copy the previous list from `From_Position` to `To_Position.
+
+```jsx
+{ "@copy" : "List",
+  "@from" : From_Position,
+  "@to" : To_Position,
+  "@rest" : Diff }
 ```
+
+### Swap
+
+Swap out the list starting from the current point from `Previous` to `Next`
+
+```jsx
+{ "@swap" : "List",
+  "@before" : Previous,
+  "@after" : Next,
+  "@rest" : Diff }
+```
+
+### Example:
+
+```jsx
+var Patch =
 { '@id' : "TaskList/my_tasks",
   'tasks' : { '@copy' : "List",                      % Replace List
               '@from' : 0,
               '@to' : 2,
               '@rest' : { '@swap' : "List",
-              '@before' : ["Task/shopping","Task/cleaning","Task/fishing"],
-              '@after' : ["Task/climbing","Task/dining","Task/travelling"],
-              '@rest' : { '@keep' : "List" } } }
+                          '@before' : ["Task/shopping","Task/cleaning","Task/fishing"],
+                          '@after' : ["Task/climbing","Task/dining","Task/travelling"],
+                          '@rest' : { '@keep' : "List" } } }
+var Before =
+{ '@id' : "TaskList/my_tasks",
+  'tasks' : ["Task/driving", "Task/reading", "Task/shopping",
+             "Task/cleaning","Task/fishing", "Task/arguing"] }
+var After =
+{ '@id' : "TaskList/my_tasks",
+  'tasks' : ["Task/driving", "Task/reading", "Task/climbing",
+             "Task/dining", "Task/travelling", "Task/arguing"] }
+
 ```
 
 ## Array Diff
@@ -107,6 +141,7 @@ upper-right hand corner as follows:
 |  Diff    |  Diff    |
 |          |          |
 -----------------------
+
 ```
 
 We will recursively patch the table by applying the diffs in the
@@ -174,7 +209,7 @@ Application would take a table through the following transformation:
 
 ###  Copy
 
-```
+```jsx
 { '@copy' : "Table"
   '@from_row' : From_Row,       % integer
   '@from_column' : From_Column, % integer
@@ -186,13 +221,13 @@ Application would take a table through the following transformation:
   }
 ```
 
-## Swap
+### Swap
 
 Swap isntructions will give a before table as a JSON list of lists for
 both the before and after. These tables need not have the same
 dimensions.
 
-```
+```jsx
 { '@swap' : "Table",
   '@from_row' : From_Row,       % integer
   '@from_column' : From_Column, % integer
@@ -206,7 +241,7 @@ dimensions.
   }
 ```
 
-## Keep
+### Keep
 
 @keep instructions are degenerate copies.
 
@@ -217,7 +252,7 @@ dimensions.
 Examples:
 ---------
 
-
+```
 Diff := {
           '@id' : ID % ID of object to change.
           <prop1> : { '@before' : Obj_Old                      % Mandatory
@@ -266,11 +301,12 @@ Diff := {
           <prop6> : { '@force' : "Value" }                   % Ignore read state and force value
 
         }
-
+```
 
 Examples of Patch:
 
-Original = {
+```jsx
+var Original = {
         '@id': "EmployeesFromCSV/001",
         '@type': "EmployeesFromCSV",
         employee_id: "001",
@@ -278,11 +314,11 @@ Original = {
         team: "Marketing",
         title: "Marketing Manager"
       },
-Diff = {
+var Diff = {
         '@id': "EmployeesFromCSV/001",
         name: { '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
       },
-Final = {
+var Final = {
         '@id': "EmployeesFromCSV/001",
         '@type': "EmployeesFromCSV",
         employee_id: "001",
@@ -293,6 +329,7 @@ Final = {
 patch(Diff,Original,Final).
 
 => true
+```
 
 */
 
