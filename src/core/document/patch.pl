@@ -5,55 +5,239 @@
 
 /*
 
-Patch definition:
+# Patch and Diff
 
-For the defintion of patch on trees we will take the following
-approach:
+Patch applies a diff to obtain a new object. We will need to be able
+to infer Diffs from objects, or from between diff different data
+products.
 
-1. Copy is implicit
+A patch can be applied either singularly or in bulk to a patch
+endpoint which will apply the patch to the specified data product
+resource.
+
+We specify this patch using the following:
+
+## Copy Diff
+
+Copy is implicit
 
 All properties which are not specifically mentioned will be considered
-part of an implicit copy. This will make patches more constrained.
+part of an implicit copy. This will make patches more compressed and
+easier to specify by hand.
 
-2. Mandatory and optional properties will use @left / @right swap
-instructions.
+## Mandatory Diff
 
-a) @left/@right instructions contain objects specified as tightly as
+@before/@after instructions contain objects specified as tightly as
 required to obtain ids, or as ids.
 
-b) optionals also contain @left/@right designations, but potentially 'null's
+```jsx
+{ '@id' : "Person/jim",
+  'date_of_birth' : { '@before' : "1928-03-05",
+                      '@after' : "1938-03-05" }}
+```
 
-3. Set requires the ability to explicitly remove or add elements - we can do this by maintaining a @@left/@right with a list of those which exist *only* on the left, and *only* on the right.
+## Optional Diff
+
+Optionals also contain @before/@after designations, but potentially
+`null` fields to describe missing elements.
+
+```jsx
+{ '@id' : "Object/my_object",
+  'name' : { '@before' : null,
+             '@after' : "Jim" }}
+```
+
+# Set Diff / Cardinality Diff
+
+Set requires the ability to explicitly remove or add elements - we can do this by maintaining a @@before/@after with a list of those which exist *only* on the left, and *only* on the right.
 
 
-4. List requires swaps at a position - we will use, @copy, @swap and @keep.
+## List Diff
 
-5. Arrays will allow index swaping or "shrink" and "grow".
+The list diff requires swaps at a position.  We use, @copy, @swap and @keep.
 
-6. '@force' used to drop a value irrespective of current value.
+```
+{ '@id' : "TaskList/my_tasks",
+  'tasks' : { '@copy' : "List",                      % Replace List
+              '@from' : 0,
+              '@to' : 2,
+              '@rest' : { '@swap' : "List",
+              '@before' : ["Task/shopping","Task/cleaning","Task/fishing"],
+              '@after' : ["Task/climbing","Task/dining","Task/travelling"],
+              '@rest' : { '@keep' : "List" } } }
+```
 
-7. Table requires swaps at two positions - we will use @copy, @swap and @keep.
+## Array Diff
+
+Arrays will allow index swaping or "shrink" and "grow".
+
+## Force Diff
+
+A "Force Diff" will set the value of a location regardless of current
+read-state. This is a potentially unsafe operation as there is no
+guarantee we are seeing the object state version we think we
+are.
+
+```jsx
+{ '@id' : "Employee/012" ,
+  'name' : { '@force' : "Jake" }}
+```
+
+## Table Diff
+
+A Table diff requires swaps at two positions and subdivision of each patch into squares: Top-Left (in which we make the patch) Top-Right, Bottom-Left and Bottom-Right, each of which will be computed with the help of an additional Diff.
+
+We use @copy, @swap and @keep.
+
+Schematically the diff is a context with a the current hole in the
+upper-right hand corner as follows:
+
+```jsx
+
+-----------------------
+|          |          |
+| Swap /   |   Top    |
+| Copy     |   Right  |
+| instr.   |   Diff   |
+|          |          |
+-----------------------
+|          |          |
+|  Bttom   |  Bottom  |
+|  Left    |  Right   |
+|  Diff    |  Diff    |
+|          |          |
+-----------------------
+```
+
+We will recursively patch the table by applying the diffs in the
+various corners.
+
+### Example Table
+
+This might apply to an object as follows:
+
+```jsx
+{ '@id' : "Excel/012" ,
+  'sheets' : [{ '@id' : "Excel/012/sheet/Sheet/1",
+                'cells' :
+                { '@swap' : "Table",
+                  '@from_row' : 0,
+                  '@to_row' : 3,
+                  '@from_column' : 0,
+                  '@to_column' : 3,
+                  '@before' : [[ { 'Value' : "10", ... },
+                                 { 'Value' : "20", ... },
+                                 { 'Value' : "30", ... } ],
+                               [ { 'Value' : "40", ... },
+                                 { 'Value' : "50", ... },
+                                 { 'Value' : "60", ... } ]
+                               [ { 'Value' : "70", ... },
+                                 { 'Value' : "80", ... },
+                                 { 'Value' : "90", ... } ] ],
+                  '@after' : [[ { 'Value' : "1", ... },
+                                { 'Value' : "2", ... },
+                                { 'Value' : "3", ... } ],
+                              [ { 'Value' : "4", ... },
+                                { 'Value' : "5", ... },
+                                { 'Value' : "6", ... } ]
+                              [ { 'Value' : "7", ... },
+                                { 'Value' : "8", ... },
+                                { 'Value' : "9", ... } ] ],
+                  '@after' : { '@keep' : "Table" },
+                  '@bottom_left' : { '@keep' : "Table" },
+                  '@top_right' : { '@keep' : "Table" },
+                  '@bottom_right' : { '@keep' : "Table" }
+                }}]}
+```
+
+Application would take a table through the following transformation:
+
+```
+| 10 | 20 | 30 | A | B | C |
+| 40 | 50 | 60 | D | E | F |
+| 70 | 80 | 90 | G | H | I |
+| X  | Y  | Z  | O | O | O |
+| X  | Y  | Z  | O | O | O |
+| X  | Y  | Z  | O | O | O |
+
+=>
+
+| 1  | 2  | 3  | A | B | C |
+| 4  | 5  | 6  | D | E | F |
+| 7  | 8  | 9  | G | H | I |
+| X  | Y  | Z  | O | O | O |
+| X  | Y  | Z  | O | O | O |
+| X  | Y  | Z  | O | O | O |
+
+```
+
+
+###  Copy
+
+```
+{ '@copy' : "Table"
+  '@from_row' : From_Row,       % integer
+  '@from_column' : From_Column, % integer
+  '@to_row' : To_Row,           % integer
+  '@to_column' : To_Column,     % integer
+  '@bottom_left' : Diff_BL,     % A Table Diff
+  '@top_right' : Diff_TR,       % A Table Diff
+  '@bottom_right' : Diff_BR     % A Table Diff
+  }
+```
+
+## Swap
+
+Swap isntructions will give a before table as a JSON list of lists for
+both the before and after. These tables need not have the same
+dimensions.
+
+```
+{ '@swap' : "Table",
+  '@from_row' : From_Row,       % integer
+  '@from_column' : From_Column, % integer
+  '@to_row' : To_Row,           % integer
+  '@to_column' : To_Column,     % integer
+  '@before' : Diff_Before,
+  '@after' : Diff_After,
+  '@bottom_left' : Diff_BL,
+  '@top_right' : Diff_TR,
+  '@bottom_right' : DIff_BR
+  }
+```
+
+## Keep
+
+@keep instructions are degenerate copies.
+
+```
+{ '@keep' : "Table" }
+```
+
+Examples:
+---------
+
 
 Diff := {
           '@id' : ID % ID of object to change.
-          <prop1> : { '@left' : Obj_Old                      % Mandatory
-                      '@right' : Obj_New },
-          <prop2> : { '@left' : null                         % Add optional
-                      '@right' : Obj_New },
-          <prop2> : { '@left' : Obj_Old                      % Drop optional
-                      '@right' : null },
+          <prop1> : { '@before' : Obj_Old                      % Mandatory
+                      '@after' : Obj_New },
+          <prop2> : { '@before' : null                         % Add optional
+                      '@after' : Obj_New },
+          <prop2> : { '@before' : Obj_Old                      % Drop optional
+                      '@after' : null },
           <prop3> : { <prop3_1> :                            % Deep swap [*must* be subdocuments]
                         { <prop3_2> : ...
-                           { <prop3_n> : { '@left' : Obj_Old,
-                                           '@right' : Obj_New }
+                           { <prop3_n> : { '@before' : Obj_Old,
+                                           '@after' : Obj_New }
                         ... } } },
           <prop4> : { '@copy' : "List",                      % Replace List
                       '@from' : 0,
                       '@to' : 10,
                       '@rest' : { '@swap' : "List",
-                                  '@left' : [1,2,3],
-                                  '@right' : [4,5,6],
-                                  '@then' : { '@keep' : "List" } } },
+                                  '@before' : [1,2,3],
+                                  '@after' : [4,5,6],
+                                  '@rest' : { '@keep' : "List" } } },
           <prop4> : { '@copy' : "Table"
                       '@from_row' : 0,
                       '@from_column' : 0,
@@ -61,24 +245,24 @@ Diff := {
                       '@to_column' : 3,
                       '@bottom_left' : { '@keep' : "Table" },
                       '@top_right' :  { '@keep' : "Table" },
-                      '@bottom_right' : { '@swap' : "List",
-                                          '@left' : [[1,2,3]],
-                                          '@right' : [[4,5,6]],
+                      '@bottom_right' : { '@swap' : "Table",
+                                          '@before' : [[1,2,3]],
+                                          '@after' : [[4,5,6]],
                                           '@bottom_left' : { '@keep' : "Table" },
                                           '@top_right' : { '@keep' : "Table" },
                                           '@bottom_right' : { '@keep' : "Table" } }
                     },
-          <prop5> : { '@left' : { '@id' : ID },              % Replace element of a set
-                      '@right' : { '@id' : ID }}
+          <prop5> : { '@before' : { '@id' : ID },              % Replace element of a set
+                      '@after' : { '@id' : ID }}
           <prop6> : { '@id' : ID,                            % Deep set replace
-                       <prop6_1> : { '@left' : ...,
-                                     '@right' : ... } },
+                       <prop6_1> : { '@before' : ...,
+                                     '@after' : ... } },
           <prop6> : [{ '@id' : ID1,                          % Deep set replace 2
-                        <prop6_1> : { '@left' : ...,
-                                      '@right' : ... } },
+                        <prop6_1> : { '@before' : ...,
+                                      '@after' : ... } },
                      { '@id' : ID2,                          % Deep set replace 2
-                        <prop6_2> : { '@left' : ...,
-                                      '@right' : ... } }],
+                        <prop6_2> : { '@before' : ...,
+                                      '@after' : ... } }],
           <prop6> : { '@force' : "Value" }                   % Ignore read state and force value
 
         }
@@ -86,7 +270,7 @@ Diff := {
 
 Examples of Patch:
 
-Original = _{
+Original = {
         '@id': "EmployeesFromCSV/001",
         '@type': "EmployeesFromCSV",
         employee_id: "001",
@@ -94,11 +278,11 @@ Original = _{
         team: "Marketing",
         title: "Marketing Manager"
       },
-Diff = _{
+Diff = {
         '@id': "EmployeesFromCSV/001",
-        name: _{ '@left' : "Destiny Norris", '@right' : "Destiny Morris" },
+        name: { '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
       },
-Final = _{
+Final = {
         '@id': "EmployeesFromCSV/001",
         '@type': "EmployeesFromCSV",
         employee_id: "001",
@@ -215,7 +399,7 @@ test(all_class_frames, [
     Diff =
     _{
         '@id': Id,
-        name: _{ '@left' : "Destiny Norris", '@right' : "Destiny Morris" },
+        name: _{ '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
     },
 
     open_descriptor(Desc, DB),
