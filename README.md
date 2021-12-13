@@ -62,9 +62,10 @@ TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public
 
 <br/>
 TerminusDB is a powerful document-oriented graph database that provides version control features. If Neo4j, MongoDB, and Git had a superpowered baby, that would be TerminusDB. We want to facilitate users in building data-intense applications with collaborative workflows. The JSON format is now ubiquitous in application development but other systems - such as MongoDB - lack the easy ability to link documents. A schema-driven document graph opens new possibilities for building applications and working with data.  
+<br />
   
 Data-centric, domain focused, and decentralized application development.
-<br />
+
 <br /> 
 <br />  
   
@@ -90,7 +91,7 @@ align="right"
   
 
  ## Highlighted Features 
-  
+<br />  
 <img
   src="https://github.com/terminusdb/terminusdb-web-assets/blob/master/images/like-git-for-data-terminusx-V2.png"
   alt="TerminusDB DWorkflow"
@@ -120,7 +121,6 @@ Expose this functionality to your users so they can audit their application data
 <br />
 <br /> 
 <br />
-<br />
 <br /> 
 
 <img
@@ -132,7 +132,6 @@ Expose this functionality to your users so they can audit their application data
   
 <br /> 
 <br />
-<br />   
   
 If corrupt or erroneous data is infecting your application, you can immediately roll back to a working version. 
 
