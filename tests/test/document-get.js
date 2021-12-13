@@ -229,12 +229,20 @@ describe('document-get', function () {
       { body: { graph_type: 'schema', as_list: true, prefixed: false } },
       { query: { graph_type: 'instance', as_list: true, prefixed: false } },
       { body: { graph_type: 'instance', as_list: true, prefixed: false } },
+      { query: { graph_type: 'schema', as_list: true, compress_ids: false } },
+      { body: { graph_type: 'schema', as_list: true, compress_ids: false, prefixed: false } },
+      { query: { graph_type: 'instance', as_list: true, compress_ids: false, prefixed: true } },
+      { body: { graph_type: 'instance', as_list: true, compress_ids: false }, query: { prefixed: true } },
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const graphType = option.query
-          ? option.query.graph_type
-          : option.body ? option.body.graph_type : false
+        let graphType
+        if (option.query) {
+          graphType = option.query.graph_type
+        }
+        if (option.body) {
+          graphType = option.body.graph_type || graphType
+        }
         if (graphType === 'schema') {
           // TODO: Implement `prefixed` for schemas:
           // https://github.com/terminusdb/terminusdb/issues/801
@@ -261,8 +269,8 @@ describe('document-get', function () {
     const options = [
       [{ queryString: 'as_list=7' }, 'as_list', 'boolean', '7'],
       [{ bodyString: '{"as_list":"wrong"}' }, 'as_list', 'boolean', 'wrong'],
-      [{ queryString: 'prefixed=null' }, 'prefixed', 'boolean', null],
-      [{ queryString: 'prefixed=abc' }, 'prefixed', 'boolean', 'abc'],
+      [{ queryString: 'compress_ids=null' }, 'compress_ids', 'boolean', null],
+      [{ queryString: 'compress_ids=abc' }, 'compress_ids', 'boolean', 'abc'],
       [{ bodyString: '{"prefixed":1}' }, 'prefixed', 'boolean', 1],
       [{ queryString: 'unfold=' }, 'unfold', 'boolean', ''],
       [{ bodyString: '{"unfold":"false"}' }, 'unfold', 'boolean', 'false'],
