@@ -1,3 +1,22 @@
+# TerminusDB Server v10.0.13 Beta Release Notes
+## Bug fixes
++ utf-8 handling is now the default for json input
++ enums could not be documented
++ schema endpoint did not work properly with enums and `@oneOf`
++ floats could not be queried
+
+## Enhancement
++ New flag compress_ids replaces prefixed. prefixed deprecated but
+  retained for backwards compatibility.
++ schema endpoint will now return all types if none is specified
++ new environment variables `TERMINUSDB_INSECURE_USER_HEADER_ENABLED`
+  and `TERMINUSDB_INSECURE_USER_HEADER`. if the enabled header is set
+  to true, the content of the given header will be interpreted as
+  containing the authenticated user, with no further authentication
+  checks taking place. This can be used to plug in an external
+  authentication mechanism.
++ Upgraded to the latest version of SWI-Prolog
+
 # TerminusDB Server v10.0.12 Beta Release Notes
 ## Bug fixes
 + Query parameter is ignored.
