@@ -1,10 +1,17 @@
 VERSION=4.2.3
 LICENSE=Apache-2.0
 MAINTAINER="TerminusDB Team <team@terminusdb.com>"
-TARGET=terminusdb
 SWIPL=LANG=C.UTF-8 $(SWIPL_DIR)swipl
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
+
+# Get the absolute path of the Makefile to use for the target (handling spaces
+# in the path), so that we can use the path to run the target to build the docs.
+# Source: https://stackoverflow.com/a/61429483
+SPACE :=
+SPACE +=
+TARGET_DIR := $(subst $(lastword $(notdir $(MAKEFILE_LIST))),,$(subst $(SPACE),\$(SPACE),$(shell realpath '$(strip $(MAKEFILE_LIST))')))
+TARGET=$(TARGET_DIR)terminusdb
 
 ################################################################################
 
@@ -51,7 +58,7 @@ $(TARGET):
 
 # Create input for `ronn` from a template and the `terminusdb` help text.
 $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
-	HELP="$$(./$(TARGET) help -m)" envsubst < $< > $@
+	HELP="$$($(TARGET) help -m)" envsubst < $< > $@
 
 # Create a man page from using `ronn`.
 $(ROFF_FILE): $(RONN_FILE)

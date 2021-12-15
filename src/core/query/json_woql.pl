@@ -2,7 +2,8 @@
               woql_context/1,
               initialise_woql_contexts/0,
               json_woql/2,
-              json_woql_path_element_error_message/4
+              json_woql_path_element_error_message/4,
+              json_value_cast_type/3
           ]).
 
 /** <module> WOQL JSON-LD syntax
@@ -54,28 +55,31 @@ prefix_split(Node, Term) :-
         Term = Prefix_Atom:Suffix_Atom
     ;   atom_string(Term,Node)).
 
+json_value_cast_type(V,Type,WOQL) :-
+    default_prefixes(Default_Prefixes),
+    prefix_expand(Type, Default_Prefixes, TE),
+    (   string(V)
+    ->  typecast(V^^xsd:string,
+                 TE, [], Val)
+    ;   atom(V),
+        atom_string(V,String)
+    ->  typecast(String^^xsd:string,
+                 TE, [], Val)
+    ;   number(V)
+    ->  typecast(V^^xsd:decimal,
+                 TE, [], Val)
+    ;   member(V,[false,true])
+    ->  typecast(V^^xsd:boolean,
+                 TE, [], Val)
+    ;   throw(error(null_unsupported, V))
+    ),
+    WOQL = Val.
+
 json_data_to_woql_ast(JSON,WOQL) :-
     is_dict(JSON),
     !,
     (   _{'@value' : V, '@type' : T } :< JSON
-    ->  default_prefixes(Default_Prefixes),
-        prefix_expand(T, Default_Prefixes, TE),
-        (   string(V)
-        ->  typecast(V^^xsd:string,
-                     TE, [], Val)
-        ;   atom(V),
-            atom_string(V,String)
-        ->  typecast(String^^xsd:string,
-                     TE, [], Val)
-        ;   number(V)
-        ->  typecast(V^^xsd:decimal,
-                     TE, [], Val)
-        ;   member(V,[false,true])
-        ->  typecast(V^^xsd:boolean,
-                     TE, [], Val)
-        ;   throw(error(null_unsupported, JSON))
-        ),
-        WOQL = Val
+    ->  json_value_cast_type(V,T,WOQL)
     ;   _{'@value' : V, '@language' : L } :< JSON
     ->  atom_string(LE,L),
         WOQL = '@'(V,LE)
@@ -365,11 +369,37 @@ json_type_to_woql_ast('ReadDocument',JSON,WOQL,Path) :-
                                        |Path]),
     WOQL = get_document(WID,WDoc).
 json_type_to_woql_ast('UpdateDocument',JSON,WOQL,Path) :-
+    _{document : Doc,
+      identifier : Doc_ID
+     } :< JSON,
+    !,
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    json_value_to_woql_ast(Doc_ID, WDoc_ID, [identifier
+                                             |Path]),
+    WOQL = insert_document(WDoc,WDoc_ID).
+json_type_to_woql_ast('UpdateDocument',JSON,WOQL,Path) :-
     _{document : Doc
      } :< JSON,
     json_value_to_woql_ast(Doc, WDoc, [document
                                        |Path]),
     WOQL = update_document(WDoc).
+json_type_to_woql_ast('InsertDocument',JSON,WOQL,Path) :-
+    _{document : Doc,
+      identifier : Doc_ID
+     } :< JSON,
+    !,
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    json_value_to_woql_ast(Doc_ID, WDoc_ID, [identifier
+                                             |Path]),
+    WOQL = insert_document(WDoc,WDoc_ID).
+json_type_to_woql_ast('InsertDocument',JSON,WOQL,Path) :-
+    _{document : Doc
+     } :< JSON,
+    json_value_to_woql_ast(Doc, WDoc, [document
+                                       |Path]),
+    WOQL = insert_document(WDoc).
 json_type_to_woql_ast('DeleteDocument',JSON,WOQL,Path) :-
     _{identifier : Doc
      } :< JSON,

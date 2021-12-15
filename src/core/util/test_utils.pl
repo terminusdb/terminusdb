@@ -430,7 +430,11 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
     ],
 
-    inherit_env_vars(Env_List_1,
+    (   memberchk(env_vars(Env_List_User), Options)
+    ->  append(Env_List_1, Env_List_User, Combined_Env_List)
+    ;   Combined_Env_List = Env_List_1),
+
+    inherit_env_vars(Combined_Env_List,
                      [
                          'HOME',
                          'SystemRoot', % Windows specific stuff...
@@ -481,7 +485,11 @@ spawn_server(Path, URL, PID, Options) :-
               error(Error, _)).
 
 kill_server(PID) :-
-    process_kill(PID),
+    % As of SWI-Prolog v8.4.0, process_kill(PID), which defaults to SIGTERM,
+    % does not terminate the process on all systems. Until that is fixed, we use
+    % SIGKILL to work around this issue.
+    % See: https://github.com/terminusdb/terminusdb/pull/828
+    process_kill(PID, 9),
     process_wait(PID, _).
 
 setup_temp_server(Store-Dir-PID, URL, Options) :-

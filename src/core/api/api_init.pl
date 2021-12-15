@@ -158,3 +158,106 @@ initialize_database_with_store(Key, Store, Force) :-
     initialize_woql_schema(Store, Force),
 
     initialize_system_instance(Store, System_Schema, Key, Force).
+
+% FIXME! These tests should go into `src/config/terminus_config.pl`, but I
+% couldn't run them when they were there.
+:- begin_tests(env_vars).
+
+test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED is not set",
+     [ setup(config:clear_check_insecure_user_header_enabled),
+       cleanup(config:clear_check_insecure_user_header_enabled),
+       true(Enabled = false)
+     ]) :-
+    config:check_insecure_user_header_enabled(Enabled).
+
+test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true",
+     [ setup((
+           config:clear_check_insecure_user_header_enabled,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+       )),
+       cleanup((
+           config:clear_check_insecure_user_header_enabled,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'))
+       ),
+       true(Enabled = true)
+     ]) :-
+    config:check_insecure_user_header_enabled(Enabled).
+
+test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED has a bad value",
+     [ setup((
+           config:clear_check_insecure_user_header_enabled,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', 42)
+       )),
+       cleanup((
+           config:clear_check_insecure_user_header_enabled,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
+       )),
+       throws(error(bad_env_var_value('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', '42'), _))
+     ]) :-
+    config:check_insecure_user_header_enabled(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER is not set",
+     [ setup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+       )),
+       cleanup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
+       )),
+       throws(error(missing_env_var('TERMINUSDB_INSECURE_USER_HEADER'), _))
+     ]) :-
+    insecure_user_header_key(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER is missing",
+     [ setup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+       )),
+       cleanup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
+       )),
+       throws(error(missing_env_var('TERMINUSDB_INSECURE_USER_HEADER'), _))
+     ]) :-
+    insecure_user_header_key(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER has a bad value",
+     [ setup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
+           setenv('TERMINUSDB_INSECURE_USER_HEADER', '')
+       )),
+       cleanup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'),
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER')
+       )),
+       throws(error(bad_env_var_value('TERMINUSDB_INSECURE_USER_HEADER', ''), _))
+     ]) :-
+    insecure_user_header_key(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER=TerminusDB-5",
+     [ setup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
+           setenv('TERMINUSDB_INSECURE_USER_HEADER', 'TerminusDB-5')
+       )),
+       cleanup((
+           config:clear_check_insecure_user_header_enabled,
+           config:clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'),
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER')
+       )),
+       true(Header_Key = terminusdb_5)
+     ]) :-
+    insecure_user_header_key(Header_Key).
+
+:- end_tests(env_vars).

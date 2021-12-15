@@ -9,11 +9,13 @@
               param_check_json/4,
               param_check_search/4,
 
-              param_value_search/4,
+              param_value_search_required/4,
               param_value_search_optional/5,
-              param_value_json/4,
+
+              param_value_json_required/4,
               param_value_json_optional/5,
-              param_value_search_or_json/5,
+
+              param_value_search_or_json_required/5,
               param_value_search_or_json_optional/6,
 
               param_value_search_author/2,
@@ -78,81 +80,87 @@ param_check_common_(nonnegative_integer, Value_In, Value_Out) :-
     Value_Integer >= 0,
     Value_Out = Value_Integer.
 
-/*
- * Get the value of a parameter from a search list (a.k.a. query string
- * parameters), check its type, and convert if necessary.
- */
-param_value_search(Search, Param, Type, Value) :-
+param_value_search_(Search, Param, Type, Value) :-
     memberchk(Param=Value_Unchecked, Search),
     param_check_search(Type, Param, Value_Unchecked, Value).
+
+/*
+ * Get the value of a required parameter from a search list (a.k.a. query string
+ * parameters), check its type, and convert if necessary.
+ */
+param_value_search_required(Search, Param, Type, Value) :-
+    (   param_value_search_(Search, Param, Type, Value)
+    ->  true
+    ;   throw(error(missing_parameter(Param), _))).
 
 /*
  * Get the value of an optional parameter from a search list, or use Default if
  * not found.
  */
 param_value_search_optional(Search, Param, Type, Default, Value) :-
-    (   param_value_search(Search, Param, Type, Value)
+    (   param_value_search_(Search, Param, Type, Value)
     ->  true
     ;   Value = Default).
 
 /*
- * Get the value for 'author' from a search list, or throw an exception if not
- * found.
+ * Get the value of the required parameter 'author' from a search list.
  */
 param_value_search_author(Search, Author) :-
-    (   param_value_search(Search, author, atom, Author)
-    ->  true
-    ;   throw(error(no_commit_author, _))).
+    param_value_search_required(Search, author, atom, Author).
 
 /*
- * Get the value for 'message' from a search list, or throw an exception if not
- * found.
+ * Get the value of the required parameter 'message' from a search list.
  */
 param_value_search_message(Search, Message) :-
-    (   param_value_search(Search, message, atom, Message)
-    ->  true
-    ;   throw(error(no_commit_message, _))).
+    param_value_search_required(Search, message, atom, Message).
 
 /*
- * Get the value for 'graph_type' from a search list, or use 'instance' if not
- * found.
+ * Get the value of the optional parameter 'graph_type' from a search list.
  */
 param_value_search_graph_type(Search, Graph_Type) :-
-    (   param_value_search(Search, graph_type, graph, Graph_Type)
-    ->  true
-    ;   Graph_Type = instance).
+    param_value_search_optional(Search, graph_type, graph, instance, Graph_Type).
+
+param_value_json_(JSON, Param, Type, Value) :-
+    get_dict(Param, JSON, Value_Unchecked),
+    !,
+    param_check_json(Type, Param, Value_Unchecked, Value).
 
 /*
- * Get the value for a parameter from a JSON dict, check it, and convert if
- * necessary.
+ * Get the value of a required parameter from a JSON dict, check it, and convert
+ * if necessary.
  */
-param_value_json(JSON, Param, Type, Value) :-
-    get_dict(Param, JSON, Value_Unchecked),
-    param_check_json(Type, Param, Value_Unchecked, Value).
+param_value_json_required(JSON, Param, Type, Value) :-
+    (   param_value_json_(JSON, Param, Type, Value)
+    ->  true
+    ;   throw(error(missing_parameter(Param), _))).
 
 /*
  * Get the value of an optional parameter from a JSON dict, or use Default if
  * not found.
  */
 param_value_json_optional(JSON, Param, Type, Default, Value) :-
-    (   param_value_json(JSON, Param, Type, Value)
+    (   param_value_json_(JSON, Param, Type, Value)
     ->  true
     ;   Value = Default).
 
 /*
- * Get the value of a parameter from a search list or JSON dict, check it, and
- * convert if necessary.
+ * Get the value of a required parameter from a search list or JSON dict, check
+ * it, and convert if necessary.
  */
-param_value_search_or_json(Search, JSON, Param, Type, Value) :-
-    (   param_value_search(Search, Param, Type, Value)
+param_value_search_or_json_required(Search, JSON, Param, Type, Value) :-
+    (   param_value_search_(Search, Param, Type, Value)
     ->  true
-    ;   param_value_json(JSON, Param, Type, Value)).
+    ;   param_value_json_(JSON, Param, Type, Value)
+    ->  true
+    ;   throw(error(missing_parameter(Param), _))).
 
 /*
- * Get the value of a parameter from a search list or JSON dict, check it, and
- * convert if necessary.
+ * Get the value of an optional parameter from a search list or JSON dict, check
+ * it, and convert if necessary.
  */
 param_value_search_or_json_optional(Search, JSON, Param, Type, Default, Value) :-
-    (   param_value_search_or_json(Search, JSON, Param, Type, Value)
+    (   param_value_search_(Search, Param, Type, Value)
+    ->  true
+    ;   param_value_json_(JSON, Param, Type, Value)
     ->  true
     ;   Value = Default).
