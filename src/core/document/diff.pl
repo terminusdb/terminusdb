@@ -1,5 +1,5 @@
 :- module('document/diff',
-          [patch/3]).
+          []).
 
 :- use_module(core(util)).
 
@@ -468,6 +468,7 @@ all_hash_matches(T1,T2,IJs,Matches) :-
     hash_blocks(Rows,Cols,T2,Blocks2),
     match(Blocks1,Blocks2,Matches).
 
+/*
 binary_area_search(T1,T2,Area,Areas,Max_Area,Bounding_Boxes) :-
     all_hash_matches(T1,T2,IJs,Matches),
     (   maximum_match(Matches,Match)
@@ -482,6 +483,7 @@ binary_area_search(T1,T2,Area,Areas,Max_Area,Bounding_Boxes) :-
         ;   
     ;   true
     ).
+*/
 
 maximum_match(Matches,Match) :-
     true.

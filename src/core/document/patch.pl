@@ -32,8 +32,10 @@ required to obtain ids, or as ids.
 
 ```jsx
 { '@id' : "Person/jim",
-  'date_of_birth' : { '@before' : "1928-03-05",
-                      '@after' : "1938-03-05" }}
+  'date_of_birth' : { '@op' : 'ValueSwap',
+                      '@before' : "1928-03-05",
+                      '@after' : "1938-03-05"
+                    }}
 ```
 
 ## Optional Diff
@@ -43,7 +45,8 @@ Optionals also contain @before/@after designations, but potentially
 
 ```jsx
 { '@id' : "Object/my_object",
-  'name' : { '@before' : null,
+  'name' : { '@op' : 'ValueSwap',
+             '@before' : null,
              '@after' : "Jim" }}
 ```
 
@@ -61,7 +64,7 @@ The list diff requires swaps at a position.  We use, @copy, @swap and @keep.
 Copy the previous list from `From_Position` to `To_Position.
 
 ```jsx
-{ "@copy" : "List",
+{ "@op" : "CopyList",
   "@from" : From_Position,
   "@to" : To_Position,
   "@rest" : Diff }
@@ -72,7 +75,7 @@ Copy the previous list from `From_Position` to `To_Position.
 Swap out the list starting from the current point from `Previous` to `Next`
 
 ```jsx
-{ "@swap" : "List",
+{ "@op" : "SwapList",
   "@before" : Previous,
   "@after" : Next,
   "@rest" : Diff }
@@ -83,13 +86,13 @@ Swap out the list starting from the current point from `Previous` to `Next`
 ```jsx
 var Patch =
 { '@id' : "TaskList/my_tasks",
-  'tasks' : { '@copy' : "List",                      % Replace List
+  'tasks' : { '@op' : "CopyList",                      % Replace List
               '@from' : 0,
               '@to' : 2,
-              '@rest' : { '@swap' : "List",
+              '@rest' : { '@op' : "SwapList",
                           '@before' : ["Task/shopping","Task/cleaning","Task/fishing"],
                           '@after' : ["Task/climbing","Task/dining","Task/travelling"],
-                          '@rest' : { '@keep' : "List" } } }
+                          '@rest' : { '@op' : "KeepList" } } }}
 var Before =
 { '@id' : "TaskList/my_tasks",
   'tasks' : ["Task/driving", "Task/reading", "Task/shopping",
@@ -121,7 +124,7 @@ are.
 
 A Table diff requires swaps at two positions and subdivision of each patch into squares: Top-Left (in which we make the patch) Top-Right, Bottom-Left and Bottom-Right, each of which will be computed with the help of an additional Diff.
 
-We use @copy, @swap and @keep.
+We use `CopyTable`, `SwapTable` and `KeepTable`.
 
 Schematically the diff is a context with a the current hole in the
 upper-right hand corner as follows:
@@ -155,7 +158,7 @@ This might apply to an object as follows:
 { '@id' : "Excel/012" ,
   'sheets' : [{ '@id' : "Excel/012/sheet/Sheet/1",
                 'cells' :
-                { '@swap' : "Table",
+                { '@op' : "SwapTable",
                   '@from_row' : 0,
                   '@to_row' : 3,
                   '@from_column' : 0,
@@ -255,21 +258,28 @@ Examples:
 ```
 Diff := {
           '@id' : ID % ID of object to change.
-          <prop1> : { '@before' : Obj_Old                      % Mandatory
+          <prop1> : { '@op' : 'ValueSwap',
+                      '@before' : Obj_Old                      % Mandatory
                       '@after' : Obj_New },
-          <prop2> : { '@before' : null                         % Add optional
+          <prop2> : { '@op' : 'ValueSwap',
+                      '@before' : null                         % Add optional
                       '@after' : Obj_New },
-          <prop2> : { '@before' : Obj_Old                      % Drop optional
+          <prop2> : { '@op' : 'ValueSwap',
+                      '@before' : Obj_Old                      % Drop optional
                       '@after' : null },
-          <prop3> : { <prop3_1> :                            % Deep swap [*must* be subdocuments]
-                        { <prop3_2> : ...
-                           { <prop3_n> : { '@before' : Obj_Old,
-                                           '@after' : Obj_New }
+          <prop3> : { '@id' : ID1,
+                      <prop3_1> :                              % Deep swap [*must* be subdocuments]
+                        { '@id' : ID2,
+                           <prop3_2> : ...
+                           { '@id' : ID3,
+                              <prop3_n> : { '@op' : 'ValueSwap',
+                                            '@before' : Obj_Old,
+                                            '@after' : Obj_New }
                         ... } } },
-          <prop4> : { '@copy' : "List",                      % Replace List
+          <prop4> : { '@op' : 'CopyList',                      % Replace List
                       '@from' : 0,
                       '@to' : 10,
-                      '@rest' : { '@swap' : "List",
+                      '@rest' : { '@op' : 'SwapList',          % Replace List
                                   '@before' : [1,2,3],
                                   '@after' : [4,5,6],
                                   '@rest' : { '@keep' : "List" } } },
@@ -332,6 +342,28 @@ patch(Diff,Original,Final).
 ```
 
 */
+
+simple_patch(Diff,JSON_In,JSON_Out) :-
+    dict(Diff),
+    !,
+    dict_keys(Keys,JSON_In),
+    findall(
+        Key-Value,
+        (
+            member(Key, Keys),
+            get_dict(Key, JSON_In, V),
+            simple_patch_key_value(Key,V,Diff,Value)
+        ),
+        PVs),
+    dict_pairs(JSON_Out,json,PVs).
+
+simple_diff_op('@force', New_Value, 
+
+simple_patch_key_value(Key,V,Diff,Value) :-
+    get_dict(Key,Diff,Key_Diff),
+    !,
+    simple_diff_op(Key_Diff,V,Value).
+simple_patch_key_value(_Key,Value,_Diff,Value).
 
 patch(DB,Diff) :-
     elaborate_diff(DB,Diff,Elaborated_Diff),
