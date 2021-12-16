@@ -32,7 +32,7 @@ required to obtain ids, or as ids.
 
 ```jsx
 { '@id' : "Person/jim",
-  'date_of_birth' : { '@op' : 'ValueSwap',
+  'date_of_birth' : { '@op' : 'SwapValue',
                       '@before' : "1928-03-05",
                       '@after' : "1938-03-05"
                     }}
@@ -45,7 +45,7 @@ Optionals also contain @before/@after designations, but potentially
 
 ```jsx
 { '@id' : "Object/my_object",
-  'name' : { '@op' : 'ValueSwap',
+  'name' : { '@op' : 'SwapValue',
              '@before' : null,
              '@after' : "Jim" }}
 ```
@@ -181,10 +181,10 @@ This might apply to an object as follows:
                               [ { 'Value' : "7", ... },
                                 { 'Value' : "8", ... },
                                 { 'Value' : "9", ... } ] ],
-                  '@after' : { '@keep' : "Table" },
-                  '@bottom_left' : { '@keep' : "Table" },
-                  '@top_right' : { '@keep' : "Table" },
-                  '@bottom_right' : { '@keep' : "Table" }
+                  '@after' : { '@op' : "KeepTable" },
+                  '@bottom_left' : { '@op' : "KeepTable" },
+                  '@top_right' : { '@op' : "KeepTable" },
+                  '@bottom_right' : { '@op' : "KeepTable" }
                 }}]}
 ```
 
@@ -213,7 +213,7 @@ Application would take a table through the following transformation:
 ###  Copy
 
 ```jsx
-{ '@copy' : "Table"
+{ '@op' : "CopyTable"
   '@from_row' : From_Row,       % integer
   '@from_column' : From_Column, % integer
   '@to_row' : To_Row,           % integer
@@ -231,7 +231,7 @@ both the before and after. These tables need not have the same
 dimensions.
 
 ```jsx
-{ '@swap' : "Table",
+{ '@op' : "SwapTable",
   '@from_row' : From_Row,       % integer
   '@from_column' : From_Column, % integer
   '@to_row' : To_Row,           % integer
@@ -258,13 +258,13 @@ Examples:
 ```
 Diff := {
           '@id' : ID % ID of object to change.
-          <prop1> : { '@op' : 'ValueSwap',
+          <prop1> : { '@op' : 'SwapValue',
                       '@before' : Obj_Old                      % Mandatory
                       '@after' : Obj_New },
-          <prop2> : { '@op' : 'ValueSwap',
+          <prop2> : { '@op' : 'SwapValue',
                       '@before' : null                         % Add optional
                       '@after' : Obj_New },
-          <prop2> : { '@op' : 'ValueSwap',
+          <prop2> : { '@op' : 'SwapValue',
                       '@before' : Obj_Old                      % Drop optional
                       '@after' : null },
           <prop3> : { '@id' : ID1,
@@ -272,7 +272,7 @@ Diff := {
                         { '@id' : ID2,
                            <prop3_2> : ...
                            { '@id' : ID3,
-                              <prop3_n> : { '@op' : 'ValueSwap',
+                              <prop3_n> : { '@op' : 'SwapValue',
                                             '@before' : Obj_Old,
                                             '@after' : Obj_New }
                         ... } } },
@@ -283,32 +283,37 @@ Diff := {
                                   '@before' : [1,2,3],
                                   '@after' : [4,5,6],
                                   '@rest' : { '@keep' : "List" } } },
-          <prop4> : { '@copy' : "Table"
+          <prop4> : { '@op' : "CopyTable"
                       '@from_row' : 0,
                       '@from_column' : 0,
                       '@to_row' : 3,
                       '@to_column' : 3,
-                      '@bottom_left' : { '@keep' : "Table" },
-                      '@top_right' :  { '@keep' : "Table" },
-                      '@bottom_right' : { '@swap' : "Table",
+                      '@bottom_left' : { '@keep' : "KeepTable" },
+                      '@top_right' :  { '@keep' : "KeepTable" },
+                      '@bottom_right' : { '@swap' : "SwapTable",
                                           '@before' : [[1,2,3]],
                                           '@after' : [[4,5,6]],
-                                          '@bottom_left' : { '@keep' : "Table" },
-                                          '@top_right' : { '@keep' : "Table" },
-                                          '@bottom_right' : { '@keep' : "Table" } }
+                                          '@bottom_left' : { '@keep' : "KeepTable" },
+                                          '@top_right' : { '@keep' : "KeepTable" },
+                                          '@bottom_right' : { '@keep' : "KeepTable" } }
                     },
-          <prop5> : { '@before' : { '@id' : ID },              % Replace element of a set
+          <prop5> : { '@op' : "SwapValue",
+                      '@before' : { '@id' : ID },              % Replace element of a set
                       '@after' : { '@id' : ID }}
           <prop6> : { '@id' : ID,                            % Deep set replace
-                       <prop6_1> : { '@before' : ...,
+                       <prop6_1> : { '@op' : "SwapValue",
+                                     '@before' : ...,
                                      '@after' : ... } },
           <prop6> : [{ '@id' : ID1,                          % Deep set replace 2
-                        <prop6_1> : { '@before' : ...,
+                        <prop6_1> : { '@op' : "SwapValue",
+                                      '@before' : ...,
                                       '@after' : ... } },
                      { '@id' : ID2,                          % Deep set replace 2
-                        <prop6_2> : { '@before' : ...,
+                        <prop6_2> : { '@op' : "SwapValue",
+                                      '@before' : ...,
                                       '@after' : ... } }],
-          <prop6> : { '@force' : "Value" }                   % Ignore read state and force value
+          <prop6> : { '@op' : 'ValueForce',
+                      '@after' : "Value" }                   % Ignore read state and force value
 
         }
 ```
@@ -326,7 +331,7 @@ var Original = {
       },
 var Diff = {
         '@id': "EmployeesFromCSV/001",
-        name: { '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
+        name: { '@op' : 'ValueSwap', '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
       },
 var Final = {
         '@id': "EmployeesFromCSV/001",
@@ -352,17 +357,21 @@ simple_patch(Diff,JSON_In,JSON_Out) :-
         (
             member(Key, Keys),
             get_dict(Key, JSON_In, V),
-            simple_patch_key_value(Key,V,Diff,Value)
+            simple_patch_key_value(Key,Diff,V,Value)
         ),
         PVs),
     dict_pairs(JSON_Out,json,PVs).
 
-simple_diff_op('@force', New_Value, 
+simple_op_diff_value('ValueSwap', Diff, V, Value) :-
+    get_dict('@before', Diff, V),
+    get_dict('@after', Diff, Value).
 
-simple_patch_key_value(Key,V,Diff,Value) :-
+simple_patch_key_value(Key,Diff,V,Value) :-
     get_dict(Key,Diff,Key_Diff),
     !,
-    simple_diff_op(Key_Diff,V,Value).
+    get_dict('@op', Key_Diff, Operation_String),
+    atom_string(Op, Operation_String),
+    simple_op_diff_value(Op,Key_Diff,V,Value).
 simple_patch_key_value(_Key,Value,_Diff,Value).
 
 patch(DB,Diff) :-
