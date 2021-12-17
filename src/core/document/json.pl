@@ -547,8 +547,6 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     is_dict(JSON),
     !,
 
-    json_log_info_formatted("incoming captures: ~q", [Captures_In]),
-
     % Look for @type. If there, expand it. If not there but @id is, assume that
     % the expanded @type should be @id. If @id is not there, throw an error.
     (    get_dict('@type', JSON, Type)
@@ -589,10 +587,11 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
         ->  do_or_die(var(Capture_Var),
                       error(capture_already_bound(Capture_Group), _)),
             json_log_info_formatted("found existing ref ~q, unifying", [Capture_Group]),
-            Capture_Var = Id_Ex
+            Capture_Var = Id_Ex,
+            Captures_Out = Captures_Out_1
         ;   json_log_info_formatted("found no existing ref ~q, putting (~q)", [Capture_Group, Captures_Out_1]),
             put_assoc(Capture_Group, Captures_Out_1, Id_Ex, Captures_Out))
-    ;   true).
+    ;   Captures_Out = Captures_Out_1).
 
 json_assign_ids(DB,Context,JSON) :-
     json_assign_ids(DB,Context,JSON,[]).
@@ -2022,7 +2021,6 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
     database_prefixes(DB,Context),
     empty_assoc(Captures_In),
-    ensure_transaction_has_builder(instance, DB),
     write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
     do_or_die(ground(Captures_Out),
               error(not_all_captures_ground(Captures_Out),_)).
@@ -9048,3 +9046,92 @@ test(foreign_type,
                        pay_period:"P1M"}]}.
 
 :- end_tests(foreign_types).
+
+:- begin_tests(id_capture).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+cross_reference_required_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friend": "Person"
+}
+').
+
+
+test(cross_reference_required,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_required_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friend: _{'@ref': "Capture_Ernie"}},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friend: _{'@ref': "Capture_Bert"}},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Bert_Id == (Ernie_Elaborated.'terminusdb:///schema#friend'.'@id'),
+    Ernie_Id == (Bert_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+test(self_reference_required,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_required_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friend: _{'@ref': "Capture_Elmo"}},
+                   Context,
+                   In,
+                   Elmo_Elaborated,
+                   _Dependencies_1,
+                   Out),
+
+    ground(Out),
+
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    Elmo_Id == (Elmo_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+
+:- end_tests(id_capture).
