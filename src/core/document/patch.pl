@@ -1,5 +1,5 @@
 :- module('document/patch',
-          [patch/3]).
+          []).
 
 :- use_module(core(util)).
 
@@ -117,7 +117,8 @@ are.
 
 ```jsx
 { '@id' : "Employee/012" ,
-  'name' : { '@force' : "Jake" }}
+  'name' : { '@op' : 'ForceValue',
+             '@after' : "Jake" }}
 ```
 
 ## Table Diff
@@ -312,7 +313,7 @@ Diff := {
                         <prop6_2> : { '@op' : "SwapValue",
                                       '@before' : ...,
                                       '@after' : ... } }],
-          <prop6> : { '@op' : 'ValueForce',
+          <prop6> : { '@op' : 'ForceValue',
                       '@after' : "Value" }                   % Ignore read state and force value
 
         }
@@ -348,70 +349,251 @@ patch(Diff,Original,Final).
 
 */
 
-simple_patch(Diff,JSON_In,JSON_Out) :-
-    dict(Diff),
+simple_patch(Diff,JSON_In,JSON_Out,Patch) :-
+    is_dict(Diff),
     !,
-    dict_keys(Keys,JSON_In),
-    findall(
-        Key-Value,
-        (
-            member(Key, Keys),
-            get_dict(Key, JSON_In, V),
-            simple_patch_key_value(Key,Diff,V,Value)
-        ),
-        PVs),
-    dict_pairs(JSON_Out,json,PVs).
+    dict_keys(JSON_In,Doc_Keys),
+    dict_keys(Diff,Diff_Keys),
+    union(Doc_Keys,Diff_Keys,Keys),
+    pairs_and_conflicts_from_keys(Keys,JSON_In,Diff,Pairs,Conflicts),
+    dict_create(JSON_Out,_,Pairs),
+    dict_create(Patch,_,Conflicts).
 
-simple_op_diff_value('ValueSwap', Diff, V, Value) :-
-    get_dict('@before', Diff, V),
-    get_dict('@after', Diff, Value).
+pairs_and_conflicts_from_keys([], _, _, [], []).
+pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff, [Result|Values], Conflicts_Out) :-
+    simple_patch_key_value(Key,JSON,Diff,Result,Conflict),
+    !,
+    (   Conflict = _{}
+    ->  Conflicts_Out = Conflicts
+    ;   Conflicts_Out = [Conflict|Conflicts]
+    ),
+    pairs_and_conflicts_from_keys(Keys, JSON, Diff, Values, Conflicts).
+pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff, [Key-Final|Values],
+                              [Key-Patch|Conflicts]) :-
+    get_dict(Key,Diff,Key_Diff),
+    get_dict('@before', Key_Diff, Expected),
+    get_dict('@after', Key_Diff, Final),
+    get_dict_or_null(Key, JSON, Actual),
+    Patch = _{ '@op' : "SwapValue",
+               '@before' : Expected,
+               '@after' : Actual },
+    !,
+    pairs_and_conflicts_from_keys(Keys, JSON, Diff, Values, Conflicts).
 
-simple_patch_key_value(Key,Diff,V,Value) :-
+simple_op_diff_value('SwapValue', _Key, Diff, Before, After) :-
+    get_dict('@before', Diff, Before),
+    get_dict('@after', Diff, After).
+
+get_dict_or_null(Key,JSON,V) :-
+    (   get_dict(Key,JSON,V)
+    ->  true
+    ;   V = null).
+
+simple_patch_key_value(Key,JSON,Diff,Result,Conflict) :-
+    % If it's in the diff, we're changing it.
     get_dict(Key,Diff,Key_Diff),
     !,
-    get_dict('@op', Key_Diff, Operation_String),
-    atom_string(Op, Operation_String),
-    simple_op_diff_value(Op,Key_Diff,V,Value).
-simple_patch_key_value(_Key,Value,_Diff,Value).
+    (   get_dict('@op', Key_Diff, Operation_String)
+    ->  atom_string(Op, Operation_String),
+        get_dict_or_null(Key,JSON,V),
+        simple_op_diff_value(Op,Key,Key_Diff,V,Value),
+        Result = Key-Value,
+        Conflict = _{}
+    ;   get_dict_or_null(Key,JSON,V),
+        simple_patch(Key_Diff,V,Value,Sub_Conflict),
+        Result = Key-Value,
+        (   Sub_Conflict = _{}
+        ->  Conflict = _{}
+        ;   Conflict = Key-Sub_Conflict)
+    ).
+simple_patch_key_value(Key,JSON,_Diff,Key-Value,_{}) :-
+    % This is an implicit copy instruction
+    get_dict(Key,JSON,Value).
 
-patch(DB,Diff) :-
-    elaborate_diff(DB,Diff,Elaborated_Diff),
-    patch_(DB,Elaborated_Diff).
+:- begin_tests(simple_patch).
+:- use_module(core(util/test_utils)).
 
-patch_(DB,Elaborated_Diff) :-
-    database_prefixes(DB,Context),
-    patch_(DB,Context,Elaborated_Diff).
+test(simple_flat_patch, []) :-
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                dob : "2009-08-03"
+              },
+    Patch = _{ name : _{ '@op' : "SwapValue",
+                         '@before' : "jim",
+                         '@after' : "james" }
+             },
+    After =  _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "james",
+                dob : "2009-08-03"
+              },
 
-elaborate_diff(DB,Diff,Elaborated_Diff) :-
-    is_dict(Dict),
-    !,
-    get_dict('@id', Diff, ID),
+    simple_patch(Patch,Before,After,_{}).
 
-    dict_keys(Diff,Keys),
-    findall(
-        P-V,
-        (   member(Key,Keys),
-            get_dict(Key,Dict,Value),
-            \+ member(Key, '@id'),
-            patch_property(Key,Value,Context,ID,DocLeft,P,DocRight)
-        ),
-        PVs),
-    dict_pairs(DocRight, _, PVs).
+test(bad_read_state, []) :-
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                dob : "2009-08-03"
+              },
+    Patch = _{ name : _{ '@op' : "SwapValue",
+                         '@before' : "jake",
+                         '@after' : "james" }
+             },
+    simple_patch(Patch,Before,After,Conflict),
+    After = _{ '@id' : "Person/1",
+               '@type' : "Person",
+               dob : "2009-08-03",
+               name : "james"
+             },
+    Conflict = _{ name: _{ '@op' : "SwapValue",
+                           '@after' : "jim",
+                           '@before': "jake"}
+                }.
 
-patch_(Diff,DB,Context,Elaborated_Diff) :-
-    is_dict(Dict),
-    !,
-    get_dict('@id', Diff, ID),
+test(simple_flat_patch_missing, []) :-
 
-    dict_keys(Diff,Keys),
-    findall(
-        P-V,
-        (   member(Key,Keys),
-            get_dict(Key,Dict,Value),
-            patch_property(Key,Value,Context,ID,DocLeft,P,DocRight)
-        ),
-        PVs),
-    dict_pairs(DocRight, _, PVs).
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim"
+              },
+    Patch = _{ dob : _{ '@op' : "SwapValue",
+                        '@before' : null,
+                        '@after' :  "2009-08-03" }
+             },
+    After =  _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                dob : "2009-08-03"
+              },
+
+    simple_patch(Patch,Before,After,_{}).
+
+test(simple_flat_drop_value, []) :-
+
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                dob : "2009-08-03"
+              },
+    Patch = _{ dob : _{ '@op' : "SwapValue",
+                        '@before' : "2009-08-03",
+                        '@after' : null }
+             },
+    After =  _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                dob: null
+              },
+
+    simple_patch(Patch,Before,After,_{}).
+
+
+test(simple_deep_swap_drop_value, []) :-
+
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "Beethoven",
+                dob : "1770-12-17",
+                address :
+                _{
+                    address1 : "Probusgasse 6",
+                    address2 : "Heiligenstadt",
+                    city : "Vienna",
+                    country : "Austria"
+                }
+              },
+    Patch = _{ address :
+               _{ address1 : _{
+                                 '@op' : "SwapValue",
+                                 '@before' : "Probusgasse 6",
+                                 '@after' : "Mölker Bastei 8" },
+                  address2 : _{
+                                 '@op' : "SwapValue",
+                                 '@before' : "Heiligenstadt",
+                                 '@after' : null }
+                }
+             },
+    After =  _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "Beethoven",
+                dob : "1770-12-17",
+                address :
+                _{
+                    address1 : "Mölker Bastei 8",
+                    address2 : null,
+                    city : "Vienna",
+                    country : "Austria"
+                }
+              },
+
+    simple_patch(Patch,Before,After,_{}).
+
+test(simple_deep_swap_wrong_value, []) :-
+
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "Beethoven",
+                dob : "1770-12-17",
+                address :
+                _{
+                    address1 : "Probusgasse 6",
+                    address2 : "Heiligenstadt",
+                    city : "Vienna",
+                    country : "Austria"
+                }
+              },
+    Patch = _{ address :
+               _{ address1 : _{
+                                 '@op' : "SwapValue",
+                                 '@before' : "Probusgasse 7",
+                                 '@after' : "Mölker Bastei 8" },
+                  address2 : _{
+                                 '@op' : "SwapValue",
+                                 '@before' : "Heiligenstadt",
+                                 '@after' : null }
+                }
+             },
+    After =  _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "Beethoven",
+                dob : "1770-12-17",
+                address :
+                _{
+                    address1 : "Mölker Bastei 8",
+                    address2 : null,
+                    city : "Vienna",
+                    country : "Austria"
+                }
+              },
+
+    simple_patch(Patch,Before,After,Conflict),
+    After =
+    _{ '@id' : "Person/1",
+       '@type' : "Person",
+       address:
+       _{ address1 : "Mölker Bastei 8",
+          address2 : null,
+          city : "Vienna",
+          country : "Austria"},
+       dob:"1770-12-17",
+       name:"Beethoven"},
+    Conflict =
+    _{ address:
+       _{ address1:
+          _{
+              '@op' : "SwapValue",
+              '@after' : "Probusgasse 6",
+              '@before' : "Probusgasse 7"
+          }
+        }
+     }.
+
+:- end_tests(simple_patch).
+
+/*
+
 
 :- begin_tests(patch).
 
@@ -446,7 +628,7 @@ schema1('
             "@type": "Optional"
         }
     }
-')
+').
 
 test(all_class_frames, [
          setup(
@@ -477,7 +659,7 @@ test(all_class_frames, [
     Diff =
     _{
         '@id': Id,
-        name: _{ '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
+        name: _{ '@before' : "Destiny Norris", '@after' : "Destiny Morris" }
     },
 
     open_descriptor(Desc, DB),
@@ -503,3 +685,5 @@ test(all_class_frames, [
     get_document(Desc, Id, Final).
 
 :- end_tests(patch).
+
+*/
