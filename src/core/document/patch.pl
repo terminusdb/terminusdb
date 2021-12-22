@@ -65,7 +65,6 @@ Copy the previous list from `From_Position` to `To_Position.
 
 ```jsx
 { "@op" : "CopyList",
-  "@from" : From_Position,
   "@to" : To_Position,
   "@rest" : Diff }
 ```
@@ -87,7 +86,6 @@ Swap out the list starting from the current point from `Previous` to `Next`
 var Patch =
 { '@id' : "TaskList/my_tasks",
   'tasks' : { '@op' : "CopyList",                      % Replace List
-              '@from' : 0,
               '@to' : 2,
               '@rest' : { '@op' : "SwapList",
                           '@before' : ["Task/shopping","Task/cleaning","Task/fishing"],
@@ -160,10 +158,6 @@ This might apply to an object as follows:
   'sheets' : [{ '@id' : "Excel/012/sheet/Sheet/1",
                 'cells' :
                 { '@op' : "SwapTable",
-                  '@from_row' : 0,
-                  '@to_row' : 3,
-                  '@from_column' : 0,
-                  '@to_column' : 3,
                   '@before' : [[ { 'Value' : "10", ... },
                                  { 'Value' : "20", ... },
                                  { 'Value' : "30", ... } ],
@@ -215,8 +209,6 @@ Application would take a table through the following transformation:
 
 ```jsx
 { '@op' : "CopyTable"
-  '@from_row' : From_Row,       % integer
-  '@from_column' : From_Column, % integer
   '@to_row' : To_Row,           % integer
   '@to_column' : To_Column,     % integer
   '@bottom_left' : Diff_BL,     % A Table Diff
@@ -233,10 +225,6 @@ dimensions.
 
 ```jsx
 { '@op' : "SwapTable",
-  '@from_row' : From_Row,       % integer
-  '@from_column' : From_Column, % integer
-  '@to_row' : To_Row,           % integer
-  '@to_column' : To_Column,     % integer
   '@before' : Diff_Before,
   '@after' : Diff_After,
   '@bottom_left' : Diff_BL,
@@ -278,15 +266,12 @@ Diff := {
                                             '@after' : Obj_New }
                         ... } } },
           <prop4> : { '@op' : 'CopyList',                      % Replace List
-                      '@from' : 0,
                       '@to' : 10,
                       '@rest' : { '@op' : 'SwapList',          % Replace List
                                   '@before' : [1,2,3],
                                   '@after' : [4,5,6],
                                   '@rest' : { '@keep' : "List" } } },
           <prop4> : { '@op' : "CopyTable"
-                      '@from_row' : 0,
-                      '@from_column' : 0,
                       '@to_row' : 3,
                       '@to_column' : 3,
                       '@bottom_left' : { '@keep' : "KeepTable" },
@@ -349,8 +334,46 @@ patch(Diff,Original,Final).
 
 */
 
+row_length(T, Length) :-
+    length(T, Length).
+
+column_length([], 0).
+column_length([R|_], Length) :-
+    length(R, Length).
+
+split(Index,List,Left,Right) :-
+    length(Left, Index),
+    append(Left,Right,List).
+
+split_matrix(In, N, M, Top_Left, Right, Bottom, Bottom_Right) :-
+    when((   ground(In)
+         ;   ground(Rows_Top),
+             ground(Rows_Bottom)),
+         split_row(In, N, Rows_Top, Rows_Bottom)),
+    split_column(Rows_Top, M, Top_Left, Right),
+    split_column(Rows_Bottom, M, Bottom, Bottom_Right).
+
+split_row(In, N, Top, Bottom) :-
+    split(N, In, Top, Bottom).
+
+split_column([], _, [], []) :-
+    !.
+split_column(L, 0, [], L) :-
+    !.
+split_column([R|Rows], N, [R|Rows], []) :-
+    length(R,N),
+    !.
+split_column([R|Rows], N, [Left|Top], [Right|Bottom]) :-
+    split(N, R, Left, Right),
+    split_column(Rows, N, Top, Bottom).
+
 simple_patch(Diff,JSON_In,JSON_Out,Patch) :-
-    is_dict(Diff),
+    is_list(JSON_In),
+    !,
+    diff_op(Diff,Op),
+    simple_op_diff_value(Op,Diff,JSON_In,JSON_Out).
+simple_patch(Diff,JSON_In,JSON_Out,Patch) :-
+    is_dict(JSON_In),
     !,
     dict_keys(JSON_In,Doc_Keys),
     dict_keys(Diff,Diff_Keys),
@@ -380,9 +403,68 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff, [Key-Final|Values],
     !,
     pairs_and_conflicts_from_keys(Keys, JSON, Diff, Values, Conflicts).
 
-simple_op_diff_value('SwapValue', _Key, Diff, Before, After) :-
+simple_op_diff_value('SwapValue', Diff, Before, After) :-
     get_dict('@before', Diff, Before),
     get_dict('@after', Diff, After).
+simple_op_diff_value('CopyList', Diff, Before, After) :-
+    get_dict('@to', Diff, To),
+    get_dict('@rest', Diff, Next_Diff),
+    nth_list_prefix_suffix(To,Before,Prefix,Suffix),
+    diff_op(Next_Diff,Op),
+    simple_op_diff_value(Op,Next_Diff,Suffix,Rest),
+    append(Prefix,Rest,After).
+simple_op_diff_value('SwapList', Diff, Before, After) :-
+    get_dict('@before', Diff, Prefix_Before),
+    get_dict('@after', Diff, Prefix_After),
+    get_dict('@rest', Diff, Next_Diff),
+    append(Prefix_Before,Suffix_Before,Before),
+    diff_op(Next_Diff,Op),
+    simple_op_diff_value(Op,Next_Diff,Suffix_Before,Suffix_After),
+    append(Prefix_After,Suffix_After,After).
+simple_op_diff_value('KeepList', _Diff, Same, Same).
+simple_op_diff_value('CopyTable', Diff, Before, After) :-
+    get_dict('@to_row', Diff, To_Row),
+    get_dict('@to_column', Diff, To_Column),
+    get_dict('@bottom_left', Diff, BL_Diff),
+    get_dict('@top_right', Diff, TR_Diff),
+    get_dict('@bottom_right', Diff, BR_Diff),
+    split_matrix(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
+    diff_op(BL_Diff,BL_Op),
+    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
+    diff_op(TR_Diff,TR_Op),
+    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
+    diff_op(BR_Diff,BR_Op),
+    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
+    split_matrix(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
+simple_op_diff_value('SwapTable', Diff, Before, After) :-
+    get_dict('@before', Diff, Top_Left_Before),
+    get_dict('@after', Diff, Top_Left_After),
+    get_dict('@bottom_left', Diff, BL_Diff),
+    get_dict('@top_right', Diff, TR_Diff),
+    get_dict('@bottom_right', Diff, BR_Diff),
+    row_length(Top_Left_Before,To_Row_Before),
+    column_length(Top_Left_Before,To_Column_Before),
+    split_matrix(Before,To_Row_Before,To_Column_Before,Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
+    diff_op(BL_Diff,BL_Op),
+    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
+    diff_op(TR_Diff,TR_Op),
+    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
+    diff_op(BR_Diff,BR_Op),
+    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
+    row_length(Top_Left_After,To_Row_After),
+    column_length(Top_Left_After,To_Column_After),
+    split_matrix(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
+simple_op_diff_value('KeepTable', _Diff, Same, Same).
+
+nth_list_prefix_suffix(0,List,[],List) :-
+    !.
+nth_list_prefix_suffix(N,[H|T],[H|Pr],Rest) :-
+    M is N - 1,
+    nth_list_prefix_suffix(M,T,Pr,Rest).
+
+diff_op(Diff, Op) :-
+    get_dict('@op', Diff, Operation_String),
+    atom_string(Op, Operation_String).
 
 get_dict_or_null(Key,JSON,V) :-
     (   get_dict(Key,JSON,V)
@@ -393,10 +475,9 @@ simple_patch_key_value(Key,JSON,Diff,Result,Conflict) :-
     % If it's in the diff, we're changing it.
     get_dict(Key,Diff,Key_Diff),
     !,
-    (   get_dict('@op', Key_Diff, Operation_String)
-    ->  atom_string(Op, Operation_String),
-        get_dict_or_null(Key,JSON,V),
-        simple_op_diff_value(Op,Key,Key_Diff,V,Value),
+    (   diff_op(Key_Diff,Op)
+    ->  get_dict_or_null(Key,JSON,V),
+        simple_op_diff_value(Op,Key_Diff,V,Value),
         Result = Key-Value,
         Conflict = _{}
     ;   get_dict_or_null(Key,JSON,V),
@@ -589,6 +670,69 @@ test(simple_deep_swap_wrong_value, []) :-
           }
         }
      }.
+
+test(simple_flat_list_diff, []) :-
+
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                friends : ["Person/2","Person/3","Person/4"]
+              },
+    Patch = _{ friends : _{ '@op' : "CopyList",
+                            '@to' : 1,
+                            '@rest' :
+                            _{ '@op' : "SwapList",
+                               '@before' : ["Person/3"],
+                               '@after' : [],
+                               '@rest' : _{ '@op' : "KeepList" }
+                             }
+                          }
+             },
+
+    simple_patch(Patch,Before,After,_{}),
+    After = _{ '@id' : "Person/1",
+               '@type' : "Person",
+               friends : ["Person/2","Person/4"],
+               name : "jim"}.
+
+
+test(simple_flat_table_diff, []) :-
+
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "jim",
+                table : [[1,2,3],
+                         [4,5,6],
+                         [7,8,9]]
+              },
+    Patch = _{ table : _{ '@op' : "CopyTable",
+                          '@to_row' : 2,
+                          '@to_column' : 2,
+                          '@bottom_left' :
+                          _{ '@op' : "KeepTable" },
+                          '@top_right' :
+                          _{ '@op' : "KeepTable" },
+                          '@bottom_right' :
+                           _{ '@op' : "SwapTable",
+                              '@before' : [[9]],
+                              '@after' : [[10]],
+                              '@bottom_left' :
+                              _{ '@op' : "KeepTable" },
+                              '@top_right' :
+                              _{ '@op' : "KeepTable" },
+                              '@bottom_right' :
+                              _{ '@op' : "KeepTable" }
+                            }
+                        }
+             },
+
+    simple_patch(Patch,Before,After,_{}),
+    After = _{ '@id' : "Person/1",
+               '@type' : "Person",
+               name : "jim",
+               table: [[1,2,3],
+                       [4,5,6],
+                       [7,8,10]]}.
 
 :- end_tests(simple_patch).
 
