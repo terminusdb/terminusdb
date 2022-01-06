@@ -1564,6 +1564,15 @@ api_document_error_jsonld(Type, error(key_fields_is_empty(Document),_),JSON) :-
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(not_all_captures_found(Refs),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Ids were referenced but never captured.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NotAllCapturesFound',
+                              'api:captures' : Refs },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

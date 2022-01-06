@@ -232,12 +232,23 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
                      ;   empty_assoc(Captures),
+                         Captures_Var = state(Captures),
                          findall(Id,
                                  nb_thread_var({Schema_Or_Instance,Transaction,Stream,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Stream, State, Id, Captures_Out)),
-                                               state(Captures)),
+                                               Captures_Var),
                                  Ids),
+
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
+
+nonground_captures(state(Captures), Nonground) :-
+    findall(Ref,
+            (   gen_assoc(Ref, Captures, Var),
+                var(Var)),
+            Nonground),
+    Nonground \= [].
 
 api_delete_document_(schema, Transaction, Id) :-
     delete_schema_document(Transaction, Id).
