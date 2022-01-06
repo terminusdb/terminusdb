@@ -168,7 +168,7 @@ jobs:
           # version. We clean up after a certain amount of time.
           if [ "$VERSION" == "dev" ]; then
              DEV_COMMIT_TAG=${IMAGE_ID}:${VERSION}-${GITHUB_SHA}
-             docker tag $DOCKER_IMAGE:local $DEV_COMMIT_TAG
+             docker tag $DOCKER_IMAGE_NAME:local $DEV_COMMIT_TAG
              docker push $DEV_COMMIT_TAG
           fi
 
