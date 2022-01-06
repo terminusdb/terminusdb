@@ -374,7 +374,10 @@ idgen_check_base(Submitted_ID, Base, Context) :-
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(foreign(C),json{ '@type' : "@id", '@foreign' : C}).
-class_descriptor_image(optional(C),json{ '@type' : C }).
+class_descriptor_image(optional(C),json{ '@type' : Type }) :-
+    (   base_type(C)
+    ->  Type = C
+    ;   Type = "@id").
 class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
 class_descriptor_image(base_class(C),json{ '@type' : C }).
 class_descriptor_image(enum(C,_),json{ '@type' : C }).
@@ -579,7 +582,7 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
         put_dict('@id', Elaborated, Id_Ex, Result)
     ),
 
-    %% do we need to capture soomething?
+    %% do we need to capture something?
     (   get_dict('@capture', Elaborated, Capture_Group)
     ->  do_or_die(string(Capture_Group),
                   error(capture_is_not_a_string(Capture_Group), _)),
@@ -701,6 +704,8 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     % A possible reference
     get_dict('@type', Expansion, "@id"),
+    % writeq(othermu),nl,
+    % print_term(Context, []), nl,
     !,
     (   is_dict(Value)
     ->  (   get_dict('@ref', Value, Ref)
@@ -738,6 +743,7 @@ context_value_expand(DB,Context,Value,Expansion,Captures,V,[],Captures) :-
     V = json{'@id' : Enum_Value_Ex,
              '@type' : "@id"}.
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
+    % this case is hit for optionals
     get_dict('@type', Expansion, Type),
     \+ is_base_type(Type),
     !,
@@ -2819,7 +2825,7 @@ test(create_database_prefixes,
     Context = json{ 'http://s/birthdate':json{ '@id':'http://s/birthdate',
                                                '@type':'http://www.w3.org/2001/XMLSchema#date'
                                              },
-                    'http://s/boss':json{'@id':'http://s/boss','@type':'http://s/Employee'},
+                    'http://s/boss':json{'@id':'http://s/boss','@type':"@id"},
                     'http://s/friends':json{'@container':"@set",
                                             '@id':'http://s/friends',
                                             '@type':'http://s/Person'},
@@ -9064,12 +9070,79 @@ cross_reference_required_schema('
   "friend": "Person"
 }
 ').
+cross_reference_optional_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
 
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friend": {"@type":"Optional","@class":"Person"}
+}
+').
+
+cross_reference_set_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friend": {"@type":"Set","@class":"Person"}
+}
+').
 
 test(cross_reference_required,
      [setup((setup_temp_store(State),
               test_document_label_descriptor(Desc),
               write_schema(cross_reference_required_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friend: _{'@ref': "Capture_Ernie"}},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friend: _{'@ref': "Capture_Bert"}},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Bert_Id == (Ernie_Elaborated.'terminusdb:///schema#friend'.'@id'),
+    Ernie_Id == (Bert_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+test(cross_reference_optional,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_optional_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
