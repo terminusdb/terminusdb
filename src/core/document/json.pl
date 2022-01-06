@@ -586,11 +586,9 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
         (   get_assoc(Capture_Group, Captures_Out_1, Capture_Var)
         ->  do_or_die(var(Capture_Var),
                       error(capture_already_bound(Capture_Group), _)),
-            json_log_info_formatted("found existing ref ~q, unifying", [Capture_Group]),
             Capture_Var = Id_Ex,
             Captures_Out = Captures_Out_1
-        ;   json_log_info_formatted("found no existing ref ~q, putting (~q)", [Capture_Group, Captures_Out_1]),
-            put_assoc(Capture_Group, Captures_Out_1, Id_Ex, Captures_Out))
+        ;   put_assoc(Capture_Group, Captures_Out_1, Id_Ex, Captures_Out))
     ;   Captures_Out = Captures_Out_1).
 
 json_assign_ids(DB,Context,JSON) :-
@@ -660,6 +658,12 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
         Expansion = Cleaned
     ).
 
+capture_ref(Captures_In, Ref, Capture_Var, Captures_Out) :-
+    do_or_die(string(Ref),
+              error(capture_is_not_a_string(Ref), _)),
+    (   get_assoc(Ref, Captures_In, Capture_Var)
+    ->  Captures_In = Captures_Out
+    ;   put_assoc(Ref, Captures_In, Capture_Var, Captures_Out)).
 
 value_expand_list([], _DB, _Context, _Elt_Type, Captures, [], [], Captures).
 value_expand_list([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs], Dependencies, Captures_Out) :-
@@ -669,7 +673,11 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs]
         Prepared = json{'@id' : Enum_Value_Ex,
                         '@type' : "@id"}
     ;   is_dict(Value)
-    ->  (   get_dict('@type', Value, _)
+    ->  (   get_dict('@ref', Value, Ref)
+        ->  capture_ref(Captures_In, Ref, Capture_Var, Captures_In_1),
+            Prepared = json{'@type': "@id", '@id' : Capture_Var},
+            Dependencies_1 = [Capture_Var]
+        ;   get_dict('@type', Value, _)
         ->  Value = Prepared % existing type could be more specific
         ;   put_dict(json{'@type':Elt_Type}, Value, Prepared))
     ;   is_base_type(Elt_Type)
@@ -677,9 +685,14 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs]
                         '@type': Elt_Type}
     ;   Prepared = json{'@id' : Value,
                         '@type': "@id"}),
-    json_elaborate_(DB, Prepared, Context, Captures_In, Expanded, Dependencies_1, New_Captures_In),
-    value_expand_list(Vs, DB, Context, Elt_Type, New_Captures_In, Exs, Dependencies_2, Captures_Out),
-    append(Dependencies_1, Dependencies_2, Dependencies).
+
+    % set up capture defaults if they're unbound at this point
+    ignore((Captures_In_1 = Captures_In,
+            Dependencies_1 = [])),
+
+    json_elaborate_(DB, Prepared, Context, Captures_In_1, Expanded, Dependencies_2, Captures_In_2),
+    value_expand_list(Vs, DB, Context, Elt_Type, Captures_In_2, Exs, Dependencies_3, Captures_Out),
+    append([Dependencies_1, Dependencies_2, Dependencies_3], Dependencies).
 
 % Unit type expansion
 context_value_expand(_,_,[],json{},Captures,[],[],Captures) :-
@@ -695,7 +708,12 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
     ->  Value_List = Value
     ;   string(Value)
     ->  Value_List = [Value]
-    ;   get_dict('@value',Value,Value_List)),
+    ;   get_dict('@value',Value,Value_List)
+    ->  true
+    %   fallthrough case - we were expecting a container but we have
+    %   single dictionary which is not a direct value. It must be a
+    %   single object which we'll treat as a single element list.
+    ;   Value_List = [Value]),
     value_expand_list(Value_List, DB, Context, Elt_Type, Captures_In, Expanded_List, Dependencies, Captures_Out),
     V = (Expansion.put(json{'@value' : Expanded_List})).
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
@@ -704,18 +722,12 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
     (   Type = "@id"
     ;   \+ is_base_type(Type),
         \+ is_enum(DB, Type)),
-    % writeq(othermu),nl,
-    % print_term(Context, []), nl,
 
     !,
     (   is_dict(Value)
     ->  (   get_dict('@ref', Value, Ref)
         % This is a capture reference
-        ->  do_or_die(string(Ref),
-                      error(capture_is_not_a_string(Ref), _)),
-            (   get_assoc(Ref, Captures_In, Capture_Var)
-            ->  Captures_In = Captures_Out
-            ;   put_assoc(Ref, Captures_In, Capture_Var, Captures_Out)),
+        ->  capture_ref(Captures_In, Ref, Capture_Var, Captures_Out),
             V = _{'@id' : Capture_Var, '@type': "@id"},
             Dependencies = [Capture_Var]
         ;   json_elaborate_(DB, Value, Context, Captures_In, V, Dependencies,Captures_Out))
@@ -9093,7 +9105,35 @@ cross_reference_set_schema('
   "@id": "Person",
   "@key": {"@type":"Lexical","@fields":["name"]},
   "name": "xsd:string",
-  "friend": {"@type":"Set","@class":"Person"}
+  "friends": {"@type":"Set","@class":"Person"}
+}
+').
+
+cross_reference_list_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friends": {"@type":"List","@class":"Person"}
+}
+').
+
+cross_reference_array_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friends": {"@type":"Array","@class":"Person"}
 }
 ').
 
@@ -9178,6 +9218,241 @@ test(cross_reference_optional,
     Ernie_Id = (Ernie_Elaborated.'@id'),
     Bert_Id == (Ernie_Elaborated.'terminusdb:///schema#friend'.'@id'),
     Ernie_Id == (Bert_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+test(cross_reference_set_singleton,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: _{'@ref': "Capture_Ernie"}},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: _{'@ref': "Capture_Bert"}},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    [Bert_Cross] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross.'@id'),
+    Ernie_Id == (Ernie_Cross.'@id').
+
+test(cross_reference_set_multi,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "Capture_Ernie"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+    \+ ground(Out_2),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Ernie"}]},
+                   Context,
+                   Out_2,
+                   Elmo_Elaborated,
+                   _Dependencies_3,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(cross_reference_list_multi,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_list_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "Capture_Ernie"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+    \+ ground(Out_2),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Ernie"}]},
+                   Context,
+                   Out_2,
+                   Elmo_Elaborated,
+                   _Dependencies_3,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(cross_reference_array_multi,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_array_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "Capture_Ernie"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+    \+ ground(Out_2),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Ernie"}]},
+                   Context,
+                   Out_2,
+                   Elmo_Elaborated,
+                   _Dependencies_3,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
 
 test(self_reference_required,
      [setup((setup_temp_store(State),
