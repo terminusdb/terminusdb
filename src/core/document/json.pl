@@ -374,10 +374,7 @@ idgen_check_base(Submitted_ID, Base, Context) :-
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(foreign(C),json{ '@type' : "@id", '@foreign' : C}).
-class_descriptor_image(optional(C),json{ '@type' : Type }) :-
-    (   base_type(C)
-    ->  Type = C
-    ;   Type = "@id").
+class_descriptor_image(optional(C),json{ '@type' : C }).
 class_descriptor_image(tagged_union(_,_),json{ '@type' : "@id" }).
 class_descriptor_image(base_class(C),json{ '@type' : C }).
 class_descriptor_image(enum(C,_),json{ '@type' : C }).
@@ -703,9 +700,13 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
     V = (Expansion.put(json{'@value' : Expanded_List})).
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     % A possible reference
-    get_dict('@type', Expansion, "@id"),
+    get_dict('@type', Expansion, Type),
+    (   Type = "@id"
+    ;   \+ is_base_type(Type),
+        \+ is_enum(DB, Type)),
     % writeq(othermu),nl,
     % print_term(Context, []), nl,
+
     !,
     (   is_dict(Value)
     ->  (   get_dict('@ref', Value, Ref)
@@ -722,7 +723,8 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
     ->  Value = [Val],
         context_value_expand(DB,Context,Val,Expansion,Captures_In,V,Dependencies,Captures_Out)
     ;   prefix_expand(Value,Context,Value_Ex),
-        put_dict(_{'@id' : Value_Ex},Expansion,V),
+        put_dict(_{'@type': "@id", '@id' : Value_Ex}, Expansion, V),
+        % V = _{'@type': "@id", '@id': Value_Ex},
         Dependencies = [],
         Captures_Out = Captures_In
     ).
@@ -743,7 +745,6 @@ context_value_expand(DB,Context,Value,Expansion,Captures,V,[],Captures) :-
     V = json{'@id' : Enum_Value_Ex,
              '@type' : "@id"}.
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
-    % this case is hit for optionals
     get_dict('@type', Expansion, Type),
     \+ is_base_type(Type),
     !,
@@ -2199,7 +2200,6 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          (
-             json_log_info_formatted("Grounded for ~q!", [ID]),
              check_existing_document_status(Transaction, Elaborated, Status),
              (   Status = not_present
              ->  insert_document_expanded(Transaction, Elaborated, ID)
@@ -2208,8 +2208,7 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
              ;   Status = present
              ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
              )
-         )),
-    json_log_info_formatted("yo, ~q ~q", [Dependencies, Captures_Out]).
+         )).
 insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
@@ -2825,7 +2824,7 @@ test(create_database_prefixes,
     Context = json{ 'http://s/birthdate':json{ '@id':'http://s/birthdate',
                                                '@type':'http://www.w3.org/2001/XMLSchema#date'
                                              },
-                    'http://s/boss':json{'@id':'http://s/boss','@type':"@id"},
+                    'http://s/boss':json{'@id':'http://s/boss','@type':'http://s/Employee'},
                     'http://s/friends':json{'@container':"@set",
                                             '@id':'http://s/friends',
                                             '@type':'http://s/Person'},
