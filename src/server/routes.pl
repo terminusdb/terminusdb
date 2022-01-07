@@ -3956,6 +3956,7 @@ add_payload_to_request(Request,[payload(Document)|Request]) :-
     !.
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     memberchk(content_type(_Some_Other_Type), Request),
+    check_content_length(Request),
     !,
     http_read_data(Request, Document, []).
 add_payload_to_request(Request,Request).
