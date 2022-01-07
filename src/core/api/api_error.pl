@@ -7,6 +7,7 @@
                       generic_exception_jsonld/2
                      ]).
 
+:- use_module(core(util)).
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 
@@ -1004,6 +1005,7 @@ api_error_jsonld(get_documents, Error, JSON) :-
 api_error_jsonld(insert_documents, Error, JSON) :-
     api_document_error_jsonld(insert_documents, Error, JSON).
 api_error_jsonld(replace_documents, Error, JSON) :-
+    json_log_error_formatted("~q", [Error]),
     api_document_error_jsonld(replace_documents, Error, JSON).
 api_error_jsonld(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).

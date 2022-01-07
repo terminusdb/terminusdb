@@ -21,6 +21,7 @@
               replace_document/2,
               replace_document/3,
               replace_document/4,
+              replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
@@ -2252,21 +2253,27 @@ replace_document(DB, Document, Id) :-
     replace_document(DB, Document, false, Id).
 
 replace_document(Transaction, Document, Create, Id) :-
+    empty_assoc(Captures),
+    replace_document(Transaction, Document, Create, Captures, Id, _Dependencies, _Captures_Out).
+
+replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
-    json_elaborate(Transaction, Document, Elaborated),
+    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
     get_dict('@id', Elaborated, Id),
     catch(delete_document(Transaction, false, Id),
           error(document_does_not_exist(_),_),
           (   Create = true
           ->  true
           ;   throw(error(document_does_not_exist(Id, Document),_)))),
-    insert_document_expanded(Transaction, Elaborated, Id).
-replace_document(Query_Context, Document, Create, Id) :-
+    ensure_transaction_has_builder(instance, Transaction),
+    when(ground(Dependencies),
+         insert_document_expanded(Transaction, Elaborated, Id)).
+replace_document(Query_Context, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, Id).
+    replace_document(TO, Document, Create, Captures_In, Id, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),

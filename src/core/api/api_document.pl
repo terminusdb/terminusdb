@@ -225,7 +225,6 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
 
     stream_property(Stream, position(Pos)),
 
-    ensure_transaction_has_builder(instance, Transaction),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          Full_Replace = true
@@ -233,6 +232,7 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                          Ids = []
                      ;   empty_assoc(Captures),
                          Captures_Var = state(Captures),
+                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
                          findall(Id,
                                  nb_thread_var({Schema_Or_Instance,Transaction,Stream,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Stream, State, Id, Captures_Out)),
                                                Captures_Var),
@@ -314,9 +314,9 @@ api_nuke_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message) :-
                      api_nuke_documents_(Schema_Or_Instance, Transaction),
                     _).
 
-api_replace_document_(instance, Transaction, Document, Create, Id):-
-    replace_document(Transaction, Document, Create, Id).
-api_replace_document_(schema, Transaction, Document, Create, Id):-
+api_replace_document_(instance, Transaction, Document, Create, state(Captures_In), Id, Captures_Out):-
+    replace_document(Transaction, Document, Create, Captures_In, Id, _Dependencies, Captures_Out).
+api_replace_document_(schema, Transaction, Document, Create, state(Captures_In), Id, Captures_In):-
     replace_schema_document(Transaction, Document, Create, Id).
 
 api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Create, Ids) :-
@@ -336,24 +336,37 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
 
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
+                         empty_assoc(Captures),
+                         Captures_Var = state(Captures),
+                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
                          findall(Id,
-                                 (   json_read_dict_stream(Stream,JSON),
-                                     (   is_list(JSON)
-                                     ->  !,
-                                         member(Document, JSON)
-                                     ;   Document = JSON),
-                                     call_catch_document_mutation(
-                                         Document,
-                                         api_replace_document_(Schema_Or_Instance,
-                                                               Transaction,
-                                                               Document,
-                                                               Create,
-                                                               Id))
-                                 ),
+                                 nb_thread_var(
+                                     {Schema_Or_Instance, Transaction,Stream,Id}/[State,Captures_Out]>>
+                                     (   json_read_dict_stream(Stream,JSON),
+                                         (   is_list(JSON)
+                                         ->  !,
+                                             member(Document, JSON)
+                                         ;   Document = JSON),
+                                         call_catch_document_mutation(
+                                             Document,
+                                             api_replace_document_(Schema_Or_Instance,
+                                                                   Transaction,
+                                                                   Document,
+                                                                   Create,
+                                                                   State,
+                                                                   Id,
+                                                                   Captures_Out))
+                                     ),
+                                     Captures_Var),
                                  Ids),
-                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
+                         json_log_info_formatted("done replacing", []),
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
+                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _)),
+                         json_log_info_formatted("awafsd", [])
                      ),
-                     _).
+                     _),
+    json_log_info_formatted("do we get here?", []).
 
 :- begin_tests(delete_document).
 :- use_module(core(util/test_utils)).
