@@ -19,6 +19,9 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 
+% prolog stack print
+:- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
+
 % http libraries
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_server_files)).
