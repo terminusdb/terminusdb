@@ -84,6 +84,7 @@
 :- use_module(library(apply_macros)).
 
 :- use_module(library(process)).
+:- use_module(library(plunit)).
 
 :- use_module(library(lists)).
 

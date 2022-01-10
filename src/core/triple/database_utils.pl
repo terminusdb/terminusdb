@@ -27,6 +27,7 @@
 :- use_module(core(transaction/database)).
 
 :- use_module(library(pcre)).
+:- use_module(library(plunit)).
 
 /**
  * system_graph_layer(-Graph,-Layer) is det.

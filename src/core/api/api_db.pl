@@ -11,6 +11,7 @@
 :- use_module(core(transaction)).
 
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 get_all_databases(System_DB, Databases) :-
     create_context(System_DB, Context),

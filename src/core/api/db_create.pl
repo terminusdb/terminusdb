@@ -26,6 +26,7 @@
 :- use_module(core(util/test_utils)).
 
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 :- multifile prolog:message//1.
 prolog:message(error(database_exists(Name), _)) -->

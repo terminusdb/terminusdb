@@ -8,6 +8,7 @@
 :- use_module(core(triple)).
 
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),

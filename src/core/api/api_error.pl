@@ -8,6 +8,8 @@
                      ]).
 
 :- use_module(library(http/json)).
+:- use_module(library(plunit)).
+
 :- use_module(core(query)).
 
 /**
