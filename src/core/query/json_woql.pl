@@ -27,6 +27,8 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
+:- use_module(library(lists)).
+
 :- dynamic woql_context/1.
 initialise_woql_contexts :-
     terminus_schema_path(Path),

@@ -85,6 +85,8 @@
 
 :- use_module(library(process)).
 
+:- use_module(library(lists)).
+
 :- meta_predicate test_format(:, +, +).
 
 %!  test_format(+Goal:callable, +Format:text, +Args:list) is det

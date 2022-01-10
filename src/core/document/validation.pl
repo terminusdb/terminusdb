@@ -7,6 +7,8 @@
 :- use_module(core(query)).
 :- use_module(instance).
 :- use_module(schema).
+
+:- use_module(library(lists)).
 /*
  * needs_schema_validation(Validation_Object) is det.
  *

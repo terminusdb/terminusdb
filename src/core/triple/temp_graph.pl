@@ -15,6 +15,7 @@
 :- use_module(core(transaction)).
 
 :- use_module(library(semweb/turtle)).
+:- use_module(library(lists)).
 
 /*
  * extend_database_with_temp_graph(+Graph_Name, +Path, +Options, -Program,

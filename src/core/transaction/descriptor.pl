@@ -158,6 +158,7 @@
 :- use_module(core(query)).
 
 :- use_module(library(terminus_store)).
+:- use_module(library(lists)).
 
 is_descriptor_name(system_descriptor).
 is_descriptor_name(label_descriptor).

@@ -22,6 +22,9 @@
 % prolog stack print
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 
+% various prolog helper libraries
+:- use_module(library(lists)).
+
 % http libraries
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_server_files)).

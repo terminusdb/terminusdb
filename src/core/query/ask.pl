@@ -34,6 +34,8 @@
 
 :- use_module(core(document), [database_prefixes/2]).
 
+:- use_module(library(lists)).
+
 prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
     freeze(Woql_Var,
            (   is_dict(Woql_Var) % Document

@@ -14,6 +14,8 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 
+:- use_module(library(lists)).
+
 payload_repository_head_and_pack(Data, Head, Pack) :-
     ground(Head),
     ground(Pack),
