@@ -25,6 +25,9 @@
 % various prolog helper libraries
 :- use_module(library(lists)).
 
+% unit tests
+:- use_module(library(plunit)).
+
 % http libraries
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_server_files)).

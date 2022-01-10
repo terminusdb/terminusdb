@@ -5,6 +5,7 @@
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
 

@@ -9,6 +9,8 @@
 :- use_module(core(api/api_remote)).
 :- use_module(core(api/db_push)).
 
+:- use_module(library(plunit)).
+
 bundle(System_DB, Auth, Path, Payload, Options) :-
 
     do_or_die(

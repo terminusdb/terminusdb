@@ -7,6 +7,8 @@
 :- use_module(core(query)).
 :- use_module(core(document)).
 
+:- use_module(library(plunit)).
+
 has_layer(Askable, Layer_Id) :-
     ask(Askable,
         t(_, layer:identifier, Layer_Id^^xsd:string)).
