@@ -9,6 +9,7 @@
 :- reexport(core(util/syntax)).
 
 :- use_module(core(util)).
+:- use_module(library(plunit)).
 
 :- set_test_options([run(manual), load(always)]).
 
