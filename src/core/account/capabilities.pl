@@ -41,6 +41,7 @@
 :- use_module(config(terminus_config),[]).
 
 :- use_module(library(crypto)).
+:- use_module(library(lists)).
 
 /**
  * username_user_id(+DB, +Username, -User_ID) is semidet.

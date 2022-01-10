@@ -36,6 +36,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(lists)).
 
 :- reexport(library(terminus_store),
             except([create_named_graph/3,

@@ -44,6 +44,8 @@
 :- use_module(core(triple/literals)).
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
+:- use_module(library(lists)).
+
 % performance
 :- use_module(library(apply)).
 :- use_module(library(yall)).

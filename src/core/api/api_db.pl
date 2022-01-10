@@ -10,6 +10,8 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 
+:- use_module(library(lists)).
+
 get_all_databases(System_DB, Databases) :-
     create_context(System_DB, Context),
     findall(

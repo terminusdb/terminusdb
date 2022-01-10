@@ -83,6 +83,7 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(http/json)).
 :- use_module(library(solution_sequences)).
+:- use_module(library(lists)).
 
 /*
  * Forget the next phrase.
@@ -923,7 +924,6 @@ input_to_integer(Atom, Integer) :-
     ->  catch(atom_number(Atom, Integer), _, fail),
         integer(Integer)).
 
-:- use_module(library(lists)).
 duplicates([], []) :- !.
 duplicates(List, Duplicates) :-
     msort(List, Sorted),
