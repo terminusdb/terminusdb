@@ -9487,5 +9487,62 @@ test(self_reference_required,
     Elmo_Id = (Elmo_Elaborated.'@id'),
     Elmo_Id == (Elmo_Elaborated.'terminusdb:///schema#friend'.'@id').
 
+test(deep_reference,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
 
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "C_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "C_Ernie"},
+                               _{'@type': "Person",
+                                 '@capture': "C_Elmo",
+                                 name: "Elmo",
+                                 friends: [_{'@ref': "C_Bert"},
+                                           _{'@ref': "C_Ernie"}]
+                                }]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "C_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "C_Bert"},
+                               _{'@ref': "C_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+
+    ground(Out_2),
+
+    [_,Elmo_Elaborated] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
 :- end_tests(id_capture).
