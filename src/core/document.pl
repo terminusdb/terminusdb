@@ -63,3 +63,5 @@
 :- use_module('document/schema').
 :- use_module('document/instance').
 :- use_module('document/query').
+:- use_module('document/patch').
+:- use_module('document/diff').
