@@ -122,7 +122,11 @@
               api_nuke_documents/6,
 
               % api_user_organizations.pl
-              user_organizations/3
+              user_organizations/3,
+
+              % api_patch.pl
+              api_patch/6,
+              api_diff/5
           ]).
 
 :- use_module(api/api_init).
@@ -154,3 +158,4 @@
 :- use_module(api/api_unbundle).
 :- use_module(api/api_document).
 :- use_module(api/api_user_organizations).
+:- use_module(api/api_patch).

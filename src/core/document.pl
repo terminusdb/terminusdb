@@ -55,7 +55,13 @@
               is_schemaless/1,
 
               % query.pl
-              match_query_document_uri/4
+              match_query_document_uri/4,
+
+              % diff.pl
+              simple_diff/3,
+
+              % patch.pl
+              simple_patch/4
           ]).
 
 :- use_module('document/validation').

@@ -18,7 +18,7 @@ simple_diff(Before,After,Cost,Diff) :-
     (   simple_diff(Before,After,New_Diff,State,0,New_Cost),
         nb_setarg(1,State,New_Cost),
         nb_setarg(2,State,New_Diff),
-        format(user_error,'~nNew_Cost: ~q', [New_Cost]),
+        %format(user_error,'~nNew_Cost: ~q', [New_Cost]),
         fail
     ;   best_cost(State, Cost),
         best_diff(State, Diff)
@@ -55,21 +55,21 @@ simple_diff(Before,After,Diff,_State,Cost,New_Cost) :-
               '@after' : After },
     New_Cost is Cost + 1.
 
-simple_key_diff([],_Before,_After,[],Cost,Cost,_State).
-simple_key_diff([Key|Keys],Before,After,New_Keys,Cost,New_Cost,State) :-
+simple_key_diff([],_Before,_After,[],_State,Cost,Cost).
+simple_key_diff([Key|Keys],Before,After,New_Keys,State,Cost,New_Cost) :-
     get_dict(Key,Before,Sub_Before),
     get_dict(Key,After,Sub_After),
     !,
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
-    (   simple_diff(Sub_Before,Sub_After,Sub_Diff,Cost,Cost1,State)
+    (   simple_diff(Sub_Before,Sub_After,Sub_Diff,State,Cost,Cost1)
     ->  New_Keys = [Key-Sub_Diff|Rest]
     ;   New_Keys = Rest,
         Cost = Cost1
     ),
-    simple_key_diff(Keys,Before,After,Rest,Cost1,New_Cost,State).
-simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],Cost,New_Cost,State) :-
+    simple_key_diff(Keys,Before,After,Rest,State,Cost1,New_Cost).
+simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],State,Cost,New_Cost) :-
     get_dict(Key,Before,Sub_Before),
     % has it in the before but not the after.
     !,
@@ -79,8 +79,8 @@ simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],Cost,New_Cost,State)
     best_cost(State,Best_Cost),
     Cost1 is Cost + 1,
     Cost1 < Best_Cost,
-    simple_key_diff(Keys,Before,After,Rest,Cost1,New_Cost,State).
-simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],Cost,New_Cost,State) :-
+    simple_key_diff(Keys,Before,After,Rest,State,Cost1,New_Cost).
+simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],State,Cost,New_Cost) :-
     get_dict(Key,After,Sub_After),
     % has it in the before but not the after.
     !,
@@ -90,7 +90,7 @@ simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],Cost,New_Cost,State)
     best_cost(State,Best_Cost),
     Cost1 is Cost + 1,
     Cost1 < Best_Cost,
-    simple_key_diff(Keys,Before,After,Rest,Cost1,New_Cost,State).
+    simple_key_diff(Keys,Before,After,Rest,State,Cost1,New_Cost).
 
 split(Index,List,Left,Right) :-
     length(Left, Index),
@@ -131,16 +131,19 @@ simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
 simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
     length(Before,N),
     down_from(N,0,I),
-    split(I,Before,Before_Prefix,Before_Suffix),
-
     length(After,M),
     down_from(M,0,J),
-    split(J,After,After_Prefix,After_Suffix),
 
     % Something must be getting smaller.
     (   I < N
     ;   J < M
     ),
+    % And we don't want to do nothing.
+    \+ (   N = 0,
+           M = 0),
+
+    split(I,Before,Before_Prefix,Before_Suffix),
+    split(J,After,After_Prefix,After_Suffix),
 
     % branch and bound
     best_cost(State,Best_Cost),
@@ -187,15 +190,18 @@ test(simple_list_diff, []) :-
     List1 = [1],
     List2 = [1,2],
     simple_diff(List1,List2,Diff),
-    writeq(Diff).
+    Diff = _{'@op':"CopyList",
+             '@rest':_{'@after':[2],'@before':[],
+                       '@op':"SwapList"},
+             '@to':1}.
 
-test(deep_list_diff, []) :-
+test(deep_list_diff_append, []) :-
 
     Before = _{ '@id' : "Person/Ludwig",
                 '@type' : "Person",
                 name : "Ludwig",
                 addresses : [
-                    _{ '@id' : "Person/jim/Address/addresses/1",
+                    _{ '@id' : "Person/Ludwig/Address/addresses/1",
                        '@type' : "Address",
                        address1 : "Mölker Bastei 8",
                        address2 : null,
@@ -206,13 +212,13 @@ test(deep_list_diff, []) :-
     After = _{'@id':"Person/Ludwig",
               '@type':"Person",
               addresses: [
-                  _{'@id':"Person/jim/Address/addresses/1",
+                  _{'@id':"Person/Ludwig/Address/addresses/1",
                     '@type':"Address",
                     address1:"Mölker Bastei 8",
                     address2:null,
                     city:"Vienna",
                     country:"Austria"},
-                  _{'@id':"Person/jim/Address/addresses/2",
+                  _{'@id':"Person/Ludwig/Address/addresses/2",
                     '@type':"Address",
                     address1:"Probusgasse 6",
                     address2:null,
@@ -221,6 +227,50 @@ test(deep_list_diff, []) :-
               name:"Ludwig"},
 
     simple_diff(Before,After,Patch),
-    writeq(Patch).
+
+    Patch = _{addresses:_{'@op':"CopyList",
+                          '@rest':_{'@after':[_{'@id':"Person/Ludwig/Address/addresses/2",
+                                                '@type':"Address",
+                                                address1:"Probusgasse 6",
+                                                address2:null,
+                                                city:"Vienna",
+                                                country:"Austria"}],
+                                    '@before':[],
+                                    '@op':"SwapList"},
+                          '@to':1}}.
+
+test(deep_list_diff, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig",
+                addresses : [
+                    _{ '@id' : "Person/Ludwig/Address/addresses/1",
+                       '@type' : "Address",
+                       address1 : "Mölker Bastei 7",
+                       address2 : null,
+                       city : "Vienna",
+                       country : "Austria"}
+                ]
+              },
+    After = _{'@id':"Person/Ludwig",
+              '@type':"Person",
+              name:"Ludwig",
+              addresses: [
+                  _{'@id':"Person/Ludwig/Address/addresses/1",
+                    '@type':"Address",
+                    address1:"Mölker Bastei 8",
+                    address2:null,
+                    city:"Vienna",
+                    country:"Austria"}
+              ]
+             },
+
+    simple_diff(Before,After,Patch),
+    Patch = _{addresses:[
+                  _{address1:_{'@after':"Mölker Bastei 8",
+                               '@before':"Mölker Bastei 7",
+                               '@op':"ValueSwap"}}]
+             }.
 
 :- end_tests(simple_diff).
