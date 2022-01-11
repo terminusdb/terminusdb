@@ -9545,4 +9545,39 @@ test(deep_reference,
     Ernie_Id == (Ernie_Cross_2.'@id'),
     Elmo_Id == (Elmo_Cross_1.'@id'),
     Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(double_capture,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      throws(error(capture_already_bound("Capture"),_))
+     ]) :-
+    open_descriptor(Desc, DB),
+
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture",
+                     name: "Bert",
+                     friends: []},
+                   Context,
+                   In,
+                   _Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture",
+                     name: "Ernie",
+                     friends: []},
+                   Context,
+                   Out_1,
+                   _Ernie_Elaborated,
+                   _Dependencies_2,
+                   _Out_2).
+
 :- end_tests(id_capture).
