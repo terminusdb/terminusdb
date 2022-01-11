@@ -1876,6 +1876,16 @@ get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
     is_simple_class(DB, Uri).
 
+get_schema_document(Query_Context, Id, Document) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    get_schema_document(TO, Id, Document).
+get_schema_document(Desc, Id, Document) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc, Transaction),
+    get_schema_document(Transaction, Id, Document).
 get_schema_document(DB, '@context', Document) :-
     !,
     database_context_object(DB, Context_Object),
