@@ -4,7 +4,7 @@
               idgen_lexical/3,
               context_triple/2,
               json_elaborate/3,
-              json_triple/3,
+              json_elaborate/6,
               json_schema_triple/3,
               json_schema_elaborate/3,
               get_document/3,
@@ -17,9 +17,11 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_document/6,
               replace_document/2,
               replace_document/3,
               replace_document/4,
+              replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
@@ -505,23 +507,26 @@ prefix_expand_schema(Node,Context,NodeEx) :-
     ;   Context = New_Context),
     prefix_expand(Node, New_Context, NodeEx).
 
-property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     get_dict(Prop, Context, Full_Expansion),
     is_dict(Full_Expansion),
     !,
     expansion_key(Prop,Full_Expansion,P,Expansion),
-    context_value_expand(DB,Context,Value,Expansion,V).
-property_expand_key_value(Prop,Value,DB,Context,P,V) :-
+    context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out).
+property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     prefix_expand_schema(Prop, Context, Prop_Ex),
     Prop \= Prop_Ex,
-    property_expand_key_value(Prop_Ex,Value,DB,Context,P,V).
+    property_expand_key_value(Prop_Ex,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out).
 
 json_elaborate(DB,JSON,Elaborated) :-
+    empty_assoc(Captures_In),
+    json_elaborate(DB,JSON,Captures_In,Elaborated,_Dependencies,_Captures_Out).
+json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     database_prefixes(DB,Context),
-    json_elaborate(DB,JSON,Context,Elaborated).
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies, Captures_Out).
 
-json_elaborate(DB,JSON,Context,Elaborated) :-
-    json_elaborate_(DB,JSON,Context,Elaborated),
+json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out) :-
+    json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
     do_or_die(
         json_assign_ids(DB,Context,Elaborated),
         error(unable_to_assign_ids)).
@@ -540,7 +545,7 @@ check_json_string(_, Val) :-
 check_json_string(Field, Val) :-
     throw(error(bad_field_value(Field, Val), _)).
 
-json_elaborate_(DB,JSON,Context,Result) :-
+json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) :-
     is_dict(JSON),
     !,
 
@@ -550,7 +555,7 @@ json_elaborate_(DB,JSON,Context,Result) :-
     ->   (   prefix_expand_schema(Type, Context, TypeEx),
              New_JSON = JSON)
     ;    (   do_or_die(
-                 get_dict('@id', JSON, _Id),
+                 get_dict('@id', JSON, Id),
                  % Note that, even though we check for @id here, we primarily
                  % expect a @type, so that is the reported error.
                  error(missing_field('@type', JSON), _)),
@@ -562,7 +567,7 @@ json_elaborate_(DB,JSON,Context,Result) :-
         error(unknown_type_encountered(TypeEx),_)),
 
     put_dict(Type_Context,Context,New_Context),
-    json_context_elaborate(DB,New_JSON,New_Context,Elaborated),
+    json_context_elaborate(DB,New_JSON,New_Context,Captures_In,Elaborated,Dependencies,Captures_Out_1),
 
     % Insert an id. If id was part of the input document, it is
     % prefix-expanded. If not, it is kept as a variable, to be unified
@@ -574,7 +579,19 @@ json_elaborate_(DB,JSON,Context,Result) :-
         ;   Id_Ex = _),
 
         put_dict('@id', Elaborated, Id_Ex, Result)
-    ).
+    ),
+
+    %% do we need to capture something?
+    (   get_dict('@capture', Elaborated, Capture_Group)
+    ->  do_or_die(string(Capture_Group),
+                  error(capture_is_not_a_string(Capture_Group), _)),
+        (   get_assoc(Capture_Group, Captures_Out_1, Capture_Var)
+        ->  do_or_die(var(Capture_Var),
+                      error(capture_already_bound(Capture_Group), _)),
+            Capture_Var = Id_Ex,
+            Captures_Out = Captures_Out_1
+        ;   put_assoc(Capture_Group, Captures_Out_1, Id_Ex, Captures_Out))
+    ;   Captures_Out = Captures_Out_1).
 
 json_assign_ids(DB,Context,JSON) :-
     json_assign_ids(DB,Context,JSON,[]).
@@ -643,16 +660,26 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
         Expansion = Cleaned
     ).
 
+capture_ref(Captures_In, Ref, Capture_Var, Captures_Out) :-
+    do_or_die(string(Ref),
+              error(capture_is_not_a_string(Ref), _)),
+    (   get_assoc(Ref, Captures_In, Capture_Var)
+    ->  Captures_In = Captures_Out
+    ;   put_assoc(Ref, Captures_In, Capture_Var, Captures_Out)).
 
-value_expand_list([], _DB, _Context, _Elt_Type, []).
-value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
+value_expand_list([], _DB, _Context, _Elt_Type, Captures, [], [], Captures).
+value_expand_list([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs], Dependencies, Captures_Out) :-
     (   is_enum(DB,Elt_Type)
     ->  enum_value(Elt_Type,Value,Enum_Value),
         prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
         Prepared = json{'@id' : Enum_Value_Ex,
                         '@type' : "@id"}
     ;   is_dict(Value)
-    ->  (   get_dict('@type', Value, _)
+    ->  (   get_dict('@ref', Value, Ref)
+        ->  capture_ref(Captures_In, Ref, Capture_Var, Captures_In_1),
+            Prepared = json{'@type': "@id", '@id' : Capture_Var},
+            Dependencies_1 = [Capture_Var]
+        ;   get_dict('@type', Value, _)
         ->  Value = Prepared % existing type could be more specific
         ;   put_dict(json{'@type':Elt_Type}, Value, Prepared))
     ;   is_base_type(Elt_Type)
@@ -660,15 +687,21 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, [Expanded|Exs]) :-
                         '@type': Elt_Type}
     ;   Prepared = json{'@id' : Value,
                         '@type': "@id"}),
-    json_elaborate_(DB, Prepared, Context, Expanded),
-    value_expand_list(Vs, DB, Context, Elt_Type, Exs).
+
+    % set up capture defaults if they're unbound at this point
+    ignore((Captures_In_1 = Captures_In,
+            Dependencies_1 = [])),
+
+    json_elaborate_(DB, Prepared, Context, Captures_In_1, Expanded, Dependencies_2, Captures_In_2),
+    value_expand_list(Vs, DB, Context, Elt_Type, Captures_In_2, Exs, Dependencies_3, Captures_Out),
+    append([Dependencies_1, Dependencies_2, Dependencies_3], Dependencies).
 
 % Unit type expansion
-context_value_expand(_,_,[],json{},[]) :-
+context_value_expand(_,_,[],json{},Captures,[],[],Captures) :-
     !.
-context_value_expand(_,_,null,_,null) :-
+context_value_expand(_,_,null,_,Captures,null,[],Captures) :-
     !.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     get_dict('@container', Expansion, _),
     !,
     % Container type
@@ -677,22 +710,39 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     ->  Value_List = Value
     ;   string(Value)
     ->  Value_List = [Value]
-    ;   get_dict('@value',Value,Value_List)),
-    value_expand_list(Value_List, DB, Context, Elt_Type, Expanded_List),
+    ;   get_dict('@value',Value,Value_List)
+    ->  true
+    %   fallthrough case - we were expecting a container but we have
+    %   single dictionary which is not a direct value. It must be a
+    %   single object which we'll treat as a single element list.
+    ;   Value_List = [Value]),
+    value_expand_list(Value_List, DB, Context, Elt_Type, Captures_In, Expanded_List, Dependencies, Captures_Out),
     V = (Expansion.put(json{'@value' : Expanded_List})).
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     % A possible reference
-    get_dict('@type', Expansion, "@id"),
+    get_dict('@type', Expansion, Type),
+    (   Type = "@id"
+    ;   \+ is_base_type(Type),
+        \+ is_enum(DB, Type)),
+
     !,
     (   is_dict(Value)
-    ->  json_elaborate_(DB, Value, Context, V)
+    ->  (   get_dict('@ref', Value, Ref)
+        % This is a capture reference
+        ->  capture_ref(Captures_In, Ref, Capture_Var, Captures_Out),
+            V = _{'@id' : Capture_Var, '@type': "@id"},
+            Dependencies = [Capture_Var]
+        ;   json_elaborate_(DB, Value, Context, Captures_In, V, Dependencies,Captures_Out))
     ;   is_list(Value)
     ->  Value = [Val],
-        context_value_expand(DB,Context,Val,Expansion,V)
+        context_value_expand(DB,Context,Val,Expansion,Captures_In,V,Dependencies,Captures_Out)
     ;   prefix_expand(Value,Context,Value_Ex),
-        put_dict(_{'@id' : Value_Ex},Expansion,V)
+        put_dict(_{'@type': "@id", '@id' : Value_Ex}, Expansion, V),
+        % V = _{'@type': "@id", '@id': Value_Ex},
+        Dependencies = [],
+        Captures_Out = Captures_In
     ).
-context_value_expand(_,Context,Value,_Expansion,V) :-
+context_value_expand(_,Context,Value,_Expansion,Captures,V,[],Captures) :-
     % An already expanded typed value
     is_dict(Value),
     get_dict('@value',Value, Elt),
@@ -700,7 +750,7 @@ context_value_expand(_,Context,Value,_Expansion,V) :-
     prefix_expand(Type,Context,Type_Ex),
     !,
     V = json{'@value' : Elt, '@type' : Type_Ex}.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures,V,[],Captures) :-
     get_dict('@type', Expansion, Type),
     is_enum(DB,Type),
     !,
@@ -708,19 +758,22 @@ context_value_expand(DB,Context,Value,Expansion,V) :-
     prefix_expand_schema(Enum_Value, Context, Enum_Value_Ex),
     V = json{'@id' : Enum_Value_Ex,
              '@type' : "@id"}.
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     get_dict('@type', Expansion, Type),
     \+ is_base_type(Type),
     !,
     (   is_dict(Value)
-    ->  json_elaborate_(DB, Value, Context, V)
-    ;   prefix_expand(Value,Context,Value_Ex),
-        V = json{ '@type' : "@id", '@id' : Value_Ex}
+    ->  json_elaborate_(DB, Value, Context, Captures_In, V, Dependencies,Captures_Out)
+    ;   throw(error(this_case_should_not_exist,_)), % while reading this code it seems like this case should not exist. At this point value should have been a dictionary always
+        prefix_expand(Value,Context,Value_Ex),
+        V = json{ '@type' : "@id", '@id' : Value_Ex},
+        Captures_Out = Captures_In,
+        Dependencies = []
     ).
-context_value_expand(DB,Context,Value,Expansion,V) :-
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     % An unexpanded typed value
     New_Expansion = (Expansion.put(json{'@value' : Value})),
-    json_elaborate_(DB,New_Expansion, Context, V).
+    json_elaborate_(DB,New_Expansion, Context, Captures_In,V,Dependencies,Captures_Out).
 
 enum_value(Type,Value,ID) :-
     ground(Type),
@@ -749,7 +802,7 @@ oneof_value(Val,Context,NewPath,Transformed) :-
     global_prefix_expand(sys:'Choice',Choice_Type),
     put_dict(_{'@id' : ID, '@type' : Choice_Type}, Elaborated, Transformed).
 
-json_context_elaborate(DB, JSON, Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, [], Captures_In) :-
     is_dict(JSON),
     get_dict('@type',JSON,Type),
     prefix_expand_schema(Type,Context,Type_Ex),
@@ -759,27 +812,36 @@ json_context_elaborate(DB, JSON, Context, Expanded) :-
     enum_value(Type,Value,Full_ID),
     Expanded = json{ '@type' : "@id",
                      '@id' : Full_ID }.
-json_context_elaborate(DB, JSON, Context, Expanded) :-
+json_context_elaborate(DB, JSON, Context, Captures_In, Expanded, Dependencies, Captures_Out) :-
     is_dict(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
-    findall(
-        P-V,
-        (   member(Prop-Value,Pairs),
-            (   property_expand_key_value(Prop,Value,DB,Context,P,V)
-            ->  true
-            ;   Prop = '@type'
-            ->  P = Prop,
-                prefix_expand_schema(Value, Context, V)
-            ;   has_at(Prop)
-            ->  P = Prop,
-                V = Value
-            ;   (   get_dict('@type', JSON, Type)
-                ->  throw(error(unrecognized_property(Type,Prop,Value), _))
-                ;   throw(error(unrecognized_untyped_property(Prop,Value), _)))
-            )
-        ),
-        PVs),
+    mapm({DB,JSON,Context}/[Prop-Value,P-V,Dependencies,Captures, New_Captures]>>
+         (   (   property_expand_key_value(Prop,Value,DB,Context,Captures,P,V,Dependencies,New_Captures)
+             ->  true
+             ;   Prop = '@type'
+             ->  P = Prop,
+                 prefix_expand_schema(Value, Context, V)
+             ;   has_at(Prop)
+             ->  P = Prop,
+                 V = Value
+             ;   (   get_dict('@type', JSON, Type)
+                 ->  throw(error(unrecognized_property(Type,Prop,Value), _))
+                 ;   throw(error(unrecognized_untyped_property(Prop,Value), _)))
+             ),
+             (   var(Dependencies)
+             ->  Dependencies = []
+             ;   true),
+             (   var(New_Captures)
+             ->  New_Captures = Captures
+             ;   true)
+         ),
+         Pairs,
+         PVs,
+         Dependencies_List,
+         Captures_In,
+         Captures_Out),
+    append(Dependencies_List, Dependencies),
     dict_pairs(Expanded,json,PVs).
 
 json_prefix_access(JSON,Edge,Type) :-
@@ -1288,21 +1350,30 @@ json_schema_triple(JSON,Context,Triple) :-
         error(unable_to_elaborate_schema_document(JSON),_)),
     json_triple_(JSON_Schema,Context,Triple).
 
+/*
 % Triple generator
 json_triple(DB,JSON,Triple) :-
     database_prefixes(DB,Context),
     json_triple(DB,Context,JSON,Triple).
 
 json_triple(DB,Context,JSON,Triple) :-
-    json_elaborate(DB,JSON,Context,Elaborated),
-    json_triple_(Elaborated,Context,Triple).
+    empty_assoc(Captures),
+    json_triple(DB, Context, JSON, Captures, Triple, _Dependencies, _Captures_Out).
+json_triple(DB,Context,JSON,Captures_In, Triple, Dependencies, Captures_Out) :-
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies, Captures_Out),
+    when(ground(Dependencies),
+         json_triple_(Elaborated,Context,Triple)).
+*/
 
 json_triples(DB,JSON,Triples) :-
     database_prefixes(DB,Context),
-    findall(
-        Triple,
-        json_triple(DB, Context, JSON, Triple),
-        Triples).
+    empty_assoc(Captures),
+    json_elaborate(DB,JSON,Context,Captures,Elaborated,Dependencies,_Captures_Out),
+    do_or_die(ground(Dependencies),
+              error(unbound_capture_groups(Dependencies),_)),
+    findall(Triple,
+            json_triple_(Elaborated,Context,Triple),
+            Triples).
 
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
@@ -1323,6 +1394,8 @@ json_triple_(JSON,Context,Triple) :-
     member(Key, Keys),
     get_dict(Key,JSON,Value),
     (   Key = '@id'
+    ->  fail
+    ;   Key = '@capture'
     ->  fail
     ;   Key = '@type', % this is a leaf
         Value = "@id"
@@ -1968,18 +2041,26 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
     database_prefixes(DB,Context),
-    forall(
-        json_read_dict_stream(JSON_Stream, Dict),
-        (
-            forall(
-                json_triple(DB,Context,Dict,t(S,P,O)),
-                (
-                    object_storage(O,OS),
-                    nb_add_triple(Builder, S, P, OS)
-                )
-            )
-        )
-    ).
+    empty_assoc(Captures_In),
+    write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
+    do_or_die(ground(Captures_Out),
+              error(not_all_captures_ground(Captures_Out),_)).
+write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
+    json_stream_read_single_dict(JSON_Stream, Dict),
+    !,
+    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,New_Captures_In),
+
+    when(ground(Dependencies),
+         forall(
+             json_triple_(Elaborated,Context,t(S,P,O)),
+             (
+                 object_storage(O,OS),
+                 nb_add_triple(Builder, S, P, OS)
+             )
+         )),
+
+    write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, New_Captures_In, Captures_Out).
+write_json_instance_stream_to_builder(_JSON_Stream, _Builder, _DB, _Context, Captures, Captures).
 
 write_json_stream_to_schema(Transaction, Stream) :-
     transaction_object{} :< Transaction,
@@ -2121,25 +2202,32 @@ check_existing_document_status(Transaction, Document, Status) :-
     ).
 
 insert_document(Transaction, Document, ID) :-
+    empty_assoc(Captures_In),
+    insert_document(Transaction, Document, Captures_In, ID, _Dependencies, _Captures_Out).
+insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
-    json_elaborate(Transaction, Document, Elaborated),
+    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
     % After elaboration, the Elaborated document will have an '@id'
     get_dict('@id', Elaborated, ID),
 
-    check_existing_document_status(Transaction, Elaborated, Status),
-    (   Status = not_present
-    ->  insert_document_expanded(Transaction, Elaborated, ID)
-    ;   Status = equivalent
-    ->  true
-    ;   Status = present
-    ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
-    ).
-insert_document(Query_Context, Document, ID) :-
+    ensure_transaction_has_builder(instance, Transaction),
+    when(ground(Dependencies),
+         (
+             check_existing_document_status(Transaction, Elaborated, Status),
+             (   Status = not_present
+             ->  insert_document_expanded(Transaction, Elaborated, ID)
+             ;   Status = equivalent
+             ->  true
+             ;   Status = present
+             ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
+             )
+         )).
+insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, ID).
+    insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
@@ -2166,21 +2254,27 @@ replace_document(DB, Document, Id) :-
     replace_document(DB, Document, false, Id).
 
 replace_document(Transaction, Document, Create, Id) :-
+    empty_assoc(Captures),
+    replace_document(Transaction, Document, Create, Captures, Id, _Dependencies, _Captures_Out).
+
+replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
-    json_elaborate(Transaction, Document, Elaborated),
+    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
     get_dict('@id', Elaborated, Id),
     catch(delete_document(Transaction, false, Id),
           error(document_does_not_exist(_),_),
           (   Create = true
           ->  true
           ;   throw(error(document_does_not_exist(Id, Document),_)))),
-    insert_document_expanded(Transaction, Elaborated, Id).
-replace_document(Query_Context, Document, Create, Id) :-
+    ensure_transaction_has_builder(instance, Transaction),
+    when(ground(Dependencies),
+         insert_document_expanded(Transaction, Elaborated, Id)).
+replace_document(Query_Context, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, Id).
+    replace_document(TO, Document, Create, Captures_In, Id, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
@@ -8977,3 +9071,514 @@ test(foreign_type,
                        pay_period:"P1M"}]}.
 
 :- end_tests(foreign_types).
+
+:- begin_tests(id_capture).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+cross_reference_required_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friend": "Person"
+}
+').
+cross_reference_optional_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friend": {"@type":"Optional","@class":"Person"}
+}
+').
+
+cross_reference_set_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friends": {"@type":"Set","@class":"Person"}
+}
+').
+
+cross_reference_list_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friends": {"@type":"List","@class":"Person"}
+}
+').
+
+cross_reference_array_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{
+  "@type": "Class",
+  "@id": "Person",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "friends": {"@type":"Array","@class":"Person"}
+}
+').
+
+test(cross_reference_required,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_required_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friend: _{'@ref': "Capture_Ernie"}},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friend: _{'@ref': "Capture_Bert"}},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Bert_Id == (Ernie_Elaborated.'terminusdb:///schema#friend'.'@id'),
+    Ernie_Id == (Bert_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+test(cross_reference_optional,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_optional_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friend: _{'@ref': "Capture_Ernie"}},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friend: _{'@ref': "Capture_Bert"}},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Bert_Id == (Ernie_Elaborated.'terminusdb:///schema#friend'.'@id'),
+    Ernie_Id == (Bert_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+test(cross_reference_set_singleton,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: _{'@ref': "Capture_Ernie"}},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: _{'@ref': "Capture_Bert"}},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    [Bert_Cross] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross.'@id'),
+    Ernie_Id == (Ernie_Cross.'@id').
+
+test(cross_reference_set_multi,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "Capture_Ernie"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+    \+ ground(Out_2),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Ernie"}]},
+                   Context,
+                   Out_2,
+                   Elmo_Elaborated,
+                   _Dependencies_3,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(cross_reference_list_multi,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_list_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "Capture_Ernie"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+    \+ ground(Out_2),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Ernie"}]},
+                   Context,
+                   Out_2,
+                   Elmo_Elaborated,
+                   _Dependencies_3,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(cross_reference_array_multi,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_array_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "Capture_Ernie"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+    \+ ground(Out_2),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friends: [_{'@ref': "Capture_Bert"},
+                               _{'@ref': "Capture_Ernie"}]},
+                   Context,
+                   Out_2,
+                   Elmo_Elaborated,
+                   _Dependencies_3,
+                   Out),
+
+    ground(Out),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(self_reference_required,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_required_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture_Elmo",
+                     name: "Elmo",
+                     friend: _{'@ref': "Capture_Elmo"}},
+                   Context,
+                   In,
+                   Elmo_Elaborated,
+                   _Dependencies_1,
+                   Out),
+
+    ground(Out),
+
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    Elmo_Id == (Elmo_Elaborated.'terminusdb:///schema#friend'.'@id').
+
+test(deep_reference,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "C_Bert",
+                     name: "Bert",
+                     friends: [_{'@ref': "C_Ernie"},
+                               _{'@type': "Person",
+                                 '@capture': "C_Elmo",
+                                 name: "Elmo",
+                                 friends: [_{'@ref': "C_Bert"},
+                                           _{'@ref': "C_Ernie"}]
+                                }]},
+                   Context,
+                   In,
+                   Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    \+ ground(Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "C_Ernie",
+                     name: "Ernie",
+                     friends: [_{'@ref': "C_Bert"},
+                               _{'@ref': "C_Elmo"}]},
+                   Context,
+                   Out_1,
+                   Ernie_Elaborated,
+                   _Dependencies_2,
+                   Out_2),
+
+    ground(Out_2),
+
+    [_,Elmo_Elaborated] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+
+    Bert_Id = (Bert_Elaborated.'@id'),
+    Ernie_Id = (Ernie_Elaborated.'@id'),
+    Elmo_Id = (Elmo_Elaborated.'@id'),
+    [Bert_Cross_1, Elmo_Cross_1] = (Ernie_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Ernie_Cross_1, Elmo_Cross_2] = (Bert_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    [Bert_Cross_2, Ernie_Cross_2] = (Elmo_Elaborated.'terminusdb:///schema#friends'.'@value'),
+    Bert_Id == (Bert_Cross_1.'@id'),
+    Bert_Id == (Bert_Cross_2.'@id'),
+    Ernie_Id == (Ernie_Cross_1.'@id'),
+    Ernie_Id == (Ernie_Cross_2.'@id'),
+    Elmo_Id == (Elmo_Cross_1.'@id'),
+    Elmo_Id == (Elmo_Cross_2.'@id').
+
+test(double_capture,
+     [setup((setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(cross_reference_set_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(capture_already_bound("Capture"))
+     ]) :-
+    open_descriptor(Desc, DB),
+
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture",
+                     name: "Bert",
+                     friends: []},
+                   Context,
+                   In,
+                   _Bert_Elaborated,
+                   _Dependencies_1,
+                   Out_1),
+
+    json_elaborate(DB,
+                   _{'@type': "Person",
+                     '@capture': "Capture",
+                     name: "Ernie",
+                     friends: []},
+                   Context,
+                   Out_1,
+                   _Ernie_Elaborated,
+                   _Dependencies_2,
+                   _Out_2).
+
+:- end_tests(id_capture).

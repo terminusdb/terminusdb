@@ -142,7 +142,7 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, Transaction, Stream, Id) :-
+api_insert_document_(schema, Transaction, Stream, state(Captures), Id, Captures) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
     ->  !,
@@ -155,15 +155,16 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Transaction, Stream, Id) :-
+api_insert_document_(instance, Transaction, Stream, State, Id, Captures_Out) :-
     json_read_dict_stream(Stream, JSON),
+    State = state(Captures_In),
     (   is_list(JSON)
     ->  !,
         member(Document, JSON)
     ;   Document = JSON),
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Id),
+        do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 replace_existing_graph(schema, Transaction, Stream) :-
@@ -171,7 +172,9 @@ replace_existing_graph(schema, Transaction, Stream) :-
 replace_existing_graph(instance, Transaction, Stream) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
-    forall(api_insert_document_(instance, Transaction, Stream, _),
+    empty_assoc(Captures),
+    forall(nb_thread_var({Transaction,Stream}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Stream, State, _, Captures_Out)),
+                         state(Captures)),
            true).
 
 api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
@@ -182,11 +185,25 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                          Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id,
-                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
+                     ;   empty_assoc(Captures),
+                         Captures_Var = state(Captures),
+                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
+                         findall(Id,
+                                 nb_thread_var({Schema_Or_Instance,Transaction,Stream,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Stream, State, Id, Captures_Out)),
+                                               Captures_Var),
                                  Ids),
+
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
+
+nonground_captures(state(Captures), Nonground) :-
+    findall(Ref,
+            (   gen_assoc(Ref, Captures, Var),
+                var(Var)),
+            Nonground),
+    Nonground \= [].
 
 api_delete_document_(schema, Transaction, Id) :-
     delete_schema_document(Transaction, Id).
@@ -224,9 +241,9 @@ api_nuke_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message) :-
                      api_nuke_documents_(Schema_Or_Instance, Transaction),
                     _).
 
-api_replace_document_(instance, Transaction, Document, Create, Id):-
-    replace_document(Transaction, Document, Create, Id).
-api_replace_document_(schema, Transaction, Document, Create, Id):-
+api_replace_document_(instance, Transaction, Document, Create, state(Captures_In), Id, Captures_Out):-
+    replace_document(Transaction, Document, Create, Captures_In, Id, _Dependencies, Captures_Out).
+api_replace_document_(schema, Transaction, Document, Create, state(Captures_In), Id, Captures_In):-
     replace_schema_document(Transaction, Document, Create, Id).
 
 api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Create, Ids) :-
@@ -234,21 +251,31 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
+                         empty_assoc(Captures),
+                         Captures_Var = state(Captures),
+                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
                          findall(Id,
-                                 (   json_read_dict_stream(Stream,JSON),
-                                     (   is_list(JSON)
-                                     ->  !,
-                                         member(Document, JSON)
-                                     ;   Document = JSON),
-                                     call_catch_document_mutation(
-                                         Document,
-                                         api_replace_document_(Schema_Or_Instance,
-                                                               Transaction,
-                                                               Document,
-                                                               Create,
-                                                               Id))
-                                 ),
+                                 nb_thread_var(
+                                     {Schema_Or_Instance, Transaction,Stream,Id}/[State,Captures_Out]>>
+                                     (   json_read_dict_stream(Stream,JSON),
+                                         (   is_list(JSON)
+                                         ->  !,
+                                             member(Document, JSON)
+                                         ;   Document = JSON),
+                                         call_catch_document_mutation(
+                                             Document,
+                                             api_replace_document_(Schema_Or_Instance,
+                                                                   Transaction,
+                                                                   Document,
+                                                                   Create,
+                                                                   State,
+                                                                   Id,
+                                                                   Captures_Out))
+                                     ),
+                                     Captures_Var),
                                  Ids),
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
                      ),
                      _).
@@ -430,3 +457,156 @@ test(key_missing, [
             }.
 
 :- end_tests(document_error_reporting).
+:- begin_tests(document_id_capture).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+test(basic_capture, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}
+{ "@type": "Person",
+  "@capture": "C_Ernie",
+  "name" : "Ernie",
+  "friends" : {"@ref" : "C_Bert"}
+}',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids),
+
+    open_descriptor(Desc, T),
+    get_document(T, 'Person/Bert', Bert),
+    get_document(T, 'Person/Ernie', Ernie),
+
+    ['Person/Ernie'] = (Bert.friends),
+    ['Person/Bert'] = (Ernie.friends).
+
+test(capture_missing, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(not_all_captures_found(["C_Ernie"]))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+test(double_capture, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(capture_already_bound("Capture"))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "Capture",
+  "name" : "Bert",
+  "friends" : []
+}
+{ "@type": "Person",
+  "@capture": "Capture",
+  "name" : "Ernie",
+  "friends" : []
+}
+',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+:- end_tests(document_id_capture).
+
