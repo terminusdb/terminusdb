@@ -3364,7 +3364,7 @@ patch_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(patch), cors_handler(Method, diff_handler),
+:- http_handler(api(diff), cors_handler(Method, diff_handler),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
