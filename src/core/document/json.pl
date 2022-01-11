@@ -9552,7 +9552,7 @@ test(double_capture,
               write_schema(cross_reference_set_schema,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      throws(error(capture_already_bound("Capture"),_))
+      error(capture_already_bound("Capture"))
      ]) :-
     open_descriptor(Desc, DB),
 

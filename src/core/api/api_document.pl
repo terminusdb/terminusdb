@@ -545,3 +545,156 @@ test(key_missing, [
             }.
 
 :- end_tests(document_error_reporting).
+:- begin_tests(document_id_capture).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+test(basic_capture, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}
+{ "@type": "Person",
+  "@capture": "C_Ernie",
+  "name" : "Ernie",
+  "friends" : {"@ref" : "C_Bert"}
+}',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids),
+
+    open_descriptor(Desc, T),
+    get_document(T, 'Person/Bert', Bert),
+    get_document(T, 'Person/Ernie', Ernie),
+
+    ['Person/Ernie'] = (Bert.friends),
+    ['Person/Bert'] = (Ernie.friends).
+
+test(capture_missing, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(not_all_captures_found(["C_Ernie"]))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+test(double_capture, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(capture_already_bound("Capture"))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "Capture",
+  "name" : "Bert",
+  "friends" : []
+}
+{ "@type": "Person",
+  "@capture": "Capture",
+  "name" : "Ernie",
+  "friends" : []
+}
+',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+:- end_tests(document_id_capture).
+
