@@ -5,6 +5,7 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
+:- use_module(library(yall)).
 
 /* api_rollup(System_DB, Auth, Path, Options, Status_List) */
 

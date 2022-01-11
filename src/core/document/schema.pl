@@ -47,6 +47,7 @@
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
 :- use_module(library(lists)).
+:- use_module(library(solution_sequences)).
 
 % performance
 :- use_module(library(apply)).

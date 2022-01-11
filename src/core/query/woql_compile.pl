@@ -40,10 +40,13 @@
 :- use_module(library(csv)).
 :- use_module(library(isub)).
 :- use_module(library(lists)).
+:- use_module(library(dicts)).
 :- use_module(library(aggregate)).
+:- use_module(library(random)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
+:- use_module(library(sort)).
 :- use_module(library(apply_macros)).
 
 /*
