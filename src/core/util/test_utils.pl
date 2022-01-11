@@ -329,11 +329,17 @@ print_all_triples(Askable, Selector) :-
 print_all_documents(Askable) :-
     print_all_documents(Askable, instance).
 
+get_selector_document(instance, Askable, Id, Document) :-
+    get_document(Askable, Id, Document).
+get_selector_document(schema, Askable, Id, Document) :-
+    get_schema_document(Askable, Id, Document).
+
 print_all_documents(Askable, Selector) :-
     nl,
     forall(
-        api_document:api_generate_documents_(Selector, Askable, true, false, 0, unlimited, Document),
-        json_write_dict(current_output, Document, [])),
+        api_document:api_generate_document_ids(Selector, Askable, true, 0, unlimited, Id),
+        (   get_selector_document(Selector, Askable, Id, Document),
+            json_write_dict(current_output, Document, []))),
     nl.
 
 cleanup_user_database(User, Database) :-
