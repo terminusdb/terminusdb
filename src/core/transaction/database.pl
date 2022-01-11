@@ -336,7 +336,6 @@ collect_validations_metadata(Validations, Meta_Data) :-
           },
           Meta_Data).
 
-
 /*
  * query_context_transaction_objects(+Query_Object,Transaction_Objects) is det.
  *

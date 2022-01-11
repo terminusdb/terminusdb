@@ -3332,6 +3332,66 @@ test(remote_list, [
 
 :- end_tests(remote_endpoint).
 
+%%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(patch), cors_handler(Method, patch_handler),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * patch_handler(Mode, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+patch_handler(post, Request, System_DB, Auth) :-
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ before : Before,
+               patch : Patch
+             } :< Document),
+        error(bad_api_document(Document, [before, patch]), _)),
+
+    api_report_errors(
+        patch,
+        Request,
+        (   api_patch(System_DB, Auth, Patch, Before, After, Conflict),
+            (   Conflict = _{}
+            ->  cors_reply_json(Request, After)
+            ;   cors_reply_json(Request, Conflict, [status(404)])
+            )
+        )
+    ).
+
+%%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(patch), cors_handler(Method, diff_handler),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * diff_handler(Mode, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+diff_handler(post, Request, System_DB, Auth) :-
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ before : Before,
+               after : After
+             } :< Document),
+        error(bad_api_document(Document, [before, after]), _)),
+
+    api_report_errors(
+        diff,
+        Request,
+        (   api_diff(System_DB, Auth, Before, After, Patch),
+            cors_reply_json(Request, Patch)
+        )
+    ).
+
+
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
                 [method(Method),
