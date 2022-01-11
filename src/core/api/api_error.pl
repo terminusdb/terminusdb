@@ -9,6 +9,7 @@
 
 :- use_module(core(util)).
 :- use_module(library(http/json)).
+:- use_module(library(yall)).
 :- use_module(library(plunit)).
 
 :- use_module(core(query)).

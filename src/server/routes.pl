@@ -23,7 +23,11 @@
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 
 % various prolog helper libraries
+:- use_module(library(apply)).
 :- use_module(library(lists)).
+:- use_module(library(pcre)).
+:- use_module(library(option)).
+:- use_module(library(yall)).
 
 % unit tests
 :- use_module(library(plunit)).
@@ -42,6 +46,7 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(http/http_stream)).
+:- use_module(library(url)).
 
 
 % multipart

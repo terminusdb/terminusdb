@@ -28,6 +28,7 @@
 
 :- use_module(library(pcre)).
 :- use_module(library(plunit)).
+:- use_module(library(yall)).
 
 /**
  * system_graph_layer(-Graph,-Layer) is det.

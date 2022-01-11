@@ -28,6 +28,8 @@
 :- use_module(capabilities).
 :- use_module(core(document)).
 
+:- use_module(library(crypto)).
+
 /** <module> User
  *
  * User management. This is required for testing the capabilities system,

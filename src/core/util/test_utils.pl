@@ -88,6 +88,7 @@
 
 :- use_module(library(process)).
 :- use_module(library(plunit)).
+:- use_module(library(pcre)).
 
 :- use_module(library(lists)).
 

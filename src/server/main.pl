@@ -27,6 +27,8 @@
 :- use_module(library(http/http_ssl_plugin)).
 :- use_module(library(http/html_write)).
 
+:- use_module(library(option)).
+
 % JWT IO library
 :- if(config:jwt_enabled).
 
