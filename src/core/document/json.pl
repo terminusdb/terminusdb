@@ -52,6 +52,8 @@
 :- use_module(schema).
 
 :- use_module(library(pcre)).
+:- use_module(library(uri)).
+:- use_module(library(crypto)).
 
 % performance
 :- use_module(library(apply)).
@@ -61,6 +63,9 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(library(dicts)).
+:- use_module(library(solution_sequences)).
+:- use_module(library(random)).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
