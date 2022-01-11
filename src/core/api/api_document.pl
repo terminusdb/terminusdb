@@ -359,14 +359,11 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
                                      ),
                                      Captures_Var),
                                  Ids),
-                         json_log_info_formatted("done replacing", []),
                          die_if(nonground_captures(Captures_Var, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
-                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _)),
-                         json_log_info_formatted("awafsd", [])
+                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     _),
-    json_log_info_formatted("do we get here?", []).
+                     _).
 
 :- begin_tests(delete_document).
 :- use_module(core(util/test_utils)).
