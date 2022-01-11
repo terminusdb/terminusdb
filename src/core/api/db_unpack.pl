@@ -10,6 +10,7 @@
 :- use_module(core(account)).
 
 :- use_module(library(tus)).
+:- use_module(library(url)).
 
 child_parent_linear_history(Child,Parent,Graph) :-
     memberchk(Child-some(Parent), Graph),

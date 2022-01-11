@@ -27,6 +27,8 @@
               check_all_env_vars/0
           ]).
 
+:- use_module(library(pcre)).
+
 :- use_module(core(util)).
 
 version('10.0.16').

@@ -20,6 +20,10 @@
 :- use_module(core(util), [do_or_die/2, basic_authorization/3]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
+:- use_module(library(pcre)).
+:- use_module(library(url)).
+:- use_module(library(option)).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
