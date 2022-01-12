@@ -61,6 +61,7 @@ This file deliberately has no dependencies - please do not introduce them.
 :- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(lists)).
 
 /**
  * is_literal(+X) is semidet.

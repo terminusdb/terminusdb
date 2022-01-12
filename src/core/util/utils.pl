@@ -64,11 +64,13 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
+              json_stream_read_single_dict/2,
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
               has_duplicates/2,
-              index_list/2
+              index_list/2,
+              nb_thread_var/2
           ]).
 
 /** <module> Utils
@@ -83,6 +85,7 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(http/json)).
 :- use_module(library(solution_sequences)).
+:- use_module(library(lists)).
 
 /*
  * Forget the next phrase.
@@ -898,6 +901,12 @@ time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
 
 json_read_dict_stream(Stream,Term) :-
     repeat,
+    (   json_stream_read_single_dict(Stream,Term)
+    *-> true
+    ;   !,
+        fail).
+
+json_stream_read_single_dict(Stream,Term) :-
     json_read_dict(Stream, Term, [default_tag(json),end_of_file(eof)]),
     (   Term = eof
     ->  !,
@@ -923,7 +932,6 @@ input_to_integer(Atom, Integer) :-
     ->  catch(atom_number(Atom, Integer), _, fail),
         integer(Integer)).
 
-:- use_module(library(lists)).
 duplicates([], []) :- !.
 duplicates(List, Duplicates) :-
     msort(List, Sorted),
@@ -953,3 +961,8 @@ index_list(List,Indexes) :-
         numlist(0, N, Indexes)
     ;   Indexes = []
     ).
+
+:- meta_predicate nb_thread_var(2,+).
+nb_thread_var(Callable, State) :-
+    call(Callable, State, Out),
+    nb_setarg(1,State, Out).

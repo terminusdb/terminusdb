@@ -25,6 +25,9 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
+
 :- multifile prolog:message//1.
 prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].

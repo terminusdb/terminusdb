@@ -33,6 +33,8 @@
               ]).
 
 :- use_module(library(semweb/turtle)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 :- use_module(library(terminus_store)).
 

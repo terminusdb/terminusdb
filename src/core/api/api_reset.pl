@@ -6,6 +6,8 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
+:- use_module(library(plunit)).
+
 api_reset(System_DB, Auth, Path, Ref) :-
 
     do_or_die(

@@ -31,6 +31,8 @@
 :- use_module(library(pcre)).
 :- use_module(library(pairs)).
 :- use_module(library(http/json)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).

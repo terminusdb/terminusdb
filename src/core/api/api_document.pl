@@ -1,8 +1,9 @@
 :- module(api_document, [
-              api_generate_documents/9,
-              api_generate_documents_by_type/10,
-              api_generate_documents_by_query/11,
-              api_get_document/8,
+              api_get_document_read_transaction/5,
+              api_generate_document_ids/6,
+              api_generate_document_ids_by_type/6,
+              api_generate_document_ids_by_query/7,
+              api_get_document/6,
               api_insert_documents/9,
               api_delete_documents/7,
               api_delete_document/7,
@@ -18,6 +19,8 @@
 :- use_module(core(account)).
 
 :- use_module(library(http/json)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
     atom_string(Graph_Type, Graph_Type_String),
@@ -43,107 +46,69 @@ assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, ReadWrite) :-
 
     check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
 
-api_generate_document_uris_(instance, Transaction, Unfold, Skip, Count, Uri) :-
+api_get_document_read_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Transaction) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_path(Path),_)),
+
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
+
+    do_or_die(
+        open_descriptor(Descriptor, Transaction),
+        error(unresolvable_collection(Descriptor), _)).
+
+api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_path(Path),_)),
+
+    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
+
+    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
+              error(unresolvable_collection(Descriptor), _)),
+    do_or_die(query_default_collection(Context, Transaction),
+              error(query_default_collection_failed_unexpectedly(Context), _)).
+
+api_generate_document_ids(instance, Transaction, Unfold, Skip, Count, Id) :-
     (   Unfold = true
     ->  Include_Subdocuments = false
     ;   Include_Subdocuments = true),
     skip_generate_nsols(
-        get_document_uri(Transaction, Include_Subdocuments, Uri),
+        get_document_uri(Transaction, Include_Subdocuments, Id),
         Skip,
         Count).
-api_generate_document_uris_(schema, Transaction, _Unfold, Skip, Count, Uri) :-
+api_generate_document_ids(schema, Transaction, _Unfold, Skip, Count, Id) :-
     skip_generate_nsols(
-        get_schema_document_uri(Transaction, Uri),
-        Skip,
-        Count).
-
-api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri) :-
-    skip_generate_nsols(
-        get_document_uri_by_type(Transaction, Type, Uri),
-        Skip,
-        Count).
-api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri) :-
-    skip_generate_nsols(
-        get_schema_document_uri_by_type(Transaction, Type, Uri),
+        get_schema_document_uri(Transaction, Id),
         Skip,
         Count).
 
-api_generate_documents_(instance, Transaction, Compress_Ids, Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_(instance, Transaction, Unfold, Skip, Count, Uri),
-    get_document(Transaction, Compress_Ids, Unfold, Uri, Document).
-
-api_generate_documents_(schema, Transaction, _Prefixed, Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_(schema, Transaction, Unfold, Skip, Count, Uri),
-    get_schema_document(Transaction, Uri, Document).
-
-api_generate_documents(SystemDB, Auth, Path, Schema_Or_Instance, Compress_Ids, Unfold, Skip, Count, Document) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
-
-    do_or_die(open_descriptor(Descriptor, Transaction),
-              error(unresolvable_collection(Descriptor), _)),
-
-    api_generate_documents_(Schema_Or_Instance, Transaction, Compress_Ids, Unfold, Skip, Count, Document).
-
-api_generate_documents_by_type_(schema, Transaction, Type, _Prefixed, _Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_by_type_(schema, Transaction, Type, Skip, Count, Uri),
-    get_schema_document(Transaction, Uri, Document).
-api_generate_documents_by_type_(instance, Transaction, Type, Compress_Ids, Unfold, Skip, Count, Document) :-
-    api_generate_document_uris_by_type_(instance, Transaction, Type, Skip, Count, Uri),
-    get_document(Transaction, Compress_Ids, Unfold, Uri, Document).
-
-api_generate_documents_by_type(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Document) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
-
-    do_or_die(open_descriptor(Descriptor, Transaction),
-              error(unresolvable_collection(Descriptor), _)),
-
-    api_generate_documents_by_type_(Graph_Type, Transaction, Type, Compress_Ids, Unfold, Skip, Count, Document).
-
-api_generate_documents_by_query(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Document) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, read),
-
-    do_or_die(open_descriptor(Descriptor, Transaction),
-              error(unresolvable_collection(Descriptor), _)),
-
-    do_or_die(Graph_Type = instance,
-              error(query_is_only_supported_for_instance_graphs, _)),
-
+api_generate_document_ids_by_type(instance, Transaction, Type, Skip, Count, Id) :-
     skip_generate_nsols(
-        match_query_document_uri(Transaction, Type, Query, Uri),
+        get_document_uri_by_type(Transaction, Type, Id),
         Skip,
-        Count),
-    get_document(Transaction, Compress_Ids, Unfold, Uri, Document).
+        Count).
+api_generate_document_ids_by_type(schema, Transaction, Type, Skip, Count, Id) :-
+    skip_generate_nsols(
+        get_schema_document_uri_by_type(Transaction, Type, Id),
+        Skip,
+        Count).
 
-api_get_document_(instance, Transaction, Compress_Ids, Unfold, Id, Document) :-
+api_generate_document_ids_by_query(instance, Transaction, Type, Query, Skip, Count, Id) :-
+    skip_generate_nsols(
+        match_query_document_uri(Transaction, Type, Query, Id),
+        Skip,
+        Count).
+api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Skip, _Count, _Id) :-
+    throw(error(query_is_only_supported_for_instance_graphs, _)).
+
+api_get_document(instance, Transaction, Compress_Ids, Unfold, Id, Document) :-
     do_or_die(get_document(Transaction, Compress_Ids, Unfold, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document_(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
+api_get_document(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
-
-api_get_document(SystemDB, Auth, Path, Schema_Or_Instance, Compress_Ids, Unfold, Id, Document) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
-
-    do_or_die(open_descriptor(Descriptor, Transaction),
-              error(unresolvable_collection(Descriptor), _)),
-    api_get_document_(Schema_Or_Instance, Transaction, Compress_Ids, Unfold, Id, Document).
 
 embed_document_in_error(Error, Document, New_Error) :-
     Error =.. Error_List,
@@ -177,7 +142,7 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, Transaction, Stream, Id) :-
+api_insert_document_(schema, Transaction, Stream, state(Captures), Id, Captures) :-
     json_read_dict_stream(Stream, JSON),
     (   is_list(JSON)
     ->  !,
@@ -190,15 +155,16 @@ api_insert_document_(schema, Transaction, Stream, Id) :-
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Transaction, Stream, Id) :-
+api_insert_document_(instance, Transaction, Stream, State, Id, Captures_Out) :-
     json_read_dict_stream(Stream, JSON),
+    State = state(Captures_In),
     (   is_list(JSON)
     ->  !,
         member(Document, JSON)
     ;   Document = JSON),
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Id),
+        do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 replace_existing_graph(schema, Transaction, Stream) :-
@@ -206,32 +172,38 @@ replace_existing_graph(schema, Transaction, Stream) :-
 replace_existing_graph(instance, Transaction, Stream) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
-    forall(api_insert_document_(instance, Transaction, Stream, _),
+    empty_assoc(Captures),
+    forall(nb_thread_var({Transaction,Stream}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Stream, State, _, Captures_Out)),
+                         state(Captures)),
            true).
 
 api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
-
-    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(unresolvable_collection(Descriptor), _)),
-    query_default_collection(Context, Transaction),
-
+    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
     stream_property(Stream, position(Pos)),
-
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          Full_Replace = true
                      ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
                          Ids = []
-                     ;   findall(Id,
-                                 api_insert_document_(Schema_Or_Instance, Transaction, Stream, Id),
+                     ;   empty_assoc(Captures),
+                         Captures_Var = state(Captures),
+                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
+                         findall(Id,
+                                 nb_thread_var({Schema_Or_Instance,Transaction,Stream,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Stream, State, Id, Captures_Out)),
+                                               Captures_Var),
                                  Ids),
+
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
                      _).
+
+nonground_captures(state(Captures), Nonground) :-
+    findall(Ref,
+            (   gen_assoc(Ref, Captures, Var),
+                var(Var)),
+            Nonground),
+    Nonground \= [].
 
 api_delete_document_(schema, Transaction, Id) :-
     delete_schema_document(Transaction, Id).
@@ -239,18 +211,8 @@ api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
 api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
-
-    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(unresolvable_collection(Descriptor), _)),
-    query_default_collection(Context, Transaction),
-
+    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
     stream_property(Stream, position(Pos)),
-
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          forall(
@@ -263,16 +225,7 @@ api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                      _).
 
 api_delete_document(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, ID) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
-
-    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(unresolvable_collection(Descriptor), _)),
-    query_default_collection(Context, Transaction),
-
+    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
     with_transaction(Context,
                      api_delete_document_(Schema_Or_Instance, Transaction, ID),
                      _).
@@ -283,57 +236,46 @@ api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
 
 api_nuke_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
-
-    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(unresolvable_collection(Descriptor), _)),
-    query_default_collection(Context, Transaction),
-
+    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
     with_transaction(Context,
                      api_nuke_documents_(Schema_Or_Instance, Transaction),
                     _).
 
-api_replace_document_(instance, Transaction, Document, Create, Id):-
-    replace_document(Transaction, Document, Create, Id).
-api_replace_document_(schema, Transaction, Document, Create, Id):-
+api_replace_document_(instance, Transaction, Document, Create, state(Captures_In), Id, Captures_Out):-
+    replace_document(Transaction, Document, Create, Captures_In, Id, _Dependencies, Captures_Out).
+api_replace_document_(schema, Transaction, Document, Create, state(Captures_In), Id, Captures_In):-
     replace_schema_document(Transaction, Document, Create, Id).
 
 api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Create, Ids) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
-
-    do_or_die(
-        create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-        error(unresolvable_collection(Descriptor), _)),
-
-    query_default_collection(Context, Transaction),
-
+    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
     stream_property(Stream, position(Pos)),
-
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
+                         empty_assoc(Captures),
+                         Captures_Var = state(Captures),
+                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
                          findall(Id,
-                                 (   json_read_dict_stream(Stream,JSON),
-                                     (   is_list(JSON)
-                                     ->  !,
-                                         member(Document, JSON)
-                                     ;   Document = JSON),
-                                     call_catch_document_mutation(
-                                         Document,
-                                         api_replace_document_(Schema_Or_Instance,
-                                                               Transaction,
-                                                               Document,
-                                                               Create,
-                                                               Id))
-                                 ),
+                                 nb_thread_var(
+                                     {Schema_Or_Instance, Transaction,Stream,Id}/[State,Captures_Out]>>
+                                     (   json_read_dict_stream(Stream,JSON),
+                                         (   is_list(JSON)
+                                         ->  !,
+                                             member(Document, JSON)
+                                         ;   Document = JSON),
+                                         call_catch_document_mutation(
+                                             Document,
+                                             api_replace_document_(Schema_Or_Instance,
+                                                                   Transaction,
+                                                                   Document,
+                                                                   Create,
+                                                                   State,
+                                                                   Id,
+                                                                   Captures_Out))
+                                     ),
+                                     Captures_Var),
                                  Ids),
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
                      ),
                      _).
@@ -515,3 +457,156 @@ test(key_missing, [
             }.
 
 :- end_tests(document_error_reporting).
+:- begin_tests(document_id_capture).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+test(basic_capture, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}
+{ "@type": "Person",
+  "@capture": "C_Ernie",
+  "name" : "Ernie",
+  "friends" : {"@ref" : "C_Bert"}
+}',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids),
+
+    open_descriptor(Desc, T),
+    get_document(T, 'Person/Bert', Bert),
+    get_document(T, 'Person/Ernie', Ernie),
+
+    ['Person/Ernie'] = (Bert.friends),
+    ['Person/Bert'] = (Ernie.friends).
+
+test(capture_missing, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(not_all_captures_found(["C_Ernie"]))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+test(double_capture, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(capture_already_bound("Capture"))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "Capture",
+  "name" : "Bert",
+  "friends" : []
+}
+{ "@type": "Person",
+  "@capture": "Capture",
+  "name" : "Ernie",
+  "friends" : []
+}
+',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+:- end_tests(document_id_capture).
+

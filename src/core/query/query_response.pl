@@ -12,6 +12,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple/literals)).
 
+:- use_module(library(lists)).
+
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD

@@ -36,6 +36,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(lists)).
 
 :- reexport(library(terminus_store),
             except([create_named_graph/3,
@@ -231,6 +232,8 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
  * Insert triple into transaction layer, record changed as 1 or 0
  */
 insert(G,X,Y,Z,Changed) :-
+    do_or_die(ground(Z),
+              error(instantiation_error, _)),
     ground_object_storage(Z,S),
     read_write_obj_builder(G, Builder),
     (   nb_add_triple(Builder, X, Y, S)

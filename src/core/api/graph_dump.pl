@@ -5,6 +5,8 @@
 :- use_module(core(account)).
 :- use_module(core(triple/turtle_utils)).
 
+:- use_module(library(plunit)).
+
 graph_dump(System_DB, Auth, Path, Format, String) :-
     do_or_die(
         resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),

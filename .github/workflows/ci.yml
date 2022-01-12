@@ -164,6 +164,14 @@ jobs:
           docker tag $DOCKER_IMAGE_NAME:local $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
+          # Use dev-COMMITHASH tag for each development
+          # version. We clean up after a certain amount of time.
+          if [ "$VERSION" == "dev" ]; then
+             DEV_COMMIT_TAG=${IMAGE_ID}:${VERSION}-${GITHUB_SHA}
+             docker tag $DOCKER_IMAGE_NAME:local $DEV_COMMIT_TAG
+             docker push $DEV_COMMIT_TAG
+          fi
+
           # Use Docker `latest` tag convention when a version tag is pushed
           if [ $(echo "$GITHUB_REF" | grep "refs/tags/v") ]; then
              docker tag $IMAGE_ID:$VERSION ${IMAGE_ID}:latest

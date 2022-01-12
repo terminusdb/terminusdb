@@ -6,6 +6,8 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
+:- use_module(library(plunit)).
+
 % Take a path, squash and return a reference to the
 % Commit.
 %

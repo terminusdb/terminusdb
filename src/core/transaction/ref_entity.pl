@@ -41,6 +41,8 @@
               attach_layer_to_commit/4
           ]).
 :- use_module(library(terminus_store)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 :- use_module(core(util)).
 :- use_module(core(query)).

@@ -26,6 +26,7 @@
 
 :- use_module(library(http/json)).
 :- use_module(library(aggregate)).
+:- use_module(library(lists)).
 
 
 is_rdf_list_(_Instance, Type) :-
