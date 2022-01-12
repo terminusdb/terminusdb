@@ -142,12 +142,7 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, Transaction, Stream, state(Captures), Id, Captures) :-
-    json_read_dict_stream(Stream, JSON),
-    (   is_list(JSON)
-    ->  !,
-        member(Document, JSON)
-    ;   Document = JSON),
+api_insert_document_(schema, Transaction, Document, state(Captures), Id, Captures) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
@@ -155,13 +150,7 @@ api_insert_document_(schema, Transaction, Stream, state(Captures), Id, Captures)
 
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Transaction, Stream, State, Id, Captures_Out) :-
-    json_read_dict_stream(Stream, JSON),
-    State = state(Captures_In),
-    (   is_list(JSON)
-    ->  !,
-        member(Document, JSON)
-    ;   Document = JSON),
+api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
@@ -173,9 +162,9 @@ replace_existing_graph(instance, Transaction, Stream) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
     empty_assoc(Captures),
-    forall(nb_thread_var({Transaction,Stream}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Stream, State, _, Captures_Out)),
-                         state(Captures)),
-           true).
+    forall(json_read_dict_list_stream(Stream, Document),
+           nb_thread_var({Transaction,Document}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Document, State, _, Captures_Out)),
+                         state(Captures))).
 
 api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
     api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
@@ -189,8 +178,9 @@ api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                          Captures_Var = state(Captures),
                          ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
                          findall(Id,
-                                 nb_thread_var({Schema_Or_Instance,Transaction,Stream,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Stream, State, Id, Captures_Out)),
-                                               Captures_Var),
+                                 (   json_read_dict_list_stream(Stream, Document),
+                                     nb_thread_var({Schema_Or_Instance,Transaction,Document,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Document, State, Id, Captures_Out)),
+                                                   Captures_Var)),
                                  Ids),
 
                          die_if(nonground_captures(Captures_Var, Nonground),
@@ -257,11 +247,7 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
                          findall(Id,
                                  nb_thread_var(
                                      {Schema_Or_Instance, Transaction,Stream,Id}/[State,Captures_Out]>>
-                                     (   json_read_dict_stream(Stream,JSON),
-                                         (   is_list(JSON)
-                                         ->  !,
-                                             member(Document, JSON)
-                                         ;   Document = JSON),
+                                     (   json_read_dict_list_stream(Stream,Document),
                                          call_catch_document_mutation(
                                              Document,
                                              api_replace_document_(Schema_Or_Instance,
@@ -607,6 +593,212 @@ test(double_capture, [
                          false,
                          Stream,
                          _Ids).
+test(basic_capture_list, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+[{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+},
+{ "@type": "Person",
+  "@capture": "C_Ernie",
+  "name" : "Ernie",
+  "friends" : {"@ref" : "C_Bert"}
+}]',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids),
+
+    open_descriptor(Desc, T),
+    get_document(T, 'Person/Bert', Bert),
+    get_document(T, 'Person/Ernie', Ernie),
+
+    ['Person/Ernie'] = (Bert.friends),
+    ['Person/Bert'] = (Ernie.friends).
+
+test(basic_capture_replace, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "name" : "Bert",
+  "friends" : []
+}
+{ "@type": "Person",
+  "name" : "Ernie",
+  "friends" : []
+}',
+                Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream_1,
+                         _Ids_1),
+
+    open_string('
+{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+}
+{ "@type": "Person",
+  "@capture": "C_Ernie",
+  "name" : "Ernie",
+  "friends" : {"@ref" : "C_Bert"}
+}',
+                Stream_2),
+
+
+    api_replace_documents(SystemDB,
+                          Auth,
+                          "admin/testdb",
+                          instance,
+                          "testauthor",
+                          "testmessage",
+                          Stream_2,
+                          false,
+                          _Ids_2),
+
+    open_descriptor(Desc, T),
+    get_document(T, 'Person/Bert', Bert),
+    get_document(T, 'Person/Ernie', Ernie),
+
+    ['Person/Ernie'] = (Bert.friends),
+    ['Person/Bert'] = (Ernie.friends).
+
+test(basic_capture_list_replace, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Person",
+              '@key': _{'@type': "Lexical",
+                        '@fields': ["name"]},
+              name: "xsd:string",
+              friends: _{'@type': "Set",
+                         '@class': "Person"}})
+    ),
+
+
+    open_string('
+{ "@type": "Person",
+  "name" : "Bert",
+  "friends" : []
+}
+{ "@type": "Person",
+  "name" : "Ernie",
+  "friends" : []
+}',
+                Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream_1,
+                         _Ids_1),
+
+    open_string('
+[{ "@type": "Person",
+  "@capture": "C_Bert",
+  "name" : "Bert",
+  "friends" : {"@ref" : "C_Ernie"}
+},
+{ "@type": "Person",
+  "@capture": "C_Ernie",
+  "name" : "Ernie",
+  "friends" : {"@ref" : "C_Bert"}
+}]',
+                Stream_2),
+
+
+    api_replace_documents(SystemDB,
+                          Auth,
+                          "admin/testdb",
+                          instance,
+                          "testauthor",
+                          "testmessage",
+                          Stream_2,
+                          false,
+                          _Ids_2),
+
+    open_descriptor(Desc, T),
+    get_document(T, 'Person/Bert', Bert),
+    get_document(T, 'Person/Ernie', Ernie),
+
+    ['Person/Ernie'] = (Bert.friends),
+    ['Person/Bert'] = (Ernie.friends).
+
 
 :- end_tests(document_id_capture).
 
