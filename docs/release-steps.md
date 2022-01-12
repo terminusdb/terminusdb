@@ -2,19 +2,14 @@
 
 This document describes the steps we go through we making a new release.
 
-1. Identify the previous version released.
-   * Save it as `$LAST_VERSION`.
+1. Note the current release branch: `v10.0`
 
 2. Choose the version number for the new release.
-   * Save it as `$VERSION`.
+   * Save it (mentally) as `$VERSION`.
 
-3. Look at the changes to the `main` branch since the last version.
-   * Copy the following URL, paste it into your browser, and replace
-     `$LAST_VERSION` with its value.
+3. Look at the changes between `main` and the current release branch:
 
-     ```
-     https://github.com/terminusdb/terminusdb/compare/$LAST_VERSION...main
-     ```
+   https://github.com/terminusdb/terminusdb/compare/v10.0...main
 
 4. Update [`RELEASE_NOTES.md`](./RELEASE_NOTES.md):
    1. Add a section for `$VERSION` at the beginning of the file.
