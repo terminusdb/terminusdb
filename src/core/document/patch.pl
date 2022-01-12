@@ -100,9 +100,16 @@ var Patch =
 { '@id' : "TaskList/my_tasks",
   'tasks' : { '@op' : "CopyList",                      % Replace List
               '@to' : 2,
-              '@rest' : { '@op' : "SwapList",
-                          '@before' : ["Task/shopping","Task/cleaning","Task/fishing"],
-                          '@after' : ["Task/climbing","Task/dining","Task/travelling"],
+              '@rest' : { '@op' : "PatchList",
+                          '@patch' : [{ '@op' : "SwapValue",
+                                        '@before' : "Task/shopping",
+                                        '@after' : "Task/climbing"},
+                                      { '@op' : "SwapValue",
+                                        '@before' : "Task/cleaning",
+                                        '@after' : "Task/dining"},
+                                      { '@op' : "SwapValue",
+                                        '@before' : "Task/fishing",
+                                        '@after' : "Task/travelling"}],
                           '@rest' : { '@op' : "KeepList" } } }}
 var Before =
 { '@id' : "TaskList/my_tasks",
@@ -386,7 +393,7 @@ An example of the payload:
 Which would result in the following patch:
 
 ```json
-{ "name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}
+{ "name" : { "@op" : "SwapValue", "@before" : "Jane", "@after": "Janine" }}
 ```
 
 ## Patch
@@ -416,6 +423,10 @@ simple_patch(Diff,JSON_In,JSON_Out) :-
     union(Doc_Keys,Diff_Keys,Keys),
     pairs_and_conflicts_from_keys(Keys,JSON_In,Diff,Pairs),
     dict_create(JSON_Out,_,Pairs).
+simple_patch(Diff,Before,After) :-
+    is_list(Diff),
+    !,
+    maplist([D,B,A]>>simple_patch(D,B,A), Diff, Before, After).
 simple_patch(Diff,Before,After) :-
     diff_op(Diff,Op),
     simple_op_diff_value(Op, Diff, Before, After).

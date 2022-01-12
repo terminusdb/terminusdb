@@ -145,7 +145,6 @@ simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
     ->  put_dict(_{'@rest' : {'@op' : "KeepList"}}, Simple_Diff, Diff)
     ;   Simple_Diff = Diff
     ).
-
 simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
     length(Before,N),
     %between(0,N,I),
