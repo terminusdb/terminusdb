@@ -417,20 +417,15 @@ simple_patch(Diff,JSON_In,JSON_Out,Conflict) :-
     pairs_and_conflicts_from_keys(Keys,JSON_In,Diff,Pairs,Conflicts),
     dict_create(JSON_Out,_,Pairs),
     dict_create(Conflict,_,Conflicts).
+simple_patch(Diff,Before,After,Conflict) :-
+    diff_op(Diff,Op),
+    simple_op_diff_value(Op, Diff, Before, After, Conflict).
 
 simple_patch_list(Diff,List_In,List_Out,Conflict) :-
     is_list(List_In),
     !,
-    length(Diff,N),
-    length(List_In,M),
-    (   N = M
-    ->  maplist([Patch,Elt,Patched,Sub_Conflict]>>simple_patch(Patch,Elt,Patched,Sub_Conflict),
-                Diff,List_In,List_Out,Conflict)
-    %   This requires a bit of care around constructing the conflict.
-    ;   throw(error(
-                  list_patch_conflict_not_implemented(Diff,List_In),
-                  _))
-    ).
+    maplist([Patch,Elt,Patched,Sub_Conflict]>>simple_patch(Patch,Elt,Patched,Sub_Conflict),
+            Diff,List_In,List_Out,Conflict).
 
 simple_patch_table(Diff,Table_In,Table_Out,Conflict) :-
     is_list(Table_In),
