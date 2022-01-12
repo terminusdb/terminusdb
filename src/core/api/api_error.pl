@@ -1576,6 +1576,15 @@ api_document_error_jsonld(Type, error(not_all_captures_found(Refs),_),JSON) :-
                               'api:captures' : Refs },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(inserted_subdocument_as_document(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a subdocument as a document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InsertedSubdocumentAsDocument',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

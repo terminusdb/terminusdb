@@ -132,6 +132,7 @@ known_document_error(key_missing_fields(_)).
 known_document_error(key_fields_not_an_array(_)).
 known_document_error(key_fields_is_empty).
 known_document_error(unable_to_assign_ids).
+known_document_error(inserted_subdocument_as_document).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -802,3 +803,166 @@ test(basic_capture_list_replace, [
 
 :- end_tests(document_id_capture).
 
+
+:- begin_tests(subdocument_as_document).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+test(insert_subdocument_as_document, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(inserted_subdocument_as_document(_{'@type':"Thing"}))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Thing",
+              '@key': _{
+                          '@type': "Random"
+                      },
+              '@subdocument': []})
+    ),
+
+
+    open_string('
+{"@type": "Thing"}
+',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream,
+                         _Ids).
+
+test(replace_nonexisting_subdocument_as_document, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         error(inserted_subdocument_as_document(_{'@type':"Thing"}))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Thing",
+              '@key': _{
+                          '@type': "Random"
+                      },
+              '@subdocument': []})
+    ),
+
+
+    open_string('
+{"@type": "Thing"}
+',
+                Stream),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_replace_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         Stream,
+                         true,
+                         _Ids).
+
+test(replace_existing_subdocument_as_document, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State)),
+         % Right now, idgen will generate ids of submitted documents
+         % without taking into account that they may be
+         % subdocuments. For the replace case, this means we cannot
+         % directly replace a subdocument, as the submitted id will
+         % never match the generated id. idgen fix is planned but not
+         % yet implemented. Unblock when it is here.
+         blocked('idgen prevents subdocument replace')
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_schema_document(
+                C1,
+                _{'@type': "Class",
+                  '@id': "Thing",
+                  '@key': _{
+                              '@type': "Random"
+                          },
+                  '@subdocument': [],
+                  'name': "xsd:string"}),
+            insert_schema_document(
+                C1,
+                _{'@type': "Class",
+                  '@id': "Outer",
+                  '@key': _{
+                              '@type': "Random"
+                          },
+                  'thing': "Thing"}))
+    ),
+
+
+    open_string('
+{"@type": "Outer",
+ "thing": {"@type": "Thing", "name": "Foo"}
+}
+',
+                Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+
+    api_insert_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         false,
+                         Stream_1,
+                         [Outer_Id]),
+
+    get_document(Desc, Outer_Id, Outer_Document),
+    Id = (Outer_Document.thing.'@id'),
+
+    format(string(Replace_String),
+           '{"@type": "Thing", "@id": "~q", "name": "Bar"}',
+           [Id]),
+    open_string(Replace_String, Stream_2),
+
+    api_replace_documents(SystemDB,
+                         Auth,
+                         "admin/testdb",
+                         instance,
+                         "testauthor",
+                         "testmessage",
+                         Stream_2,
+                         false,
+                         _Ids),
+
+    get_document(Desc, Id, Inner_Document),
+    print_term(Inner_Document),nl.
+
+
+:- end_tests(subdocument_as_document).

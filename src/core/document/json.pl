@@ -2219,6 +2219,11 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
+    % Are we trying to insert a subdocument?
+    get_dict('@type', Elaborated, Type),
+    die_if(is_subdocument(Transaction, Type),
+           error(inserted_subdocument_as_document, _)),
+
     % After elaboration, the Elaborated document will have an '@id'
     get_dict('@id', Elaborated, ID),
 
@@ -2276,7 +2281,10 @@ replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, C
     catch(delete_document(Transaction, false, Id),
           error(document_does_not_exist(_),_),
           (   Create = true
-          ->  true
+          % If we're creating a document, we gotta be sure that it is not a subdocument
+          ->  get_dict('@type', Elaborated, Type),
+              die_if(is_subdocument(Transaction, Type),
+                     error(inserted_subdocument_as_document, _))
           ;   throw(error(document_does_not_exist(Id, Document),_)))),
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
