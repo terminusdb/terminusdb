@@ -1957,10 +1957,14 @@ save_and_retrieve_woql(Query_In, Query_Out) :-
     random(0,10000,Random),
     format(atom(Label), "woql_~q", [Random]),
     test_woql_label_descriptor(Label, Descriptor),
+    Document_In = _{'@type': "NamedQuery",
+                    name: "TestQuery",
+                    query: Query_In},
     run_insert_document(Descriptor, commit_object{ author : "automated test framework",
-                                                   message : "testing"}, Query_In, Id),
+                                                   message : "testing"}, Document_In, Id),
     * print_all_triples(Descriptor),
-    get_document(Descriptor, Id, Query_Out).
+    get_document(Descriptor, Id, Document_Out),
+    Query_Out = (Document_Out.query).
 
 query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
