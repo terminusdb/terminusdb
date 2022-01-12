@@ -50,7 +50,7 @@ simple_diff(Same,Same,_,_,_,_) :-
     !,
     fail.
 simple_diff(Before,After,Diff,_State,Cost,New_Cost) :-
-    Diff = _{ '@op' : "ValueSwap",
+    Diff = _{ '@op' : "SwapValue",
               '@before' : Before,
               '@after' : After },
     New_Cost is Cost + 1.
@@ -73,7 +73,7 @@ simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],State,Cost,New_Cost)
     get_dict(Key,Before,Sub_Before),
     % has it in the before but not the after.
     !,
-    Sub_Diff = _{ '@op' : "ValueSwap",
+    Sub_Diff = _{ '@op' : "SwapValue",
                   '@before' : Sub_Before,
                   '@after' : null },
     best_cost(State,Best_Cost),
@@ -84,7 +84,7 @@ simple_key_diff([Key|Keys],Before,After,[Key-Sub_Diff|Rest],State,Cost,New_Cost)
     get_dict(Key,After,Sub_After),
     % has it in the before but not the after.
     !,
-    Sub_Diff = _{ '@op' : "ValueSwap",
+    Sub_Diff = _{ '@op' : "SwapValue",
                   '@before' : null,
                   '@after' : Sub_After },
     best_cost(State,Best_Cost),
@@ -96,7 +96,7 @@ split(Index,List,Left,Right) :-
     length(Left, Index),
     append(Left,Right,List).
 
-simple_list_diff([],After,Diff,State,Cost,New_Cost) :-
+simple_list_diff_base([],After,Diff,State,Cost,New_Cost) :-
     !,
     Diff = _{ '@op' : "SwapList",
               '@before' : [],
@@ -105,7 +105,7 @@ simple_list_diff([],After,Diff,State,Cost,New_Cost) :-
     length(After,Length),
     New_Cost is Cost + Length + 1,
     New_Cost < Best_Cost.
-simple_list_diff(Before,[],Diff,State,Cost,New_Cost) :-
+simple_list_diff_base(Before,[],Diff,State,Cost,New_Cost) :-
     !,
     Diff = _{ '@op' : "SwapList",
               '@before' : Before,
@@ -114,20 +114,29 @@ simple_list_diff(Before,[],Diff,State,Cost,New_Cost) :-
     length(Before,Length),
     New_Cost is Cost + Length + 1,
     New_Cost < Best_Cost.
-simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
+simple_list_diff_base(Same,Same,Diff,State,Cost,New_Cost) :-
+    Diff = _{ '@op' : "KeepList" },
+    !,
+    best_cost(State,Best_Cost),
+    New_Cost is Cost + 1,
+    New_Cost < Best_Cost.
+simple_list_diff_base(Before,After,Diff,State,Cost,New_Cost) :-
     length(Before, Length),
     length(After, Length),
     !,
-    mapm(
-        {State}/[B,A,D]>>simple_diff(B,A,D,State),
-        Before,
-        After,
-        Diff,
-        Cost,
-        New_Cost
-    ),
+    mapm({State}/[B,A,D]>>simple_diff(B,A,D,State),
+         Before,
+         After,
+         Diff,
+         Cost,
+         New_Cost
+        ),
     best_cost(State,Best_Cost),
     New_Cost < Best_Cost.
+
+simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
+    simple_list_diff_base(Before,After,Diff,State,Cost,New_Cost),
+    !.
 simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
     length(Before,N),
     down_from(N,0,I),
@@ -156,12 +165,13 @@ simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
         Diff = _{ '@op' : "CopyList",
                   '@to' : I,
                   '@rest' : Patch }
-    ;   Cost_Lower_Bound_Prefix is Cost + 2,
-        Cost_Lower_Bound_Prefix < Best_Cost,
-        simple_list_diff(Before_Prefix,After_Prefix,Prefix_Patch,State,Cost,Cost1),
-        Cost_Lower_Bound_Suffix is Cost1 + 1,
-        Cost_Lower_Bound_Suffix < Best_Cost,
-        simple_list_diff(Before_Suffix,After_Suffix,Suffix_Patch,State,Cost1,New_Cost),
+    ;   Cost1 is Cost + 1,
+        Cost_Lower_Bound is Cost1 + 1,
+        Cost_Lower_Bound < Best_Cost,
+        simple_list_diff_base(Before_Prefix,After_Prefix,Prefix_Patch,State,Cost1,Cost2),
+        Cost3 is Cost2 + 1,
+        Cost3 < Best_Cost,
+        simple_list_diff(Before_Suffix,After_Suffix,Suffix_Patch,State,Cost3,New_Cost),
         Diff = _{ '@op' : "PatchList",
                   '@patch' : Prefix_Patch,
                   '@rest' : Suffix_Patch }
@@ -183,7 +193,7 @@ test(simple_diff, []) :-
     simple_diff(Before,After,Patch),
     Patch = _{name:_{'@after':"Ludo",
                      '@before':"Ludwig",
-                     '@op':"ValueSwap"}
+                     '@op':"SwapValue"}
              }.
 
 test(simple_list_diff, []) :-
@@ -194,6 +204,12 @@ test(simple_list_diff, []) :-
              '@rest':_{'@after':[2],'@before':[],
                        '@op':"SwapList"},
              '@to':1}.
+
+test(simple_list_diff_middle, []) :-
+    List1 = [1,2,3],
+    List2 = [1,3],
+    simple_diff(List1,List2,Diff),
+    writeq(Diff).
 
 test(deep_list_diff_append, []) :-
 
@@ -270,7 +286,23 @@ test(deep_list_diff, []) :-
     Patch = _{addresses:[
                   _{address1:_{'@after':"Mölker Bastei 8",
                                '@before':"Mölker Bastei 7",
-                               '@op':"ValueSwap"}}]
+                               '@op':"SwapValue"}}]
              }.
+
+test(list_middle, []) :-
+
+    Before = _{ asdf : "fdsa",
+                bar : "baz",
+                list : [1,2,3,5,6] },
+    After = _{ asdf : "ooo",
+               bar : "bazz",
+               list : [1,2,3,4,5,6] },
+    simple_diff(Before,After,Patch),
+    writeq(Patch),
+    Patch = _{asdf:_{'@after':"ooo",'@before':"fdsa",'@op':"SwapValue"},
+              bar:_{'@after':"bazz",'@before':"baz",'@op':"SwapValue"},
+              list: Rest},
+
+    writeq(Rest).
 
 :- end_tests(simple_diff).
