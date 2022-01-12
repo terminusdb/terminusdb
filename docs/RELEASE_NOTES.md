@@ -1,3 +1,9 @@
+# TerminusDB Server v10.0.14 Beta Release Notes
+## New
++ id capture: during document insert and replace, it is now possible
+  to capture an id and then refer to it in another document, allowing
+  for easy document linking
+
 # TerminusDB Server v10.0.13 Beta Release Notes
 ## Bug fixes
 + utf-8 handling is now the default for json input
