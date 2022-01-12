@@ -32,3 +32,16 @@ This document describes the steps we go through we making a new release.
    1. Wait for CI to pass.
    2. Approve.
    3. Merge.
+
+8. Create a new tag for `$VERSION` on the current release branch:
+
+   ```
+   git checkout v10.0
+   git pull
+   git tag $VERSION
+   git push origin $VERSION
+   ```
+
+9. Create a new release for this tag on GitHub:
+
+   https://github.com/terminusdb/terminusdb/tags
