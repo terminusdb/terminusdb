@@ -54,7 +54,7 @@ This document describes the steps we go through we making a new release.
     1. Approve.
     2. Merge.
 
-12. (_PR_) Update the version number in [`terminus_config.pl`](./src/config/terminus_config.pl).
+12. (_PR_) Update the version number in [`terminus_config.pl`](../src/config/terminus_config.pl).
 
 13. Review the PR for correct version.
     1. Wait for CI to pass.
