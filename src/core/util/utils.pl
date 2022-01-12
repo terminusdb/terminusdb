@@ -72,6 +72,7 @@
               has_duplicates/2,
               index_list/2,
               nb_thread_var/2
+              uri_encoded_string/3
           ]).
 
 /** <module> Utils
@@ -973,3 +974,8 @@ index_list(List,Indexes) :-
 nb_thread_var(Callable, State) :-
     call(Callable, State, Out),
     nb_setarg(1,State, Out).
+
+uri_encoded_string(Component, Value, Encoded_String) :-
+    uri_encoded(Component, Value, Encoded),
+    atom_string(Encoded, Encoded_String).
+
