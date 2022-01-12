@@ -64,7 +64,10 @@ simple_key_diff([Key|Keys],Before,After,New_Keys,State,Cost,New_Cost) :-
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
     (   simple_diff(Sub_Before,Sub_After,Sub_Diff,State,Cost,Cost1)
-    ->  New_Keys = [Key-Sub_Diff|Rest]
+    *-> (   \+ Sub_Diff = _{'@op':"KeepList"}
+        ->  New_Keys = [Key-Sub_Diff|Rest]
+        ;   New_Keys = Rest
+        )
     ;   New_Keys = Rest,
         Cost = Cost1
     ),
@@ -209,7 +212,13 @@ test(simple_list_diff_middle, []) :-
     List1 = [1,2,3],
     List2 = [1,3],
     simple_diff(List1,List2,Diff),
-    writeq(Diff).
+    % This does not seem ideal...
+    Diff = _{'@op':"CopyList",
+             '@to':1,
+             '@rest':
+             _{'@op':"PatchList",
+               '@patch':[_{'@after':3,'@before':2,'@op':"SwapValue"}],
+               '@rest':_{'@after':[],'@before':[3],'@op':"SwapList"}}}.
 
 test(deep_list_diff_append, []) :-
 
@@ -298,11 +307,21 @@ test(list_middle, []) :-
                bar : "bazz",
                list : [1,2,3,4,5,6] },
     simple_diff(Before,After,Patch),
-    writeq(Patch),
-    Patch = _{asdf:_{'@after':"ooo",'@before':"fdsa",'@op':"SwapValue"},
-              bar:_{'@after':"bazz",'@before':"baz",'@op':"SwapValue"},
-              list: Rest},
-
-    writeq(Rest).
+    Patch = _{asdf:
+              _{'@after':"ooo",
+                '@before':"fdsa",
+                '@op':"SwapValue"},
+              bar:
+              _{'@after':"bazz",
+                '@before':"baz",
+                '@op':"SwapValue"},
+              list:
+              _{'@op':"CopyList",
+                '@to':3,
+                '@rest':_{'@op':"PatchList",
+                          '@patch':_{'@before':[],
+                                     '@after':[4],
+                                     '@op':"SwapList"},
+                          '@rest':_{'@op':"KeepList"}}}}.
 
 :- end_tests(simple_diff).
