@@ -5904,7 +5904,6 @@ test(round_trip_float,
 
     Geo_Schema_Atom = '{ "@type" : "Class",
       "@id" : "GeoCoordinate",
-      "@subdocument" : [],
       "@key" : { "@type" : "Lexical",
                  "@fields" : ["latitude", "longitude"] },
       "latitude" : "xsd:decimal",
@@ -7432,29 +7431,33 @@ test(subsumption_insert,
          )
      ]) :-
 
-    JSON = _{'@type' : "Subsumption",
-             'child' : _{ '@type' : "NodeValue",
-                          'node' : "system:Organization"},
-             'parent' : _{'@type' : "NodeValue",
-                          'variable' : "Parent"} },
+    JSON = _{'@type': "NamedQuery",
+             name: "TestQuery",
+             query: _{'@type' : "Subsumption",
+                      'child' : _{ '@type' : "NodeValue",
+                                   'node' : "system:Organization"},
+                      'parent' : _{'@type' : "NodeValue",
+                                   'variable' : "Parent"}}},
 
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, Id),
 
     get_document(Desc, Id, JSON2),
 
-    JSON2 =
-    json{ '@id':'Subsumption/df269c56e3b263424bb3f9c9e4316a10ceb21e43c14e51bebd705c89068e7ddf',
-          '@type':'Subsumption',
-          child:json{ '@id':'NodeValue/ce25df5164a1d812aa1e79d8aa0e5cbd61f3f1a4b69d53add7115b267989117b',
-                      '@type':'NodeValue',
-                      node:"system:Organization"
-                    },
-          parent:json{ '@id':'NodeValue/9f77cd3ff5da0240e21bacceec8c31f137cb92a15426d6b21e7c55ae26cf8390',
-                       '@type':'NodeValue',
-                       variable:"Parent"
-		     }
-        }.
+    JSON2 = json{'@id':'NamedQuery/TestQuery',
+                 '@type':'NamedQuery',
+                 name: "TestQuery",
+                 query: json{ '@id':'Subsumption/df269c56e3b263424bb3f9c9e4316a10ceb21e43c14e51bebd705c89068e7ddf',
+                              '@type':'Subsumption',
+                              child:json{ '@id':'NodeValue/ce25df5164a1d812aa1e79d8aa0e5cbd61f3f1a4b69d53add7115b267989117b',
+                                          '@type':'NodeValue',
+                                          node:"system:Organization"
+                                        },
+                              parent:json{ '@id':'NodeValue/9f77cd3ff5da0240e21bacceec8c31f137cb92a15426d6b21e7c55ae26cf8390',
+                                           '@type':'NodeValue',
+                                           variable:"Parent"
+		                         }
+                            }}.
 
 test(substring_insert, [
          setup(
@@ -7466,50 +7469,55 @@ test(substring_insert, [
          )
      ]) :-
 
-    JSON = _{'@type' : "Substring",
-             string : _{ '@type' : "DataValue",
-                         data : _{'@type' : "xsd:string",
-                                  '@value' : "Test"}},
-             before : _{ '@type' : "DataValue",
-                         data : _{'@type' : "xsd:integer",
-                                  '@value' : 1}},
-             length : _{ '@type' : "DataValue",
-                         variable : "Length"},
-             after : _{ '@type' : "DataValue",
-                        data : _{'@type' : "xsd:integer",
-                                 '@value' : 1}},
-             substring : _{ '@type' : "DataValue",
-                            variable : "Substring" }},
+    JSON = _{'@type': "NamedQuery",
+             name: "TestQuery",
+             query: _{'@type' : "Substring",
+                      string : _{ '@type' : "DataValue",
+                                  data : _{'@type' : "xsd:string",
+                                           '@value' : "Test"}},
+                      before : _{ '@type' : "DataValue",
+                                  data : _{'@type' : "xsd:integer",
+                                           '@value' : 1}},
+                      length : _{ '@type' : "DataValue",
+                                  variable : "Length"},
+                      after : _{ '@type' : "DataValue",
+                                 data : _{'@type' : "xsd:integer",
+                                          '@value' : 1}},
+                      substring : _{ '@type' : "DataValue",
+                                     variable : "Substring" }}},
 
     run_insert_document(Desc, commit_object{ author : "me",
                                              message : "boo"}, JSON, Id),
 
     get_document(Desc, Id, JSON2),
 
-    JSON2 =
-    json{ '@id':'Substring/58966c0b377f0bef26c5e70c9e1dfcc755a0d0283dfd5c1bd24ab00088dfcf74',
-          '@type':'Substring',
-          after:json{ '@id':'DataValue/7754f109f1156e98967aab291d4297d84e880a1791bd668cfd92843806006953',
-                      '@type':'DataValue',
-                      data:json{'@type':'xsd:integer','@value':1}
-                    },
-          before:json{ '@id':'DataValue/7754f109f1156e98967aab291d4297d84e880a1791bd668cfd92843806006953',
-                       '@type':'DataValue',
-                       data:json{'@type':'xsd:integer','@value':1}
-                     },
-          length:json{ '@id':'DataValue/345e2ac5aa9fdb2497f535fa0b8a3bfbb32ba34bc6b248b804fba60c2259fd6e',
-                       '@type':'DataValue',
-                       variable:"Length"
-                     },
-          string:json{ '@id':'DataValue/361af56aa6241921e995130e61dd0aaf6d4d307e5e7a5bfce77e188d1ebeacb2',
-                       '@type':'DataValue',
-                       data:json{'@type':'xsd:string','@value':"Test"}
-                     },
-          substring:json{ '@id':'DataValue/c53baa036cc4e3af24ed85c0e339c592262c6ebccea830850dba0be4bbfd0b66',
-		          '@type':'DataValue',
-		          variable:"Substring"
-		        }
-        }.
+    JSON2 = json{'@id':'NamedQuery/TestQuery',
+                 '@type':'NamedQuery',
+                 name: "TestQuery",
+                 query: json{ '@id':'Substring/58966c0b377f0bef26c5e70c9e1dfcc755a0d0283dfd5c1bd24ab00088dfcf74',
+                              '@type':'Substring',
+                              after:json{ '@id':'DataValue/7754f109f1156e98967aab291d4297d84e880a1791bd668cfd92843806006953',
+                                          '@type':'DataValue',
+                                          data:json{'@type':'xsd:integer','@value':1}
+                                        },
+                              before:json{ '@id':'DataValue/7754f109f1156e98967aab291d4297d84e880a1791bd668cfd92843806006953',
+                                           '@type':'DataValue',
+                                           data:json{'@type':'xsd:integer','@value':1}
+                                         },
+                              length:json{ '@id':'DataValue/345e2ac5aa9fdb2497f535fa0b8a3bfbb32ba34bc6b248b804fba60c2259fd6e',
+                                           '@type':'DataValue',
+                                           variable:"Length"
+                                         },
+                              string:json{ '@id':'DataValue/361af56aa6241921e995130e61dd0aaf6d4d307e5e7a5bfce77e188d1ebeacb2',
+                                           '@type':'DataValue',
+                                           data:json{'@type':'xsd:string','@value':"Test"}
+                                         },
+                              substring:json{ '@id':'DataValue/c53baa036cc4e3af24ed85c0e339c592262c6ebccea830850dba0be4bbfd0b66',
+		                              '@type':'DataValue',
+		                              variable:"Substring"
+		                            }
+                            }
+                 }.
 
 test(named_parametric_query, [
          setup(
