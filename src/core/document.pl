@@ -61,7 +61,7 @@
               simple_diff/3,
 
               % patch.pl
-              simple_patch/4
+              simple_patch/3
           ]).
 
 :- use_module('document/validation').

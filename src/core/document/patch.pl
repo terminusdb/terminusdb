@@ -1,5 +1,5 @@
 :- module('document/patch',
-          [simple_patch/4]).
+          [simple_patch/3]).
 
 :- use_module(core(util)).
 
@@ -408,44 +408,38 @@ Resulting in the following document:
 
 */
 
-simple_patch(Diff,JSON_In,JSON_Out,Conflict) :-
+simple_patch(Diff,JSON_In,JSON_Out) :-
     is_dict(JSON_In),
     !,
     dict_keys(JSON_In,Doc_Keys),
     dict_keys(Diff,Diff_Keys),
     union(Doc_Keys,Diff_Keys,Keys),
-    pairs_and_conflicts_from_keys(Keys,JSON_In,Diff,Pairs,Conflicts),
-    dict_create(JSON_Out,_,Pairs),
-    dict_create(Conflict,_,Conflicts).
-simple_patch(Diff,Before,After,Conflict) :-
+    pairs_and_conflicts_from_keys(Keys,JSON_In,Diff,Pairs),
+    dict_create(JSON_Out,_,Pairs).
+simple_patch(Diff,Before,After) :-
     diff_op(Diff,Op),
-    simple_op_diff_value(Op, Diff, Before, After, Conflict).
+    simple_op_diff_value(Op, Diff, Before, After).
 
-simple_patch_list(Diff,List_In,List_Out,Conflict) :-
+simple_patch_list(Diff,List_In,List_Out) :-
     is_list(List_In),
     !,
-    maplist([Patch,Elt,Patched,Sub_Conflict]>>simple_patch(Patch,Elt,Patched,Sub_Conflict),
-            Diff,List_In,List_Out,Conflict).
+    maplist([Patch,Elt,Patched]>>simple_patch(Patch,Elt,Patched),
+            Diff,List_In,List_Out).
 
-simple_patch_table(Diff,Table_In,Table_Out,Conflict) :-
+simple_patch_table(Diff,Table_In,Table_Out) :-
     is_list(Table_In),
     !,
     row_length(Diff,Diff_Row_Length),
     column_length(Diff,Diff_Column_Length),
     row_length(Table_In,Row_Length),
     column_length(Table_In,Column_Length),
-    (   Diff_Row_Length = Row_Length,
-        Diff_Column_Length = Column_Length
-    ->  maplist([Diff_Row,Row_In,Row_Out,Conflict_Row]>>
-                maplist([Patch,Elt,Patched,Sub_Conflict]>>
-                        simple_patch(Patch,Elt,Patched,Sub_Conflict),
-                        Diff_Row,Row_In,Row_Out,Conflict_Row),
-                Diff,Table_In,Table_Out,Conflict)
-    %   This requires a bit of care around constructing the conflict.
-    ;   throw(error(
-                  table_patch_conflict_not_implemented(Diff,Table_In),
-                  _))
-    ).
+    Diff_Row_Length = Row_Length,
+    Diff_Column_Length = Column_Length,
+    maplist([Diff_Row,Row_In,Row_Out]>>
+            maplist([Patch,Elt,Patched]>>
+                    simple_patch(Patch,Elt,Patched),
+                    Diff_Row,Row_In,Row_Out),
+            Diff,Table_In,Table_Out).
 
 
 %%% Table utils
@@ -484,59 +478,46 @@ split_column([R|Rows], N, [Left|Top], [Right|Bottom]) :-
 
 
 %%% Conflict utils
-pairs_and_conflicts_from_keys([], _, _, [], []).
-pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff, [Result|Values], Conflicts_Out) :-
-    simple_patch_key_value(Key,JSON,Diff,Result,Conflict),
+pairs_and_conflicts_from_keys([], _, _, []).
+pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff, [Result|Values]) :-
+    simple_patch_key_value(Key,JSON,Diff,Result),
     !,
-    (   Conflict = _{}
-    ->  Conflicts_Out = Conflicts
-    ;   Conflicts_Out = [Conflict|Conflicts]
-    ),
-    pairs_and_conflicts_from_keys(Keys, JSON, Diff, Values, Conflicts).
+    pairs_and_conflicts_from_keys(Keys, JSON, Diff, Values).
 
 
 %%% Patch operations
-simple_op_diff_value('ForceValue', Diff, _, After, _{}) :-
+simple_op_diff_value('ForceValue', Diff, _, After) :-
     get_dict('@after', Diff, After).
-simple_op_diff_value('SwapValue', Diff, Before, After, Conflict) :-
-    get_dict('@before', Diff, Before_Expected),
-    get_dict('@after', Diff, After),
-    value_conflict(Before,Before_Expected,Conflict).
-simple_op_diff_value('CopyList', Diff, Before, After, Conflict) :-
+simple_op_diff_value('SwapValue', Diff, Before, After) :-
+    get_dict('@before', Diff, Before),
+    get_dict('@after', Diff, After).
+simple_op_diff_value('CopyList', Diff, Before, After) :-
     get_dict('@to', Diff, To),
     get_dict('@rest', Diff, Next_Diff),
     nth_list_prefix_suffix(To,Before,Prefix,Suffix),
     diff_op(Next_Diff,Op),
-    % we need to build up the conflict appropriately here...
-    simple_op_diff_value(Op,Next_Diff,Suffix, Rest, Rest_Conflict),
-    append(Prefix,Rest,After),
-    list_conflict(Before,Before,Rest_Conflict,Conflict).
-simple_op_diff_value('SwapList', Diff, Before, After, Conflict) :-
-    get_dict('@before', Diff, Prefix_Before_Expected),
-    get_dict('@after', Diff, Prefix_After),
+    simple_op_diff_value(Op,Next_Diff,Suffix, Rest),
+    append(Prefix,Rest,After).
+simple_op_diff_value('SwapList', Diff, Before, After) :-
+    get_dict('@before', Diff, Before_Prefix),
+    get_dict('@after', Diff, After_Prefix),
     get_dict('@rest', Diff, Next_Diff),
-    length(Prefix_Before_Expected, N),
-    length(Prefix_Before, N),
-    append(Prefix_Before,Suffix_Before,Before),
+    append(Before_Prefix,Before_Suffix,Before),
+    append(After_Prefix,After_Suffix,After),
     diff_op(Next_Diff,Op),
-    simple_op_diff_value(Op,Next_Diff,Suffix_Before,Suffix_After,Rest_Conflict),
-    append(Prefix_After,Suffix_After,After),
-    list_conflict(Prefix_Before,Prefix_Before_Expected,Rest_Conflict,Conflict).
-simple_op_diff_value('PatchList', Diff, Before, After, Conflict) :-
+    simple_op_diff_value(Op,Next_Diff, Before_Suffix, After_Suffix).
+simple_op_diff_value('PatchList', Diff, Before, After) :-
     %% This should recover when the patch list length is smaller instead of failing.
     get_dict('@patch', Diff, Patch),
     get_dict('@rest', Diff, Rest),
     length(Patch, To),
     nth_list_prefix_suffix(To,Before,Prefix_Before,Suffix_Before),
-    simple_patch_list(Patch,Prefix_Before,Prefix_After,Prefix_Conflict),
+    simple_patch_list(Patch,Prefix_Before,Prefix_After),
     diff_op(Rest,Op),
-    simple_op_diff_value(Op,Rest,Suffix_Before,Suffix_After,Rest_Conflict),
-    append(Prefix_After,Suffix_After,After),
-    % Conflict construction here is wrong.
-    % We need to take into account the Prefix_Conflict
-    list_patch_conflict(To,Prefix_Conflict,Rest_Conflict,Conflict).
-simple_op_diff_value('KeepList', _Diff, Same, Same, _{}).
-simple_op_diff_value('CopyTable', Diff, Before, After, Conflict) :-
+    simple_op_diff_value(Op,Rest,Suffix_Before,Suffix_After),
+    append(Prefix_After,Suffix_After,After).
+simple_op_diff_value('KeepList', _Diff, Same, Same).
+simple_op_diff_value('CopyTable', Diff, Before, After) :-
     get_dict('@to_row', Diff, To_Row),
     get_dict('@to_column', Diff, To_Column),
     get_dict('@bottom_left', Diff, BL_Diff),
@@ -544,35 +525,32 @@ simple_op_diff_value('CopyTable', Diff, Before, After, Conflict) :-
     get_dict('@bottom_right', Diff, BR_Diff),
     split_matrix(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
     diff_op(BL_Diff,BL_Op),
-    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New,BL_Conflict),
+    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
     diff_op(TR_Diff,TR_Op),
-    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New,TR_Conflict),
+    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
-    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New, BR_Conflict),
-    split_matrix(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New),
-    table_conflict(Top_Left, Top_Left, BL_Conflict, TR_Conflict, BR_Conflict, Conflict).
-simple_op_diff_value('SwapTable', Diff, Before, After, Conflict) :-
-    get_dict('@before', Diff, Top_Left_Before_Expected),
+    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
+    split_matrix(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
+simple_op_diff_value('SwapTable', Diff, Before, After) :-
+    get_dict('@before', Diff, Top_Left_Before),
     get_dict('@after', Diff, Top_Left_After),
     get_dict('@bottom_left', Diff, BL_Diff),
     get_dict('@top_right', Diff, TR_Diff),
     get_dict('@bottom_right', Diff, BR_Diff),
-    row_length(Top_Left_Before_Expected,To_Row_Before),
-    column_length(Top_Left_Before_Expected,To_Column_Before),
+    row_length(Top_Left_Before,To_Row_Before),
+    column_length(Top_Left_Before,To_Column_Before),
     split_matrix(Before,To_Row_Before,To_Column_Before,
                  Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
     diff_op(BL_Diff,BL_Op),
-    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New, BL_Conflict),
+    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
     diff_op(TR_Diff,TR_Op),
-    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New, TR_Conflict),
+    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
-    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New, BR_Conflict),
+    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
     row_length(Top_Left_After,To_Row_After),
     column_length(Top_Left_After,To_Column_After),
-    split_matrix(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New),
-    table_conflict(Top_Left_Before, Top_Left_Before_Expected,
-                   BL_Conflict, TR_Conflict, BR_Conflict, Conflict).
-simple_op_diff_value('PatchTable', Diff, Before, After, Conflict) :-
+    split_matrix(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
+simple_op_diff_value('PatchTable', Diff, Before, After) :-
     get_dict('@top_left', Diff, TL_Diff),
     get_dict('@bottom_left', Diff, BL_Diff),
     get_dict('@top_right', Diff, TR_Diff),
@@ -581,131 +559,17 @@ simple_op_diff_value('PatchTable', Diff, Before, After, Conflict) :-
     column_length(TL_Diff,To_Column),
     split_matrix(Before,To_Row,To_Column,
                  Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
-    simple_patch_table(TL_Diff,Top_Left_Before, TL_New, TL_Conflict),
+    simple_patch_table(TL_Diff,Top_Left_Before, TL_New),
     diff_op(BL_Diff,BL_Op),
-    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New, BL_Conflict),
+    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
     diff_op(TR_Diff,TR_Op),
-    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New, TR_Conflict),
+    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
-    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New, BR_Conflict),
+    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
     row_length(Top_Left_After,To_Row_After),
     column_length(Top_Left_After,To_Column_After),
-    split_matrix(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New),
-    % DDD
-    % Conflict construction here is completely wrong.
-    % We need to take into account the TL_Conflict
-    table_patch_conflict(To_Row,To_Column,
-                         TL_Conflict, BL_Conflict, TR_Conflict, BR_Conflict,
-                         Conflict).
-simple_op_diff_value('KeepTable', _Diff, Same, Same, _{}).
-
-promote_table_conflict(_{}, _{ '@op' : "KeepTable" }) :- !.
-promote_table_conflict(Conflict, Conflict).
-
-promote_list_conflict(_{},  _{ '@op' : "KeepList" }) :- !.
-promote_list_conflict(Conflict, Conflict).
-
-value_conflict(Before, Before, _{}) :-
-    !.
-value_conflict(Before, Before_Expected, _{ '@op' : "@SwapValue",
-                                           '@before' : Before,
-                                           '@after' : Before_Expected }).
-
-% DDD: list_conflict/4 and list_patch_conflict/4 should probably use the same code path
-list_conflict(Before, Before, _{}, _{}) :-
-    !.
-list_conflict(Before, Before, Rest_Conflict, Conflict) :-
-    !,
-    length(Before, To),
-    promote_list_conflict(Rest_Conflict, Rest_Conflict_Promoted),
-    Conflict = _{ 'op' : "CopyList",
-                  '@to' : To,
-                  '@rest' : Rest_Conflict_Promoted
-                }.
-list_conflict(Before, After, Rest_Conflict, Conflict) :-
-    promote_list_conflict(Rest_Conflict, Rest_Conflict_Promoted),
-    Conflict = _{ 'op' : "SwapList",
-                  '@before' : Before,
-                  '@after' : After,
-                  '@rest' : Rest_Conflict_Promoted
-                }.
-
-list_patch_conflict(_To,_{},_{},_{}) :-
-    !.
-list_patch_conflict(To, _{}, Rest_Conflict, Conflict) :-
-    !,
-    promote_list_conflict(Rest_Conflict, Rest_Conflict_Promoted),
-    Conflict = _{ 'op' : "CopyList",
-                  '@to' : To,
-                  '@rest' : Rest_Conflict_Promoted
-                }.
-list_patch_conflict(_To, Head_Conflict, Rest_Conflict, Conflict) :-
-    !,
-    promote_list_conflict(Rest_Conflict, Rest_Conflict_Promoted),
-    Conflict = _{ 'op' : "PatchList",
-                  '@patch' : Head_Conflict,
-                  '@rest' : Rest_Conflict_Promoted
-                }.
-
-table_conflict(Before, Before, _{}, _{}, _{}, _{}) :-
-    !.
-table_conflict(Before, Before, BL_Conflict, TR_Conflict, BR_Conflict, Conflict) :-
-    !,
-    promote_table_conflict(BL_Conflict, BL_Conflict_Promoted),
-    promote_table_conflict(TR_Conflict, TR_Conflict_Promoted),
-    promote_table_conflict(BR_Conflict, BR_Conflict_Promoted),
-    row_length(Before,To_Row),
-    column_length(Before,To_Column),
-    Conflict = _{ '@op' : "CopyTable",
-                  '@to_row' : To_Row,
-                  '@to_column' : To_Column,
-                  '@bottom_left' : BL_Conflict_Promoted,
-                  '@bottom_right' : BR_Conflict_Promoted,
-                  '@top_right' : TR_Conflict_Promoted
-                }.
-table_conflict(Before, After, BL_Conflict, TR_Conflict, BR_Conflict, Conflict) :-
-    !,
-    promote_table_conflict(BL_Conflict, BL_Conflict_Promoted),
-    promote_table_conflict(TR_Conflict, TR_Conflict_Promoted),
-    promote_table_conflict(BR_Conflict, BR_Conflict_Promoted),
-    Conflict = _{ '@op' : "SwapTable",
-                  '@before' : Before,
-                  '@after' : After,
-                  '@bottom_left' : BL_Conflict_Promoted,
-                  '@bottom_right' : BR_Conflict_Promoted,
-                  '@top_right' : TR_Conflict_Promoted
-                }.
-
-table_patch_conflict(_To_Row, _To_Column, _{}, _{}, _{}, _{}, _{}) :-
-    !.
-table_patch_conflict(To_Row, To_Column, _{}, BL_Conflict, TR_Conflict, BR_Conflict, Conflict) :-
-    !,
-    promote_table_conflict(BL_Conflict, BL_Conflict_Promoted),
-    promote_table_conflict(TR_Conflict, TR_Conflict_Promoted),
-    promote_table_conflict(BR_Conflict, BR_Conflict_Promoted),
-    row_length(Before,To_Row),
-    column_length(Before,To_Column),
-    Conflict = _{ '@op' : "CopyTable",
-                  '@to_row' : To_Row,
-                  '@to_column' : To_Column,
-                  '@bottom_left' : BL_Conflict_Promoted,
-                  '@bottom_right' : BR_Conflict_Promoted,
-                  '@top_right' : TR_Conflict_Promoted
-                }.
-table_patch_conflict(_To_Row, _To_Column,
-                     TL_Conflict, BL_Conflict, TR_Conflict, BR_Conflict,
-                     Conflict) :-
-    !,
-    promote_table_conflict(TL_Conflict, TL_Conflict_Promoted),
-    promote_table_conflict(BL_Conflict, BL_Conflict_Promoted),
-    promote_table_conflict(TR_Conflict, TR_Conflict_Promoted),
-    promote_table_conflict(BR_Conflict, BR_Conflict_Promoted),
-    Conflict = _{ '@op' : "PatchTable",
-                  '@top_left' : TL_Conflict_Promoted,
-                  '@bottom_left' : BL_Conflict_Promoted,
-                  '@bottom_right' : BR_Conflict_Promoted,
-                  '@top_right' : TR_Conflict_Promoted
-                }.
+    split_matrix(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
+simple_op_diff_value('KeepTable', _Diff, Same, Same).
 
 diff_op(Diff, Op) :-
     get_dict('@op', Diff, Operation_String),
@@ -716,22 +580,19 @@ get_dict_or_null(Key,JSON,V) :-
     ->  true
     ;   V = null).
 
-simple_patch_key_value(Key,JSON,Diff,Result,Conflict) :-
+simple_patch_key_value(Key,JSON,Diff,Result) :-
     % If it's in the diff, we're changing it.
     get_dict(Key,Diff,Key_Diff),
     !,
     (   diff_op(Key_Diff,Op)
     ->  get_dict_or_null(Key,JSON,V),
-        simple_op_diff_value(Op,Key_Diff,V,Value,Sub_Conflict),
+        simple_op_diff_value(Op,Key_Diff,V,Value),
         Result = Key-Value
     ;   get_dict_or_null(Key,JSON,V),
-        simple_patch(Key_Diff,V,Value,Sub_Conflict),
+        simple_patch(Key_Diff,V,Value),
         Result = Key-Value
-    ),
-    (   Sub_Conflict = _{}
-    ->  Conflict = _{}
-    ;   Conflict = Key-Sub_Conflict).
-simple_patch_key_value(Key,JSON,_Diff,Key-Value,_{}) :-
+    ).
+simple_patch_key_value(Key,JSON,_Diff,Key-Value) :-
     % This is an implicit copy instruction
     get_dict(Key,JSON,Value).
 
@@ -762,7 +623,7 @@ test(flat_patch, []) :-
                 dob : "2009-08-03"
               },
 
-    simple_patch(Patch,Before,After,_{}).
+    simple_patch(Patch,Before,After).
 
 test(bad_read_state, []) :-
     Before = _{ '@id' : "Person/1",
@@ -774,16 +635,7 @@ test(bad_read_state, []) :-
                          '@before' : "jake",
                          '@after' : "james" }
              },
-    simple_patch(Patch,Before,After,Conflict),
-    After = _{ '@id' : "Person/1",
-               '@type' : "Person",
-               dob : "2009-08-03",
-               name : "james"
-             },
-    Conflict = _{ name: _{ '@op' : "SwapValue",
-                           '@after' : "jim",
-                           '@before': "jake"}
-                }.
+    \+ simple_patch(Patch,Before,_After).
 
 test(flat_patch_missing, []) :-
 
@@ -801,7 +653,7 @@ test(flat_patch_missing, []) :-
                 dob : "2009-08-03"
               },
 
-    simple_patch(Patch,Before,After,_{}).
+    simple_patch(Patch,Before,After).
 
 test(flat_drop_value, []) :-
 
@@ -820,7 +672,7 @@ test(flat_drop_value, []) :-
                 dob: null
               },
 
-    simple_patch(Patch,Before,After,_{}).
+    simple_patch(Patch,Before,After).
 
 
 test(deep_swap_drop_value, []) :-
@@ -861,7 +713,7 @@ test(deep_swap_drop_value, []) :-
                 }
               },
 
-    simple_patch(Patch,Before,After,_{}).
+    simple_patch(Patch,Before,After).
 
 test(deep_swap_wrong_value, []) :-
 
@@ -888,40 +740,8 @@ test(deep_swap_wrong_value, []) :-
                                  '@after' : null }
                 }
              },
-    After =  _{ '@id' : "Person/1",
-                '@type' : "Person",
-                name : "Beethoven",
-                dob : "1770-12-17",
-                address :
-                _{
-                    address1 : "Mölker Bastei 8",
-                    address2 : null,
-                    city : "Vienna",
-                    country : "Austria"
-                }
-              },
 
-    simple_patch(Patch,Before,After,Conflict),
-    After =
-    _{ '@id' : "Person/1",
-       '@type' : "Person",
-       address:
-       _{ address1 : "Mölker Bastei 8",
-          address2 : null,
-          city : "Vienna",
-          country : "Austria"},
-       dob:"1770-12-17",
-       name:"Beethoven"},
-    Conflict =
-    _{ address:
-       _{ address1:
-          _{
-              '@op' : "SwapValue",
-              '@after' : "Probusgasse 7",
-              '@before' : "Probusgasse 6"
-          }
-        }
-     }.
+    \+ simple_patch(Patch,Before,_After).
 
 test(flat_list_diff, []) :-
 
@@ -933,15 +753,15 @@ test(flat_list_diff, []) :-
     Patch = _{ friends : _{ '@op' : "CopyList",
                             '@to' : 1,
                             '@rest' :
-                            _{ '@op' : "SwapList",
-                               '@before' : ["Person/3"],
-                               '@after' : [],
-                               '@rest' : _{ '@op' : "KeepList" }
+                            _{'@op' : "SwapList",
+                              '@before' : ["Person/3"],
+                              '@after' : [],
+                              '@rest' : _{'@op':"KeepList"}
                              }
                           }
              },
 
-    simple_patch(Patch,Before,After,_{}),
+    simple_patch(Patch,Before,After),
     After = _{ '@id' : "Person/1",
                '@type' : "Person",
                friends : ["Person/2","Person/4"],
@@ -978,7 +798,7 @@ test(flat_table_diff, []) :-
                         }
              },
 
-    simple_patch(Patch,Before,After,_{}),
+    simple_patch(Patch,Before,After),
     After = _{ '@id' : "Person/1",
                '@type' : "Person",
                name : "jim",
@@ -1017,23 +837,7 @@ test(flat_table_diff_conflict, []) :-
                         }
              },
 
-    simple_patch(Patch,Before,After,Conflict),
-    After = _{'@id':"Person/1",
-              '@type':"Person",
-              name:"jim",
-              table:[[1,2,3],[4,5,6],[7,8,10]]},
-    Conflict = _{table:_{'@op':"CopyTable",
-                         '@bottom_left':_{'@op':"KeepTable"},
-                         '@bottom_right':_{'@op':"SwapTable",
-                                           '@after':[[8]],'@before':[[9]],
-                                           '@bottom_left':_{'@op':"KeepTable"},
-                                           '@bottom_right':_{'@op':"KeepTable"},
-                                           '@top_right':_{'@op':"KeepTable"}},
-                         '@to_column':2,
-                         '@to_row':2,
-                         '@top_right':_{'@op':"KeepTable"}}}.
-
-
+    \+ simple_patch(Patch,Before,_After).
 
 test(deep_list_patch, []) :-
 
@@ -1072,36 +876,7 @@ test(deep_list_patch, []) :-
                 }
              },
 
-    simple_patch(Patch,Before,After,Conflict),
-
-    After = _{'@id':"Person/Ludwig",
-              '@type':"Person",
-              addresses:[
-                  _{'@id':"Person/jim/Address/addresses/1",
-                    '@type':"Address",
-                    address1:"Mölker Bastei 8",
-                    address2:null,
-                    city:"Vienna",
-                    country:"Austria"},
-                  _{'@id':"Person/jim/Address/addresses/2",
-                    '@type':"Address",
-                    address1:"Probusgasse 6",
-                    address2:null,
-                    city:"Vienna",
-                    country:"Austria"}],
-              name:"Ludwig"},
-
-    Conflict = _{addresses:_{op:"CopyList",
-                             '@to':2,
-                             '@rest':_{op:"PatchList",
-                                       '@patch':[_{address1:
-                                                   _{'@op':"@SwapValue",
-                                                     '@after':"Probusgasse 6",
-                                                     '@before':"Probusgasse 7"}}],
-                                       '@rest':_{'@op':"KeepList"}
-                                      }
-                            }
-                }.
+    \+ simple_patch(Patch,Before,_After).
 
 :- use_module(library(http/json)).
 
@@ -1173,7 +948,7 @@ test(deep_table_patch, []) :-
                   ],
                   '@rest' : _{ '@op' : "KeepList" }}},
 
-    simple_patch(Patch,Before,After,_Conflict),
+    simple_patch(Patch,Before,After),
 
     After = _{'@type':"Excel",
               'Name':"testdoc.xlsx",
@@ -1187,11 +962,7 @@ test(deep_table_patch, []) :-
                                    [_{'@type':"Cell",'Text':"7",'Value':"7.0"},
                                     _{'@type':"Cell",'Text':"8",'Value':"8.0"},
                                     _{'@type':"Cell",'Text':"9",'Value':"9.0"}]],
-                          'Name':"Sheet1"}]},
-
-    json_write(current_output, Before),
-    json_write(current_output, Patch),
-    json_write(current_output, After).
+                          'Name':"Sheet1"}]}.
 
 :- end_tests(simple_patch).
 

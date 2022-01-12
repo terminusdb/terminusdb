@@ -3355,10 +3355,9 @@ patch_handler(post, Request, System_DB, Auth) :-
     api_report_errors(
         patch,
         Request,
-        (   api_patch(System_DB, Auth, Patch, Before, After, Conflict),
-            (   Conflict = _{}
+        (   (   api_patch(System_DB, Auth, Patch, Before, After)
             ->  cors_reply_json(Request, After)
-            ;   cors_reply_json(Request, Conflict, [status(404)])
+            ;   cors_reply_json(Request, "", [status(404)])
             )
         )
     ).

@@ -125,7 +125,7 @@
               user_organizations/3,
 
               % api_patch.pl
-              api_patch/6,
+              api_patch/5,
               api_diff/5
           ]).
 
