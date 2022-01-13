@@ -84,5 +84,4 @@ describe('diff', function () {
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })
-
 })
