@@ -67,4 +67,24 @@ describe('diff', function () {
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })
+
+  it('patch a deep list deep diff', async function () {
+    const { path: diff_path } = endpoint.diff(agent.defaults())
+    const { path: patch_path } = endpoint.patch(agent.defaults())
+    const before = { asdf: { bar: [{ baz: 'quux' }] } }
+    const after = { asdf: { bar: [{ baz: 'quuz' }] } }
+    const r = await agent
+      .post(diff_path)
+      .send({ before: before, after: after })
+    expect(r.status).to.equal(200)
+    const patch = r.body
+    console.log(patch)
+    const r2 = await agent
+      .post(patch_path)
+      .send({ before: before, patch: patch })
+    console.log(r2.body)
+    expect(r2.status).to.equal(200)
+    expect(r2.body).to.deep.equal(after)
+  })
+
 })
