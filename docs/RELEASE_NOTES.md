@@ -1,3 +1,8 @@
+# TerminusDB Server v10.0.15 Beta Release Notes
+## Bug fixes
++ id capture did not work with document arrays
++ subdocuments could be submitted as root documents
+
 # TerminusDB Server v10.0.14 Beta Release Notes
 ## New
 + id capture: during document insert and replace, it is now possible
