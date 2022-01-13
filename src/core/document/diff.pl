@@ -348,4 +348,12 @@ test(list_middle, []) :-
                                '@rest':_{'@op':"KeepList"}},
                      '@to':3}}.
 
+:- use_module(core('document/patch')).
+
+test(deep_list_patch, []) :-
+    Before = _{ asdf: _{ bar: [_{ baz: 'quux' }] } },
+    After = _{ asdf: _{ bar: [_{ baz: 'quuz' }] } },
+    simple_diff(Before,After,Diff),
+    simple_patch(Diff,Before,After).
+
 :- end_tests(simple_diff).
