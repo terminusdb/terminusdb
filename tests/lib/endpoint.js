@@ -46,9 +46,25 @@ function remote (params) {
   }
 }
 
+function diff (params) {
+  params = new Params(params)
+  return {
+    path: '/api/diff',
+  }
+}
+
+function patch (params) {
+  params = new Params(params)
+  return {
+    path: '/api/patch',
+  }
+}
+
 module.exports = {
   branch,
   db,
   document,
   remote,
+  diff,
+  patch,
 }

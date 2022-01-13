@@ -30,6 +30,7 @@
               replace_schema_document/4,
               nuke_schema_documents/1,
               database_prefixes/2,
+              database_schema_prefixes/2,
               insert_context_document/2,
               run_insert_document/4,
               create_graph_from_json/5,
@@ -2622,15 +2623,6 @@ replace_schema_document(Query_Context, Document, Create, Id) :-
     !,
     query_default_collection(Query_Context, TO),
     replace_schema_document(TO, Document, Create, Id).
-
-write_schema_string(Schema, Desc) :-
-    create_context(Desc, commit{author: "a", message: "m"}, Context),
-    with_transaction(Context, write_json_string_to_schema(Context, Schema), _).
-
-:- meta_predicate write_schema(1,+).
-write_schema(P,Desc) :-
-    call(P,Schema),
-    write_schema_string(Schema, Desc).
 
 :- begin_tests(json_stream).
 :- use_module(core(util)).
@@ -8907,6 +8899,7 @@ test(underscore_space_slash_in_id,
            foo: "hi_there buddy",
            bar: (0.5),
            baz: "lo_there/buddy"},
+
         'Thing/hi_there%20buddy+0.5+lo_there%2Fbuddy').
 
 test(normalizable_float,
