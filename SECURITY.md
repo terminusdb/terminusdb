@@ -1,20 +1,24 @@
 # Security Policy
 
-## Supported Versions
+## Reporting a Vulnerability
+
+Check if the vulnerability is for a currently supported version of TerminusDB
+listed below.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 10.0.x  | :white_check_mark: |
-| < 9.0   | :x:                |
+| > 10.0  | :white_check_mark: |
+| < 10.0  | :x:                |
 
-## Reporting a Vulnerability
+Report the vulnerability to <security@terminusdb.com>.
 
-Please don't file a public issue when you discover a vulnerability. Always report vulnerabilities to security@terminusdb.com.
-This allows us to fix the issue and minimize the impact when the vulnerability has not yet been widely discovered.
+> :warning: Please do **not** file a public issue when reporting a
+> vulnerability. This allows us to fix the issue and minimize the impact before
+> the vulnerability has been widely discovered.
 
-Please include the following details in your report:
+Include the following details in your report:
 
-- Your OS
+- OS name and version
+- TerminusDB version
 - How to reproduce the issue
-- Version of TerminusDB
 - Proof of concept exploit code if possible
