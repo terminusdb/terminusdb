@@ -142,7 +142,7 @@ simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
     (   is_list(Simple_Diff)
     ->  Simple_Diff = Diff
     ;   _{ '@op' : "SwapList" } :< Simple_Diff
-    ->  put_dict(_{'@rest' : {'@op' : "KeepList"}}, Simple_Diff, Diff)
+    ->  put_dict(_{'@rest' : _{'@op' : "KeepList"}}, Simple_Diff, Diff)
     ;   Simple_Diff = Diff
     ).
 simple_list_diff(Before,After,Diff,State,Cost,New_Cost) :-
@@ -208,6 +208,25 @@ test(simple_diff, []) :-
                      '@before':"Ludwig",
                      '@op':"SwapValue"}
              }.
+
+test(introduce_drop, []) :-
+    Before = _{asdf:"fdsa"},
+    After = _{name:"Ludo"},
+    simple_diff(Before,After,Patch),
+    Patch = _{asdf:_{'@after':null,
+                     '@before':"fdsa",
+                     '@op':"SwapValue"},
+              name:_{'@after':"Ludo",
+                     '@before':null,
+                     '@op':"SwapValue"}}.
+
+test(introduce_deep, []) :-
+    Before = _{},
+    After = _{name:_{asdf:"Ludo"}},
+    simple_diff(Before,After,Patch),
+    Patch = _{name:_{'@after':_{asdf:"Ludo"},
+                     '@before':null,
+                     '@op':"SwapValue"}}.
 
 test(simple_list_diff, []) :-
     List1 = [1],
