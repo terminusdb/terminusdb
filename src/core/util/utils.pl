@@ -64,6 +64,7 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
+              json_read_dict_list_stream/2,
               json_stream_read_single_dict/2,
               skip_generate_nsols/3,
               input_to_integer/2,
@@ -905,6 +906,12 @@ json_read_dict_stream(Stream,Term) :-
     *-> true
     ;   !,
         fail).
+
+json_read_dict_list_stream(Stream, Term) :-
+    json_read_dict_stream(Stream, Term_1),
+    (   is_list(Term_1)
+    ->  member(Term, Term_1)
+    ;   Term = Term_1).
 
 json_stream_read_single_dict(Stream,Term) :-
     json_read_dict(Stream, Term, [default_tag(json),end_of_file(eof)]),

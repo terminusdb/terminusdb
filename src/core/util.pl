@@ -126,6 +126,7 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
+              json_read_dict_list_stream/2,
               json_stream_read_single_dict/2,
               skip_generate_nsols/3,
               input_to_integer/2,
