@@ -53,10 +53,18 @@ function diff (params) {
   }
 }
 
+function patch (params) {
+  params = new Params(params)
+  return {
+    path: '/api/patch',
+  }
+}
+
 module.exports = {
   branch,
   db,
   document,
   remote,
   diff,
+  patch,
 }
