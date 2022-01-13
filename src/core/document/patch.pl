@@ -595,7 +595,11 @@ simple_patch_key_value(Key,JSON,Diff,Result) :-
     % If it's in the diff, we're changing it.
     get_dict(Key,Diff,Key_Diff),
     !,
-    (   diff_op(Key_Diff,Op)
+    (   is_list(Key_Diff)
+    ->  get_dict_or_null(Key,JSON,V),
+        simple_patch_list(Key_Diff,V,Value),
+        Result = Key-Value
+    ;   diff_op(Key_Diff,Op)
     ->  get_dict_or_null(Key,JSON,V),
         simple_op_diff_value(Op,Key_Diff,V,Value),
         Result = Key-Value
