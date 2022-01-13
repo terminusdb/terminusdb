@@ -237,7 +237,7 @@ test(simple_list_diff, []) :-
              '@rest':_{'@op':"SwapList",
                        '@before':[],
                        '@after':[2],
-                       '@rest':{'@op':"KeepList"}
+                       '@rest':_{'@op':"KeepList"}
                        }}.
 
 test(simple_list_diff_middle, []) :-
@@ -249,7 +249,7 @@ test(simple_list_diff_middle, []) :-
              '@rest':_{'@op':"PatchList",
                        '@patch':[_{'@after':3,'@before':2,'@op':"SwapValue"}],
                        '@rest':_{'@after':[],'@before':[3],'@op':"SwapList",
-                                 '@rest':{'@op':"KeepList"}}},'@to':1}.
+                                 '@rest':_{'@op':"KeepList"}}},'@to':1}.
 
 test(deep_list_diff_append, []) :-
 
@@ -291,7 +291,7 @@ test(deep_list_diff_append, []) :-
                 _{'@after':[_{'@id':"Person/Ludwig/Address/addresses/2",'@type':"Address",address1:"Probusgasse 6",address2:null,city:"Vienna",country:"Austria"}],
                   '@before':[],
                   '@op':"SwapList",
-                  '@rest':{'@op':"KeepList"}}}}.
+                  '@rest':_{'@op':"KeepList"}}}}.
 
 test(deep_list_diff, []) :-
 
