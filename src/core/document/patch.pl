@@ -396,6 +396,32 @@ Which would result in the following patch:
 { "name" : { "@op" : "SwapValue", "@before" : "Jane", "@after": "Janine" }}
 ```
 
+Some examples using curl are as follows:
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" 'http://127.0.0.1:6363/api/diff' -d @-
+  { "before" : [{ "asdf" : "foo"}], "after" : [{ "asdf" : "bar"}]}
+^D
+[ {"asdf": {"@after":"bar", "@before":"foo", "@op":"SwapValue"}} ]
+$ curl -X POST -H "Content-Type: application/json" 'http://127.0.0.1:6363/api/diff' -d @-
+{ "before" : [0,1,2], "after" : [0,1,2,3]}
+{
+  "@op":"CopyList",
+  "@rest": {
+    "@after": [3 ],
+    "@before": [],
+    "@op":"SwapList",
+    "@rest": {"@op":"KeepList"}
+  },
+  "@to":3
+}
+$ curl -X POST -H "Content-Type: application/json" 'http://127.0.0.1:6363/api/diff' -d @-
+{ "before" : { "asdf" : { "fdsa" : "quux"}}, "after" : { "asdf" : { "fdsa" : "quuz" }}}
+{
+  "asdf": {"fdsa": {"@after":"quuz", "@before":"quux", "@op":"SwapValue"}}
+}
+```
+
 ## Patch
 
 Patch takes a POST with a *before* document and a *patch* and produces an *after*
@@ -412,6 +438,27 @@ Resulting in the following document:
 { "@id" : "Person/Jane", "@type" : Person", "name" : "Janine"}
 ```
 
+Some examples using curl are as follows:
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" 'http://127.0.0.1:6363/api/patch' -d @-
+{ "before" : { "alpha" : 1, "asdf" : { "fdsa" : "quux"}}, "patch" : {
+  "asdf": {"fdsa": {"@after":"quuz", "@before":"quux", "@op":"SwapValue"}}
+}}
+{"alpha":1, "asdf": {"fdsa":"quuz"}}
+$ curl -X POST -H "Content-Type: application/json" 'http://127.0.0.1:6363/api/patch' -d @-
+{ "before" : [0,1,2], "patch" : {
+  "@op":"CopyList",
+  "@rest": {
+    "@after": [3 ],
+    "@before": [],
+    "@op":"SwapList",
+    "@rest": {"@op":"KeepList"}
+  },
+  "@to":3
+}}
+[0, 1, 2, 3 ]
+```
 
 */
 
