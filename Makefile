@@ -33,6 +33,15 @@ debug:
 i:
 	$(SWIPL) -f src/interactive.pl
 
+# Check for implicit imports by disabling autoload
+.PHONY: check-imports
+check-imports:
+	$(SWIPL) \
+	  --on-error=status \
+	  -g "set_prolog_flag(autoload, false)" \
+	  -g "['src/bootstrap.pl']" \
+	  -g halt
+
 # Remove the binary.
 .PHONY: clean
 clean:
