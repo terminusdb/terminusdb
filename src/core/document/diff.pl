@@ -357,3 +357,49 @@ test(deep_list_patch, []) :-
     simple_patch(Diff,Before,After).
 
 :- end_tests(simple_diff).
+
+object_identifier(Obj,Hash) :-
+    term_to_atom(Obj,Atom),
+    crypto_data_hash(Atom, Hash, [algorithm(sha256)]).
+
+list_to_identifier_list([],[]).
+list_to_identifier_list([H|T],[H|Ids]) :-
+    (   string(H)
+    ;   atom(H)
+    ;   number(H)),
+    !,
+    list_to_identifier_list(T,Ids).
+list_to_identifier_list([H|T],[Id|Ids]) :-
+    object_identifier(H,Id),
+    list_to_identifier_list(T,Ids).
+
+create_table(L1,L2,Table) :-
+    Size is (L1 + 1) * (L2 + 1),
+    length(Table,Size).
+
+print_table(Table, L1, L2) :-
+    length(List, L1),
+    append(List, Rest, Table).
+
+index(Length1,Length2,I,J,Table,N) :-
+    Idx is J * (Length1 + 1) + I + 1,
+    nth0(Idx, Table, N).
+
+fill_lcs_table(List1, List2, Table) :-
+    length(List1,Length1),
+    length(List2,Length2),
+    between(0, Length1, I),
+    between(0, Length2, J),
+    true.
+
+lcs(List1,List2,Start1,Start2,Len) :-
+    length(List1,Length1),
+    length(List2,Length2),
+
+    create_table(Length1,Length2,Table),
+    fill_lcs_table(List1,List2,Table).
+
+diff_segment(List1,List2,asd) :-
+    list_to_identifier_list(List1, Ids1),
+    list_to_identifier_list(List2, Ids2),
+    lcs(Ids1,Ids2,Start1,Start2,Length).
