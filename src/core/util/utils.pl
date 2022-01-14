@@ -88,6 +88,7 @@
 :- use_module(library(http/json)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
+:- use_module(library(random)).
 
 /*
  * Forget the next phrase.

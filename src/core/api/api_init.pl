@@ -14,7 +14,10 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(filesex)).
+:- use_module(library(crypto)).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.

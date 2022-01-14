@@ -6,6 +6,7 @@
 :- use_module(core(triple/turtle_utils)).
 
 :- use_module(library(plunit)).
+:- use_module(library(pcre)).
 
 graph_dump(System_DB, Auth, Path, Format, String) :-
     do_or_die(

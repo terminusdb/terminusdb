@@ -17,6 +17,8 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 :- use_module(library(lists)).
+:- use_module(library(pcre)).
+:- use_module(library(url)).
 
 /** <module> File Utils
  *

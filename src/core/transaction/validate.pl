@@ -34,6 +34,8 @@
 
 :- use_module(library(semweb/turtle)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
+:- use_module(library(sort)).
 :- use_module(library(plunit)).
 
 :- use_module(library(terminus_store)).
