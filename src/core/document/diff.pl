@@ -377,12 +377,16 @@ create_table(L1,L2,Table) :-
     Size is (L1 + 1) * (L2 + 1),
     length(Table,Size).
 
-print_table(Table, L1, L2) :-
+print_table(Table, List1, List2) :-
+    format(user_error, '|  |', []),
+    forall(member(Elt,List1),
+           format(user_error, '~q |', [Elt]),
+    format(user_error, '~q', 
     length(List, L1),
     append(List, Rest, Table).
 
-index(Length1,Length2,I,J,Table,N) :-
-    Idx is J * (Length1 + 1) + I + 1,
+index(Length1,I,J,Table,N) :-
+    Idx is J * Length1 + I,
     nth0(Idx, Table, N).
 
 fill_lcs_table(List1, List2, Table) :-
