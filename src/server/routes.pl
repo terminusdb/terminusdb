@@ -247,11 +247,23 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
-                 methods([options,post,delete])]).
+                 methods([options,head,post,delete])]).
 
-/**
- * db_handler(Method:atom,DB:atom,Request:http_request) is det.
- */
+db_handler(head, Organization, DB, Request, System_DB, Auth) :-
+    /* HEAD: Check DB Exists */
+    api_report_errors(
+        check_db,
+        Request,
+        (   db_exists_api(System_DB, Auth, Organization, DB)
+        ->  cors_reply_json(Request, _{'@type' : 'api:DbExistsResponse',
+                                       'api:status' : 'api:success'})
+        ;   cors_reply_json(Request, _{'@type' : 'api:DbExistsErrorResponse',
+                                       'api:status' : 'api:failure',
+                                       'api:message' : "Database does not exist, or you do not have permission"},
+                            [status(404)])
+        )
+    ).
+
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
     check_content_type_json(Request),
