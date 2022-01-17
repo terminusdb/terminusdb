@@ -20,6 +20,15 @@
  * Binds JSON to an appropriate JSON-LD object for the given error and API.
  *
  */
+%% DB Exists
+api_error_jsonld(check_db, error(unknown_database(Organization,DB), _),JSON) :-
+    format(string(Msg), "DB for ~s/~s does not exist or you do not have permission.", [Organization,DB]),
+    JSON = _{'@type' : 'api:DbExistsErrorResponse',
+             'api:status' : 'api:not_found',
+             'api:error' : _{'@type' : 'api:DatabaseInaccessable',
+                             'api:organization_name' : Organization,
+                             'api:database_name' : DB},
+             'api:message' : Msg}.
 %% DB Create
 api_error_jsonld(create_db,error(unknown_organization(Organization_Name),_),JSON) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),

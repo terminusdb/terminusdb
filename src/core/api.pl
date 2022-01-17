@@ -80,6 +80,7 @@
               list_databases/3,
               list_existing_databases/2,
               pretty_print_databases/1,
+              db_exists_api/4,
 
               % api_error.pl
               api_error_jsonld/3,
