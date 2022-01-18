@@ -20,6 +20,24 @@
  * Binds JSON to an appropriate JSON-LD object for the given error and API.
  *
  */
+%% DB Exists
+api_error_jsonld(check_db, error(unknown_database(Organization, Database), _), JSON) :-
+    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
+    JSON = _{'@type' : 'api:DbExistsErrorResponse',
+             'api:status' : 'api:not_found',
+             'api:error' : _{'@type' : 'api:UnknownDatabase',
+                             'api:database_name' : Database,
+                             'api:organization_name' : Organization},
+             'api:message' : Msg}.
+api_error_jsonld(check_db, error(bad_parameter_value(Param, Expected_Value, Value), _), JSON) :-
+    format(string(Msg), "Expected parameter '~s' to have '~q' but found: ~q", [Param, Expected_Value, Value]),
+    JSON = _{'@type' : 'api:DbExistsErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadParameterValue',
+                              'api:parameter' : Param,
+                              'api:expected_value' : Expected_Value,
+                              'api:value' : Value },
+             'api:message' : Msg}.
 %% DB Create
 api_error_jsonld(create_db,error(unknown_organization(Organization_Name),_),JSON) :-
     format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
