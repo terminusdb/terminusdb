@@ -247,14 +247,21 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
-                 methods([options,get,post,delete])]).
+                 methods([options,head,post,delete])]).
 
-db_handler(get, Organization, DB, Request, System_DB, Auth) :-
+db_handler(head, Organization, DB, Request, System_DB, Auth) :-
     /* HEAD: Check DB Exists */
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
     api_report_errors(
         check_db,
         Request,
-        (   db_exists_api(System_DB, Auth, Organization, DB)
+        (   param_value_search_optional(Search, exists, boolean, false, Exists),
+            die_if(Exists \= true,
+                   error(bad_parameter_value(exists, true, Exists), _)),
+            db_exists_api(System_DB, Auth, Organization, DB)
         ->  cors_reply_json(Request, _{'@type' : 'api:DbExistsResponse',
                                        'api:status' : 'api:success'})
         ;   cors_reply_json(Request, _{'@type' : 'api:DbExistsErrorResponse',
