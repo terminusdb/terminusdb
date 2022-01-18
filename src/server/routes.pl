@@ -3381,7 +3381,7 @@ patch_handler(post, Request, System_DB, Auth) :-
         Request,
         (   (   api_patch(System_DB, Auth, Patch, Before, After)
             ->  cors_reply_json(Request, After)
-            ;   cors_reply_json(Request, "", [status(404)])
+            ;   cors_reply_json(Request, null, [status(404)])
             )
         )
     ).
@@ -3770,11 +3770,11 @@ write_cors_headers(Request) :-
 
 cors_reply_json(Request, JSON) :-
     write_cors_headers(Request),
-    reply_json(JSON).
+    reply_json(JSON, [json_object(dict)]).
 
 cors_reply_json(Request, JSON, Options) :-
     write_cors_headers(Request),
-    reply_json(JSON, Options).
+    reply_json(JSON, [json_object(dict)|Options]).
 
 /**
  * cors_json_stream_write_headers_(+Request, +As_List) is det.
