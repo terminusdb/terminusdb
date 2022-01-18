@@ -1,11 +1,20 @@
 const { expect } = require('chai')
 const { Agent, db, endpoint } = require('../lib')
 
-describe('db', function () {
+describe('db-auth', function () {
   let agent
 
   before(function () {
     agent = new Agent().auth()
+  })
+
+  it('fails on database exists with not found', async function () {
+    const { path } = endpoint.db(agent.defaults())
+    const r = await agent
+      .head(path)
+      .query({ exists: true })
+    expect(r.status).to.equal(404)
+    expect(r.text).to.be.undefined
   })
 
   it('fails on deleting nonexistent database', async function () {
