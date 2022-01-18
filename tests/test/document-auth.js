@@ -24,6 +24,14 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
+    it('succeeds on database exists', async function () {
+      const r = await agent
+        .head(dbPath)
+        .query({ exists: true })
+      expect(r.status).to.equal(200)
+      expect(r.text).to.be.undefined
+    })
+
     describe('fails insert with missing parameters', function () {
       const options = [
         [{ queryString: '', bodyString: '' }, 'author'],

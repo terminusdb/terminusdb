@@ -8,6 +8,23 @@ describe('db-noauth', function () {
     agent = new Agent()
   })
 
+  it('fails on database exists for bad parameter value', async function () {
+    const { path } = endpoint.db(agent.defaults())
+    const r = await agent
+      .head(path)
+    expect(r.status).to.equal(400)
+    expect(r.text).to.be.undefined
+  })
+
+  it('fails on database exists with not found', async function () {
+    const { path } = endpoint.db(agent.defaults())
+    const r = await agent
+      .head(path)
+      .query({ exists: true })
+    expect(r.status).to.equal(404)
+    expect(r.text).to.be.undefined
+  })
+
   it('fails on missing comment and label', async function () {
     const { path } = endpoint.db(agent.defaults())
     const bodies = [

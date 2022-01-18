@@ -54,6 +54,10 @@ class Agent {
     }
   }
 
+  head (path) {
+    return this.agent.head(path)
+  }
+
   get (path) {
     return this.agent.get(path)
   }
