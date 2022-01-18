@@ -53,7 +53,30 @@ simple_diff(Before,After,Diff,_State,Cost,New_Cost) :-
     Diff = _{ '@op' : "SwapValue",
               '@before' : Before,
               '@after' : After },
-    New_Cost is Cost + 1.
+    size(Before,Size_Before),
+    size(After,Size_After),
+    New_Cost is Cost + Size_Before + Size_After.
+
+size(JSON, Size) :-
+    is_dict(JSON),
+    !,
+    dict_keys(JSON,Keys),
+    aggregate(sum(S),
+              Key^Sub^(   member(Key,Keys),
+                          get_dict(Key,JSON,Sub),
+                          size(Sub,S)
+                      ),
+              Total),
+    length(Keys,L),
+    Size is L + Total.
+size(JSON, Size) :-
+    is_list(JSON),
+    !,
+    aggregate(sum(S),
+              M^(   member(M,JSON),
+                    size(M,S)),
+              Size).
+size(_JSON, 1).
 
 simple_key_diff([],_Before,_After,[],_State,Cost,Cost).
 simple_key_diff([Key|Keys],Before,After,New_Keys,State,Cost,New_Cost) :-
@@ -373,37 +396,74 @@ list_to_identifier_list([H|T],[Id|Ids]) :-
     object_identifier(H,Id),
     list_to_identifier_list(T,Ids).
 
-create_table(L1,L2,Table) :-
-    Size is (L1 + 1) * (L2 + 1),
-    length(Table,Size).
+%%	lcs(+As:list, +Bs:list, -LCS:list) is det.
+%
+%	True if LCS is a longest common subsequence of As and Bs.
+%	Elements =A= and =B= are can be common if =|A==B|=.
+%
+%	Implemented in terms of lcs/5.
+lcs(A, B, LCS) :-
+    lcs(equality_metric, A, B, LCS_Pairs, _Length),
+    maplist(fst, LCS_Pairs, LCS).
 
-print_table(Table, List1, List2) :-
-    format(user_error, '|  |', []),
-    forall(member(Elt,List1),
-           format(user_error, '~q |', [Elt]),
-    format(user_error, '~q', 
-    length(List, L1),
-    append(List, Rest, Table).
+fst(X-_, X).
 
-index(Length1,I,J,Table,N) :-
-    Idx is J * Length1 + I,
-    nth0(Idx, Table, N).
+% Place to stored memoized lcs/5 results
+:- thread_local lcs_cache/3.
 
-fill_lcs_table(List1, List2, Table) :-
-    length(List1,Length1),
-    length(List2,Length2),
-    between(0, Length1, I),
-    between(0, Length2, J),
-    true.
+%%	lcs(+Cmp:callable,+As:list,+Bs:list,-LCS:list,-Length) is det.
+%
+%	True if LCS is a longest common subsequence of As and Bs.
+%	LCS is a list of pairs =|A-B|= since Cmp allows non-identical
+%	elements to be considered common.
+%
+%	Elements of As and Bs are compared by =|call(Cmp,A,B,Similarity)|=,
+%	where larger =Similarity= values indicate more similar elements.
+%	Length is the sum of similarity scores for elements in the
+%	subsequence.
+%
+%	Implemented with memoization on top of a naive, exponential
+%	algorithm.  It performs fairly well, but patches to use a better
+%	algorithm are welcome.
+:- meta_predicate lcs(3,+,+,-,-).
+lcs(Cmp, As, Bs, LCS, Length) :-
+    retractall(lcs_cache(_,_,_)),
+    lcs_(Cmp,As,Bs,LCS,Length),
+    retractall(lcs_cache(_,_,_)).
 
-lcs(List1,List2,Start1,Start2,Len) :-
-    length(List1,Length1),
-    length(List2,Length2),
+:- meta_predicate lcs_(3,+,+,-,-).
+lcs_(Cmp, As, Bs, LCS, Length) :-
+    term_hash((Cmp,As,Bs), Hash),
+    lcs_cache(Hash, LCS, Length),
+    !.
+lcs_(Cmp,[A|As],[B|Bs],LCS,Length) :-
+    !,
+    call(Cmp, A, B, Similarity),
+    lcs_(Cmp,   As ,   Bs ,LCS_AB, Length_AB0),
+    lcs_(Cmp,   As ,[B|Bs],LCS_A,  Length_A),
+    lcs_(Cmp,[A|As],   Bs ,LCS_B,  Length_B),
+    Length_AB is Similarity + Length_AB0,
+    ( Length_A >= Length_AB, Length_A >= Length_B ->
+        LCS = LCS_A,
+        Length is Length_A
+    ; Length_B >= Length_AB, Length_B >= Length_A ->
+        LCS = LCS_B,
+        Length is Length_B
+    ; otherwise ->
+        LCS = [A-B|LCS_AB],
+        Length = Length_AB
+    ),
+    term_hash((Cmp,[A|As],[B|Bs]), Hash),
+    assert(lcs_cache(Hash, LCS, Length)).
+lcs_(_,[],_,[],0) :- !.
+lcs_(_,_,[],[],0).
 
-    create_table(Length1,Length2,Table),
-    fill_lcs_table(List1,List2,Table).
 
-diff_segment(List1,List2,asd) :-
-    list_to_identifier_list(List1, Ids1),
-    list_to_identifier_list(List2, Ids2),
-    lcs(Ids1,Ids2,Start1,Start2,Length).
+%%	equality_metric(+A, +B, -Similarity) is det.
+%
+%	Similarity is 1 if =|A == B|=, otherwise 0.  This predicate
+%	is helpful as the first argument to lcs/5.
+equality_metric(A,B,Similarity) :-
+    ( A==B -> Similarity=1
+    ; true -> Similarity=0
+    ).
