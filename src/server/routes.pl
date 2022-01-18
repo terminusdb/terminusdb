@@ -247,9 +247,9 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
                 [method(Method),
-                 methods([options,head,post,delete])]).
+                 methods([options,get,post,delete])]).
 
-db_handler(head, Organization, DB, Request, System_DB, Auth) :-
+db_handler(get, Organization, DB, Request, System_DB, Auth) :-
     /* HEAD: Check DB Exists */
     api_report_errors(
         check_db,
