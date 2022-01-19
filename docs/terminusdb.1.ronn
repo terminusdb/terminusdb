@@ -551,3 +551,4 @@ Dmytri Kleiner <dk@terminusdb.com>
 
 [Paulo Moura](https://github.com/pmoura)
 
+Sean Leather <sean@terminusdb.com>
