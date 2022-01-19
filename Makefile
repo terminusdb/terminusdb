@@ -12,6 +12,7 @@ SPACE :=
 SPACE +=
 TARGET_DIR := $(subst $(lastword $(notdir $(MAKEFILE_LIST))),,$(subst $(SPACE),\$(SPACE),$(shell realpath '$(strip $(MAKEFILE_LIST))')))
 TARGET=$(TARGET_DIR)terminusdb
+RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/src/ -type f -name '*.rs')
 
 ifeq ($(shell uname), Darwin)
 	RUST_LIB_NAME := librust.dylib
@@ -32,6 +33,7 @@ bin: $(TARGET)
 .PHONY: all
 all: bin docs
 
+.PHONY: module
 module: $(RUST_TARGET)
 
 # Build a debug version of the binary.
@@ -78,7 +80,8 @@ $(TARGET): $(RUST_TARGET)
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
-$(RUST_TARGET):
+$(RUST_TARGET): $(RUST_FILES)
+	echo $(RUST_FILES)
 	cd src/rust && cargo build --release
 	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
 
