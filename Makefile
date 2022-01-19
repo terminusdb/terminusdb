@@ -38,17 +38,17 @@ module: $(RUST_TARGET)
 
 # Build a debug version of the binary.
 .PHONY: debug
-debug:
+debug: $(RUST_TARGET)
 	echo "main, halt." | $(SWIPL) -f src/bootstrap.pl
 
 # Quick command for interactive
 .PHONY: i
-i:
+i: $(RUST_TARGET)
 	$(SWIPL) -f src/interactive.pl
 
 # Check for implicit imports by disabling autoload
 .PHONY: check-imports
-check-imports:
+check-imports: $(RUST_TARGET)
 	$(SWIPL) \
 	  --on-error=status \
 	  -g "set_prolog_flag(autoload, false)" \
