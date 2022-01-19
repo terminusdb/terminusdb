@@ -81,7 +81,6 @@ $(TARGET): $(RUST_TARGET)
 	  (! grep -e ERROR -e Warning)
 
 $(RUST_TARGET): $(RUST_FILES)
-	echo $(RUST_FILES)
 	cd src/rust && cargo build --release
 	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
 
