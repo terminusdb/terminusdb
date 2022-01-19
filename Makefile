@@ -12,6 +12,16 @@ SPACE :=
 SPACE +=
 TARGET_DIR := $(subst $(lastword $(notdir $(MAKEFILE_LIST))),,$(subst $(SPACE),\$(SPACE),$(shell realpath '$(strip $(MAKEFILE_LIST))')))
 TARGET=$(TARGET_DIR)terminusdb
+RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/src/ -type f -name '*.rs')
+
+ifeq ($(shell uname), Darwin)
+	RUST_LIB_NAME := librust.dylib
+else
+	RUST_LIB_NAME := librust.so
+endif
+
+RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
+RUST_TARGET:=src/rust/$(RUST_LIB_NAME)
 
 ################################################################################
 
@@ -23,19 +33,22 @@ bin: $(TARGET)
 .PHONY: all
 all: bin docs
 
+.PHONY: module
+module: $(RUST_TARGET)
+
 # Build a debug version of the binary.
 .PHONY: debug
-debug:
+debug: $(RUST_TARGET)
 	echo "main, halt." | $(SWIPL) -f src/bootstrap.pl
 
 # Quick command for interactive
 .PHONY: i
-i:
+i: $(RUST_TARGET)
 	$(SWIPL) -f src/interactive.pl
 
 # Check for implicit imports by disabling autoload
 .PHONY: check-imports
-check-imports:
+check-imports: $(RUST_TARGET)
 	$(SWIPL) \
 	  --on-error=status \
 	  -g "set_prolog_flag(autoload, false)" \
@@ -46,6 +59,8 @@ check-imports:
 .PHONY: clean
 clean:
 	rm -f $(TARGET)
+	rm -f $(RUST_TARGET)
+	cd src/rust && cargo clean
 
 # Build the documentation.
 .PHONY: docs
@@ -58,12 +73,16 @@ docs-clean:
 
 ################################################################################
 
-$(TARGET):
+$(TARGET): $(RUST_TARGET)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
 	$(SWIPL) -t 'main,halt.' -O -q -f src/bootstrap.pl 2>&1 | \
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
+
+$(RUST_TARGET): $(RUST_FILES)
+	cd src/rust && cargo build --release
+	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
 
 # Create input for `ronn` from a template and the `terminusdb` help text.
 $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)

@@ -84,3 +84,10 @@ add_template_path :-
     asserta(user:file_search_path(template, Template)).
 
 :- add_template_path.
+
+add_rust_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir, '/rust',Rust),
+    asserta(user:file_search_path(foreign, Rust)).
+
+:- add_rust_path.

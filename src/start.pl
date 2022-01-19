@@ -35,6 +35,8 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- reexport(core(util/syntax)).
 
+:- use_foreign_library(foreign(librust)).
+
 :- use_module(server(routes)).
 :- use_module(server(main)).
 
