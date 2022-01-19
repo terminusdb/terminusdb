@@ -12,6 +12,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "alcs"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f411ec469f16177489d7427a803ed485c87110a8aa88e026545ffcd2ee882447"
+
+[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -255,6 +261,7 @@ checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 name = "rust"
 version = "0.1.0"
 dependencies = [
+ "alcs",
  "swipl",
 ]
 
@@ -285,8 +292,6 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 [[package]]
 name = "swipl"
 version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "643507ed49b904015ac166c579664a20346e655adc7980c7cbc260ef6cec8945"
 dependencies = [
  "lazy_static",
  "swipl-fli",
@@ -297,8 +302,6 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faae0c7a45e3969f07432778774130bcb730f639f888cd8ee96ddd8dd64e5b9e"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -307,8 +310,6 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1b7cf6cbfa5484d916d67858e629874fcc76136aee299d184e81b9751c74828"
 dependencies = [
  "regex",
 ]
@@ -316,8 +317,6 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a575fc11dc12e551e13b1c8e208a0e054bda3bfaeeb1960ecc69bb7847b610a0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
