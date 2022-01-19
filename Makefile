@@ -7,6 +7,7 @@ ROFF_FILE=docs/terminusdb.1
 TARGET=terminusdb
 
 RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/src/ -type f -name '*.rs')
+PROLOG_FILES = $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 
 ifeq ($(shell uname), Darwin)
 	RUST_LIB_NAME := librust.dylib
@@ -67,7 +68,7 @@ docs-clean:
 
 ################################################################################
 
-$(TARGET): $(RUST_TARGET)
+$(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
 	$(SWIPL) -t 'main,halt.' -O -q -f src/bootstrap.pl 2>&1 | \
