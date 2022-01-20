@@ -58,7 +58,7 @@
               match_query_document_uri/4,
 
               % diff.pl
-              simple_diff/3,
+              simple_diff/4,
 
               % patch.pl
               simple_patch/3

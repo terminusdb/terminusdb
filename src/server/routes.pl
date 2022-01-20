@@ -3406,10 +3406,15 @@ diff_handler(post, Request, System_DB, Auth) :-
              } :< Document),
         error(bad_api_document(Document, [before, after]), _)),
 
+    (   _{ keep : Keep } :< Document
+    ->  true
+    ;   Keep = _{ '@id' : true, '_id' : true }
+    ),
+
     api_report_errors(
         diff,
         Request,
-        (   api_diff(System_DB, Auth, Before, After, Patch),
+        (   api_diff(System_DB, Auth, Before, After, Keep, Patch),
             cors_reply_json(Request, Patch)
         )
     ).
