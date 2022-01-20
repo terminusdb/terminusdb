@@ -1021,6 +1021,14 @@ api_error_jsonld(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
+    format(string(Msg), "The explicitly copied key ~q is not the same in both documents.", [Key]),
+    JSON = _{'@type' : 'api:DiffErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ExplicitlyCopiedKeyError',
+                              'api:key' : Key},
+             'api:message' : Msg
+            }.
 api_error_jsonld(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).
 api_error_jsonld(insert_documents, Error, JSON) :-
