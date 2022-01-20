@@ -24,16 +24,15 @@ predicates! {
         for elt in table_diff {
             let atomic =
                 match elt {
-                    lcs::DiffComponent::Unchanged(_x,_y) => unchanged.clone(),
-                    lcs::DiffComponent::Deletion(_x) => deleted.clone(),
-                    lcs::DiffComponent::Insertion(_x) => inserted.clone()
+                    lcs::DiffComponent::Unchanged(_x,_y) => &unchanged,
+                    lcs::DiffComponent::Deletion(_x) => &deleted,
+                    lcs::DiffComponent::Insertion(_x) => &inserted
                 };
             vec.push(atomic);
         }
 
         diff.unify(vec.as_slice())
     }
-
 }
 
 #[no_mangle]
