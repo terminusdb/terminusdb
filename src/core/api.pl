@@ -127,7 +127,7 @@
 
               % api_patch.pl
               api_patch/5,
-              api_diff/5
+              api_diff/6
           ]).
 
 :- use_module(api/api_init).
