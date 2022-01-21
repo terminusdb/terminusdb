@@ -2,7 +2,7 @@
               transaction_objects_to_validation_objects/2,
               validation_objects_to_transaction_objects/2,
               commit_validation_object/2,
-              commit_validation_objects/1,
+              commit_validation_objects/2,
               commit_commit_validation_object/4,
               validate_validation_objects/2,
               validate_validation_objects/3,
@@ -401,15 +401,15 @@ commit_order(Op, Left, Right) :-
         transaction_validation_order(Op, Left_Label, Right_Label)
     ;   Op = Descriptor_Op).
 
-commit_validation_objects_([]) :- !.
-commit_validation_objects_([Object|Objects]) :-
+commit_validation_objects_([], []) :- !.
+commit_validation_objects_([Object|Objects], Committed) :-
     transaction_object{} :< Object,
     !,
     Descriptor = (Object.descriptor),
     (   member(Validation_Object,Objects),
         validation_object{} :< Validation_Object,
         (Validation_Object.descriptor) = Descriptor
-    ->  commit_validation_objects_(Objects)
+    ->  commit_validation_objects_(Objects, Committed)
     ;   transaction_objects_to_validation_objects([Object], Validation_Objects),
 
         validate_validation_objects(Validation_Objects, Witnesses),
@@ -419,15 +419,15 @@ commit_validation_objects_([Object|Objects]) :-
         ;   true),
         append(Validation_Objects, Objects, New_Objects),
         predsort(commit_order, New_Objects, Sorted_Objects),
-        commit_validation_objects_(Sorted_Objects)).
-commit_validation_objects_([Object|Objects]) :-
+        commit_validation_objects_(Sorted_Objects, Committed)).
+commit_validation_objects_([Object|Objects], [Object|Committed]) :-
     % we know it is a validation object
     commit_validation_object(Object, Transaction_Objects),
     append(Transaction_Objects, Objects, Unsorted_Objects),
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
-    commit_validation_objects_(Sorted_Objects).
+    commit_validation_objects_(Sorted_Objects, Committed).
 
-commit_validation_objects(Unsorted_Objects) :-
+commit_validation_objects(Unsorted_Objects, Committed) :-
     % NOTE: We need to check to make sure we do not simlutaneously
     % modify a parent and child of the same transaction object
     % - this could cause commit to fail when we attempt to make the
@@ -435,7 +435,7 @@ commit_validation_objects(Unsorted_Objects) :-
     % of a commit (adding commit information and repo change info for
     % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
-    commit_validation_objects_(Sorted_Objects),
+    commit_validation_objects_(Sorted_Objects, Committed),
     log_commits(Sorted_Objects).
 
 log_commits(_) :-
@@ -592,7 +592,7 @@ test(insert_on_branch_descriptor, [
     transaction_objects_to_validation_objects([Transaction2], Validation),
     validate_validation_objects(Validation,Witnesses),
     Witnesses = [],
-    commit_validation_objects(Validation),
+    commit_validation_objects(Validation, _),
 
     ask(Branch_Descriptor,
         t(X, Y, Z)).
@@ -614,7 +614,7 @@ test(insert_on_label_descriptor, [
     once(ask(Context,insert(foo,bar,baz))),
     Transactions = (Context.transaction_objects),
     transaction_objects_to_validation_objects(Transactions, Validation),
-    commit_validation_objects(Validation),
+    commit_validation_objects(Validation, _),
 
     once(ask(Descriptor, t(foo,bar,baz))).
 

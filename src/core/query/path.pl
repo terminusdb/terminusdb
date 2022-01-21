@@ -207,12 +207,12 @@ test(n_m, [
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
-    query_response:run_context_ast_jsonld_response(Context, AST, _),
+    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     AST2 = path(a, times((p(b);p(d);p(f);p(h)),1,3), v(x), v(p)),
 
     create_context(Descriptor,Commit_Info, Context2),
-    query_response:run_context_ast_jsonld_response(Context2, AST2, Result),
+    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
     get_dict(bindings,Result,Bindings),
     length(Bindings, 3).
 
@@ -232,12 +232,12 @@ test(n_m_loop, [
 
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
-    query_response:run_context_ast_jsonld_response(Context, AST, _),
+    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     AST2 = path(a, times((p(b);p(d);p(f);p(h)),1,5), v(x), v(p)),
 
     create_context(Descriptor,Commit_Info, Context2),
-    query_response:run_context_ast_jsonld_response(Context2, AST2, Result),
+    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
     get_dict(bindings,Result,Bindings),
 
     % test that we aren't going in circles

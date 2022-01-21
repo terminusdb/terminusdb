@@ -9,7 +9,9 @@ const util = require('./util.js')
 class Params {
   // Wrap an object with `Params`.
   constructor (params) {
-    this.params = params || {}
+    // Clone with Object.assign() so that we can later use assertEmpty() without
+    // actually changing the params passed in.
+    this.params = Object.assign({}, params || {})
   }
 
   // Assert that there are no more parameters.

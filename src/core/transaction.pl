@@ -32,7 +32,7 @@
               % validate.pl
               transaction_objects_to_validation_objects/2,
               validation_objects_to_transaction_objects/2,
-              commit_validation_objects/1,
+              commit_validation_objects/2,
               commit_validation_object/2,
               commit_commit_validation_object/4,
               validate_validation_objects/2,
