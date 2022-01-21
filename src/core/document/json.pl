@@ -2225,12 +2225,16 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
     !,
     json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
-    get_dict('@type', Elaborated, Type),
+    do_or_die(
+        get_dict('@type', Elaborated, Type),
+        error(missing_field('@type', Elaborated), _)),
     die_if(is_subdocument(Transaction, Type),
            error(inserted_subdocument_as_document, _)),
 
     % After elaboration, the Elaborated document will have an '@id'
-    get_dict('@id', Elaborated, ID),
+    do_or_die(
+        get_dict('@id', Elaborated, ID),
+        error(missing_field('@id', Elaborated), _)),
 
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),

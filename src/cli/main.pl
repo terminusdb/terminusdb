@@ -641,7 +641,7 @@ run_command(query,[Database,Query],Opts) :-
         (   woql_context(Prefixes),
             context_extend_prefixes(Context,Prefixes,Context0),
             read_query_term_from_atom(Query,AST),
-            query_response:run_context_ast_jsonld_response(Context0, AST, Response),
+            query_response:run_context_ast_jsonld_response(Context0, AST, no_data_version, _, Response),
             get_dict(prefixes, Context0, Context_Prefixes),
             default_prefixes(Defaults),
             put_dict(Defaults, Context_Prefixes, Final_Prefixes),
