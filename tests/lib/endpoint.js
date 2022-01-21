@@ -35,6 +35,36 @@ function document (params) {
   }
 }
 
+function documentCommits (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const remoteName = params.string('remoteName', 'local')
+  return {
+    path: `/api/document/${orgName}/${dbName}/${remoteName}/_commits`,
+    orgName: orgName,
+    dbName: dbName,
+    remoteName: remoteName,
+  }
+}
+
+function documentMeta (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/document/${orgName}/${dbName}/_meta`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
+function documentSystem () {
+  return {
+    path: '/api/document/_system',
+  }
+}
+
 function remote (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -60,11 +90,26 @@ function patch (params) {
   }
 }
 
+function woqlResource (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/woql/${orgName}/${dbName}`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
 module.exports = {
   branch,
   db,
-  document,
-  remote,
   diff,
+  document,
+  documentCommits,
+  documentMeta,
+  documentSystem,
   patch,
+  remote,
+  woqlResource,
 }

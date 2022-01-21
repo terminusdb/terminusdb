@@ -232,7 +232,15 @@
               param_value_search_or_json_optional/6,
               param_value_search_author/2,
               param_value_search_message/2,
-              param_value_search_graph_type/2
+              param_value_search_graph_type/2,
+
+              % data_version.pl
+              compare_data_versions/2,
+              read_data_version_header/2,
+              write_data_version_header/1,
+              transaction_data_version/2,
+              transaction_data_version/3,
+              meta_data_version/3
           ]).
 
 % note: test_utils is intentionally omitted
@@ -248,3 +256,4 @@
 %:- use_module(util/plunit_patch).
 :- use_module(util/param).
 :- use_module(util/json_log).
+:- use_module(util/data_version).
