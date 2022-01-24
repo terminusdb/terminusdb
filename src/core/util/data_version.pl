@@ -133,6 +133,8 @@ transaction_data_version(Object, Objects, Data_Version) :-
         % Search Objects for the matching repository object.
         member(Repo_Object, Objects),
         get_dict(descriptor, Repo_Object, Repo_Descriptor),
+        % Remove choice points when we find a match.
+        !,
         transaction_data_version_(Descriptor, Repo_Object, Data_Version)
     ).
 
