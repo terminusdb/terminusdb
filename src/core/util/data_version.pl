@@ -92,10 +92,9 @@ write_data_version_header(Data_Version) :-
     throw(error(unexpected_argument_instantiation(write_data_version_header, Data_Version), _)).
 
 /**
- * transaction_data_version(+Transaction, -Data_Version) is semidet.
+ * transaction_data_version(+Transaction, -Data_Version) is det.
  *
- * Return the data version of a transaction object. Fail if Transaction does not
- * have a data version.
+ * Return the data version of a transaction object.
  */
 transaction_data_version(Transaction, Data_Version) :-
     utils:do_or_die(
@@ -108,7 +107,11 @@ transaction_data_version(Transaction, Data_Version) :-
     ->  Repo_Object = Parent
     ;   Repo_Object = Transaction
     ),
-    extract_data_version(Descriptor, Repo_Object, Data_Version).
+    % We only check a transaction where we expect to find a data version. So,
+    % extract_data_version should never fail.
+    utils:do_or_die(
+        data_version:extract_data_version(Descriptor, Repo_Object, Data_Version),
+        error(data_version_not_found(Transaction), _)).
 
 /**
  * validation_data_version(+Validation, +Validations, -Data_Version) is semidet.
