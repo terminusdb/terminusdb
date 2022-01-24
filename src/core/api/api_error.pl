@@ -1029,6 +1029,7 @@ api_error_jsonld(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
                               'api:key' : Key},
              'api:message' : Msg
             }.
+
 api_error_jsonld(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).
 api_error_jsonld(insert_documents, Error, JSON) :-
@@ -1037,6 +1038,34 @@ api_error_jsonld(replace_documents, Error, JSON) :-
     api_document_error_jsonld(replace_documents, Error, JSON).
 api_error_jsonld(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
+
+%% Errors that are common to all error types
+api_error_jsonld(Type, error(bad_data_version(Data_Version),_),JSON) :-
+    error_type(Type, Type_Msg),
+    format(string(Data_Version_String), "~w", [Data_Version]),
+    format(string(Msg), "Bad data version: ~s", [Data_Version_String]),
+    JSON = _{'@type' : Type_Msg,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadDataVersion',
+                              'api:data_version' : Data_Version_String },
+             'api:message' : Msg
+            }.
+api_error_jsonld(Type, error(data_version_mismatch(Requested_Data_Version, Actual_Data_Version), _), JSON) :-
+    error_type(Type, Type_Msg),
+    format(string(Msg), "Requested data version in header does not match actual data version.", []),
+    JSON = _{'@type' : Type_Msg,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DataVersionMismatch",
+                              'api:requested_data_version' : Requested_Data_Version,
+                              'api:actual_data_version' : Actual_Data_Version }
+            }.
+
+error_type(woql, 'api:WoqlErrorResponse').
+error_type(get_documents, 'api:GetDocumentErrorResponse').
+error_type(insert_documents, 'api:InsertDocumentErrorResponse').
+error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
+error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1084,7 +1113,6 @@ api_error_jsonld(graph,error(graph_already_exists(Descriptor,Graph_Name), _), Ty
                               'api:graph_name' : Graph_Name,
                               'api:absolute_descriptor' : Path}
             }.
-
 
 document_error_type(get_documents, 'api:GetDocumentErrorResponse').
 document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
