@@ -3,7 +3,7 @@
               read_data_version_header/2,
               write_data_version_header/1,
               transaction_data_version/2,
-              transaction_data_version/3,
+              validation_data_version/3,
               meta_data_version/3
           ]).
 
@@ -92,53 +92,57 @@ write_data_version_header(Data_Version) :-
     throw(error(unexpected_argument_instantiation(write_data_version_header, Data_Version), _)).
 
 /**
- * transaction_data_version(+Object, -Data_Version) is semidet.
+ * transaction_data_version(+Transaction, -Data_Version) is semidet.
  *
- * Look for the data version of a transaction/validation object. Fail if Object
- * does not have a data version.
+ * Return the data version of a transaction object. Fail if Transaction does not
+ * have a data version.
  */
-transaction_data_version(Object, Data_Version) :-
+transaction_data_version(Transaction, Data_Version) :-
     utils:do_or_die(
-        (   is_dict(Object),
-            (   transaction_object{} :< Object
-            ;   validation_object{} :< Object
-            )),
-        error(unexpected_argument_instantiation('transaction_data_version/2', Object), _)),
-    % Check if Object has a parent repository object and set that.
-    (   get_dict(parent, Object, Parent)
+        (   is_dict(Transaction),
+            transaction_object{} :< Transaction,
+            get_dict(descriptor, Transaction, Descriptor)),
+        error(unexpected_argument_instantiation(transaction_data_version, Transaction), _)),
+    % Check if Transaction has a parent repository object and set that.
+    (   get_dict(parent, Transaction, Parent)
     ->  Repo_Object = Parent
-    ;   Repo_Object = Object
+    ;   Repo_Object = Transaction
     ),
-    transaction_data_version_(Object.descriptor, Repo_Object, Data_Version).
+    extract_data_version(Descriptor, Repo_Object, Data_Version).
 
 /**
- * transaction_data_version(+Object, +Objects, -Data_Version) is semidet.
+ * validation_data_version(+Validation, +Validations, -Data_Version) is semidet.
  *
- * Look for the data version of a transaction/validation object using Objects to
- * look for Object's repository transaction/validation object. Fail if Object
- * does not have a data version.
+ * Return the data version of a validation object using Validations to look for
+ * Validation's repository validation object. Fail if Validation does not have a
+ * data version.
  */
-transaction_data_version(Object, Objects, Data_Version) :-
+validation_data_version(Validation, Validations, Data_Version) :-
     utils:do_or_die(
-        (   is_dict(Object),
-            is_list(Objects),
-            (   transaction_object{} :< Object
-            ;   validation_object{} :< Object
-            )),
-        error(unexpected_argument_instantiation('transaction_data_version/3', objects(Object, Objects)), _)),
-    Descriptor = Object.descriptor,
-    (   transaction_data_version_(Descriptor, Object, Data_Version)
+        (   is_dict(Validation),
+            is_list(Validations),
+            validation_object{} :< Validation,
+            get_dict(descriptor, Validation, Descriptor)),
+        error(unexpected_argument_instantiation(validation_data_version, args(Validation, Validations)), _)),
+    (   extract_data_version(Descriptor, Validation, Data_Version)
     ->  true
     ;   get_dict(repository_descriptor, Descriptor, Repo_Descriptor),
-        % Search Objects for the matching repository object.
-        member(Repo_Object, Objects),
+        % Search Validations for the matching repository object.
+        member(Repo_Object, Validations),
         get_dict(descriptor, Repo_Object, Repo_Descriptor),
         % Remove choice points when we find a match.
         !,
-        transaction_data_version_(Descriptor, Repo_Object, Data_Version)
+        extract_data_version(Descriptor, Repo_Object, Data_Version)
     ).
 
-transaction_data_version_(Descriptor, Repo_Object, data_version(branch, Commit_Id)) :-
+/**
+ * extract_data_version(+Descriptor, +Transaction_Or_Validation, -Data_Version) is semidet.
+ *
+ * Return the data version of a transaction or validation object given a
+ * Descriptor and a second object that depends on which tag the Descriptor has.
+ * Fail if the object does not have a data version.
+ */
+extract_data_version(Descriptor, Repo_Object, data_version(branch, Commit_Id)) :-
     branch_descriptor{} :< Descriptor,
     !,
     % The /api/document/<org>/<db> endpoint uses a branch head commit ID as a
@@ -147,7 +151,7 @@ transaction_data_version_(Descriptor, Repo_Object, data_version(branch, Commit_I
     transaction:branch_head_commit(Repo_Object, Descriptor.branch_name, Commit_Uri),
     transaction:commit_id_uri(Repo_Object, Commit_Id_String, Commit_Uri),
     atom_string(Commit_Id, Commit_Id_String).
-transaction_data_version_(Descriptor, Object, data_version(system, Value)) :-
+extract_data_version(Descriptor, Object, data_version(system, Value)) :-
     system_descriptor{} :< Descriptor,
     !,
     % The /api/document/_system endpoint can be used to update the schema graph
@@ -158,7 +162,7 @@ transaction_data_version_(Descriptor, Object, data_version(system, Value)) :-
     terminus_store:layer_to_id(Schema_Object.read, Schema_Layer_Id),
     terminus_store:layer_to_id(Instance_Object.read, Instance_Layer_Id),
     atomic_list_concat([Schema_Layer_Id, '/', Instance_Layer_Id], Value).
-transaction_data_version_(Descriptor, Object, data_version(Label, Layer_Id)) :-
+extract_data_version(Descriptor, Object, data_version(Label, Layer_Id)) :-
     (   repository_descriptor{} :< Descriptor, Label = repo
     ;   database_descriptor{} :< Descriptor, Label = meta
     ),
