@@ -342,7 +342,7 @@ collect_validations_metadata(Validations, Meta_Data) :-
 
 collect_commit_metadata(Validations, Meta_Data) :-
     convlist({Validations}/[Validation, Descriptor-Data_Version]>>(
-                transaction_data_version(Validation, Validations, Data_Version),
+                validation_data_version(Validation, Validations, Data_Version),
                 get_dict(descriptor, Validation, Descriptor)
              ),
              Validations,
