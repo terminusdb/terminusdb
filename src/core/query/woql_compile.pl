@@ -5020,7 +5020,7 @@ test(insert_document_forget_uri, [
     resolve_absolute_string_descriptor('admin/test', Descriptor),
     create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
     Read_AST = get_document('City/Dublin',v('Doc')),
-    query_response:run_context_ast_jsonld_response(Context2, Read_AST, Response),
+    query_response:run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
     [Res2] = (Response.bindings),
     _{'@id':_,
       '@type':'City',
