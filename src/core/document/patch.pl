@@ -599,6 +599,9 @@ simple_patch_key_value(Key,JSON,Diff,Result) :-
     ->  get_dict_or_null(Key,JSON,V),
         simple_patch_list(Key_Diff,V,Value),
         Result = Key-Value
+    ;   \+ is_dict(Key_Diff)
+    ->  get_dict_or_null(Key,JSON,Value),
+        Result = Key-Value
     ;   diff_op(Key_Diff,Op)
     ->  get_dict_or_null(Key,JSON,V),
         simple_op_diff_value(Op,Key_Diff,V,Value),
@@ -978,6 +981,24 @@ test(deep_table_patch, []) :-
                                     _{'@type':"Cell",'Text':"8",'Value':"8.0"},
                                     _{'@type':"Cell",'Text':"9",'Value':"9.0"}]],
                           'Name':"Sheet1"}]}.
+
+test(read_state_test, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig"
+              },
+    Patch = _{ '@id' : "Person/Ludwig",
+               name : _{ '@op' : "SwapValue",
+                         '@before' : "Ludwig",
+                         '@after' : "Ludo" }
+             },
+    simple_patch(Patch,Before,After),
+
+    After = _{ '@id' : "Person/Ludwig",
+               '@type' : "Person",
+               name : "Ludo"
+             }.
 
 :- end_tests(simple_patch).
 
