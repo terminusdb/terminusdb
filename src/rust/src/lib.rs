@@ -1,3 +1,5 @@
+mod matrix;
+
 use swipl::prelude::*;
 use lcs;
 
@@ -38,4 +40,6 @@ predicates! {
 #[no_mangle]
 pub extern "C" fn install() {
     register_list_diff();
+
+    matrix::register();
 }
