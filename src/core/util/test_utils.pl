@@ -85,10 +85,14 @@
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(filesex)).
 
+:- use_module(library(debug)).
 :- use_module(library(process)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
+:- use_module(library(random)).
+:- use_module(library(readutil)).
 
 :- use_module(library(lists)).
 

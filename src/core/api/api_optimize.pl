@@ -173,6 +173,8 @@ exponential_rollup_strategy(Layer) :-
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+:- use_module(library(ordsets)).
+
 test(partition,[]) :-
     B1 = 2,
     findall(

@@ -1,5 +1,7 @@
 :- module(plunit_patch, []).
 
+:- use_module(library(error)).
+:- use_module(library(option)).
 :- use_module(library(thread)).
 :- use_module(library(plunit)).
 

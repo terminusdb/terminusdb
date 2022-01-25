@@ -3,6 +3,11 @@
 
 :- use_module(core(util)).
 
+:- use_module(library(apply)).
+:- use_module(library(dicts)).
+:- use_module(library(lists)).
+:- use_module(library(when)).
+
 /*
 
 # Patch and Diff

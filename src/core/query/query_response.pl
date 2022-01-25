@@ -12,6 +12,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple/literals)).
 
+:- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 
