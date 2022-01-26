@@ -47,7 +47,7 @@ jobs:
       - name: Install python requirements
         run: pip install beautifulsoup4 requests
       - name: Run linter
-        run: python3 src/utils/lint_modules.py
+        run: python3 .github/lint_modules.py
 
   # Build the Docker image.
   build_docker:
