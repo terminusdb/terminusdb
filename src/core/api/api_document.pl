@@ -17,8 +17,10 @@
 :- use_module(core(document)).
 :- use_module(core(account)).
 
+:- use_module(library(assoc)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
 :- use_module(library(plunit)).
 
 document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-

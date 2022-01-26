@@ -7,6 +7,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(global_prefixes).
+:- use_module(library(apply)).
 
 :- reexport(core(util/syntax)).
 

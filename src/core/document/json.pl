@@ -51,9 +51,11 @@
 :- use_module(instance).
 :- use_module(schema).
 
+:- use_module(library(assoc)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
 :- use_module(library(crypto)).
+:- use_module(library(when)).
 
 % performance
 :- use_module(library(apply)).

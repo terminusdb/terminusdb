@@ -34,6 +34,8 @@
 
 :- use_module(core(document), [database_prefixes/2]).
 
+:- use_module(library(apply)).
+:- use_module(library(debug)).
 :- use_module(library(lists)).
 :- use_module(library(gensym)).
 
