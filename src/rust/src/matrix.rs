@@ -385,8 +385,8 @@ impl ArcBlobImpl for Window {
     fn write(&self, stream: &mut PrologStream) -> std::io::Result<()> {
         write!(
             stream,
-            "<window {}x{} ({}+{}x{}+{})>",
-            self.width, self.height, self.matrix.cols, self.x, self.matrix.rows, self.y
+            "<window {}x{} (at {}x{} in <matrix {}x{}>)>",
+            self.width, self.height, self.x, self.y, self.matrix.cols, self.matrix.rows
         )
     }
 
