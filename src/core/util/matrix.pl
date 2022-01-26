@@ -4,7 +4,8 @@
               matrix_col/3,
               as_list_of_lists/2,
               matrix_window/6,
-              matrix_size/3
+              matrix_size/3,
+              window_offset/3
           ]).
 
 as_matrix(List, Matrix) :-
@@ -47,3 +48,6 @@ matrix_window(Unknown, _, _, _, _, _) :-
 
 matrix_size(M, W, H) :-
     '$matrix':matrix_size(M, W, H).
+
+window_offset(W, X, Y) :-
+    '$matrix':window_offset(W, X, Y).

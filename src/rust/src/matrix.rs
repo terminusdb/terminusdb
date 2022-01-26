@@ -88,6 +88,25 @@ predicates! {
     }
 
     #[module("$matrix")]
+    semidet fn window_offset(context, window_term, x_term, y_term) {
+        let (x, y) = if let Some(_matrix) = attempt_opt::<Arc<Matrix>>(window_term.get())? {
+            (0,0)
+        }
+        else if let Some(window) = attempt_opt::<Arc<Window>>(window_term.get())? {
+            window.offset()
+        }
+        else {
+            let error_term = term!{context: error(type_error(one_of(matrix, window), #window_term), _)}?;
+            return context.raise_exception(&error_term);
+        };
+
+        x_term.unify(x as u64)?;
+        y_term.unify(y as u64)?;
+
+        Ok(())
+    }
+
+    #[module("$matrix")]
     semidet fn matrix_window(context, matrix_term, x_term, y_term, width_term, height_term, window_term) {
         let matrix: Arc<Matrix> = matrix_term.get_ex()?;
 
@@ -505,4 +524,5 @@ pub fn register() {
     register_matrix_col();
     register_window_col();
     register_matrix_size();
+    register_window_offset();
 }
