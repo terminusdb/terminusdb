@@ -77,6 +77,21 @@ rectangle(I_Max,J_Max,A,I,J) :-
     between(1,J_Max,J),
     A is I * J.
 
+best_area(Op,I0-J0,I1-J1) :-
+    A is max(I0,J0),
+    B is max(I1,J1),
+    (   A = B
+    ->  (   I0 < I1
+        ->  Op = (>)
+        ;   I1 < I0
+        ->  Op = (<)
+        ;   Op = (=)
+        )
+    ;   A < B
+    ->  Op = (>)
+    ;   Op = (<)
+    ).
+
 areas(I_Max,J_Max,Areas) :-
     findall(A-I-J,
             (
@@ -85,8 +100,12 @@ areas(I_Max,J_Max,Areas) :-
                 A is I * J
             ),
             AIJs),
-    findall(A-Group, group_by(A, I-J, member(A-I-J,AIJs), Group), As),
-    sort(1,>,As,Areas).
+    findall(A-Group_Sorted,
+            (   group_by(A, I-J, member(A-I-J,AIJs), Group),
+                predsort(best_area,Group,Group_Sorted)
+            ),
+            As),
+    sort(0,>,As,Areas).
 
 disjoint_rectangles(Rs) :-
     must_be(list, Rs),
@@ -199,14 +218,25 @@ test_area(Area,Areas,M1,M2,
     sort(0,@=<,Windows1,Windows1_Sorted),
 
     findall(r(Window2,X2,W,Y2,H),
-            (   member(W-H,WHs),
-                windows(W,H,R2,C2,Right_Exclusions0,X2,Y2),
+            (   windows(W,H,R2,C2,Right_Exclusions0,X2,Y2),
                 label([X2,Y2]),
                 matrix_window(M2,X2,Y2,W,H,Window2)
             ),
             Windows2),
     sort(0,@=<,Windows2,Windows2_Sorted),
 
+    %% time: 17.364s for random_exclusions_10x10
+    %% extend_exclusions(Windows1_Sorted,Windows2_Sorted,
+    %%                   Left_Exclusions0, Right_Exclusions0,
+    %%                   Left_Exclusions1, Right_Exclusions1),
+    %% !,
+    %% \+ Left_Exclusions0 = Left_Exclusions1,
+    %% \+ Right_Exclusions0 = Right_Exclusions1,
+
+    %% Left_Exclusions1 = Left_ExclusionsN,
+    %% Right_Exclusions1 = Right_ExclusionsN.
+
+    % time: 12.963s for random_exclusions_10x10
     extend_exclusions(Windows1_Sorted,Windows2_Sorted,
                       [],[],
                       Left_Exclusions1,Right_Exclusions1),
@@ -366,6 +396,7 @@ test(random_exclusions_4x4, []) :-
     random_matrix(4,4, T2),
     profile(ignore(all_exclusions(T1,T2,E1,E2))).
 
+% can we make 10x1000 take a second?
 test(random_exclusions_10x10, []) :-
     T1 = [['7','4','9','5','6','0','0','7','5','2'],
           ['4','7','9','6','5','1','3','6','6','3'],
