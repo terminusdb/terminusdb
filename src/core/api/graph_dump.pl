@@ -7,6 +7,7 @@
 
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
+:- use_module(library(readutil)).
 
 graph_dump(System_DB, Auth, Path, Format, String) :-
     do_or_die(

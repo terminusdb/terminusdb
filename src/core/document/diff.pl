@@ -3,6 +3,9 @@
 
 :- use_module(core(util)).
 
+:- use_module(library(dicts)).
+:- use_module(library(lists)).
+
 simple_diff(Before,After,Keep,Diff) :-
     simple_diff(Before,After,Keep,_,Diff).
 

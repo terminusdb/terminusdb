@@ -29,6 +29,7 @@
 :- use_module(core(document)).
 
 :- use_module(library(crypto)).
+:- use_module(library(lists)).
 
 /** <module> User
  *

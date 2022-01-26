@@ -9,6 +9,7 @@
 :- use_module(core(api/api_remote)).
 :- use_module(core(api/db_push)).
 
+:- use_module(library(md5)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
 

@@ -17,6 +17,7 @@
 :- use_module(core(account)).
 
 :- use_module(library(terminus_store)).
+:- use_module(library(lists)).
 
 begin_deleting_db_from_system(System, Organization,DB_Name) :-
     organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
