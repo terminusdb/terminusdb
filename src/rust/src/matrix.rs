@@ -1,9 +1,9 @@
-use swipl::prelude::*;
-use std::sync::{Arc, RwLock};
-use std::io::Write;
+use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::cmp::Ordering;
+use std::io::Write;
+use std::sync::{Arc, RwLock};
+use swipl::prelude::*;
 
 predicates! {
     #[module("$matrix")]
@@ -147,37 +147,37 @@ predicates! {
 pub struct Matrix {
     data: Vec<Atom>,
     rows: usize,
-    cols: usize
+    cols: usize,
 }
 
 impl Matrix {
-    fn window(self: &Arc<Self>, x: usize, y: usize, width: usize, height: usize) -> Result<Window, WindowError> {
+    fn window(
+        self: &Arc<Self>,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> Result<Window, WindowError> {
         if width == 0 {
             Err(WindowError::WidthZero)
-        }
-        else if height == 0 {
+        } else if height == 0 {
             Err(WindowError::HeightZero)
-        }
-        else if x >= self.cols {
+        } else if x >= self.cols {
             Err(WindowError::XOutOfRange)
-        }
-        else if y >= self.rows {
+        } else if y >= self.rows {
             Err(WindowError::YOutOfRange)
-        }
-        else if x+width > self.cols {
+        } else if x + width > self.cols {
             Err(WindowError::WidthOutOfRange)
-        }
-        else if y+height > self.rows {
+        } else if y + height > self.rows {
             Err(WindowError::HeightOutOfRange)
-        }
-        else {
+        } else {
             Ok(Window {
                 matrix: self.clone(),
                 x,
                 y,
                 width,
                 height,
-                cached_hash: Default::default()
+                cached_hash: Default::default(),
             })
         }
     }
@@ -189,20 +189,21 @@ enum WindowError {
     WidthZero,
     HeightZero,
     WidthOutOfRange,
-    HeightOutOfRange
+    HeightOutOfRange,
 }
 
 impl IntoPrologException for WindowError {
     fn into_prolog_exception<'a, 'b, T: QueryableContextType>(
         self,
-        context: &'a Context<'b, T>) -> PrologResult<Term<'a>> {
+        context: &'a Context<'b, T>,
+    ) -> PrologResult<Term<'a>> {
         match self {
-            WindowError::XOutOfRange => term!{context: error(x_out_of_range, _)},
-            WindowError::YOutOfRange => term!{context: error(y_out_of_range, _)},
-            WindowError::WidthZero => term!{context: error(width_zero, _)},
-            WindowError::HeightZero => term!{context: error(height_zero, _)},
-            WindowError::WidthOutOfRange => term!{context: error(width_out_of_range, _)},
-            WindowError::HeightOutOfRange => term!{context: error(height_out_of_range, _)},
+            WindowError::XOutOfRange => term! {context: error(x_out_of_range, _)},
+            WindowError::YOutOfRange => term! {context: error(y_out_of_range, _)},
+            WindowError::WidthZero => term! {context: error(width_zero, _)},
+            WindowError::HeightZero => term! {context: error(height_zero, _)},
+            WindowError::WidthOutOfRange => term! {context: error(width_out_of_range, _)},
+            WindowError::HeightOutOfRange => term! {context: error(height_out_of_range, _)},
         }
     }
 }
@@ -221,37 +222,37 @@ pub struct Window {
     width: usize,
     height: usize,
 
-    cached_hash: Arc<RwLock<Option<u64>>>
+    cached_hash: Arc<RwLock<Option<u64>>>,
 }
 
 impl Window {
-    fn window(self: &Arc<Self>, x: usize, y: usize, width: usize, height: usize) -> Result<Window, WindowError> {
+    fn window(
+        self: &Arc<Self>,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> Result<Window, WindowError> {
         if width == 0 {
             Err(WindowError::WidthZero)
-        }
-        else if height == 0 {
+        } else if height == 0 {
             Err(WindowError::HeightZero)
-        }
-        else if x >= self.width {
+        } else if x >= self.width {
             Err(WindowError::XOutOfRange)
-        }
-        else if y >= self.height {
+        } else if y >= self.height {
             Err(WindowError::YOutOfRange)
-        }
-        else if x+width > self.width {
+        } else if x + width > self.width {
             Err(WindowError::WidthOutOfRange)
-        }
-        else if y+height > self.height {
+        } else if y + height > self.height {
             Err(WindowError::HeightOutOfRange)
-        }
-        else {
+        } else {
             Ok(Window {
                 matrix: self.matrix.clone(),
-                x:self.x+x,
-                y:self.y+y,
+                x: self.x + x,
+                y: self.y + y,
                 width,
                 height,
-                cached_hash: Default::default()
+                cached_hash: Default::default(),
             })
         }
     }
@@ -280,7 +281,7 @@ impl Window {
 }
 
 impl Hash for Window {
-    fn hash<H:Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.get_hash())
     }
 }
@@ -289,11 +290,9 @@ impl PartialEq for Window {
     fn eq(&self, other: &Window) -> bool {
         if self.size() != other.size() {
             false
-        }
-        else if self.get_hash() != other.get_hash() {
+        } else if self.get_hash() != other.get_hash() {
             false
-        }
-        else {
+        } else {
             self.items().eq(other.items())
         }
     }
@@ -321,9 +320,13 @@ impl PartialOrd for Window {
             Ordering::Equal => {
                 // since hashes are equal we have to resort to ordering of content.
                 // Note: Atom does not (yet) implement Ord so we compare the inner atom_ptr values.
-                Some(self.items().map(|a|a.atom_ptr()).cmp(other.items().map(|a|a.atom_ptr())))
-            },
-            _ => Some(cmp)
+                Some(
+                    self.items()
+                        .map(|a| a.atom_ptr())
+                        .cmp(other.items().map(|a| a.atom_ptr())),
+                )
+            }
+            _ => Some(cmp),
         }
     }
 }
@@ -336,13 +339,11 @@ impl Ord for Window {
 
 impl ArcBlobImpl for Window {
     fn write(&self, stream: &mut PrologStream) -> std::io::Result<()> {
-        write!(stream, "<window {}x{} ({}+{}x{}+{})>",
-               self.width,
-               self.height,
-               self.matrix.cols,
-               self.x,
-               self.matrix.rows,
-               self.y)
+        write!(
+            stream,
+            "<window {}x{} ({}+{}x{}+{})>",
+            self.width, self.height, self.matrix.cols, self.x, self.matrix.rows, self.y
+        )
     }
 
     fn compare(&self, other: &Window) -> Ordering {
@@ -354,16 +355,17 @@ impl ArcBlobImpl for Window {
 #[derive(Debug)]
 enum RangeError {
     RowOutOfRange,
-    ColOutOfRange
+    ColOutOfRange,
 }
 
 impl IntoPrologException for RangeError {
     fn into_prolog_exception<'a, 'b, T: QueryableContextType>(
         self,
-        context: &'a Context<'b, T>) -> PrologResult<Term<'a>> {
+        context: &'a Context<'b, T>,
+    ) -> PrologResult<Term<'a>> {
         match self {
-            RangeError::RowOutOfRange => term!{context: error(row_out_of_range, _)},
-            RangeError::ColOutOfRange => term!{context: error(col_out_of_range, _)},
+            RangeError::RowOutOfRange => term! {context: error(row_out_of_range, _)},
+            RangeError::ColOutOfRange => term! {context: error(col_out_of_range, _)},
         }
     }
 }
@@ -373,27 +375,27 @@ trait Windowed {
     fn offset(&self) -> (usize, usize);
     fn size(&self) -> (usize, usize);
 
-    fn row(&self, row: usize) -> Result<&[Atom],RangeError> {
-        let (x,y) = self.offset();
+    fn row(&self, row: usize) -> Result<&[Atom], RangeError> {
+        let (x, y) = self.offset();
         let (width, height) = self.size();
         if row >= height {
             return Err(RangeError::RowOutOfRange);
         }
         let original = self.original();
         let orig_cols = original.cols;
-        let offset = (y+row)*orig_cols + x;
-        Ok(&self.original().data[offset..offset+width])
+        let offset = (y + row) * orig_cols + x;
+        Ok(&self.original().data[offset..offset + width])
     }
 
-    fn col(&self, col: usize) -> Result<Vec<&Atom>,RangeError> {
-        let (x,y) = self.offset();
+    fn col(&self, col: usize) -> Result<Vec<&Atom>, RangeError> {
+        let (x, y) = self.offset();
         let (width, height) = self.size();
         if col >= width {
             return Err(RangeError::ColOutOfRange);
         }
         let original = self.original();
         let orig_cols = original.cols;
-        let mut offset = y*orig_cols + x + col;
+        let mut offset = y * orig_cols + x + col;
         let mut result = Vec::with_capacity(height);
 
         for _ in 0..height {
@@ -404,7 +406,11 @@ trait Windowed {
         Ok(result)
     }
 
-    fn as_list_of_lists<C:QueryableContextType>(&self, context: &Context<C>, list_of_lists_term: &Term) -> PrologResult<()> {
+    fn as_list_of_lists<C: QueryableContextType>(
+        &self,
+        context: &Context<C>,
+        list_of_lists_term: &Term,
+    ) -> PrologResult<()> {
         let frame = context.open_frame();
         let (_width, height) = self.size();
         let mut rows_vec = Vec::with_capacity(height);
@@ -423,9 +429,9 @@ trait Windowed {
         result
     }
 
-    fn items<'a>(&'a self) -> Box<dyn Iterator<Item=&Atom>+'a> {
+    fn items<'a>(&'a self) -> Box<dyn Iterator<Item = &Atom> + 'a> {
         let (width, height) = self.size();
-        let (mut x, mut y) = (0,0);
+        let (mut x, mut y) = (0, 0);
 
         Box::new(std::iter::from_fn(move || {
             if y == height {
@@ -433,7 +439,7 @@ trait Windowed {
             }
 
             let result = &self.row(y).unwrap()[x];
-            x+=1;
+            x += 1;
             if x == width {
                 x = 0;
                 y += 1;
@@ -449,7 +455,7 @@ impl Windowed for Matrix {
         self
     }
     fn offset(&self) -> (usize, usize) {
-        (0,0)
+        (0, 0)
     }
 
     fn size(&self) -> (usize, usize) {
@@ -468,7 +474,6 @@ impl Windowed for Window {
     fn size(&self) -> (usize, usize) {
         (self.width, self.height)
     }
-
 }
 
 pub fn register() {

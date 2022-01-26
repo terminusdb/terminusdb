@@ -1,7 +1,7 @@
 mod matrix;
 
-use swipl::prelude::*;
 use lcs;
+use swipl::prelude::*;
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
