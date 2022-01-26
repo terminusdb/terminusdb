@@ -205,12 +205,30 @@ test_area(Area,Areas,M1,M2,
           Left_ExclusionsN,Right_ExclusionsN) :-
     memberchk(Area-WHs,Areas),
 
+    foldl(
+        {M1,M2}/[W-H,
+                 Left_Exclusions_In-Right_Exclusions_In,
+                 Left_Exclusions_Out-Right_Exclusions_Out]>>(
+            test_shape(W,H,M1,M2,
+                       Left_Exclusions_In,Right_Exclusions_In,
+                       Left_Exclusions_Out,Right_Exclusions_Out)
+            ),
+        WHs,
+        Left_Exclusions0-Right_Exclusions0,
+        Left_ExclusionsN-Right_ExclusionsN),
+    !,
+    \+ Left_Exclusions0 = Left_ExclusionsN,
+    \+ Right_Exclusions0 = Right_ExclusionsN.
+
+
+test_shape(W,H,M1,M2,
+           Left_Exclusions0,Right_Exclusions0,
+           Left_ExclusionsN,Right_ExclusionsN) :-
     matrix_size(M1,R1,C1),
     matrix_size(M2,R2,C2),
 
     findall(r(Window1,X1,W,Y1,H),
-            (   member(W-H,WHs),
-                windows(W,H,R1,C1,Left_Exclusions0,X1,Y1),
+            (   windows(W,H,R1,C1,Left_Exclusions0,X1,Y1),
                 label([X1,Y1]),
                 matrix_window(M1,X1,Y1,W,H,Window1)
             ),
@@ -241,10 +259,9 @@ test_area(Area,Areas,M1,M2,
                       [],[],
                       Left_Exclusions1,Right_Exclusions1),
     !,
-    \+ [] = Left_Exclusions1,
-    \+ [] = Right_Exclusions1,
     append(Left_Exclusions0,Left_Exclusions1,Left_ExclusionsN),
     append(Right_Exclusions0,Right_Exclusions1,Right_ExclusionsN).
+
 
 previous_area(This,[Last-_,This-_|_],Last) :-
     !.
@@ -383,6 +400,7 @@ test(all_exclusions, []) :-
            [ '7', '8', '9'] ],
 
     all_exclusions(T1,T2,E1,E2),
+    writeq(E1),writeq(E2),
     E1 = [r(_,1,3,1,3)],
     E2 = [r(_,0,3,0,3)].
 
