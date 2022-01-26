@@ -69,6 +69,25 @@ predicates! {
     }
 
     #[module("$matrix")]
+    semidet fn matrix_size(context, matrix_term, width_term, height_term) {
+        let (width, height) = if let Some(matrix) = attempt_opt::<Arc<Matrix>>(matrix_term.get())? {
+            matrix.size()
+        }
+        else if let Some(window) = attempt_opt::<Arc<Window>>(matrix_term.get())? {
+            window.size()
+        }
+        else {
+            let error_term = term!{context: error(type_error(one_of(matrix, window), #matrix_term), _)}?;
+            return context.raise_exception(&error_term);
+        };
+
+        width_term.unify(width as u64)?;
+        height_term.unify(height as u64)?;
+
+        Ok(())
+    }
+
+    #[module("$matrix")]
     semidet fn matrix_window(context, matrix_term, x_term, y_term, width_term, height_term, window_term) {
         let matrix: Arc<Matrix> = matrix_term.get_ex()?;
 
@@ -485,4 +504,5 @@ pub fn register() {
     register_window_row();
     register_matrix_col();
     register_window_col();
+    register_matrix_size();
 }

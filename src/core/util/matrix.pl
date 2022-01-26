@@ -3,7 +3,8 @@
               matrix_row/3,
               matrix_col/3,
               as_list_of_lists/2,
-              matrix_window/6
+              matrix_window/6,
+              matrix_size/3
           ]).
 
 as_matrix(List, Matrix) :-
@@ -43,3 +44,6 @@ matrix_window(Window, X, Y, Width, Height, New_Window) :-
     '$matrix':window_window(Window, X, Y, Width, Height, New_Window).
 matrix_window(Unknown, _, _, _, _, _) :-
     throw(error(type_error(one_of(matrix, window), Unknown), _)).
+
+matrix_size(M, W, H) :-
+    '$matrix':matrix_size(M, W, H).
