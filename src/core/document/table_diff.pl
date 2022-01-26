@@ -89,23 +89,26 @@ areas(I_Max,J_Max,Areas) :-
     sort(1,>,As,Areas).
 
 disjoint_rectangles(Rs) :-
-        must_be(list, Rs),
-        non_overlapping(Rs).
+    must_be(list, Rs),
+    non_overlapping(Rs).
 
 non_overlapping([]).
 non_overlapping([R|Rs]) :-
         maplist(non_overlapping_(R), Rs),
         non_overlapping(Rs).
 
-non_overlapping_(A, B) :-
-        a_apart_from_b(A, B),
-        a_apart_from_b(B, A).
+not_overlapping_with(R,Rs) :-
+    maplist(non_overlapping_(R), Rs).
 
-a_apart_from_b(r(_,AX,AW,AY,AH), r(_,BX,BW,BY,BH)) :-
-        ?(AX) #=< ?(BX) #/\ ?(BX) #< ?(AX) + ?(AW) #==>
-                   ?(AY) + ?(AH) #=< ?(BY) #\/ ?(BY) + ?(BH) #=< ?(AY),
-        ?(AY) #=< ?(BY) #/\ ?(BY) #< ?(AY) + ?(AH) #==>
-                   ?(AX) + ?(AW) #=< ?(BX) #\/ ?(BX) + ?(BW) #=< ?(AX).
+non_overlapping_(A, B) :-
+        a_not_in_b(A, B),
+        a_not_in_b(B, A).
+
+a_not_in_b(r(_,AX,AW,AY,AH), r(_,BX,BW,BY,BH)) :-
+    ?(AX) #=< ?(BX) #/\ ?(BX) #< ?(AX) + ?(AW) #==>
+          ?(AY) + ?(AH) #=< ?(BY) #\/ ?(BY) + ?(BH) #=< ?(AY),
+    ?(AY) #=< ?(BY) #/\ ?(BY) #< ?(AY) + ?(AH) #==>
+          ?(AX) + ?(AW) #=< ?(BX) #\/ ?(BX) + ?(BW) #=< ?(AX).
 
 column_slice(_,0,_,[]) :- !.
 column_slice(0,H,[Elt|L1],[Elt|L2]) :-
@@ -132,23 +135,26 @@ windows(Width,Height,N,M,Exclusions,I,J) :-
     I in 0 .. Right,
     J in 0 .. Bottom,
     R = r(_,I,Width,J,Height),
-    disjoint_rectangles([R|Exclusions]).
+    not_overlapping_with(R,Exclusions).
 
-window_values_equal(r(X,_,_,_,_),r(X,_,_,_,_)).
+window_values_equal(r(X,_,_,_,_),r(Y,_,_,_,_)) :-
+    compare(Order,X,Y),
+    Order = (=).
 
 window_values_less(r(X,_,_,_,_),r(Y,_,_,_,_)) :-
     X @< Y.
 
-extend_exclusions(_, [],Left_Exclusions0, Right_Exclusions0, Left_Exclusions0, Right_Exclusions0).
+extend_exclusions(_, [], Left_Exclusions0, Right_Exclusions0, Left_Exclusions0, Right_Exclusions0).
 extend_exclusions([], _, Left_Exclusions0, Right_Exclusions0, Left_Exclusions0, Right_Exclusions0).
 extend_exclusions([W1|Windows1],
                   [W2|Windows2],
                   Left_Exclusions0, Right_Exclusions0,
                   Left_Exclusions1, Right_Exclusions1) :-
-    (   window_values_equal(W1,W2)
-    ->  disjoint_rectangles([W1|Left_Exclusions0]),
-        disjoint_rectangles([W2|Right_Exclusions0]),
-        extend_exclusions(Windows1,Windows2,
+    window_values_equal(W1,W2),
+    !,
+    (   not_overlapping_with(W1,Left_Exclusions0),
+        not_overlapping_with(W2,Right_Exclusions0)
+    ->  extend_exclusions(Windows1,Windows2,
                           [W1|Left_Exclusions0],[W2|Right_Exclusions0],
                           Left_Exclusions1,Right_Exclusions1)
     ;   extend_exclusions(Windows1,Windows2,
@@ -174,40 +180,41 @@ extend_exclusions([W1|Windows1],
                       Left_Exclusions0,Right_Exclusions0,
                       Left_Exclusions1,Right_Exclusions1).
 
+% test_area(4,[4-[2-2,1-4,4-1]], M1, M2, [ ... ], [ ... ], Left_Exc, Right_Exc)
 test_area(Area,Areas,M1,M2,
           Left_Exclusions0,Right_Exclusions0,
-          Left_Exclusions1,Right_Exclusions1) :-
+          Left_ExclusionsN,Right_ExclusionsN) :-
     memberchk(Area-WHs,Areas),
-    row_length(M1,R1),
-    column_length(M1,C1),
 
-    row_length(M2,R2),
-    column_length(M2,C2),
+    matrix_size(M1,R1,C1),
+    matrix_size(M2,R2,C2),
 
     findall(r(Window1,X1,W,Y1,H),
             (   member(W-H,WHs),
                 windows(W,H,R1,C1,Left_Exclusions0,X1,Y1),
                 label([X1,Y1]),
-                window(X1,W,Y1,H,M1,Window1)
+                matrix_window(M1,X1,Y1,W,H,Window1)
             ),
             Windows1),
     sort(0,@=<,Windows1,Windows1_Sorted),
 
     findall(r(Window2,X2,W,Y2,H),
             (   member(W-H,WHs),
-                windows(W,H,R2,C2,Left_Exclusions0,X2,Y2),
+                windows(W,H,R2,C2,Right_Exclusions0,X2,Y2),
                 label([X2,Y2]),
-                window(X2,W,Y2,H,M2,Window2)
+                matrix_window(M2,X2,Y2,W,H,Window2)
             ),
             Windows2),
     sort(0,@=<,Windows2,Windows2_Sorted),
 
     extend_exclusions(Windows1_Sorted,Windows2_Sorted,
-                      Left_Exclusions0,Right_Exclusions0,
+                      [],[],
                       Left_Exclusions1,Right_Exclusions1),
-
-    \+ Left_Exclusions0 = Left_Exclusions1,
-    \+ Right_Exclusions0 = Right_Exclusions1.
+    !,
+    \+ [] = Left_Exclusions1,
+    \+ [] = Right_Exclusions1,
+    append(Left_Exclusions0,Left_Exclusions1,Left_ExclusionsN),
+    append(Right_Exclusions0,Right_Exclusions1,Right_ExclusionsN).
 
 previous_area(This,[Last-_,This-_|_],Last) :-
     !.
@@ -219,6 +226,7 @@ next_area(This,[This-_,Next-_|_],Next) :-
 next_area(This,[_-_|Rest],Next) :-
     next_area(This, Rest,Next).
 
+% :- table area_search/10.
 area_search(Left,Left,_,_,_,
             _,
             _, _,
@@ -258,15 +266,17 @@ collect_exclusions(A0,T1,T2,Areas,LE0,RE0,LEN,REN) :-
     format(user_error,'.',[]),
     area_search(L,R,T1,T2,Areas,A1,LE0,RE0,LE1,RE1),
     !,
-    next_area(A1,Areas,A2),
-    collect_exclusions(A2,T1,T2,Areas,LE1,RE1,LEN,REN).
+    (   next_area(A1,Areas,A2)
+    ->  collect_exclusions(A2,T1,T2,Areas,LE1,RE1,LEN,REN)
+    ;   LE1=LEN, RE1=REN
+    ).
 collect_exclusions(_,_,_,_,LE,RE,LE,RE).
 
-all_exclusions(T1,T2,Left_Exclusions,Right_Exclusions) :-
-    row_length(T1,Length1),
-    column_length(T1,Height1),
-    row_length(T2,Length2),
-    column_length(T2,Height2),
+all_exclusions(M1,M2,Left_Exclusions,Right_Exclusions) :-
+    as_matrix(M1,T1),
+    as_matrix(M2,T2),
+    matrix_size(T1,Length1,Height1),
+    matrix_size(T2,Length2,Height2),
     Window_Length is min(Length1,Length2),
     Window_Height is min(Height1,Height2),
     areas(Window_Length, Window_Height, Areas),
@@ -290,36 +300,94 @@ random_matrix(N,M,Matrix) :-
 
 :- begin_tests(table_diff).
 
-test(all_exclusions, []) :-
-    T1 = [ [ a, x, y, z, a],
-           [ b, 1, 2, 3, b],
-           [ c, 4, 5, 6, c],
-           [ d, 7, 8, 9, d],
-           [ a, a, a, a, a] ],
+test(windows_1x3, []) :-
 
-    T2 = [ [ 1, 2, 3],
-           [ 4, 5, 6],
-           [ 7, 8, 9] ],
+    %% All, 1x3 windows
+    %%
+    %%   0 1 2
+    %% 0 . . .
+    %% 1 . . x
+    %% 2 . . .
+
+    N = 3,
+    M = 3,
+    windows(1,3,N,M,[r(bob,2,1,1,1)],I,J),
+    findall(I-J,label([I,J]), IJs),
+    IJs = [0-0,1-0].
+
+test(windows_2x2, []) :-
+
+    %% All, 2x2 windows
+    %%
+    %%   0 1 2 3
+    %% 0 . . . .
+    %% 1 . . x x
+    %% 2 x . . .
+    %% 3 . . . .
+
+    N = 4,
+    M = 4,
+    windows(2,2,N,M,[r(bob,2,2,1,1),r(jim,0,1,2,1)],I,J),
+    findall(I-J,label([I,J]), IJs),
+    IJs = [0-0,1-2,2-2].
+
+test(some_exclusions, []) :-
+    T1 = [ [ a ] ],
+
+    T2 = [ [ a ] ],
 
     all_exclusions(T1,T2,E1,E2),
     nl,
     writeq(E1),nl,
     writeq(E2),nl.
 
+test(all_exclusions, []) :-
+    T1 = [ [ a, x, y, z, a],
+           [ b, '1', '2', '3', b],
+           [ c, '4', '5', '6', c],
+           [ d, '7', '8', '9', d],
+           [ a, a, a, a, a] ],
+
+    T2 = [ [ '1', '2', '3'],
+           [ '4', '5', '6'],
+           [ '7', '8', '9'] ],
+
+    all_exclusions(T1,T2,E1,E2),
+    E1 = [r(_,1,3,1,3)],
+    E2 = [r(_,0,3,0,3)].
+
+test(random_exclusions_3x3, []) :-
+    random_matrix(3,3, T1),
+    random_matrix(3,3, T2),
+    profile(ignore(all_exclusions(T1,T2,E1,E2))).
+
 test(random_exclusions_4x4, []) :-
     random_matrix(4,4, T1),
     random_matrix(4,4, T2),
-    profile(ignore(all_exclusions(T1,T2,E1,E2))),
-    nl,
-    writeq(E1),nl,
-    writeq(E2),nl.
+    profile(ignore(all_exclusions(T1,T2,E1,E2))).
 
-test(random_exclusions, []) :-
-    random_matrix(30,30, T1),
-    random_matrix(20,10, T2),
-    time(all_exclusions(T1,T2,E1,E2)),
-    nl,
-    writeq(E1),nl,
-    writeq(E2),nl.
+test(random_exclusions_10x10, []) :-
+    T1 = [['7','4','9','5','6','0','0','7','5','2'],
+          ['4','7','9','6','5','1','3','6','6','3'],
+          ['6','2','2','5','0','9','9','4','5','6'],
+          ['7','6','0','1','9','8','3','4','9','2'],
+          ['7','3','6','2','7','0','7','5','5','7'],
+          ['5','2','4','9','9','1','9','8','6','0'],
+          ['7','2','5','6','9','6','0','8','3','7'],
+          ['9','4','5','7','8','6','4','9','1','8'],
+          ['7','7','1','4','3','7','0','7','4','2'],
+          ['8','9','5','5','0','4','2','4','8','2']],
+
+    T2 = [['2','6','9','2','8','6','7','9','5','5'],
+          ['9','4','3','6','8','9','3','4','6','0'],
+          ['6','1','7','0','5','1','6','9','4','4'],
+          ['0','0','2','4','5','2','3','5','4','2'],
+          ['7','9','6','2','8','5','9','5','3','1'],
+          ['0','5','9','9','1','8','9','6','0','8'],
+          ['6','7','0','3','1','6','0','1','3','0'],
+          ['7','7','4','6','4','5','7','2','4','7'],
+          ['9','8','8','6','1','7','9','3','2','6'],
+          ['2','1','4','6','1','6','8','4','7','2']],
+    time(ignore(all_exclusions(T1,T2,E1,E2))).
 
 :- end_tests(table_diff).
