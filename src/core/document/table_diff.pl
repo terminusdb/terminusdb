@@ -347,18 +347,21 @@ heuristic_exclusions(M1,M2,Left_Exclusions,Right_Exclusions) :-
     collect_exclusions(Everything,T1,T2,Everything_Areas,
                        [],[],
                        Left_Exclusions0,Right_Exclusions0),
-
+    format(user_error, '~nTried everything~n', []),
     areas(Window_Length, 1, Min_Area, Areas),
     Areas = [Row_Area-IJs|Rest_Areas],
-    Just_Row = [Row_Area-IJs], % try full rows first
+    Full_Row = [Row_Area-IJs], % try full rows first
 
-    collect_exclusions(Area,T1,T2,Just_Row,
+    collect_exclusions(Row_Area,T1,T2,Full_Row,
                        Left_Exclusions0,Right_Exclusions0,
                        Left_Exclusions1,Right_Exclusions1),
-    (   Rest_Areas = [Area-_]
+
+    format(user_error, '~nTried rows~n', []),
+    (   Rest_Areas = [Area-_|_]
     ->  collect_exclusions(Area,T1,T2,Rest_Areas,
                            Left_Exclusions1,Right_Exclusions1,
-                           Left_Exclusions,Right_Exclusions)
+                           Left_Exclusions,Right_Exclusions),
+        format(user_error, '~nTried sub-rows~n', [])
     ;   Left_Exclusions1 = Left_Exclusions,
         Right_Exclusions1 = Right_Exclusions
     ).
@@ -883,11 +886,10 @@ test(my_spreadsheet, []) :-
     E1 = [r(_,0,5,0,182),r(_,0,4,184,3),r(_,0,3,182,2),r(_,4,1,184,3),r(_,3,1,182,2)],
     E2 = [r(_,0,5,0,182),r(_,0,4,184,3),r(_,0,3,182,2),r(_,4,1,184,3),r(_,3,1,182,2)].
 
-
 test(my_spreadsheet_first_col_sorted, []) :-
-    spreadsheet1(T1),
+    spreadsheet1([H|T1]),
     sort(T1,TS1),
-    time(heuristic_exclusions(T1,TS1,E1,E2)),
+    profile(heuristic_exclusions([H|T1],[H|TS1],E1,E2)),
     length(E1,L1),
     length(E2,L2),
     writeq([L1,L2]).
