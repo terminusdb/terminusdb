@@ -87,6 +87,7 @@ def main() -> ():
     libraries = get_libraries()
     remove_arity(libraries)
     filter_too_hard(libraries)
+    unique_predicates(libraries)
     check_prolog_files(libraries)
 
 
