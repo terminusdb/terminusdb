@@ -5,10 +5,9 @@
               as_list_of_lists/2,
               matrix_window/6,
               matrix_size/3,
-              window_offset/3
+              window_offset/3,
+              window_matrix/2
           ]).
-
-:- export('$matrix':window_matrix/2).
 
 as_matrix(List, Matrix) :-
     '$matrix':as_matrix(List, Matrix).
@@ -53,3 +52,6 @@ matrix_size(M, W, H) :-
 
 window_offset(W, X, Y) :-
     '$matrix':window_offset(W, X, Y).
+
+window_matrix(W, M) :-
+    '$matrix':window_matrix(W,M).

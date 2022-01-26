@@ -247,7 +247,10 @@
               matrix_row/3,
               matrix_col/3,
               as_list_of_lists/2,
-              matrix_window/6
+              matrix_window/6,
+              matrix_size/3,
+              window_offset/3,
+              window_matrix/2
           ]).
 
 % note: test_utils is intentionally omitted
