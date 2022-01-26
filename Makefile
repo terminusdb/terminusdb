@@ -44,11 +44,7 @@ i: $(RUST_TARGET)
 # Check for implicit imports by disabling autoload
 .PHONY: check-imports
 check-imports: $(RUST_TARGET)
-	$(SWIPL) \
-	  --on-error=status \
-	  -g "set_prolog_flag(autoload, false)" \
-	  -g "['src/bootstrap.pl']" \
-	  -g halt
+	python3 src/utils/lint_modules.py
 
 # Remove the binary.
 .PHONY: clean
