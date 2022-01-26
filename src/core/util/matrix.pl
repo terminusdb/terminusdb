@@ -8,6 +8,8 @@
               window_offset/3
           ]).
 
+:- export('$matrix':window_matrix/2).
+
 as_matrix(List, Matrix) :-
     '$matrix':as_matrix(List, Matrix).
 

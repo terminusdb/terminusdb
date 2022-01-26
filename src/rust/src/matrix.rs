@@ -179,6 +179,12 @@ predicates! {
 
         col_term.unify(col.as_slice())
     }
+
+    #[module("$matrix")]
+    semidet fn window_matrix(_context, window_term, matrix_term) {
+        let window: Arc<Window> = window_term.get_ex()?;
+        matrix_term.unify(window.matrix.clone())
+    }
 }
 
 #[arc_blob("matrix")]
@@ -525,4 +531,5 @@ pub fn register() {
     register_window_col();
     register_matrix_size();
     register_window_offset();
+    register_window_matrix();
 }
