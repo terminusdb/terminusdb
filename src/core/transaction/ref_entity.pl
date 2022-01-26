@@ -43,6 +43,7 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
+:- use_module(library(apply)).
 :- use_module(library(plunit)).
 
 :- use_module(core(util)).
@@ -469,6 +470,8 @@ test(insert_commit_object_with_layer,
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
 :- use_module(database).
+:- use_module(library(ordsets)).
+
 test(copy_base_commit,
      [setup((setup_temp_store(State),
              ensure_label(testlabel1),

@@ -161,7 +161,9 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
+:- use_module(library(apply)).
 :- use_module(library(plunit)).
+:- use_module(library(debug)).
 
 is_descriptor_name(system_descriptor).
 is_descriptor_name(label_descriptor).

@@ -36,7 +36,7 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
-
+:- use_module(library(option)).
 :- use_module(library(csv)).
 :- use_module(library(isub)).
 :- use_module(library(lists)).
@@ -45,6 +45,7 @@
 :- use_module(library(random)).
 
 :- use_module(library(apply)).
+:- use_module(library(debug)).
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).

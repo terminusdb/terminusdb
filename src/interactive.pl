@@ -49,6 +49,7 @@ prolog:message(server_missing_config(BasePath)) -->
 :- set_test_options([run(manual)]). % ,concurrent(true)]).
 
 :- use_module(cli(main)).
+:- use_module(library(debug)).
 
 hup(_Signal) :-
   thread_send_message(main, stop).

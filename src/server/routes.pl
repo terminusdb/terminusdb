@@ -48,6 +48,8 @@
 :- use_module(library(http/http_stream)).
 :- use_module(library(url)).
 
+:- use_module(library(base64)).
+
 
 % multipart
 :- use_module(library(http/http_multipart_plugin)).
@@ -641,6 +643,7 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
+:- use_module(library(readutil)).
 :- use_module(core(document)).
 
 test(triples_update, [
@@ -1211,6 +1214,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
+:- use_module(library(base64)).
 
 test(clone_local, [
          setup(setup_temp_server(State, Server)),
@@ -1919,6 +1923,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
+:- use_module(library(base64)).
 
 test(push_empty_to_empty_does_nothing_succesfully,
      [
@@ -2928,6 +2933,7 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 :- use_module(library(terminus_store)).
+:- use_module(library(ordsets)).
 
 test(squash_a_branch, [
          setup((setup_temp_server(State, Server),

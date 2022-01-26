@@ -20,6 +20,7 @@
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 
+:- use_module(library(lists)).
 :- use_module(library(prolog_stack)).
 :- use_module(library(plunit)).
 :- use_module(library(apply)).
