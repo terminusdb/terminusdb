@@ -1,6 +1,9 @@
 use swipl::prelude::*;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::io::Write;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::cmp::Ordering;
 
 predicates! {
     #[module("$matrix")]
@@ -173,7 +176,8 @@ impl Matrix {
                 x,
                 y,
                 width,
-                height
+                height,
+                cached_hash: Default::default()
             })
         }
     }
@@ -215,7 +219,9 @@ pub struct Window {
     x: usize,
     y: usize,
     width: usize,
-    height: usize
+    height: usize,
+
+    cached_hash: Arc<RwLock<Option<u64>>>
 }
 
 impl Window {
@@ -244,9 +250,87 @@ impl Window {
                 x:self.x+x,
                 y:self.y+y,
                 width,
-                height
+                height,
+                cached_hash: Default::default()
             })
         }
+    }
+
+    fn get_hash(&self) -> u64 {
+        let cache = self.cached_hash.read().unwrap();
+        if let Some(cache) = (*cache).as_ref() {
+            return *cache;
+        }
+
+        let mut hasher = DefaultHasher::new();
+
+        for item in self.items() {
+            hasher.write_usize(item.atom_ptr());
+        }
+
+        let result = hasher.finish();
+
+        std::mem::drop(cache);
+
+        let mut cache = self.cached_hash.write().unwrap();
+        *cache = Some(result);
+
+        result
+    }
+}
+
+impl Hash for Window {
+    fn hash<H:Hasher>(&self, state: &mut H) {
+        state.write_u64(self.get_hash())
+    }
+}
+
+impl PartialEq for Window {
+    fn eq(&self, other: &Window) -> bool {
+        if self.size() != other.size() {
+            false
+        }
+        else if self.get_hash() != other.get_hash() {
+            false
+        }
+        else {
+            self.items().eq(other.items())
+        }
+    }
+}
+
+impl Eq for Window {}
+
+impl PartialOrd for Window {
+    fn partial_cmp(&self, other: &Window) -> Option<Ordering> {
+        let size_order = self.size().cmp(&other.size());
+        if size_order != Ordering::Equal {
+            return Some(size_order);
+        }
+
+        if self.eq(other) {
+            return Some(Ordering::Equal);
+        }
+
+        let hash = self.get_hash();
+        let other_hash = other.get_hash();
+
+        let cmp = hash.cmp(&other_hash);
+
+        match cmp {
+            Ordering::Equal => {
+                // since hashes are equal we have to resort to ordering of content.
+                // Note: Atom does not (yet) implement Ord so we compare the inner atom_ptr values.
+                Some(self.items().map(|a|a.atom_ptr()).cmp(other.items().map(|a|a.atom_ptr())))
+            },
+            _ => Some(cmp)
+        }
+    }
+}
+
+impl Ord for Window {
+    fn cmp(&self, other: &Window) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 
@@ -259,6 +343,10 @@ impl ArcBlobImpl for Window {
                self.x,
                self.matrix.rows,
                self.y)
+    }
+
+    fn compare(&self, other: &Window) -> Ordering {
+        self.cmp(other)
     }
 }
 
@@ -333,6 +421,26 @@ trait Windowed {
         frame.close();
 
         result
+    }
+
+    fn items<'a>(&'a self) -> Box<dyn Iterator<Item=&Atom>+'a> {
+        let (width, height) = self.size();
+        let (mut x, mut y) = (0,0);
+
+        Box::new(std::iter::from_fn(move || {
+            if y == height {
+                return None;
+            }
+
+            let result = &self.row(y).unwrap()[x];
+            x+=1;
+            if x == width {
+                x = 0;
+                y += 1;
+            }
+
+            Some(result)
+        }))
     }
 }
 
