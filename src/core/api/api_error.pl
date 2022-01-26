@@ -1040,20 +1040,43 @@ api_error_jsonld(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
 
 %% Errors that are common to all error types
+api_error_jsonld(Type, error(bad_parameter_type(Param, Expected_Type_In, Value), _), JSON) :-
+    error_type(Type, Type_Displayed),
+    (   Expected_Type_In = atom
+    ->  Expected_Type = string
+    ;   Expected_Type = Expected_Type_In),
+    (   Expected_Type = boolean
+    ->  Type_Msg = "to be 'true' or 'false'"
+    ;   Expected_Type = graph
+    ->  Type_Msg = "to be 'schema' or 'instance'"
+    ;   Expected_Type = integer
+    ->  Type_Msg = "to be an integer"
+    ;   Expected_Type = nonnegative_integer
+    ->  Type_Msg = "to be a non-negative integer"
+    ;   format(string(Type_Msg), "to be a ~q", [Expected_Type])),
+    format(string(Msg), "Expected parameter '~s' ~s but found: ~q", [Param, Type_Msg, Value]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadParameterType',
+                              'api:parameter' : Param,
+                              'api:expected_type' : Expected_Type,
+                              'api:value' : Value },
+             'api:message' : Msg
+            }.
 api_error_jsonld(Type, error(bad_data_version(Data_Version),_),JSON) :-
-    error_type(Type, Type_Msg),
+    error_type(Type, Type_Displayed),
     format(string(Data_Version_String), "~w", [Data_Version]),
     format(string(Msg), "Bad data version: ~s", [Data_Version_String]),
-    JSON = _{'@type' : Type_Msg,
+    JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadDataVersion',
                               'api:data_version' : Data_Version_String },
              'api:message' : Msg
             }.
 api_error_jsonld(Type, error(data_version_mismatch(Requested_Data_Version, Actual_Data_Version), _), JSON) :-
-    error_type(Type, Type_Msg),
+    error_type(Type, Type_Displayed),
     format(string(Msg), "Requested data version in header does not match actual data version.", []),
-    JSON = _{'@type' : Type_Msg,
+    JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:DataVersionMismatch",
@@ -1061,6 +1084,7 @@ api_error_jsonld(Type, error(data_version_mismatch(Requested_Data_Version, Actua
                               'api:actual_data_version' : Actual_Data_Version }
             }.
 
+error_type(check_db, 'api:DbExistsErrorResponse').
 error_type(woql, 'api:WoqlErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
@@ -1314,29 +1338,6 @@ api_document_error_jsonld(Type, error(missing_parameter(Param), _), JSON) :-
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:MissingParameter',
                               'api:parameter' : Param },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(Type, error(bad_parameter_type(Param, Expected_Type_In, Value), _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    (   Expected_Type_In = atom
-    ->  Expected_Type = string
-    ;   Expected_Type = Expected_Type_In),
-    (   Expected_Type = boolean
-    ->  Type_Msg = "to be 'true' or 'false'"
-    ;   Expected_Type = graph
-    ->  Type_Msg = "to be 'schema' or 'instance'"
-    ;   Expected_Type = integer
-    ->  Type_Msg = "to be an integer"
-    ;   Expected_Type = nonnegative_integer
-    ->  Type_Msg = "to be a non-negative integer"
-    ;   format(string(Type_Msg), "to be a ~q", [Expected_Type])),
-    format(string(Msg), "Expected parameter '~s' ~s but found: ~q", [Param, Type_Msg, Value]),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:BadParameterType',
-                              'api:parameter' : Param,
-                              'api:expected_type' : Expected_Type,
-                              'api:value' : Value },
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents,error(document_not_found(Id),_), JSON) :-

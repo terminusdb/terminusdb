@@ -16,6 +16,15 @@ describe('db-noauth', function () {
     expect(r.text).to.be.undefined
   })
 
+  it('fails on database exists for bad parameter type', async function () {
+    const { path } = endpoint.db(agent.defaults())
+    const r = await agent
+      .head(path)
+      .query({ exists: 5 })
+    expect(r.status).to.equal(400)
+    expect(r.text).to.be.undefined
+  })
+
   it('fails on database exists with not found', async function () {
     const { path } = endpoint.db(agent.defaults())
     const r = await agent
