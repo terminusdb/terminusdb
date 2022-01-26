@@ -101,7 +101,7 @@ jobs:
       - name: Run server
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run $DOCKER_IMAGE_NAME:local make check-imports
+          docker run $DOCKER_IMAGE_NAME:local make
           docker run --detach --publish 6363:6363 $DOCKER_IMAGE_NAME:local
 
       - name: Set up Node.js
