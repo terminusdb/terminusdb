@@ -41,11 +41,6 @@ debug: $(RUST_TARGET)
 i: $(RUST_TARGET)
 	$(SWIPL) -f src/interactive.pl
 
-# Check for implicit imports by disabling autoload
-.PHONY: check-imports
-check-imports: $(RUST_TARGET)
-	python3 src/utils/lint_modules.py
-
 # Remove the binary.
 .PHONY: clean
 clean:
