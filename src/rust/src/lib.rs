@@ -1,4 +1,5 @@
 mod matrix;
+mod exclusion;
 
 use lcs;
 use swipl::prelude::*;
@@ -42,4 +43,5 @@ pub extern "C" fn install() {
     register_list_diff();
 
     matrix::register();
+    exclusion::register();
 }
