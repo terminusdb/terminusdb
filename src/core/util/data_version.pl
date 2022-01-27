@@ -178,6 +178,10 @@ extract_data_version(Descriptor, Object, data_version(Label, Layer_Id)) :-
     [Instance_Object] = Object.instance_objects,
     terminus_store:layer_to_id(Instance_Object.read, Layer_Id_String),
     atom_string(Layer_Id, Layer_Id_String).
+extract_data_version(Descriptor, _Object, data_version(commit, Commit_Id)) :-
+    commit_descriptor{ commit_id: Commit_Id_String } :< Descriptor,
+    !,
+    atom_string(Commit_Id, Commit_Id_String).
 
 /**
  * meta_data_version(+Object_With_Descriptor, +Meta_Data, -Data_Version) is det.
