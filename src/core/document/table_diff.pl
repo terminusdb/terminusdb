@@ -45,7 +45,8 @@ areas(I_Max,J_Max,Min_Area,Areas) :-
 windows(Width,Height,N,M,Exclusions,I,J) :-
     #(I) #=< #(N) - #(Width),
     #(J) #=< #(M) - #(Height),
-    Exclusions = r(I,Width,J,Height).
+    Exclusions = r(I,Width,J,Height),
+    labeling([ffc],[I,J]).
 
 window_values_equal(X,Y) :-
     compare(Order,X,Y),
@@ -141,7 +142,6 @@ all_windows_of_shape(M,W,H,Exclusions,Windows) :-
     matrix_size(M,R,C),
     findall(Window,
             (   windows(W,H,R,C,Exclusions,X,Y),
-                labeling([ffc],[X,Y]),
                 matrix_window(M,X,Y,W,H,Window)
             ),
             Windows_Unsorted),
