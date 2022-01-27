@@ -319,8 +319,6 @@ heuristic_windows(M1,M2,Left_Windows,Right_Windows) :-
         Right_Windows3 = Right_Windows
     ).
 
-
-
 random_matrix(N,M,Matrix) :-
     findall(
         Row,
@@ -333,6 +331,16 @@ random_matrix(N,M,Matrix) :-
         ),
         Matrix).
 
+swap_in_row(N,M,Row1,Row2) :-
+    Min is min(N,M),
+    Max is max(N,M),
+    swap_in_row_(Min,Max,Row1,Row2).
+
+swap
+
+swap_columns(N,M,TS1,TS2) :-
+    maplist([Row_In,Row_Out]>>
+            maplist([
 :- begin_tests(table_diff).
 
 test(windows_1x3, []) :-
@@ -883,6 +891,15 @@ test(my_spreadsheet, []) :-
 test(my_spreadsheet_first_col_sorted, []) :-
     spreadsheet1([H|T1]),
     sort(T1,TS1),
+    heuristic_windows([H|T1],[H|TS1],E1,E2),
+    length(E1,187),
+    length(E2,187).
+
+
+test(my_spreadsheet_first_col_sorted_col_swapped, []) :-
+    spreadsheet1([H|T1]),
+    sort(T1,TS1),
+    swap_columns(1,2,TS1,TS2),
     heuristic_windows([H|T1],[H|TS1],E1,E2),
     length(E1,187),
     length(E2,187).
