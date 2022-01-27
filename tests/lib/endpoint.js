@@ -35,6 +35,21 @@ function document (params) {
   }
 }
 
+function documentCommit (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const commitId = params.stringRequired('commitId')
+  const remoteName = params.string('remoteName', 'local')
+  return {
+    path: `/api/document/${orgName}/${dbName}/${remoteName}/commit/${commitId}`,
+    orgName: orgName,
+    dbName: dbName,
+    remoteName: remoteName,
+    commitId: commitId,
+  }
+}
+
 function documentCommits (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -106,6 +121,7 @@ module.exports = {
   db,
   diff,
   document,
+  documentCommit,
   documentCommits,
   documentMeta,
   documentSystem,
