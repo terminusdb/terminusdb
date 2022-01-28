@@ -6,7 +6,6 @@
               server_port/1,
               worker_amount/1,
               max_transaction_retries/1,
-              index_template/1,
               default_database_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
@@ -62,18 +61,6 @@ max_transaction_retries(Value) :-
     ->  atom_number(Atom_Value, Value)
     ;   worker_amount(Num_Workers),
         Value is Num_Workers * 2).
-
-:- dynamic index_template_/1.
-
-index_template(Value) :-
-    index_template_(Value),
-    !.
-index_template(Value) :-
-    once(expand_file_search_path(config('index.tpl'), Template_Path)),
-    open(Template_Path, read, Template_Stream),
-    read_string(Template_Stream, _, Value),
-    assertz(index_template_(Value)),
-    close(Template_Stream).
 
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
