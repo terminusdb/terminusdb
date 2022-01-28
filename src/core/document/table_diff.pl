@@ -416,8 +416,7 @@ diff_copies_and_swaps([W1|Matches1],[W2|Matches2],LL1,LL2,M1,M2,[Copy|Copies],Mo
                          '@y' : Y,
                          '@width' : Width,
                          '@height' : Height
-                       }
-            },
+                       }},
     diff_copies_and_swaps(Matches1,Matches2,M1,M2,Copies,Moves).
 diff_copies_and_swaps([W1|Matches1],[W2|Matches2],M1,M2,Copies,[Move|Moves]) :-
     % this is a move
@@ -451,8 +450,7 @@ diff_unmatched(M,Exclusions,Unmatched) :-
                                   '@y' : Y,
                                   '@width' : Width,
                                   '@height' : Height
-                                }
-                     }
+                                }}
             ),
             Windows,
             Unmatched).
