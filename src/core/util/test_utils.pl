@@ -242,10 +242,8 @@ create_db_with_test_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
-    terminus_path(Path),
-    interpolate([Path, '/test/worldOnt.json'], JSON_File),
-
-    open(JSON_File, read, JSON_Stream),
+    api_init:world_ontology_json(OntologyJSON),
+    open_string(OntologyJSON, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
     atomic_list_concat([Organization,'/',Db_Name], DB_Path),
