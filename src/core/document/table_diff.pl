@@ -336,11 +336,23 @@ swap_in_row(N,M,Row1,Row2) :-
     Max is max(N,M),
     swap_in_row_(Min,Max,Row1,Row2).
 
-swap
+swap_in_row_(0, Max, [X|Row1], [Y|Row2]) :-
+    !,
+    replace(Max,X,Row1,Y,Row2).
+swap_in_row_(N, Max, [X|Row1], [X|Row2]) :-
+    Np is N - 1,
+    swap_in_row_(Np, Max, Row1, Row2).
+
+replace(1, X, [Y|Row], Y, [X|Row]) :- !.
+replace(N, X, [A|Row1], Y, [A|Row2]) :-
+    Np is N - 1,
+    replace(Np, X, Row1, Y, Row2).
 
 swap_columns(N,M,TS1,TS2) :-
-    maplist([Row_In,Row_Out]>>
-            maplist([
+    maplist({N,M}/[Row_In,Row_Out]>>
+            swap_in_row(N,M,Row_In,Row_Out),
+            TS1, TS2).
+
 :- begin_tests(table_diff).
 
 test(windows_1x3, []) :-
@@ -357,8 +369,7 @@ test(windows_1x3, []) :-
     R = r(2,1,1,1),
     exclusion_template(N,M,Exclusions),
     disjoint2([R,Exclusions]),
-    windows(1,3,N,M,Exclusions,I,J),
-    findall(I-J,label([I,J]), IJs),
+    findall(I-J,windows(1,3,N,M,Exclusions,I,J), IJs),
     IJs = [0-0,1-0].
 
 test(windows_2x2, []) :-
@@ -375,8 +386,7 @@ test(windows_2x2, []) :-
     M = 4,
     exclusion_template(N,M,Exclusions),
     disjoint2([r(2,2,1,1),r(0,1,2,1),Exclusions]),
-    windows(2,2,N,M,Exclusions,I,J),
-    findall(I-J,label([I,J]), IJs),
+    findall(I-J,windows(2,2,N,M,Exclusions,I,J), IJs),
     IJs = [0-0,1-2,2-2].
 
 test(match_2x1_window, []) :-
@@ -431,8 +441,8 @@ test(random_10x10, []) :-
           ['9','8','8','6','1','7','9','3','2','6'],
           ['2','1','4','6','1','6','8','4','7','2']],
     all_windows(T1,T2,W1,W2),
-    length(W1,23),
-    length(W2,23).
+    length(W1,25),
+    length(W2,25).
 
 test(random_12x12, []) :-
     T1 = [['9','1','6','4','8','1','0','9','8','9','2','4'],
@@ -462,8 +472,8 @@ test(random_12x12, []) :-
           ['4','7','6','4','5','2','7','0','6','5','6','4']],
 
     all_windows(T1,T2,W1,W2),
-    length(W1,36),
-    length(W2,36).
+    length(W1,35),
+    length(W2,35).
 
 test(random_12x12_heuristic, []) :-
     T1 = [['9','1','6','4','8','1','0','9','8','9','2','4'],
@@ -493,8 +503,64 @@ test(random_12x12_heuristic, []) :-
           ['4','7','6','4','5','2','7','0','6','5','6','4']],
 
     heuristic_windows(T1,T2,W1,W2),
-    length(W1,38),
-    length(W2,38).
+    length(W1,40),
+    length(W2,40).
+
+test(swap_columns, []) :-
+    T1 = [[a,b,c,d],
+          [e,f,g,h],
+          [i,j,k,l],
+          [m,n,o,p]],
+
+    swap_columns(0,1,T1,T2),
+
+    heuristic_windows(T1,T2,W1,W2),
+    maplist(window_rectangle,W1,R1),
+    maplist(window_rectangle,W2,R2),
+    R1 = [r(0,1,0,4),r(2,1,0,4),r(3,1,0,4),r(1,1,0,4)],
+    R2 = [r(1,1,0,4),r(2,1,0,4),r(3,1,0,4),r(0,1,0,4)].
+
+test(swap_columns_and_sort, []) :-
+    T1 = [[a,b,c,d],
+          [e,f,g,h],
+          [i,j,k,l],
+          [m,n,o,p]],
+
+    swap_columns(0,1,T1,T2),
+    T1=[H1|TT1],
+    T2=[H2|TT2],
+    sort(0,@>,TT2,TS2),
+
+    [H2|TS2] = [[b,a,c,d],
+                [n,m,o,p],
+                [j,i,k,l],
+                [f,e,g,h]],
+
+    heuristic_windows([H1|TT1],[H2|TS2],W1,W2),
+    maplist(window_rectangle,W1,R1),
+    maplist(as_list_of_lists,W1,LL1),
+    maplist(window_rectangle,W2,R2),
+    maplist(as_list_of_lists,W2,LL2),
+
+    LL1 = [[[c,d]],
+           [[k,l]],
+           [[g,h]],
+           [[o,p]]],
+
+    R1 = [r(2,2,0,1),
+          r(2,2,2,1),
+          r(2,2,1,1),
+          r(2,2,3,1)],
+
+    LL2 = [[[c,d]],
+           [[k,l]],
+           [[g,h]],
+           [[o,p]]],
+
+    R2 =[r(2,2,0,1),
+         r(2,2,2,1),
+         r(2,2,3,1),
+         r(2,2,1,1)].
 
 spreadsheet1(
     [
@@ -897,13 +963,13 @@ test(my_spreadsheet_first_col_sorted, []) :-
 
 
 test(my_spreadsheet_first_col_sorted_col_swapped, []) :-
-    spreadsheet1([H|T1]),
+    spreadsheet1(SS),
+    swap_columns(1,2,SS,SS2),
+    SS2 = [H|T1],
     sort(T1,TS1),
-    swap_columns(1,2,TS1,TS2),
     heuristic_windows([H|T1],[H|TS1],E1,E2),
     length(E1,187),
     length(E2,187).
-
 
 :- end_tests(table_diff).
 
