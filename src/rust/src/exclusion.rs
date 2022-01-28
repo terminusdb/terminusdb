@@ -73,7 +73,7 @@ enum ExclusionState {
     Invalid,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[clone_blob("exclusion")]
 struct Exclusion {
     left_x: usize,
@@ -103,7 +103,7 @@ impl From<ProvisionalExclusion> for Exclusion {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[clone_blob("provisional_exclusion")]
 pub struct ProvisionalExclusion {
     left_x: usize,
@@ -229,7 +229,7 @@ impl Exclusions {
 
         let mut vec = self.vec.write().unwrap();
         vec.extend(extension);
-        vec.sort_by_key(|e| e.top_y);
+        vec.sort_by_key(|e| (e.top_y, e.left_x, e.bottom_y, e.right_x));
     }
 
     pub fn generate_provisionals(&self, width:usize, height:usize) -> (Vec<ProvisionalExclusion>, ProvisionalExclusions) {
@@ -337,9 +337,12 @@ impl Exclusions {
                     // we will need this exclusion for the next row too
                     new_row_exclusions.push(exclusion.clone());
                 }
-                if c > self.width-width {
-                    break;
+                else {
                 }
+                //if c > self.width-width {
+                //    println!("actually break wtf");
+                //    break;
+                //}
             }
 
             // there may be windows right of the last match
@@ -377,7 +380,7 @@ impl Exclusions {
 }
 
 /// This is the shared state carried around by exclusions.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[clone_blob("provisional_exclusions", defaults)]
 pub struct ProvisionalExclusions {
     valid: Arc<RwLock<bool>>,
@@ -410,4 +413,256 @@ pub fn register() {
     register_provisional_valid();
     register_provisional_selected();
     register_exclusions_as_list();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_single_selection(x:usize, y:usize, expected_invalids: Vec<(usize,usize)>) {
+        test_selection(vec!((x,y)), expected_invalids);
+    }
+
+    fn test_selection(selections: Vec<(usize,usize)>,  expected_invalids: Vec<(usize,usize)>) {
+        let exclusions = Exclusions::new(4,4);
+        let (prov_list, provs) = exclusions.generate_provisionals(2,2);
+        let mut selecteds = Vec::new();
+
+        for (x,y) in selections.iter() {
+            let index = y*3+x;
+            prov_list[index].select();
+            let selected = prov_list[index].as_exclusion();
+            selecteds.push(selected);
+        }
+        selecteds.sort_by_key(|s|(s.top_y, s.left_x));
+
+        let mut expected_remainder = Vec::new();
+        for s_y in 0..3 {
+            for s_x in 0..3 {
+                let index = s_y*3+s_x;
+                let expected;
+                if selections.contains(&(s_x, s_y)) {
+                    expected = ((s_x, s_y),
+                                true,
+                                true);
+                }
+                else if expected_invalids.contains(&(s_x, s_y)) {
+                    expected = ((s_x, s_y),
+                                false,
+                                false);
+                }
+                else {
+                    expected = ((s_x, s_y),
+                                true,
+                                false);
+                    expected_remainder.push(prov_list[index].as_exclusion());
+                }
+                assert_eq!(expected, ((s_x, s_y),
+                                      prov_list[index].valid(),
+                                      prov_list[index].selected()));
+            }
+        }
+
+        exclusions.integrate_provisionals(&provs);
+        assert_eq!(selecteds, *exclusions.vec.read().unwrap());
+
+        let (prov_list_2, _provs) = exclusions.generate_provisionals(2,2);
+
+       assert_eq!(
+           expected_remainder,
+           prov_list_2.iter().map(|p|p.as_exclusion()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn gen_4by4_2by2_one_0x0() {
+        test_single_selection(0,0, vec![
+            (1,0),
+            (0,1),
+            (1,1),
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_1x0() {
+        test_single_selection(1,0, vec![
+            (0,0),
+            (2,0),
+            (0,1),
+            (1,1),
+            (2,1)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_2x0() {
+        test_single_selection(2,0, vec![
+            (1,0),
+            (1,1),
+            (2,1)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_0x1() {
+        test_single_selection(0,1, vec![
+            (0,0),
+            (1,0),
+            (1,1),
+            (0,2),
+            (1,2)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_1x1() {
+        test_single_selection(1,1, vec![
+            (0,0),
+            (1,0),
+            (2,0),
+            (0,1),
+            (2,1),
+            (0,2),
+            (1,2),
+            (2,2)
+        ]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_one_2x1() {
+        test_single_selection(2,1, vec![
+            (1,0),
+            (2,0),
+            (1,1),
+            (1,2),
+            (2,2)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_0x2() {
+        test_single_selection(0,2, vec![
+            (0,1),
+            (1,1),
+            (1,2)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_1x2() {
+        test_single_selection(1,2, vec![
+            (0,1),
+            (1,1),
+            (2,1),
+            (0,2),
+            (2,2)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_one_2x2() {
+        test_single_selection(2,2, vec![
+            (1,1),
+            (2,1),
+            (1,2)
+        ]);
+   }
+
+    #[test]
+    fn gen_4by4_2by2_two_0x0_2x0() {
+        test_selection(
+            vec![(0,0), (2,0)],
+            vec![(1,0),
+                 (0,1),
+                 (1,1),
+                 (2,1)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_2x0_0x0() {
+        test_selection(
+            vec![(2,0), (0,0)],
+            vec![(1,0),
+                 (0,1),
+                 (1,1),
+                 (2,1)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_0x0_0x2() {
+        test_selection(
+            vec![(0,0), (0,2)],
+            vec![(1,0),
+                 (0,1),
+                 (1,1),
+                 (1,2)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_0x2_0x0() {
+        test_selection(
+            vec![(0,2), (0,0)],
+            vec![(1,0),
+                 (0,1),
+                 (1,1),
+                 (1,2)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_0x0_2x2() {
+        test_selection(
+            vec![(0,0), (2,2)],
+            vec![(0,1),
+                 (1,0),
+                 (1,1),
+                 (1,2),
+                 (2,1)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_2x2_0x0() {
+        test_selection(
+            vec![(2,2), (0,0)],
+            vec![(0,1),
+                 (1,0),
+                 (1,1),
+                 (1,2),
+                 (2,1)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_1x0_0x2() {
+        test_selection(
+            vec![(1,0), (0,2)],
+            vec![(0,0),
+                 (2,0),
+                 (0,1),
+                 (1,1),
+                 (2,1),
+                 (1,2)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_0x2_1x0() {
+        test_selection(
+            vec![(0,2), (1,0)],
+            vec![(0,0),
+                 (2,0),
+                 (0,1),
+                 (1,1),
+                 (2,1),
+                 (1,2)]);
+    }
+
+    #[test]
+    fn gen_4by4_2by2_two_1x0_1x2() {
+        test_selection(
+            vec![(1,0), (1,2)],
+            vec![(0,0),
+                 (2,0),
+                 (0,1),
+                 (1,1),
+                 (2,1),
+                 (0,2),
+                 (2,2)]);
+    }
 }
