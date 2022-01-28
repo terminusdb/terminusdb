@@ -7040,6 +7040,31 @@ test(incompatible_key_change,
                      replace_schema_document(Context3, New_Schema),
                      _).
 
+test(comment_free_documentation_object,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@documentation' :
+                _{ '@properties' : _{ name : "Your name" } },
+                '@id' : "Thing",
+                'name' : "xsd:string"
+              },
+
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+    true.
+
 test(compatible_key_change_same_value,
      [
          setup(
