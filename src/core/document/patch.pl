@@ -580,6 +580,23 @@ simple_op_diff_value('PatchTable', Diff, Before, After) :-
     row_length(Top_Left_After,To_Row_After),
     column_length(Top_Left_After,To_Column_After),
     split_matrix(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
+simple_op_diff_value('ModifyTable', Diff, Before, After) :-
+    Diff = _{ '@op' : "ModifyTable",
+              dimensions: _{ '@before' : [R1,C1],
+                             '@after' : [R2,C2]
+                           },
+              copies : Copies,
+              swaps: Swaps,
+              inserts: Inserts,
+              deletes: Deletes
+            },
+    row_length(Before,R1),
+    column_length(Before,C1),
+    empty_matrix(R2,C2,After0),
+    check_deletes(Before,Deletes),
+    add_copies(Before,After0,Copies,After1),
+    add_swaps(Before,After1,Swaps,After2),
+    add_inserts(After2,Inserts,After).
 simple_op_diff_value('KeepTable', _Diff, Same, Same).
 
 diff_op(Diff, Op) :-

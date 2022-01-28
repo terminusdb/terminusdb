@@ -5,6 +5,7 @@
 
 :- use_module(core(util)).
 :- use_module(library(clpfd)).
+:- use_module(library(thread)).
 
 /* Fast(er) table diff */
 down_from(From,To,X) :-
@@ -215,7 +216,7 @@ area_search(Left,Right,M1,M2,Areas,
     ).
 
 %%
-%% collect_windows(+,+,+,+,?,?,W,
+%% collect_windows(+,+,+,+,?,?,-,-,-,-)
 %%
 collect_windows(A0,T1,T2,Areas,LE,RE,LW0,RW0,LWN,RWN) :-
     nth0(L,Areas,A0-_),
@@ -243,9 +244,18 @@ exclusion_template(N,M,r(X,W,Y,H)) :-
     #(X) #=< #(N) - #(W),
     #(Y) #=< #(M) - #(H).
 
-all_windows(M1,M2,Left_Windows,Right_Windows) :-
-    as_matrix(M1,T1),
-    as_matrix(M2,T2),
+table_diff_area_max(LL1,LL2,Diff) :-
+    as_matrix(LL1,T1),
+    as_matrix(LL2,T2),
+    all_windows(T1,T2,LE,RE,LW,RW),
+    build_diff(LL1,LL2,T1,T2,LE,RE,LW,RW,Diff).
+
+all_windows(LL1,LL2,Left_Windows,Right_Windows) :-
+    as_matrix(LL1,T1),
+    as_matrix(LL2,T2),
+    all_windows(T1,T2,_LE,_RE,Left_Windows,Right_Windows).
+
+all_windows(T1,T2,LE,RE,Left_Windows,Right_Windows) :-
     matrix_size(T1,Length1,Height1),
     matrix_size(T2,Length2,Height2),
     Window_Length is min(Length1,Length2),
@@ -260,21 +270,38 @@ all_windows(M1,M2,Left_Windows,Right_Windows) :-
                     [],[],
                     Left_Windows,Right_Windows).
 
-heuristic_windows(M1,M2,Left_Windows,Right_Windows) :-
-    as_matrix(M1,T1),
-    as_matrix(M2,T2),
-    matrix_size(T1,Length1,Height1),
-    matrix_size(T2,Length2,Height2),
+table_diff(M1,M2,Diff) :-
+    first_solution(Diff,
+                   [
+                       table_diff_heuristic(M1,M2,Diff),
+                       table_diff_area_max(M1,M2,Diff)
+                   ],
+                   []).
+
+table_diff_heuristic(LL1,LL2,Diff) :-
+    as_matrix(LL1,M1),
+    as_matrix(LL2,M2),
+    heuristic_windows(M1,M2,LE,RE,LW,RW),
+    build_diff(LL1,LL2,M1,M2,LE,RE,LW,RW,Diff).
+
+heuristic_windows(LL1,LL2,Left_Windows,Right_Windows) :-
+    as_matrix(LL1,M1),
+    as_matrix(LL2,M2),
+    heuristic_windows(M1,M2,_LE,_RE,Left_Windows,Right_Windows).
+
+heuristic_windows(M1,M2,LE,RE,Left_Windows,Right_Windows) :-
+    matrix_size(M1,Length1,Height1),
+    matrix_size(M2,Length2,Height2),
     Window_Length is min(Length1,Length2),
     Window_Height is min(Height1,Height2),
     Min_Area = 2,
     Everything is Window_Length * Window_Height,
     Everything_Areas = [Everything-[Window_Length-Window_Height]],
 
-    exclusion_template(T1,LE),
-    exclusion_template(T2,RE),
+    exclusion_template(M1,LE),
+    exclusion_template(M2,RE),
 
-    collect_windows(Everything,T1,T2,Everything_Areas,
+    collect_windows(Everything,M1,M2,Everything_Areas,
                     LE,RE,
                     [],[],
                     Left_Windows0,Right_Windows0),
@@ -283,7 +310,7 @@ heuristic_windows(M1,M2,Left_Windows,Right_Windows) :-
     areas(Window_Length, 1, Min_Area, Row_Areas),
     Row_Areas = [Row_Area-Row_IJs|Rest_Row_Areas],
     Full_Row = [Row_Area-Row_IJs], % try full rows first
-    collect_windows(Row_Area,T1,T2,Full_Row,
+    collect_windows(Row_Area,M1,M2,Full_Row,
                     LE,RE,
                     Left_Windows0,Right_Windows0,
                     Left_Windows1,Right_Windows1),
@@ -293,14 +320,14 @@ heuristic_windows(M1,M2,Left_Windows,Right_Windows) :-
     Column_Areas = [Column_Area-Column_IJs|Rest_Column_Areas],
     Full_Column = [Column_Area-Column_IJs], % try full rows first
 
-    collect_windows(Column_Area,T1,T2,Full_Column,
+    collect_windows(Column_Area,M1,M2,Full_Column,
                     LE,RE,
                     Left_Windows1,Right_Windows1,
                     Left_Windows2,Right_Windows2),
     format(user_error, '~nTried columns~n', []),
 
     (   Rest_Row_Areas = [Rest_Row_Area-_|_]
-    ->  collect_windows(Rest_Row_Area,T1,T2,Rest_Row_Areas,
+    ->  collect_windows(Rest_Row_Area,M1,M2,Rest_Row_Areas,
                         LE,RE,
                         Left_Windows2,Right_Windows2,
                         Left_Windows3,Right_Windows3),
@@ -310,7 +337,7 @@ heuristic_windows(M1,M2,Left_Windows,Right_Windows) :-
     ),
 
     (   Rest_Column_Areas = [Rest_Column_Area-_|_]
-    ->  collect_windows(Rest_Column_Area,T1,T2,Rest_Column_Areas,
+    ->  collect_windows(Rest_Column_Area,M1,M2,Rest_Column_Areas,
                         LE,RE,
                         Left_Windows3,Right_Windows3,
                         Left_Windows,Right_Windows),
@@ -352,6 +379,83 @@ swap_columns(N,M,TS1,TS2) :-
     maplist({N,M}/[Row_In,Row_Out]>>
             swap_in_row(N,M,Row_In,Row_Out),
             TS1, TS2).
+
+build_diff(LL1,LL2,M1,M2,Exclusions1,Exclusions2,Matches1,Matches2,Diff) :-
+    sort(Matches1,Matches1_Sorted),
+    sort(Matches2,Matches2_Sorted),
+    diff_copies_and_swaps(Matches1_Sorted,Matches2_Sorted,
+                          LL1,LL2,
+                          M1,M2,
+                          Matches, Swaps),
+    diff_unmatched(LL1,M1,Exclusions1,Deletes),
+    diff_unmatched(LL2,M2,Exclusions2,Inserts),
+    matrix_size(M1,R1,C1),
+    matrix_size(M2,R2,C2),
+    Diff =
+    _{ '@op' : "ModifyTable",
+       dimensions : _{ '@before' : [R1,C1],
+                       '@after' : [R2,C2] },
+       copies : Matches,
+       swaps : Swaps,
+       inserts : Inserts,
+       deletes : Deletes }.
+
+diff_copies_and_swaps([],[],_,_,_,_,[],[]) :-
+    !.
+diff_copies_and_swaps([W1|Matches1],[W2|Matches2],LL1,LL2,M1,M2,[Copy|Copies],Moves) :-
+    % this is a copy
+    window_rectangle(W1,R),
+    window_rectangle(W2,R),
+    !,
+    R =.. [_,X,Width,Y,Height],
+
+    split_matrix(
+    as_list_of_lists(W1,LL),
+    Copy = _{ '@value' : LL,
+              '@at' : _{ '@x' : X,
+                         '@y' : Y,
+                         '@width' : Width,
+                         '@height' : Height
+                       }
+            },
+    diff_copies_and_swaps(Matches1,Matches2,M1,M2,Copies,Moves).
+diff_copies_and_swaps([W1|Matches1],[W2|Matches2],M1,M2,Copies,[Move|Moves]) :-
+    % this is a move
+    window_rectangle(W1,R1),
+    window_rectangle(W2,R2),
+    !,
+    as_list_of_lists(W1,LL),
+    R1 =.. [_,X1,Width,Y1,Height],
+    R2 =.. [_,X2,_,Y2,_],
+    Move = _{ '@value' : LL,
+              '@from' : _{ '@x' : X1,
+                           '@y' : Y1,
+                           '@width' : Width,
+                           '@height' : Height
+                         },
+              '@to' : _{ '@x' : X2,
+                         '@y' : Y2,
+                         '@width' : Width,
+                         '@height' : Height
+                       }},
+    diff_copies_and_swaps(Matches1,Matches2,M1,M2,Copies,Moves).
+
+diff_unmatched(M,Exclusions,Unmatched) :-
+    all_windows_of_shape(M,1,1,Exclusions,Windows),
+    maplist([W,U]>>(
+                window_rectangle(W,R),
+                R =.. [_,X,Width,Y,Height],
+                as_list_of_lists(W,D),
+                U = _{ '@value' : D,
+                       '@at' : _{ '@x' : X,
+                                  '@y' : Y,
+                                  '@width' : Width,
+                                  '@height' : Height
+                                }
+                     }
+            ),
+            Windows,
+            Unmatched).
 
 :- begin_tests(table_diff).
 
@@ -472,8 +576,8 @@ test(random_12x12, []) :-
           ['4','7','6','4','5','2','7','0','6','5','6','4']],
 
     all_windows(T1,T2,W1,W2),
-    length(W1,35),
-    length(W2,35).
+    length(W1,36),
+    length(W2,36).
 
 test(random_12x12_heuristic, []) :-
     T1 = [['9','1','6','4','8','1','0','9','8','9','2','4'],
@@ -944,7 +1048,7 @@ spreadsheet2(
         ['Director Data Science ','Booking.com','Netherlands','Large','Travel']
     ]).
 
-test(my_spreadsheet, []) :-
+test(my_spreadsheet_windows, []) :-
     spreadsheet1(T1),
     spreadsheet2(T2),
 
@@ -954,7 +1058,44 @@ test(my_spreadsheet, []) :-
     E1 = [r(0,5,0,182),r(0,4,183,3),r(0,5,186,1),r(0,4,182,1),r(4,1,184,2)],
     E2 = [r(0,5,0,182),r(0,4,183,3),r(0,5,186,1),r(0,4,182,1),r(4,1,184,2)].
 
-test(my_spreadsheet_first_col_sorted, []) :-
+test(my_spreadsheet_diff_area_max, []) :-
+    spreadsheet1(T1),
+    spreadsheet2(T2),
+
+    table_diff_area_max(T1,T2,Diff),
+    writeq(Diff).
+
+test(my_spreadsheet_diff, []) :-
+    spreadsheet1(T1),
+    spreadsheet2(T2),
+
+    table_diff(T1,T2,Diff),
+    Diff = _{'@op':"ModifyTable",
+             dimensions:_{'@after':[5,187],
+                          '@before':[5,187]},
+             copies:[_{'@at':_{'@height':2,'@width':2,'@x':3,'@y':185},
+                       '@value':_},
+                     _{'@at':_{'@height':2,'@width':3,'@x':0,'@y':185},
+                       '@value':_},
+                     _{'@at':_{'@height':3,'@width':4,'@x':0,'@y':182},
+                       '@value':_},
+                     _{'@at':_{'@height':182,'@width':5,'@x':0,'@y':0},
+                       '@value':_}],
+             deletes:[_{'@at':_{'@height':1,'@width':1,'@x':4,'@y':184},
+                        '@value':[['Telecoms']]},
+                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
+                        '@value':[['Telco']]},
+                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
+                        '@value':[['Telco']]}],
+             inserts:[_{'@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
+                        '@value':[['Telecoms']]},
+                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
+                        '@value':[['Telecoms']]},
+                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':184},
+                        '@value':[['Telecoms']]}],
+             swaps:[]}.
+
+test(my_spreadsheet_first_col_sorted_windows, []) :-
     spreadsheet1([H|T1]),
     sort(T1,TS1),
     heuristic_windows([H|T1],[H|TS1],E1,E2),
@@ -962,7 +1103,7 @@ test(my_spreadsheet_first_col_sorted, []) :-
     length(E2,187).
 
 
-test(my_spreadsheet_first_col_sorted_col_swapped, []) :-
+test(my_spreadsheet_first_col_sorted_col_swapped_windows, []) :-
     spreadsheet1(SS),
     swap_columns(1,2,SS,SS2),
     SS2 = [H|T1],
