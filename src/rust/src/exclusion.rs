@@ -234,8 +234,8 @@ impl Exclusions {
 
     pub fn generate_provisionals(&self, width:usize, height:usize) -> (Vec<ProvisionalExclusion>, ProvisionalExclusions) {
         let orig = self.vec.read().unwrap();
-        let mut exclusions:VecDeque<Exclusion> = VecDeque::with_capacity(orig.len());
-        exclusions.extend(orig.iter().cloned());
+        let mut exclusions = orig.clone();
+        let mut exclusions_slice = exclusions.as_mut_slice();
 
         let provisionals = ProvisionalExclusions::new();
         let mut result = Vec::new();
@@ -247,27 +247,16 @@ impl Exclusions {
             let mut past_indexes: Vec<usize> = vec![0;past.len()];
 
             // get a nice subvec
-            let mut row_exclusions;
-            if exclusions.len() == 0 {
-                row_exclusions = VecDeque::with_capacity(0)
-            }
-            else {
-                let pos = match exclusions.iter().position(|e| e.top_y > r + height-1) {
-                    Some(pos) => pos,
-                    None => exclusions.len()
-                };
-                let new_exclusions = exclusions.split_off(pos);
-                row_exclusions = exclusions;
-                exclusions = new_exclusions;
-            }
+            let pos = match exclusions_slice.iter().position(|e| e.top_y > r + height-1) {
+                Some(pos) => pos,
+                None => exclusions_slice.len()
+            };
+            let row_exclusions = &mut exclusions_slice[0..pos];
 
             // row_exclusions contains all the exclusions that will
             // match something on this row. We now sort by left_x so
             // we get them in order.
-            {
-                let slice = row_exclusions.make_contiguous();
-                slice.sort_by_key(|e|e.left_x);
-            }
+            row_exclusions.sort_by_key(|e|e.left_x);
 
             // set up a little closure we'll be using multiple time.
             // This will create a new provisional exclusion for the
@@ -330,8 +319,9 @@ impl Exclusions {
             };
 
             // reserve a new vec to save row exclusions that we're keeping
-            let mut new_row_exclusions = VecDeque::with_capacity(exclusions.len());
+            let mut new_row_exclusions = Vec::with_capacity(row_exclusions.len());
             let mut c = 0;
+            let row_exclusions_len = row_exclusions.len();
             for exclusion in row_exclusions {
                 if exclusion.left_x >= c + width {
                     // matches are possible
@@ -345,7 +335,7 @@ impl Exclusions {
                 c = exclusion.right_x + 1;
                 if exclusion.bottom_y != r {
                     // we will need this exclusion for the next row too
-                    new_row_exclusions.push_back(exclusion.clone());
+                    new_row_exclusions.push(exclusion.clone());
                 }
                 if c > self.width-width {
                     break;
@@ -358,12 +348,11 @@ impl Exclusions {
             }
 
             // glue exclusions back together
-            {
-                let slice = new_row_exclusions.make_contiguous();
-                slice.sort_by_key(|e|e.top_y);
-            }
-            new_row_exclusions.append(&mut exclusions);
-            exclusions = new_row_exclusions;
+            new_row_exclusions.sort_by_key(|e|e.top_y);
+            let offset = row_exclusions_len - new_row_exclusions.len();
+            exclusions_slice = &mut exclusions_slice[offset..];
+            exclusions_slice[0..new_row_exclusions.len()]
+                .clone_from_slice(new_row_exclusions.as_slice());
 
             // update the past
             past.push_back(past_row);
