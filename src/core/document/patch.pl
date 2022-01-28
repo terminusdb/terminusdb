@@ -1021,7 +1021,6 @@ test(deep_read_state, []) :-
                address: _{ city : "Vienna" }
              },
     simple_patch(Patch,Before,After),
-    writeq(After),
     After = _{'@id':"Person/Ludwig",
               '@type':"Person",
               name:"Ludo",
