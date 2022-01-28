@@ -5370,47 +5370,6 @@ test(comment_elaborate,
                shape:'xsd:string',
                species:'xsd:string'}.
 
-test(no_comment_elaborate,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 test_document_label_descriptor(Desc),
-                 write_schema(schema2,Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         ),
-         error(schema_check_failure([witness{'@type':no_comment_on_documentation_object,class:'http://s/Squash',object:'http://s/Squash/documentation/Documentation'}]), _)
-     ]) :-
-
-    Document =
-    _{ '@id' : "Squash",
-       '@type' : "Class",
-       '@key' : _{ '@type' : "Lexical",
-                   '@fields' : ["genus", "species"] },
-       '@documentation' :
-       _{ '@properties' : _{ genus : "The genus of the Cucurtiba is always Cucurtiba",
-                             species : "There are between 13 and 30 species of Cucurtiba",
-                             colour: "Red, Green, Brown, Yellow, lots of things here.",
-                             shape: "Round, Silly, or very silly!" }
-        },
-       genus : "xsd:string",
-       species : "xsd:string",
-       name : "xsd:string",
-       colour : "xsd:string",
-       shape : "xsd:string"
-     },
-
-    open_descriptor(Desc, DB),
-    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
-    with_transaction(
-        Context,
-        insert_schema_document(Context, Document),
-        _
-    ),
-    open_descriptor(Desc, DB2),
-    get_schema_document(DB2, 'Squash', _).
-
 test(bad_documentation,
      [
          setup(
