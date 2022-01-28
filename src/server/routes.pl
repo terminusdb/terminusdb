@@ -3475,7 +3475,7 @@ diff_handler(post, Request, System_DB, Auth) :-
  * console_handler(+Method,+Request) is det.
  */
 console_handler(get, _Request, _System_DB, _Auth) :-
-    config:index_template(Index),
+    api_init:index_template(Index),
     throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).

@@ -47,6 +47,7 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 :- dynamic repo_schema/1.
 :- dynamic layer_schema/1.
 :- dynamic ref_schema/1.
+:- dynamic index_template/1.
 bootstrap_files :-
     template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
@@ -57,7 +58,9 @@ bootstrap_files :-
     ref_schema_json(RefSchemaPath),
     file_to_predicate(RefSchemaPath, ref_schema),
     woql_schema_json(WOQLSchemaPath),
-    file_to_predicate(WOQLSchemaPath, woql_schema).
+    file_to_predicate(WOQLSchemaPath, woql_schema),
+    index_template_path(IndexTemplatePath),
+    file_to_predicate(IndexTemplatePath, index_template).
 
 template_system_instance_json(Path) :-
     once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
@@ -73,6 +76,9 @@ ref_schema_json(Path) :-
 
 woql_schema_json(Path) :-
     once(expand_file_search_path(ontology('woql.json'), Path)).
+
+index_template_path(Path) :-
+    once(expand_file_search_path(config('index.tpl'), Path)).
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
