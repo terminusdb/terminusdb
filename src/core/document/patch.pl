@@ -2,6 +2,7 @@
           [simple_patch/3]).
 
 :- use_module(core(util)).
+:- use_module(core('util/tables')).
 
 /*
 
@@ -452,42 +453,6 @@ simple_patch_table(Diff,Table_In,Table_Out) :-
                     Diff_Row,Row_In,Row_Out),
             Diff,Table_In,Table_Out).
 
-
-%%% Table utils
-row_length(T, Length) :-
-    length(T, Length).
-
-column_length([], 0).
-column_length([R|_], Length) :-
-    length(R, Length).
-
-split(Index,List,Left,Right) :-
-    length(Left, Index),
-    append(Left,Right,List).
-
-split_matrix(In, N, M, Top_Left, Right, Bottom, Bottom_Right) :-
-    when((   nonvar(In)
-         ;   nonvar(Rows_Top),
-             nonvar(Rows_Bottom)),
-         split_row(In, N, Rows_Top, Rows_Bottom)),
-    split_column(Rows_Top, M, Top_Left, Right),
-    split_column(Rows_Bottom, M, Bottom, Bottom_Right).
-
-split_row(In, N, Top, Bottom) :-
-    split(N, In, Top, Bottom).
-
-split_column([], _, [], []) :-
-    !.
-split_column(L, 0, [], L) :-
-    !.
-split_column([R|Rows], N, [R|Rows], []) :-
-    length(R,N),
-    !.
-split_column([R|Rows], N, [Left|Top], [Right|Bottom]) :-
-    split(N, R, Left, Right),
-    split_column(Rows, N, Top, Bottom).
-
-
 %%% Conflict utils
 pairs_and_conflicts_from_keys([], _, _, []).
 pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff, [Result|Values]) :-
@@ -534,14 +499,14 @@ simple_op_diff_value('CopyTable', Diff, Before, After) :-
     get_dict('@bottom_left', Diff, BL_Diff),
     get_dict('@top_right', Diff, TR_Diff),
     get_dict('@bottom_right', Diff, BR_Diff),
-    split_matrix(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
+    split_table(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
     diff_op(BL_Diff,BL_Op),
     simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
     diff_op(TR_Diff,TR_Op),
     simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
     simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    split_matrix(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
+    split_table(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
 simple_op_diff_value('SwapTable', Diff, Before, After) :-
     get_dict('@before', Diff, Top_Left_Before),
     get_dict('@after', Diff, Top_Left_After),
@@ -550,7 +515,7 @@ simple_op_diff_value('SwapTable', Diff, Before, After) :-
     get_dict('@bottom_right', Diff, BR_Diff),
     row_length(Top_Left_Before,To_Row_Before),
     column_length(Top_Left_Before,To_Column_Before),
-    split_matrix(Before,To_Row_Before,To_Column_Before,
+    split_table(Before,To_Row_Before,To_Column_Before,
                  Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
     diff_op(BL_Diff,BL_Op),
     simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
@@ -560,7 +525,7 @@ simple_op_diff_value('SwapTable', Diff, Before, After) :-
     simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
     row_length(Top_Left_After,To_Row_After),
     column_length(Top_Left_After,To_Column_After),
-    split_matrix(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
+    split_table(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
 simple_op_diff_value('PatchTable', Diff, Before, After) :-
     get_dict('@top_left', Diff, TL_Diff),
     get_dict('@bottom_left', Diff, BL_Diff),
@@ -568,7 +533,7 @@ simple_op_diff_value('PatchTable', Diff, Before, After) :-
     get_dict('@bottom_right', Diff, BR_Diff),
     row_length(TL_Diff,To_Row),
     column_length(TL_Diff,To_Column),
-    split_matrix(Before,To_Row,To_Column,
+    split_table(Before,To_Row,To_Column,
                  Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
     simple_patch_table(TL_Diff,Top_Left_Before, TL_New),
     diff_op(BL_Diff,BL_Op),
@@ -579,7 +544,7 @@ simple_op_diff_value('PatchTable', Diff, Before, After) :-
     simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
     row_length(Top_Left_After,To_Row_After),
     column_length(Top_Left_After,To_Column_After),
-    split_matrix(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
+    split_table(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
 simple_op_diff_value('ModifyTable', Diff, Before, After) :-
     Diff = _{ '@op' : "ModifyTable",
               dimensions: _{ '@before' : [R1,C1],
@@ -592,12 +557,65 @@ simple_op_diff_value('ModifyTable', Diff, Before, After) :-
             },
     row_length(Before,R1),
     column_length(Before,C1),
-    empty_matrix(R2,C2,After0),
-    check_deletes(Before,Deletes),
-    add_copies(Before,After0,Copies,After1),
-    add_swaps(Before,After1,Swaps,After2),
-    add_inserts(After2,Inserts,After).
+    empty_table(R2,C2,After0),
+    table_check_deletes(Deletes,Before),
+    table_add_copies(Before,After0,Copies,After1),
+    table_add_swaps(Before,After1,Swaps,After2),
+    table_add_inserts(After2,Inserts,After).
 simple_op_diff_value('KeepTable', _Diff, Same, Same).
+
+empty_row(N, Row) :-
+    length(Row, N),
+    maplist([null]>>true, Row).
+
+empty_table(0,_, []) :- !.
+empty_table(Rows,Columns,[Row|Table]) :-
+    New_Rows is Rows - 1,
+    empty_row(Columns,Row),
+    empty_table(New_Rows,Columns,Table).
+
+table_check_delete(Delete,Before) :-
+    _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
+      '@value': V} = Delete,
+    table_window(X,W,Y,H,Before,V).
+
+table_check_deletes([],_Before).
+table_check_deletes([Delete|Deletes],Before) :-
+    table_check_delete(Delete,Before),
+    table_check_deletes(Deletes,Before).
+
+table_add_copy(Copy,Before,After0,After1) :-
+    _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
+      '@value': Window} = Copy,
+    table_window(X,W,Y,H,Before,Window),
+    replace_table_window(X,Y,Window,After0,After1).
+
+table_add_copies([],_,After,After).
+table_add_copies([Copy|Copies],Before,After0,AfterN) :-
+    table_add_copy(Copy,Before,After0,After1),
+    table_add_copies(Copies,Before,After1,AfterN).
+
+table_add_swap(Swap,Before,After0,After1) :-
+    _{'@from' : _{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
+      '@to' : _{'@height':_H2,'@width':_W2,'@x':X2,'@y':Y2},
+      '@value': Window} = Swap,
+    table_window(X1,W1,Y1,H1,Before,Window),
+    replace_table_window(X2,Y2,Window,After0,After1).
+
+table_add_swaps([],_,After,After).
+table_add_swaps([Swap|Swaps],Before,After0,AfterN) :-
+    table_add_swap(Swap,Before,After0,After1),
+    table_add_swaps(Swaps,Before,After1,AfterN).
+
+table_add_insert(Insert,After0,After1) :-
+    _{'@at' : _{'@height':_H,'@width':_W,'@x':X,'@y':Y},
+      '@value': Window} = Insert,
+    replace_table_window(X,Y,Window,After0,After1).
+
+table_add_inserts([],After,After).
+table_add_inserts([Insert|Inserts],After0,AfterN) :-
+    table_add_insert(Insert,After0,After1),
+    table_add_inserts(Inserts,After1,AfterN).
 
 diff_op(Diff, Op) :-
     get_dict('@op', Diff, Operation_String),

@@ -1,4 +1,5 @@
 :- module(utils,[
+              down_from/3,
               get_key/4,
               get_key/3,
               get_dict_default/4,
@@ -89,6 +90,13 @@
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(random)).
+
+/*
+ * The opposite of between/3
+ */
+down_from(From,To,X) :-
+    between(To,From,Y),
+    X is From - Y + 1.
 
 /*
  * Forget the next phrase.

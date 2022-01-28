@@ -2,16 +2,13 @@
           [simple_diff/4]).
 
 :- use_module(core(util)).
+:- use_module(table_diff).
 
 simple_diff(Before,After,Keep,Diff) :-
     simple_diff(Before,After,Keep,_,Diff).
 
 best_cost(best(Cost,_),Cost).
 best_diff(best(_,Diff),Diff).
-
-down_from(From,To,X) :-
-    between(To,From,Y),
-    X is From - Y.
 
 simple_diff(Before,After,Keep,Cost,Diff) :-
     State = best(inf,_{}),
@@ -39,6 +36,12 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     union(Before_Keys,After_Keys,Keys),
     simple_key_diff(Keys,Before,After,Keep,Diff_Pairs,State,Cost,New_Cost),
     dict_create(Diff,_,Diff_Pairs).
+simple_diff(Before,After,_,Diff,_,Cost,Cost) :-
+    % table (need to look at both if there is an empty table)
+    (   is_table(Before)
+    ;   is_table(After)),
+    !,
+    table_diff(Before,After,Diff).
 simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     % null?
     is_list(Before),
