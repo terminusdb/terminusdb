@@ -443,12 +443,16 @@ is_list_type(C) :-
 is_array_type(C) :-
     global_prefix_expand(sys:'Array', C).
 
+is_table_type(C) :-
+    global_prefix_expand(rdf:'Table', C).
+
 type_family_constructor(Type) :-
     prefix_list(
         [
             sys:'Set',
             sys:'List',
             sys:'Array',
+            sys:'Table',
             sys:'Cardinality',
             sys:'Optional'
         ],
@@ -645,6 +649,31 @@ refute_list(Validation_Object,Type,Witness) :-
     xrdf(Schema, Type, rdf:rest, Cdr),
     refute_list(Validation_Object, Cdr, Witness).
 
+refute_table(_Validation_Object,rdf:nil,_Witness) :-
+    !,
+    fail.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Type, rdf:first, _Car),
+    Witness = witness{ '@type': table_has_no_first,
+                       'type': Type }.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:first, Car),
+    refute_list(Validation_Object,Car, _),
+    Witness = witness{ '@type': table_has_a_non_list,
+                       'type': Type }.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Type, rdf:rest, _Cdr),
+    Witness = witness{ '@type' : table_has_no_rest,
+                       type: Type }.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:first, _Car),
+    xrdf(Schema, Type, rdf:rest, Cdr),
+    refute_table(Validation_Object, Cdr, Witness).
+
 refute_simple_class(Validation_Object,Class,_Witness) :-
     is_simple_class(Validation_Object,Class),
     !,
@@ -706,6 +735,12 @@ refute_type(Validation_Object,Type,Witness) :-
     Witness = json{ '@type' : list_has_no_class,
                     type : Type }.
 refute_type(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:type, sys:'Table'),
+    \+ xrdf(Schema, Type, sys:class, _),
+    Witness = json{ '@type' : table_has_no_class,
+                    type : Type }.
+refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     \+ xrdf(Schema, Type, sys:class, _),
@@ -758,6 +793,10 @@ schema_type_descriptor(Schema, Type, set(Class)) :-
     xrdf(Schema, Type, sys:class, Class).
 schema_type_descriptor(Schema, Type, list(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'List'),
+    !,
+    xrdf(Schema, Type, sys:class, Class).
+schema_type_descriptor(Schema, Type, table(Class)) :-
+    xrdf(Schema, Type, rdf:type, sys:'Table'),
     !,
     xrdf(Schema, Type, sys:class, Class).
 schema_type_descriptor(Schema, Type, array(Class)) :-
