@@ -72,10 +72,10 @@ test("extraneous colons", [fail]) :-
     read_data_version_header_('label:value1:value2', _).
 
 test("short label", [fail]) :-
-    read_data_version_header_('labe:value', _).
+    read_data_version_header_('lab:value', _).
 
 test("short value", [fail]) :-
-    read_data_version_header_('label:valu', _).
+    read_data_version_header_('label:val', _).
 
 test("pass") :-
     read_data_version_header_('label:value', data_version(label, value)).
