@@ -16,17 +16,12 @@
  *
  * Compare data versions. Throw an exception if they are different.
  */
-compare_data_versions(no_data_version, _Actual_Data_Version) :-
-    !.
-compare_data_versions(data_version(Label, Value), data_version(Label, Value)) :-
-    !.
-compare_data_versions(data_version(Requested_Label, Requested_Value), data_version(Actual_Label, Actual_Value)) :-
-    !,
-    atomic_list_concat([Requested_Label, ':', Requested_Value], Requested_Data_Version),
-    atomic_list_concat([Actual_Label, ':', Actual_Value], Actual_Data_Version),
-    throw(error(data_version_mismatch(Requested_Data_Version, Actual_Data_Version), _)).
-compare_data_versions(Requested_Data_Version, _Actual_Data_Version) :-
-    throw(error(unexpected_argument_instantiation(compare_data_versions, Requested_Data_Version), _)).
+compare_data_versions(Expected, Actual) :-
+    do_or_die(compare_data_versions_(Expected, Actual),
+              error(data_version_mismatch(Expected, Actual), _)).
+
+compare_data_versions_(no_data_version, _Actual_Data_Version).
+compare_data_versions_(data_version(Label, Value), data_version(Label, Value)).
 
 /**
  * read_data_version_header(+Request, -Data_Version) is det.
