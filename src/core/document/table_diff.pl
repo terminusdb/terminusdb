@@ -222,7 +222,7 @@ area_search(Left,Right,M1,M2,Areas,
 collect_windows(A0,T1,T2,Areas,LE,RE,LW0,RW0,LWN,RWN) :-
     nth0(L,Areas,A0-_),
     length(Areas,R),
-    format(user_error,'.',[]),
+    * format(user_error,'.',[]),
     area_search(L,R,T1,T2,Areas,A1,LE,RE,LW0,RW0,LW1,RW1),
     !,
     (   next_area(A1,Areas,A2)
@@ -319,7 +319,7 @@ heuristic_windows(M1,M2,LE,RE,Left_Windows,Right_Windows) :-
                     LE,RE,
                     [],[],
                     Left_Windows0,Right_Windows0),
-    format(user_error, '~nTried everything~n', []),
+    * format(user_error, '~nTried everything~n', []),
 
     areas(Window_Length, 1, Min_Area, Row_Areas),
     Row_Areas = [Row_Area-Row_IJs|Rest_Row_Areas],
@@ -328,7 +328,7 @@ heuristic_windows(M1,M2,LE,RE,Left_Windows,Right_Windows) :-
                     LE,RE,
                     Left_Windows0,Right_Windows0,
                     Left_Windows1,Right_Windows1),
-    format(user_error, '~nTried rows~n', []),
+    * format(user_error, '~nTried rows~n', []),
 
     areas(1, Window_Height, Min_Area, Column_Areas),
     Column_Areas = [Column_Area-Column_IJs|Rest_Column_Areas],
@@ -338,14 +338,14 @@ heuristic_windows(M1,M2,LE,RE,Left_Windows,Right_Windows) :-
                     LE,RE,
                     Left_Windows1,Right_Windows1,
                     Left_Windows2,Right_Windows2),
-    format(user_error, '~nTried columns~n', []),
+    * format(user_error, '~nTried columns~n', []),
 
     (   Rest_Row_Areas = [Rest_Row_Area-_|_]
     ->  collect_windows(Rest_Row_Area,M1,M2,Rest_Row_Areas,
                         LE,RE,
                         Left_Windows2,Right_Windows2,
                         Left_Windows3,Right_Windows3),
-        format(user_error, '~nTried sub-rows~n', [])
+        * format(user_error, '~nTried sub-rows~n', [])
     ;   Left_Windows2 = Left_Windows3,
         Right_Windows2 = Right_Windows3
     ),
@@ -355,7 +355,7 @@ heuristic_windows(M1,M2,LE,RE,Left_Windows,Right_Windows) :-
                         LE,RE,
                         Left_Windows3,Right_Windows3,
                         Left_Windows,Right_Windows),
-        format(user_error, '~nTried sub-columns~n', [])
+        * format(user_error, '~nTried sub-columns~n', [])
     ;   Left_Windows3 = Left_Windows,
         Right_Windows3 = Right_Windows
     ).
@@ -555,8 +555,16 @@ test(random_10x10, []) :-
           [9,8,8,6,1,7,9,3,2,6],
           [2,1,4,6,1,6,8,4,7,2]],
     all_windows(T1,T2,W1,W2),
-    length(W1,25),
-    length(W2,25).
+    length(W1,L1),
+    length(W2,L2),
+    L1 < 30, L1 > 20,
+    L2 < 30, L2 > 20.
+
+window_blocks(M,WS,Blocks) :-
+    maplist({M}/[Window,Block]>>(
+                window_rectangle(Window,r(X,W,Y,H)),
+                table_window(X,W,Y,H,M,Block)
+            ),WS,Blocks).
 
 test(random_12x12, []) :-
     T1 = [[9,1,6,4,8,1,0,9,8,9,2,4],
@@ -585,9 +593,11 @@ test(random_12x12, []) :-
           [4,8,0,2,7,9,5,3,8,9,2,7],
           [4,7,6,4,5,2,7,0,6,5,6,4]],
 
-    all_windows(T1,T2,W1,W2),
-    length(W1,36),
-    length(W2,36).
+    all_windows(T1,T2,WS1,WS2),
+    length(WS1,L1),
+    length(WS2,L2),
+    L1 > 35, L1 < 42,
+    L2 > 35, L2 < 42.
 
 test(random_12x12_heuristic, []) :-
     T1 = [[9,1,6,4,8,1,0,9,8,9,2,4],
@@ -616,10 +626,13 @@ test(random_12x12_heuristic, []) :-
           [4,8,0,2,7,9,5,3,8,9,2,7],
           [4,7,6,4,5,2,7,0,6,5,6,4]],
 
-    heuristic_windows(T1,T2,W1,W2),
-    writeq([W1,W2]),
-    length(W1,38),
-    length(W2,38).
+    heuristic_windows(T1,T2,WS1,WS2),
+    window_blocks(T1,WS1,Blocks1),
+    window_blocks(T2,WS2,Blocks2),
+    length(Blocks1, L1),
+    length(Blocks2, L2),
+    L1 > 35, L1 < 42,
+    L2 > 35, L2 < 42.
 
 test(swap_columns, []) :-
     T1 = [[a,b,c,d],
@@ -628,12 +641,25 @@ test(swap_columns, []) :-
           [m,n,o,p]],
 
     swap_columns(0,1,T1,T2),
+    heuristic_windows(T1,T2,WS1,WS2),
 
-    heuristic_windows(T1,T2,W1,W2),
-    maplist(window_rectangle,W1,R1),
-    maplist(window_rectangle,W2,R2),
-    R1 = [r(0,1,0,4),r(2,1,0,4),r(3,1,0,4),r(1,1,0,4)],
-    R2 = [r(1,1,0,4),r(2,1,0,4),r(3,1,0,4),r(0,1,0,4)].
+    maplist({T1,T2}/[Window1,Window2,Block1,Block2]>>(
+                window_rectangle(Window1,r(X1,W1,Y1,H1)),
+                table_window(X1,W1,Y1,H1,T1,Block1),
+                window_rectangle(Window2,r(X2,W2,Y2,H2)),
+                table_window(X2,W2,Y2,H2,T2,Block2)
+            ),WS1,WS2,Blocks1,Blocks2),
+    sort(Blocks1, Blocks_Sorted1),
+    sort(Blocks2, Blocks_Sorted2),
+
+    Blocks_Sorted1 = [[[a],[e],[i],[m]],
+                      [[b],[f],[j],[n]],
+                      [[c],[g],[k],[o]],
+                      [[d],[h],[l],[p]]],
+    Blocks_Sorted2 = [[[a],[e],[i],[m]],
+                      [[b],[f],[j],[n]],
+                      [[c],[g],[k],[o]],
+                      [[d],[h],[l],[p]]].
 
 test(swap_columns_and_sort, []) :-
     T1 = [[a,b,c,d],
@@ -646,36 +672,28 @@ test(swap_columns_and_sort, []) :-
     T2=[H2|TT2],
     sort(0,@>,TT2,TS2),
 
+    HT1 = [H1|TT1],
+    HT2 = [H2|TS2],
+
     [H2|TS2] = [[b,a,c,d],
                 [n,m,o,p],
                 [j,i,k,l],
                 [f,e,g,h]],
 
-    heuristic_windows([H1|TT1],[H2|TS2],W1,W2),
-    maplist(window_rectangle,W1,R1),
-    maplist(as_list_of_lists,W1,LL1),
-    maplist(window_rectangle,W2,R2),
-    maplist(as_list_of_lists,W2,LL2),
+    heuristic_windows(HT1,HT2,WS1,WS2),
+    window_blocks(HT1,WS1,Blocks_Unsorted1),
+    window_blocks(HT2,WS2,Blocks_Unsorted2),
+    sort(Blocks_Unsorted1,Blocks1),
+    sort(Blocks_Unsorted2,Blocks2),
 
-    LL1 = [[[c,d]],
-           [[k,l]],
-           [[g,h]],
-           [[o,p]]],
-
-    R1 = [r(2,2,0,1),
-          r(2,2,2,1),
-          r(2,2,1,1),
-          r(2,2,3,1)],
-
-    LL2 = [[[c,d]],
-           [[k,l]],
-           [[g,h]],
-           [[o,p]]],
-
-    R2 =[r(2,2,0,1),
-         r(2,2,2,1),
-         r(2,2,3,1),
-         r(2,2,1,1)].
+    Blocks1 = [[[c,d]],
+               [[g,h]],
+               [[k,l]],
+               [[o,p]]],
+    Blocks2 = [[[c,d]],
+               [[g,h]],
+               [[k,l]],
+               [[o,p]]].
 
 spreadsheet1(
     [
@@ -1059,55 +1077,52 @@ spreadsheet2(
         ['Director Data Science ','Booking.com','Netherlands','Large','Travel']
     ]).
 
-test(my_spreadsheet_windows, []) :-
-    spreadsheet1(T1),
-    spreadsheet2(T2),
-
-    all_windows(T1,T2,W1,W2),
-    maplist(window_rectangle,W1,E1),
-    maplist(window_rectangle,W2,E2),
-    E1 = [r(0,5,0,182),r(0,4,183,3),r(0,5,186,1),r(0,4,182,1),r(4,1,184,2)],
-    E2 = [r(0,5,0,182),r(0,4,183,3),r(0,5,186,1),r(0,4,182,1),r(4,1,184,2)].
-
 test(my_spreadsheet_diff_area_max, []) :-
     spreadsheet1(T1),
     spreadsheet2(T2),
 
     table_diff_area_max(T1,T2,Diff),
-    writeq(Diff).
-
-test(my_spreadsheet_diff, []) :-
-    spreadsheet1(T1),
-    spreadsheet2(T2),
-
-    table_diff(T1,T2,Diff),
 
     Diff = _{'@op':"ModifyTable",
              dimensions:_{'@after':[5,187],
                           '@before':[5,187]},
-             copies:[_{'@at':_{'@height':2,'@width':2,'@x':3,'@y':185},
-                       '@value':_},
-                     _{'@at':_{'@height':2,'@width':3,'@x':0,'@y':185},
-                       '@value':_},
-                     _{'@at':_{'@height':3,'@width':4,'@x':0,'@y':182},
-                       '@value':_},
+             copies:Copies,
+             deletes:Deletes,
+             inserts:Inserts,
+             moves:[]},
+    sort(Copies, Copies_Sorted),
+    Copies_Sorted = [_{'@at':_{'@height':2,'@width':1,'@x':0,'@y':182},
+                       '@value':[['Pre Sales Engineering'],['Cyber Analytics']]},
+                     _{'@at':_{'@height':3,'@width':1,'@x':4,'@y':184},
+                       '@value':[['Telecoms'],['Textiles'],['Travel']]},
+                     _{'@at':_{'@height':2,'@width':3,'@x':1,'@y':182},
+                       '@value':[['Orange Business Services','France','Large'],
+                                 ['TELUS','Canada','Large']]},
+                     _{'@at':_{'@height':3,'@width':4,'@x':0,'@y':184},
+                       '@value':[['Product Owner','BT','UK','Large'],
+                                 ['Lead Data Engineer','Chantelle','France','Medium'],
+                                 ['Director Data Science ','Booking.com','Netherlands','Large']]},
                      _{'@at':_{'@height':182,'@width':5,'@x':0,'@y':0},
                        '@value':_}],
-             deletes:[_{'@at':_{'@height':1,'@width':1,'@x':4,'@y':184},
-                        '@value':[['Telecoms']]},
-                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
-                        '@value':[['Telco']]},
-                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
-                        '@value':[['Telco']]}],
-             inserts:[_{'@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
-                        '@value':[['Telecoms']]},
-                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
-                        '@value':[['Telecoms']]},
-                      _{'@at':_{'@height':1,'@width':1,'@x':4,'@y':184},
-                        '@value':[['Telecoms']]}],
-             moves:[]}.
+    sort(Deletes, Deletes_Sorted),
+    Deletes_Sorted = [ _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
+                          '@value':[['Telco']]
+                        },
+                       _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
+                          '@value':[['Telco']]
+                        }
+                     ],
+    sort(Inserts, Inserts_Sorted),
+    Inserts_Sorted = [ _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
+                          '@value':[['Telecoms']]
+                        },
+                       _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
+                          '@value':[['Telecoms']]
+                        }
+                     ].
 
-test(my_spreadsheet_first_col_sorted_windows, []) :-
+
+test(my_spreadsheet_first_col_sorted_windows, [blocked(slow)]) :-
     spreadsheet1([H|T1]),
     sort(T1,TS1),
     heuristic_windows([H|T1],[H|TS1],E1,E2),
@@ -1115,7 +1130,7 @@ test(my_spreadsheet_first_col_sorted_windows, []) :-
     length(E2,187).
 
 
-test(my_spreadsheet_first_col_sorted_col_swapped_windows, []) :-
+test(my_spreadsheet_first_col_sorted_col_swapped_windows, [blocked(slow)]) :-
     spreadsheet1(SS),
     swap_columns(1,2,SS,SS2),
     SS2 = [H|T1],
