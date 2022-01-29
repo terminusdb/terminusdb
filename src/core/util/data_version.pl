@@ -48,8 +48,8 @@ read_data_version_header_(Header, data_version(Label, Value)) :-
     split_atom(Header,':',[Label,Value]),
     atom_length(Label,Label_Length),
     atom_length(Value,Value_Length),
-    Label_Length > 4,
-    Value_Length > 4,
+    Label_Length > 3,
+    Value_Length > 3,
     \+ re_match(':', Label, []),
     \+ re_match(':', Value, []).
 
