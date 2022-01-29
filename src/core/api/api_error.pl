@@ -62,8 +62,12 @@ api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
                               'api:data_version' : Data_Version_String },
              'api:message' : Msg
             }.
-api_global_error_jsonld(Type, error(data_version_mismatch(Requested_Data_Version, Actual_Data_Version), _), JSON) :-
+api_global_error_jsonld(error(data_version_mismatch(
+                                  data_version(Requested_Label, Requested_Value),
+                                  data_version(Actual_Label, Actual_Value)), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
+    atomic_list_concat([Requested_Label, ':', Requested_Value], Requested_Data_Version),
+    atomic_list_concat([Actual_Label, ':', Actual_Value], Actual_Data_Version),
     format(string(Msg), "Requested data version in header does not match actual data version.", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
@@ -72,6 +76,7 @@ api_global_error_jsonld(Type, error(data_version_mismatch(Requested_Data_Version
                               'api:requested_data_version' : Requested_Data_Version,
                               'api:actual_data_version' : Actual_Data_Version }
             }.
+
 
 %% DB Exists
 api_error_jsonld_(check_db, error(unknown_database(Organization, Database), _), JSON) :-
