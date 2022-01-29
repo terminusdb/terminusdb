@@ -9,7 +9,8 @@
 
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
-
+:- use_module(utils).
+:- use_module(library(pcre)).
 /**
  * compare_data_versions(+Requested_Data_Version, +Actual_Data_Version) is det.
  *
@@ -44,15 +45,13 @@ read_data_version_header(Request, Data_Version) :-
 read_data_version_header(_Request, no_data_version).
 
 read_data_version_header_(Header, data_version(Label, Value)) :-
-    once(sub_atom(Header, Label_Length, 1, Value_Length, ':')),
-    % The lengths should be > 0, but we know they will be larger.
-    Label_Length > 3,
-    Value_Length > 3,
-    once(sub_atom(Header, 0, Label_Length, _After_Label, Label)),
-    Before_Value is Label_Length + 1,
-    once(sub_atom(Header, Before_Value, Value_Length, 0, Value)),
-    % Check for extraneous colons.
-    \+ sub_atom(Value, _, _, _, ':').
+    split_atom(Header,':',[Label,Value]),
+    atom_length(Label,Label_Length),
+    atom_length(Value,Value_Length),
+    Label_Length > 4,
+    Value_Length > 4,
+    \+ re_match(':', Label, []),
+    \+ re_match(':', Value, []).
 
 :- begin_tests(read_data_version_header_tests).
 
