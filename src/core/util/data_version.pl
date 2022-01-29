@@ -48,8 +48,8 @@ read_data_version_header_(Header, data_version(Label, Value)) :-
     split_atom(Header,':',[Label,Value]),
     atom_length(Label,Label_Length),
     atom_length(Value,Value_Length),
-    Label_Length > 4,
-    Value_Length > 4,
+    Label_Length > 3,
+    Value_Length > 3,
     \+ re_match(':', Label, []),
     \+ re_match(':', Value, []).
 
@@ -71,10 +71,10 @@ test("extraneous colons", [fail]) :-
     read_data_version_header_('label:value1:value2', _).
 
 test("short label", [fail]) :-
-    read_data_version_header_('labe:value', _).
+    read_data_version_header_('lab:value', _).
 
 test("short value", [fail]) :-
-    read_data_version_header_('label:valu', _).
+    read_data_version_header_('label:val', _).
 
 test("pass") :-
     read_data_version_header_('label:value', data_version(label, value)).
