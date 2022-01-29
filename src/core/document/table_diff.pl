@@ -281,12 +281,13 @@ all_windows(T1,T2,LE,RE,Left_Windows,Right_Windows) :-
                     Left_Windows,Right_Windows).
 
 table_diff(M1,M2,Diff) :-
-    first_solution(Diff,
-                   [
-                       table_diff_heuristic(M1,M2,Diff),
-                       table_diff_area_max(M1,M2,Diff)
-                   ],
-                   []).
+    table_diff_heuristic(M1,M2,Diff),
+    * first_solution(Diff,
+                     [
+                         table_diff_heuristic(M1,M2,Diff),
+                         table_diff_area_max(M1,M2,Diff)
+                     ],
+                     []).
 
 table_diff_heuristic(LL1,LL2,Diff) :-
     atomize_table(LL1,LLA1),
@@ -403,16 +404,20 @@ build_diff(LL1,LL2,M1,M2,Exclusions1,Exclusions2,Matches1,Matches2,Diff) :-
                           Matches, Moves),
     diff_unmatched(LL1,M1,Exclusions1,Deletes),
     diff_unmatched(LL2,M2,Exclusions2,Inserts),
+    sort(Moves,MovesS),
+    sort(Matches,MatchesS),
+    sort(Inserts,InsertsS),
+    sort(Deletes,DeletesS),
     matrix_size(M1,R1,C1),
     matrix_size(M2,R2,C2),
     Diff =
     _{ '@op' : "ModifyTable",
        dimensions : _{ '@before' : [R1,C1],
                        '@after' : [R2,C2] },
-       copies : Matches,
-       moves : Moves,
-       inserts : Inserts,
-       deletes : Deletes }.
+       copies : MatchesS,
+       moves : MovesS,
+       inserts : InsertsS,
+       deletes : DeletesS }.
 
 diff_copies_and_moves([],[],_,_,_,_,[],[]) :-
     !.

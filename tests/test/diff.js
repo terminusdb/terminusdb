@@ -97,36 +97,33 @@ describe('diff', function () {
 
     const tableDiff = {
       '@op': 'ModifyTable',
-      copies: [
-        {
-          '@at': { '@height': 1, '@width': 2, '@x': 0, '@y': 0 },
-          '@value': [['asdf', "quux"]],
-        },
-      ],
-      deletes: [
-        {
-          '@at': { '@height': 1, '@width': 1, '@x': 1, '@y': 1 },
-          '@value': [['baaz']],
-        },
-        {
-          '@at': { '@height': 1, '@width': 1, '@x': 0, '@y': 1 },
-          '@value': [['fdsa']],
-        },
-      ],
+      copies: [{
+        '@at': { '@height': 1, '@width': 2, '@x': 0, '@y': 0 },
+        '@value': [['asdf', 'quux']],
+      }],
+      deletes: [{
+        '@at': { '@height': 1, '@width': 1, '@x': 1, '@y': 1 },
+        '@value': [['baaz']],
+      },
+      {
+        '@at': { '@height': 1, '@width': 1, '@x': 0, '@y': 1 },
+        '@value': [['fdsa']],
+      }],
       dimensions: {
         '@after': [2, 2],
         '@before': [2, 2],
       },
       inserts: [{
-        '@at': { '@height': 1, '@width': 1, '@x': 0, '@y': 1 },
-        '@value': [['fdsa']],
-      },
-      {
         '@at': { '@height': 1, '@width': 1, '@x': 1, '@y': 1 },
         '@value': [['bar']],
+      },
+      {
+        '@at': { '@height': 1, '@width': 1, '@x': 0, '@y': 1 },
+        '@value': [['fdsa']],
       }],
       moves: [],
     }
+
     expect(r.body).to.deep.equal(tableDiff)
   })
 
@@ -149,14 +146,14 @@ describe('diff', function () {
       dimensions: { '@after': [2, 2], '@before': [2, 2] },
       inserts: [],
       moves: [{
-        '@from': { '@height': 1, '@width': 2, '@x': 0, '@y': 0 },
-        '@to': { '@height': 1, '@width': 2, '@x': 0, '@y': 1 },
-        '@value': [['asdf', 'quux']],
-      },
-      {
         '@from': { '@height': 1, '@width': 2, '@x': 0, '@y': 1 },
         '@to': { '@height': 1, '@width': 2, '@x': 0, '@y': 0 },
         '@value': [['fdsa', 'baaz']],
+      },
+      {
+        '@from': { '@height': 1, '@width': 2, '@x': 0, '@y': 0 },
+        '@to': { '@height': 1, '@width': 2, '@x': 0, '@y': 1 },
+        '@value': [['asdf', 'quux']],
       },
       ],
     }
