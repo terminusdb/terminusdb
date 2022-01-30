@@ -4,418 +4,6 @@
 :- use_module(core(util)).
 :- use_module(core('util/tables')).
 
-/*
-
-# Patch and Diff
-
-Patch applies a diff to obtain a new object. We will need to be able
-to infer Diffs from objects, or from between diff different data
-products.
-
-A patch can be applied either singularly or in bulk to a patch
-endpoint which will apply the patch to the specified data product
-resource.
-
-We specify patch using the operations described below.
-
-## Copy Diff
-
-Copy is implicit
-
-All properties which are not specifically mentioned will be considered
-part of an implicit copy. This will make patches more compressed and
-easier to specify by hand.
-
-## Mandatory Diff
-
-`@before`/`@after` instructions contain objects specified as tightly as
-required to obtain ids, or as ids.
-
-```jsx
-{ '@id' : "Person/jim",
-  'date_of_birth' : { '@op' : 'SwapValue',
-                      '@before' : "1928-03-05",
-                      '@after' : "1938-03-05"
-                    }}
-```
-
-## Optional Diff
-
-Optionals also contain `@before`/`@after` designations, but potentially
-`null` fields to describe missing elements.
-
-```jsx
-{ '@id' : "Object/my_object",
-  'name' : { '@op' : 'SwapValue',
-             '@before' : null,
-             '@after' : "Jim" }}
-```
-
-## Set Diff / Cardinality Diff
-
-Set requires the ability to explicitly remove or add elements - we can do this by maintaining a `@before`/`@after` with a list of those which exist *only* on the left, and *only* on the right.
-
-
-## List Diff
-
-The list diff requires swaps at a position.  We use, `@copy`, `@swap` and `@keep`.
-
-### Copy List
-
-Copy the previous list from `From_Position` to `To_Position.
-
-```jsx
-{ "@op" : "CopyList",
-  "@to" : To_Position,
-  "@rest" : Diff }
-```
-
-### Swap List
-
-Swap out the list starting from the current point from `Previous` to
-`Next`. This can be used to extend, or drop elements as well as do
-full replacement.
-
-```jsx
-{ "@op" : "SwapList",
-  "@before" : Previous,
-  "@after" : Next,
-  "@rest" : Diff }
-```
-
-### Patch List
-
-Patch the list starting from the current point with the patch list in
-"@patch". The patch must be less than or equal to the length of the list.
-
-```jsx
-{ "@op" : "PatchList",
-  "@patch" : Patch,
-  "@rest" : Diff }
-```
-
-### Example:
-
-```jsx
-var Patch =
-{ '@id' : "TaskList/my_tasks",
-  'tasks' : { '@op' : "CopyList",                      % Replace List
-              '@to' : 2,
-              '@rest' : { '@op' : "PatchList",
-                          '@patch' : [{ '@op' : "SwapValue",
-                                        '@before' : "Task/shopping",
-                                        '@after' : "Task/climbing"},
-                                      { '@op' : "SwapValue",
-                                        '@before' : "Task/cleaning",
-                                        '@after' : "Task/dining"},
-                                      { '@op' : "SwapValue",
-                                        '@before' : "Task/fishing",
-                                        '@after' : "Task/travelling"}],
-                          '@rest' : { '@op' : "KeepList" } } }}
-var Before =
-{ '@id' : "TaskList/my_tasks",
-  'tasks' : ["Task/driving", "Task/reading", "Task/shopping",
-             "Task/cleaning","Task/fishing", "Task/arguing"] }
-var After =
-{ '@id' : "TaskList/my_tasks",
-  'tasks' : ["Task/driving", "Task/reading", "Task/climbing",
-             "Task/dining", "Task/travelling", "Task/arguing"] }
-
-```
-
-## Array Diff
-
-Arrays will allow index swaping or "shrink" and "grow".
-
-## Force Diff
-
-A "Force Diff" will set the value of a location regardless of current
-read-state. This is a potentially unsafe operation as there is no
-guarantee we are seeing the object state version we think we
-are.
-
-```jsx
-{ '@id' : "Employee/012" ,
-  'name' : { '@op' : 'ForceValue',
-             '@after' : "Jake" }}
-```
-
-## Table Diff
-
-A Table diff requires swaps at two positions and subdivision of each patch into squares: Top-Left (in which we make the patch) Top-Right, Bottom-Left and Bottom-Right, each of which will be computed with the help of an additional Diff.
-
-We use `CopyTable`, `SwapTable` and `KeepTable`.
-
-Schematically the diff is a context with a the current hole in the
-upper-right hand corner as follows:
-
-```jsx
-
------------------------
-|          |          |
-| Swap /   |   Top    |
-| Copy     |   Right  |
-| instr.   |   Diff   |
-|          |          |
------------------------
-|          |          |
-|  Bttom   |  Bottom  |
-|  Left    |  Right   |
-|  Diff    |  Diff    |
-|          |          |
------------------------
-
-```
-
-We will recursively patch the table by applying the diffs in the
-various corners.
-
-### Example Table
-
-This might apply to an object as follows:
-
-```jsx
-{ '@id' : "Excel/012" ,
-  'sheets' : [{ '@id' : "Excel/012/sheet/Sheet/1",
-                'cells' :
-                { '@op' : "SwapTable",
-                  '@before' : [[ { 'Value' : "10", ... },
-                                 { 'Value' : "20", ... },
-                                 { 'Value' : "30", ... } ],
-                               [ { 'Value' : "40", ... },
-                                 { 'Value' : "50", ... },
-                                 { 'Value' : "60", ... } ]
-                               [ { 'Value' : "70", ... },
-                                 { 'Value' : "80", ... },
-                                 { 'Value' : "90", ... } ] ],
-                  '@after' : [[ { 'Value' : "1", ... },
-                                { 'Value' : "2", ... },
-                                { 'Value' : "3", ... } ],
-                              [ { 'Value' : "4", ... },
-                                { 'Value' : "5", ... },
-                                { 'Value' : "6", ... } ]
-                              [ { 'Value' : "7", ... },
-                                { 'Value' : "8", ... },
-                                { 'Value' : "9", ... } ] ],
-                  '@after' : { '@op' : "KeepTable" },
-                  '@bottom_left' : { '@op' : "KeepTable" },
-                  '@top_right' : { '@op' : "KeepTable" },
-                  '@bottom_right' : { '@op' : "KeepTable" }
-                }}]}
-```
-
-Application would take a table through the following transformation:
-
-```
-| 10 | 20 | 30 | A | B | C |
-| 40 | 50 | 60 | D | E | F |
-| 70 | 80 | 90 | G | H | I |
-| X  | Y  | Z  | O | O | O |
-| X  | Y  | Z  | O | O | O |
-| X  | Y  | Z  | O | O | O |
-
-=>
-
-| 1  | 2  | 3  | A | B | C |
-| 4  | 5  | 6  | D | E | F |
-| 7  | 8  | 9  | G | H | I |
-| X  | Y  | Z  | O | O | O |
-| X  | Y  | Z  | O | O | O |
-| X  | Y  | Z  | O | O | O |
-
-```
-
-
-###  Copy Table
-
-```jsx
-{ '@op' : "CopyTable"
-  '@to_row' : To_Row,           % integer
-  '@to_column' : To_Column,     % integer
-  '@bottom_left' : Diff_BL,     % A Table Diff
-  '@top_right' : Diff_TR,       % A Table Diff
-  '@bottom_right' : Diff_BR     % A Table Diff
-  }
-```
-
-### Swap Table
-
-Swap isntructions will give a before table as a JSON list of lists for
-both the before and after. These tables need not have the same
-dimensions. This operation subsumes extension and drop of rows and
-columns as well as full replacement.
-
-```jsx
-{ '@op' : "SwapTable",
-  '@before' : Diff_Before,
-  '@after' : Diff_After,
-  '@bottom_left' : Diff_BL,
-  '@top_right' : Diff_TR,
-  '@bottom_right' : DIff_BR
-  }
-```
-
-### Patch Table
-
-Patch the table starting from the current point with the patch table in
-`@patch`. The patch must be less than or equal to the length of the list.
-
-```jsx
-{ "@op" : "PatchTable",
-  "@patch" : Patch,
-  '@bottom_left' : Diff_BL,
-  '@top_right' : Diff_TR,
-  '@bottom_right' : DIff_BR
-}
-```
-
-
-### Keep Table
-
-`@keep` instructions are degenerate copies.
-
-```
-{ '@keep' : "Table" }
-```
-
-Examples:
----------
-
-```
-Diff := {
-          '@id' : ID % ID of object to change.
-          <prop1> : { '@op' : 'SwapValue',
-                      '@before' : Obj_Old                      % Mandatory
-                      '@after' : Obj_New },
-          <prop2> : { '@op' : 'SwapValue',
-                      '@before' : null                         % Add optional
-                      '@after' : Obj_New },
-          <prop2> : { '@op' : 'SwapValue',
-                      '@before' : Obj_Old                      % Drop optional
-                      '@after' : null },
-          <prop3> : { '@id' : ID1,
-                      <prop3_1> :                              % Deep swap [*must* be subdocuments]
-                        { '@id' : ID2,
-                           <prop3_2> : ...
-                           { '@id' : ID3,
-                              <prop3_n> : { '@op' : 'SwapValue',
-                                            '@before' : Obj_Old,
-                                            '@after' : Obj_New }
-                        ... } } },
-          <prop4> : { '@op' : 'CopyList',                      % Replace List
-                      '@to' : 10,
-                      '@rest' : { '@op' : 'SwapList',          % Replace List
-                                  '@before' : [1,2,3],
-                                  '@after' : [4,5,6],
-                                  '@rest' : { '@keep' : "List" } } },
-          <prop4> : { '@op' : "CopyTable"
-                      '@to_row' : 3,
-                      '@to_column' : 3,
-                      '@bottom_left' : { '@keep' : "KeepTable" },
-                      '@top_right' :  { '@keep' : "KeepTable" },
-                      '@bottom_right' : { '@swap' : "SwapTable",
-                                          '@before' : [[1,2,3]],
-                                          '@after' : [[4,5,6]],
-                                          '@bottom_left' : { '@keep' : "KeepTable" },
-                                          '@top_right' : { '@keep' : "KeepTable" },
-                                          '@bottom_right' : { '@keep' : "KeepTable" } }
-                    },
-          <prop5> : { '@op' : "SwapValue",
-                      '@before' : { '@id' : ID },              % Replace element of a set
-                      '@after' : { '@id' : ID }}
-          <prop6> : { '@id' : ID,                            % Deep set replace
-                       <prop6_1> : { '@op' : "SwapValue",
-                                     '@before' : ...,
-                                     '@after' : ... } },
-          <prop6> : [{ '@id' : ID1,                          % Deep set replace 2
-                        <prop6_1> : { '@op' : "SwapValue",
-                                      '@before' : ...,
-                                      '@after' : ... } },
-                     { '@id' : ID2,                          % Deep set replace 2
-                        <prop6_2> : { '@op' : "SwapValue",
-                                      '@before' : ...,
-                                      '@after' : ... } }],
-          <prop6> : { '@op' : 'ForceValue',
-                      '@after' : "Value" }                   % Ignore read state and force value
-
-        }
-```
-
-Examples of Patch:
-
-```jsx
-var Original = {
-        '@id': "EmployeesFromCSV/001",
-        '@type': "EmployeesFromCSV",
-        employee_id: "001",
-        name: "Destiny Norris",
-        team: "Marketing",
-        title: "Marketing Manager"
-      },
-var Diff = {
-        '@id': "EmployeesFromCSV/001",
-        name: { '@op' : 'SwapValue', '@before' : "Destiny Norris", '@after' : "Destiny Morris" },
-      },
-var Final = {
-        '@id': "EmployeesFromCSV/001",
-        '@type': "EmployeesFromCSV",
-        employee_id: "001",
-        name: "Destiny Norris",
-        team: "Marketing",
-        title: "Marketing Manager"
-      },
-patch(Diff,Original,Final).
-
-=> true
-```
-
-# Patch and Diff Endpoints
-
-The Patch and Diff endpoints expose endpoints for clients to obtain
-diffs or patches of data.
-
-## Diff
-
-The diff endpoint takes a POST of two JSON documents, *before*, and
-*after*. This endpoint then returns a 200 and a patch which takes
-*before* to *after* if applied using the patch inteface.
-
-The payload is structured as a JSON document, with two keys,
-`"before"` and `"after"`, pointing to the documents you would like to
-diff.
-
-An example of the payload:
-
-```json
-{ "before" : { "@id" : "Person/Jane", "@type" : Person", "name" : "Jane"},
-  "after" :  { "@id" : "Person/Jane", "@type" : Person", "name" : "Janine"}}
-```
-
-Which would result in the following patch:
-
-```json
-{ "name" : { "@op" : "SwapValue", "@before" : "Jane", "@after": "Janine" }}
-```
-
-## Patch
-
-Patch takes a POST with a *before* document and a *patch* and produces an *after*
-document.
-
-```json
-{ "before" : { "@id" : "Person/Jane", "@type" : Person", "name" : "Jane"}
-  "patch" : {"name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}}
-```
-
-Resulting in the following document:
-
-```json
-{ "@id" : "Person/Jane", "@type" : Person", "name" : "Janine"}
-```
-
-
-*/
-
 simple_patch(Diff,JSON_In,JSON_Out) :-
     is_dict(JSON_In),
     !,
@@ -441,12 +29,12 @@ simple_patch_list(Diff,List_In,List_Out) :-
 simple_patch_table(Diff,Table_In,Table_Out) :-
     is_list(Table_In),
     !,
-    row_length(Diff,Diff_Row_Length),
-    column_length(Diff,Diff_Column_Length),
-    row_length(Table_In,Row_Length),
-    column_length(Table_In,Column_Length),
-    Diff_Row_Length = Row_Length,
-    Diff_Column_Length = Column_Length,
+    columns(Diff,Diff_Columns),
+    rows(Diff,Diff_Rows),
+    columns(Table_In,Columns),
+    rows(Table_In,Rows),
+    Diff_Columns = Columns,
+    Diff_Rows = Rows,
     maplist([Diff_Row,Row_In,Row_Out]>>
             maplist([Patch,Elt,Patched]>>
                     simple_patch(Patch,Elt,Patched),
@@ -493,86 +81,34 @@ simple_op_diff_value('PatchList', Diff, Before, After) :-
     simple_op_diff_value(Op,Rest,Suffix_Before,Suffix_After),
     append(Prefix_After,Suffix_After,After).
 simple_op_diff_value('KeepList', _Diff, Same, Same).
-simple_op_diff_value('CopyTable', Diff, Before, After) :-
-    get_dict('@to_row', Diff, To_Row),
-    get_dict('@to_column', Diff, To_Column),
-    get_dict('@bottom_left', Diff, BL_Diff),
-    get_dict('@top_right', Diff, TR_Diff),
-    get_dict('@bottom_right', Diff, BR_Diff),
-    split_table(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
-    diff_op(BL_Diff,BL_Op),
-    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
-    diff_op(TR_Diff,TR_Op),
-    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
-    diff_op(BR_Diff,BR_Op),
-    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    split_table(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
-simple_op_diff_value('SwapTable', Diff, Before, After) :-
-    get_dict('@before', Diff, Top_Left_Before),
-    get_dict('@after', Diff, Top_Left_After),
-    get_dict('@bottom_left', Diff, BL_Diff),
-    get_dict('@top_right', Diff, TR_Diff),
-    get_dict('@bottom_right', Diff, BR_Diff),
-    row_length(Top_Left_Before,To_Row_Before),
-    column_length(Top_Left_Before,To_Column_Before),
-    split_table(Before,To_Row_Before,To_Column_Before,
-                 Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
-    diff_op(BL_Diff,BL_Op),
-    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
-    diff_op(TR_Diff,TR_Op),
-    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
-    diff_op(BR_Diff,BR_Op),
-    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    row_length(Top_Left_After,To_Row_After),
-    column_length(Top_Left_After,To_Column_After),
-    split_table(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
-simple_op_diff_value('PatchTable', Diff, Before, After) :-
-    get_dict('@top_left', Diff, TL_Diff),
-    get_dict('@bottom_left', Diff, BL_Diff),
-    get_dict('@top_right', Diff, TR_Diff),
-    get_dict('@bottom_right', Diff, BR_Diff),
-    row_length(TL_Diff,To_Row),
-    column_length(TL_Diff,To_Column),
-    split_table(Before,To_Row,To_Column,
-                 Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
-    simple_patch_table(TL_Diff,Top_Left_Before, TL_New),
-    diff_op(BL_Diff,BL_Op),
-    simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
-    diff_op(TR_Diff,TR_Op),
-    simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
-    diff_op(BR_Diff,BR_Op),
-    simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    row_length(Top_Left_After,To_Row_After),
-    column_length(Top_Left_After,To_Column_After),
-    split_table(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
 simple_op_diff_value('ModifyTable', Diff, Before, After) :-
     Diff = _{ '@op' : "ModifyTable",
-              dimensions: _{ '@before' : [R1,C1],
-                             '@after' : [R2,C2]
+              dimensions: _{ '@before' : [C1,R1],
+                             '@after' : [C2,R2]
                            },
               copies : Copies,
-              swaps: Swaps,
+              moves: Moves,
               inserts: Inserts,
               deletes: Deletes
             },
-    row_length(Before,R1),
-    column_length(Before,C1),
-    empty_table(R2,C2,After0),
+    columns(Before,C1),
+    rows(Before,R1),
+    empty_table(C2,R2,After0),
     table_check_deletes(Deletes,Before),
-    table_add_copies(Before,After0,Copies,After1),
-    table_add_swaps(Before,After1,Swaps,After2),
-    table_add_inserts(After2,Inserts,After).
+    table_add_copies(Copies,Before,After0,After1),
+    table_add_moves(Moves,Before,After1,After2),
+    table_add_inserts(Inserts,After2,After).
 simple_op_diff_value('KeepTable', _Diff, Same, Same).
 
 empty_row(N, Row) :-
     length(Row, N),
     maplist([null]>>true, Row).
 
-empty_table(0,_, []) :- !.
-empty_table(Rows,Columns,[Row|Table]) :-
+empty_table(_,0, []) :- !.
+empty_table(Columns,Rows,[Row|Table]) :-
     New_Rows is Rows - 1,
     empty_row(Columns,Row),
-    empty_table(New_Rows,Columns,Table).
+    empty_table(Columns,New_Rows,Table).
 
 table_check_delete(Delete,Before) :-
     _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
@@ -595,17 +131,17 @@ table_add_copies([Copy|Copies],Before,After0,AfterN) :-
     table_add_copy(Copy,Before,After0,After1),
     table_add_copies(Copies,Before,After1,AfterN).
 
-table_add_swap(Swap,Before,After0,After1) :-
+table_add_move(Move,Before,After0,After1) :-
     _{'@from' : _{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
       '@to' : _{'@height':_H2,'@width':_W2,'@x':X2,'@y':Y2},
-      '@value': Window} = Swap,
+      '@value': Window} = Move,
     table_window(X1,W1,Y1,H1,Before,Window),
     replace_table_window(X2,Y2,Window,After0,After1).
 
-table_add_swaps([],_,After,After).
-table_add_swaps([Swap|Swaps],Before,After0,AfterN) :-
-    table_add_swap(Swap,Before,After0,After1),
-    table_add_swaps(Swaps,Before,After1,AfterN).
+table_add_moves([],_,After,After).
+table_add_moves([Move|Moves],Before,After0,AfterN) :-
+    table_add_move(Move,Before,After0,After1),
+    table_add_moves(Moves,Before,After1,AfterN).
 
 table_add_insert(Insert,After0,After1) :-
     _{'@at' : _{'@height':_H,'@width':_W,'@x':X,'@y':Y},
@@ -817,78 +353,6 @@ test(flat_list_diff, []) :-
                friends : ["Person/2","Person/4"],
                name : "jim"}.
 
-
-test(flat_table_diff, []) :-
-
-    Before = _{ '@id' : "Person/1",
-                '@type' : "Person",
-                name : "jim",
-                table : [[1,2,3],
-                         [4,5,6],
-                         [7,8,9]]
-              },
-    Patch = _{ table : _{ '@op' : "CopyTable",
-                          '@to_row' : 2,
-                          '@to_column' : 2,
-                          '@bottom_left' :
-                          _{ '@op' : "KeepTable" },
-                          '@top_right' :
-                          _{ '@op' : "KeepTable" },
-                          '@bottom_right' :
-                           _{ '@op' : "SwapTable",
-                              '@before' : [[9]],
-                              '@after' : [[10]],
-                              '@bottom_left' :
-                              _{ '@op' : "KeepTable" },
-                              '@top_right' :
-                              _{ '@op' : "KeepTable" },
-                              '@bottom_right' :
-                              _{ '@op' : "KeepTable" }
-                            }
-                        }
-             },
-
-    simple_patch(Patch,Before,After),
-    After = _{ '@id' : "Person/1",
-               '@type' : "Person",
-               name : "jim",
-               table: [[1,2,3],
-                       [4,5,6],
-                       [7,8,10]]}.
-
-
-test(flat_table_diff_conflict, []) :-
-
-    Before = _{ '@id' : "Person/1",
-                '@type' : "Person",
-                name : "jim",
-                table : [[1,2,3],
-                         [4,5,6],
-                         [7,8,9]]
-              },
-    Patch = _{ table : _{ '@op' : "CopyTable",
-                          '@to_row' : 2,
-                          '@to_column' : 2,
-                          '@bottom_left' :
-                          _{ '@op' : "KeepTable" },
-                          '@top_right' :
-                          _{ '@op' : "KeepTable" },
-                          '@bottom_right' :
-                           _{ '@op' : "SwapTable",
-                              '@before' : [[8]],
-                              '@after' : [[10]],
-                              '@bottom_left' :
-                              _{ '@op' : "KeepTable" },
-                              '@top_right' :
-                              _{ '@op' : "KeepTable" },
-                              '@bottom_right' :
-                              _{ '@op' : "KeepTable" }
-                            }
-                        }
-             },
-
-    \+ simple_patch(Patch,Before,_After).
-
 test(deep_list_patch, []) :-
 
     Before = _{ '@id' : "Person/Ludwig",
@@ -928,91 +392,40 @@ test(deep_list_patch, []) :-
 
     \+ simple_patch(Patch,Before,_After).
 
-:- use_module(library(http/json)).
+test(table_add_copies, []) :-
+    M1 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+    M2 = [[null, null, null], [null, null, null], [null, null, null]],
+    Copies = [json{'@at':json{'@height':2, '@width':1, '@x':2, '@y':0},
+                   '@value':[[3], [6]]}],
+    table_add_copies(Copies, M1, M2, M3),
+    M3 = [[null,null,3],
+          [null,null,6],
+          [null,null,null]].
 
-test(deep_table_patch, []) :-
+test(modify_table_patch, []) :-
+    T1 = [ [ 1, 2, 3 ],
+           [ 4, 5, 6 ],
+           [ 7, 8, 9 ] ],
 
-    Before = _{ '@type': "Excel",
-                'Name': "testdoc.xlsx",
-                'Sheets': [
-                     _{
-                         '@type': "Sheet",
-                         'Name': "Sheet1",
-                         'Cells': [[ _{ '@type': "Cell",
-                                        'Value': "1.0",
-                                        'Text': "1" },
-                                      _{ '@type': "Cell",
-                                        'Value': "2.0",
-                                        'Text': "2" },
-                                      _{ '@type': "Cell",
-                                        'Value': "3.0",
-                                        'Text': "3" }],
-                                   [ _{ '@type': "Cell",
-                                        'Value': "4.0",
-                                        'Text': "4" },
-                                     _{ '@type': "Cell",
-                                        'Value': "5.0",
-                                        'Text': "5" },
-                                     _{ '@type': "Cell",
-                                        'Value': "6.0",
-                                        'Text': "6" }],
-                                   [ _{ '@type': "Cell",
-                                        'Value': "7.0",
-                                        'Text': "7" },
-                                     _{ '@type': "Cell",
-                                        'Value': "8.0",
-                                        'Text': "8" },
-                                     _{ '@type': "Cell",
-                                        'Value': "9.0",
-                                        'Text': "9" }]]
-                     }
-                ]},
+    T2 = [ [ 2, 1, 3 ],
+           [ 5, 4, 6 ],
+           [ 8, 7, 10 ] ],
 
-    Patch = _{ 'Sheets' :
-               _{ '@op' : "PatchList",
-                  '@patch' : [
-                      _{ 'Cells' :
-                         _{ '@op' : "PatchTable",
-                            '@top_left' :
-                            [[ _{ 'Value' : _{ '@op' : "SwapValue",
-                                               '@before' : "1.0",
-                                               '@after' : "2.0" },
-                                  'Text' : _{ '@op' : "SwapValue",
-                                              '@before' : "1",
-                                              '@after' : "2" }},
-                               _{ 'Value' : _{ '@op' : "SwapValue",
-                                               '@before' : "2.0",
-                                               '@after' : "3.0" },
-                                  'Text' : _{ '@op' : "SwapValue",
-                                              '@before' : "2",
-                                              '@after' : "3" }},
-                               _{ 'Value' : _{ '@op' : "SwapValue",
-                                               '@before' : "3.0",
-                                               '@after' : "4.0" },
-                                  'Text' : _{ '@op' : "SwapValue",
-                                              '@before' : "3",
-                                              '@after' : "4" }}]],
-                            '@bottom_left' : _{ '@op' : "KeepTable" },
-                            '@top_right' : _{ '@op' : "KeepTable" },
-                            '@bottom_right' : _{ '@op' : "KeepTable" }}}
-                  ],
-                  '@rest' : _{ '@op' : "KeepList" }}},
-
-    simple_patch(Patch,Before,After),
-
-    After = _{'@type':"Excel",
-              'Name':"testdoc.xlsx",
-              'Sheets':[_{'@type':"Sheet",
-                          'Cells':[[_{'@type':"Cell",'Text':"2",'Value':"2.0"},
-                                    _{'@type':"Cell",'Text':"3",'Value':"3.0"},
-                                    _{'@type':"Cell",'Text':"4",'Value':"4.0"}],
-                                   [_{'@type':"Cell",'Text':"4",'Value':"4.0"},
-                                    _{'@type':"Cell",'Text':"5",'Value':"5.0"},
-                                    _{'@type':"Cell",'Text':"6",'Value':"6.0"}],
-                                   [_{'@type':"Cell",'Text':"7",'Value':"7.0"},
-                                    _{'@type':"Cell",'Text':"8",'Value':"8.0"},
-                                    _{'@type':"Cell",'Text':"9",'Value':"9.0"}]],
-                          'Name':"Sheet1"}]}.
+    Patch = json{'@op':"ModifyTable",
+                 copies:[json{'@at':json{'@height':2, '@width':1, '@x':2, '@y':0},
+                              '@value':[[3], [6]]}],
+                 deletes:[json{'@at':json{'@height':1, '@width':1, '@x':2, '@y':2},
+                               '@value':[[9]]}],
+                 dimensions:_{'@after':[3, 3], '@before':[3, 3]},
+                 inserts:[json{'@at':json{'@height':1, '@width':1, '@x':2, '@y':2},
+                               '@value':[[10]]}],
+                 moves:[json{'@from':json{'@height':3, '@width':1, '@x':0, '@y':0},
+                             '@to':json{'@height':3, '@width':1, '@x':1, '@y':0},
+                             '@value':[[1], [4], [7]]},
+                        json{'@from':json{'@height':3, '@width':1, '@x':1, '@y':0},
+                             '@to':json{'@height':3, '@width':1, '@x':0, '@y':0},
+                             '@value':[[2], [5], [8]]}]},
+    simple_patch(Patch,T1,T2).
 
 :- end_tests(simple_patch).
 

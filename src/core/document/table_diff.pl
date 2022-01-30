@@ -11,8 +11,6 @@
 
 /* Fast(er) table diff */
 
-is_table([[_|_]|_]).
-
 best_area(Op,I0-J0,I1-J1) :-
     A is max(I0,J0),
     B is max(I1,J1),
@@ -1110,6 +1108,7 @@ spreadsheet2(
         ['Director Data Science ','Booking.com','Netherlands','Large','Travel']
     ]).
 
+:- use_module(core('document/patch')).
 test(my_spreadsheet_diff_area_max, []) :-
     spreadsheet1(T1),
     spreadsheet2(T2),
@@ -1120,25 +1119,17 @@ test(my_spreadsheet_diff_area_max, []) :-
              dimensions:_{'@after':[5,187],
                           '@before':[5,187]},
              copies:Copies,
-             deletes:Deletes,
-             inserts:Inserts,
+             deletes:_Deletes,
+             inserts:_Inserts,
              moves:[]},
 
     % Depends on solution order!
     Copies = [ json{ '@at':json{'@height':182,'@width':5,'@x':0,'@y':0},
                      '@value':_
-                   },
-               _,
-               _,
-               _|_],
+                   }
+               | _],
 
-    Deletes = [ _,
-                _
-              ],
-
-    Inserts = [ _,
-                _
-              ].
+    simple_patch(Diff,T1,T2).
 
 test(my_spreadsheet_first_col_sorted_windows, [blocked(slow)]) :-
     spreadsheet1([H|T1]),

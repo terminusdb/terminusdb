@@ -1,33 +1,37 @@
 :- module('util/tables',
           [
-              row_length/2,
-              column_length/2,
+              columns/2,
+              rows/2,
               split_list/4,
               split_table/7,
               split_column/4,
               table_window/6,
-              replace_table_window/5
+              replace_table_window/5,
+              is_table/1
           ]).
 
+is_table([[]]).
+is_table([[_|_]|_]).
+
 %%% Table utils
-row_length(T, Length) :-
+rows(T, Length) :-
     length(T, Length).
 
-column_length([], 0).
-column_length([R|_], Length) :-
+columns([], 0).
+columns([R|_], Length) :-
     length(R, Length).
 
 split_list(Index,List,Left,Right) :-
     length(Left, Index),
     append(Left,Right,List).
 
-split_table(In, N, M, Top_Left, Right, Bottom, Bottom_Right) :-
+split_table(In, X, Y, Top_Left, Right, Bottom, Bottom_Right) :-
     when((   nonvar(In)
          ;   nonvar(Rows_Top),
              nonvar(Rows_Bottom)),
-         split_row(In, N, Rows_Top, Rows_Bottom)),
-    split_column(Rows_Top, M, Top_Left, Right),
-    split_column(Rows_Bottom, M, Bottom, Bottom_Right).
+         split_row(In, Y, Rows_Top, Rows_Bottom)),
+    split_column(Rows_Top, X, Top_Left, Right),
+    split_column(Rows_Bottom, X, Bottom, Bottom_Right).
 
 split_row(In, N, Top, Bottom) :-
     split_list(N, In, Top, Bottom).
@@ -64,9 +68,46 @@ table_window(X,W,Y,H,[_|M1],M2) :-
     table_window(X,W,Yp,H,M1,M2).
 
 replace_table_window(X,Y,Window,Table,New_Table) :-
-    row_length(Window,R),
-    column_length(Window,C),
+    columns(Window,C),
+    rows(Window,R),
     split_table(Table, X, Y, Top_Left, Right, Bottom, Bottom_Right),
-    split_table(Bottom_Right, R, C, _, BR_Right, BR_Bottom, BR_Bottom_Right),
-    split_table(New_Bottom_Right, R, C, Window, BR_Right, BR_Bottom, BR_Bottom_Right),
+    split_table(Bottom_Right, C, R, _, BR_Right, BR_Bottom, BR_Bottom_Right),
+    split_table(New_Bottom_Right, C, R, Window, BR_Right, BR_Bottom, BR_Bottom_Right),
     split_table(New_Table, X, Y, Top_Left, Right, Bottom, New_Bottom_Right).
+
+
+:- begin_tests(tables).
+
+test(split_table, []) :-
+    M1 = [[a, b, c],
+          [d, e, f],
+          [g, h, i]],
+    split_table(M1,1,1,TL,TR,BL,BR),
+    TL = [[a]],
+    TR = [[b, c]],
+    BL = [[d], [g]],
+    BR = [[e, f],
+          [h, i]].
+
+test(split_table_2, []) :-
+    M1 = [[a, b, c],
+          [d, e, f],
+          [g, h, i]],
+    split_table(M1,2,1,TL,TR,BL,BR),
+    TL = [[a, b]],
+    TR = [[c]],
+    BL = [[d, e], [g, h]],
+    BR = [[f],
+          [i]].
+
+test(replace_window, []) :-
+    Window = [[3], [6]],
+    M1 = [[null, null, null],
+          [null, null, null],
+          [null, null, null]],
+    replace_table_window(2, 1, Window, M1, M2),
+    M2 = [[null,null,null],
+          [null,null,3],
+          [null,null,6]].
+
+:- end_tests(tables).
