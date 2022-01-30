@@ -395,6 +395,34 @@ swap_columns(N,M,TS1,TS2) :-
             swap_in_row(N,M,Row_In,Row_Out),
             TS1, TS2).
 
+position_list(Position,[X,Y,W,H]) :-
+    get_dict('@x', Position, X),
+    get_dict('@height',Position, H),
+    get_dict('@y', Position, Y),
+    get_dict('@width',Position, W).
+
+position_sort(Patches,Sorted) :-
+    predsort([Op,Patch1,Patch2]>>
+             (   get_dict('@at',Patch1,P1),
+                 position_list(P1,L1),
+                 get_dict('@at',Patch2,P2),
+                 position_list(P2,L2),
+                 compare(Op,L1,L2)
+             ),  Patches, Sorted).
+
+move_sort(Patches,Sorted) :-
+    predsort([Op,Patch1,Patch2]>>
+             (   get_dict('@from', Patch1, From_P1),
+                  position_list(From_P1,From_L1),
+                  get_dict('@to', Patch1, To_P1),
+                  position_list(To_P1, To_L1),
+                  get_dict('@from', Patch2, From_P2),
+                  position_list(From_P2,From_L2),
+                  get_dict('@to', Patch2, To_P2),
+                  position_list(To_P2, To_L2),
+                  compare(Op,[From_L1,To_L1],[From_L2,To_L2])
+              ),  Patches, Sorted).
+
 build_diff(LL1,LL2,M1,M2,Exclusions1,Exclusions2,Matches1,Matches2,Diff) :-
     sort(Matches1,Matches1_Sorted),
     sort(Matches2,Matches2_Sorted),
@@ -404,20 +432,20 @@ build_diff(LL1,LL2,M1,M2,Exclusions1,Exclusions2,Matches1,Matches2,Diff) :-
                           Matches, Moves),
     diff_unmatched(LL1,M1,Exclusions1,Deletes),
     diff_unmatched(LL2,M2,Exclusions2,Inserts),
-    sort(Moves,MovesS),
-    sort(Matches,MatchesS),
-    sort(Inserts,InsertsS),
-    sort(Deletes,DeletesS),
+    move_sort(Moves,MovesS),
+    position_sort(Matches,MatchesS),
+    position_sort(Inserts,InsertsS),
+    position_sort(Deletes,DeletesS),
     matrix_size(M1,R1,C1),
     matrix_size(M2,R2,C2),
     Diff =
-    _{ '@op' : "ModifyTable",
-       dimensions : _{ '@before' : [R1,C1],
-                       '@after' : [R2,C2] },
-       copies : MatchesS,
-       moves : MovesS,
-       inserts : InsertsS,
-       deletes : DeletesS }.
+    json{ '@op' : "ModifyTable",
+          dimensions : _{ '@before' : [R1,C1],
+                          '@after' : [R2,C2] },
+          copies : MatchesS,
+          moves : MovesS,
+          inserts : InsertsS,
+          deletes : DeletesS }.
 
 diff_copies_and_moves([],[],_,_,_,_,[],[]) :-
     !.
@@ -428,12 +456,12 @@ diff_copies_and_moves([W1|Matches1],[W2|Matches2],LL1,LL2,M1,M2,[Copy|Copies],Mo
     !,
     R =.. [_,X,Width,Y,Height],
     table_window(X,Width,Y,Height,LL1,LL),
-    Copy = _{ '@value' : LL,
-              '@at' : _{ '@x' : X,
-                         '@y' : Y,
-                         '@width' : Width,
-                         '@height' : Height
-                       }},
+    Copy = json{ '@value' : LL,
+                 '@at' : json{ '@x' : X,
+                               '@y' : Y,
+                               '@width' : Width,
+                               '@height' : Height
+                             }},
     diff_copies_and_moves(Matches1,Matches2,LL1,LL2,M1,M2,Copies,Moves).
 diff_copies_and_moves([W1|Matches1],[W2|Matches2],LL1,LL2,M1,M2,Copies,[Move|Moves]) :-
     % this is a move
@@ -443,17 +471,17 @@ diff_copies_and_moves([W1|Matches1],[W2|Matches2],LL1,LL2,M1,M2,Copies,[Move|Mov
     R1 =.. [_,X1,Width,Y1,Height],
     R2 =.. [_,X2,_,Y2,_],
     table_window(X1,Width,Y1,Height,LL1,LLW),
-    Move = _{ '@value' : LLW,
-              '@from' : _{ '@x' : X1,
-                           '@y' : Y1,
-                           '@width' : Width,
-                           '@height' : Height
-                         },
-              '@to' : _{ '@x' : X2,
-                         '@y' : Y2,
-                         '@width' : Width,
-                         '@height' : Height
-                       }},
+    Move = json{ '@value' : LLW,
+                 '@from' : json{ '@x' : X1,
+                                 '@y' : Y1,
+                                 '@width' : Width,
+                                 '@height' : Height
+                               },
+                 '@to' : json{ '@x' : X2,
+                               '@y' : Y2,
+                               '@width' : Width,
+                               '@height' : Height
+                             }},
     diff_copies_and_moves(Matches1,Matches2,LL1,LL2,M1,M2,Copies,Moves).
 
 diff_unmatched(LL,M,Exclusions,Unmatched) :-
@@ -462,12 +490,12 @@ diff_unmatched(LL,M,Exclusions,Unmatched) :-
                 window_rectangle(W,R),
                 R =.. [_,X,Width,Y,Height],
                 table_window(X,Width,Y,Height,LL,LLW),
-                U = _{ '@value' : LLW,
-                       '@at' : _{ '@x' : X,
-                                  '@y' : Y,
-                                  '@width' : Width,
-                                  '@height' : Height
-                                }}
+                U = json{ '@value' : LLW,
+                          '@at' : json{ '@x' : X,
+                                        '@y' : Y,
+                                        '@width' : Width,
+                                        '@height' : Height
+                                      }}
             ),
             Windows,
             Unmatched).
@@ -601,8 +629,8 @@ test(random_12x12, []) :-
     all_windows(T1,T2,WS1,WS2),
     length(WS1,L1),
     length(WS2,L2),
-    L1 > 35, L1 < 42,
-    L2 > 35, L2 < 42.
+    L1 > 30, L1 < 42,
+    L2 > 30, L2 < 42.
 
 test(random_12x12_heuristic, []) :-
     T1 = [[9,1,6,4,8,1,0,9,8,9,2,4],
@@ -1095,36 +1123,53 @@ test(my_spreadsheet_diff_area_max, []) :-
              deletes:Deletes,
              inserts:Inserts,
              moves:[]},
-    sort(Copies, Copies_Sorted),
-    Copies_Sorted = [_{'@at':_{'@height':2,'@width':1,'@x':0,'@y':182},
-                       '@value':[['Pre Sales Engineering'],['Cyber Analytics']]},
-                     _{'@at':_{'@height':3,'@width':1,'@x':4,'@y':184},
-                       '@value':[['Telecoms'],['Textiles'],['Travel']]},
-                     _{'@at':_{'@height':2,'@width':3,'@x':1,'@y':182},
-                       '@value':[['Orange Business Services','France','Large'],
-                                 ['TELUS','Canada','Large']]},
-                     _{'@at':_{'@height':3,'@width':4,'@x':0,'@y':184},
-                       '@value':[['Product Owner','BT','UK','Large'],
-                                 ['Lead Data Engineer','Chantelle','France','Medium'],
-                                 ['Director Data Science ','Booking.com','Netherlands','Large']]},
-                     _{'@at':_{'@height':182,'@width':5,'@x':0,'@y':0},
-                       '@value':_}],
-    sort(Deletes, Deletes_Sorted),
-    Deletes_Sorted = [ _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
-                          '@value':[['Telco']]
-                        },
-                       _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
-                          '@value':[['Telco']]
-                        }
-                     ],
-    sort(Inserts, Inserts_Sorted),
-    Inserts_Sorted = [ _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':182},
-                          '@value':[['Telecoms']]
-                        },
-                       _{ '@at':_{'@height':1,'@width':1,'@x':4,'@y':183},
-                          '@value':[['Telecoms']]
-                        }
-                     ].
+
+    Copies = [ json{ '@at':json{'@height':182,'@width':5,'@x':0,'@y':0},
+                     '@value':_
+                   },
+               json{ '@at':json{'@height':1,'@width':4,'@x':0,'@y':182},
+                     '@value':[ [ 'Pre Sales Engineering',
+		                          'Orange Business Services',
+		                          'France',
+		                          'Large'
+		                        ]
+	                          ]
+                   },
+               json{ '@at':json{'@height':3,'@width':4,'@x':0,'@y':183},
+                     '@value':[ ['Cyber Analytics','TELUS','Canada','Large'],
+		                        ['Product Owner','BT','UK','Large'],
+		                        ['Lead Data Engineer','Chantelle','France','Medium']
+	                          ]
+                   },
+               json{ '@at':json{'@height':1,'@width':5,'@x':0,'@y':186},
+                     '@value':[ [ 'Director Data Science ',
+		                          'Booking.com',
+		                          'Netherlands',
+		                          'Large',
+		                          'Travel'
+		                        ]
+	                          ]
+                   },
+               json{ '@at':json{'@height':2,'@width':1,'@x':4,'@y':184},
+                     '@value':[['Telecoms'],['Textiles']]
+                   }
+             ],
+
+    Deletes = [ json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':182},
+                      '@value':[['Telco']]
+                 },
+                json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':183},
+                      '@value':[['Telco']]
+                 }
+              ],
+
+    Inserts = [ json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':182},
+                      '@value':[['Telecoms']]
+                 },
+                json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':183},
+                      '@value':[['Telecoms']]
+                 }
+              ].
 
 
 test(my_spreadsheet_first_col_sorted_windows, [blocked(slow)]) :-
