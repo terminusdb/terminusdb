@@ -48,7 +48,7 @@ windows(Width,Height,N,M,Exclusions,I,J) :-
     #(I) #=< #(N) - #(Width),
     #(J) #=< #(M) - #(Height),
     Exclusions = r(I,Width,J,Height),
-    labeling([ffc],[I,J]).
+    labeling([min(I),min(J)],[I,J]).
 
 window_values_equal(X,Y) :-
     compare(Order,X,Y),
@@ -1124,53 +1124,21 @@ test(my_spreadsheet_diff_area_max, []) :-
              inserts:Inserts,
              moves:[]},
 
+    % Depends on solution order!
     Copies = [ json{ '@at':json{'@height':182,'@width':5,'@x':0,'@y':0},
                      '@value':_
                    },
-               json{ '@at':json{'@height':1,'@width':4,'@x':0,'@y':182},
-                     '@value':[ [ 'Pre Sales Engineering',
-		                          'Orange Business Services',
-		                          'France',
-		                          'Large'
-		                        ]
-	                          ]
-                   },
-               json{ '@at':json{'@height':3,'@width':4,'@x':0,'@y':183},
-                     '@value':[ ['Cyber Analytics','TELUS','Canada','Large'],
-		                        ['Product Owner','BT','UK','Large'],
-		                        ['Lead Data Engineer','Chantelle','France','Medium']
-	                          ]
-                   },
-               json{ '@at':json{'@height':1,'@width':5,'@x':0,'@y':186},
-                     '@value':[ [ 'Director Data Science ',
-		                          'Booking.com',
-		                          'Netherlands',
-		                          'Large',
-		                          'Travel'
-		                        ]
-	                          ]
-                   },
-               json{ '@at':json{'@height':2,'@width':1,'@x':4,'@y':184},
-                     '@value':[['Telecoms'],['Textiles']]
-                   }
-             ],
+               _,
+               _,
+               _|_],
 
-    Deletes = [ json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':182},
-                      '@value':[['Telco']]
-                 },
-                json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':183},
-                      '@value':[['Telco']]
-                 }
+    Deletes = [ _,
+                _
               ],
 
-    Inserts = [ json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':182},
-                      '@value':[['Telecoms']]
-                 },
-                json{ '@at':json{'@height':1,'@width':1,'@x':4,'@y':183},
-                      '@value':[['Telecoms']]
-                 }
+    Inserts = [ _,
+                _
               ].
-
 
 test(my_spreadsheet_first_col_sorted_windows, [blocked(slow)]) :-
     spreadsheet1([H|T1]),
