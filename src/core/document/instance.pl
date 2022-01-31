@@ -257,7 +257,6 @@ refute_cardinality_(table(C),Validation_Object,S,P,Witness) :-
     ;   terminus_store:predicate_id(Layer, Predicate_String, P),
         atom_string(Predicate, Predicate_String)
     ),
-    test_utils:print_all_triples(Validation_Object, schema),
     Witness = witness{ '@type': instance_not_cardinality_one,
                        instance: Subject,
                        class: C,
