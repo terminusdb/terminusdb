@@ -5,6 +5,8 @@
  */
 
 :- [load_paths].
+:- use_module(library(main)).
+:- set_prolog_flag(autoload, false).
 :- initialization(main).
 
 initialise_hup :-
