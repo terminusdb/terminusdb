@@ -65,6 +65,7 @@
               copy_remote/4,
 
               % utils.pl
+              down_from/3,
               escape_pcre/2,
               get_key/4,
               get_key/3,
@@ -240,7 +241,17 @@
               write_data_version_header/1,
               transaction_data_version/2,
               validation_data_version/3,
-              meta_data_version/3
+              meta_data_version/3,
+
+              % matrix.pl
+              as_matrix/2,
+              matrix_row/3,
+              matrix_col/3,
+              as_list_of_lists/2,
+              matrix_window/6,
+              matrix_size/3,
+              window_offset/3,
+              window_matrix/2
           ]).
 
 % note: test_utils is intentionally omitted
@@ -257,3 +268,4 @@
 :- use_module(util/param).
 :- use_module(util/json_log).
 :- use_module(util/data_version).
+:- use_module(util/matrix).

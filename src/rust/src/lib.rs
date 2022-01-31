@@ -1,5 +1,8 @@
-use swipl::prelude::*;
+mod matrix;
+mod exclusion;
+
 use lcs;
+use swipl::prelude::*;
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -38,4 +41,7 @@ predicates! {
 #[no_mangle]
 pub extern "C" fn install() {
     register_list_diff();
+
+    matrix::register();
+    exclusion::register();
 }
