@@ -438,8 +438,8 @@ build_diff(LL1,LL2,M1,M2,Exclusions1,Exclusions2,Matches1,Matches2,Diff) :-
     matrix_size(M2,R2,C2),
     Diff =
     json{ '@op' : "ModifyTable",
-          dimensions : _{ '@before' : [R1,C1],
-                          '@after' : [R2,C2] },
+          dimensions : json{ '@before' : [R1,C1],
+                             '@after' : [R2,C2] },
           copies : MatchesS,
           moves : MovesS,
           inserts : InsertsS,
@@ -1147,6 +1147,32 @@ test(my_spreadsheet_first_col_sorted_col_swapped_windows, [blocked(slow)]) :-
     heuristic_windows([H|T1],[H|TS1],E1,E2),
     length(E1,187),
     length(E2,187).
+
+test(my_small_first_col_sorted_col_swapped_windows, []) :-
+    spreadsheet1(SS),
+    SS = [H,R1,R2,R3,R4|_],
+    S1 = [H,R1,R2,R3,R4],
+    sort([R1,R2,R3,R4], Sorted),
+    S2 = [H|Sorted],
+    table_diff(S1,S2,Diff),
+    Diff = json{'@op':"ModifyTable",
+                copies:[json{'@at':json{'@height':1,'@width':5,'@x':0,'@y':0},
+                             '@value':[['Job Title','Company','Location','Company Size','Company Industry']]}],
+                deletes:[],
+                dimensions:json{'@after':[5,5],'@before':[5,5]},
+                inserts:[],
+                moves:[json{'@from':json{'@height':1,'@width':5,'@x':0,'@y':1},
+                            '@to':json{'@height':1,'@width':5,'@x':0,'@y':4},
+                            '@value':[['Sr. Mgt.','Boeing','USA','Large','Aerospace']]},
+                       json{'@from':json{'@height':1,'@width':5,'@x':0,'@y':2},
+                            '@to':json{'@height':1,'@width':5,'@x':0,'@y':1},
+                            '@value':[['Data Architect','Airbus','France','Large','Aerospace']]},
+                       json{'@from':json{'@height':1,'@width':5,'@x':0,'@y':3},
+                            '@to':json{'@height':1,'@width':5,'@x':0,'@y':2},
+                            '@value':[['Founder','Ellie Tech','Sweden','Startup','AI']]},
+                       json{'@from':json{'@height':1,'@width':5,'@x':0,'@y':4},
+                            '@to':json{'@height':1,'@width':5,'@x':0,'@y':3},
+                            '@value':[['Platform Engineer','Adidas','Germany','Large','Apparel']]}]}.
 
 :- end_tests(table_diff).
 
