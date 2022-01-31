@@ -68,6 +68,7 @@
 :- use_module(library(dicts)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(random)).
+:- use_module(library(plunit)).
 
 :- use_module(core(util)).
 :- use_module(core(query)).

@@ -42,6 +42,7 @@
 
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 /**
  * username_user_id(+DB, +Username, -User_ID) is semidet.

@@ -5,6 +5,8 @@
  */
 
 :- [load_paths].
+:- use_module(library(main)).
+:- set_prolog_flag(autoload, false).
 :- initialization(main).
 
 initialise_hup :-
@@ -45,6 +47,8 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api), [bootstrap_files/0]).
+
+:- use_module(library(plunit)).
 
 :- set_test_options([run(manual)]). % ,concurrent(true)]).
 
