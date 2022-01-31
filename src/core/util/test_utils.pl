@@ -85,10 +85,14 @@
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(filesex)).
 
+:- use_module(library(debug)).
 :- use_module(library(process)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
+:- use_module(library(random)).
+:- use_module(library(readutil)).
 
 :- use_module(library(lists)).
 
@@ -238,10 +242,8 @@ create_db_with_test_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
-    terminus_path(Path),
-    interpolate([Path, '/test/worldOnt.json'], JSON_File),
-
-    open(JSON_File, read, JSON_Stream),
+    api_init:world_ontology_json(OntologyJSON),
+    open_string(OntologyJSON, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
     atomic_list_concat([Organization,'/',Db_Name], DB_Path),

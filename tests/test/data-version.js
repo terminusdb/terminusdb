@@ -109,6 +109,26 @@ describe('data-version', function () {
       })
     })
 
+    it('/api/document/.../commit/...', async function () {
+      const commitsPath = endpoint.documentCommits(dbDefaults).path
+      const r1 = await document
+        .get(agent, commitsPath, { query: { as_list: true } })
+        .then(document.verifyGetSuccess)
+      const initialCommit = r1.body.find((i) => i['@type'] === 'InitialCommit')
+      if (util.isUndefinedOrNull(initialCommit)) {
+        throw new Error(`Missing InitialCommit in response: ${r1.body}`)
+      }
+      const commitId = initialCommit.identifier
+      const commitParams = Object.assign({ commitId: commitId }, dbDefaults)
+      const commitPath = endpoint.documentCommit(commitParams).path
+      const header = 'commit:' + commitId
+      const r2 = await document
+        .get(agent, commitPath, { query: { as_list: true } })
+        .set('TerminusDB-Data-Version', header)
+        .then(document.verifyGetSuccess)
+      expect(r2.header['terminusdb-data-version']).to.equal(header)
+    })
+
     describe('/api/woql/...', function () {
       let woqlPath
       let docPath

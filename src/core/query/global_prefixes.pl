@@ -11,6 +11,8 @@
 
 :- reexport(core(util/syntax)).
 
+:- use_module(library(apply)).
+
 % internal
 global_prefixes(sys,'http://terminusdb.com/schema/sys#').
 global_prefixes(xdd,'http://terminusdb.com/schema/xdd#').

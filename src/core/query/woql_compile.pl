@@ -36,7 +36,7 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
-
+:- use_module(library(option)).
 :- use_module(library(csv)).
 :- use_module(library(isub)).
 :- use_module(library(lists)).
@@ -45,6 +45,7 @@
 :- use_module(library(random)).
 
 :- use_module(library(apply)).
+:- use_module(library(debug)).
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
@@ -925,6 +926,9 @@ find_resources(replace_document(_), Collection, _DRG, DWG, Read, Write) :-
 find_resources(replace_document(_,_), Collection, _DRG, DWG, Read, Write) :-
     Write = [resource(Collection,DWG)],
     Read = [].
+find_resources(insert_document(_), Collection, _DRG, DWG, Read, Write) :-
+    Write = [resource(Collection,DWG)],
+    Read = [].
 find_resources(insert_document(_,_), Collection, _DRG, DWG, Read, Write) :-
     Write = [resource(Collection,DWG)],
     Read = [].
@@ -1085,6 +1089,12 @@ compile_wf(replace_document(Doc,X),(
                freeze(Guard,
                       replace_document(S0, DocE, URI)))) -->
     resolve(X,URI),
+    resolve(Doc,DocE),
+    view(update_guard, Guard),
+    peek(S0).
+compile_wf(insert_document(Doc),(
+               freeze(Guard,
+                      insert_document(S0, DocE, _URI)))) -->
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
@@ -4957,7 +4967,7 @@ test(insert_read_document, [
                                                 { "@type" : "FieldValuePair",
                                                   "field" : "@id",
                                                   "value" : { "@type" : "Value",
-                                                              "variable" : "City/Dublin"}},
+                                                              "node" : "City/Dublin"}},
                                                 { "@type" : "FieldValuePair",
                                                   "field" : "name",
                                                   "value" : { "@type" : "Value",
@@ -4974,6 +4984,43 @@ test(insert_read_document, [
     resolve_absolute_string_descriptor('admin/test', Descriptor),
     create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
     Read_AST = get_document(ID,v('Doc')),
+    query_response:run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    [Res2] = (Response.bindings),
+    _{'@id':_,
+      '@type':'City',
+      name:"Dublin"} = Res2.'Doc'.
+
+test(insert_document_forget_uri, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Insert_Atom =
+    '{ "@type" : "InsertDocument",
+       "document" : { "@type" : "Value",
+                      "dictionary" : {"@type": "DictionaryTemplate",
+                                      "data": [ { "@type" : "FieldValuePair",
+                                                  "field" : "@type",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "City" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "@id",
+                                                  "value" : { "@type" : "Value",
+                                                              "node" : "City/Dublin"}},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "name",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "Dublin"}}
+                                               ]}}
+     }',
+    atom_json_dict(Insert_Atom, Query, []),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, _JSON),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    Read_AST = get_document('City/Dublin',v('Doc')),
     query_response:run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
     [Res2] = (Response.bindings),
     _{'@id':_,

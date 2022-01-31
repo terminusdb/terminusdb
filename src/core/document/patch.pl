@@ -4,6 +4,11 @@
 :- use_module(core(util)).
 :- use_module(core('util/tables')).
 
+:- use_module(library(apply)).
+:- use_module(library(dicts)).
+:- use_module(library(lists)).
+:- use_module(library(when)).
+
 simple_patch(Diff,JSON_In,JSON_Out) :-
     is_dict(JSON_In),
     !,
@@ -19,6 +24,7 @@ simple_patch(Diff,Before,After) :-
 simple_patch(Diff,Before,After) :-
     diff_op(Diff,Op),
     simple_op_diff_value(Op, Diff, Before, After).
+simple_patch(Before,Before,Before).
 
 simple_patch_list(Diff,List_In,List_Out) :-
     is_list(List_In),
@@ -154,6 +160,7 @@ table_add_inserts([Insert|Inserts],After0,AfterN) :-
     table_add_inserts(Inserts,After1,AfterN).
 
 diff_op(Diff, Op) :-
+    is_dict(Diff),
     get_dict('@op', Diff, Operation_String),
     atom_string(Op, Operation_String).
 
@@ -426,6 +433,73 @@ test(modify_table_patch, []) :-
                              '@to':json{'@height':3, '@width':1, '@x':0, '@y':0},
                              '@value':[[2], [5], [8]]}]},
     simple_patch(Patch,T1,T2).
+
+test(read_state, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig"
+              },
+    Patch = _{ '@id' : "Person/Ludwig",
+               name : _{ '@op' : "SwapValue",
+                         '@before' : "Ludwig",
+                         '@after' : "Ludo" }
+             },
+    simple_patch(Patch,Before,After),
+
+    After = _{ '@id' : "Person/Ludwig",
+               '@type' : "Person",
+               name : "Ludo"
+             }.
+
+test(deep_read_state, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig",
+                address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
+                             '@type' : "Address",
+                             address1 : "Mölker Bastei 8",
+                             address2 : null,
+                             city : "Vienna",
+                             country : "Austria"}
+              },
+    Patch = _{ name:_{'@after':"Ludo",
+                      '@before':"Ludwig",
+                      '@op':"SwapValue"},
+               address: _{ city : "Vienna" }
+             },
+    simple_patch(Patch,Before,After),
+    After = _{'@id':"Person/Ludwig",
+              '@type':"Person",
+              name:"Ludo",
+              address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
+                           '@type' : "Address",
+                           address1 : "Mölker Bastei 8",
+                           address2 : null,
+                           city : "Vienna",
+                           country : "Austria"}
+             }.
+
+test(deep_read_state_failure, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig",
+                address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
+                             '@type' : "Address",
+                             address1 : "Mölker Bastei 8",
+                             address2 : null,
+                             city : "Vienna",
+                             country : "Austria"}
+              },
+    Patch = _{ name:_{'@after':"Ludo",
+                      '@before':"Ludwig",
+                      '@op':"SwapValue"},
+               address: _{ city : "Timbuktu" }
+             },
+    \+ simple_patch(Patch,Before,_After).
+
 
 :- end_tests(simple_patch).
 

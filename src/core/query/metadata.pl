@@ -23,7 +23,7 @@ transaction_object_read_write_objs(Transaction, Objects) :-
 transaction_object_triple_count(Transaction, Triple_Count) :-
     transaction_object_read_write_objs(Transaction,Objects),
     maplist(read_object_triple_count,Objects,Counts),
-    sumlist(Counts,Triple_Count).
+    sum_list(Counts,Triple_Count).
 
 read_object_triple_count(Object, Count) :-
     Layer = (Object.read),
@@ -34,7 +34,7 @@ read_object_triple_count(Object, Count) :-
 transaction_object_size(Transaction, Size) :-
     transaction_object_read_write_objs(Transaction,Objects),
     maplist(read_object_size, Objects, Sizes),
-    sumlist(Sizes, Size).
+    sum_list(Sizes, Size).
 
 read_object_size(Object, Size) :-
     Layer = (Object.read),
@@ -42,7 +42,7 @@ read_object_size(Object, Size) :-
     ->  Size = 0
     ;   layer_stack_names(Layer, Names),
         maplist(layer_size,Names,Sizes),
-        sumlist(Sizes,Size)).
+        sum_list(Sizes,Size)).
 
 % NOTE: Stub! Should be in store.
 layer_directory_prefix_length(3).
@@ -80,7 +80,7 @@ size_directory(Directory,Size) :-
             atomic_list_concat([Directory,'/',File],Path),
             Plain_Files,Paths),
     maplist(size_file,Paths,Sizes),
-    sumlist(Sizes,Size).
+    sum_list(Sizes,Size).
 
 :- begin_tests(metadata).
 :- use_module(ask).

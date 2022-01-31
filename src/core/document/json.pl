@@ -51,9 +51,11 @@
 :- use_module(instance).
 :- use_module(schema).
 
+:- use_module(library(assoc)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
 :- use_module(library(crypto)).
+:- use_module(library(when)).
 
 % performance
 :- use_module(library(apply)).
@@ -5368,47 +5370,6 @@ test(comment_elaborate,
                shape:'xsd:string',
                species:'xsd:string'}.
 
-test(no_comment_elaborate,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 test_document_label_descriptor(Desc),
-                 write_schema(schema2,Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         ),
-         error(schema_check_failure([witness{'@type':no_comment_on_documentation_object,class:'http://s/Squash',object:'http://s/Squash/documentation/Documentation'}]), _)
-     ]) :-
-
-    Document =
-    _{ '@id' : "Squash",
-       '@type' : "Class",
-       '@key' : _{ '@type' : "Lexical",
-                   '@fields' : ["genus", "species"] },
-       '@documentation' :
-       _{ '@properties' : _{ genus : "The genus of the Cucurtiba is always Cucurtiba",
-                             species : "There are between 13 and 30 species of Cucurtiba",
-                             colour: "Red, Green, Brown, Yellow, lots of things here.",
-                             shape: "Round, Silly, or very silly!" }
-        },
-       genus : "xsd:string",
-       species : "xsd:string",
-       name : "xsd:string",
-       colour : "xsd:string",
-       shape : "xsd:string"
-     },
-
-    open_descriptor(Desc, DB),
-    create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
-    with_transaction(
-        Context,
-        insert_schema_document(Context, Document),
-        _
-    ),
-    open_descriptor(Desc, DB2),
-    get_schema_document(DB2, 'Squash', _).
-
 test(bad_documentation,
      [
          setup(
@@ -7037,6 +6998,31 @@ test(incompatible_key_change,
     with_transaction(Context3,
                      replace_schema_document(Context3, New_Schema),
                      _).
+
+test(comment_free_documentation_object,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
+    Schema = _{ '@type' : "Class",
+                '@documentation' :
+                _{ '@properties' : _{ name : "Your name" } },
+                '@id' : "Thing",
+                'name' : "xsd:string"
+              },
+
+    with_transaction(Context1,
+                     insert_schema_document(Context1, Schema),
+                     _),
+    true.
 
 test(compatible_key_change_same_value,
      [

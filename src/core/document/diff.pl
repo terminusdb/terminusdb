@@ -4,6 +4,9 @@
 :- use_module(core(util)).
 :- use_module(table_diff).
 
+:- use_module(library(dicts)).
+:- use_module(library(lists)).
+
 simple_diff(Before,After,Keep,Diff) :-
     simple_diff(Before,After,Keep,_,Diff).
 
@@ -313,6 +316,35 @@ test(simple_diff_id, []) :-
               name:_{'@after':"Ludo",
                      '@before':"Ludwig",
                      '@op':"SwapValue"}
+             }.
+
+test(simple_diff_deep_value, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig",
+                address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
+                             '@type' : "Address",
+                             address1 : "Mölker Bastei 8",
+                             address2 : null,
+                             city : "Vienna",
+                             country : "Austria"}
+              },
+    After = _{'@id':"Person/Ludwig",
+              '@type':"Person",
+              name:"Ludo",
+              address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
+                           '@type' : "Address",
+                           address1 : "Mölker Bastei 8",
+                           address2 : null,
+                           city : "Vienna",
+                           country : "Austria"}
+             },
+    simple_diff(Before,After,_{address : _{ city: true }},Patch),
+    Patch = _{ name:_{'@after':"Ludo",
+                      '@before':"Ludwig",
+                      '@op':"SwapValue"},
+               address: _{ city : "Vienna" }
              }.
 
 test(simple_diff_error, [
