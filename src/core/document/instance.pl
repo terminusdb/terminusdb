@@ -246,6 +246,37 @@ refute_cardinality_(list,Validation_Object,S,P,Witness) :-
                        instance: Subject,
                        predicate: Predicate
                      }.
+refute_cardinality_(table(C),Validation_Object,S,P,Witness) :-
+    % a property whose value is a list
+    \+ card_count(Validation_Object,S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
+    Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: Subject,
+                       class: C,
+                       predicate: Predicate
+                     }.
+refute_cardinality_(table,Validation_Object,S,P,Witness) :-
+    % a property inside a list cell
+    \+ card_count(Validation_Object,S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    atom_string(Subject, Subject_String),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
+    Witness = witness{ '@type': table_predicate_not_cardinality_one,
+                       instance: Subject,
+                       predicate: Predicate
+                     }.
 refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
     card_count(Validation_Object,S,P,N),
     (   \+ memberchk(N, [0,1])
@@ -607,6 +638,28 @@ refute_object_type_(list(C),Validation_Object,Object,Witness) :-
                       object: Elt,
                       list: Object
                   }
+    ).
+refute_object_type_(table(C),Validation_Object,Object,Witness) :-
+    (   \+ is_rdf_list(Validation_Object, Object)
+    ->  Witness = witness{'@type':not_a_valid_table,
+                          class:C,
+                          table:Object}
+    ;   member_list(Validation_Object, List_Elt, Object),
+        refute_object_type_(list(C),Validation_Object,List_Elt,List_Witness),
+        (   witness{'@type':not_a_valid_list} :< List_Witness
+        ->  Witness = witness{ '@type': table_list_malformed,
+                               class: C,
+                               list: List_Elt}
+        ;   witness{'@type':list_element_of_wrong_type,
+                    object: Elt} :< List_Witness,
+            Witness = witness{
+                          '@type': table_element_of_wrong_type,
+                          class: C,
+                          object: Elt,
+                          list: List_Elt,
+                          table: Object
+                      }
+        )
     ).
 
 refute_built_in(Validation_Object,Subject,Predicate,Witness) :-

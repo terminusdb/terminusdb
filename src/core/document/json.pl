@@ -182,6 +182,15 @@ get_value(Elaborated,Value) :-
     get_value(Elt,Value).
 get_value(Elaborated,Value) :-
     is_dict(Elaborated),
+    get_dict('@container',Elaborated,Table_Type),
+    memberchk(Table_Type, ["@table"]),
+    !,
+    get_dict('@value',Elaborated, Table),
+    member(List,Table),
+    member(Elt,List),
+    get_value(Elt,Value).
+get_value(Elaborated,Value) :-
+    is_dict(Elaborated),
     get_dict('@value',Elaborated,_),
     !,
     value_json(Value,Elaborated).
@@ -269,6 +278,10 @@ raw(JValue,Value) :-
         ;   \+ is_list(V)
         ->  get_dict('@type', JValue, Value_Type),
             normalize_json_value(V, Value_Type, Value)
+        ;   Container_Type = "@table"
+        ->  maplist([V1,V1_Raw]>>maplist(raw, V1, V1_Raw),
+                    V,V_Raw),
+            Value = table(V_Raw)
         ;   (   Container_Type = "@set"
             ->  sort(V, V_1)
             ;   V_1 = V),
@@ -390,6 +403,8 @@ class_descriptor_image(base_class(C),json{ '@type' : C }).
 class_descriptor_image(enum(C,_),json{ '@type' : C }).
 class_descriptor_image(list(C),json{ '@container' : "@list",
                                      '@type' : C }).
+class_descriptor_image(table(C),json{ '@container' : "@table",
+                                      '@type' : C }).
 class_descriptor_image(array(C),json{ '@container' : "@array",
                                       '@type' : C }).
 class_descriptor_image(set(C),json{ '@container' : "@set",
@@ -643,6 +658,18 @@ json_assign_ids(DB,Context,JSON,Path) :-
             ),
             Values).
 json_assign_ids(DB,Context,JSON,Path) :-
+    get_dict('@container',JSON, "@table"),
+    !,
+    get_dict('@value', JSON, Values),
+    maplist({DB,Context,Path}/[Value_List]>>(
+                maplist({DB,Context,Path}/[Value]>>(
+                            json_assign_ids(DB, Context, Value, Path)
+                        ),
+                        Value_List
+                       )
+            ),
+            Values).
+json_assign_ids(DB,Context,JSON,Path) :-
     get_dict('@container',JSON, _),
     !,
     get_dict('@value', JSON, Values),
@@ -704,11 +731,30 @@ value_expand_list([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs]
     value_expand_list(Vs, DB, Context, Elt_Type, Captures_In_2, Exs, Dependencies_3, Captures_Out),
     append([Dependencies_1, Dependencies_2, Dependencies_3], Dependencies).
 
+value_expand_table([], _DB, _Context, _Elt_Type, Captures, [], [], Captures).
+value_expand_table([Value|Vs], DB, Context, Elt_Type, Captures_In, [Expanded|Exs], Dependencies, Captures_Out) :-
+    value_expand_list(Value, DB, Context, Elt_Type, Captures_In, Expanded, Dependencies_1, Captures_1),
+    value_expand_table(Vs, DB, Context, Elt_Type, Captures_1, Exs, Dependencies_2, Captures_Out),
+    append([Dependencies_1, Dependencies_2], Dependencies).
+
 % Unit type expansion
 context_value_expand(_,_,[],json{},Captures,[],[],Captures) :-
     !.
 context_value_expand(_,_,null,_,Captures,null,[],Captures) :-
     !.
+context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
+    get_dict('@container', Expansion, "@table"),
+    !,
+    % Container type
+    get_dict('@type', Expansion, Elt_Type),
+    (   is_list(Value)
+    ->  Value_List = Value
+    ;   get_dict('@value',Value,Value_List),
+        is_list(Value_List)
+    ->  true
+    ),
+    value_expand_table(Value_List, DB, Context, Elt_Type, Captures_In, Expanded_List, Dependencies, Captures_Out),
+    V = (Expansion.put(json{'@value' : Expanded_List})).
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
     get_dict('@container', Expansion, _),
     !,
@@ -1303,7 +1349,7 @@ json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
 json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
     memberchk(Type,['Class','TaggedUnion',
                     'Set','List','Optional','Array', 'Cardinality',
-                    'Foreign']),
+                    'Table','Foreign']),
     is_dict(JSON),
     dict_pairs(JSON,json,Pre_Pairs),
     !,
@@ -1441,6 +1487,9 @@ json_triple_(JSON,Context,Triple) :-
         ;   get_dict('@container', Value, "@array")
         ->  get_dict('@value', Value, Array),
             array_id_key_context_triple(Array,ID,Key,Context,Triple)
+        ;   get_dict('@container', Value, "@table")
+        ->  get_dict('@value', Value, Table),
+            table_id_key_context_triple(Table,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@set")
         ->  get_dict('@value', Value, Set),
             set_id_key_context_triple(Set,ID,Key,Context,Triple)
@@ -1483,6 +1532,22 @@ reference(Dict,ID) :-
     !.
 reference(Elt,V) :-
     value_json(V,Elt).
+
+table_id_key_context_triple([],ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
+    global_prefix_expand(rdf:nil, RDF_Nil).
+table_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
+    get_dict('@base', Context, Base),
+    atomic_list_concat([Base,'Cons/'], Base_Cons),
+    idgen_random(Base_Cons,New_ID),
+    (   Triple = t(ID,Key,New_ID)
+    ;   global_prefix_expand(rdf:type, RDF_Type),
+        global_prefix_expand(rdf:'List', RDF_List),
+        Triple = t(New_ID, RDF_Type, RDF_List)
+    ;   global_prefix_expand(rdf:first, RDF_First),
+        list_id_key_context_triple(H,New_ID,RDF_First,Context,Triple)
+    ;   global_prefix_expand(rdf:rest, RDF_Rest),
+        table_id_key_context_triple(T,New_ID,RDF_Rest,Context,Triple)
+    ).
 
 list_id_key_context_triple([],ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
     global_prefix_expand(rdf:nil, RDF_Nil).
@@ -1553,6 +1618,11 @@ list_type_id_predicate_value([O|T],C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unf
     type_id_predicate_iri_value(C,Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V),
     list_type_id_predicate_value(T,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
 
+table_type_id_predicate_value([],_,_,_,_,_,_,_,_,[]).
+table_type_id_predicate_value([O|T],C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,[V|L]) :-
+    list_type_id_predicate_value(O,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,V),
+    table_type_id_predicate_value(T,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
+
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
     enum_value(C, O, V).
 type_id_predicate_iri_value(foreign(_),_,_,Id,_,_,Prefixes,Compress_Ids,_,Value) :-
@@ -1566,6 +1636,12 @@ type_id_predicate_iri_value(list(C),Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Un
     rdf_list_list(Instance,O,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
+type_id_predicate_iri_value(table(C),Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,L) :-
+    database_instance(DB,Instance),
+    rdf_list_list(Instance,O,V_Pointers),
+    maplist(rdf_list_list(Instance),V_Pointers,V),
+    type_descriptor(DB,C,Desc),
+    table_type_id_predicate_value(V,Desc,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
 type_id_predicate_iri_value(array(C),Id,P,_,Recursion,DB,Prefixes,Compress_Ids,Unfold,L) :-
     array_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
@@ -1804,6 +1880,9 @@ type_descriptor_json(array(C), Prefixes, json{ '@type' : "Array",
                                                '@class' : Class_Comp }) :-
     compress_schema_uri(C, Prefixes, Class_Comp).
 type_descriptor_json(list(C), Prefixes, json{ '@type' : "List",
+                                              '@class' : Class_Comp }) :-
+    compress_schema_uri(C, Prefixes, Class_Comp).
+type_descriptor_json(table(C), Prefixes, json{ '@type' : "Table",
                                               '@class' : Class_Comp }) :-
     compress_schema_uri(C, Prefixes, Class_Comp).
 type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp) :-
@@ -2346,6 +2425,10 @@ type_descriptor_sub_frame(array(C), DB, Prefixes, json{ '@type' : "Array",
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
 type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : "List",
                                                        '@class' : Frame }) :-
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
+type_descriptor_sub_frame(table(C), DB, Prefixes, json{ '@type' : "Table",
+                                                        '@class' : Frame }) :-
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame).
 type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : "Enum",
@@ -9596,3 +9679,81 @@ test(double_capture,
                    _Out_2).
 
 :- end_tests(id_capture).
+
+:- begin_tests(json_tables).
+:- use_module(core(util/test_utils)).
+
+geojson_point_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Enum",
+  "@id" : "Point_Type",
+  "@value" : [ "Point" ] }
+
+{ "@type": "Class",
+  "@id": "Point",
+  "type": "Point_Type",
+  "coordinates" : {"@type":"List", "@class": "xsd:decimal"}}
+
+{ "@type" : "Enum",
+  "@id" : "MultiPoint_Type",
+  "@value" : [ "MultiPoint" ] }
+
+{ "@type": "Class",
+  "@id": "MultiPoint",
+  "type": "MultiPoint_Type",
+  "coordinates" : {"@type":"Table", "@class": "xsd:decimal"}}
+
+').
+
+
+test(just_a_table,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+     with_test_transaction(Desc,
+                           C1,
+                           insert_schema_document(
+                               C1,
+                               _{ '@type': "Class",
+                                  '@id': "MultiPoint",
+                                  coordinates : _{ '@type' : "Table",
+                                                   '@class' : "xsd:decimal"}}
+                           )).
+
+test(geojson_point,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(geojson_point_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_document(
+                              C1,
+                              _{ '@type': "MultiPoint",
+                                 '@id': "MultiPoint/MyMultiPoint",
+                                 type: "MultiPoint",
+                                 coordinates : [
+                                     [100.0, 0.0],
+                                     [101.0, 1.0]
+                                 ]},
+                              ID
+                          )
+                         ),
+    open_descriptor(Desc, New_DB),
+    get_document(New_DB, ID, Fresh_JSON),
+    Fresh_JSON = json{'@id':'MultiPoint/MyMultiPoint',
+                      '@type':'MultiPoint',
+                      coordinates:[[100.0,0.0],[101.0,1.0]],
+                      type:'MultiPoint'}.
+
+:- end_tests(json_tables).
