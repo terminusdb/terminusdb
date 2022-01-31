@@ -5,6 +5,7 @@
 
 :- use_module(library(dicts)).
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 simple_diff(Before,After,Keep,Diff) :-
     simple_diff(Before,After,Keep,_,Diff).

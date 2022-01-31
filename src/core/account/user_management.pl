@@ -30,6 +30,7 @@
 
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 /** <module> User
  *
