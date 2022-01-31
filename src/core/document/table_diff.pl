@@ -9,6 +9,11 @@
 :- use_module(library(clpfd)).
 :- use_module(library(thread)).
 
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(random)).
+:- use_module(library(lists)).
+
 /* Fast(er) table diff */
 
 best_area(Op,I0-J0,I1-J1) :-

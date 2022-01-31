@@ -10,6 +10,8 @@
               is_table/1
           ]).
 
+:- use_module(library(lists)).
+
 is_table([[]]).
 is_table([[_|_]|_]).
 
