@@ -480,12 +480,6 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
                        object : Doc }.
 refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     database_schema(Validation_Object,Schema),
-    \+ xrdf(Schema, Doc, sys:comment, _),
-    Witness = witness{ '@type' : no_comment_on_documentation_object,
-                       class: Class,
-                       object : Doc }.
-refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
-    database_schema(Validation_Object,Schema),
     xrdf(Schema, Doc, Prop, _),
     prefix_list([sys:comment, sys:properties, sys:values, rdf:type], List),
     (   \+ memberchk(Prop, List)

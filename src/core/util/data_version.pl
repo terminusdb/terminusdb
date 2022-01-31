@@ -9,23 +9,19 @@
 
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
-
+:- use_module(utils).
+:- use_module(library(pcre)).
 /**
  * compare_data_versions(+Requested_Data_Version, +Actual_Data_Version) is det.
  *
  * Compare data versions. Throw an exception if they are different.
  */
-compare_data_versions(no_data_version, _Actual_Data_Version) :-
-    !.
-compare_data_versions(data_version(Label, Value), data_version(Label, Value)) :-
-    !.
-compare_data_versions(data_version(Requested_Label, Requested_Value), data_version(Actual_Label, Actual_Value)) :-
-    !,
-    atomic_list_concat([Requested_Label, ':', Requested_Value], Requested_Data_Version),
-    atomic_list_concat([Actual_Label, ':', Actual_Value], Actual_Data_Version),
-    throw(error(data_version_mismatch(Requested_Data_Version, Actual_Data_Version), _)).
-compare_data_versions(Requested_Data_Version, _Actual_Data_Version) :-
-    throw(error(unexpected_argument_instantiation(compare_data_versions, Requested_Data_Version), _)).
+compare_data_versions(Expected, Actual) :-
+    do_or_die(compare_data_versions_(Expected, Actual),
+              error(data_version_mismatch(Expected, Actual), _)).
+
+compare_data_versions_(no_data_version, _Actual_Data_Version).
+compare_data_versions_(data_version(Label, Value), data_version(Label, Value)).
 
 /**
  * read_data_version_header(+Request, -Data_Version) is det.
@@ -44,15 +40,13 @@ read_data_version_header(Request, Data_Version) :-
 read_data_version_header(_Request, no_data_version).
 
 read_data_version_header_(Header, data_version(Label, Value)) :-
-    once(sub_atom(Header, Label_Length, 1, Value_Length, ':')),
-    % The lengths should be > 0, but we know they will be larger.
+    split_atom(Header,':',[Label,Value]),
+    atom_length(Label,Label_Length),
+    atom_length(Value,Value_Length),
     Label_Length > 3,
     Value_Length > 3,
-    once(sub_atom(Header, 0, Label_Length, _After_Label, Label)),
-    Before_Value is Label_Length + 1,
-    once(sub_atom(Header, Before_Value, Value_Length, 0, Value)),
-    % Check for extraneous colons.
-    \+ sub_atom(Value, _, _, _, ':').
+    \+ re_match(':', Label, []),
+    \+ re_match(':', Value, []).
 
 :- begin_tests(read_data_version_header_tests).
 
@@ -72,10 +66,10 @@ test("extraneous colons", [fail]) :-
     read_data_version_header_('label:value1:value2', _).
 
 test("short label", [fail]) :-
-    read_data_version_header_('labe:value', _).
+    read_data_version_header_('lab:value', _).
 
 test("short value", [fail]) :-
-    read_data_version_header_('label:valu', _).
+    read_data_version_header_('label:val', _).
 
 test("pass") :-
     read_data_version_header_('label:value', data_version(label, value)).
