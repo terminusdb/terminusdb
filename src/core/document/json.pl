@@ -749,14 +749,10 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
     get_dict('@type', Expansion, Elt_Type),
     (   is_list(Value)
     ->  Value_List = Value
-    ;   string(Value)
-    ->  Value_List = [Value]
-    ;   get_dict('@value',Value,Value_List)
+    ;   get_dict('@value',Value,Value_List),
+        is_list(Value_List)
     ->  true
-    %   fallthrough case - we were expecting a container but we have
-    %   single dictionary which is not a direct value. It must be a
-    %   single object which we'll treat as a single element list.
-    ;   Value_List = [Value]),
+    ),
     value_expand_table(Value_List, DB, Context, Elt_Type, Captures_In, Expanded_List, Dependencies, Captures_Out),
     V = (Expansion.put(json{'@value' : Expanded_List})).
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
@@ -1551,7 +1547,6 @@ table_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
         list_id_key_context_triple(H,New_ID,RDF_First,Context,Triple)
     ;   global_prefix_expand(rdf:rest, RDF_Rest),
         table_id_key_context_triple(T,New_ID,RDF_Rest,Context,Triple)
-    ;   json_triple_(H,Context,Triple)
     ).
 
 list_id_key_context_triple([],ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
