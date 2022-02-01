@@ -1152,13 +1152,13 @@ test(my_spreadsheet_first_col_sorted_windows, [blocked(slow)]) :-
     length(E2,187).
 
 
-test(my_spreadsheet_first_col_sorted_col_swapped_windows, []) :-
+test(my_spreadsheet_first_col_sorted_col_swapped_windows, [blocked(slow)]) :-
     spreadsheet1(SS1),
     swap_columns(1,2,SS1,SS2),
     SS2 = [H|T1],
     sort(T1,TS1),
     TSS2 = [H|TS1],
-    table_diff(SS1,TSS2,Diff).
+    table_diff(SS1,TSS2,_Diff).
 
 test(my_small_first_col_sorted_col_swapped_windows, []) :-
     spreadsheet1(SS),
