@@ -133,6 +133,7 @@
               duplicates/2,
               has_duplicates/2,
               index_list/2,
+              nb_thread_var_init/2,
               nb_thread_var/2,
               uri_encoded_string/3,
 
