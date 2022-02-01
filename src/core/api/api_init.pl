@@ -1,5 +1,6 @@
 :- module(api_init, [
               bootstrap_files/0,
+              initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2
           ]).
@@ -18,6 +19,18 @@
 :- use_module(library(plunit)).
 :- use_module(library(filesex)).
 :- use_module(library(crypto)).
+
+/**
+ * initialize_flags is det.
+ *
+ * Initialize flags shared by all main predicates.
+ */
+initialize_flags :-
+    (   pack:pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
+    ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
+    ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
+        halt(1)
+    ).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
