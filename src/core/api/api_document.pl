@@ -573,7 +573,7 @@ test(double_capture, [
                 create_db_with_empty_schema("admin", "testdb"),
                 resolve_absolute_string_descriptor("admin/testdb", Desc))),
          cleanup(teardown_temp_store(State)),
-         error(capture_already_bound("Capture"))
+         error(capture_already_bound("Capture",_))
      ]) :-
     with_test_transaction(
         Desc,
