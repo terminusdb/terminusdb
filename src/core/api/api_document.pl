@@ -185,15 +185,14 @@ api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Ca
         do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-replace_existing_graph(schema, Transaction, Stream) :-
+replace_existing_graph(schema, Transaction, Stream, _Captures_Var) :-
     replace_json_schema(Transaction, Stream).
-replace_existing_graph(instance, Transaction, Stream) :-
+replace_existing_graph(instance, Transaction, Stream, Captures_Var) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
-    empty_assoc(Captures),
     forall(json_read_dict_list_stream(Stream, Document),
            nb_thread_var({Transaction,Document}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Document, State, _, Captures_Out)),
-                         state(Captures))).
+                         Captures_Var)).
 
 api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Requested_Data_Version, New_Data_Version, Ids) :-
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
@@ -201,21 +200,21 @@ api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Rep
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         Full_Replace = true
-                     ->  replace_existing_graph(Graph_Type, Transaction, Stream),
-                         Ids = []
-                     ;   empty_assoc(Captures),
-                         Captures_Var = state(Captures),
-                         ensure_transaction_has_builder(Graph_Type, Transaction),
-                         findall(Id,
-                                 (   json_read_dict_list_stream(Stream, Document),
-                                     nb_thread_var({Graph_Type,Transaction,Document,Id}/[State,Captures_Out]>>(api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)),
-                                                   Captures_Var)),
-                                 Ids),
+                         empty_assoc(Captures),
+                         nb_thread_var_init(Captures, Captures_Var),
+                         (   Full_Replace = true
+                         ->  replace_existing_graph(Graph_Type, Transaction, Stream, Captures_Var),
+                             Ids = []
+                         ;   ensure_transaction_has_builder(Graph_Type, Transaction),
+                             findall(Id,
+                                     (   json_read_dict_list_stream(Stream, Document),
+                                         nb_thread_var({Graph_Type,Transaction,Document,Id}/[State,Captures_Out]>>(api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)),
+                                                       Captures_Var)),
+                                     Ids),
 
-                         die_if(nonground_captures(Captures_Var, Nonground),
-                                error(not_all_captures_found(Nonground), _)),
-                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
+                             die_if(nonground_captures(Captures_Var, Nonground),
+                                    error(not_all_captures_found(Nonground), _)),
+                             die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _)))),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
@@ -280,7 +279,7 @@ api_replace_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream,
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          empty_assoc(Captures),
-                         Captures_Var = state(Captures),
+                         nb_thread_var_init(Captures, Captures_Var),
                          ensure_transaction_has_builder(Graph_Type, Transaction),
                          findall(Id,
                                  nb_thread_var(

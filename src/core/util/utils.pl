@@ -72,6 +72,7 @@
               duplicates/2,
               has_duplicates/2,
               index_list/2,
+              nb_thread_var_init/2,
               nb_thread_var/2,
               uri_encoded_string/3
           ]).
@@ -979,6 +980,10 @@ index_list(List,Indexes) :-
         numlist(0, N, Indexes)
     ;   Indexes = []
     ).
+
+nb_thread_var_init(Var, State) :-
+    State = state(_),
+    nb_setarg(1, State, Var).
 
 :- meta_predicate nb_thread_var(2,+).
 nb_thread_var(Callable, State) :-
