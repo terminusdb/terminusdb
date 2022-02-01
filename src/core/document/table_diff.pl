@@ -12,6 +12,8 @@
 :- use_module(library(apply)).
 :- use_module(library(random)).
 :- use_module(library(lists)).
+:- use_module(library(solution_sequences)).
+:- use_module(library(sort)).
 
 /* Fast(er) table diff */
 
@@ -283,13 +285,19 @@ all_windows(T1,T2,LE,RE,Left_Windows,Right_Windows) :-
                     Left_Windows,Right_Windows).
 
 table_diff(M1,M2,Diff) :-
-    table_diff_heuristic(M1,M2,Diff),
-    * first_solution(Diff,
+    first_solution(Diff,
                      [
                          table_diff_heuristic(M1,M2,Diff),
-                         table_diff_area_max(M1,M2,Diff)
+                         table_timeout
                      ],
                      []).
+
+table_timeout_time(60).
+
+table_timeout :-
+    table_timeout_time(Time),
+    sleep(Time),
+    throw(error(table_diff_timeout,_)).
 
 table_diff_heuristic(LL1,LL2,Diff) :-
     atomize_table(LL1,LLA1),
@@ -502,6 +510,7 @@ diff_unmatched(LL,M,Exclusions,Unmatched) :-
             Windows,
             Unmatched).
 
+:- use_module(library(plunit)).
 :- begin_tests(table_diff).
 
 test(windows_1x3, []) :-
@@ -1143,14 +1152,13 @@ test(my_spreadsheet_first_col_sorted_windows, [blocked(slow)]) :-
     length(E2,187).
 
 
-test(my_spreadsheet_first_col_sorted_col_swapped_windows, [blocked(slow)]) :-
-    spreadsheet1(SS),
-    swap_columns(1,2,SS,SS2),
+test(my_spreadsheet_first_col_sorted_col_swapped_windows, []) :-
+    spreadsheet1(SS1),
+    swap_columns(1,2,SS1,SS2),
     SS2 = [H|T1],
     sort(T1,TS1),
-    heuristic_windows([H|T1],[H|TS1],E1,E2),
-    length(E1,187),
-    length(E2,187).
+    TSS2 = [H|TS1],
+    table_diff(SS1,TSS2,Diff).
 
 test(my_small_first_col_sorted_col_swapped_windows, []) :-
     spreadsheet1(SS),

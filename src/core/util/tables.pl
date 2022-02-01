@@ -11,6 +11,7 @@
           ]).
 
 :- use_module(library(lists)).
+:- use_module(library(when)).
 
 is_table([[]]).
 is_table([[_|_]|_]).
@@ -77,7 +78,7 @@ replace_table_window(X,Y,Window,Table,New_Table) :-
     split_table(New_Bottom_Right, C, R, Window, BR_Right, BR_Bottom, BR_Bottom_Right),
     split_table(New_Table, X, Y, Top_Left, Right, Bottom, New_Bottom_Right).
 
-
+:- use_module(library(plunit)).
 :- begin_tests(tables).
 
 test(split_table, []) :-

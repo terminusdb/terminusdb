@@ -1087,6 +1087,13 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
                               'api:key' : Key},
              'api:message' : Msg
             }.
+api_error_jsonld_(diff,error(table_diff_timeout,_), JSON) :-
+    format(string(Msg), "The table diff you requested is too complex for our little brains. Perhaps try signing up for a dedicated table diff account?", []),
+    JSON = _{'@type' : 'api:DiffErrorResponse',
+             'api:status' : 'api:i_am_a_teapot',
+             'api:error' : _{ '@type' : 'api:TableDiffTimeoutError' },
+             'api:message' : Msg
+            }.
 
 api_error_jsonld_(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).
@@ -1847,6 +1854,7 @@ status_http_code('api:unauthorized',401).
 status_http_code('api:forbidden',403).
 status_http_code('api:not_found',404).
 status_http_code('api:method_not_allowed',405).
+status_http_code('api:i_am_a_teapot',418).
 status_http_code('api:server_error',500).
 
 status_cli_code('api:success',0).
