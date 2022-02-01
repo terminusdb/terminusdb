@@ -1654,6 +1654,16 @@ api_document_error_jsonld(Type, error(inserted_subdocument_as_document(Document)
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(capture_already_bound(Capture_Id, Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a document with capture id ~q which was bound earlier.", [Capture_Id]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:CaptureIdAlreadyBound',
+                              'api:capture': Capture_Id,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
