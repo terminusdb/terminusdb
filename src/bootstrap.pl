@@ -23,8 +23,8 @@
 
 :- use_module(library(qsave)).
 
-
 main :-
+    initialize_flags,
     bootstrap_files,
     bootstrap_config_files,
     qsave_program(terminusdb, [
