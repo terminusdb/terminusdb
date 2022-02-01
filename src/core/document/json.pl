@@ -697,6 +697,8 @@ expansion_key(Key,Expansion,Prop,Cleaned) :-
     ).
 
 capture_ref(Captures_In, Ref, Capture_Var, Captures_Out) :-
+    do_or_die(var(Capture_Var),
+              error(capture_var_was_ground_unexpectedly(Ref, Capture_Var),_ )),
     do_or_die(string(Ref),
               error(capture_is_not_a_string(Ref), _)),
     (   get_assoc(Ref, Captures_In, Capture_Var)
