@@ -10,7 +10,9 @@ info(_System_DB, Auth, Info) :-
         error(access_not_authorized(Auth),_)),
 
     version(TerminusDB_Version),
-    pack:pack_property(terminus_store_prolog, version(TerminusDB_Store_Version)),
+    (   pack:pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
+    ->  true
+    ;   TerminusDB_Store_Version = 'unknown'),
     get_db_version(Storage_Version),
 
     Info = _{
