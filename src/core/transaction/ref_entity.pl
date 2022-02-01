@@ -145,6 +145,13 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ->  random_string(Commit_Id)
     ;   true),
 
+    do_or_die(
+        get_dict(author, Commit_Info, Author),
+        error(missing_parameter(author), _)),
+    do_or_die(
+        get_dict(message, Commit_Info, Message),
+        error(missing_parameter(message), _)),
+
     (   get_dict(commit_type, Commit_Info, Commit_Type)
     ->  true
     ;   Commit_Type = 'ValidCommit'),
@@ -153,8 +160,8 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
         Context,
         _{ '@type' : Commit_Type,
            'identifier' : Commit_Id,
-           'author' : (Commit_Info.author),
-           'message' : (Commit_Info.message),
+           'author' : Author,
+           'message' : Message,
            'timestamp' : Timestamp
          },
         Commit_Uri).

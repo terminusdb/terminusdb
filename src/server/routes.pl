@@ -1009,11 +1009,11 @@ test(get_frame, [
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(api(woql), cors_handler(Method, woql_handler),
+:- http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path)),
+:- http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1034,27 +1034,24 @@ woql_handler(post, Path, Request, System_DB, Auth) :-
     woql_handler_helper(Request, System_DB, Auth, some(Path)).
 
 woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
-    check_content_type_json(Request),
-    try_get_param('query',Request,Query),
-
-    (   get_param('commit_info', Request, Commit_Info)
-    ->  true
-    ;   Commit_Info = _{}
-    ),
-    collect_posted_files(Request,Files),
-
-    (   get_param('all_witnesses', Request, All_Witnesses)
-    ->  true
-    ;   All_Witnesses = false),
-
     api_report_errors(
         woql,
         Request,
-        (   read_data_version_header(Request, Requested_Data_Version),
-            woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, JSON),
+        (   http_read_json_required(json_dict(JSON), Request),
+
+            param_value_json_required(JSON, query, object, Query),
+            param_value_json_optional(JSON, commit_info, object, commit_info{}, Commit_Info),
+            param_value_json_optional(JSON, all_witnesses, boolean, false, All_Witnesses),
+
+            collect_posted_files(Request, Files),
+
+            read_data_version_header(Request, Requested_Data_Version),
+
+            woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, Response),
+
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            reply_json_dict(JSON)
+            reply_json_dict(Response)
         )).
 
 % woql_handler Unit Tests
@@ -1064,22 +1061,6 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
-
-test(db_not_there, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/woql/admin/blagblagblagblagblag'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{'query' : ""}),
-              JSON,
-              [status_code(Code), json_object(dict),authorization(basic(admin,Key))]),
-    Code = 404,
-    _{'@type' : "api:WoqlErrorResponse",
-      'api:error' :
-      _{'@type' : "api:UnresolvableAbsoluteDescriptor",
-        'api:absolute_descriptor': "admin/blagblagblagblagblag/local/branch/main"}} :< JSON.
 
 test(branch_db, [
          setup(setup_temp_server(State, Server)),

@@ -506,8 +506,7 @@ type_context(_DB, Base_Type, _, json{}) :-
     !.
 type_context(DB,Type,Prefixes,Context) :-
     prefix_expand_schema(Type,Prefixes,TypeEx),
-    do_or_die(is_simple_class(DB, TypeEx),
-              error(type_not_found(Type), _)),
+    is_simple_class(DB, TypeEx),
     findall(P - C,
           (
               class_predicate_type(DB, TypeEx, P, Desc),
@@ -573,23 +572,22 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     is_dict(JSON),
     !,
 
-    % Look for @type. If there, expand it. If not there but @id is, assume that
-    % the expanded @type should be @id. If @id is not there, throw an error.
+    % Look for @type. If it is not there but @id is, assume that the expanded
+    % @type should be @id. If @id is not there, throw an error.
+    % See <https://github.com/terminusdb/terminusdb/issues/622>
     (    get_dict('@type', JSON, Type)
-    ->   (   prefix_expand_schema(Type, Context, TypeEx),
-             New_JSON = JSON)
+    ->   New_JSON = JSON
     ;    (   do_or_die(
                  get_dict('@id', JSON, Id),
                  % Note that, even though we check for @id here, we primarily
                  % expect a @type, so that is the reported error.
                  error(missing_field('@type', JSON), _)),
              put_dict('@type', JSON, "@id", New_JSON),
-             TypeEx = "@id")),
+             Type = "@id")),
 
     do_or_die(
-        type_context(DB,TypeEx,Context,Type_Context),
-        error(unknown_type_encountered(TypeEx),_)),
-
+        type_context(DB,Type,Context,Type_Context),
+        error(type_not_found(Type),_)),
     put_dict(Type_Context,Context,New_Context),
     json_context_elaborate(DB,New_JSON,New_Context,Captures_In,Elaborated,Dependencies,Captures_Out_1),
 
