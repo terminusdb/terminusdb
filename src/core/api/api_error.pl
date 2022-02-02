@@ -94,6 +94,24 @@ api_global_error_jsonld(error(type_not_found(Unknown_Type), _), Type, JSON) :-
                               'api:type' : Unknown_Type },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(invalid_organization_name(Organization), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid organization name: ~q", [Organization]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidOrganizationName',
+                              'api:organization_name' : Organization },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(invalid_database_name(DB), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid database name: ~q", [DB]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidDatabaseName',
+                              'api:database_name' : DB },
+             'api:message' : Msg
+            }.
 
 %% DB Exists
 api_error_jsonld_(check_db, error(unknown_database(Organization, Database), _), JSON) :-
@@ -1107,6 +1125,8 @@ api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
 
 error_type(check_db, 'api:DbExistsErrorResponse').
+error_type(create_db, 'api:DbCreateErrorResponse').
+error_type(delete_db, 'api:DbDeleteErrorResponse').
 error_type(add_organization, 'api:AddOrganizationErrorResponse').
 error_type(woql, 'api:WoqlErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').

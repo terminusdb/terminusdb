@@ -15,6 +15,8 @@
 :- use_module(library(plunit)).
 
 db_exists_api(System_DB, Auth, Organization, Database) :-
+    error_on_excluded_organization(Organization),
+    error_on_excluded_database(Database),
     resolve_absolute_descriptor([Organization,Database], Descriptor),
     check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/instance_read_access', Auth).
 

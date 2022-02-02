@@ -47,6 +47,8 @@ delete_db_from_system(Organization,DB) :-
  * Deletes a database if it exists, fails if it doesn't.
  */
 delete_db(System, Auth, Organization,DB_Name, Force) :-
+    error_on_excluded_organization(Organization),
+    error_on_excluded_database(DB_Name),
     create_context(System, System_Context),
     with_transaction(
         System_Context,
