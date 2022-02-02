@@ -1,5 +1,6 @@
 :- module('document/schema', [
               graph_member_list/3,
+              graph_member_array/3,
               is_system_class/1,
               refute_schema/2,
               is_enum/2,
@@ -62,6 +63,9 @@ graph_member_list(Instance, O,L) :-
 graph_member_list(Instance, O,L) :-
     xrdf(Instance, L, rdf:rest, Cdr),
     graph_member_list(Instance,O,Cdr).
+
+graph_member_array(Instance, O, A) :-
+    xrdf(Instance, A, rdf:value, O).
 
 is_unit(Class) :-
     global_prefix_expand(sys:'Unit', Class).
@@ -620,6 +624,10 @@ refute_base_type(Type,Witness) :-
     Witness = witness{ '@type': not_a_base_type,
                        type: Type }.
 
+is_array(Validation_Object,Type) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:type, sys:'Array').
+
 is_rdf_list(Validation_Object,Type) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:type, rdf:'List').
@@ -793,10 +801,13 @@ schema_type_descriptor(Schema, Type, table(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Table'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-schema_type_descriptor(Schema, Type, array(Class)) :-
+schema_type_descriptor(Schema, Type, array(Class,Dimensions)) :-
     xrdf(Schema, Type, rdf:type, sys:'Array'),
     !,
-    xrdf(Schema, Type, sys:class, Class).
+    xrdf(Schema, Type, sys:class, Class),
+    (   xrdf(Schema, Type, sys:dimensions, Dimensions^^xsd:nonNegativeInteger)
+    ->  true
+    ;   Dimensions = 1).
 schema_type_descriptor(Schema, Type, card(Class,N)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
