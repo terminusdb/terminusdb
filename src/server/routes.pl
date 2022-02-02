@@ -151,57 +151,6 @@ test(connection_unauthorized_user_jwt, [
 
 :- end_tests(jwt_auth).
 
-:- begin_tests(connect_handler).
-:- use_module(core(util/test_utils)).
-
-test(connection_authorised_user_http_basic, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    admin_pass(Key),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, _, [authorization(basic(admin, Key))]).
-
-
-test(connection_authorised_insecure_user_header, [
-         setup(setup_temp_server(State, Server, [env_vars([
-                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
-                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
-                                 ])])),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, [json(Request_Data)], [request_header('X-Forwarded-User'='admin')]),
-    memberchk(name=DB_Name, Request_Data),
-    DB_Name = 'TEST_DB'.
-
-
-test(connection_unauthorised_insecure_user_header, [
-         setup(setup_temp_server(State, Server, [env_vars([
-                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
-                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
-                                 ])])),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, _, [request_header('X-Forwarded-User'='adminlolz'), status_code(Status)]),
-    Status = 401.
-
-
-test(connection_result_dbs, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    admin_pass(Key),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
-
-    Result = [].
-
-:- end_tests(connect_handler).
 
 %%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(message), cors_handler(Method, message_handler),
@@ -246,7 +195,6 @@ info_handler(get, Request, System_DB, Auth) :-
                  methods([options,get])]).
 
 ok_handler(_Method, _Request, _System_DB, _Auth) :-
-    format('Content-type: application/octets~n', []),
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -326,99 +274,6 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(db_create, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ '@base' : "https://terminushub.com/document",
-                           '@schema' : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              In, [json_object(dict),
-                   authorization(basic(admin, Key))]),
-    _{'api:status' : "api:success"} :< In.
-
-create_db_bad_prefixes(URI, Prefix_Name) :-
-    dict_create(Prefixes, _, [Prefix_Name-"x"]),
-    Doc = _{prefixes : Prefixes, comment : "c", label : "l"},
-    admin_pass(Key),
-    http_post(URI, json(Doc), JSON,
-              [json_object(dict),
-               authorization(basic(admin, Key)),
-               status_code(Code)]),
-    400 = Code,
-    _{'@type' : "api:DbCreateErrorResponse", 'api:error' : Error} :< JSON,
-    atom_string(Prefix_Name, Prefix_Name_String),
-    _{'@type' : "api:InvalidPrefix",
-      'api:prefix_name' : Prefix_Name_String,
-      'api:prefix_value' : "x"} :< Error.
-
-test(db_create_bad_prefixes, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    forall(member(Prefix_Name, ['@base', '@schema', other]),
-           create_db_bad_prefixes(URI, Prefix_Name)).
-
-test(db_create_bad_api_document, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ label : "A label" },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              JSON, [json_object(dict),
-                   status_code(Code),
-                   authorization(basic(admin, Key))]),
-    400 = Code,
-    _{'@type' : "api:BadAPIDocumentErrorResponse",
-      'api:error' : Error} :< JSON,
-    _{'@type' : "api:RequiredFieldsMissing"} :< Error.
-
-test(db_create_existing_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              Result, [json_object(dict),
-                       authorization(basic(admin, Key)),
-                       status_code(Status)]),
-
-    Status = 400,
-    _{'api:status' : "api:failure"} :< Result.
-
-test(db_create_in_unknown_organization_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              Result, [json_object(dict),
-                       authorization(basic(admin, Key)),
-                       status_code(Status)]),
-
-    Status = 400,
-    _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthenticated_errors, [
          setup(setup_temp_server(State, Server)),
@@ -456,17 +311,6 @@ test(db_create_unauthorized_errors, [
     Status = 403,
     _{'api:status' : "api:forbidden"} :< Result.
 
-test(db_delete, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    admin_pass(Key),
-    http_delete(URI, Delete_In, [json_object(dict),
-                                 authorization(basic(admin, Key))]),
-
-    _{'api:status' : "api:success"} :< Delete_In.
 
 test(db_force_delete_unfinalized_system_only, [
          setup(setup_temp_server(State, Server)),
@@ -522,41 +366,6 @@ test(db_force_delete_unfinalized_system_and_label, [
 
     \+ database_exists("admin", "foo"),
     \+ safe_open_named_graph(Store, Label, _).
-
-test(db_delete_unknown_organization_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
-    admin_pass(Key),
-    http_delete(URI,
-                Result,
-                [json_object(dict),
-                 authorization(basic(admin, Key)),
-                 status_code(Status)]),
-
-    Status = 400,
-
-    % TODO this test is actually equivalent to the one below.
-    % We need to differentiate these errors better, but I don't want to validate the exact error message.
-    % We need codes!
-    _{'api:status' : "api:failure"} :< Result.
-
-test(db_delete_nonexistent_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    admin_pass(Key),
-    http_delete(URI,
-                Result,
-                [json_object(dict),
-                 authorization(basic(admin, Key)),
-                 status_code(Status)]),
-
-    Status = 404,
-
-    _{'api:status' : "api:not_found"} :< Result.
 
 
 test(db_auth_test, [
@@ -696,93 +505,6 @@ test(triples_update, [
 
     memberchk(system-(rdf:type)-'http://terminusdb.com/schema/system#SystemDatabase', Triples2).
 
-
-test(triples_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/triples/_system/schema'], URI),
-    admin_pass(Key),
-    http_get(URI, In, [json_object(dict),
-                       authorization(basic(admin, Key))]),
-    string(In).
-
-
-test(triples_put_two, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "Jumanji"),
-
-    TTL = "
-@prefix layer: <http://terminusdb.com/schema/layer#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-layer:LayerIdRestriction a owl:Restriction.",
-
-    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/instance'], URI),
-    admin_pass(Key),
-
-    http_put(URI, json(_{commit_info : _{ author : "Test",
-                                           message : "testing" },
-                         turtle : TTL}),
-             _Result, [json_object(dict),
-                       authorization(basic(admin, Key))]),
-
-    TTL2 = "
-@prefix layer: <http://terminusdb.com/schema/layer#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-layer:LayerIdRestriction2 a owl:Restriction.",
-
-    http_put(URI, json(_{commit_info : _{ author : "Test",
-                                          message : "testing" },
-                         turtle : TTL2}),
-             _Result2, [json_object(dict),
-                        authorization(basic(admin, Key))]),
-
-    http_get(URI, Result, [json_object(dict),
-                           authorization(basic(admin, Key))]),
-
-    once(sub_string(Result, _, _, _,
-                    "LayerIdRestriction>\n  a owl:Restriction")),
-
-    once(sub_string(Result, _, _, _,
-                    "LayerIdRestriction2>\n  a owl:Restriction")).
-
-
-test(get_invalid_descriptor, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/triples/nonsense'], URI),
-    admin_pass(Key),
-
-    http_get(URI, In, [json_object(dict),
-                        authorization(basic(admin, Key)),
-                        status_code(Code)]),
-    _{'api:message':_Msg,
-      'api:status':"api:failure"} :< In,
-    Code = 400.
-
-
-test(get_bad_descriptor, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/triples/admin/fdsa'], URI),
-    admin_pass(Key),
-
-    http_get(URI, In, [json_object(dict),
-                        authorization(basic(admin, Key)),
-                        status_code(Code)]),
-    _{'api:message':_,
-      'api:status':"api:failure"} :< In,
-    Code = 400.
 
 :- end_tests(triples_endpoint).
 

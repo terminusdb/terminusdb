@@ -5,6 +5,7 @@ function create (agent, path, params) {
   params = new Params(params)
   const comment = params.string('comment', 'default comment')
   const label = params.string('label', 'default label')
+  const prefixes = params.object('prefixes', {})
   params.assertEmpty()
 
   return agent
@@ -12,6 +13,7 @@ function create (agent, path, params) {
     .send({
       comment: comment,
       label: label,
+      prefixes: prefixes,
     })
 }
 

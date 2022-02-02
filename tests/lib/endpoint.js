@@ -80,6 +80,16 @@ function documentSystem () {
   }
 }
 
+function triples (params) {
+  params = new Params(params)
+  const graph = params.stringRequired('graph')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/triples/${dbName}/${graph}`,
+    dbName,
+  }
+}
+
 function remote (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -125,6 +135,7 @@ module.exports = {
   documentCommits,
   documentMeta,
   documentSystem,
+  triples,
   patch,
   remote,
   woqlResource,
