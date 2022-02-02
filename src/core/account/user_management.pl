@@ -113,7 +113,7 @@ add_organization_transaction(System_DB, Auth, Name) :-
                      _).
 
 add_organization(Name, Organization_URI) :-
-    error_on_excluded_organization(Org),
+    error_on_excluded_organization(Name),
 
     create_context(system_descriptor{}, Context),
     with_transaction(Context,
