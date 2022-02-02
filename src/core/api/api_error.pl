@@ -29,6 +29,15 @@ api_error_jsonld(API, Error, JSON) :-
     ).
 
 %% Errors that are common to all error types
+api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Missing parameter: ~s", [Param]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MissingParameter',
+                              'api:parameter' : Param },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type_In, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     (   Expected_Type_In = atom
@@ -76,7 +85,15 @@ api_global_error_jsonld(error(data_version_mismatch(
                               'api:requested_data_version' : Requested_Data_Version,
                               'api:actual_data_version' : Actual_Data_Version }
             }.
-
+api_global_error_jsonld(error(type_not_found(Unknown_Type), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Type not found in the schema: ~q", [Unknown_Type]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:TypeNotFound',
+                              'api:type' : Unknown_Type },
+             'api:message' : Msg
+            }.
 
 %% DB Exists
 api_error_jsonld_(check_db, error(unknown_database(Organization, Database), _), JSON) :-
@@ -841,14 +858,6 @@ api_error_jsonld_(user_delete,error(user_delete_failed_without_error(Name),_),JS
              'api:error' : _{ '@type' : "api:UserDeleteFailedWithoutError",
                               'api:user_name' : Name}
             }.
-api_error_jsonld_(add_organization, error(missing_parameter(Param), _), JSON) :-
-    format(string(Msg), "Missing parameter: ~s", [Param]),
-    JSON = _{'@type' : "api:AddOrganizationErrorResponse",
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:MissingParameter',
-                              'api:parameter' : Param },
-             'api:message' : Msg
-            }.
 api_error_jsonld_(add_organization,error(unknown_user(Name),_), JSON) :-
     format(string(Msg), "Unknown user: ~q", [Name]),
     JSON = _{'@type' : "api:AddOrganizationErrorResponse",
@@ -1098,6 +1107,7 @@ api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
 
 error_type(check_db, 'api:DbExistsErrorResponse').
+error_type(add_organization, 'api:AddOrganizationErrorResponse').
 error_type(woql, 'api:WoqlErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
@@ -1342,15 +1352,6 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:value' : Value,
                               'api:type' : Destination_Type,
                               'api:document' : Document },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(Type, error(missing_parameter(Param), _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "Missing parameter: ~s", [Param]),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:MissingParameter',
-                              'api:parameter' : Param },
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents,error(document_not_found(Id),_), JSON) :-
