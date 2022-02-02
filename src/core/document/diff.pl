@@ -13,10 +13,6 @@ simple_diff(Before,After,Keep,Diff) :-
 best_cost(best(Cost,_),Cost).
 best_diff(best(_,Diff),Diff).
 
-down_from(From,To,X) :-
-    between(To,From,Y),
-    X is From - Y.
-
 simple_diff(Before,After,Keep,Cost,Diff) :-
     State = best(inf,_{}),
     (   simple_diff(Before,After,Keep,New_Diff,State,0,New_Cost),
