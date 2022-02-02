@@ -1088,9 +1088,9 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
              'api:message' : Msg
             }.
 api_error_jsonld_(diff,error(table_diff_timeout,_), JSON) :-
-    format(string(Msg), "The table diff you requested is too complex for our little brains. Perhaps try signing up for a dedicated table diff account?", []),
+    format(string(Msg), "The table diff you requested is too complex. Perhaps try signing up for a dedicated account?", []),
     JSON = _{'@type' : 'api:DiffErrorResponse',
-             'api:status' : 'api:i_am_a_teapot',
+             'api:status' : 'api:payment_required',
              'api:error' : _{ '@type' : 'api:TableDiffTimeoutError' },
              'api:message' : Msg
             }.
@@ -1856,6 +1856,7 @@ status_http_code('api:not_found',404).
 status_http_code('api:method_not_allowed',405).
 status_http_code('api:i_am_a_teapot',418).
 status_http_code('api:server_error',500).
+status_http_code('api:payment_required',402).
 
 status_cli_code('api:success',0).
 status_cli_code('api:failure',1).
