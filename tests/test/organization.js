@@ -24,13 +24,50 @@ describe('organization', function () {
     }
   })
 
-  it('succeeds adding unknown organization', async function () {
-    await organization
-      .add(agent, {
+  describe('with random organization name', function () {
+    let params
+    before(async function () {
+      params = {
         organization_name: util.randomString(),
-        user_name: agent.defaults().userName,
-      })
-      .then(organization.verifyAddSuccess)
+      }
+    })
+    after(async function () {
+      // deleting organizations is unfortunately broken right now.
+      /*
+      await organization
+        .del(agent, params)
+        .then(organization.verifyDelSuccess)
+      */
+    })
+
+    it('succeeds adding organization', async function () {
+      await organization
+        .add(agent, params)
+        .then(organization.verifyAddSuccess)
+    })
+  })
+
+  describe('with random organization name with pipe', function () {
+    let params
+    before(async function () {
+      params = {
+        organization_name: util.randomString() + '|pipe',
+      }
+    })
+    after(async function () {
+      // deleting organizations is unfortunately broken right now.
+      /*
+      await organization
+        .del(agent, params)
+        .then(organization.verifyDelSuccess)
+      */
+    })
+
+    it('succeeds adding organization', async function () {
+      await organization
+        .add(agent, params)
+        .then(organization.verifyAddSuccess)
+    })
   })
 
   it('fails adding unknown user', async function () {
