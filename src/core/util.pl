@@ -137,6 +137,7 @@
               nb_thread_var_init/2,
               nb_thread_var/2,
               uri_encoded_string/3,
+              text/1,
 
               % speculative_parse.pl
               %guess_date/2,
@@ -187,6 +188,9 @@
               integerRange//2,
               point//2,
               url//0,
+              ncname//0,
+              nmtoken//0,
+              normalizedString//0,
 
               % benchmark.pl
               benchmark_start/1,
@@ -255,7 +259,6 @@
 :- use_module(util/xsd_parser).
 :- use_module(util/benchmark).
 :- use_module(util/http_utils).
-%:- use_module(util/plunit_patch).
 :- use_module(util/param).
 :- use_module(util/json_log).
 :- use_module(util/data_version).
