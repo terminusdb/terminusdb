@@ -36,10 +36,10 @@ simple_patch_list(Diff,List_In,List_Out) :-
 simple_patch_table(Diff,Table_In,Table_Out) :-
     is_list(Table_In),
     !,
-    row_length(Diff,Diff_Row_Length),
-    column_length(Diff,Diff_Column_Length),
-    row_length(Table_In,Row_Length),
-    column_length(Table_In,Column_Length),
+    rows(Diff,Diff_Row_Length),
+    columns(Diff,Diff_Column_Length),
+    rows(Table_In,Row_Length),
+    columns(Table_In,Column_Length),
     Diff_Row_Length = Row_Length,
     Diff_Column_Length = Column_Length,
     maplist([Diff_Row,Row_In,Row_Out]>>
@@ -94,23 +94,23 @@ simple_op_diff_value('CopyTable', Diff, Before, After) :-
     get_dict('@bottom_left', Diff, BL_Diff),
     get_dict('@top_right', Diff, TR_Diff),
     get_dict('@bottom_right', Diff, BR_Diff),
-    split_matrix(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
+    split_table(Before,To_Row,To_Column,Top_Left,Top_Right,Bottom_Left,Bottom_Right),
     diff_op(BL_Diff,BL_Op),
     simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
     diff_op(TR_Diff,TR_Op),
     simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
     simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    split_matrix(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
+    split_table(After, To_Row, To_Column, Top_Left, TR_New, BL_New, BR_New).
 simple_op_diff_value('SwapTable', Diff, Before, After) :-
     get_dict('@before', Diff, Top_Left_Before),
     get_dict('@after', Diff, Top_Left_After),
     get_dict('@bottom_left', Diff, BL_Diff),
     get_dict('@top_right', Diff, TR_Diff),
     get_dict('@bottom_right', Diff, BR_Diff),
-    row_length(Top_Left_Before,To_Row_Before),
-    column_length(Top_Left_Before,To_Column_Before),
-    split_matrix(Before,To_Row_Before,To_Column_Before,
+    rows(Top_Left_Before,To_Row_Before),
+    columns(Top_Left_Before,To_Column_Before),
+    split_table(Before,To_Row_Before,To_Column_Before,
                  Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
     diff_op(BL_Diff,BL_Op),
     simple_op_diff_value(BL_Op,BL_Diff,Bottom_Left,BL_New),
@@ -118,17 +118,17 @@ simple_op_diff_value('SwapTable', Diff, Before, After) :-
     simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
     simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    row_length(Top_Left_After,To_Row_After),
-    column_length(Top_Left_After,To_Column_After),
-    split_matrix(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
+    rows(Top_Left_After,To_Row_After),
+    columns(Top_Left_After,To_Column_After),
+    split_table(After, To_Row_After, To_Column_After, Top_Left_After, TR_New, BL_New, BR_New).
 simple_op_diff_value('PatchTable', Diff, Before, After) :-
     get_dict('@top_left', Diff, TL_Diff),
     get_dict('@bottom_left', Diff, BL_Diff),
     get_dict('@top_right', Diff, TR_Diff),
     get_dict('@bottom_right', Diff, BR_Diff),
-    row_length(TL_Diff,To_Row),
-    column_length(TL_Diff,To_Column),
-    split_matrix(Before,To_Row,To_Column,
+    rows(TL_Diff,To_Row),
+    columns(TL_Diff,To_Column),
+    split_table(Before,To_Row,To_Column,
                  Top_Left_Before,Top_Right,Bottom_Left,Bottom_Right),
     simple_patch_table(TL_Diff,Top_Left_Before, TL_New),
     diff_op(BL_Diff,BL_Op),
@@ -137,9 +137,9 @@ simple_op_diff_value('PatchTable', Diff, Before, After) :-
     simple_op_diff_value(TR_Op,TR_Diff,Top_Right,TR_New),
     diff_op(BR_Diff,BR_Op),
     simple_op_diff_value(BR_Op,BR_Diff,Bottom_Right,BR_New),
-    row_length(Top_Left_After,To_Row_After),
-    column_length(Top_Left_After,To_Column_After),
-    split_matrix(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
+    rows(Top_Left_After,To_Row_After),
+    columns(Top_Left_After,To_Column_After),
+    split_table(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
 simple_op_diff_value('KeepTable', _Diff, Same, Same).
 
 diff_op(Diff, Op) :-
@@ -455,90 +455,6 @@ test(deep_list_patch, []) :-
     \+ simple_patch(Patch,Before,_After).
 
 :- use_module(library(http/json)).
-
-test(deep_table_patch, []) :-
-
-    Before = _{ '@type': "Excel",
-                'Name': "testdoc.xlsx",
-                'Sheets': [
-                     _{
-                         '@type': "Sheet",
-                         'Name': "Sheet1",
-                         'Cells': [[ _{ '@type': "Cell",
-                                        'Value': "1.0",
-                                        'Text': "1" },
-                                      _{ '@type': "Cell",
-                                        'Value': "2.0",
-                                        'Text': "2" },
-                                      _{ '@type': "Cell",
-                                        'Value': "3.0",
-                                        'Text': "3" }],
-                                   [ _{ '@type': "Cell",
-                                        'Value': "4.0",
-                                        'Text': "4" },
-                                     _{ '@type': "Cell",
-                                        'Value': "5.0",
-                                        'Text': "5" },
-                                     _{ '@type': "Cell",
-                                        'Value': "6.0",
-                                        'Text': "6" }],
-                                   [ _{ '@type': "Cell",
-                                        'Value': "7.0",
-                                        'Text': "7" },
-                                     _{ '@type': "Cell",
-                                        'Value': "8.0",
-                                        'Text': "8" },
-                                     _{ '@type': "Cell",
-                                        'Value': "9.0",
-                                        'Text': "9" }]]
-                     }
-                ]},
-
-    Patch = _{ 'Sheets' :
-               _{ '@op' : "PatchList",
-                  '@patch' : [
-                      _{ 'Cells' :
-                         _{ '@op' : "PatchTable",
-                            '@top_left' :
-                            [[ _{ 'Value' : _{ '@op' : "SwapValue",
-                                               '@before' : "1.0",
-                                               '@after' : "2.0" },
-                                  'Text' : _{ '@op' : "SwapValue",
-                                              '@before' : "1",
-                                              '@after' : "2" }},
-                               _{ 'Value' : _{ '@op' : "SwapValue",
-                                               '@before' : "2.0",
-                                               '@after' : "3.0" },
-                                  'Text' : _{ '@op' : "SwapValue",
-                                              '@before' : "2",
-                                              '@after' : "3" }},
-                               _{ 'Value' : _{ '@op' : "SwapValue",
-                                               '@before' : "3.0",
-                                               '@after' : "4.0" },
-                                  'Text' : _{ '@op' : "SwapValue",
-                                              '@before' : "3",
-                                              '@after' : "4" }}]],
-                            '@bottom_left' : _{ '@op' : "KeepTable" },
-                            '@top_right' : _{ '@op' : "KeepTable" },
-                            '@bottom_right' : _{ '@op' : "KeepTable" }}}
-                  ],
-                  '@rest' : _{ '@op' : "KeepList" }}},
-
-    simple_patch(Patch,Before,After),
-
-    After = _{'@type':"Excel",
-              'Name':"testdoc.xlsx",
-              'Sheets':[_{'@type':"Sheet",
-                          'Cells':[[_{'@type':"Cell",'Text':"2",'Value':"2.0"},
-                                    _{'@type':"Cell",'Text':"3",'Value':"3.0"},
-                                    _{'@type':"Cell",'Text':"4",'Value':"4.0"}],
-                                   [_{'@type':"Cell",'Text':"4",'Value':"4.0"},
-                                    _{'@type':"Cell",'Text':"5",'Value':"5.0"},
-                                    _{'@type':"Cell",'Text':"6",'Value':"6.0"}],
-                                   [_{'@type':"Cell",'Text':"7",'Value':"7.0"},
-                                    _{'@type':"Cell",'Text':"8",'Value':"8.0"},
-                                    _{'@type':"Cell",'Text':"9",'Value':"9.0"}]],
-                          'Name':"Sheet1"}]}.
 
 test(read_state, []) :-
 
