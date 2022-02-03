@@ -5,10 +5,11 @@
  */
 
 :- [load_paths].
-
-:- use_foreign_library(foreign(librust)).
-
 :- reexport(core(util/syntax)).
+:- use_foreign_library(foreign(librust)).
+:- if(is_enterprise).
+:- use_module(enterprise(init_enterprise)).
+:- endif.
 
 :- use_module(core(util)).
 :- use_module(library(plunit)).

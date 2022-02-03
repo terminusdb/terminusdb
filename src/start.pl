@@ -5,6 +5,12 @@
  */
 
 :- [load_paths].
+:- reexport(core(util/syntax)).
+:- use_foreign_library(foreign(librust)).
+:- if(is_enterprise).
+:- use_module(enterprise(init_enterprise)).
+:- endif.
+
 :- initialization(main).
 
 initialise_hup :-
@@ -31,11 +37,6 @@ prolog:message(server_missing_config(BasePath)) -->
     'Run: ~s/utils/db_init first'-[BasePath],
     nl
     ].
-
-
-:- reexport(core(util/syntax)).
-
-:- use_foreign_library(foreign(librust)).
 
 :- use_module(server(routes)).
 :- use_module(server(main)).

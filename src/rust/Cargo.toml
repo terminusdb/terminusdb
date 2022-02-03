@@ -1,14 +1,2 @@
-[package]
-name = "rust"
-version = "0.1.0"
-edition = "2021"
-publish = false
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-swipl = "0.3.6"
-lcs = "0.2.0"
+[workspace]
+members = ["terminusdb-community", "terminusdb-dylib"]
