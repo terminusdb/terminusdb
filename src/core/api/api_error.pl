@@ -113,6 +113,7 @@ api_global_error_jsonld(error(invalid_database_name(DB), _), Type, JSON) :-
              'api:message' : Msg
             }.
 
+:- multifile api_error_jsonld_/3.
 %% DB Exists
 api_error_jsonld_(check_db, error(unknown_database(Organization, Database), _), JSON) :-
     format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
@@ -1872,6 +1873,7 @@ json_cli_code(JSON,Code) :-
     atom_string(Atom_Status,Status),
     status_cli_code(Atom_Status,Code).
 
+:- multifile status_http_code/2.
 status_http_code('api:success',200).
 status_http_code('api:failure',400).
 status_http_code('api:unauthorized',401).
