@@ -1,5 +1,8 @@
 :- module('document/patch',
-          [simple_patch/3]).
+          [
+              simple_patch/3,
+              diff_op/2
+          ]).
 
 :- use_module(core(util)).
 :- use_module(core('util/tables')).
