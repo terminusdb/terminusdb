@@ -91,3 +91,13 @@ add_rust_path :-
     asserta(user:file_search_path(foreign, Rust)).
 
 :- add_rust_path.
+
+add_enterprise_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir, '/../../terminusdb-enterprise/prolog', Enterprise),
+    asserta(user:file_search_path(enterprise, Enterprise)).
+
+:- if(getenv("TERMINUSDB_ENTERPRISE", true)).
+:- add_enterprise_path.
+:- set_prolog_flag(terminusdb_enterprise, true).
+:- endif.

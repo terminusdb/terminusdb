@@ -1,5 +1,5 @@
-use swipl::prelude::*;
 use lcs;
+use swipl::prelude::*;
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -35,7 +35,6 @@ predicates! {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn install() {
+pub fn install() {
     register_list_diff();
 }

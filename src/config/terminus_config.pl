@@ -23,7 +23,8 @@
               set_log_format/1,
               clear_log_format/0,
               insecure_user_header_key/1,
-              check_all_env_vars/0
+              check_all_env_vars/0,
+              is_enterprise/0
           ]).
 
 :- use_module(library(pcre)).
@@ -234,3 +235,6 @@ insecure_user_header_key(Header_Key) :-
  */
 check_all_env_vars :-
     ignore(insecure_user_header_key(_)).
+
+is_enterprise :-
+    current_prolog_flag(terminusdb_enterprise, true).
