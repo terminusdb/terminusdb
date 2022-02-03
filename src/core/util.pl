@@ -65,6 +65,7 @@
               copy_remote/4,
 
               % utils.pl
+              down_from/3,
               escape_pcre/2,
               get_key/4,
               get_key/3,

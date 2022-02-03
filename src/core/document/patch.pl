@@ -24,6 +24,7 @@ simple_patch(Diff,Before,After) :-
     maplist([D,B,A]>>simple_patch(D,B,A), Diff, Before, After).
 simple_patch(Diff,Before,After) :-
     diff_op(Diff,Op),
+    !,
     simple_op_diff_value(Op, Diff, Before, After).
 simple_patch(Before,Before,Before).
 

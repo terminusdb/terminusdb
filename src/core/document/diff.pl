@@ -1,11 +1,17 @@
 :- module('document/diff',
-          [simple_diff/4]).
+          [simple_diff/4,
+           start_state/1,
+           best_cost/2,
+           best_diff/2]).
 
 :- use_module(core(util)).
+:- use_module(core(util/tables)).
 
 :- use_module(library(dicts)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
+
+:- multifile table_diff/7.
 
 simple_diff(Before,After,Keep,Diff) :-
     simple_diff(Before,After,Keep,_,Diff).
@@ -13,8 +19,10 @@ simple_diff(Before,After,Keep,Diff) :-
 best_cost(best(Cost,_),Cost).
 best_diff(best(_,Diff),Diff).
 
+start_state(best(inf,_{})).
+
 simple_diff(Before,After,Keep,Cost,Diff) :-
-    State = best(inf,_{}),
+    start_state(State),
     (   simple_diff(Before,After,Keep,New_Diff,State,0,New_Cost),
         nb_setarg(1,State,New_Cost),
         nb_setarg(2,State,New_Diff),
@@ -39,6 +47,11 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     union(Before_Keys,After_Keys,Keys),
     simple_key_diff(Keys,Before,After,Keep,Diff_Pairs,State,Cost,New_Cost),
     dict_create(Diff,_,Diff_Pairs).
+simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
+    (   is_table(Before)
+    ;   is_table(After)),
+    table_diff(Before,After,Keep,Diff,State,Cost,New_Cost),
+    !.
 simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     % null?
     is_list(Before),
