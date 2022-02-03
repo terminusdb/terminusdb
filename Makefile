@@ -8,7 +8,7 @@ TARGET=terminusdb
 ENTERPRISE=false
 
 RUST_SOURCE_DIR := src/rust
-RUST_FILES = src/rust/terminusdb-community/Cargo.toml src/rust/terminusdb-community/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs')
+RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs')
 PROLOG_FILES = $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 
 ifeq ($(shell uname), Darwin)
