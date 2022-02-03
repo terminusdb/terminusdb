@@ -22,7 +22,7 @@ FROM terminusdb/terminus_store_prolog:v0.19.6
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
 COPY --from=0 /usr/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
-COPY --from=1 /app/rust/target/release/librust.so /app/terminusdb/src/rust/librust.so
+COPY --from=1 /app/rust/target/release/libterminusdb_dylib.so /app/terminusdb/src/rust/librust.so
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 RUN apt-get update && apt-get install -y --no-install-recommends libjwt0 make openssl \
