@@ -140,7 +140,77 @@ simple_op_diff_value('PatchTable', Diff, Before, After) :-
     rows(Top_Left_After,To_Row_After),
     columns(Top_Left_After,To_Column_After),
     split_table(After, To_Row_After, To_Column_After, TL_New, TR_New, BL_New, BR_New).
+simple_op_diff_value('ModifyTable', Diff, Before, After) :-
+    Diff = _{ '@op' : "ModifyTable",
+              dimensions: _{ '@before' : [C1,R1],
+                             '@after' : [C2,R2]
+                           },
+              copies : Copies,
+              moves: Moves,
+              inserts: Inserts,
+              deletes: Deletes
+            },
+    columns(Before,C1),
+    rows(Before,R1),
+    empty_table(C2,R2,After0),
+    table_check_deletes(Deletes,Before),
+    table_add_copies(Copies,Before,After0,After1),
+    table_add_moves(Moves,Before,After1,After2),
+    table_add_inserts(Inserts,After2,After).
 simple_op_diff_value('KeepTable', _Diff, Same, Same).
+
+empty_row(N, Row) :-
+    length(Row, N),
+    maplist([null]>>true, Row).
+
+empty_table(_,0, []) :- !.
+empty_table(Columns,Rows,[Row|Table]) :-
+    New_Rows is Rows - 1,
+    empty_row(Columns,Row),
+    empty_table(Columns,New_Rows,Table).
+
+table_check_delete(Delete,Before) :-
+    _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
+      '@value': V} = Delete,
+    table_window(X,W,Y,H,Before,V).
+
+table_check_deletes([],_Before).
+table_check_deletes([Delete|Deletes],Before) :-
+    table_check_delete(Delete,Before),
+    table_check_deletes(Deletes,Before).
+
+table_add_copy(Copy,Before,After0,After1) :-
+    _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
+      '@value': Window} = Copy,
+    table_window(X,W,Y,H,Before,Window),
+    replace_table_window(X,Y,Window,After0,After1).
+
+table_add_copies([],_,After,After).
+table_add_copies([Copy|Copies],Before,After0,AfterN) :-
+    table_add_copy(Copy,Before,After0,After1),
+    table_add_copies(Copies,Before,After1,AfterN).
+
+table_add_move(Move,Before,After0,After1) :-
+    _{'@from' : _{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
+      '@to' : _{'@height':_H2,'@width':_W2,'@x':X2,'@y':Y2},
+      '@value': Window} = Move,
+    table_window(X1,W1,Y1,H1,Before,Window),
+    replace_table_window(X2,Y2,Window,After0,After1).
+
+table_add_moves([],_,After,After).
+table_add_moves([Move|Moves],Before,After0,AfterN) :-
+    table_add_move(Move,Before,After0,After1),
+    table_add_moves(Moves,Before,After1,AfterN).
+
+table_add_insert(Insert,After0,After1) :-
+    _{'@at' : _{'@height':_H,'@width':_W,'@x':X,'@y':Y},
+      '@value': Window} = Insert,
+    replace_table_window(X,Y,Window,After0,After1).
+
+table_add_inserts([],After,After).
+table_add_inserts([Insert|Inserts],After0,AfterN) :-
+    table_add_insert(Insert,After0,After1),
+    table_add_inserts(Inserts,After1,AfterN).
 
 diff_op(Diff, Op) :-
     is_dict(Diff),
