@@ -8,7 +8,6 @@ ignore_predicate("woql_compile:min_member/3").
 ignore_predicate("woql_compile/2").
 % this one is imported, but fails to be recognized. I think xref parses the pldocs of
 % prolog/terminus_store.pl. And unfortunately, layer_to_id/2 is not in the pldocs.
-ignore_predicate("layer_to_id/2").
 ignore_predicate("'document/patch'/2").
 ignore_predicate("'document/patch:min_member'/2").
 ignore_predicate("util:mapm/5").

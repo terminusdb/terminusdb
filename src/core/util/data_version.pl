@@ -12,6 +12,8 @@
 :- use_module(utils).
 :- use_module(core(transaction), [branch_head_commit/3, commit_id_uri/3]).
 :- use_module(library(pcre)).
+:- use_module(library(terminus_store)).
+
 /**
  * compare_data_versions(+Requested_Data_Version, +Actual_Data_Version) is det.
  *
