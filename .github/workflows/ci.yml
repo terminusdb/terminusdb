@@ -39,27 +39,6 @@ jobs:
           concurrent_skipping: same_content_newer
           do_not_skip: '["push", "workflow_dispatch", "schedule"]'
 
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install requirements
-        run: |
-          sudo add-apt-repository -y ppa:swi-prolog/stable
-          sudo apt update
-          sudo apt install swi-prolog-nox
-          mkdir -p ~/.local/share/swi-prolog/pack
-          cd ~/.local/share/swi-prolog/pack
-          git clone https://github.com/terminusdb-labs/jwt_io.git
-          git clone https://github.com/terminusdb/tus.git --single-branch --branch "$TUS_VERSION"
-          git clone https://github.com/terminusdb/terminus_store_prolog.git --single-branch --branch "$TERMINUSDB_STORE_PROLOG_VERSION"
-        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
-      - name: Download script
-        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.4/pl_lint.pl' > pl_lint.pl
-      - name: Run linter
-        run: swipl -f src/load_paths.pl pl_lint.pl
-
   # Build the Docker image.
   build_docker:
     runs-on: ubuntu-latest
@@ -81,6 +60,30 @@ jobs:
         with:
             name: terminusdb-server-docker-image
             path: terminusdb-server-docker-image.tar.gz
+
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: build-docker
+
+    steps:
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
+      - name: Download script
+        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.4/pl_lint.pl' > pl_lint.pl
+
+      - name: Run linter
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run --name terminusdb $DOCKER_IMAGE_NAME:local -v $(pwd)/pl_lint.pl:/app/pl_lint.pl \
+          swipl -f src/load_paths.pl /app/pl_lint.pl
+      - uses: actions/checkout@v2
+
 
   # Unit tests
   unit_tests:
