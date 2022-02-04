@@ -340,7 +340,7 @@ test(delete_objects_with_stream,
     create_context(Descriptor, Context),
     findall(Id_Compressed,
             (   get_document_uri(Context, true, Id),
-                'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
+                compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
     Ids = ['City/Utrecht'].
@@ -360,7 +360,7 @@ test(delete_objects_with_string,
     create_context(Descriptor, Context),
     findall(Id_Compressed,
             (   get_document_uri(Context, true, Id),
-                'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
+                compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
     Ids = ['City/Utrecht'].
@@ -380,7 +380,7 @@ test(delete_objects_with_mixed_string_stream,
     create_context(Descriptor, Context),
     findall(Id_Compressed,
             (   get_document_uri(Context, true, Id),
-                'document/json':compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
+                compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
 
     Ids = ['City/Utrecht'].
