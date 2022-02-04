@@ -12,6 +12,7 @@
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(library(thread)).
+:- use_module(library(aggregate)).
 
 :- multifile table_diff/7.
 
