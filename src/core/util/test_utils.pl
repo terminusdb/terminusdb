@@ -93,6 +93,7 @@
 :- use_module(library(pcre)).
 :- use_module(library(random)).
 :- use_module(library(readutil)).
+:- use_module(library(base64)).
 
 :- use_module(library(lists)).
 
@@ -242,7 +243,7 @@ create_db_with_test_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
-    api_init:world_ontology_json(OntologyJSON),
+    world_ontology_json(OntologyJSON),
     open_string(OntologyJSON, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
@@ -338,8 +339,8 @@ print_all_documents(Askable) :-
 print_all_documents(Askable, Selector) :-
     nl,
     forall(
-        api_document:api_generate_document_ids(Selector, Askable, false, 0, unlimited, Id),
-        (   api_document:api_get_document(Selector, Askable, true, false, Id, Document),
+        api_generate_document_ids(Selector, Askable, false, 0, unlimited, Id),
+        (   api_get_document(Selector, Askable, true, false, Id, Document),
             json_write_dict(current_output, Document, []))),
     nl.
 

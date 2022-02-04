@@ -10,6 +10,7 @@
 :- use_module(core(api/db_pull)).
 
 :- use_module(library(yall)).
+:- use_module(library(md5)).
 
 unbundle(System_DB, Auth, Path, Payload) :-
     do_or_die(

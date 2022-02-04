@@ -1,4 +1,5 @@
 :- module(api_document, [
+              api_get_document/6,
               api_get_documents/11,
               api_get_documents_by_type/12,
               api_get_documents_by_query/13,
@@ -7,7 +8,8 @@
               api_delete_documents/9,
               api_delete_document/9,
               api_replace_documents/11,
-              api_nuke_documents/8
+              api_nuke_documents/8,
+              api_generate_document_ids/6
           ]).
 
 :- use_module(core(util)).
@@ -22,6 +24,7 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(pprint), [print_term/2]).
 
 document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
     atom_string(Graph_Type, Graph_Type_String),
@@ -901,7 +904,7 @@ test(replace_existing_subdocument_as_document, [
     api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream_2, false, no_data_version, _New_Data_Version_2, _Ids_2),
 
     get_document(Desc, Id, Inner_Document),
-    print_term(Inner_Document),nl.
+    print_term(Inner_Document, []),nl.
 
 
 :- end_tests(subdocument_as_document).

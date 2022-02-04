@@ -264,6 +264,7 @@ expand_key(K,Context,Key,Value) :-
 
 :- begin_tests(jsonld_expand).
 :- use_module(core(util/test_utils)).
+:- use_module(config(terminus_config)).
 
 test(expand_inner, [])
 :-

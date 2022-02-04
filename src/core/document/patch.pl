@@ -12,6 +12,7 @@
 :- use_module(library(dicts)).
 :- use_module(library(lists)).
 :- use_module(library(when)).
+:- use_module(library(yall)).
 :- use_module(library(plunit)).
 
 simple_patch(Diff,JSON_In,JSON_Out) :-

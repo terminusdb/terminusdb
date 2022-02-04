@@ -39,6 +39,27 @@ jobs:
           concurrent_skipping: same_content_newer
           do_not_skip: '["push", "workflow_dispatch", "schedule"]'
 
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install requirements
+        run: |
+          sudo add-apt-repository -y ppa:swi-prolog/stable
+          sudo apt update
+          sudo apt install swi-prolog-nox
+          mkdir -p ~/.local/share/swi-prolog/pack
+          cd ~/.local/share/swi-prolog/pack
+          git clone https://github.com/terminusdb-labs/jwt_io.git
+          git clone https://github.com/terminusdb/tus.git --single-branch --branch "$TUS_VERSION"
+          git clone https://github.com/terminusdb/terminus_store_prolog.git --single-branch --branch "$TERMINUSDB_STORE_PROLOG_VERSION"
+        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
+      - name: Download script
+        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.4/pl_lint.pl' > pl_lint.pl
+      - name: Run linter
+        run: swipl -f src/load_paths.pl pl_lint.pl
+
   # Build the Docker image.
   build_docker:
     runs-on: ubuntu-latest

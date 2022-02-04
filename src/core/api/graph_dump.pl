@@ -3,7 +3,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
-:- use_module(core(triple/turtle_utils)).
+:- use_module(core(triple)).
 
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).

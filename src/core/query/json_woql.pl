@@ -3,7 +3,8 @@
               initialise_woql_contexts/0,
               json_woql/2,
               json_woql_path_element_error_message/4,
-              json_value_cast_type/3
+              json_value_cast_type/3,
+              json_to_woql_ast/3
           ]).
 
 /** <module> WOQL JSON-LD syntax

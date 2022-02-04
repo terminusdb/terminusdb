@@ -10,6 +10,7 @@
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(utils).
+:- use_module(core(transaction), [branch_head_commit/3, commit_id_uri/3]).
 :- use_module(library(pcre)).
 /**
  * compare_data_versions(+Requested_Data_Version, +Actual_Data_Version) is det.
@@ -146,8 +147,8 @@ extract_data_version(Descriptor, Repo_Object, data_version(branch, Commit_Id)) :
     % The /api/document/<org>/<db> endpoint uses a branch head commit ID as a
     % data version. Since the schema and instance updates affect the same
     % branch, we need only one commit ID for both.
-    transaction:branch_head_commit(Repo_Object, Descriptor.branch_name, Commit_Uri),
-    transaction:commit_id_uri(Repo_Object, Commit_Id_String, Commit_Uri),
+    branch_head_commit(Repo_Object, Descriptor.branch_name, Commit_Uri),
+    commit_id_uri(Repo_Object, Commit_Id_String, Commit_Uri),
     atom_string(Commit_Id, Commit_Id_String).
 extract_data_version(Descriptor, Object, data_version(system, Value)) :-
     system_descriptor{} :< Descriptor,

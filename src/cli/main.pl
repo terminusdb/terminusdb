@@ -13,11 +13,12 @@
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api)).
 :- use_module(core(triple)).
+:- use_module(server(main), [terminus_server/2]).
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(library(optparse)).
-:- use_module(core(util), [do_or_die/2, basic_authorization/3]).
+:- use_module(core(util), [do_or_die/2, basic_authorization/3, intersperse/3]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -26,6 +27,10 @@
 :- use_module(library(pcre)).
 :- use_module(library(url)).
 :- use_module(library(option)).
+:- use_module(library(plunit), [run_tests/0, run_tests/1]).
+:- use_module(library(settings)).
+
+:- use_module(config(terminus_config), [check_all_env_vars/0]).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
@@ -1143,7 +1148,7 @@ format_help_markdown_opt(Opt) :-
             atomic_list_concat(['`',LFlag_In,'`'],LFlag_Out),
             LFlags0,LFlags1
            ),
-    utils:intersperse(', ',LFlags1,LFlags2),
+    intersperse(', ',LFlags1,LFlags2),
     atomic_list_concat(LFlags2, LFlags),
 
     memberchk(help(Help), Opt),

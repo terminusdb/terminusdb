@@ -5,6 +5,7 @@
 :- use_module(core(util), [exists/2]).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(config(terminus_config), [ignore_ref_and_repo_schema/0]).
 :- use_module(instance).
 :- use_module(schema).
 

@@ -48,6 +48,7 @@
               json_woql/2,
               json_woql_path_element_error_message/4,
               json_value_cast_type/3,
+              json_to_woql_ast/3,
 
               % query_response.pl
               run_context_ast_jsonld_response/5,

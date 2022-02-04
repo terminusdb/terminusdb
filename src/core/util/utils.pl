@@ -74,7 +74,8 @@
               index_list/2,
               nb_thread_var_init/2,
               nb_thread_var/2,
-              uri_encoded_string/3
+              uri_encoded_string/3,
+              text/1
           ]).
 
 /** <module> Utils
@@ -91,6 +92,8 @@
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(random)).
+:- use_module(library(process), [process_create/3, process_wait/2]).
+:- use_module(library(uri), [uri_encoded/3]).
 
 /*
  * The opposite of between/3
@@ -947,7 +950,7 @@ skip_generate_nsols(Goal, Skip, Count) :-
 input_to_integer(Atom, Integer) :-
     (   integer(Atom)
     ->  Integer = Atom
-    ;   error:text(Atom)
+    ;   text(Atom)
     ->  catch(atom_number(Atom, Integer), _, fail),
         integer(Integer)).
 
@@ -994,3 +997,11 @@ uri_encoded_string(Component, Value, Encoded_String) :-
     uri_encoded(Component, Value, Encoded),
     atom_string(Encoded, Encoded_String).
 
+
+text(X) :-
+    (   atom(X)
+    ;   string(X)
+    ;   '$is_char_list'(X, _)
+    ;   '$is_code_list'(X, _)
+    ),
+    !.

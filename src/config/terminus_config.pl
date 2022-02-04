@@ -1,5 +1,5 @@
 :- module(config,[
-              version/1,
+              terminusdb_version/1,
               bootstrap_config_files/0,
               server/1,
               server_name/1,
@@ -24,14 +24,15 @@
               clear_log_format/0,
               insecure_user_header_key/1,
               check_all_env_vars/0,
-              is_enterprise/0
+              is_enterprise/0,
+              check_insecure_user_header_enabled/1
           ]).
 
 :- use_module(library(pcre)).
 
 :- use_module(core(util)).
 
-version('10.0.17').
+terminusdb_version('10.0.17').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.

@@ -1901,7 +1901,7 @@ test(size_syntax,[]) :-
                        'http://terminusdb.com/schema/woql#resource' : 1,
                        'http://terminusdb.com/schema/woql#size' : 2
                      },
-            json_woql:json_to_woql_ast(Query, _, [])
+            json_to_woql_ast(Query, _, [])
         ),
         E,
         once(api_error_jsonld(woql,E,JSON))

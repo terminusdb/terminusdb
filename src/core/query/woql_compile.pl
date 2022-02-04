@@ -50,6 +50,7 @@
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
 :- use_module(library(plunit)).
+:- use_module(library(when), [when/2 as when_predicate]).
 
 /*
  * Ctx is a context object which is used in WOQL queries to
@@ -1617,12 +1618,12 @@ typeof(X,T) :-
     var(X),
     var(T),
     !,
-    when(nonvar(X), typeof(X,T)),
-    when(nonvar(T), typeof(X,T)).
+    when_predicate(nonvar(X), typeof(X,T)),
+    when_predicate(nonvar(T), typeof(X,T)).
 typeof(X,T) :-
     var(X),
     !,
-    when(nonvar(X),
+    when_predicate(nonvar(X),
          typeof(X,T)).
 typeof(_@T,S^^'http://www.w3.org/2001/XMLSchema#string') :-
     atom_string(T,S),
@@ -1913,7 +1914,7 @@ filter_transaction(type_name_filter{ type : schema}, Transaction, New_Transactio
 :- use_module(ask,[ask/2,create_context/2, create_context/3, context_extend_prefixes/3]).
 % NOTE: This circularity is very irritating...
 % We are merely hoping that query_response is loaded before we run this test.
-%:- use_module(query_response, [run_context_ast_jsonld_response/5]).
+:- use_module(query_response, [run_context_ast_jsonld_response/5]).
 :- use_module(library(ordsets)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
@@ -1940,7 +1941,7 @@ query_test_response(Descriptor, Query, Response) :-
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
     json_woql(Query, AST),
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response).
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response).
 
 test(subsumption, [setup(setup_temp_store(State)),
                    cleanup(teardown_temp_store(State))
@@ -2513,7 +2514,7 @@ test(length_of_var, [
 
     create_context(system_descriptor{},Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, Result),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Result),
     [First] = (Result.bindings),
     (First.'N'.'@value') = 3.
 
@@ -3352,10 +3353,9 @@ test(ast_when_test, [
     ),
 
     create_context(Descriptor, Commit_Info, Context2),
-
     AST = when(t(a,b,v('X')),
                insert(e, f, v('X'))),
-    query_response:run_context_ast_jsonld_response(Context2, AST, no_data_version, _, _JSON),
+    run_context_ast_jsonld_response(Context2, AST, no_data_version, _, _JSON),
 
     findall(t(X,P,Y),
             ask(Descriptor, t(X, P, Y)),
@@ -3388,7 +3388,7 @@ test(ast_when_update, [
                 (   delete(a, v('P'), v('X')),
                     insert(a, v('P'), g)))),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST, no_data_version, _, _JSON),
+    run_context_ast_jsonld_response(Context2, AST, no_data_version, _, _JSON),
 
     findall(t(X,P,Y),
             ask(Descriptor, t(X, P, Y)),
@@ -3574,7 +3574,7 @@ test(date_marshall, [
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
 
     [_{'Start date':
        _{'@type':'xsd:dateTime',
@@ -3593,7 +3593,7 @@ test(into_absolute_descriptor, [
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
     Response.inserts = 1.
 
 test(one_witness, [
@@ -3608,7 +3608,7 @@ test(one_witness, [
     create_context(Descriptor,commit_info{ author : "automated test framework",
                                            message : "testing"}, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response).
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response).
 
 test(using_insert_default_graph, [
          setup((setup_temp_store(State),
@@ -3628,7 +3628,7 @@ test(using_insert_default_graph, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response),
 
     resolve_absolute_string_descriptor("admin/test/local/branch/new",
                                        New_Descriptor),
@@ -3648,14 +3648,14 @@ test(count_test, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response),
 
     resolve_absolute_string_descriptor("admin/test", New_Descriptor),
 
     New_AST = count(t(v('X'),v('Y'),v('Z')), v('Count')),
     create_context(New_Descriptor,Commit_Info,New_Context),
 
-    query_response:run_context_ast_jsonld_response(New_Context, New_AST, no_data_version, _, New_Response),
+    run_context_ast_jsonld_response(New_Context, New_AST, no_data_version, _, New_Response),
     [Binding] = (New_Response.bindings),
     2 = (Binding.'Count'.'@value').
 
@@ -3672,7 +3672,7 @@ test(unbound_test, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response).
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Response).
 
 test(distinct, [
          setup((setup_temp_store(State),
@@ -3689,7 +3689,7 @@ test(distinct, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
     Bindings = (Response.bindings),
     findall(X-Y,
             (   member(B,Bindings),
@@ -3714,7 +3714,7 @@ test(immediately, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     once(ask(Descriptor,
              t(a,b,c))).
@@ -3733,7 +3733,7 @@ test(immediately_doesnt_go, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     \+ once(ask(Descriptor,
                 t(a,b,c))).
@@ -3754,7 +3754,7 @@ test(negative_path_pattern, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     once(ask(Descriptor,
              path(a, plus((p(b),n(b))), f, _Path))).
@@ -3775,7 +3775,7 @@ test(any_path_pattern, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
     once(ask(Descriptor,
              path(a, plus((p,n)), f, _Path))).
 
@@ -3793,7 +3793,7 @@ test(any_two_path_pattern, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
     findall(
         Path,
         ask(Descriptor,
@@ -3820,7 +3820,7 @@ test(list_path_pattern, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
     findall(
         Path0,
         ask(Descriptor,
@@ -3906,7 +3906,7 @@ test(added_deleted_triple, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
 
     AST2 = (insert(h,i,j),
@@ -3914,7 +3914,7 @@ test(added_deleted_triple, [
 
     create_context(Descriptor,Commit_Info, Context2),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
 
     once(ask(Descriptor,
              (   addition(h,i,j),
@@ -3938,14 +3938,14 @@ test(added_deleted_quad, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     AST2 = (insert(h,i,j),
             delete(a,b,c)),
 
     create_context(Descriptor,Commit_Info, Context2),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
 
     once(ask(Descriptor,
              (   addition(h,i,j, instance),
@@ -3968,7 +3968,7 @@ test(guard_interspersed_insertions, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     \+ ask(Descriptor,
            (   t(a,b,c))).
@@ -3986,7 +3986,7 @@ test(guard_safe_intersperesed_insertions, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
 
     AST2 = (insert(e,f,g),
@@ -3995,7 +3995,7 @@ test(guard_safe_intersperesed_insertions, [
 
     create_context(Descriptor,Commit_Info, Context2),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
 
     once(ask(Descriptor,
              (   t(a,b,c),
@@ -4015,7 +4015,7 @@ test(guard_safe_insertions, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     create_context(Descriptor,Commit_Info, Context2),
 
@@ -4023,7 +4023,7 @@ test(guard_safe_insertions, [
         t(a,b,c),
         insert(e,f,g)),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
 
     once(ask(Descriptor,
              (   t(a,b,c),
@@ -4042,7 +4042,7 @@ test(guard_disjunctive_insertions, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     create_context(Descriptor,Commit_Info, Context2),
 
@@ -4051,7 +4051,7 @@ test(guard_disjunctive_insertions, [
            ;   not(t(a,b,c)),
                insert(x,y,z)),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
 
     once(ask(Descriptor,
              t(e,f,g))),
@@ -4072,7 +4072,7 @@ test(guard_deep_insertions, [
     resolve_absolute_string_descriptor("admin/test", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
 
     create_context(Descriptor,Commit_Info, Context2),
 
@@ -4083,7 +4083,7 @@ test(guard_deep_insertions, [
                ),
                insert(l,m,n)),
 
-    query_response:run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, _),
 
     once(ask(Descriptor,
              (   t(e,f,g),
@@ -4109,7 +4109,7 @@ test(using_multiple_prefixes, [
     resolve_absolute_string_descriptor("admin/schemaless_db", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _).
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _).
 
 test(bad_class_vio, [
          setup((setup_temp_store(State),
@@ -4133,7 +4133,7 @@ test(bad_class_vio, [
     resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
     create_context(Descriptor,Commit_Info, Context),
 
-    query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Result).
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _Result).
 
 
 test(typeof, [
@@ -4430,7 +4430,7 @@ test(commit_graph, [
                           t(v(target_commit),timestamp,v(timestamp))))),
 
     create_context(Descriptor, commit_info{ author : "test", message: "message3"}, Context3),
-    query_response:run_context_ast_jsonld_response(Context3, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context3, AST, no_data_version, _, Response),
     [Commit1,Commit2] = (Response.bindings),
     (Commit1.message.'@value') = "message2",
     (Commit2.message.'@value') = "message1".
@@ -4555,7 +4555,7 @@ test(jobs_group_by, [
                         length(v('JobRoleInterestGroup'),v('TheCount'))))),
     create_context(Descriptor, commit_info{ author : "test", message: "message2"},
                    Context2),
-    query_response:run_context_ast_jsonld_response(Context2, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context2, AST, no_data_version, _, Response),
     [_{'JobInterest':json{'@type':'xsd:string','@value':"Something"},
        'JobRoleInterestGroup':[json{'@type':'xsd:string','@value':"foo"},
                                json{'@type':'xsd:string','@value':"bar"}],
@@ -4791,7 +4791,7 @@ test(document_path, [
     ),
 
     create_context(Descriptor, Commit_Info, C3),
-    query_response:run_context_ast_jsonld_response(C3, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(C3, AST, no_data_version, _, Response),
     (Response.bindings) =
     [_{'Links':[_{source:'Node/a',target:'Node/b'},
                 _{source:'Node/a',target:'Node/c'},
@@ -4814,7 +4814,7 @@ test(test_matching, [
     AST = (_{ a : 1, b : v('X')} = _{ a : v('Y'), b : 2}),
 
     create_context(Descriptor, Commit_Info, C1),
-    query_response:run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
     (Response.bindings) = [ _{'X':2, 'Y':1} ].
 
 test(json_dict_vars, [
@@ -4941,7 +4941,7 @@ test(insert_read_document, [
     resolve_absolute_string_descriptor('admin/test', Descriptor),
     create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
     Read_AST = get_document(ID,v('Doc')),
-    query_response:run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
     [Res2] = (Response.bindings),
     _{'@id':_,
       '@type':'City',
@@ -4978,7 +4978,7 @@ test(insert_document_forget_uri, [
     resolve_absolute_string_descriptor('admin/test', Descriptor),
     create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
     Read_AST = get_document('City/Dublin',v('Doc')),
-    query_response:run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
     [Res2] = (Response.bindings),
     _{'@id':_,
       '@type':'City',
