@@ -1,7 +1,8 @@
 :- module('document/patch',
           [
               simple_patch/3,
-              diff_op/2
+              diff_op/2,
+              get_dict_or_null/3
           ]).
 
 :- use_module(core(util)).
