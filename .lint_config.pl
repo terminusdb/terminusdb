@@ -13,3 +13,4 @@ ignore_predicate("'document/patch'/2").
 ignore_predicate("'document/patch:min_member'/2").
 ignore_predicate("util:mapm/5").
 ignore_predicate("util/4").
+ignore_predicate("plunit_fast_forward_api:with_test_transaction/4").
