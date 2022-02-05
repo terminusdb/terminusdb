@@ -421,11 +421,14 @@ json_size(Dict,Size) :-
 json_size(List,Size) :-
     is_list(List),
     !,
-    aggregate(sum(S),
-              (   member(O,List),
-                  json_size(O,S)
-              ),
-              Size).
+    (   List = []
+    ->  Size = 0
+    ;   aggregate(sum(S),
+                  (   member(O,List),
+                      json_size(O,S)
+                  ),
+                  Size)
+    ).
 json_size(_,1).
 
 :- begin_tests(simple_diff).
