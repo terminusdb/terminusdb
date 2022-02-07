@@ -1385,45 +1385,6 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [Resource]),
             throw(error(M)))
     }.
-compile_wf(put(Spec,Query,resource(File_Spec,_Format,_Opts)), Prog) -->
-    {
-        maplist([Name as Var,Var,Name]>>(true), Spec, Vars, Names)
-    },
-    % Make sure all variables are bound
-    mapm(resolve,Vars,VarsE),
-    compile_wf(Query,Compiled_Query),
-    {
-
-        (   File_Spec = file(CSV_Path,_Options),
-            Options = []
-        ;   File_Spec = file(CSV_Path),
-            Options = []),
-
-        Header_Row =.. [row|Names],
-
-        Prog = setup_call_cleanup(
-                   open(CSV_Path, write, Out),
-                   (
-                       csv_write_stream(Out,[Header_Row], Options),
-                       forall(
-                           (
-                               Compiled_Query,
-                               maplist([Value,Data]>>(
-                                           (   Value=Data@_
-                                           ->  true
-                                           ;   Value=Data^^_
-                                           ->  true
-                                           ;   Data=Value)
-                                       ),
-                                       VarsE, Row_Data),
-                               Row_Term =.. [row|Row_Data]
-                           ),
-                           csv_write_stream(Out,[Row_Term],Options)
-                       )
-                   ),
-                   close(Out)
-               )
-    }.
 compile_wf(typecast(Val,Type,_Hints,Cast),
            (typecast(ValE, TypeE, [], CastE))) -->
     resolve(Val,ValE),
@@ -1723,11 +1684,6 @@ update_descriptor_transactions(Descriptor) -->
  *
  * Converts a file spec into a referenceable file path which can be opened as a stream.
  */
-file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
-    (   File_Spec = file(Path,Options)
-    ;   File_Spec = file(Path),
-        Options = []),
-    merge_options(Options,Default,New_Options).
 file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     (   File_Spec = remote(URI,Options)
     ;   File_Spec = remote(URI),
