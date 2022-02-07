@@ -50,6 +50,10 @@
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
 :- use_module(library(plunit)).
+% When is imported with a different name because when is also
+% a term in the WOQL ast, which makes it very confusing if the
+% predicate is being called or whether we do something with
+% the WOQL AST.
 :- use_module(library(when), [when/2 as when_predicate]).
 
 /*
