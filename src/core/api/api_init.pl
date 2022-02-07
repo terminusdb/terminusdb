@@ -1,5 +1,6 @@
 :- module(api_init, [
               bootstrap_files/0,
+              initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2
           ]).
@@ -14,7 +15,22 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(filesex)).
+:- use_module(library(crypto)).
+
+/**
+ * initialize_flags is det.
+ *
+ * Initialize flags shared by all main predicates.
+ */
+initialize_flags :-
+    (   pack:pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
+    ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
+    ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
+        halt(1)
+    ).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -44,6 +60,8 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 :- dynamic repo_schema/1.
 :- dynamic layer_schema/1.
 :- dynamic ref_schema/1.
+:- dynamic index_template/1.
+:- dynamic world_ontology_json/1.
 bootstrap_files :-
     template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
@@ -54,7 +72,11 @@ bootstrap_files :-
     ref_schema_json(RefSchemaPath),
     file_to_predicate(RefSchemaPath, ref_schema),
     woql_schema_json(WOQLSchemaPath),
-    file_to_predicate(WOQLSchemaPath, woql_schema).
+    file_to_predicate(WOQLSchemaPath, woql_schema),
+    index_template_path(IndexTemplatePath),
+    file_to_predicate(IndexTemplatePath, index_template),
+    world_ontology_json_path(OntJsonPath),
+    file_to_predicate(OntJsonPath, world_ontology_json).
 
 template_system_instance_json(Path) :-
     once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
@@ -70,6 +92,12 @@ ref_schema_json(Path) :-
 
 woql_schema_json(Path) :-
     once(expand_file_search_path(ontology('woql.json'), Path)).
+
+index_template_path(Path) :-
+    once(expand_file_search_path(config('index.tpl'), Path)).
+
+world_ontology_json_path(Path) :-
+    once(expand_file_search_path(test('worldOnt.json'), Path)).
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).

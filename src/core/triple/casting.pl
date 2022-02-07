@@ -20,8 +20,10 @@
 :- use_module(library(lists)).
 
 :- use_module(library(apply)).
+:- use_module(library(plunit)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(url)).
 :- use_module(library(http/json), [atom_json_dict/3]).
 
 /*

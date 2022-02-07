@@ -35,6 +35,51 @@ function document (params) {
   }
 }
 
+function documentCommit (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const commitId = params.stringRequired('commitId')
+  const remoteName = params.string('remoteName', 'local')
+  return {
+    path: `/api/document/${orgName}/${dbName}/${remoteName}/commit/${commitId}`,
+    orgName: orgName,
+    dbName: dbName,
+    remoteName: remoteName,
+    commitId: commitId,
+  }
+}
+
+function documentCommits (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const remoteName = params.string('remoteName', 'local')
+  return {
+    path: `/api/document/${orgName}/${dbName}/${remoteName}/_commits`,
+    orgName: orgName,
+    dbName: dbName,
+    remoteName: remoteName,
+  }
+}
+
+function documentMeta (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/document/${orgName}/${dbName}/_meta`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
+function documentSystem () {
+  return {
+    path: '/api/document/_system',
+  }
+}
+
 function remote (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -46,9 +91,41 @@ function remote (params) {
   }
 }
 
+function diff (params) {
+  params = new Params(params)
+  return {
+    path: '/api/diff',
+  }
+}
+
+function patch (params) {
+  params = new Params(params)
+  return {
+    path: '/api/patch',
+  }
+}
+
+function woqlResource (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/woql/${orgName}/${dbName}`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
 module.exports = {
   branch,
   db,
+  diff,
   document,
+  documentCommit,
+  documentCommits,
+  documentMeta,
+  documentSystem,
+  patch,
   remote,
+  woqlResource,
 }

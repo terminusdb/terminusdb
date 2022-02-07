@@ -429,7 +429,6 @@
   "@key" : { "@type" : "ValueHash" },
   "@subdocument" : [],
   "post" : "xsd:string",
-  "file" : "xsd:string",
   "url" : "xsd:string" }
 
 { "@id" : "FormatType",
@@ -455,15 +454,6 @@
   "resource" : "QueryResource",
   "has_header" : { "@type" : "Optional",
                    "@class" : "xsd:boolean" } }
-
-{ "@id" : "Put",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "columns" : { "@type" : "List",
-                "@class" : "Column" },
-  "resource" : "QueryResource" }
 
 { "@id" : "AddData",
   "@type" : "Class",

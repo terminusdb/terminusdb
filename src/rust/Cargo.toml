@@ -1,0 +1,2 @@
+[workspace]
+members = ["terminusdb-community", "terminusdb-dylib"]

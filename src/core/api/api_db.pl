@@ -1,7 +1,8 @@
 :- module(api_db, [
               list_databases/3,
               list_existing_databases/2,
-              pretty_print_databases/1
+              pretty_print_databases/1,
+              db_exists_api/4
           ]).
 
 :- use_module(core(transaction)).
@@ -9,9 +10,16 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(triple)).
 
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
+
+db_exists_api(System_DB, Auth, Organization, Database) :-
+    error_on_excluded_organization(Organization),
+    error_on_excluded_database(Database),
+    resolve_absolute_descriptor([Organization,Database], Descriptor),
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/instance_read_access', Auth).
 
 get_all_databases(System_DB, Databases) :-
     create_context(System_DB, Context),

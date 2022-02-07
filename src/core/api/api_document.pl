@@ -1,14 +1,13 @@
 :- module(api_document, [
-              api_get_document_read_transaction/5,
-              api_generate_document_ids/6,
-              api_generate_document_ids_by_type/6,
-              api_generate_document_ids_by_query/7,
-              api_get_document/6,
-              api_insert_documents/9,
-              api_delete_documents/7,
-              api_delete_document/7,
-              api_replace_documents/9,
-              api_nuke_documents/6
+              api_get_documents/11,
+              api_get_documents_by_type/12,
+              api_get_documents_by_query/13,
+              api_get_document_by_id/10,
+              api_insert_documents/11,
+              api_delete_documents/9,
+              api_delete_document/9,
+              api_replace_documents/11,
+              api_nuke_documents/8
           ]).
 
 :- use_module(core(util)).
@@ -18,8 +17,10 @@
 :- use_module(core(document)).
 :- use_module(core(account)).
 
+:- use_module(library(assoc)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
 :- use_module(library(plunit)).
 
 document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
@@ -39,35 +40,33 @@ document_auth_action_type_(branch_descriptor, schema, write, '@schema':'Action/s
 document_auth_action_type_(commit_descriptor, instance, read, '@schema':'Action/instance_read_access').
 document_auth_action_type_(commit_descriptor, schema, read, '@schema':'Action/schema_read_access').
 
-assert_document_auth(SystemDB, Auth, Descriptor, Graph_Type, ReadWrite) :-
+resolve_descriptor_auth(ReadWrite, SystemDB, Auth, Path, Graph_Type, Descriptor) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_path(Path), _)),
     Descriptor_Type{} :< Descriptor,
     do_or_die(document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action),
               error(document_access_impossible(Descriptor, Graph_Type, ReadWrite), _)),
-
     check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
 
-api_get_document_read_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Transaction) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
-
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, read),
-
+before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
         open_descriptor(Descriptor, Transaction),
-        error(unresolvable_collection(Descriptor), _)).
+        error(unresolvable_collection(Descriptor), _)),
 
-api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction) :-
+    transaction_data_version(Transaction, Actual_Data_Version),
+    compare_data_versions(Requested_Data_Version, Actual_Data_Version).
+
+before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction) :-
     do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path),_)),
+        create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
+        error(unresolvable_collection(Descriptor), _)),
+    do_or_die(
+        query_default_collection(Context, Transaction),
+        error(query_default_collection_failed_unexpectedly(Context), _)),
 
-    assert_document_auth(SystemDB, Auth, Descriptor, Schema_Or_Instance, write),
-
-    do_or_die(create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
-              error(unresolvable_collection(Descriptor), _)),
-    do_or_die(query_default_collection(Context, Transaction),
-              error(query_default_collection_failed_unexpectedly(Context), _)).
+    transaction_data_version(Transaction, Actual_Data_Version),
+    compare_data_versions(Requested_Data_Version, Actual_Data_Version).
 
 api_generate_document_ids(instance, Transaction, Unfold, Skip, Count, Id) :-
     (   Unfold = true
@@ -83,6 +82,14 @@ api_generate_document_ids(schema, Transaction, _Unfold, Skip, Count, Id) :-
         Skip,
         Count).
 
+api_get_documents(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
+    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    Goal = {Graph_Type, Transaction, Skip, Count, Compress_Ids, Unfold}/[Document]>>(
+        api_document:api_generate_document_ids(Graph_Type, Transaction, Unfold, Skip, Count, Id),
+        api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
+    ).
+
 api_generate_document_ids_by_type(instance, Transaction, Type, Skip, Count, Id) :-
     skip_generate_nsols(
         get_document_uri_by_type(Transaction, Type, Id),
@@ -94,6 +101,14 @@ api_generate_document_ids_by_type(schema, Transaction, Type, Skip, Count, Id) :-
         Skip,
         Count).
 
+api_get_documents_by_type(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
+    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    Goal = {Graph_Type, Transaction, Type, Skip, Count, Compress_Ids, Unfold}/[Document]>>(
+        api_document:api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Skip, Count, Id),
+        api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
+    ).
+
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Skip, Count, Id) :-
     skip_generate_nsols(
         match_query_document_uri(Transaction, Type, Query, Id),
@@ -102,13 +117,25 @@ api_generate_document_ids_by_query(instance, Transaction, Type, Query, Skip, Cou
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Skip, _Count, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
+api_get_documents_by_query(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
+    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    Goal = {Graph_Type, Transaction, Type, Query, Skip, Count, Compress_Ids, Unfold}/[Document]>>(
+        api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Skip, Count, Id),
+        api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
+    ).
+
 api_get_document(instance, Transaction, Compress_Ids, Unfold, Id, Document) :-
     do_or_die(get_document(Transaction, Compress_Ids, Unfold, Id, Document),
               error(document_not_found(Id), _)).
-
 api_get_document(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
+
+api_get_document_by_id(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Requested_Data_Version, Actual_Data_Version, Id, Document) :-
+    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
 
 embed_document_in_error(Error, Document, New_Error) :-
     Error =.. Error_List,
@@ -133,6 +160,7 @@ known_document_error(key_fields_not_an_array(_)).
 known_document_error(key_fields_is_empty).
 known_document_error(unable_to_assign_ids).
 known_document_error(inserted_subdocument_as_document).
+known_document_error(capture_already_bound(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -157,37 +185,38 @@ api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Ca
         do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-replace_existing_graph(schema, Transaction, Stream) :-
+replace_existing_graph(schema, Transaction, Stream, _Captures_Var) :-
     replace_json_schema(Transaction, Stream).
-replace_existing_graph(instance, Transaction, Stream) :-
+replace_existing_graph(instance, Transaction, Stream, Captures_Var) :-
     [RWO] = (Transaction.instance_objects),
     delete_all(RWO),
-    empty_assoc(Captures),
     forall(json_read_dict_list_stream(Stream, Document),
            nb_thread_var({Transaction,Document}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Document, State, _, Captures_Out)),
-                         state(Captures))).
+                         Captures_Var)).
 
-api_insert_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Full_Replace, Stream, Ids) :-
-    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
+api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Requested_Data_Version, New_Data_Version, Ids) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         Full_Replace = true
-                     ->  replace_existing_graph(Schema_Or_Instance, Transaction, Stream),
-                         Ids = []
-                     ;   empty_assoc(Captures),
-                         Captures_Var = state(Captures),
-                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
-                         findall(Id,
-                                 (   json_read_dict_list_stream(Stream, Document),
-                                     nb_thread_var({Schema_Or_Instance,Transaction,Document,Id}/[State,Captures_Out]>>(api_insert_document_(Schema_Or_Instance, Transaction, Document, State, Id, Captures_Out)),
-                                                   Captures_Var)),
-                                 Ids),
+                         empty_assoc(Captures),
+                         nb_thread_var_init(Captures, Captures_Var),
+                         (   Full_Replace = true
+                         ->  replace_existing_graph(Graph_Type, Transaction, Stream, Captures_Var),
+                             Ids = []
+                         ;   ensure_transaction_has_builder(Graph_Type, Transaction),
+                             findall(Id,
+                                     (   json_read_dict_list_stream(Stream, Document),
+                                         nb_thread_var({Graph_Type,Transaction,Document,Id}/[State,Captures_Out]>>(api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)),
+                                                       Captures_Var)),
+                                     Ids),
 
-                         die_if(nonground_captures(Captures_Var, Nonground),
-                                error(not_all_captures_found(Nonground), _)),
-                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))),
-                     _).
+                             die_if(nonground_captures(Captures_Var, Nonground),
+                                    error(not_all_captures_found(Nonground), _)),
+                             die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _)))),
+                     Meta_Data),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 nonground_captures(state(Captures), Nonground) :-
     findall(Ref,
@@ -201,8 +230,9 @@ api_delete_document_(schema, Transaction, Id) :-
 api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
-api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream) :-
-    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
+api_delete_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream, Requested_Data_Version, New_Data_Version) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
@@ -212,46 +242,52 @@ api_delete_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, 
                                  ->  member(ID_Unchecked, JSON)
                                  ;   ID_Unchecked = JSON),
                                  param_check_json(string, id, ID_Unchecked, ID)),
-                             api_delete_document_(Schema_Or_Instance, Transaction, ID))),
-                     _).
+                             api_delete_document_(Graph_Type, Transaction, ID))),
+                     Meta_Data),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_delete_document(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, ID) :-
-    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
+api_delete_document(SystemDB, Auth, Path, Graph_Type, Author, Message, ID, Requested_Data_Version, New_Data_Version) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
-                     api_delete_document_(Schema_Or_Instance, Transaction, ID),
-                     _).
+                     api_delete_document_(Graph_Type, Transaction, ID),
+                     Meta_Data),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_nuke_documents_(schema, Transaction) :-
     nuke_schema_documents(Transaction).
 api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
 
-api_nuke_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message) :-
-    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
+api_nuke_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Requested_Data_Version, New_Data_Version) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
-                     api_nuke_documents_(Schema_Or_Instance, Transaction),
-                    _).
+                     api_nuke_documents_(Graph_Type, Transaction),
+                     Meta_Data),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_replace_document_(instance, Transaction, Document, Create, state(Captures_In), Id, Captures_Out):-
     replace_document(Transaction, Document, Create, Captures_In, Id, _Dependencies, Captures_Out).
 api_replace_document_(schema, Transaction, Document, Create, state(Captures_In), Id, Captures_In):-
     replace_schema_document(Transaction, Document, Create, Id).
 
-api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Stream, Create, Ids) :-
-    api_get_document_write_transaction(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message, Context, Transaction),
+api_replace_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream, Create, Requested_Data_Version, New_Data_Version, Ids) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          empty_assoc(Captures),
-                         Captures_Var = state(Captures),
-                         ensure_transaction_has_builder(Schema_Or_Instance, Transaction),
+                         nb_thread_var_init(Captures, Captures_Var),
+                         ensure_transaction_has_builder(Graph_Type, Transaction),
                          findall(Id,
                                  nb_thread_var(
-                                     {Schema_Or_Instance, Transaction,Stream,Id}/[State,Captures_Out]>>
+                                     {Graph_Type, Transaction,Stream,Id}/[State,Captures_Out]>>
                                      (   json_read_dict_list_stream(Stream,Document),
                                          call_catch_document_mutation(
                                              Document,
-                                             api_replace_document_(Schema_Or_Instance,
+                                             api_replace_document_(Graph_Type,
                                                                    Transaction,
                                                                    Document,
                                                                    Create,
@@ -265,7 +301,8 @@ api_replace_documents(SystemDB, Auth, Path, Schema_Or_Instance, Author, Message,
                                 error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     _).
+                     Meta_Data),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 :- begin_tests(delete_document).
 :- use_module(core(util/test_utils)).
@@ -283,7 +320,7 @@ insert_some_cities(System, Path) :-
   "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
-    api_insert_documents(System, 'User/admin', Path, instance, "author", "message", false, Stream, _Out_Ids).
+    api_insert_documents(System, 'User/admin', Path, instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids).
 
 test(delete_objects_with_stream,
      [setup((setup_temp_store(State),
@@ -294,7 +331,7 @@ test(delete_objects_with_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"City/Dublin" "City/Pretoria"', Stream),
-    api_delete_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, no_data_version, _New_Data_Version),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -314,7 +351,7 @@ test(delete_objects_with_string,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('["City/Dublin", "City/Pretoria"]', Stream),
-    api_delete_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, no_data_version, _New_Data_Version),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -334,7 +371,7 @@ test(delete_objects_with_mixed_string_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"City/Dublin"\n["City/Pretoria"]', Stream),
-    api_delete_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream),
+    api_delete_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, no_data_version, _New_Data_Version),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -363,7 +400,7 @@ insert_some_cities(System, Path) :-
   "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
-    api_insert_documents(System, 'User/admin', Path, instance, "author", "message", false, Stream, _Out_Ids).
+    api_insert_documents(System, 'User/admin', Path, instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids).
 
 test(replace_objects_with_stream,
      [setup((setup_temp_store(State),
@@ -380,7 +417,7 @@ test(replace_objects_with_stream,
 { "@type": "City",
   "@id" : "City/Pretoria",
   "name" : "Tshwane" }', Stream),
-    api_replace_documents(system_descriptor{}, 'User/admin', 'admin/foo', instance, "author", "message", Stream, false, Ids),
+    api_replace_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, false, no_data_version, _New_Data_Version, Ids),
 
     Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
 
@@ -486,15 +523,7 @@ test(basic_capture, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream,
-                         _Ids),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -536,22 +565,14 @@ test(capture_missing, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream,
-                         _Ids).
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids).
 
 test(double_capture, [
          setup((setup_temp_store(State),
                 create_db_with_empty_schema("admin", "testdb"),
                 resolve_absolute_string_descriptor("admin/testdb", Desc))),
          cleanup(teardown_temp_store(State)),
-         error(capture_already_bound("Capture"))
+         error(capture_already_bound("Capture",_))
      ]) :-
     with_test_transaction(
         Desc,
@@ -585,15 +606,8 @@ test(double_capture, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream,
-                         _Ids).
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids).
+
 test(basic_capture_list, [
          setup((setup_temp_store(State),
                 create_db_with_empty_schema("admin", "testdb"),
@@ -631,15 +645,7 @@ test(basic_capture_list, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream,
-                         _Ids),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -668,7 +674,6 @@ test(basic_capture_replace, [
                          '@class': "Person"}})
     ),
 
-
     open_string('
 { "@type": "Person",
   "name" : "Bert",
@@ -683,15 +688,7 @@ test(basic_capture_replace, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream_1,
-                         _Ids_1),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream_1, no_data_version, _New_Data_Version_1, _Ids_1),
 
     open_string('
 { "@type": "Person",
@@ -706,16 +703,7 @@ test(basic_capture_replace, [
 }',
                 Stream_2),
 
-
-    api_replace_documents(SystemDB,
-                          Auth,
-                          "admin/testdb",
-                          instance,
-                          "testauthor",
-                          "testmessage",
-                          Stream_2,
-                          false,
-                          _Ids_2),
+    api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream_2, false, no_data_version, _New_Data_Version_2, _Ids_2),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -759,15 +747,7 @@ test(basic_capture_list_replace, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream_1,
-                         _Ids_1),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream_1, no_data_version, _New_Data_Version_1, _Ids_1),
 
     open_string('
 [{ "@type": "Person",
@@ -782,16 +762,7 @@ test(basic_capture_list_replace, [
 }]',
                 Stream_2),
 
-
-    api_replace_documents(SystemDB,
-                          Auth,
-                          "admin/testdb",
-                          instance,
-                          "testauthor",
-                          "testmessage",
-                          Stream_2,
-                          false,
-                          _Ids_2),
+    api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream_2, false, no_data_version, _New_Data_Version_2, _Ids_2),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -838,15 +809,7 @@ test(insert_subdocument_as_document, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream,
-                         _Ids).
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream, no_data_version, _New_Data_Version, _Ids).
 
 test(replace_nonexisting_subdocument_as_document, [
          setup((setup_temp_store(State),
@@ -877,15 +840,7 @@ test(replace_nonexisting_subdocument_as_document, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_replace_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         Stream,
-                         true,
-                         _Ids).
+    api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream, true, no_data_version, _New_Data_Version, _Ids).
 
 test(replace_existing_subdocument_as_document, [
          setup((setup_temp_store(State),
@@ -933,15 +888,7 @@ test(replace_existing_subdocument_as_document, [
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
 
-    api_insert_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         false,
-                         Stream_1,
-                         [Outer_Id]),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", false, Stream_1, no_data_version, _New_Data_Version_1, [Outer_Id]),
 
     get_document(Desc, Outer_Id, Outer_Document),
     Id = (Outer_Document.thing.'@id'),
@@ -951,15 +898,7 @@ test(replace_existing_subdocument_as_document, [
            [Id]),
     open_string(Replace_String, Stream_2),
 
-    api_replace_documents(SystemDB,
-                         Auth,
-                         "admin/testdb",
-                         instance,
-                         "testauthor",
-                         "testmessage",
-                         Stream_2,
-                         false,
-                         _Ids),
+    api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream_2, false, no_data_version, _New_Data_Version_2, _Ids_2),
 
     get_document(Desc, Id, Inner_Document),
     print_term(Inner_Document),nl.

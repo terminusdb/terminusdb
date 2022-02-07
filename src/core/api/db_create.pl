@@ -163,6 +163,8 @@ validate_prefixes(Prefixes) :-
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes) :-
     validate_prefixes(Prefixes),
+    error_on_excluded_organization(Organization_Name),
+    error_on_excluded_database(Database_Name),
 
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
 

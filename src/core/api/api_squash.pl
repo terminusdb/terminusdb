@@ -92,6 +92,8 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+:- use_module(library(ordsets)).
+
 test(squash_branch,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb")

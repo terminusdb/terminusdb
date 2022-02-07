@@ -5,6 +5,7 @@
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(library(plunit)).
 
 fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Commit_Ids) :-
     Our_Repo_Descriptor = Our_Branch_Descriptor.repository_descriptor,

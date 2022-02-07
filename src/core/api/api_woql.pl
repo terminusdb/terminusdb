@@ -1,10 +1,10 @@
-:- module(api_woql, [woql_query_json/8]).
+:- module(api_woql, [woql_query_json/10]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 
-woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, JSON) :-
+woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, JSON) :-
 
     % No descriptor to work with until the query sets one up
     (   some(Path) = Path_Option
@@ -26,5 +26,4 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Wit
     ),
 
     json_woql(Query, AST),
-    run_context_ast_jsonld_response(Context,AST,JSON).
-
+    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, JSON).

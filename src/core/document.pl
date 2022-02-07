@@ -55,7 +55,13 @@
               is_schemaless/1,
 
               % query.pl
-              match_query_document_uri/4
+              match_query_document_uri/4,
+
+              % diff.pl
+              simple_diff/4,
+
+              % patch.pl
+              simple_patch/3
           ]).
 
 :- use_module('document/validation').
@@ -63,3 +69,5 @@
 :- use_module('document/schema').
 :- use_module('document/instance').
 :- use_module('document/query').
+:- use_module('document/patch').
+:- use_module('document/diff').

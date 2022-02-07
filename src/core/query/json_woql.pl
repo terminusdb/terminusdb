@@ -380,13 +380,13 @@ json_type_to_woql_ast('UpdateDocument',JSON,WOQL,Path) :-
                                        |Path]),
     json_value_to_woql_ast(Doc_ID, WDoc_ID, [identifier
                                              |Path]),
-    WOQL = insert_document(WDoc,WDoc_ID).
+    WOQL = replace_document(WDoc,WDoc_ID).
 json_type_to_woql_ast('UpdateDocument',JSON,WOQL,Path) :-
     _{document : Doc
      } :< JSON,
     json_value_to_woql_ast(Doc, WDoc, [document
                                        |Path]),
-    WOQL = update_document(WDoc).
+    WOQL = replace_document(WDoc).
 json_type_to_woql_ast('InsertDocument',JSON,WOQL,Path) :-
     _{document : Doc,
       identifier : Doc_ID
@@ -404,19 +404,10 @@ json_type_to_woql_ast('InsertDocument',JSON,WOQL,Path) :-
                                        |Path]),
     WOQL = insert_document(WDoc).
 json_type_to_woql_ast('DeleteDocument',JSON,WOQL,Path) :-
-    _{identifier : Doc
+    _{identifier : Doc_ID
      } :< JSON,
-    json_value_to_woql_ast(Doc,WDoc,[identifier|Path]),
-    do_or_die(
-        (   _{'@id' : ID} :< WDoc
-        ->  true
-        ;   atom(WDoc)
-        ->  ID = Doc
-        ),
-        error(woql_syntax_error(JSON,
-                                [identifier|Path],
-                                Doc), _)),
-    WOQL = delete_document(ID).
+    json_value_to_woql_ast(Doc_ID, WDoc_ID, [identifier|Path]),
+    WOQL = delete_document(WDoc_ID).
 json_type_to_woql_ast('ReadObject',JSON,WOQL,Path) :-
     _{identifier : Doc_ID,
       document : Doc
@@ -433,19 +424,10 @@ json_type_to_woql_ast('UpdateObject',JSON,WOQL,Path) :-
                                        |Path]),
     WOQL = update_document(WDoc).
 json_type_to_woql_ast('DeleteObject',JSON,WOQL,Path) :-
-    _{identifier : Doc
+    _{identifier : Doc_ID
      } :< JSON,
-    json_value_to_woql_ast(Doc,WDoc,[identifier|Path]),
-    do_or_die(
-        (   _{'@id' : ID} :< WDoc
-        ->  true
-        ;   atom(WDoc)
-        ->  ID = Doc
-        ),
-        error(woql_syntax_error(JSON,
-                                [identifier|Path],
-                                Doc), _)),
-    WOQL = delete_document(ID).
+    json_value_to_woql_ast(Doc_ID, WDoc_ID, [identifier|Path]),
+    WOQL = delete_document(WDoc_ID).
 json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
@@ -685,25 +667,10 @@ json_type_to_woql_ast('Source',JSON,WOQL,_Path) :-
     (   _{post: Resource} :< JSON
     ->  atom_string(R,Resource),
         WOQL = post(R)
-    ;   _{file: Resource} :< JSON
-    ->  atom_string(R,Resource),
-        WOQL = file(R)
     ;   _{url: Resource} :< JSON
     ->  atom_string(R,Resource),
         WOQL = remote(R)
     ).
-json_type_to_woql_ast('Put',JSON,WOQL,Path) :-
-    _{columns : Header,
-      query : Query,
-      resource : Resource
-     } :< JSON,
-    json_to_woql_ast(Header,WHeader,[columns
-                                     |Path]),
-    json_to_woql_ast(Query,WQuery,[query
-                                   |Path]),
-    json_to_woql_ast(Resource,WResource,[resource
-                                         |Path]),
-    WOQL = put(WHeader,WQuery,WResource).
 json_type_to_woql_ast('LexicalKey',JSON,WOQL,Path) :-
     _{base : Base,
       key_list : Key,

@@ -42,6 +42,8 @@
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
+:- use_module(library(apply)).
 :- use_module(library(plunit)).
 
 :- use_module(core(util)).
@@ -143,6 +145,13 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ->  random_string(Commit_Id)
     ;   true),
 
+    do_or_die(
+        get_dict(author, Commit_Info, Author),
+        error(missing_parameter(author), _)),
+    do_or_die(
+        get_dict(message, Commit_Info, Message),
+        error(missing_parameter(message), _)),
+
     (   get_dict(commit_type, Commit_Info, Commit_Type)
     ->  true
     ;   Commit_Type = 'ValidCommit'),
@@ -151,8 +160,8 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
         Context,
         _{ '@type' : Commit_Type,
            'identifier' : Commit_Id,
-           'author' : (Commit_Info.author),
-           'message' : (Commit_Info.message),
+           'author' : Author,
+           'message' : Message,
            'timestamp' : Timestamp
          },
         Commit_Uri).
@@ -468,6 +477,8 @@ test(insert_commit_object_with_layer,
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
 :- use_module(database).
+:- use_module(library(ordsets)).
+
 test(copy_base_commit,
      [setup((setup_temp_store(State),
              ensure_label(testlabel1),

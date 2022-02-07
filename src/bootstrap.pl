@@ -5,8 +5,11 @@
  */
 
 :- [load_paths].
-
 :- reexport(core(util/syntax)).
+:- use_foreign_library(foreign(librust)).
+:- if(is_enterprise).
+:- use_module(enterprise(init_enterprise)).
+:- endif.
 
 :- use_module(core(util)).
 :- use_module(library(plunit)).
@@ -21,8 +24,8 @@
 
 :- use_module(library(qsave)).
 
-
 main :-
+    initialize_flags,
     bootstrap_files,
     bootstrap_config_files,
     qsave_program(terminusdb, [

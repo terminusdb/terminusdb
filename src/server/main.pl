@@ -27,6 +27,8 @@
 :- use_module(library(http/http_ssl_plugin)).
 :- use_module(library(http/html_write)).
 
+:- use_module(library(option)).
+
 % JWT IO library
 :- if(config:jwt_enabled).
 
@@ -110,5 +112,8 @@ welcome_banner(Server,Argv) :-
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
     format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
            [StrTime, Now, Argv]),
-    format(user_error,'% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
+    (   is_enterprise
+    ->  Enterprise = ' Enterprise'
+    ;   Enterprise = ''),
+    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server!~n',[Enterprise]),
     format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).

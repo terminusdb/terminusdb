@@ -1,5 +1,6 @@
 :- module('document/schema', [
               graph_member_list/3,
+              graph_member_array/3,
               is_system_class/1,
               refute_schema/2,
               is_enum/2,
@@ -30,7 +31,9 @@
               class_subsumed/3,
               concrete_subclass/3,
               is_abstract/2,
-              is_subdocument/2
+              is_subdocument/2,
+              schema_is_subdocument/2,
+              schema_class_predicate_conjunctive_type/4
           ]).
 
 /*
@@ -45,6 +48,7 @@
 :- use_module(core(query), [has_at/1, compress_dict_uri/3]).
 
 :- use_module(library(lists)).
+:- use_module(library(solution_sequences)).
 
 % performance
 :- use_module(library(apply)).
@@ -59,6 +63,9 @@ graph_member_list(Instance, O,L) :-
 graph_member_list(Instance, O,L) :-
     xrdf(Instance, L, rdf:rest, Cdr),
     graph_member_list(Instance,O,Cdr).
+
+graph_member_array(Instance, O, A) :-
+    xrdf(Instance, A, rdf:value, O).
 
 is_unit(Class) :-
     global_prefix_expand(sys:'Unit', Class).
@@ -116,9 +123,12 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
     class_super(Validation_Object,Concrete,Class),
     \+ is_abstract(Validation_Object,Concrete).
 
-class_subsumed(_Validation_Object,Class,Class).
 class_subsumed(Validation_Object,Class,Subsumed) :-
-    class_super(Validation_Object,Class,Subsumed).
+    database_schema(Validation_Object,Schema),
+    schema_class_subsumed(Schema,Class,Subsumed).
+schema_class_subsumed(_Schema,Class,Class).
+schema_class_subsumed(Schema,Class,Subsumed) :-
+    schema_class_super(Schema,Class,Subsumed).
 
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
@@ -420,13 +430,16 @@ is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, C, sys:abstract, rdf:nil).
 
-is_direct_subdocument(Validation_Object, C) :-
-    database_schema(Validation_Object,Schema),
+is_direct_subdocument(Schema, C) :-
     xrdf(Schema, C, sys:subdocument, rdf:nil).
 
 is_subdocument(Validation_Object, C) :-
-    class_subsumed(Validation_Object, C, D),
-    is_direct_subdocument(Validation_Object, D).
+    database_schema(Validation_Object,Schema),
+    schema_is_subdocument(Schema, C).
+:- table schema_is_subdocument/2.
+schema_is_subdocument(Schema, C) :-
+    schema_class_subsumed(Schema, C, D),
+    is_direct_subdocument(Schema, D).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -434,12 +447,16 @@ is_list_type(C) :-
 is_array_type(C) :-
     global_prefix_expand(sys:'Array', C).
 
+is_table_type(C) :-
+    global_prefix_expand(rdf:'Table', C).
+
 type_family_constructor(Type) :-
     prefix_list(
         [
             sys:'Set',
             sys:'List',
             sys:'Array',
+            sys:'Table',
             sys:'Cardinality',
             sys:'Optional'
         ],
@@ -467,12 +484,6 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     database_schema(Validation_Object,Schema),
     \+ xrdf(Schema, Doc, rdf:type, sys:'Documentation'),
     Witness = witness{ '@type' : not_a_typed_documentation_object,
-                       class: Class,
-                       object : Doc }.
-refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
-    database_schema(Validation_Object,Schema),
-    \+ xrdf(Schema, Doc, sys:comment, _),
-    Witness = witness{ '@type' : no_comment_on_documentation_object,
                        class: Class,
                        object : Doc }.
 refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
@@ -613,6 +624,10 @@ refute_base_type(Type,Witness) :-
     Witness = witness{ '@type': not_a_base_type,
                        type: Type }.
 
+is_array(Validation_Object,Type) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:type, sys:'Array').
+
 is_rdf_list(Validation_Object,Type) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:type, rdf:'List').
@@ -635,6 +650,31 @@ refute_list(Validation_Object,Type,Witness) :-
     xrdf(Schema, Type, rdf:first, _Car),
     xrdf(Schema, Type, rdf:rest, Cdr),
     refute_list(Validation_Object, Cdr, Witness).
+
+refute_table(_Validation_Object,rdf:nil,_Witness) :-
+    !,
+    fail.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Type, rdf:first, _Car),
+    Witness = witness{ '@type': table_has_no_first,
+                       'type': Type }.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:first, Car),
+    refute_list(Validation_Object,Car, _),
+    Witness = witness{ '@type': table_has_a_non_list,
+                       'type': Type }.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    \+ xrdf(Schema, Type, rdf:rest, _Cdr),
+    Witness = witness{ '@type' : table_has_no_rest,
+                       type: Type }.
+refute_table(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:first, _Car),
+    xrdf(Schema, Type, rdf:rest, Cdr),
+    refute_table(Validation_Object, Cdr, Witness).
 
 refute_simple_class(Validation_Object,Class,_Witness) :-
     is_simple_class(Validation_Object,Class),
@@ -697,6 +737,12 @@ refute_type(Validation_Object,Type,Witness) :-
     Witness = json{ '@type' : list_has_no_class,
                     type : Type }.
 refute_type(Validation_Object,Type,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Type, rdf:type, sys:'Table'),
+    \+ xrdf(Schema, Type, sys:class, _),
+    Witness = json{ '@type' : table_has_no_class,
+                    type : Type }.
+refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     \+ xrdf(Schema, Type, sys:class, _),
@@ -751,10 +797,17 @@ schema_type_descriptor(Schema, Type, list(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'List'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-schema_type_descriptor(Schema, Type, array(Class)) :-
-    xrdf(Schema, Type, rdf:type, sys:'Array'),
+schema_type_descriptor(Schema, Type, table(Class)) :-
+    xrdf(Schema, Type, rdf:type, sys:'Table'),
     !,
     xrdf(Schema, Type, sys:class, Class).
+schema_type_descriptor(Schema, Type, array(Class,Dimensions)) :-
+    xrdf(Schema, Type, rdf:type, sys:'Array'),
+    !,
+    xrdf(Schema, Type, sys:class, Class),
+    (   xrdf(Schema, Type, sys:dimensions, Dimensions^^xsd:nonNegativeInteger)
+    ->  true
+    ;   Dimensions = 1).
 schema_type_descriptor(Schema, Type, card(Class,N)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,

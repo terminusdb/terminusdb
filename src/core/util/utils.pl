@@ -1,4 +1,5 @@
 :- module(utils,[
+              down_from/3,
               get_key/4,
               get_key/3,
               get_dict_default/4,
@@ -71,7 +72,9 @@
               duplicates/2,
               has_duplicates/2,
               index_list/2,
-              nb_thread_var/2
+              nb_thread_var_init/2,
+              nb_thread_var/2,
+              uri_encoded_string/3
           ]).
 
 /** <module> Utils
@@ -87,6 +90,14 @@
 :- use_module(library(http/json)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
+:- use_module(library(random)).
+
+/*
+ * The opposite of between/3
+ */
+down_from(From,To,X) :-
+    between(To,From,Y),
+    X is From - Y + 1.
 
 /*
  * Forget the next phrase.
@@ -251,7 +262,8 @@ unique_solutions(Template, Goal, Collection) :-
  *
  * Repeats a term A, N times.
  */
-repeat_term(_A,0,[]).
+repeat_term(_A,0,[]) :-
+    !.
 repeat_term(A,N,[A|Z]) :-
 	N > 0,
 	N2 is N - 1,
@@ -969,7 +981,16 @@ index_list(List,Indexes) :-
     ;   Indexes = []
     ).
 
+nb_thread_var_init(Var, State) :-
+    State = state(_),
+    nb_setarg(1, State, Var).
+
 :- meta_predicate nb_thread_var(2,+).
 nb_thread_var(Callable, State) :-
     call(Callable, State, Out),
     nb_setarg(1,State, Out).
+
+uri_encoded_string(Component, Value, Encoded_String) :-
+    uri_encoded(Component, Value, Encoded),
+    atom_string(Encoded, Encoded_String).
+

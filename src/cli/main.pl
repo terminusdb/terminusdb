@@ -19,7 +19,13 @@
 :- use_module(library(optparse)).
 :- use_module(core(util), [do_or_die/2, basic_authorization/3]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
+:- use_module(library(apply)).
 :- use_module(library(lists)).
+:- use_module(library(readutil)).
+:- use_module(library(yall)).
+:- use_module(library(pcre)).
+:- use_module(library(url)).
+:- use_module(library(option)).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
@@ -637,7 +643,7 @@ run_command(query,[Database,Query],Opts) :-
         (   woql_context(Prefixes),
             context_extend_prefixes(Context,Prefixes,Context0),
             read_query_term_from_atom(Query,AST),
-            query_response:run_context_ast_jsonld_response(Context0, AST, Response),
+            query_response:run_context_ast_jsonld_response(Context0, AST, no_data_version, _, Response),
             get_dict(prefixes, Context0, Context_Prefixes),
             default_prefixes(Defaults),
             put_dict(Defaults, Context_Prefixes, Final_Prefixes),

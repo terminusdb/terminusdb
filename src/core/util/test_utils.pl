@@ -42,7 +42,10 @@
               test_woql_label_descriptor/2,
 
               with_test_transaction/3,
-              with_test_transaction/4
+              with_test_transaction/4,
+
+              write_schema_string/2,
+              write_schema/2
           ]).
 
 /** <module> Test Utilities
@@ -82,9 +85,14 @@
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(filesex)).
 
+:- use_module(library(debug)).
 :- use_module(library(process)).
 :- use_module(library(plunit)).
+:- use_module(library(pcre)).
+:- use_module(library(random)).
+:- use_module(library(readutil)).
 
 :- use_module(library(lists)).
 
@@ -234,10 +242,8 @@ create_db_with_test_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
-    terminus_path(Path),
-    interpolate([Path, '/test/worldOnt.json'], JSON_File),
-
-    open(JSON_File, read, JSON_Stream),
+    api_init:world_ontology_json(OntologyJSON),
+    open_string(OntologyJSON, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
     atomic_list_concat([Organization,'/',Db_Name], DB_Path),
@@ -329,16 +335,11 @@ print_all_triples(Askable, Selector) :-
 print_all_documents(Askable) :-
     print_all_documents(Askable, instance).
 
-get_selector_document(instance, Askable, Id, Document) :-
-    get_document(Askable, Id, Document).
-get_selector_document(schema, Askable, Id, Document) :-
-    get_schema_document(Askable, Id, Document).
-
 print_all_documents(Askable, Selector) :-
     nl,
     forall(
-        api_document:api_generate_document_ids(Selector, Askable, true, 0, unlimited, Id),
-        (   get_selector_document(Selector, Askable, Id, Document),
+        api_document:api_generate_document_ids(Selector, Askable, false, 0, unlimited, Id),
+        (   api_document:api_get_document(Selector, Askable, true, false, Id, Document),
             json_write_dict(current_output, Document, []))),
     nl.
 
@@ -628,3 +629,12 @@ with_test_transaction(Descriptor, Context, Goal, Result) :-
 
     create_context(Descriptor, commit_info{author: "test", message: "test"}, Context),
     with_transaction(Context, Goal, Result).
+
+write_schema_string(Schema, Desc) :-
+    create_context(Desc, commit{author: "a", message: "m"}, Context),
+    with_transaction(Context, write_json_string_to_schema(Context, Schema), _).
+
+:- meta_predicate write_schema(1,+).
+write_schema(P,Desc) :-
+    call(P,Schema),
+    write_schema_string(Schema, Desc).

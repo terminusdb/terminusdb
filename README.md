@@ -38,10 +38,10 @@ TerminusX is a cloud data platform built on TerminusDB. TerminusX is in **public
 
 ## [🚀 Installation Guide](https://terminusdb.com/docs/v10.0/#/overviews/get-started)
 
-| <p align="center"><a href="https://hub.docker.com/r/terminusdb/terminusdb-server">🐋 Docker (Universal) | <p align="center"><a href="https://pypi.org/project/terminusdb-client/">🐍 Python  | <p align="center"><a href="https://github.com/terminusdb/terminusdb-client">🌐 JavaScript | <p align="center"><a href="https://dashboard.terminusdb.com/">⛵ TerminusX (managed service) |
+| <p align="center"><a href="https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container">🐋 Docker (Universal) | <p align="center"><a href="https://pypi.org/project/terminusdb-client/">🐍 Python  | <p align="center"><a href="https://github.com/terminusdb/terminusdb-client">🌐 JavaScript | <p align="center"><a href="https://dashboard.terminusdb.com/">⛵ TerminusX (managed service) |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |--------------------------------------------------------------------------------- |
 | <p align="center"><img src="https://github.com/Ciphey/Ciphey/raw/master/Pictures_for_README/docker.png" /></p>   | <p align="center"><img src="https://github.com/Ciphey/Ciphey/raw/master/Pictures_for_README/python.png" /></p> | <p align="center"><img src="https://assets.terminusdb.com/images/50a6428d99f98e808074cceaf4c755e7.png" width="100" height="100"  /></p> | <p align="center"><img src="https://assets.terminusdb.com/images/favicon.png" width="100" height="100" /></p> |
-| `docker run --name terminusdb --rm -it  -p 6363:6363 terminusdb/terminusdb-server:latest` | `python -m pip install terminusdb-client` | `$ npm install --save @terminusdb/terminusdb-client` | `managed service ftw` |
+| `docker run --name terminusdb --rm -it  -p 6363:6363 terminusdb.docker.scarf.sh/terminusdb/terminusdb-server:latest` | `python -m pip install terminusdb-client` | `$ npm install --save @terminusdb/terminusdb-client` | `managed service ftw` |
 
 
 <hr>

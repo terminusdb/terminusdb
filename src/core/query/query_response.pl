@@ -1,5 +1,5 @@
 :- module(query_response,[
-              run_context_ast_jsonld_response/3,
+              run_context_ast_jsonld_response/5,
               pretty_print_query_response/3
           ]).
 
@@ -12,14 +12,21 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple/literals)).
 
+:- use_module(library(apply)).
 :- use_module(library(lists)).
+:- use_module(library(yall)).
 
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD
  */
-run_context_ast_jsonld_response(Context, AST, JSON) :-
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
     compile_query(AST,Prog,Context,Output_Context),
+    do_or_die(
+        query_default_collection(Output_Context, Transaction),
+        error(query_default_collection_failed_unexpectedly(Output_Context), _)),
+    transaction_data_version(Transaction, Actual_Data_Version),
+    compare_data_versions(Requested_Data_Version, Actual_Data_Version),
     with_transaction(
         Output_Context,
         query_response:(
@@ -33,12 +40,17 @@ run_context_ast_jsonld_response(Context, AST, JSON) :-
         ),
         Meta_Data
     ),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version),
     context_variable_names(Output_Context, Names),
     Binding_JSON = _{'@type' : 'api:WoqlResponse',
                      'api:status' : 'api:success',
                      'api:variable_names' : Names,
-                     'bindings' : Binding_Set},
-    put_dict(Meta_Data, Binding_JSON, JSON).
+                     'bindings' : Binding_Set,
+                     % These are whitelisted metadata fields for serialization.
+                     % Other fields (e.g. data_versions) cannot be serialized.
+                     inserts : Meta_Data.inserts,
+                     deletes : Meta_Data.deletes,
+                     transaction_retry_count : Meta_Data.transaction_retry_count }.
 
 context_variable_names(Context, Header) :-
     get_dict(bindings, Context, Bindings),

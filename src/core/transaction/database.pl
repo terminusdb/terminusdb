@@ -20,10 +20,13 @@
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 
+:- use_module(library(lists)).
 :- use_module(library(prolog_stack)).
 :- use_module(library(plunit)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(yall)).
+:- use_module(library(random)).
 :- use_module(library(terminus_store)).
 
 
@@ -267,8 +270,10 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     (   Witnesses = []
     ->  true
     ;   throw(error(schema_check_failure(Witnesses),_))),
-    commit_validation_objects(Validations),
-    collect_validations_metadata(Validations, Meta_Data).
+    commit_validation_objects(Validations, Committed),
+    collect_validations_metadata(Validations, Validation_Meta_Data),
+    collect_commit_metadata(Committed, Commit_Meta_Data),
+    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data).
 
 
 /* Note: This should not exist */
@@ -336,6 +341,14 @@ collect_validations_metadata(Validations, Meta_Data) :-
           },
           Meta_Data).
 
+collect_commit_metadata(Validations, Meta_Data) :-
+    convlist({Validations}/[Validation, Descriptor-Data_Version]>>(
+                validation_data_version(Validation, Validations, Data_Version),
+                get_dict(descriptor, Validation, Descriptor)
+             ),
+             Validations,
+             Pairs),
+    Meta_Data = meta_data{data_versions : Pairs}.
 
 /*
  * query_context_transaction_objects(+Query_Object,Transaction_Objects) is det.

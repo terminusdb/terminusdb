@@ -3,7 +3,11 @@
               database_instance/2,
               database_inference/2,
               database_schema/2,
-              organization_database_name/3
+              organization_database_name/3,
+              excluded_organization/1,
+              excluded_database/1,
+              error_on_excluded_organization/1,
+              error_on_excluded_database/1
           ]).
 
 /** <module> Database Utilities
@@ -26,8 +30,11 @@
 
 :- use_module(core(transaction/database)).
 
+:- use_module(library(apply)).
 :- use_module(library(pcre)).
 :- use_module(library(plunit)).
+:- use_module(library(yall)).
+:- use_module(library(lists)).
 
 /**
  * system_graph_layer(-Graph,-Layer) is det.
@@ -76,46 +83,53 @@ database_schema(Transaction_Object, Schemas) :-
     Schemas = Transaction_Object.schema_objects.
 
 excluded_organization(Organization) :-
-    re_match('\\||^(console|api|db|home|profile)$', Organization).
+    Organization == ''.
 
 error_on_excluded_organization(Organization) :-
-    do_or_die(\+ excluded_organization(Organization),
-              error(invalid_organization_name(Organization))).
+    die_if(excluded_organization(Organization),
+           error(invalid_organization_name(Organization),_)).
 
-error_on_pipe(Name) :-
-    do_or_die(\+ re_match('\\|', Name),
-              error(ceci_n_est_pas_une_pipe(Name),_)).
+excluded_database(DB) :-
+    (   re_match('\\|', DB)
+    ;   DB = '').
+
+error_on_excluded_database(DB) :-
+    die_if(excluded_database(DB),
+           error(invalid_database_name(DB), _)).
 
 /**
  * organization_database_name(User,DB,Name) is det.
  *
  */
-organization_database_name(Organization,DB,Name) :-
-    freeze(Organization,error_on_excluded_organization(Organization)),
-    freeze(DB,error_on_pipe(DB)),
-    merge_separator_split(Name,'|',[Organization,DB]).
+organization_database_name(Organization, DB, Name) :-
+    ground(Organization),
+    !,
+    error_on_excluded_organization(Organization),
+    atom_concat(Organization, '|', Organization_Pipe),
+    atom_concat(Organization_Pipe, DB, Name),
+    error_on_excluded_database(DB).
+organization_database_name(Organization, DB, Name) :-
+    ground(DB),
+    !,
+    error_on_excluded_database(DB),
+    atom_concat('|', DB, DB_Pipe),
+    atom_concat(Organization, DB_Pipe, Name),
+    error_on_excluded_organization(Organization).
+organization_database_name(Organization, DB, Name) :-
+    ground(Name),
+    merge_separator_split(Name,'|',Elts),
+    last(Elts, DB),
+    atom_concat('|', DB, DB_Pipe),
+    atom_concat(Organization, DB_Pipe, Name),
+    error_on_excluded_organization(Organization),
+    error_on_excluded_database(DB).
 
 :- begin_tests(database_utils).
-
-test(excluded_organization_bad_names) :-
-    excluded_organization("console"),
-    excluded_organization("api"),
-    excluded_organization("db"),
-    excluded_organization("home"),
-    excluded_organization("profile"),
-    excluded_organization("john|smith"),
-    excluded_organization("|"),
-    excluded_organization("smith|"),
-    excluded_organization("|amy").
-
-
-test(excluded_organization_good_names) :-
-    \+ excluded_organization("consolez"),
-    \+ excluded_organization("zconsole"),
-    \+ excluded_organization("adba"),
-    \+ excluded_organization("dba"),
-    \+ excluded_organization("adb").
-
+test(excluded_organization_pipe_names) :-
+    \+ excluded_organization("john|smith"),
+    \+ excluded_organization("|"),
+    \+ excluded_organization("smith|"),
+    \+ excluded_organization("|amy").
 
 test(excluded_organization_normal_names) :-
     \+ excluded_organization("patrick"),
@@ -123,5 +137,51 @@ test(excluded_organization_normal_names) :-
     \+ excluded_organization("megacorp"),
     \+ excluded_organization("littlecorp"),
     \+ excluded_organization("jane").
+
+test(merge_organization_db_name_properly) :-
+    organization_database_name(foo, bar, 'foo|bar'),
+    organization_database_name('foo|', bar, 'foo||bar'),
+    organization_database_name('|f|o|o|', bar, '|f|o|o||bar').
+test(split_organization_db_name_properly_normal) :-
+    organization_database_name(O,D, 'foo|bar'),
+    O = 'foo',
+    D = 'bar'.
+test(split_organization_db_name_properly_pipe) :-
+    organization_database_name(O,D, '|foo||bar'),
+    O = '|foo|',
+    D = 'bar'.
+test(split_organization_db_name_properly_db_ground) :-
+    organization_database_name(O,'bar', '|foo||bar'),
+    O = '|foo|'.
+test(split_organization_db_name_properly_org_ground) :-
+    organization_database_name('|foo|',D, '|foo||bar'),
+    D = 'bar'.
+test(db_name_pipe_error_merge,
+    [error(invalid_database_name('|bar'))]) :-
+    organization_database_name(foo, '|bar', _).
+test(db_name_pipe_error_split,
+    [error(invalid_database_name('|bar'))]) :-
+    organization_database_name('foo', _, 'foo||bar').
+test(db_name_pipe_error_split_db_ground,
+    [error(invalid_database_name('|bar'))]) :-
+    organization_database_name(_, '|bar', 'foo||bar').
+test(db_name_empty_error_merge,
+     [error(invalid_database_name(''))]) :-
+    organization_database_name(foo, '', _).
+test(db_name_empty_error_split,
+     [error(invalid_database_name(''))]) :-
+    organization_database_name(_, _, 'foo|').
+test(db_name_empty_error_split_org_ground,
+     [error(invalid_database_name(''))]) :-
+    organization_database_name(foo, _, 'foo|').
+test(org_name_empty_org_merge_error,
+     [error(invalid_organization_name(''))]) :-
+    organization_database_name('', 'bar', _).
+test(org_name_excluded_org_split_error,
+     [error(invalid_organization_name(''))]) :-
+    organization_database_name(_,_, '|bar').
+test(org_name_excluded_org_split_error_db_ground,
+     [error(invalid_organization_name(''))]) :-
+    organization_database_name(_,bar, '|bar').
 
 :- end_tests(database_utils).

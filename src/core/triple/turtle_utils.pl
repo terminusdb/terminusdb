@@ -21,6 +21,8 @@
 :- use_module(core(document)).
 
 :- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
 
 :- multifile user:portray/1.
 user:portray(turtle_utils:open_string(_, Stream)) :-

@@ -17,6 +17,7 @@
 :- use_module(core(account)).
 
 :- use_module(library(terminus_store)).
+:- use_module(library(lists)).
 
 begin_deleting_db_from_system(System, Organization,DB_Name) :-
     organization_database_name_uri(System,Organization,DB_Name,Db_Uri),
@@ -46,6 +47,8 @@ delete_db_from_system(Organization,DB) :-
  * Deletes a database if it exists, fails if it doesn't.
  */
 delete_db(System, Auth, Organization,DB_Name, Force) :-
+    error_on_excluded_organization(Organization),
+    error_on_excluded_database(DB_Name),
     create_context(System, System_Context),
     with_transaction(
         System_Context,

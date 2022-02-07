@@ -20,6 +20,9 @@
 
 :- use_module(core(util)).
 :- use_module(library(pcre)).
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 resolve_string_descriptor(Default_Descriptor, String, Descriptor) :-
     (   resolve_relative_string_descriptor(Default_Descriptor,
