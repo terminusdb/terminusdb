@@ -16,6 +16,7 @@
 :- use_module(jsonld).
 
 :- use_module(library(sort)).
+:- use_module(core(api)).
 :- use_module(core(triple)).
 :- use_module(core(util)).
 :- use_module(global_prefixes).
