@@ -667,25 +667,10 @@ json_type_to_woql_ast('Source',JSON,WOQL,_Path) :-
     (   _{post: Resource} :< JSON
     ->  atom_string(R,Resource),
         WOQL = post(R)
-    ;   _{file: Resource} :< JSON
-    ->  atom_string(R,Resource),
-        WOQL = file(R)
     ;   _{url: Resource} :< JSON
     ->  atom_string(R,Resource),
         WOQL = remote(R)
     ).
-json_type_to_woql_ast('Put',JSON,WOQL,Path) :-
-    _{columns : Header,
-      query : Query,
-      resource : Resource
-     } :< JSON,
-    json_to_woql_ast(Header,WHeader,[columns
-                                     |Path]),
-    json_to_woql_ast(Query,WQuery,[query
-                                   |Path]),
-    json_to_woql_ast(Resource,WResource,[resource
-                                         |Path]),
-    WOQL = put(WHeader,WQuery,WResource).
 json_type_to_woql_ast('LexicalKey',JSON,WOQL,Path) :-
     _{base : Base,
       key_list : Key,
