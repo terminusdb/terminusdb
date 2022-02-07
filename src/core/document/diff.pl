@@ -274,7 +274,7 @@ create_patch([deleted|Operations],[Head|List1],List2,Patch) :-
 lcs_list_diff(Before,After,_Keep,Patch,_State,Cost,Cost) :-
     hash_terms(Before,Before_Hash),
     hash_terms(After,After_Hash),
-    lcs:list_diff(Before_Hash,After_Hash,Changed),
+    '$lcs':list_diff(Before_Hash,After_Hash,Changed),
     create_patch(Changed,Before,After,Patch).
 
 :- begin_tests(simple_diff).
