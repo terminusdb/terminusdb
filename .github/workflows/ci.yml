@@ -81,7 +81,7 @@ jobs:
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
           docker run --name terminusdb -v $(pwd)/pl_lint.pl:/app/pl_lint.pl $DOCKER_IMAGE_NAME:local \
-          swipl -f src/load_paths.pl /app/pl_lint.pl
+            swipl -f src/load_paths.pl /app/pl_lint.pl
 
   # Unit tests
   unit_tests:
