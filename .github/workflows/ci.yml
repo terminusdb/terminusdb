@@ -178,6 +178,27 @@ jobs:
              docker push ${IMAGE_ID}:latest
           fi
 
+  trigger_enterprise_build:
+    runs-on: ubuntu-latest
+    needs: [push_docker]
+    if: |
+      github.repository == 'terminusdb/terminusdb' &&
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main'
+      )
+
+    steps:
+      - name: Deploy Stage
+        uses: actions/github-script@v5
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+            '${{ secrets.ENTERPRISE_REPO_OWNER }}',
+            '${{ secrets.ENTERPRISE_REPO }}',
+            'workflows/ci.yml',
+            'main',
+            });
   deploy:
     runs-on: ubuntu-latest
     needs: [push_docker]
