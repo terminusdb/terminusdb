@@ -1,5 +1,9 @@
 :- module('document/patch',
-          [simple_patch/3]).
+          [
+              simple_patch/3,
+              diff_op/2,
+              get_dict_or_null/3
+          ]).
 
 :- use_module(core(util)).
 :- use_module(core('util/tables')).
@@ -24,6 +28,7 @@ simple_patch(Diff,Before,After) :-
     maplist([D,B,A]>>simple_patch(D,B,A), Diff, Before, After).
 simple_patch(Diff,Before,After) :-
     diff_op(Diff,Op),
+    !,
     simple_op_diff_value(Op, Diff, Before, After).
 simple_patch(Before,Before,Before).
 

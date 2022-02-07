@@ -5,31 +5,50 @@ SWIPL=LANG=C.UTF-8 $(SWIPL_DIR)swipl
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
 TARGET=terminusdb
+ENTERPRISE=false
 
-RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/src/ -type f -name '*.rs')
+RUST_SOURCE_DIR := src/rust
+RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs')
 PROLOG_FILES = $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 
 ifeq ($(shell uname), Darwin)
-	RUST_LIB_NAME := librust.dylib
+	RUST_LIB_NAME := libterminusdb_dylib.dylib
+	RUST_LIB_TARGET_NAME := librust.dylib
 else
-	RUST_LIB_NAME := librust.so
+	RUST_LIB_NAME := libterminusdb_dylib.so
+	RUST_LIB_TARGET_NAME := librust.so
 endif
 
 RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
-RUST_TARGET:=src/rust/$(RUST_LIB_NAME)
+ENTERPRISE_RUST_LIBRARY_FILE:=../terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
+RUST_TARGET:=src/rust/$(RUST_LIB_TARGET_NAME)
 
 ################################################################################
 
 # Build the binary (default).
-.PHONY: bin
-bin: $(TARGET)
+.PHONY: community
+community: $(TARGET)
+
+.PHONY: enterprise
+enterprise: PROLOG_FILES += $(shell find ../terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+enterprise: RUST_FILES += ../terminusdb-enterprise/rust/Cargo.toml ..//terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/src/ -type f -name '*.rs')
+enterprise: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
+enterprise: RUST_SOURCE_DIR := ../terminusdb-enterprise/rust
+enterprise: ENTERPRISE := true
+enterprise: $(TARGET)
 
 # Build the binary and the documentation.
 .PHONY: all
-all: bin docs
+all: community docs
 
 .PHONY: module
 module: $(RUST_TARGET)
+
+.PHONY: enterprise-module
+enterprise-module: RUST_FILES += ../terminusdb-enterprise/rust/Cargo.toml ..//terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/src/ -type f -name '*.rs')
+enterprise-module: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
+enterprise-module: RUST_SOURCE_DIR := ../terminusdb-enterprise/rust
+enterprise-module: $(RUST_TARGET)
 
 # Build a debug version of the binary.
 .PHONY: debug
@@ -43,10 +62,20 @@ i: $(RUST_TARGET)
 
 # Remove the binary.
 .PHONY: clean
-clean:
-	rm -f $(TARGET)
-	rm -f $(RUST_TARGET)
+clean: shallow-clean
 	cd src/rust && cargo clean
+
+.PHONY: enterprise-clean
+enterprise-clean: shallow-clean
+	cd ../terminusdb-enterprise/rust && cargo clean
+
+.PHONY: module-clean
+module-clean:
+	rm -f $(RUST_TARGET)
+
+.PHONY: shallow-clean
+shallow-clean: module-clean
+	rm -f $(TARGET)
 
 # Build the documentation.
 .PHONY: docs
@@ -62,12 +91,12 @@ docs-clean:
 $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
-	$(SWIPL) -t 'main,halt.' -O -q -f src/bootstrap.pl 2>&1 | \
+	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -O -q -f src/bootstrap.pl 2>&1 | \
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
 $(RUST_TARGET): $(RUST_FILES)
-	cd src/rust && cargo build --release
+	cd $(RUST_SOURCE_DIR) && cargo build --release
 	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
 
 # Create input for `ronn` from a template and the `terminusdb` help text.

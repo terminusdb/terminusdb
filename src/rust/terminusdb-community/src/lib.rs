@@ -1,16 +1,16 @@
-use swipl::prelude::*;
 use lcs;
+use swipl::prelude::*;
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
     /// module. This should go away as soon as some real predicates
     /// are added here.
-    #[module("rustnative")]
+    #[module("$rustnative")]
     semidet fn hello(_context, term) {
         term.unify("Hello world")
     }
 
-    #[module("lcs")]
+    #[module("$lcs")]
     semidet fn list_diff(_context, list1_term, list2_term, diff) {
         let list1: Vec<Atom> = list1_term.get()?;
         let list2: Vec<Atom> = list2_term.get()?;
@@ -35,7 +35,6 @@ predicates! {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn install() {
+pub fn install() {
     register_list_diff();
 }
