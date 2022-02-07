@@ -1,3 +1,13 @@
+# TerminusDB Server v10.0.16 Beta Release Notes
+## Enhancements
++ Patch and diff api endpoints
++ Multi-dimensional arrays
++ Data version header is now returned and accepted
++ Various improvements to error messages
+
+## Bug fixes
++ Id capture did not work properly with transaction retries
+
 # TerminusDB Server v10.0.15 Beta Release Notes
 ## Bug fixes
 + id capture did not work with document arrays
