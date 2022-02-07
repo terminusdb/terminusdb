@@ -997,7 +997,8 @@ uri_encoded_string(Component, Value, Encoded_String) :-
     uri_encoded(Component, Value, Encoded),
     atom_string(Encoded, Encoded_String).
 
-
+% This predicate is copied from library(error) to avoid using a private predicate.
+% It can be found in the file library/error.pl inside the SWIPL directory.
 text(X) :-
     (   atom(X)
     ;   string(X)
