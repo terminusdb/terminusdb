@@ -7054,7 +7054,8 @@ test(diamond_ok,
                 left_face:json{'@class':'Left','@type':"Set"},
                 right_face:json{'@class':'Right','@type':"List"},
                 thing:'xsd:string',
-                top_face:json{'@class':'Top','@type':"Array"}
+                top_face:json{'@class':'Top','@type':"Array",
+                              '@dimensions':1}
             }.
 
 test(extract_bottom,
@@ -7075,7 +7076,8 @@ test(extract_bottom,
                 '@inherits':['Left','Right'],
                 '@type':'Class',
                 top_face:json{'@class':'Top',
-                              '@type':"Array"}}.
+                              '@type':"Array",
+                              '@dimensions':1}}.
 
 % NOTE: We need to check diamond properties at schema creation time
 schema5('
