@@ -9820,29 +9820,7 @@ geojson_point_schema('
   "coordinates" : {"@type":"Array",
                    "@dimensions" : 2,
                    "@class": "xsd:decimal"}}
-
-{ "@type": "Class",
-  "@id": "Spreadsheet",
-  "sheets" : {"@type":"Set",
-              "@class": "Sheet"}}
-
-{ "@type": "Class",
-  "@id": "Sheet",
-  "@key": { "@fields": [ "index" ], "@type": "Lexical" },
-  "@subdocument" : [],
-  "index" : "xsd:string",
-  "cells" : {"@type":"Array",
-             "@dimensions":2,
-             "@class":"Cell"}}
-
-{ "@type": "Class",
-  "@id": "Cell",
-  "@key": { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "value" : "xsd:string" }
-
 ').
-
 
 test(just_a_table,
      [setup((setup_temp_store(State),
@@ -9891,10 +9869,36 @@ test(geojson_point,
                       coordinates:[[100.0,0.0],[101.0,1.0]],
                       type:'MultiPoint'}.
 
+spreadsheet_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Spreadsheet",
+  "sheets" : {"@type":"Set",
+              "@class": "Sheet"}}
+
+{ "@type": "Class",
+  "@id": "Sheet",
+  "@key": { "@fields": [ "index" ], "@type": "Lexical" },
+  "@subdocument" : [],
+  "index" : "xsd:string",
+  "cells" : {"@type":"Array",
+             "@dimensions":2,
+             "@class":"Cell"}}
+
+{ "@type": "Class",
+  "@id": "Cell",
+  "@key": { "@type" : "ValueHash" },
+  "@subdocument" : [],
+  "value" : "xsd:string" }
+').
+
 test(spreadsheet,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
-             write_schema(geojson_point_schema,Desc)
+             write_schema(spreadsheet_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
