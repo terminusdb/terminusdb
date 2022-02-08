@@ -169,6 +169,10 @@ get_all_path_values(JSON,Path_Values) :-
 % TODO: Arrays
 get_value([], []) :-
     !.
+get_value(List, Elt) :-
+    is_list(List),
+    !,
+    member(Elt,List).
 get_value(Elaborated, Value) :-
     is_dict(Elaborated),
     get_dict('@type', Elaborated, "@id"),
@@ -659,17 +663,10 @@ json_assign_ids(DB,Context,JSON,Path) :-
             ),
             Values).
 json_assign_ids(DB,Context,JSON,Path) :-
-    get_dict('@container',JSON, "@table"),
+    get_dict('@container',JSON, "@array"),
     !,
     get_dict('@value', JSON, Values),
-    maplist({DB,Context,Path}/[Value_List]>>(
-                maplist({DB,Context,Path}/[Value]>>(
-                            json_assign_ids(DB, Context, Value, Path)
-                        ),
-                        Value_List
-                       )
-            ),
-            Values).
+    array_assign_ids(Values,DB,Context,Path).
 json_assign_ids(DB,Context,JSON,Path) :-
     get_dict('@container',JSON, _),
     !,
@@ -688,6 +685,21 @@ json_assign_ids(DB,Context,JSON,Path) :-
             Values,
             Numlist).
 json_assign_ids(_DB,_Context,_JSON,_Path).
+
+array_assign_ids(Values,DB,Context,Path) :-
+    length(Values, Value_Len),
+    Max_Index is Value_Len - 1,
+    numlist(0, Max_Index, Numlist),
+    array_assign_ids(Values,Numlist,DB,Context,Path).
+
+array_assign_ids([], [], _, _, _).
+array_assign_ids([H|T], [I|Idx], DB, Context, Path) :-
+    New_Path=[index(I)|Path],
+    (   is_list(H)
+    ->  array_assign_ids(H,DB,Context,New_Path)
+    ;   json_assign_ids(DB,Context,H,New_Path)
+    ),
+    array_assign_ids(T,Idx,DB,Context,Path).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -9798,6 +9810,26 @@ geojson_point_schema('
                    "@dimensions" : 2,
                    "@class": "xsd:decimal"}}
 
+{ "@type": "Class",
+  "@id": "Spreadsheet",
+  "sheets" : {"@type":"Set",
+              "@class": "Sheet"}}
+
+{ "@type": "Class",
+  "@id": "Sheet",
+  "@key": { "@fields": [ "index" ], "@type": "Lexical" },
+  "@subdocument" : [],
+  "index" : "xsd:string",
+  "cells" : {"@type":"Array",
+             "@dimensions":2,
+             "@class":"Cell"}}
+
+{ "@type": "Class",
+  "@id": "Cell",
+  "@key": { "@type" : "ValueHash" },
+  "@subdocument" : [],
+  "value" : "xsd:string" }
+
 ').
 
 
@@ -9841,11 +9873,61 @@ test(geojson_point,
                               ID
                           )
                          ),
+    test_utils:print_all_triples(Desc),
     open_descriptor(Desc, New_DB),
     get_document(New_DB, ID, Fresh_JSON),
     Fresh_JSON = json{'@id':'MultiPoint/MyMultiPoint',
                       '@type':'MultiPoint',
                       coordinates:[[100.0,0.0],[101.0,1.0]],
                       type:'MultiPoint'}.
+
+test(spreadsheet,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(geojson_point_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % tspy('document/json':insert_document),
+    with_test_transaction(Desc,
+                          C1,
+                          insert_document(
+                              C1,
+                              _{ '@type': "Spreadsheet",
+                                 '@id': "Spreadsheet/My_Spreadsheet",
+                                 sheets: [
+                                     _{ '@type' : "Sheet",
+                                        index : "1",
+                                        cells : [
+                                            [
+                                                _{ '@type' : "Cell",
+                                                   value : "A"
+                                                 },
+                                                _{ '@type' : "Cell",
+                                                   value : "B"
+                                                }
+
+                                            ]
+                                        ]}
+
+                                 ]},
+                              ID
+                          )
+                         ),
+    test_utils:print_all_triples(Desc),
+    open_descriptor(Desc, New_DB),
+    get_document(New_DB, ID, Fresh_JSON),
+    Fresh_JSON =
+    json{'@id':'Spreadsheet/My_Spreadsheet',
+         '@type':'Spreadsheet',
+         sheets:
+         [json{'@id':'Spreadsheet/My_Spreadsheet/sheets/Sheet/1',
+               '@type':'Sheet',
+               cells:
+               [[json{'@id':'Cell/d3b1acf9b81f8781fb2c42e59f9eb482746a444c7793e3591fc526d14f850ab0',
+                      '@type':'Cell',value:"A"},
+                 json{'@id':'Cell/f77864fbb7e9824adc461725159bd4b318bbcd98c064a0057f673f3411c81810',
+                      '@type':'Cell',value:"B"}]],
+               index:"1"}]}.
 
 :- end_tests(json_tables).
