@@ -13,7 +13,6 @@
               context_to_parent_transaction/2,
               context_extend_prefixes/3,
               context_default_prefixes/2,
-              empty_context/1,
               query_default_collection/2,
               query_default_write_graph/2,
               query_default_schema_write_graph/2,
