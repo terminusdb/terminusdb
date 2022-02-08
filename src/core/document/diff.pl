@@ -15,6 +15,10 @@
 :- use_module(library(thread)).
 :- use_module(library(aggregate)).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
+
 :- multifile table_diff/7.
 
 simple_diff(Before,After,Keep,Diff) :-
