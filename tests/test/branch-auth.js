@@ -54,6 +54,21 @@ describe('branch', function () {
     // branch is created
   })
 
+  it('fails on creating a branch that already exists', async function () {
+    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
+    const newBranch = util.randomString()
+    await agent.post(`${path}/local/branch/${newBranch}`)
+      .send({
+        origin: `/${orgName}/${dbName}/local/branch/main`,
+      }).then(branch.verifySuccess)
+    const r = await agent.post(`${path}/local/branch/${newBranch}`)
+      .send({
+        origin: `/${orgName}/${dbName}/local/branch/main`,
+      }).then(branch.verifyFailure)
+    expect(r.body['api:error']['@type']).to.equal('api:BranchExistsError')
+    expect(r.body['api:error']['api:branch_name']).to.equal(newBranch)
+  })
+
   it('fails on unknown origin database', async function () {
     const { path, orgName, dbName } = endpoint.branch(agent.defaults())
     const originDbName = 'origin-' + dbName
