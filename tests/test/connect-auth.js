@@ -11,6 +11,6 @@ describe('connect-auth', function () {
   it('responds using the insecure header', async function () {
     const r = await agent.get('/api/')
     expect(r.status).to.equal(200)
-    expect(r.body).to.be.an('array').that.has.lengthOf(0)
+    expect(r.body).to.be.an('array')
   })
 })
