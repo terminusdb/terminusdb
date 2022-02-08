@@ -1,6 +1,7 @@
 :- module('document/diff',
           [simple_diff/4,
            start_state/1,
+           patch_cost/2,
            best_cost/2,
            best_diff/2]).
 
@@ -160,16 +161,16 @@ deep_list_diff_base([],After,_Keep,Diff,State,Cost,New_Cost) :-
     Diff = _{ '@op' : "SwapList",
               '@before' : [],
               '@after' : After },
-    length(After,Length),
-    New_Cost is Cost + Length + 1,
+    json_size(After,Size),
+    New_Cost is Cost + Size + 1,
     cost_bounded(State,New_Cost).
 deep_list_diff_base(Before,[],_Keep,Diff,State,Cost,New_Cost) :-
     !,
     Diff = _{ '@op' : "SwapList",
               '@before' : Before,
               '@after' : [] },
-    length(Before,Length),
-    New_Cost is Cost + Length + 1,
+    json_size(Before,Size),
+    New_Cost is Cost + Size + 1,
     cost_bounded(State,New_Cost).
 deep_list_diff_base(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     length(Before, Length),
@@ -319,8 +320,9 @@ patch_cost(Patch,Cost) :-
     is_list(Patch),
     !,
     aggregate(sum(C),
-              (   member(P,Patch),
-                  patch_cost(P, C)),
+              P^(   C = 0
+                ;   member(P,Patch),
+                    patch_cost(P, C)),
               Cost).
 patch_cost(_Patch,1).
     % This is an explicit copy.
@@ -331,7 +333,7 @@ patch_cost_op('SwapValue',Patch,Cost) :-
     get_dict_or_null('@after', Patch, After),
     json_size(Before,Before_Size),
     json_size(After,After_Size),
-    Cost is abs(Before_Size - After_Size) + 2.
+    Cost is Before_Size + After_Size + 1.
 patch_cost_op('ForceValue',_Patch,1).
 patch_cost_op('CopyList',Patch,Cost) :-
     get_dict('@rest', Patch, Rest),
@@ -344,13 +346,14 @@ patch_cost_op('SwapList',Patch,Cost) :-
     patch_cost(Rest,Sub_Cost),
     json_size(Before,Before_Size),
     json_size(After,After_Size),
-    Cost is abs(Before_Size - After_Size) + Sub_Cost + 2.
+    Cost is Before_Size + After_Size + Sub_Cost + 1.
 patch_cost_op('PatchList',Patch,Cost) :-
     get_dict('@patch', Patch, Sub_Patch),
     get_dict('@rest', Patch, Rest),
     aggregate(sum(C),
-              (   member(P,Sub_Patch),
-                  patch_cost(P,C)),
+              P^(   C = 0
+                ;   member(P,Sub_Patch),
+                    patch_cost(P,C)),
               List_Cost),
     patch_cost(Rest,Rest_Cost),
     Cost is Rest_Cost + List_Cost + 2.
@@ -374,7 +377,7 @@ patch_cost_op('SwapTable', Patch, Cost) :-
     patch_cost(BL_Patch, BL_Cost),
     patch_cost(TR_Patch, TR_Cost),
     patch_cost(BR_Patch, BR_Cost),
-    Cost is 1 + abs(Size_Before - Size_After) + BL_Cost + TR_Cost + BR_Cost.
+    Cost is 1 + Size_Before + Size_After + BL_Cost + TR_Cost + BR_Cost.
 patch_cost_op('PatchTable', Patch, Cost) :-
     get_dict('@top_left', Patch, TL_Patch),
     get_dict('@bottom_left', Patch, BL_Patch),
@@ -391,19 +394,21 @@ patch_cost_op('ModifyTable',Patch,Cost) :-
     get_dict(inserts,Patch,Inserts),
     get_dict(deletes,Patch,Deletes),
     length(Copies, Copy_Cost),
-    length(Moves, Move_Length),
-    Move_Cost is 2 * Move_Length,
+    length(Moves, Move_Cost),
+
     aggregate(
         sum(S),
-        (   member(I,Inserts),
-            get_dict('@value', I, Value),
-            json_size(Value,S)),
+        I^Value^(   S = 0
+                ;   member(I,Inserts),
+                    get_dict('@value', I, Value),
+                    json_size(Value,S)),
         Insert_Cost),
     aggregate(
         sum(S),
-        (   member(D,Deletes),
-            get_dict('@value', D, Value),
-            json_size(Value,S)),
+        D^Value^(   S = 0
+                ;   member(D,Deletes),
+                    get_dict('@value', D, Value),
+                    json_size(Value,S)),
         Delete_Cost),
     Cost is Copy_Cost + Move_Cost + Insert_Cost + Delete_Cost.
 patch_cost_op('KeepTable',_Patch,1).
@@ -412,23 +417,24 @@ json_size(Dict,Size) :-
     is_dict(Dict),
     !,
     aggregate(sum(S),
-              (   dict_keys(Dict,Keys),
-                  member(K,Keys),
-                  get_dict(K,Dict,Val),
-                  json_size(Val,S)
-              ),
+              K^Val^Sub^(   S = 0
+                        ;   dict_keys(Dict,Keys),
+                            member(K,Keys),
+                            get_dict(K,Dict,Val),
+                            json_size(Val,Sub),
+                            S is Sub + 1
+                        ),
               Size).
 json_size(List,Size) :-
     is_list(List),
     !,
-    (   List = []
-    ->  Size = 0
-    ;   aggregate(sum(S),
-                  (   member(O,List),
-                      json_size(O,S)
-                  ),
-                  Size)
-    ).
+    aggregate(sum(S),
+              O^Sub^(   S = 0
+                    ;   member(O,List),
+                        json_size(O,Sub),
+                        S is Sub + 1
+                    ),
+              Size).
 json_size(_,1).
 
 :- begin_tests(simple_diff).
