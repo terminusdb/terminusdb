@@ -34,8 +34,10 @@ describe('branch', function () {
     await agent.post(`${path}/local/branch/${newBranch}`)
       .send({
         origin: `/${orgName}/${dbName}/local/branch/main`,
-        prefixes:  { doc: "https://terminushub.com/document",
-                     scm: "https://terminushub.com/schema"}
+        prefixes: {
+          doc: 'https://terminushub.com/document',
+          scm: 'https://terminushub.com/schema',
+        },
       }).then(branch.verifySuccess)
     // It would be nice if it actually verified with a query that the
     // branch is created
