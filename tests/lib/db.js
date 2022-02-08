@@ -6,6 +6,7 @@ function create (agent, path, params) {
   const comment = params.string('comment', 'default comment')
   const label = params.string('label', 'default label')
   const prefixes = params.object('prefixes', {})
+  const schema = params.boolean('schema', true)
   params.assertEmpty()
 
   return agent
@@ -14,6 +15,7 @@ function create (agent, path, params) {
       comment: comment,
       label: label,
       prefixes: prefixes,
+      schema,
     })
 }
 

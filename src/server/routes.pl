@@ -727,67 +727,6 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             reply_json_dict(Response)
         )).
 
-% woql_handler Unit Tests
-
-:- begin_tests(woql_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(branch_db, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema(admin,test),
-    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
-
-    % TODO: We need branches to pull in the correct 'doc:' prefix.
-    Query0 =
-    _{'@type' : "AddTriple",
-      subject: _{ '@type' : "NodeValue",
-                  node: "test_subject"},
-      'predicate' : _{ '@type' : "NodeValue",
-                       node: "test_predicate"},
-      'object' : _{ '@type' : "Value",
-                    node: "test_object"}
-     },
-    * json_write_dict(current_output,Query0,[]),
-    Commit = commit_info{ author : 'The Gavinator',
-                          message : 'Peace and goodwill' },
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{'query' : Query0,
-                     'commit_info' : Commit }),
-              JSON0,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    _{bindings : [_{}], inserts: 1, deletes : 0} :< JSON0,
-
-    % Now query the insert...
-    Query1 =
-    _{'@type' : "Triple",
-      subject: _{'@type' : "NodeValue",
-                 variable: "Subject"},
-      predicate: _{'@type' : "NodeValue",
-                   variable: "Predicate"},
-      object: _{'@type' : "Value",
-                variable: "Object"}},
-
-    http_post(URI,
-              json(_{query : Query1}),
-              JSON1,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    (   _{'bindings' : L} :< JSON1
-    ->  L = [_{'Object':"test_object",
-               'Predicate':"@schema:test_predicate",
-               'Subject':"test_subject"}]
-    ).
-
-:- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
