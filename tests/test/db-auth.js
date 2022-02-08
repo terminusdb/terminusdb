@@ -23,6 +23,16 @@ describe('db-auth', function () {
     db.verifyDeleteSuccess(removeRequest)
   })
 
+  it('fails creating a new database with bad JSON payload', async function () {
+    const dbName = util.randomString()
+    const { path } = endpoint.db({ orgName: agent.userName, dbName })
+    const badJSON = "{X{'''"
+    const r = await agent.post(path).set('Content-Type', 'application/json').send(badJSON)
+    expect(r.body['api:status']).to.equal('api:failure')
+    expect(r.body['api:message']).to.equal('Submitted object was not valid JSON')
+    expect(r.body['system:object']).to.equal(badJSON)
+  })
+
   it('fails when creating a new database in non-existing organization', async function () {
     const { dbName } = endpoint.db(agent.defaults())
     const r = await db.create(agent, endpoint.db({ orgName: 'NonExistingOrganization', dbName }).path)

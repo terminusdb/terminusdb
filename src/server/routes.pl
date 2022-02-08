@@ -386,20 +386,6 @@ test(db_auth_test, [
                    authorization(basic('TERMINUS_QA', "password"))]),
     _{'api:status' : "api:success"} :< In.
 
-test(bad_json, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    admin_pass(Key),
-    Bad_JSON = "{\"x\"",
-    http_post(URI, bytes('application/json', Bad_JSON),
-              Return, [status_code(_),
-                       json_object(dict),
-                       authorization(basic(admin, Key))]),
-    Return = _{'api:message':"Submitted object was not valid JSON",
-               'api:status':"api:failure",'system:object':Bad_JSON}.
-
 :- end_tests(db_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%

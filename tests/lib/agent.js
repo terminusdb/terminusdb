@@ -78,6 +78,10 @@ class Agent {
   delete (path) {
     return this.agent.delete(path)
   }
+
+  set (header, value) {
+    return this.agent.set(header, value)
+  }
 }
 
 // This is an agent plugin that prints the request and response to stderr when
