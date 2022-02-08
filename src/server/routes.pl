@@ -680,44 +680,6 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
     write_cors_headers(Request),
     reply_json(Frame).
 
-:- begin_tests(frame_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(get_frame, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/schema/_system'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ type : "User"
-                    }),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               request_header('X-HTTP-Method-Override'='GET')
-              ]),
-
-    JSON =
-    _{'@documentation':
-      _{'@comment':"A database user.",
-        '@properties':
-        _{capability:"A set of capabilities which the user has access to.",
-          key_hash:"An optional key hash for authentication.",
-          name:"The users name."}},
-      '@key':_{'@fields':["name"],'@type':"Lexical"},
-      '@type':"Class",
-      capability:_{'@class':"Capability",'@type':"Set"},
-      key_hash:_{'@class':"xsd:string",'@type':"Optional"},
-      name:"xsd:string"}.
-
-
-:- end_tests(frame_endpoint).
-
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
 :- http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),

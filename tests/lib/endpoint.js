@@ -80,6 +80,12 @@ function documentSystem () {
   }
 }
 
+function frameSystem (params) {
+  return {
+    path: '/api/schema/_system',
+  }
+}
+
 function triples (params) {
   params = new Params(params)
   const graph = params.stringRequired('graph')
@@ -135,6 +141,7 @@ module.exports = {
   documentCommits,
   documentMeta,
   documentSystem,
+  frameSystem,
   triples,
   patch,
   remote,
