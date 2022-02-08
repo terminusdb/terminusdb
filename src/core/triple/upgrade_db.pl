@@ -48,6 +48,7 @@
 
 :- use_module(library(pcre)).
 :- use_module(library(lists)).
+:- use_module(library(shell)).
 
 
 /**

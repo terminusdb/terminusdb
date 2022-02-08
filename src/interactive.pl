@@ -12,6 +12,7 @@
 :- endif.
 
 :- use_module(library(main)).
+:- use_module(library(settings)).
 :- initialization(main).
 
 initialise_hup :-
@@ -48,6 +49,8 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
+
+:- use_module(config(terminus_config)).
 
 :- use_module(library(plunit)).
 

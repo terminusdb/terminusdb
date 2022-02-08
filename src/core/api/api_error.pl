@@ -1894,29 +1894,6 @@ status_cli_code('api:server_error',131).
 
 :- use_module(core(query/json_woql)).
 
-test(size_syntax,[]) :-
-
-    catch(
-        (   Query = _{ '@type' : "http://terminusdb.com/schema/woql#Size",
-                       'http://terminusdb.com/schema/woql#resource' : 1,
-                       'http://terminusdb.com/schema/woql#size' : 2
-                     },
-            json_woql:json_to_woql_ast(Query, _, [])
-        ),
-        E,
-        once(api_error_jsonld(woql,E,JSON))
-    ),
-
-    JSON = _{'@type':'api:WoqlErrorResponse',
-             'api:error': _{'@type':'vio:WOQLSyntaxError',
-                            'vio:path':[],
-                            'vio:query': _{'@type':"http://terminusdb.com/schema/woql#Size",
-                                           'http://terminusdb.com/schema/woql#resource':1,
-                                           'http://terminusdb.com/schema/woql#size':2}},
-             'api:message':"Not well formed WOQL JSON-LD",
-             'api:status':'api:failure'}.
-
-
 test(bad_schema_document, []) :-
     api_error_jsonld(get_documents,
                      error(unable_to_elaborate_schema_document(_{'@type' : 'Garbage'}),_),

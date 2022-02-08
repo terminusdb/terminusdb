@@ -2,7 +2,9 @@
               bootstrap_files/0,
               initialize_flags/0,
               initialize_database/2,
-              initialize_database_with_store/2
+              initialize_database_with_store/2,
+              index_template/1,
+              world_ontology_json/1
           ]).
 
 :- use_module(core(triple)).
@@ -10,6 +12,8 @@
 :- use_module(core(document)).
 :- use_module(core(query), [expand/2, default_prefixes/1]).
 :- use_module(core(transaction), [open_descriptor/2]).
+
+:- use_module(config(terminus_config)).
 
 :- use_module(library(semweb/turtle)).
 :- use_module(library(terminus_store)).
@@ -19,14 +23,14 @@
 :- use_module(library(plunit)).
 :- use_module(library(filesex)).
 :- use_module(library(crypto)).
-
+:- use_module(library(prolog_pack), [pack_property/2]).
 /**
  * initialize_flags is det.
  *
  * Initialize flags shared by all main predicates.
  */
 initialize_flags :-
-    (   pack:pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
+    (   pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
     ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
     ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
         halt(1)
@@ -60,6 +64,7 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 :- dynamic repo_schema/1.
 :- dynamic layer_schema/1.
 :- dynamic ref_schema/1.
+:- dynamic woql_schema/1.
 :- dynamic index_template/1.
 :- dynamic world_ontology_json/1.
 bootstrap_files :-
@@ -194,47 +199,47 @@ initialize_database_with_store(Key, Store, Force) :-
 :- begin_tests(env_vars).
 
 test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED is not set",
-     [ setup(config:clear_check_insecure_user_header_enabled),
-       cleanup(config:clear_check_insecure_user_header_enabled),
+     [ setup(clear_check_insecure_user_header_enabled),
+       cleanup(clear_check_insecure_user_header_enabled),
        true(Enabled = false)
      ]) :-
-    config:check_insecure_user_header_enabled(Enabled).
+    check_insecure_user_header_enabled(Enabled).
 
 test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true",
      [ setup((
-           config:clear_check_insecure_user_header_enabled,
+           clear_check_insecure_user_header_enabled,
            setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
        )),
        cleanup((
-           config:clear_check_insecure_user_header_enabled,
+           clear_check_insecure_user_header_enabled,
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'))
        ),
        true(Enabled = true)
      ]) :-
-    config:check_insecure_user_header_enabled(Enabled).
+    check_insecure_user_header_enabled(Enabled).
 
 test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED has a bad value",
      [ setup((
-           config:clear_check_insecure_user_header_enabled,
+           clear_check_insecure_user_header_enabled,
            setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', 42)
        )),
        cleanup((
-           config:clear_check_insecure_user_header_enabled,
+           clear_check_insecure_user_header_enabled,
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
        )),
        throws(error(bad_env_var_value('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', '42'), _))
      ]) :-
-    config:check_insecure_user_header_enabled(_).
+    check_insecure_user_header_enabled(_).
 
 test("TERMINUSDB_INSECURE_USER_HEADER is not set",
      [ setup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
        )),
        cleanup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
        )),
        throws(error(missing_env_var('TERMINUSDB_INSECURE_USER_HEADER'), _))
@@ -243,13 +248,13 @@ test("TERMINUSDB_INSECURE_USER_HEADER is not set",
 
 test("TERMINUSDB_INSECURE_USER_HEADER is missing",
      [ setup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
        )),
        cleanup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
        )),
        throws(error(missing_env_var('TERMINUSDB_INSECURE_USER_HEADER'), _))
@@ -258,14 +263,14 @@ test("TERMINUSDB_INSECURE_USER_HEADER is missing",
 
 test("TERMINUSDB_INSECURE_USER_HEADER has a bad value",
      [ setup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
            setenv('TERMINUSDB_INSECURE_USER_HEADER', '')
        )),
        cleanup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'),
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER')
        )),
@@ -275,14 +280,14 @@ test("TERMINUSDB_INSECURE_USER_HEADER has a bad value",
 
 test("TERMINUSDB_INSECURE_USER_HEADER=TerminusDB-5",
      [ setup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
            setenv('TERMINUSDB_INSECURE_USER_HEADER', 'TerminusDB-5')
        )),
        cleanup((
-           config:clear_check_insecure_user_header_enabled,
-           config:clear_insecure_user_header_key,
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'),
            unsetenv('TERMINUSDB_INSECURE_USER_HEADER')
        )),

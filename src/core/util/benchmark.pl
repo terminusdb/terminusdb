@@ -10,6 +10,8 @@
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
+:- use_module(library(yall)).
+:- use_module(library(prolog_stack)).
 
 benchmark_start(Path) :-
     \+ is_stream(Path),

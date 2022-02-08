@@ -16,6 +16,7 @@
 :- use_module(jsonld).
 
 :- use_module(library(sort)).
+:- use_module(core(api)).
 :- use_module(core(triple)).
 :- use_module(core(util)).
 :- use_module(global_prefixes).
@@ -1182,6 +1183,28 @@ woql_element_error_message(
     format(string(Message),'Not a well formed arithmetic expression: ~q',Element).
 
 :- begin_tests(woql_jsonld).
+
+test(size_syntax,[]) :-
+
+    catch(
+        (   Query = _{ '@type' : "http://terminusdb.com/schema/woql#Size",
+                       'http://terminusdb.com/schema/woql#resource' : 1,
+                       'http://terminusdb.com/schema/woql#size' : 2
+                     },
+            json_to_woql_ast(Query, _, [])
+        ),
+        E,
+        once(api_error_jsonld(woql,E,JSON))
+    ),
+
+    JSON = _{'@type':'api:WoqlErrorResponse',
+             'api:error': _{'@type':'vio:WOQLSyntaxError',
+                            'vio:path':[],
+                            'vio:query': _{'@type':"http://terminusdb.com/schema/woql#Size",
+                                           'http://terminusdb.com/schema/woql#resource':1,
+                                           'http://terminusdb.com/schema/woql#size':2}},
+             'api:message':"Not well formed WOQL JSON-LD",
+             'api:status':'api:failure'}.
 
 test(not_a_query, []) :-
     JSON = _{'@type' : "And",

@@ -1,9 +1,11 @@
 :- module(api, [
               % init.pl
               bootstrap_files/0,
+	      index_template/1,
               initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2,
+              world_ontology_json/1,
 
               % db_delete.pl
               delete_db/5,
@@ -11,6 +13,7 @@
 
               % db_create.pl
               create_db/9,
+	      create_db_unfinalized/10,
               create_schema/3,
               create_ref_layer/1,
 
@@ -112,6 +115,7 @@
               unbundle/4,
 
               % api_document.pl
+              api_get_document/6,
               api_get_documents/11,
               api_get_documents_by_type/12,
               api_get_documents_by_query/13,
@@ -121,6 +125,7 @@
               api_delete_document/9,
               api_replace_documents/11,
               api_nuke_documents/8,
+              api_generate_document_ids/6,
 
               % api_user_organizations.pl
               user_organizations/3,

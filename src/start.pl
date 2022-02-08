@@ -11,7 +11,10 @@
 :- use_module(enterprise(init_enterprise)).
 :- endif.
 
+:- use_module(library(main)).
 :- initialization(main).
+
+:- use_module(library(settings)).
 
 initialise_hup :-
     (   current_prolog_flag(unix, true)
@@ -41,11 +44,14 @@ prolog:message(server_missing_config(BasePath)) -->
 :- use_module(server(routes)).
 :- use_module(server(main)).
 
+:- use_module(library(plunit)).
+
 % Plugins
 %:- use_module(plugins(registry)).
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
+:- use_module(config(terminus_config)).
 
 :- set_test_options([run(manual)]).
 

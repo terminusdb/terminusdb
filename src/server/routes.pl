@@ -19,6 +19,8 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 
+:- use_module(config(terminus_config)).
+
 % prolog stack print
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 
@@ -47,6 +49,7 @@
 :- use_module(library(http/json_convert)).
 :- use_module(library(http/http_stream)).
 :- use_module(library(url)).
+:- use_module(library(uri)).
 
 :- use_module(library(base64)).
 
@@ -497,12 +500,12 @@ test(db_force_delete_unfinalized_system_and_label, [
     organization_database_name("admin","foo",Label),
     triple_store(Store),
 
-    db_create:create_db_unfinalized(system_descriptor{},
-                                    Auth, "admin", "foo",
-                                    "dblabel", "db comment", false, true,
-                                    _{'@base' : "http://foo/",
-                                      '@schema' : "http://foo/s#"},
-                                    _),
+    create_db_unfinalized(system_descriptor{},
+                          Auth, "admin", "foo",
+                          "dblabel", "db comment", false, true,
+                         _{'@base' : "http://foo/",
+                          '@schema' : "http://foo/s#"},
+                         _),
     database_exists("admin", "foo"),
     safe_open_named_graph(Store, Label, _),
 
@@ -3456,7 +3459,7 @@ diff_handler(post, Request, System_DB, Auth) :-
  * console_handler(+Method,+Request) is det.
  */
 console_handler(get, _Request, _System_DB, _Auth) :-
-    api_init:index_template(Index),
+    index_template(Index),
     throw(http_reply(bytes('text/html', Index))).
 
 :- begin_tests(console_route).
