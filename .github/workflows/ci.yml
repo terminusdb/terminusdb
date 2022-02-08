@@ -75,7 +75,7 @@ jobs:
 
         # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
       - name: Download script
-        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.4/pl_lint.pl' > pl_lint.pl
+        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.5/pl_lint.pl' > pl_lint.pl
 
       - name: Run linter
         run: |
