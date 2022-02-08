@@ -2277,27 +2277,6 @@ test(create_branch_from_local_without_prefixes, [
 
     has_branch(Repository_Descriptor, "foo").
 
-test(create_branch_from_local_with_prefixes, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'/admin/test/local/branch/main',
-                     prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}
-                    }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    has_branch(Repository_Descriptor, "foo").
-
 test(create_branch_that_already_exists_error, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
