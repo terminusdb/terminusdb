@@ -9914,7 +9914,7 @@ test(spreadsheet,
                               ID
                           )
                          ),
-    test_utils:print_all_triples(Desc),
+
     open_descriptor(Desc, New_DB),
     get_document(New_DB, ID, Fresh_JSON),
     Fresh_JSON =
