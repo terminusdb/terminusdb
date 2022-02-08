@@ -54,6 +54,17 @@ describe('branch', function () {
     // branch is created
   })
 
+  it('succesfully delete empty branch', async function () {
+    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
+    const newBranch = util.randomString()
+    const newBranchPath = `${path}/local/branch/${newBranch}`
+    await agent.post(newBranchPath)
+          .send({
+            origin: `/${orgName}/${dbName}/local/branch/main`,
+          }).then(branch.verifySuccess)
+    await agent.delete(newBranchPath).then(branch.verifySuccess)
+  })
+
   it('fails on creating a branch that already exists', async function () {
     const { path, orgName, dbName } = endpoint.branch(agent.defaults())
     const newBranch = util.randomString()
