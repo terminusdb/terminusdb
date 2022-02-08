@@ -59,7 +59,9 @@ describe('db-auth', function () {
   })
 
   it('fails on database exists with not found', async function () {
-    const { path } = endpoint.db(agent.defaults())
+    const dbName = util.randomString()
+    const { orgName } = agent.defaults()
+    const { path } = endpoint.db({ orgName, dbName })
     const r = await agent
       .head(path)
       .query({ exists: true })
