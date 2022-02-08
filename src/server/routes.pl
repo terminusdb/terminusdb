@@ -2259,28 +2259,6 @@ test(create_empty_branch, [
 
     has_branch(Repository_Descriptor, "foo").
 
-test(create_branch_from_nonexisting_origin_error, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'/admin/test/local/branch/bar',
-                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               status_code(Status_Code)]),
-    Status_Code = 400,
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    \+ has_branch(Repository_Descriptor, "foo").
-
 test(create_branch_from_commit_graph_error, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
