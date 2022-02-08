@@ -59,9 +59,9 @@ describe('branch', function () {
     const newBranch = util.randomString()
     const newBranchPath = `${path}/local/branch/${newBranch}`
     await agent.post(newBranchPath)
-          .send({
-            origin: `/${orgName}/${dbName}/local/branch/main`,
-          }).then(branch.verifySuccess)
+      .send({
+        origin: `/${orgName}/${dbName}/local/branch/main`,
+      }).then(branch.verifySuccess)
     await agent.delete(newBranchPath).then(branch.verifySuccess)
   })
 
