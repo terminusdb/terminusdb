@@ -94,6 +94,44 @@ describe('woql-auth', function () {
         .then(document.verifyInsertSuccess)
     })
 
+    it('fails on wrong cast', async function () {
+      const insertDocumentQueryWithWrongCast = {
+        commit_info: { author: 'a', message: 'm' },
+        query: {
+          '@type': 'InsertDocument',
+          identifier: { '@type': 'NodeValue', node: randomType0 + '/0' },
+          document: {
+            '@type': 'Value',
+            dictionary: {
+              '@type': 'DictionaryTemplate',
+              data: [
+                {
+                  '@type': 'FieldValuePair',
+                  field: '@type',
+                  value: { '@type': 'Value', data: randomType0 },
+                },
+                {
+                  '@type': 'FieldValuePair',
+                  field: '@id',
+                  value: { '@type': 'Value', data: randomType0 + '/0' },
+                },
+                {
+                  '@type': 'FieldValuePair',
+                  field: 'something',
+                  value: {
+                    '@type': 'Value', data: { '@type': 'xsd:integer', '@value': 'waefwaefweaf' },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }
+      const r = await woql
+        .post(agent, woqlPath, insertDocumentQueryWithWrongCast)
+      expect(r.body['api:error']['@type']).to.equal('api:BadCast')
+    })
+
     it('fails InsertDocument without commit_info', async function () {
       const r = await woql
         .post(agent, woqlPath, anInsertDocumentQuery)

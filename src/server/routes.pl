@@ -839,48 +839,6 @@ test(branch_db, [
                'Subject':"test_subject"}]
     ).
 
-test(bad_cast, [
-         setup((setup_temp_server(State, Server),
-                create_db_with_test_schema("admin", "test"))),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-
-    Query0 =
-    _{'@type' : 'And',
-      and : [First_Insert,
-             Second_Insert]},
-
-    First_Insert =
-    _{ '@type' : "AddTriple",
-       subject: _{ '@type' : "NodeValue",
-                   node: "test_subject"},
-       predicate: _{ '@type' : "NodeValue",
-                     node: "rdf:type"},
-       object: _{ '@type' : "Value",
-                  node: "BS"}
-     },
-
-    Second_Insert =
-    _{ '@type' : "AddTriple",
-       subject: _{ '@type' : "NodeValue",
-                   node: "test_subject"},
-       predicate: _{ '@type' : "NodeValue",
-                     node: "rdf:label"},
-       object: _{ '@type' : "Value",
-                  data: _{ '@type' : "xsd:integer",
-                           '@value' : "asdf"}}},
-
-    admin_pass(Key),
-    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
-    http_post(URI,
-              json(_{query : Query0, all_witnesses: true}),
-              JSON0,
-              [json_object(dict),
-               status_code(_),
-               authorization(basic(admin,Key))]),
-    "api:BadCast" = (JSON0.'api:error'.'@type').
-
 :- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
