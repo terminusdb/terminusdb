@@ -43,6 +43,17 @@ describe('branch', function () {
     // branch is created
   })
 
+  it('succeeds on creating a branch without prefixes', async function () {
+    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
+    const newBranch = util.randomString()
+    await agent.post(`${path}/local/branch/${newBranch}`)
+      .send({
+        origin: `/${orgName}/${dbName}/local/branch/main`,
+      }).then(branch.verifySuccess)
+    // It would be nice if it actually verified with a query that the
+    // branch is created
+  })
+
   it('fails on unknown origin database', async function () {
     const { path, orgName, dbName } = endpoint.branch(agent.defaults())
     const originDbName = 'origin-' + dbName
