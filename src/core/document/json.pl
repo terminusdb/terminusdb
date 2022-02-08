@@ -169,10 +169,11 @@ get_all_path_values(JSON,Path_Values) :-
 % TODO: Arrays
 get_value([], []) :-
     !.
-get_value(List, Elt) :-
+get_value(List, Value) :-
     is_list(List),
     !,
-    member(Elt,List).
+    member(Elt,List),
+    get_value(Elt,Value).
 get_value(Elaborated, Value) :-
     is_dict(Elaborated),
     get_dict('@type', Elaborated, "@id"),
@@ -686,6 +687,8 @@ json_assign_ids(DB,Context,JSON,Path) :-
             Numlist).
 json_assign_ids(_DB,_Context,_JSON,_Path).
 
+array_assign_ids([],_,_,_) :-
+    !.
 array_assign_ids(Values,DB,Context,Path) :-
     length(Values, Value_Len),
     Max_Index is Value_Len - 1,
@@ -1528,6 +1531,9 @@ level_predicate_name(Level, Predicate) :-
     ;   format(atom(Predicate), '~w~q', [SYS_Index,Level])
     ).
 
+array_id_key_context_triple([],_,_,_,_,_) :-
+    !,
+    fail.
 array_id_key_context_triple(List,Dimensions,ID,Key,Context,Triple) :-
     get_dict('@base', Context, Base),
     atomic_list_concat([Base,'Array_'], Base_Array),
@@ -4089,6 +4095,7 @@ test(array_id_key_triple, []) :-
                       '@type':task,
                       name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                 '@value':"Take out rubbish"}}],
+                1,
                 elt,
                 p,
                 _{'@base' : ''},
