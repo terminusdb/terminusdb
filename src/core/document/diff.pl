@@ -319,11 +319,11 @@ patch_cost(Patch,Cost) :-
 patch_cost(Patch,Cost) :-
     is_list(Patch),
     !,
-    aggregate(sum(C),
-              P^(   C = 0
-                ;   member(P,Patch),
-                    patch_cost(P, C)),
-              Cost).
+    Closure = [P,C]>>(   C = 0
+                     ;   member(Elt,P),
+                         patch_cost(Elt, C)
+                     ),
+    aggregate(sum(C),call(Closure,Patch,C),Cost).
 patch_cost(_Patch,1).
     % This is an explicit copy.
 
@@ -350,11 +350,11 @@ patch_cost_op('SwapList',Patch,Cost) :-
 patch_cost_op('PatchList',Patch,Cost) :-
     get_dict('@patch', Patch, Sub_Patch),
     get_dict('@rest', Patch, Rest),
-    aggregate(sum(C),
-              P^(   C = 0
-                ;   member(P,Sub_Patch),
-                    patch_cost(P,C)),
-              List_Cost),
+    Closure = [SP,C]>>(   C = 0
+                      ;   member(P,SP),
+                          patch_cost(P,C)
+                      ),
+    aggregate(sum(C),call(Closure,Sub_Patch,C), List_Cost),
     patch_cost(Rest,Rest_Cost),
     Cost is Rest_Cost + List_Cost + 2.
 patch_cost_op('KeepList',_Patch,1).
@@ -395,46 +395,36 @@ patch_cost_op('ModifyTable',Patch,Cost) :-
     get_dict(deletes,Patch,Deletes),
     length(Copies, Copy_Cost),
     length(Moves, Move_Cost),
-
-    aggregate(
-        sum(S),
-        I^Value^(   S = 0
-                ;   member(I,Inserts),
-                    get_dict('@value', I, Value),
-                    json_size(Value,S)),
-        Insert_Cost),
-    aggregate(
-        sum(S),
-        D^Value^(   S = 0
-                ;   member(D,Deletes),
-                    get_dict('@value', D, Value),
-                    json_size(Value,S)),
-        Delete_Cost),
+    Closure = [List,S]>>(   S = 0
+                        ;   member(Elt,List),
+                            get_dict('@value', Elt, Value),
+                            json_size(Value,S)
+                        ),
+    aggregate(sum(S),call(Closure,Inserts,S), Insert_Cost),
+    aggregate(sum(S),call(Closure,Deletes,S), Delete_Cost),
     Cost is Copy_Cost + Move_Cost + Insert_Cost + Delete_Cost.
 patch_cost_op('KeepTable',_Patch,1).
 
 json_size(Dict,Size) :-
     is_dict(Dict),
     !,
-    aggregate(sum(S),
-              K^Val^Sub^(   S = 0
+    Closure = [Dict,S]>>(   S = 0
                         ;   dict_keys(Dict,Keys),
                             member(K,Keys),
                             get_dict(K,Dict,Val),
                             json_size(Val,Sub),
                             S is Sub + 1
                         ),
-              Size).
+    aggregate(sum(S), call(Closure,Dict,S), Size).
 json_size(List,Size) :-
     is_list(List),
     !,
-    aggregate(sum(S),
-              O^Sub^(   S = 0
-                    ;   member(O,List),
-                        json_size(O,Sub),
-                        S is Sub + 1
-                    ),
-              Size).
+    Closure = [List,S]>>(   S = 0
+                        ;   member(O,List),
+                            json_size(O,Sub),
+                            S is Sub + 1
+                        ),
+    aggregate(sum(S), call(Closure,List,S), Size).
 json_size(_,1).
 
 :- begin_tests(simple_diff).
