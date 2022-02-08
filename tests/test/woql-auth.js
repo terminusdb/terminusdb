@@ -93,10 +93,10 @@ describe('woql-auth', function () {
 
     before(async function () {
       const defaults = agent.defaults()
-      defaults.db = util.randomString() // New DB for schemaless tests
-      dbDefaults = endpoint.db(defaults)
-      schemaLessDBPath = dbDefaults.path
-      woqlSchemaLessPath = endpoint.woqlResource(dbDefaults).path
+      defaults.dbName = util.randomString() // New DB for schemaless tests
+      const schemaLessDBDefaults = endpoint.db(defaults)
+      schemaLessDBPath = schemaLessDBDefaults.path
+      woqlSchemaLessPath = endpoint.woqlResource(schemaLessDBDefaults).path
       await db.createAfterDel(agent, schemaLessDBPath, { schema: false })
     })
 
