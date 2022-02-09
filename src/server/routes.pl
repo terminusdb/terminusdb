@@ -2623,30 +2623,6 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 :- use_module(core(util/test_utils)).
 :- use_module(library(terminus_store)).
 
-test(remote_add, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:RemoteResponse",
-             'api:status':"api:success"},
-
-    super_user_authority(Auth),
-    show_remote(system_descriptor{}, Auth, 'admin/test', origin, Origin).
-
 test(remote_remove, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
