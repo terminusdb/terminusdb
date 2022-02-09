@@ -29,7 +29,6 @@ class Agent {
   // Add authentication
   auth () {
     this.userName = process.env.TERMINUSDB_USER
-    assert(this.userName, 'Missing environment variable: TERMINUSDB_USER')
 
     const token = process.env.TERMINUSDB_ACCESS_TOKEN
     const insecureUserHeader = process.env.TERMINUSDB_INSECURE_USER_HEADER

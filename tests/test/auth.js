@@ -20,4 +20,13 @@ describe('auth', function () {
     const r = await db.create(agent, path)
     expect(r.status).to.equal(401)
   })
+
+  it('fails db create on wrong password', async function () {
+    const newAgent = new Agent()
+    const userNamePass = Buffer.from('admin:THIS_IS_NOT_THE_CORRECT_PASSWORD').toString('base64')
+    newAgent.set('Authorization', `Basic ${userNamePass}`)
+    const { path } = endpoint.db(newAgent.defaults())
+    const r = await db.create(newAgent, path)
+    expect(r.status).to.equal(401)
+  })
 })
