@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, endpoint, util } = require('../lib')
+const { Agent, db, endpoint } = require('../lib')
 
 describe('remote-auth', function () {
   let agent
@@ -11,7 +11,7 @@ describe('remote-auth', function () {
   it('adds a remote succesfully', async function () {
     const defaults = agent.defaults()
     const { path } = endpoint.db(defaults)
-    const r = await db.create(agent, path).then(db.verifyCreateSuccess)
+    await db.create(agent, path).then(db.verifyCreateSuccess)
     const remoteResponse = await agent.post(endpoint.remote(defaults).path).send({
       remote_name: 'origin',
       remote_location: 'http://somewhere.com/admin/foo',
