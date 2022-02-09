@@ -9,6 +9,9 @@ api_patch(_System_DB, _Auth, Patch, Before, After) :-
 
 api_diff(_System_DB, _Auth, Before, After, Keep, Diff) :-
     % no auth yet.
+    do_or_die((ground(Before),
+               ground(After)),
+              error(unground_patch, _)),
     simple_diff(Before,After,Keep,Diff).
 
 

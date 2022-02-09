@@ -27,7 +27,7 @@ simple_diff(Before,After,Keep,Diff) :-
 best_cost(best(Cost,_),Cost).
 best_diff(best(_,Diff),Diff).
 
-start_state(best(inf,_{})).
+start_state(best(inf,json{})).
 
 cost_bounded(State,Cost) :-
     best_cost(State,Best_Cost),
@@ -58,7 +58,7 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     %
     union(Before_Keys,After_Keys,Keys),
     simple_key_diff(Keys,Before,After,Keep,Diff_Pairs,State,Cost,New_Cost),
-    dict_create(Diff,_,Diff_Pairs).
+    dict_create(Diff,json,Diff_Pairs).
 simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     (   is_table(Before)
     ;   is_table(After)),
@@ -75,9 +75,9 @@ simple_diff(Same,Same,_,_,_,_,_) :-
     !,
     fail.
 simple_diff(Before,After,_Keep,Diff,_State,Cost,New_Cost) :-
-    Diff = _{ '@op' : "SwapValue",
-              '@before' : Before,
-              '@after' : After },
+    Diff = json{ '@op' : "SwapValue",
+                 '@before' : Before,
+                 '@after' : After },
     New_Cost is Cost + 1.
 
 simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost).
@@ -96,12 +96,12 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost) :-
     !,
     (   get_dict(Key,Keep,Sub_Keep)
     ->  true
-    ;   Sub_Keep = _{}),
+    ;   Sub_Keep = json{}),
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
     (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1)
-    *-> (   \+ Sub_Diff = _{'@op':"KeepList"}
+    *-> (   \+ Sub_Diff = json{'@op':"KeepList"}
         ->  New_Keys = [Key-Sub_Diff|Rest]
         ;   New_Keys = Rest
         )
@@ -113,9 +113,9 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_
     get_dict(Key,Before,Sub_Before),
     % has it in the before but not the after.
     !,
-    Sub_Diff = _{ '@op' : "SwapValue",
-                  '@before' : Sub_Before,
-                  '@after' : null },
+    Sub_Diff = json{ '@op' : "SwapValue",
+                     '@before' : Sub_Before,
+                     '@after' : null },
     best_cost(State,Best_Cost),
     Cost1 is Cost + 1,
     Cost1 < Best_Cost,
@@ -124,9 +124,9 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_
     get_dict(Key,After,Sub_After),
     % has it in the before but not the after.
     !,
-    Sub_Diff = _{ '@op' : "SwapValue",
-                  '@before' : null,
-                  '@after' : Sub_After },
+    Sub_Diff = json{ '@op' : "SwapValue",
+                     '@before' : null,
+                     '@after' : Sub_After },
     best_cost(State,Best_Cost),
     Cost1 is Cost + 1,
     Cost1 < Best_Cost,
@@ -151,28 +151,28 @@ deep_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out) :-
 
 deep_list_timeout(10).
 
-deep_list_timeout(_{},inf) :-
+deep_list_timeout(json{},inf) :-
     deep_list_timeout(Time),
     sleep(Time).
 
 deep_list_diff_base(Same,Same,_Keep,Diff,State,Cost,New_Cost) :-
-    Diff = _{ '@op' : "KeepList" },
+    Diff = json{ '@op' : "KeepList" },
     !,
     New_Cost is Cost + 1,
     cost_bounded(State,New_Cost).
 deep_list_diff_base([],After,_Keep,Diff,State,Cost,New_Cost) :-
     !,
-    Diff = _{ '@op' : "SwapList",
-              '@before' : [],
-              '@after' : After },
+    Diff = json{ '@op' : "SwapList",
+                 '@before' : [],
+                 '@after' : After },
     json_size(After,Size),
     New_Cost is Cost + Size + 1,
     cost_bounded(State,New_Cost).
 deep_list_diff_base(Before,[],_Keep,Diff,State,Cost,New_Cost) :-
     !,
-    Diff = _{ '@op' : "SwapList",
-              '@before' : Before,
-              '@after' : [] },
+    Diff = json{ '@op' : "SwapList",
+                 '@before' : Before,
+                 '@after' : [] },
     json_size(Before,Size),
     New_Cost is Cost + Size + 1,
     cost_bounded(State,New_Cost).
@@ -193,8 +193,8 @@ deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     !,
     (   is_list(Simple_Diff)
     ->  Simple_Diff = Diff
-    ;   _{ '@op' : "SwapList" } :< Simple_Diff
-    ->  put_dict(_{'@rest' : _{'@op' : "KeepList"}}, Simple_Diff, Diff)
+    ;   json{ '@op' : "SwapList" } :< Simple_Diff
+    ->  put_dict(json{'@rest' : json{'@op' : "KeepList"}}, Simple_Diff, Diff)
     ;   Simple_Diff = Diff
     ).
 deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
@@ -222,9 +222,9 @@ deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
         cost_bounded(State,Cost_Lower_Bound),
         Cost1 is Cost + 1,
         deep_list_diff_(Before_Suffix,After_Suffix,Keep,Patch,State,Cost1,New_Cost),
-        Diff = _{ '@op' : "CopyList",
-                  '@to' : I,
-                  '@rest' : Patch }
+        Diff = json{ '@op' : "CopyList",
+                     '@to' : I,
+                     '@rest' : Patch }
     ;   Cost1 is Cost + 1,
         Cost_Lower_Bound is Cost1 + 1,
         cost_bounded(State,Cost_Lower_Bound),
@@ -233,11 +233,11 @@ deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
         cost_bounded(State,Cost3),
         deep_list_diff_(Before_Suffix,After_Suffix,Keep,Suffix_Patch,State,Cost3,New_Cost),
         (   is_list(Prefix_Patch)
-        ->  Diff = _{ '@op' : "PatchList",
-                      '@patch' : Prefix_Patch,
-                      '@rest' : Suffix_Patch }
-        ;   _{ '@op' : "SwapList" } :< Prefix_Patch,
-            put_dict(_{'@rest' : Suffix_Patch}, Prefix_Patch, Diff)
+        ->  Diff = json{ '@op' : "PatchList",
+                         '@patch' : Prefix_Patch,
+                         '@rest' : Suffix_Patch }
+        ;   json{ '@op' : "SwapList" } :< Prefix_Patch,
+            put_dict(json{'@rest' : Suffix_Patch}, Prefix_Patch, Diff)
         )
     ).
 
@@ -251,13 +251,13 @@ create_patch([], [], [], inserted, Memory, Patch) :-
     Patch = json{ '@op' : "SwapList",
                   '@before' : [],
                   '@after' : List,
-                  '@rest' : _{ '@op' : "KeepList" }}.
+                  '@rest' : json{ '@op' : "KeepList" }}.
 create_patch([], [], [], deleted, Memory, Patch) :-
     reverse(Memory,List),
     Patch = json{ '@op' : "SwapList",
                   '@before' : List,
                   '@after' : [],
-                  '@rest' : _{ '@op' : "KeepList" }}.
+                  '@rest' : json{ '@op' : "KeepList" }}.
 create_patch([], [], [], unchanged, _, json{ '@op' : "KeepList" }).
 create_patch([unchanged|Operations],[Head|List1],[Head|List2],unchanged, Memory, Patch) :-
     !,
@@ -329,7 +329,7 @@ patch_cost(Patch,Cost) :-
                      ),
     aggregate(sum(C),call(Closure,Patch,C),Cost).
 patch_cost(_Patch,1).
-    % This is an explicit copy.
+% This is an explicit copy.
 
 patch_cost_op('SwapValue',Patch,Cost) :-
     % Should this look at the size?
@@ -435,232 +435,232 @@ json_size(_,1).
 
 test(simple_diff, []) :-
 
-    Before = _{ '@id' : "Person/Ludwig",
-                '@type' : "Person",
-                name : "Ludwig"
-              },
-    After = _{'@id':"Person/Ludwig",
-              '@type':"Person",
-              name:"Ludo"
-             },
-    simple_diff(Before,After,_{},Patch),
-    Patch = _{name:_{'@after':"Ludo",
-                     '@before':"Ludwig",
-                     '@op':"SwapValue"}
-             }.
+    Before = json{ '@id' : "Person/Ludwig",
+                   '@type' : "Person",
+                   name : "Ludwig"
+                 },
+    After = json{'@id':"Person/Ludwig",
+                 '@type':"Person",
+                 name:"Ludo"
+                },
+    simple_diff(Before,After,json{},Patch),
+    Patch = json{name:json{'@after':"Ludo",
+                           '@before':"Ludwig",
+                           '@op':"SwapValue"}
+                }.
 
 test(simple_diff_id, []) :-
 
-    Before = _{ '@id' : "Person/Ludwig",
-                '@type' : "Person",
-                name : "Ludwig"
-              },
-    After = _{'@id':"Person/Ludwig",
-              '@type':"Person",
-              name:"Ludo"
-             },
-    simple_diff(Before,After,_{'@id' : true},Patch),
-    Patch = _{'@id':"Person/Ludwig",
-              name:_{'@after':"Ludo",
-                     '@before':"Ludwig",
-                     '@op':"SwapValue"}
-             }.
+    Before = json{ '@id' : "Person/Ludwig",
+                   '@type' : "Person",
+                   name : "Ludwig"
+                 },
+    After = json{'@id':"Person/Ludwig",
+                 '@type':"Person",
+                 name:"Ludo"
+                },
+    simple_diff(Before,After,json{'@id' : true},Patch),
+    Patch = json{'@id':"Person/Ludwig",
+                 name:json{'@after':"Ludo",
+                           '@before':"Ludwig",
+                           '@op':"SwapValue"}
+                }.
 
 test(simple_diff_deep_value, []) :-
 
-    Before = _{ '@id' : "Person/Ludwig",
-                '@type' : "Person",
-                name : "Ludwig",
-                address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
-                             '@type' : "Address",
-                             address1 : "Mölker Bastei 8",
-                             address2 : null,
-                             city : "Vienna",
-                             country : "Austria"}
-              },
-    After = _{'@id':"Person/Ludwig",
-              '@type':"Person",
-              name:"Ludo",
-              address : _{ '@id' : "Person/Ludwig/Address/addresses/1",
-                           '@type' : "Address",
-                           address1 : "Mölker Bastei 8",
-                           address2 : null,
-                           city : "Vienna",
-                           country : "Austria"}
-             },
-    simple_diff(Before,After,_{address : _{ city: true }},Patch),
-    Patch = _{ name:_{'@after':"Ludo",
-                      '@before':"Ludwig",
-                      '@op':"SwapValue"},
-               address: _{ city : "Vienna" }
-             }.
+    Before = json{ '@id' : "Person/Ludwig",
+                   '@type' : "Person",
+                   name : "Ludwig",
+                   address : json{ '@id' : "Person/Ludwig/Address/addresses/1",
+                                   '@type' : "Address",
+                                   address1 : "Mölker Bastei 8",
+                                   address2 : null,
+                                   city : "Vienna",
+                                   country : "Austria"}
+                 },
+    After = json{'@id':"Person/Ludwig",
+                 '@type':"Person",
+                 name:"Ludo",
+                 address : json{ '@id' : "Person/Ludwig/Address/addresses/1",
+                                 '@type' : "Address",
+                                 address1 : "Mölker Bastei 8",
+                                 address2 : null,
+                                 city : "Vienna",
+                                 country : "Austria"}
+                },
+    simple_diff(Before,After,json{address : json{ city: true }},Patch),
+    Patch = json{ name:json{'@after':"Ludo",
+                            '@before':"Ludwig",
+                            '@op':"SwapValue"},
+                  address: json{ city : "Vienna" }
+                }.
 
 test(simple_diff_error, [
          error(explicitly_copied_key_has_changed('@id'),
                _)
      ]) :-
 
-    Before = _{ '@id' : "Person/Ludwig",
-                '@type' : "Person",
-                name : "Ludwig"
-              },
-    After = _{'@id':"Person/Ludwig_the_third",
-              '@type':"Person",
-              name:"Ludo"
-             },
-    simple_diff(Before,After,_{'@id' : true},Patch),
-    Patch = _{'@id':"Person/Ludwig",
-              name:_{'@after':"Ludo",
-                     '@before':"Ludwig",
-                     '@op':"SwapValue"}
-             }.
+    Before = json{ '@id' : "Person/Ludwig",
+                   '@type' : "Person",
+                   name : "Ludwig"
+                 },
+    After = json{'@id':"Person/Ludwig_the_third",
+                 '@type':"Person",
+                 name:"Ludo"
+                },
+    simple_diff(Before,After,json{'@id' : true},Patch),
+    Patch = json{'@id':"Person/Ludwig",
+                 name:json{'@after':"Ludo",
+                           '@before':"Ludwig",
+                           '@op':"SwapValue"}
+                }.
 
 test(introduce_drop, []) :-
-    Before = _{asdf:"fdsa"},
-    After = _{name:"Ludo"},
-    simple_diff(Before,After,_{},Patch),
-    Patch = _{asdf:_{'@after':null,
-                     '@before':"fdsa",
-                     '@op':"SwapValue"},
-              name:_{'@after':"Ludo",
-                     '@before':null,
-                     '@op':"SwapValue"}}.
+    Before = json{asdf:"fdsa"},
+    After = json{name:"Ludo"},
+    simple_diff(Before,After,json{},Patch),
+    Patch = json{asdf:json{'@after':null,
+                           '@before':"fdsa",
+                           '@op':"SwapValue"},
+                 name:json{'@after':"Ludo",
+                           '@before':null,
+                           '@op':"SwapValue"}}.
 
 test(introduce_deep, []) :-
-    Before = _{},
-    After = _{name:_{asdf:"Ludo"}},
-    simple_diff(Before,After,_{},Patch),
-    Patch = _{name:_{'@after':_{asdf:"Ludo"},
-                     '@before':null,
-                     '@op':"SwapValue"}}.
+    Before = json{},
+    After = json{name:json{asdf:"Ludo"}},
+    simple_diff(Before,After,json{},Patch),
+    Patch = json{name:json{'@after':json{asdf:"Ludo"},
+                           '@before':null,
+                           '@op':"SwapValue"}}.
 
 test(simple_list_diff, []) :-
     List1 = [1],
     List2 = [1,2],
-    simple_diff(List1,List2,_{},Diff),
-    Diff = _{'@op':"CopyList",
-             '@to':1,
-             '@rest':_{'@op':"SwapList",
-                       '@before':[],
-                       '@after':[2],
-                       '@rest':_{'@op':"KeepList"}
-                       }}.
+    simple_diff(List1,List2,json{},Diff),
+    Diff = json{'@op':"CopyList",
+                '@to':1,
+                '@rest':json{'@op':"SwapList",
+                             '@before':[],
+                             '@after':[2],
+                             '@rest':json{'@op':"KeepList"}
+                            }}.
 
 test(simple_list_diff_middle, []) :-
     List1 = [1,2,3],
     List2 = [1,3],
-    simple_diff(List1,List2,_{},Diff),
+    simple_diff(List1,List2,json{},Diff),
     % This does not seem ideal...
-    Diff = _{'@op':"CopyList",
-             '@rest':json{'@after':[],
-                          '@before':[2],
-                          '@op':"SwapList",
-                          '@rest':json{'@op':"KeepList"}},
-             '@to':1}.
+    Diff = json{'@op':"CopyList",
+                '@rest':json{'@after':[],
+                             '@before':[2],
+                             '@op':"SwapList",
+                             '@rest':json{'@op':"KeepList"}},
+                '@to':1}.
 
 test(deep_list_diff_append, []) :-
 
-    Before = _{ '@id' : "Person/Ludwig",
-                '@type' : "Person",
-                name : "Ludwig",
-                addresses : [
-                    _{ '@id' : "Person/Ludwig/Address/addresses/1",
-                       '@type' : "Address",
-                       address1 : "Mölker Bastei 8",
-                       address2 : null,
-                       city : "Vienna",
-                       country : "Austria"}
-                ]
-              },
-    After = _{'@id':"Person/Ludwig",
-              '@type':"Person",
-              addresses: [
-                  _{'@id':"Person/Ludwig/Address/addresses/1",
-                    '@type':"Address",
-                    address1:"Mölker Bastei 8",
-                    address2:null,
-                    city:"Vienna",
-                    country:"Austria"},
-                  _{'@id':"Person/Ludwig/Address/addresses/2",
-                    '@type':"Address",
-                    address1:"Probusgasse 6",
-                    address2:null,
-                    city:"Vienna",
-                    country:"Austria"}],
-              name:"Ludwig"},
+    Before = json{ '@id' : "Person/Ludwig",
+                   '@type' : "Person",
+                   name : "Ludwig",
+                   addresses : [
+                       json{ '@id' : "Person/Ludwig/Address/addresses/1",
+                             '@type' : "Address",
+                             address1 : "Mölker Bastei 8",
+                             address2 : null,
+                             city : "Vienna",
+                             country : "Austria"}
+                   ]
+                 },
+    After = json{'@id':"Person/Ludwig",
+                 '@type':"Person",
+                 addresses: [
+                     json{'@id':"Person/Ludwig/Address/addresses/1",
+                          '@type':"Address",
+                          address1:"Mölker Bastei 8",
+                          address2:null,
+                          city:"Vienna",
+                          country:"Austria"},
+                     json{'@id':"Person/Ludwig/Address/addresses/2",
+                          '@type':"Address",
+                          address1:"Probusgasse 6",
+                          address2:null,
+                          city:"Vienna",
+                          country:"Austria"}],
+                 name:"Ludwig"},
 
-    simple_diff(Before,After,_{},Patch),
+    simple_diff(Before,After,json{},Patch),
 
-    Patch = _{addresses:
-              _{'@op':"CopyList",
-                '@to':1,
-                '@rest':
-                _{'@after':[_{'@id':"Person/Ludwig/Address/addresses/2",'@type':"Address",address1:"Probusgasse 6",address2:null,city:"Vienna",country:"Austria"}],
-                  '@before':[],
-                  '@op':"SwapList",
-                  '@rest':_{'@op':"KeepList"}}}}.
+    Patch = json{addresses:
+                 json{'@op':"CopyList",
+                      '@to':1,
+                      '@rest':
+                      json{'@after':[json{'@id':"Person/Ludwig/Address/addresses/2",'@type':"Address",address1:"Probusgasse 6",address2:null,city:"Vienna",country:"Austria"}],
+                           '@before':[],
+                           '@op':"SwapList",
+                           '@rest':json{'@op':"KeepList"}}}}.
 
 test(deep_list_diff, [blocked('should start working with better list heuristic')]) :-
 
-    Before = _{ '@id' : "Person/Ludwig",
-                '@type' : "Person",
-                name : "Ludwig",
-                addresses : [
-                    _{ '@id' : "Person/Ludwig/Address/addresses/1",
-                       '@type' : "Address",
-                       address1 : "Mölker Bastei 7",
-                       address2 : null,
-                       city : "Vienna",
-                       country : "Austria"}
-                ]
-              },
-    After = _{'@id':"Person/Ludwig",
-              '@type':"Person",
-              name:"Ludwig",
-              addresses: [
-                  _{'@id':"Person/Ludwig/Address/addresses/1",
-                    '@type':"Address",
-                    address1:"Mölker Bastei 8",
-                    address2:null,
-                    city:"Vienna",
-                    country:"Austria"}
-              ]
-             },
+    Before = json{ '@id' : "Person/Ludwig",
+                   '@type' : "Person",
+                   name : "Ludwig",
+                   addresses : [
+                       json{ '@id' : "Person/Ludwig/Address/addresses/1",
+                             '@type' : "Address",
+                             address1 : "Mölker Bastei 7",
+                             address2 : null,
+                             city : "Vienna",
+                             country : "Austria"}
+                   ]
+                 },
+    After = json{'@id':"Person/Ludwig",
+                 '@type':"Person",
+                 name:"Ludwig",
+                 addresses: [
+                     json{'@id':"Person/Ludwig/Address/addresses/1",
+                          '@type':"Address",
+                          address1:"Mölker Bastei 8",
+                          address2:null,
+                          city:"Vienna",
+                          country:"Austria"}
+                 ]
+                },
 
-    simple_diff(Before,After,_{},Patch),
-    Patch = _{addresses:[
-                  _{address1:_{'@after':"Mölker Bastei 8",
-                               '@before':"Mölker Bastei 7",
-                               '@op':"SwapValue"}}]
-             }.
+    simple_diff(Before,After,json{},Patch),
+    Patch = json{addresses:[
+                     json{address1:json{'@after':"Mölker Bastei 8",
+                                        '@before':"Mölker Bastei 7",
+                                        '@op':"SwapValue"}}]
+                }.
 
 test(list_middle, []) :-
 
-    Before = _{ asdf : "fdsa",
-                bar : "baz",
-                list : [1,2,3,5,6] },
-    After = _{ asdf : "ooo",
-               bar : "bazz",
-               list : [1,2,3,4,5,6] },
-    simple_diff(Before,After,_{},Patch),
-    Patch = _{asdf:_{'@after':"ooo",
-                     '@before':"fdsa",
-                     '@op':"SwapValue"},
-              bar:_{'@after':"bazz",
-                    '@before':"baz",
-                    '@op':"SwapValue"},
-              list:_{'@op':"CopyList",
-                     '@rest':_{'@after':[4],'@before':[],
-                               '@op':"SwapList",
-                               '@rest':_{'@op':"KeepList"}},
-                     '@to':3}}.
+    Before = json{ asdf : "fdsa",
+                   bar : "baz",
+                   list : [1,2,3,5,6] },
+    After = json{ asdf : "ooo",
+                  bar : "bazz",
+                  list : [1,2,3,4,5,6] },
+    simple_diff(Before,After,json{},Patch),
+    Patch = json{asdf:json{'@after':"ooo",
+                           '@before':"fdsa",
+                           '@op':"SwapValue"},
+                 bar:json{'@after':"bazz",
+                          '@before':"baz",
+                          '@op':"SwapValue"},
+                 list:json{'@op':"CopyList",
+                           '@rest':json{'@after':[4],'@before':[],
+                                        '@op':"SwapList",
+                                        '@rest':json{'@op':"KeepList"}},
+                           '@to':3}}.
 
 :- use_module(core('document/patch')).
 
 test(deep_list_patch, []) :-
-    Before = _{ asdf: _{ bar: [_{ baz: 'quux' }] } },
-    After = _{ asdf: _{ bar: [_{ baz: 'quuz' }] } },
-    simple_diff(Before,After,_{},Diff),
+    Before = json{ asdf: json{ bar: [json{ baz: 'quux' }] } },
+    After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
+    simple_diff(Before,After,json{},Diff),
     simple_patch(Diff,Before,After).
 
 :- end_tests(simple_diff).
