@@ -113,7 +113,11 @@ jobs:
       - name: Run server
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run --detach -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' --publish 6363:6363 $DOCKER_IMAGE_NAME:local
+          docker run --detach \
+            -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
+            -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
+            --publish 6363:6363 \
+            $DOCKER_IMAGE_NAME:local
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
