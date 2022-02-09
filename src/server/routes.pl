@@ -4016,7 +4016,7 @@ http_read_utf8(stream(Stream), Request) :-
 http_read_utf8(json_dict(JSON), Request) :-
     http_read_utf8(string(String), Request),
     open_string(String, Stream),
-    catch(json_read_dict(Stream, JSON, [tag(json)]),
+    catch(json_read_dict(Stream, JSON, [default_tag(json)]),
           error(syntax_error(json(_Kind)), _),
           throw(error(malformed_json_payload(String), _))).
 
@@ -4073,7 +4073,7 @@ get_payload(Payload,Request) :-
     memberchk(multipart(Form_Data),Request),
     member(mime(Meta,Value,_),Form_Data),
     memberchk(name(payload), Meta),
-    atom_json_dict(Value,Payload, []).
+    atom_json_dict(Value,Payload, [default_tag(json)]).
 
 /*
  * request_remote_authorization(Request, Authorization) is det.
