@@ -2848,39 +2848,6 @@ console_handler(get, _Request, _System_DB, _Auth) :-
     index_template(Index),
     throw(http_reply(bytes('text/html', Index))).
 
-:- begin_tests(console_route).
-:- use_module(core(util/test_utils)).
-
-test(console_route, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s/", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-test(console_route_empty, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-test(console_route_db, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s/db/gavin/baseball", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-test(console_route_home, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s/home/somewhere", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-:- end_tests(console_route).
-
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
 :- meta_predicate cors_handler(+,2,?,+).
