@@ -164,6 +164,7 @@ known_document_error(key_fields_is_empty).
 known_document_error(unable_to_assign_ids).
 known_document_error(inserted_subdocument_as_document).
 known_document_error(capture_already_bound(_)).
+known_document_error(wrong_array_dimensions(_,_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-

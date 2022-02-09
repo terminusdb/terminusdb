@@ -337,6 +337,30 @@ describe('document', function () {
       }
     })
 
+    it('fails for wrong array dimension (#975)', async function () {
+      const type = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: {
+            '@id': type,
+            '@type': 'Class',
+            s: {
+              '@type': 'Array',
+              '@dimensions': 1,
+              '@class': 'xsd:integer',
+            },
+          },
+        })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .insert(agent, docPath, {
+          instance: { '@type': type, s: [[1], [2]] },
+        })
+        .then(document.verifyInsertFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentArrayWrongDimensions')
+      expect(r.body['api:error']['api:dimensions']).to.equal(1)
+    })
+
     it('does not stringify boolean literals (#723)', async function () {
       const type = util.randomString()
       const id = type + '/' + util.randomString()

@@ -169,10 +169,11 @@ get_all_path_values(JSON,Path_Values) :-
 % TODO: Arrays
 get_value([], []) :-
     !.
-get_value(List, Elt) :-
+get_value(List, Value) :-
     is_list(List),
     !,
-    member(Elt,List).
+    member(Elt,List),
+    get_value(Elt,Value).
 get_value(Elaborated, Value) :-
     is_dict(Elaborated),
     get_dict('@type', Elaborated, "@id"),
@@ -686,6 +687,8 @@ json_assign_ids(DB,Context,JSON,Path) :-
             Numlist).
 json_assign_ids(_DB,_Context,_JSON,_Path).
 
+array_assign_ids([],_,_,_) :-
+    !.
 array_assign_ids(Values,DB,Context,Path) :-
     length(Values, Value_Len),
     Max_Index is Value_Len - 1,
@@ -1510,7 +1513,8 @@ json_triple_(JSON,Context,Triple) :-
             list_id_key_context_triple(List,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@array")
         ->  get_dict('@value', Value, Array),
-            array_id_key_context_triple(Array,ID,Key,Context,Triple)
+            get_dict('@dimensions', Value, Dimensions),
+            array_id_key_context_triple(Array,Dimensions,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@set")
         ->  get_dict('@value', Value, Set),
             set_id_key_context_triple(Set,ID,Key,Context,Triple)
@@ -1527,32 +1531,36 @@ level_predicate_name(Level, Predicate) :-
     ;   format(atom(Predicate), '~w~q', [SYS_Index,Level])
     ).
 
-array_id_key_context_triple(List,ID,Key,Context,Triple) :-
+array_id_key_context_triple([],_,_,_,_,_) :-
+    !,
+    fail.
+array_id_key_context_triple(List,Dimensions,ID,Key,Context,Triple) :-
     get_dict('@base', Context, Base),
     atomic_list_concat([Base,'Array_'], Base_Array),
-    list_array_dimensions(List,Dimensions),
+    list_array_shape(List,Shape),
+    do_or_die(length(Shape,Dimensions),
+              error(wrong_array_dimensions(List,Dimensions), _)),
     global_prefix_expand(sys:'Array', SYS_Array),
     global_prefix_expand(sys:value, SYS_Value),
     global_prefix_expand(xsd:nonNegativeInteger, XSD_NonNegativeInteger),
     global_prefix_expand(rdf:type, RDF_Type),
-    length(Dimensions,N),
     list_array_index_element(List,Indexes,Elt),
     idgen_random(Base_Array,New_ID),
     reference(Elt,Ref),
     (   Triple = t(New_ID, SYS_Value, Ref)
     ;   json_triple_(Elt,Context,Triple)
-    ;   between(1,N,M),
-        level_predicate_name(M,SYS_Index),
-        nth1(M,Indexes,Index),
+    ;   between(1,Dimensions,N),
+        level_predicate_name(N,SYS_Index),
+        nth1(N,Indexes,Index),
         Triple = t(New_ID, SYS_Index, Index^^XSD_NonNegativeInteger)
     ;   Triple = t(ID, Key, New_ID)
     ;   Triple = t(New_ID, RDF_Type, SYS_Array)
     ).
 
 /* for now assumes uniformity */
-list_array_dimensions([],[]).
-list_array_dimensions([H|T],Dimensions) :-
-    (   list_array_dimensions(H,D)
+list_array_shape([],[]).
+list_array_shape([H|T],Dimensions) :-
+    (   list_array_shape(H,D)
     ->  Dimensions = [N|D]
     ;   Dimensions = [N]
     ),
@@ -1562,7 +1570,7 @@ list_array_index_element([], _, _) :-
     !,
     fail.
 list_array_index_element(List,Index,Element) :-
-    list_array_dimensions(List,Dimensions),
+    list_array_shape(List,Dimensions),
     list_array_index_element(Dimensions,List,Rev_Index,Element),
     reverse(Rev_Index,Index).
 
@@ -4087,6 +4095,7 @@ test(array_id_key_triple, []) :-
                       '@type':task,
                       name:json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                 '@value':"Take out rubbish"}}],
+                1,
                 elt,
                 p,
                 _{'@base' : ''},
@@ -9797,7 +9806,9 @@ geojson_point_schema('
 { "@type": "Class",
   "@id": "Point",
   "type": "Point_Type",
-  "coordinates" : {"@type":"List", "@class": "xsd:decimal"}}
+  "coordinates" : {"@type":"Array",
+                   "@dimensions" : 1,
+                   "@class": "xsd:decimal"}}
 
 { "@type" : "Enum",
   "@id" : "MultiPoint_Type",
@@ -9809,29 +9820,7 @@ geojson_point_schema('
   "coordinates" : {"@type":"Array",
                    "@dimensions" : 2,
                    "@class": "xsd:decimal"}}
-
-{ "@type": "Class",
-  "@id": "Spreadsheet",
-  "sheets" : {"@type":"Set",
-              "@class": "Sheet"}}
-
-{ "@type": "Class",
-  "@id": "Sheet",
-  "@key": { "@fields": [ "index" ], "@type": "Lexical" },
-  "@subdocument" : [],
-  "index" : "xsd:string",
-  "cells" : {"@type":"Array",
-             "@dimensions":2,
-             "@class":"Cell"}}
-
-{ "@type": "Class",
-  "@id": "Cell",
-  "@key": { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "value" : "xsd:string" }
-
 ').
-
 
 test(just_a_table,
      [setup((setup_temp_store(State),
@@ -9873,7 +9862,6 @@ test(geojson_point,
                               ID
                           )
                          ),
-    test_utils:print_all_triples(Desc),
     open_descriptor(Desc, New_DB),
     get_document(New_DB, ID, Fresh_JSON),
     Fresh_JSON = json{'@id':'MultiPoint/MyMultiPoint',
@@ -9881,10 +9869,36 @@ test(geojson_point,
                       coordinates:[[100.0,0.0],[101.0,1.0]],
                       type:'MultiPoint'}.
 
+spreadsheet_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Spreadsheet",
+  "sheets" : {"@type":"Set",
+              "@class": "Sheet"}}
+
+{ "@type": "Class",
+  "@id": "Sheet",
+  "@key": { "@fields": [ "index" ], "@type": "Lexical" },
+  "@subdocument" : [],
+  "index" : "xsd:string",
+  "cells" : {"@type":"Array",
+             "@dimensions":2,
+             "@class":"Cell"}}
+
+{ "@type": "Class",
+  "@id": "Cell",
+  "@key": { "@type" : "ValueHash" },
+  "@subdocument" : [],
+  "value" : "xsd:string" }
+').
+
 test(spreadsheet,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
-             write_schema(geojson_point_schema,Desc)
+             write_schema(spreadsheet_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9929,5 +9943,36 @@ test(spreadsheet,
                  json{'@id':'Cell/f77864fbb7e9824adc461725159bd4b318bbcd98c064a0057f673f3411c81810',
                       '@type':'Cell',value:"B"}]],
                index:"1"}]}.
+
+test(wrong_dim_error,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(geojson_point_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(wrong_array_dimensions([[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                                          '@value':100.0},
+                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                                          '@value':0.0}],
+                                    [json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                                          '@value':101.0},
+                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+                                          '@value':1.0}]],1), _)
+     ]) :-
+    with_test_transaction(Desc,
+                          C1,
+                          insert_document(
+                              C1,
+                              _{ '@type': "Point",
+                                 '@id': "Point/MyPoint",
+                                 type: "Point",
+                                 coordinates : [
+                                     [100.0, 0.0],
+                                     [101.0, 1.0]
+                                 ]
+                               },
+                              _ID
+                          )
+                         ).
 
 :- end_tests(json_tables).

@@ -48,8 +48,8 @@ npm test
 To run one or more test files, use:
 
 ```sh
-npx mocha ./test/ok.js"
-npx mocha ./test/db*.js"
+npx mocha ./test/ok.js
+npx mocha ./test/db*.js
 ```
 
 ## About the test suite
