@@ -243,23 +243,6 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
 :- use_module(library(http/http_open)).
 
 
-test(db_create_unauthenticated_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    http_post(URI, json(Doc),
-              Result, [json_object(dict),
-                       authorization(basic(admin, "THIS_IS_NOT_THE_CORRECT_PASSWORD")),
-                       status_code(Status)]),
-    Status = 401,
-    _{'api:status' : "api:failure"} :< Result.
-
 test(db_create_unauthorized_errors, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
