@@ -203,28 +203,6 @@ test(connection_result_dbs, [
 
 :- end_tests(connect_handler).
 
-%%%%%%%%%%%%%%%%%%%% Message Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(message), cors_handler(Method, message_handler),
-                [method(Method),
-                 methods([options,get,post])]).
-
-/*
- * message_handler(+Method,+Request) is det.
- */
-message_handler(_Method, Request, _System_DB, _Auth) :-
-    try_get_param('api:message',Request,Message),
-
-    with_output_to(
-        string(Payload),
-        json_write_dict(current_output, Message, [])
-    ),
-
-    json_log_info_formatted('~N[Message] ~s~n',[Payload]),
-
-    write_cors_headers(Request),
-
-    reply_json(_{'api:status' : 'api:success'}).
-
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(info), cors_handler(Method, info_handler),
                 [method(Method),
