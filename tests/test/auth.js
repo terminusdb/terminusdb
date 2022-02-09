@@ -6,8 +6,8 @@ describe('auth', function () {
 
   before(function () {
     agent = new Agent()
-    agent = agent.auth()
-    agent.userName = 'nonExistingUser'
+    const userNamePass = Buffer.from('nonExistingUser:somePassword').toString('base64')
+    agent.set('Authorization', `Basic ${userNamePass}`)
   })
 
   it('fails connect on non existing user', async function () {
