@@ -2123,31 +2123,6 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
                             Prefixes,
                             [status(200)]))).
 
-:- begin_tests(prefixes_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(create_graph, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-
-    atomic_list_concat([Server, '/api/prefixes/admin/test'], URI),
-    admin_pass(Key),
-    http_get(URI,
-             JSON,
-             [json_object(dict),authorization(basic(admin,Key))]),
-
-    _{'@base':"http://somewhere.for.now/document/",
-      '@schema':"http://somewhere.for.now/schema#",
-      '@type':"Context"} :< JSON.
-
-:- end_tests(prefixes_endpoint).
-
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
