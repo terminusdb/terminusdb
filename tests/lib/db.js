@@ -1,22 +1,27 @@
 const { expect } = require('chai')
 const { Params } = require('./params.js')
 
+const util = require('./util.js')
+
 function create (agent, path, params) {
   params = new Params(params)
   const comment = params.string('comment', 'default comment')
   const label = params.string('label', 'default label')
-  const prefixes = params.object('prefixes', {})
-  const schema = params.boolean('schema', true)
+  const prefixes = params.object('prefixes')
+  const schema = params.boolean('schema')
   params.assertEmpty()
+
+  const body = { comment, label }
+  if (util.isDefined(prefixes)) {
+    body.prefixes = prefixes
+  }
+  if (util.isDefined(schema)) {
+    body.schema = schema
+  }
 
   return agent
     .post(path)
-    .send({
-      comment: comment,
-      label: label,
-      prefixes: prefixes,
-      schema,
-    })
+    .send(body)
 }
 
 function del (agent, path) {
