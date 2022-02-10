@@ -48,6 +48,13 @@ function verifyAddSuccess (r) {
   return r
 }
 
+function verifyDelSuccess (r) {
+  expect(r.status).to.equal(200)
+  expect(r.body['api:status']).to.equal('api:success')
+  expect(r.body['@type']).to.equal('api:AddOrganizationResponse')
+  return r
+}
+
 function verifyAddFailure (r) {
   expect(r.status).to.equal(400)
   expect(r.body['api:status']).to.equal('api:failure')
@@ -66,6 +73,7 @@ module.exports = {
   add,
   del,
   verifyAddSuccess,
+  verifyDelSuccess,
   verifyAddFailure,
   verifyDelFailure,
 }

@@ -13,7 +13,6 @@
               context_to_parent_transaction/2,
               context_extend_prefixes/3,
               context_default_prefixes/2,
-              empty_context/1,
               query_default_collection/2,
               query_default_write_graph/2,
               query_default_schema_write_graph/2,
@@ -50,7 +49,7 @@
               json_value_cast_type/3,
 
               % query_response.pl
-              run_context_ast_jsonld_response/3,
+              run_context_ast_jsonld_response/5,
               pretty_print_query_response/3,
 
               % resolve_query_resource.pl

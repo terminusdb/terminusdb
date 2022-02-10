@@ -1,17 +1,21 @@
 :- module(api, [
+              % init.pl
               bootstrap_files/0,
+	      index_template/1,
+              initialize_flags/0,
+              initialize_database/2,
+              initialize_database_with_store/2,
+              world_ontology_json/1,
+
               % db_delete.pl
               delete_db/5,
               force_delete_db/2,
 
               % db_create.pl
               create_db/9,
+	      create_db_unfinalized/10,
               create_schema/3,
               create_ref_layer/1,
-
-              % init.pl
-              initialize_database/2,
-              initialize_database_with_store/2,
 
               % db_branch.pl
               branch_create/5,
@@ -61,7 +65,7 @@
               api_filled_frame/5,
 
               % api_woql.pl
-              woql_query_json/8,
+              woql_query_json/10,
 
               % api_squash.pl
               api_squash/6,
@@ -80,6 +84,7 @@
               list_databases/3,
               list_existing_databases/2,
               pretty_print_databases/1,
+              db_exists_api/4,
 
               % api_error.pl
               api_error_jsonld/3,
@@ -110,18 +115,24 @@
               unbundle/4,
 
               % api_document.pl
-              api_generate_documents/9,
-              api_generate_documents_by_type/10,
-              api_generate_documents_by_query/11,
-              api_get_document/8,
-              api_insert_documents/9,
-              api_delete_documents/7,
-              api_delete_document/7,
-              api_replace_documents/9,
-              api_nuke_documents/6,
+              api_get_document/6,
+              api_get_documents/11,
+              api_get_documents_by_type/12,
+              api_get_documents_by_query/13,
+              api_get_document_by_id/10,
+              api_insert_documents/11,
+              api_delete_documents/9,
+              api_delete_document/9,
+              api_replace_documents/11,
+              api_nuke_documents/8,
+              api_generate_document_ids/6,
 
               % api_user_organizations.pl
-              user_organizations/3
+              user_organizations/3,
+
+              % api_patch.pl
+              api_patch/5,
+              api_diff/6
           ]).
 
 :- use_module(api/api_init).
@@ -153,3 +164,4 @@
 :- use_module(api/api_unbundle).
 :- use_module(api/api_document).
 :- use_module(api/api_user_organizations).
+:- use_module(api/api_patch).

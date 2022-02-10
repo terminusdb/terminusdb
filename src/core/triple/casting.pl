@@ -20,8 +20,10 @@
 :- use_module(library(lists)).
 
 :- use_module(library(apply)).
+:- use_module(library(plunit)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(url)).
 :- use_module(library(http/json), [atom_json_dict/3]).
 
 /*
@@ -80,7 +82,7 @@ typecast_switch('http://www.w3.org/2002/07/owl#Thing', 'http://www.w3.org/2001/X
 %%% xsd:string => xdd:coordinatePolygon
 typecast_switch('http://terminusdb.com/schema/xdd#coordinatePolygon', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#coordinatePolygon') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:coordinatePolygon(S),Codes)
+    (   atom_codes(Val, Codes), phrase(coordinatePolygon(S),Codes)
     ->  Cast = coordinate_polygon(S)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#coordinatePolygon'),_))).
 %%% xdd:coordinatePolygon => xsd:string
@@ -93,7 +95,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:coordinatePolyline
 typecast_switch('http://terminusdb.com/schema/xdd#coordinatePolyline', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#coordinatePolyline') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:coordinatePolygon(S),Codes)
+    (   atom_codes(Val, Codes), phrase(coordinatePolygon(S),Codes)
     ->  Cast = coordinate_polygon(S)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#coordinatePolyline'),_))).
 %%% xdd:coordinatePolyline => xsd:string
@@ -106,7 +108,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:coordinate
 typecast_switch('http://terminusdb.com/schema/xdd#coordinate', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#coordinatePolyline') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:point(X,Y),Codes)
+    (   atom_codes(Val, Codes), phrase(point(X,Y),Codes)
     ->  Cast = point(X,Y)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#coordinate'),_))).
 %%% xdd:coordinate => xsd:string
@@ -119,7 +121,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:dateRange
 typecast_switch('http://terminusdb.com/schema/xdd#dateRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateRange') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:dateRange(X,Y),Codes)
+    (   atom_codes(Val, Codes), phrase(dateRange(X,Y),Codes)
     ->  Cast = date_range(X,Y)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
 %%% xdd:dateRange => xsd:string
@@ -134,7 +136,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:integerRange
 typecast_switch('http://terminusdb.com/schema/xdd#integerRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#integerRange') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:integerRange(X,Y),Codes)
+    (   atom_codes(Val, Codes), phrase(integerRange(X,Y),Codes)
     ->  Cast = integer_range(X,Y)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#integerRange'),_))).
 %%% xdd:integerRange => xsd:string
@@ -147,7 +149,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:decimalRange
 typecast_switch('http://terminusdb.com/schema/xdd#decimalRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#decimalRange') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:decimalRange(X,Y),Codes)
+    (   atom_codes(Val, Codes), phrase(decimalRange(X,Y),Codes)
     ->  Cast = decimal_range(X,Y)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#decimalRange'),_))).
 %%% xdd:decimalRange => xsd:string
@@ -160,7 +162,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:gYearRange
 typecast_switch('http://terminusdb.com/schema/xdd#gYearRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#gYearRange') :-
     !,
-    (   atom_codes(Val, Codes), phrase(xsd_parser:gYearRange(X,Y),Codes)
+    (   atom_codes(Val, Codes), phrase(gYearRange(X,Y),Codes)
     ->  Cast = gyear_range(X,Y)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#gYearRange'),_))).
 %%% xdd:gYearRange => xsd:string
@@ -184,7 +186,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:email
 typecast_switch('http://terminusdb.com/schema/xdd#email', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://terminusdb.com/schema/xdd#email') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:email,C,[]))
+    (   (atom_codes(Val,C), phrase(email,C,[]))
     ->  true
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#email'),_))).
 %%% xdd:email => xsd:string
@@ -234,7 +236,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 typecast_switch('http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#integer') :-
     !,
     (   atom_codes(Val,C),
-        phrase(xsd_parser:integer(Casted),C,[])
+        phrase(integer(Casted),C,[])
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#integer'),_))).
 %%% xsd:integer => xsd:string
@@ -552,7 +554,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:base64Binary
 typecast_switch('http://www.w3.org/2001/XMLSchema#base64Binary', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#base64Binary') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:base64Binary,C,[]))
+    (   (atom_codes(Val,C), phrase(base64Binary,C,[]))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#base64Binary'),_))).
 %%% xsd:base64Binary => xsd:string (downcast)
@@ -561,7 +563,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:hexBinary
 typecast_switch('http://www.w3.org/2001/XMLSchema#hexBinary', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#hexBinary') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:hexBinary,C,[]))
+    (   (atom_codes(Val,C), phrase(hexBinary,C,[]))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#hexBinary'),_))).
 %%% xsd:hexBinary => xsd:string (downcast)
@@ -579,7 +581,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:language
 typecast_switch('http://www.w3.org/2001/XMLSchema#language', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#language') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:language, C))
+    (   (atom_codes(Val,C), phrase(language, C))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#language'),_))).
 %%% xsd:language => xsd:string (downcast)
@@ -588,7 +590,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:normalizedString
 typecast_switch('http://www.w3.org/2001/XMLSchema#normalizedString', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#normalizedString') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:normalizedString,C))
+    (   (atom_codes(Val,C), phrase(normalizedString,C))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#normalizedString'),_))).
 %%% xsd:normalizedString => xsd:string (downcast)
@@ -597,7 +599,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:token
 typecast_switch('http://www.w3.org/2001/XMLSchema#token', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#token') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:normalizedString,C))
+    (   (atom_codes(Val,C), phrase(normalizedString,C))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#token'),_))).
 %%% xsd:token => xsd:string (downcast)
@@ -606,7 +608,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:NMTOKEN
 typecast_switch('http://www.w3.org/2001/XMLSchema#NMTOKEN', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#NMTOKEN') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:nmtoken,C))
+    (   (atom_codes(Val,C), phrase(nmtoken,C))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#NMTOKEN'),_))).
 %%% xsd:NMTOKEN => xsd:string (downcast)
@@ -615,7 +617,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:Name
 typecast_switch('http://www.w3.org/2001/XMLSchema#Name', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#Name') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:name,C))
+    (   (atom_codes(Val,C), phrase(name,C))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#Name'),_))).
 %%% xsd:Name => xsd:string (downcast)
@@ -624,7 +626,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:NCName
 typecast_switch('http://www.w3.org/2001/XMLSchema#NCName', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#NCName') :-
     !,
-    (   (atom_codes(Val,C), phrase(xsd_parser:ncname,C))
+    (   (atom_codes(Val,C), phrase(ncname,C))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#NCName'),_))).
 %%% xsd:NCName => xsd:string (downcast)

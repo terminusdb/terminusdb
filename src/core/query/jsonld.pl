@@ -31,6 +31,9 @@
 :- use_module(library(pcre)).
 :- use_module(library(pairs)).
 :- use_module(library(http/json)).
+:- use_module(library(lists)).
+:- use_module(library(dicts)).
+:- use_module(library(plunit)).
 
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
@@ -261,6 +264,7 @@ expand_key(K,Context,Key,Value) :-
 
 :- begin_tests(jsonld_expand).
 :- use_module(core(util/test_utils)).
+:- use_module(config(terminus_config)).
 
 test(expand_inner, [])
 :-

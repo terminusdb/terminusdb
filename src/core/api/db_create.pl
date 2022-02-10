@@ -25,6 +25,9 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
+
 :- multifile prolog:message//1.
 prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].
@@ -160,6 +163,8 @@ validate_prefixes(Prefixes) :-
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes) :-
     validate_prefixes(Prefixes),
+    error_on_excluded_organization(Organization_Name),
+    error_on_excluded_database(Database_Name),
 
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
 

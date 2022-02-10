@@ -11,6 +11,8 @@
 :- use_module(core(query)).
 :- use_module(core(account)).
 
+:- use_module(library(plunit)).
+
 add_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
     atomic_list_concat([Path, '/_meta'], Repo_Path),
 

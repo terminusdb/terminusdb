@@ -65,6 +65,7 @@
               copy_remote/4,
 
               % utils.pl
+              down_from/3,
               escape_pcre/2,
               get_key/4,
               get_key/3,
@@ -126,12 +127,17 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
+              json_read_dict_list_stream/2,
+              json_stream_read_single_dict/2,
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
               has_duplicates/2,
               index_list/2,
+              nb_thread_var_init/2,
+              nb_thread_var/2,
               uri_encoded_string/3,
+              text/1,
 
               % speculative_parse.pl
               %guess_date/2,
@@ -182,6 +188,9 @@
               integerRange//2,
               point//2,
               url//0,
+              ncname//0,
+              nmtoken//0,
+              normalizedString//0,
 
               % benchmark.pl
               benchmark_start/1,
@@ -229,7 +238,15 @@
               param_value_search_or_json_optional/6,
               param_value_search_author/2,
               param_value_search_message/2,
-              param_value_search_graph_type/2
+              param_value_search_graph_type/2,
+
+              % data_version.pl
+              compare_data_versions/2,
+              read_data_version_header/2,
+              write_data_version_header/1,
+              transaction_data_version/2,
+              validation_data_version/3,
+              meta_data_version/3
           ]).
 
 % note: test_utils is intentionally omitted
@@ -242,6 +259,6 @@
 :- use_module(util/xsd_parser).
 :- use_module(util/benchmark).
 :- use_module(util/http_utils).
-%:- use_module(util/plunit_patch).
 :- use_module(util/param).
 :- use_module(util/json_log).
+:- use_module(util/data_version).

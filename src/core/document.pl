@@ -9,7 +9,6 @@
               idgen_lexical/3,
 
               json_elaborate/3,
-              json_triple/3,
               json_schema_triple/3,
               json_schema_elaborate/3,
               context_triple/2,
@@ -33,9 +32,11 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
+              insert_document/6,
               replace_document/2,
               replace_document/3,
               replace_document/4,
+              replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
               delete_schema_document/2,
@@ -54,7 +55,13 @@
               is_schemaless/1,
 
               % query.pl
-              match_query_document_uri/4
+              match_query_document_uri/4,
+
+              % diff.pl
+              simple_diff/4,
+
+              % patch.pl
+              simple_patch/3
           ]).
 
 :- use_module('document/validation').
@@ -62,3 +69,5 @@
 :- use_module('document/schema').
 :- use_module('document/instance').
 :- use_module('document/query').
+:- use_module('document/patch').
+:- use_module('document/diff').

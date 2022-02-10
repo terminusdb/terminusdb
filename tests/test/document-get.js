@@ -22,13 +22,17 @@ describe('document-get', function () {
     },
     name: 'xsd:string',
     age: 'xsd:decimal',
+    order: 'xsd:integer',
   }
 
-  const instances = [
-    { '@type': 'Person', name: 'Aristotle', age: 61 },
-    { '@type': 'Person', name: 'Plato', age: 80 },
-    { '@type': 'Person', name: 'Socrates', age: 71 },
-  ]
+  const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3 }
+  const plato = { '@type': 'Person', name: 'Plato', age: 80, order: 2 }
+  const socrates = { '@type': 'Person', name: 'Socrates', age: 71, order: 1 }
+  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: 79, order: 3 }
+  const popper = { '@type': 'Person', name: 'Karl Popper', age: 92, order: 5 }
+  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5 }
+
+  const instances = [aristotle, plato, socrates]
 
   before(async function () {
     agent = new Agent().auth()
@@ -39,8 +43,12 @@ describe('document-get', function () {
     await db.createAfterDel(agent, dbPath)
 
     docPath = endpoint.document(dbDefaults).path
-    await document.insert(agent, docPath, { schema: schema })
-    await document.insert(agent, docPath, { instance: instances })
+    await document
+      .insert(agent, docPath, { schema: schema })
+      .then(document.verifyInsertSuccess)
+    await document
+      .insert(agent, docPath, { instance: instances })
+      .then(document.verifyInsertSuccess)
   })
 
   after(async function () {
@@ -106,7 +114,7 @@ describe('document-get', function () {
     }
   })
 
-  function expectInstances (objects, params) {
+  function expectInstances (objects, instances, params) {
     params = new Params(params)
     const skip = params.integer('skip', 0)
     let count = params.integer('count', instances.length)
@@ -135,7 +143,10 @@ describe('document-get', function () {
       const age = schemaPrefix + 'age'
       expect(object[age]).to.equal(expected.age)
       delete object[age]
-      expect(object['@id']).to.equal(basePrefix + 'Person/' + expected.name)
+      const order = schemaPrefix + 'order'
+      expect(object[order]).to.equal(expected.order)
+      delete object[order]
+      expect(object['@id']).to.equal(encodeURI(basePrefix + 'Person/' + expected.name))
       delete object['@id']
       expect(Object.keys(object).length).to.equal(0)
     }
@@ -157,7 +168,7 @@ describe('document-get', function () {
           objects.push(data.value)
         })
         r.on('end', () => {
-          expectInstances(objects)
+          expectInstances(objects, instances)
         })
       })
     }
@@ -173,7 +184,7 @@ describe('document-get', function () {
         const r = await document
           .get(agent, docPath, option)
           .then(document.verifyGetSuccess)
-        expectInstances(r.body)
+        expectInstances(r.body, instances)
       })
     }
   })
@@ -207,7 +218,7 @@ describe('document-get', function () {
         const r = await document
           .get(agent, docPath, option)
           .then(document.verifyGetSuccess)
-        expectInstances(r.body, params)
+        expectInstances(r.body, instances, params)
       })
     }
   })
@@ -218,12 +229,20 @@ describe('document-get', function () {
       { body: { graph_type: 'schema', as_list: true, prefixed: false } },
       { query: { graph_type: 'instance', as_list: true, prefixed: false } },
       { body: { graph_type: 'instance', as_list: true, prefixed: false } },
+      { query: { graph_type: 'schema', as_list: true, compress_ids: false } },
+      { body: { graph_type: 'schema', as_list: true, compress_ids: false, prefixed: false } },
+      { query: { graph_type: 'instance', as_list: true, compress_ids: false, prefixed: true } },
+      { body: { graph_type: 'instance', as_list: true, compress_ids: false }, query: { prefixed: true } },
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const graphType = option.query
-          ? option.query.graph_type
-          : option.body ? option.body.graph_type : false
+        let graphType
+        if (option.query) {
+          graphType = option.query.graph_type
+        }
+        if (option.body) {
+          graphType = option.body.graph_type || graphType
+        }
         if (graphType === 'schema') {
           // TODO: Implement `prefixed` for schemas:
           // https://github.com/terminusdb/terminusdb/issues/801
@@ -237,7 +256,7 @@ describe('document-get', function () {
             expectSchema(r.body, { prefixed: false })
             break
           case 'instance':
-            expectInstances(r.body, { prefixed: false })
+            expectInstances(r.body, instances, { prefixed: false })
             break
           default:
             throw new Error(`Unexpected 'graphType': ${graphType}`)
@@ -250,8 +269,8 @@ describe('document-get', function () {
     const options = [
       [{ queryString: 'as_list=7' }, 'as_list', 'boolean', '7'],
       [{ bodyString: '{"as_list":"wrong"}' }, 'as_list', 'boolean', 'wrong'],
-      [{ queryString: 'prefixed=null' }, 'prefixed', 'boolean', null],
-      [{ queryString: 'prefixed=abc' }, 'prefixed', 'boolean', 'abc'],
+      [{ queryString: 'compress_ids=null' }, 'compress_ids', 'boolean', null],
+      [{ queryString: 'compress_ids=abc' }, 'compress_ids', 'boolean', 'abc'],
       [{ bodyString: '{"prefixed":1}' }, 'prefixed', 'boolean', 1],
       [{ queryString: 'unfold=' }, 'unfold', 'boolean', ''],
       [{ bodyString: '{"unfold":"false"}' }, 'unfold', 'boolean', 'false'],
@@ -288,5 +307,166 @@ describe('document-get', function () {
         expect(r.body['api:error']['api:value']).to.deep.equal(value)
       })
     }
+  })
+
+  describe('gives same query results for type and @type', function () {
+    const options = [
+      { query: { type: 'Person', as_list: true } },
+      { body: { query: { '@type': 'Person' }, as_list: true } },
+    ]
+    for (const option of options) {
+      it(JSON.stringify(option), async function () {
+        const r = await document
+          .get(agent, docPath, option)
+          .then(document.verifyGetSuccess)
+        expectInstances(r.body, instances)
+      })
+    }
+  })
+
+  describe('succeeds query for @type and field', function () {
+    const queries = [
+      [{ name: 'Plato' }, 1],
+      [{ age: 71 }, 2],
+      [{ order: 3 }, 0],
+    ]
+    for (const [query, index] of queries) {
+      it(JSON.stringify(query), async function () {
+        Object.assign(query, { '@type': 'Person' })
+        const r = await document
+          .get(agent, docPath, { body: { query: query } })
+          .then(document.verifyGetSuccess)
+        expectInstances([r.body], instances.slice(index, index + 1))
+      })
+    }
+  })
+
+  it('fails query on field without type or @type', async function () {
+    const r = await document
+      .get(agent, docPath, { body: { query: { name: 'Plato' } } })
+      .then(document.verifyGetFailure)
+    expect(r.body['api:error']['@type']).to.equal('api:QueryMissingType')
+  })
+
+  describe('queries field of type Set', function () {
+    const localSchema = {
+      '@id': 'Group',
+      '@type': 'Class',
+      people: { '@type': 'Set', '@class': 'Person' },
+    }
+
+    const localInstances = [
+      { '@id': 'Group/0', '@type': 'Group', people: [kant, popper, gödel] },
+      { '@id': 'Group/1', '@type': 'Group', people: [] },
+      { '@id': 'Group/2', '@type': 'Group' },
+    ]
+
+    before(async function () {
+      await document
+        .insert(agent, docPath, { schema: localSchema })
+        .then(document.verifyInsertSuccess)
+      await document
+        .insert(agent, docPath, { instance: localInstances })
+        .then(document.verifyInsertSuccess)
+    })
+
+    after(async function () {
+      await document
+        .del(agent, docPath, { body: localInstances.map((i) => i['@id']) })
+        .then(document.verifyDelSuccess)
+      await document
+        .del(agent, docPath, { query: { graph_type: 'schema', id: 'Group' } })
+        .then(document.verifyDelSuccess)
+    })
+
+    const q1 = { '@type': 'Group' }
+
+    it(JSON.stringify(q1), async function () {
+      const r = await document
+        .get(agent, docPath, { body: { query: q1, as_list: true } })
+        .then(document.verifyGetSuccess)
+      const myInstances = []
+      for (const instance of localInstances) {
+        const copy = Object.assign({}, instance)
+        if (instance.people) {
+          if (instance.people.length) {
+            copy.people = instance.people.map((p) => encodeURI(p['@type'] + '/' + p.name))
+          } else {
+            delete copy.people
+          }
+        }
+        myInstances.push(copy)
+      }
+      expect(r.body).to.have.deep.members(myInstances)
+    })
+
+    const q2 = { '@type': 'Person', age: 71 }
+
+    it(JSON.stringify(q2), async function () {
+      const r = await document
+        .get(agent, docPath, { body: { query: q2, as_list: true } })
+        .then(document.verifyGetSuccess)
+      expectInstances(r.body, [socrates, gödel])
+    })
+  })
+
+  describe('queries field of type Optional', function () {
+    const localSchema = {
+      '@id': 'Friendship',
+      '@type': 'Class',
+      friend: { '@type': 'Optional', '@class': 'Person' },
+    }
+
+    const localInstances = [
+      { '@id': 'Friendship/0', '@type': 'Friendship', friend: kant },
+      { '@id': 'Friendship/1', '@type': 'Friendship', friend: gödel },
+      { '@id': 'Friendship/2', '@type': 'Friendship' },
+    ]
+
+    before(async function () {
+      await document
+        .insert(agent, docPath, { schema: localSchema })
+        .then(document.verifyInsertSuccess)
+      await document
+        .insert(agent, docPath, { instance: localInstances })
+        .then(document.verifyInsertSuccess)
+    })
+
+    after(async function () {
+      await document
+        .del(agent, docPath, { body: localInstances.map((i) => i['@id']) })
+        .then(document.verifyDelSuccess)
+      await document
+        .del(agent, docPath, { query: { graph_type: 'schema', id: 'Friendship' } })
+        .then(document.verifyDelSuccess)
+    })
+
+    const q1 = { '@type': 'Friendship' }
+
+    it(JSON.stringify(q1), async function () {
+      const r = await document
+        .get(agent, docPath, { body: { query: q1, as_list: true } })
+        .then(document.verifyGetSuccess)
+      const expectedInstances = []
+      for (const instance of localInstances) {
+        const copy = Object.assign({}, instance)
+        if (instance.friend) {
+          copy.friend = encodeURI(instance.friend['@type'] + '/' + instance.friend.name)
+        }
+        expectedInstances.push(copy)
+      }
+      expect(r.body).to.have.deep.members(expectedInstances)
+    })
+
+    const q2 = { '@type': 'Person', age: 71 }
+
+    it(JSON.stringify(q2), async function () {
+      const r = await document
+        .get(agent, docPath, {
+          body: { query: q2, as_list: true },
+        })
+        .then(document.verifyGetSuccess)
+      expectInstances(r.body, [socrates, gödel])
+    })
   })
 })

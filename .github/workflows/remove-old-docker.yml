@@ -1,0 +1,20 @@
+name: Remove old Docker dev tags
+
+on:
+  schedule:
+    - cron:  '0 4 * * 0' # At 4:00 on sunday, once a week
+  workflow_dispatch:
+
+jobs:
+  remove_old_docker_images:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Remove old Docker images
+        run: |
+          python3 .github/remove-old-docker-images.py
+        env:
+          DOCKER_USERNAME: terminusdb
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASS }}

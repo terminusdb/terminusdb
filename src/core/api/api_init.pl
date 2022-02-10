@@ -1,7 +1,10 @@
 :- module(api_init, [
               bootstrap_files/0,
+              initialize_flags/0,
               initialize_database/2,
-              initialize_database_with_store/2
+              initialize_database_with_store/2,
+              index_template/1,
+              world_ontology_json/1
           ]).
 
 :- use_module(core(triple)).
@@ -10,9 +13,28 @@
 :- use_module(core(query), [expand/2, default_prefixes/1]).
 :- use_module(core(transaction), [open_descriptor/2]).
 
+:- use_module(config(terminus_config)).
+
 :- use_module(library(semweb/turtle)).
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
+:- use_module(library(lists)).
+:- use_module(library(yall)).
+:- use_module(library(plunit)).
+:- use_module(library(filesex)).
+:- use_module(library(crypto)).
+:- use_module(library(prolog_pack), [pack_property/2]).
+/**
+ * initialize_flags is det.
+ *
+ * Initialize flags shared by all main predicates.
+ */
+initialize_flags :-
+    (   pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
+    ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
+    ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
+        halt(1)
+    ).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -42,6 +64,9 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 :- dynamic repo_schema/1.
 :- dynamic layer_schema/1.
 :- dynamic ref_schema/1.
+:- dynamic woql_schema/1.
+:- dynamic index_template/1.
+:- dynamic world_ontology_json/1.
 bootstrap_files :-
     template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
@@ -52,7 +77,11 @@ bootstrap_files :-
     ref_schema_json(RefSchemaPath),
     file_to_predicate(RefSchemaPath, ref_schema),
     woql_schema_json(WOQLSchemaPath),
-    file_to_predicate(WOQLSchemaPath, woql_schema).
+    file_to_predicate(WOQLSchemaPath, woql_schema),
+    index_template_path(IndexTemplatePath),
+    file_to_predicate(IndexTemplatePath, index_template),
+    world_ontology_json_path(OntJsonPath),
+    file_to_predicate(OntJsonPath, world_ontology_json).
 
 template_system_instance_json(Path) :-
     once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
@@ -68,6 +97,12 @@ ref_schema_json(Path) :-
 
 woql_schema_json(Path) :-
     once(expand_file_search_path(ontology('woql.json'), Path)).
+
+index_template_path(Path) :-
+    once(expand_file_search_path(config('index.tpl'), Path)).
+
+world_ontology_json_path(Path) :-
+    once(expand_file_search_path(test('worldOnt.json'), Path)).
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
@@ -158,3 +193,106 @@ initialize_database_with_store(Key, Store, Force) :-
     initialize_woql_schema(Store, Force),
 
     initialize_system_instance(Store, System_Schema, Key, Force).
+
+% FIXME! These tests should go into `src/config/terminus_config.pl`, but I
+% couldn't run them when they were there.
+:- begin_tests(env_vars).
+
+test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED is not set",
+     [ setup(clear_check_insecure_user_header_enabled),
+       cleanup(clear_check_insecure_user_header_enabled),
+       true(Enabled = false)
+     ]) :-
+    check_insecure_user_header_enabled(Enabled).
+
+test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true",
+     [ setup((
+           clear_check_insecure_user_header_enabled,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+       )),
+       cleanup((
+           clear_check_insecure_user_header_enabled,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'))
+       ),
+       true(Enabled = true)
+     ]) :-
+    check_insecure_user_header_enabled(Enabled).
+
+test("TERMINUSDB_INSECURE_USER_HEADER_ENABLED has a bad value",
+     [ setup((
+           clear_check_insecure_user_header_enabled,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', 42)
+       )),
+       cleanup((
+           clear_check_insecure_user_header_enabled,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
+       )),
+       throws(error(bad_env_var_value('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', '42'), _))
+     ]) :-
+    check_insecure_user_header_enabled(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER is not set",
+     [ setup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+       )),
+       cleanup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
+       )),
+       throws(error(missing_env_var('TERMINUSDB_INSECURE_USER_HEADER'), _))
+     ]) :-
+    insecure_user_header_key(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER is missing",
+     [ setup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true)
+       )),
+       cleanup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED')
+       )),
+       throws(error(missing_env_var('TERMINUSDB_INSECURE_USER_HEADER'), _))
+     ]) :-
+    insecure_user_header_key(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER has a bad value",
+     [ setup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
+           setenv('TERMINUSDB_INSECURE_USER_HEADER', '')
+       )),
+       cleanup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'),
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER')
+       )),
+       throws(error(bad_env_var_value('TERMINUSDB_INSECURE_USER_HEADER', ''), _))
+     ]) :-
+    insecure_user_header_key(_).
+
+test("TERMINUSDB_INSECURE_USER_HEADER=TerminusDB-5",
+     [ setup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           setenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED', true),
+           setenv('TERMINUSDB_INSECURE_USER_HEADER', 'TerminusDB-5')
+       )),
+       cleanup((
+           clear_check_insecure_user_header_enabled,
+           clear_insecure_user_header_key,
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER_ENABLED'),
+           unsetenv('TERMINUSDB_INSECURE_USER_HEADER')
+       )),
+       true(Header_Key = terminusdb_5)
+     ]) :-
+    insecure_user_header_key(Header_Key).
+
+:- end_tests(env_vars).

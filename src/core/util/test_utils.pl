@@ -24,8 +24,6 @@
               delete_user_and_organization/1,
               cleanup_user_database/2,
 
-              simulates/3,
-
               spawn_server/4,
               kill_server/1,
               setup_temp_server/2,
@@ -85,8 +83,17 @@
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
+:- use_module(library(filesex)).
 
+:- use_module(library(debug)).
 :- use_module(library(process)).
+:- use_module(library(plunit)).
+:- use_module(library(pcre)).
+:- use_module(library(random)).
+:- use_module(library(readutil)).
+:- use_module(library(base64)).
+
+:- use_module(library(lists)).
 
 :- meta_predicate test_format(:, +, +).
 
@@ -234,10 +241,8 @@ create_db_with_test_schema(Organization, Db_Name) :-
     super_user_authority(Admin),
     create_db(System, Admin, Organization, Db_Name, "test", "a test db", false, true, Prefixes),
 
-    terminus_path(Path),
-    interpolate([Path, '/test/worldOnt.json'], JSON_File),
-
-    open(JSON_File, read, JSON_Stream),
+    world_ontology_json(OntologyJSON),
+    open_string(OntologyJSON, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
     atomic_list_concat([Organization,'/',Db_Name], DB_Path),
@@ -332,8 +337,9 @@ print_all_documents(Askable) :-
 print_all_documents(Askable, Selector) :-
     nl,
     forall(
-        api_document:api_generate_documents_(Selector, Askable, true, false, 0, unlimited, Document),
-        json_write_dict(current_output, Document, [])),
+        api_generate_document_ids(Selector, Askable, false, 0, unlimited, Id),
+        (   api_get_document(Selector, Askable, true, false, Id, Document),
+            json_write_dict(current_output, Document, []))),
     nl.
 
 cleanup_user_database(User, Database) :-
@@ -361,29 +367,6 @@ select_mode([domain(L)|Rest],[X|Args1],[X|Args2],Equations) :-
     member(X,L),
     select_mode(Rest,Args1,Args2,Equations).
 
-/*
- * simulates(+P,+Q,+Modes) is det.
- *
- * Predicate P simulates Q, (P < Q)
- *
- * Modes is a a list with len = arity(P) = arity(Q)
- * containing elements either (?), (-) or domain([X,Y,Z,...])
- * where X,Y,Z are ground values in the domain.
- *
- */
-simulates(M:P,N:Q,Modes) :-
-    forall((   member(Mode,Modes),
-               select_mode(Mode,Args1,Args2,Equations),
-               P_Goal =.. [P|Args1],
-               Q_Goal =.. [Q|Args2],
-               call(N:Q_Goal)),
-           (   (   call(M:P_Goal),
-                   call(Equations)
-               ->  true
-               ;   format("Goal ~q did not simulate ~q~nunder equations (~q) for mode ~q",
-                          [P_Goal,Q_Goal,Equations,Mode]),
-                   fail)
-           )).
 
 inherit_env_var(Env_List_In, Var, Env_List_Out) :-
     (   getenv(Var, Val)
@@ -433,7 +416,11 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
     ],
 
-    inherit_env_vars(Env_List_1,
+    (   memberchk(env_vars(Env_List_User), Options)
+    ->  append(Env_List_1, Env_List_User, Combined_Env_List)
+    ;   Combined_Env_List = Env_List_1),
+
+    inherit_env_vars(Combined_Env_List,
                      [
                          'HOME',
                          'SystemRoot', % Windows specific stuff...
@@ -484,7 +471,11 @@ spawn_server(Path, URL, PID, Options) :-
               error(Error, _)).
 
 kill_server(PID) :-
-    process_kill(PID),
+    % As of SWI-Prolog v8.4.0, process_kill(PID), which defaults to SIGTERM,
+    % does not terminate the process on all systems. Until that is fixed, we use
+    % SIGKILL to work around this issue.
+    % See: https://github.com/terminusdb/terminusdb/pull/828
+    process_kill(PID, 9),
     process_wait(PID, _).
 
 setup_temp_server(Store-Dir-PID, URL, Options) :-

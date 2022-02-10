@@ -1,4 +1,5 @@
 :- module(utils,[
+              down_from/3,
               get_key/4,
               get_key/3,
               get_dict_default/4,
@@ -64,12 +65,17 @@
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
               json_read_dict_stream/2,
+              json_read_dict_list_stream/2,
+              json_stream_read_single_dict/2,
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
               has_duplicates/2,
               index_list/2,
-              uri_encoded_string/3
+              nb_thread_var_init/2,
+              nb_thread_var/2,
+              uri_encoded_string/3,
+              text/1
           ]).
 
 /** <module> Utils
@@ -84,6 +90,17 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(http/json)).
 :- use_module(library(solution_sequences)).
+:- use_module(library(lists)).
+:- use_module(library(random)).
+:- use_module(library(process), [process_create/3, process_wait/2]).
+:- use_module(library(uri), [uri_encoded/3]).
+
+/*
+ * The opposite of between/3
+ */
+down_from(From,To,X) :-
+    between(To,From,Y),
+    X is From - Y + 1.
 
 /*
  * Forget the next phrase.
@@ -248,7 +265,8 @@ unique_solutions(Template, Goal, Collection) :-
  *
  * Repeats a term A, N times.
  */
-repeat_term(_A,0,[]).
+repeat_term(_A,0,[]) :-
+    !.
 repeat_term(A,N,[A|Z]) :-
 	N > 0,
 	N2 is N - 1,
@@ -899,6 +917,18 @@ time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
 
 json_read_dict_stream(Stream,Term) :-
     repeat,
+    (   json_stream_read_single_dict(Stream,Term)
+    *-> true
+    ;   !,
+        fail).
+
+json_read_dict_list_stream(Stream, Term) :-
+    json_read_dict_stream(Stream, Term_1),
+    (   is_list(Term_1)
+    ->  member(Term, Term_1)
+    ;   Term = Term_1).
+
+json_stream_read_single_dict(Stream,Term) :-
     json_read_dict(Stream, Term, [default_tag(json),end_of_file(eof)]),
     (   Term = eof
     ->  !,
@@ -920,11 +950,10 @@ skip_generate_nsols(Goal, Skip, Count) :-
 input_to_integer(Atom, Integer) :-
     (   integer(Atom)
     ->  Integer = Atom
-    ;   error:text(Atom)
+    ;   text(Atom)
     ->  catch(atom_number(Atom, Integer), _, fail),
         integer(Integer)).
 
-:- use_module(library(lists)).
 duplicates([], []) :- !.
 duplicates(List, Duplicates) :-
     msort(List, Sorted),
@@ -955,6 +984,25 @@ index_list(List,Indexes) :-
     ;   Indexes = []
     ).
 
+nb_thread_var_init(Var, State) :-
+    State = state(_),
+    nb_setarg(1, State, Var).
+
+:- meta_predicate nb_thread_var(2,+).
+nb_thread_var(Callable, State) :-
+    call(Callable, State, Out),
+    nb_setarg(1,State, Out).
+
 uri_encoded_string(Component, Value, Encoded_String) :-
     uri_encoded(Component, Value, Encoded),
     atom_string(Encoded, Encoded_String).
+
+% This predicate is copied from library(error) to avoid using a private predicate.
+% It can be found in the file library/error.pl inside the SWIPL directory.
+text(X) :-
+    (   atom(X)
+    ;   string(X)
+    ;   '$is_char_list'(X, _)
+    ;   '$is_code_list'(X, _)
+    ),
+    !.

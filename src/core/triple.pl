@@ -13,6 +13,10 @@
               database_inference/2,
               database_schema/2,
               organization_database_name/3,
+              excluded_organization/1,
+              excluded_database/1,
+              error_on_excluded_organization/1,
+              error_on_excluded_database/1,
 
               % iana.pl
               iana/3,

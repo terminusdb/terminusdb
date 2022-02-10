@@ -1,6 +1,8 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
+:- use_module(library(prolog_pack)).
+
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
@@ -48,9 +50,9 @@ add_config_path :-
     asserta(user:file_search_path(config, Config)).
 
 :- add_config_path.
+:- use_module(config(terminus_config)).
 
 add_pack_path :-
-    use_module(config(terminus_config)),
     (   pack_dir(PackDir)
     ->  attach_packs(PackDir, [duplicate(replace)])
     ;   true).
@@ -84,3 +86,20 @@ add_template_path :-
     asserta(user:file_search_path(template, Template)).
 
 :- add_template_path.
+
+add_rust_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir, '/rust',Rust),
+    asserta(user:file_search_path(foreign, Rust)).
+
+:- add_rust_path.
+
+add_enterprise_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir, '/../../terminusdb-enterprise/prolog', Enterprise),
+    asserta(user:file_search_path(enterprise, Enterprise)).
+
+:- if(getenv("TERMINUSDB_ENTERPRISE", true)).
+:- add_enterprise_path.
+:- set_prolog_flag(terminusdb_enterprise, true).
+:- endif.

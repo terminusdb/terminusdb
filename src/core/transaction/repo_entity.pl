@@ -24,6 +24,11 @@
 
 :- use_module(layer_entity).
 
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
+
 has_repository(Askable, Repo_Name) :-
     ask(Askable,
         t(_, name, Repo_Name^^xsd:string)).

@@ -20,7 +20,8 @@
               collection_descriptor_graph_filter_graph_descriptor/3,
               collection_descriptor_prefixes/2,
               collection_descriptor_default_write_graph/2,
-              descriptor_to_loggable/2
+              descriptor_to_loggable/2,
+              ensure_transaction_has_builder/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -158,6 +159,11 @@
 :- use_module(core(query)).
 
 :- use_module(library(terminus_store)).
+:- use_module(library(lists)).
+:- use_module(library(yall)).
+:- use_module(library(apply)).
+:- use_module(library(plunit)).
+:- use_module(library(debug)).
 
 is_descriptor_name(system_descriptor).
 is_descriptor_name(label_descriptor).
@@ -375,6 +381,13 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     open_write(Read_Write_Obj.read, Layer_Builder),
     nb_set_dict(write,Read_Write_Obj,Layer_Builder).
+
+ensure_transaction_has_builder(schema, Transaction) :-
+    [RWO] = (Transaction.schema_objects),
+    read_write_obj_builder(RWO, _).
+ensure_transaction_has_builder(instance, Transaction) :-
+    [RWO] = (Transaction.instance_objects),
+    read_write_obj_builder(RWO, _).
 /*
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     (   get_dict(commit_type, (Read_Write_Obj.descriptor), 'http://terminusdb.com/schema/ref#InitialCommit')

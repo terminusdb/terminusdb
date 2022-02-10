@@ -34,12 +34,14 @@
 %:- use_module(core(transaction)).
 
 :- use_module(library(apply)).
+:- use_module(library(debug)).
+:- use_module(library(error)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(lists)).
+:- use_module(library(url)).
 
-:- reexport(library(terminus_store),
-            except([create_named_graph/3,
-                    open_named_graph/3])).
+:- reexport(library(terminus_store)).
 
 
 /** <module> Triplestore
@@ -184,7 +186,7 @@ storage(Triple_Store) :-
  */
 safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
-    terminus_store:create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+    create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /*
  * safe_named_graph_exists(+Store,+Graph_ID) is semidet.
@@ -201,7 +203,7 @@ safe_named_graph_exists(Store, Graph_ID) :-
  */
 safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
-    terminus_store:open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+    open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /*
  * safe_delete_named_graph(+Store, +Graph_ID) is semidet.
@@ -210,7 +212,7 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
  */
 safe_delete_named_graph(Store, Graph_ID) :-
     www_form_encode(Graph_ID, Safe_Graph_ID),
-    terminus_store:delete_named_graph(Store, Safe_Graph_ID).
+    delete_named_graph(Store, Safe_Graph_ID).
 
 /**
  * import_graph(+File,+DB_ID,+Graph_ID) is det.
@@ -231,6 +233,8 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
  * Insert triple into transaction layer, record changed as 1 or 0
  */
 insert(G,X,Y,Z,Changed) :-
+    do_or_die(ground(Z),
+              error(instantiation_error, _)),
     ground_object_storage(Z,S),
     read_write_obj_builder(G, Builder),
     (   nb_add_triple(Builder, X, Y, S)

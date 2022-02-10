@@ -37,7 +37,10 @@
                        gYearRange//2,
                        integerRange//2,
                        point//2,
-                       url//0
+                       url//0,
+                       normalizedString//0,
+                       nmtoken//0,
+                       ncname//0
                        ]).
 
 /** <module> XSD Parser
@@ -66,6 +69,11 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(triple/iana)). % dubious - seems to be the only place where iana is used, so shouldn't iana be part of this module?
+
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(yall)).
+:- use_module(library(iso_639), [iso_639_2/2, iso_639_3/2]).
 
 /******************
  *  Punctuation   *

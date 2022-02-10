@@ -28,6 +28,10 @@
 :- use_module(capabilities).
 :- use_module(core(document)).
 
+:- use_module(library(crypto)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
+
 /** <module> User
  *
  * User management. This is required for testing the capabilities system,
@@ -74,6 +78,7 @@ add_user_organization_transaction(System_DB, Auth, Nick, Org) :-
                      _).
 
 add_user_organization(Context, Nick, Org, Organization_URI) :-
+    error_on_excluded_organization(Org),
 
     do_or_die(agent_name_exists(Context, Nick),
               error(unknown_user(Nick), _)),
@@ -108,6 +113,8 @@ add_organization_transaction(System_DB, Auth, Name) :-
                      _).
 
 add_organization(Name, Organization_URI) :-
+    error_on_excluded_organization(Name),
+
     create_context(system_descriptor{}, Context),
     with_transaction(Context,
                      add_organization(Context, Name, Organization_URI),

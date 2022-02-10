@@ -9,7 +9,10 @@
 :- use_module(db_pack).
 :- use_module(core(account)).
 
+:- use_module(library(lists)).
 :- use_module(library(tus)).
+:- use_module(library(url)).
+:- use_module(library(readutil)).
 
 child_parent_linear_history(Child,Parent,Graph) :-
     memberchk(Child-some(Parent), Graph),

@@ -7,6 +7,8 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(document)).
 
+:- use_module(library(plunit)).
+
 get_prefixes(Path, System_DB, Auth, JSON) :-
 
     do_or_die(

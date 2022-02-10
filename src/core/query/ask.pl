@@ -12,7 +12,6 @@
               context_to_parent_transaction/2,
               context_extend_prefixes/3,
               context_default_prefixes/2,
-              empty_context/1,
               query_default_collection/2,
               query_default_write_graph/2,
               query_default_schema_write_graph/2
@@ -33,6 +32,11 @@
 :- use_module(core(transaction)).
 
 :- use_module(core(document), [database_prefixes/2]).
+
+:- use_module(library(apply)).
+:- use_module(library(debug)).
+:- use_module(library(lists)).
+:- use_module(library(gensym)).
 
 prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
     freeze(Woql_Var,
@@ -171,15 +175,29 @@ askable_prefixes(Transaction_Object,Prefixes) :-
 askable_prefixes(Descriptor,Prefixes) :-
     collection_descriptor_prefixes(Descriptor, Prefixes).
 
-create_context(Layer, Context) :-
+/**
+ * create_context(+Askable, -Context) is semidet.
+ *
+ * Create a context. Fail if Askable does not exist.
+ */
+create_context(Askable, Context) :-
+    do_or_die(
+       nonvar(Askable),
+       error(unexpected_argument_instantiation(create_context, 1, Askable), _)),
+    do_or_die(
+       var(Context),
+       error(unexpected_argument_instantiation(create_context, 2, Context), _)),
+    create_context_(Askable, Context).
+
+create_context_(Layer, Context) :-
     blob(Layer, layer),
     !,
     open_descriptor(Layer, Transaction),
-    create_context(Transaction, Context).
-create_context(Context, Context) :-
+    create_context_(Transaction, Context).
+create_context_(Context, Context) :-
     query_context{} :< Context,
     !.
-create_context(Validation,Context) :-
+create_context_(Validation,Context) :-
     validation_object{ instance_objects : Inst,
                        schema_objects : Schema,
                        descriptor : Desc } :< Validation,
@@ -188,8 +206,8 @@ create_context(Validation,Context) :-
                              instance_objects : Inst,
                              schema_objects : Schema,
                              descriptor : Desc },
-    create_context(Transaction_Object,Context).
-create_context(Transaction_Object, Context) :-
+    create_context_(Transaction_Object,Context).
+create_context_(Transaction_Object, Context) :-
     transaction_object{ descriptor : Descriptor } :< Transaction_Object,
     !,
     database_prefixes(Transaction_Object, Database_Prefixes),
@@ -213,18 +231,18 @@ create_context(Transaction_Object, Context) :-
         bindings : [],
         selected : []
     }.
-create_context(Descriptor, Context) :-
+create_context_(Descriptor, Context) :-
     open_descriptor(Descriptor, Transaction_Object),
-    create_context(Transaction_Object, Context).
+    create_context_(Transaction_Object, Context).
 
 is_query_context(Context) :-
     is_dict(Context),
     query_context{} :< Context.
 
 /**
- * create_context(Askable, Commit_Info, Context).
+ * create_context(+Askable, +Commit_Info, -Context) is semidet.
  *
- * Add Commit Info
+ * Create a context and add commit info to it. Fail if Askable does not exist.
  */
 create_context(Askable, Commit_Info, Context) :-
     create_context(Askable, Context_Without_Commit),

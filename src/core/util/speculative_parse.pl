@@ -35,6 +35,7 @@
 :- use_module(xsd_parser).
 :- use_module(utils).
 :- use_module(library(dcg/basics), [whites//0, blanks//0]).
+:- use_module(library(plunit)).
 
 /*
  * guess_date(+Val,-Date) is nondet.

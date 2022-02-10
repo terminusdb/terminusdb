@@ -30,8 +30,20 @@ function isObject (val) {
   return val instanceof Object
 }
 
+function isUndefinedOrNull (val) {
+  return val === undefined || val === null
+}
+
 function randomString () {
   return crypto.randomBytes(3).toString('hex')
+}
+
+function typeString (val) {
+  try {
+    return val.constructor.name
+  } catch (_) {
+    return typeof val
+  }
 }
 
 module.exports = {
@@ -43,4 +55,6 @@ module.exports = {
   isString,
   isObject,
   randomString,
+  isUndefinedOrNull,
+  typeString,
 }

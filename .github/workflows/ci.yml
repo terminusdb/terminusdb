@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 env:
-  TERMINUSDB_STORE_PROLOG_VERSION: v0.19.4
+  TERMINUSDB_STORE_PROLOG_VERSION: v0.19.6
   TUS_VERSION: v0.0.5
   DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
 
@@ -60,6 +60,28 @@ jobs:
         with:
             name: terminusdb-server-docker-image
             path: terminusdb-server-docker-image.tar.gz
+
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: build_docker
+
+    steps:
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
+      - name: Download script
+        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.5/pl_lint.pl' > pl_lint.pl
+
+      - name: Run linter
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run --name terminusdb -v $(pwd)/pl_lint.pl:/app/pl_lint.pl $DOCKER_IMAGE_NAME:local \
+            swipl -f src/load_paths.pl /app/pl_lint.pl
 
   # Unit tests
   unit_tests:
@@ -164,12 +186,35 @@ jobs:
           docker tag $DOCKER_IMAGE_NAME:local $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
+          # Use dev-COMMITHASH tag for each development
+          # version. We clean up after a certain amount of time.
+          if [ "$VERSION" == "dev" ]; then
+             DEV_COMMIT_TAG=${IMAGE_ID}:${VERSION}-${GITHUB_SHA}
+             docker tag $DOCKER_IMAGE_NAME:local $DEV_COMMIT_TAG
+             docker push $DEV_COMMIT_TAG
+          fi
+
           # Use Docker `latest` tag convention when a version tag is pushed
           if [ $(echo "$GITHUB_REF" | grep "refs/tags/v") ]; then
              docker tag $IMAGE_ID:$VERSION ${IMAGE_ID}:latest
              docker push ${IMAGE_ID}:latest
           fi
 
+  trigger_enterprise_build:
+    runs-on: ubuntu-latest
+    needs: [push_docker]
+    if: |
+      github.repository == 'terminusdb/terminusdb' &&
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main'
+      )
+
+    steps:
+      - name: Deploy Stage
+        run: |
+          curl -X POST https://api.github.com/repos/${{ secrets.ENTERPRISE_REPO_OWNER }}/${{ secrets.ENTERPRISE_REPO }}/dispatches \
+            -H 'Accept: application/vnd.github.everest-preview+json' \
+            -u rrooij:${{ secrets.PAT }} -d '{ "event_type": "Trigger from community" }'
   deploy:
     runs-on: ubuntu-latest
     needs: [push_docker]

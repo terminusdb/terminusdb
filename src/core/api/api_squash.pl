@@ -6,6 +6,8 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
+:- use_module(library(plunit)).
+
 % Take a path, squash and return a reference to the
 % Commit.
 %
@@ -89,6 +91,8 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+
+:- use_module(library(ordsets)).
 
 test(squash_branch,
      [setup((setup_temp_store(State),

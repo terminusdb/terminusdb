@@ -3,3 +3,6 @@
 *~
 docs
 storage
+src/rust/target
+src/rust/librust.so
+terminusdb

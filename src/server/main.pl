@@ -15,7 +15,12 @@
 :- use_module(core(api)).
 
 % configuration predicates
-:- use_module(config(terminus_config),[]).
+:- use_module(config(terminus_config),[jwt_enabled/0,
+                                       jwt_jwks_endpoint/1,
+                                       server/1,
+                                       server_port/1,
+                                       worker_amount/1,
+                                       is_enterprise/0]).
 
 % Sockets
 :- use_module(library(socket)).
@@ -27,15 +32,17 @@
 :- use_module(library(http/http_ssl_plugin)).
 :- use_module(library(http/html_write)).
 
+:- use_module(library(option)).
+
 % JWT IO library
-:- if(config:jwt_enabled).
+:- if(jwt_enabled).
 
 % Load the library only if JWT is enabled
 :- use_module(library(jwt_io)).
 
 % Set up JWKS only if we have an endpoint
 load_jwt_conditionally :-
-    (   config:jwt_jwks_endpoint(Endpoint)
+    (   jwt_jwks_endpoint(Endpoint)
     ->  jwt_io:setup_jwks(Endpoint)
     ;   true).
 
@@ -49,9 +56,9 @@ load_jwt_conditionally :-
 
 
 terminus_server(Argv,Wait) :-
-    config:server(Server),
-    config:server_port(Port),
-    config:worker_amount(Workers),
+    server(Server),
+    server_port(Port),
+    worker_amount(Workers),
     load_jwt_conditionally,
     HTTPOptions = [port(Port), workers(Workers)],
     catch(http_server(http_dispatch, HTTPOptions),
@@ -110,5 +117,8 @@ welcome_banner(Server,Argv) :-
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
     format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
            [StrTime, Now, Argv]),
-    format(user_error,'% Welcome to TerminusDB\'s terminusdb-server!~n',[]),
+    (   is_enterprise
+    ->  Enterprise = ' Enterprise'
+    ;   Enterprise = ''),
+    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server!~n',[Enterprise]),
     format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).

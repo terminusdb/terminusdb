@@ -15,7 +15,6 @@
               assert_write_access/4,
               authorisation_object/3,
               user_accessible_database/3,
-              super_user_authority/1,
               check_descriptor_auth/4,
               is_super_user/1,
               is_super_user/2
@@ -41,6 +40,8 @@
 :- use_module(config(terminus_config),[]).
 
 :- use_module(library(crypto)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 /**
  * username_user_id(+DB, +Username, -User_ID) is semidet.

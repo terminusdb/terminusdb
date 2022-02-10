@@ -24,6 +24,14 @@ describe('document', function () {
       await db.del(agent, dbPath)
     })
 
+    it('succeeds on database exists', async function () {
+      const r = await agent
+        .head(dbPath)
+        .query({ exists: true })
+      expect(r.status).to.equal(200)
+      expect(r.text).to.be.undefined
+    })
+
     describe('fails insert with missing parameters', function () {
       const options = [
         [{ queryString: '', bodyString: '' }, 'author'],
@@ -120,7 +128,7 @@ describe('document', function () {
       }
     })
 
-    describe('handles strange schema @id', function () {
+    describe('inserts, queries, and deletes schema with @id', function () {
       const keys = [
         'false',
         'true',
@@ -129,6 +137,7 @@ describe('document', function () {
         '[]',
         '{}',
         '/',
+        '逆手道',
       ]
       for (const id of keys) {
         it(id, async function () {
@@ -326,6 +335,30 @@ describe('document', function () {
         expect(r.body['api:error']['api:value']).to.equal(value)
         expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
       }
+    })
+
+    it('fails for wrong array dimension (#975)', async function () {
+      const type = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: {
+            '@id': type,
+            '@type': 'Class',
+            s: {
+              '@type': 'Array',
+              '@dimensions': 1,
+              '@class': 'xsd:integer',
+            },
+          },
+        })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .insert(agent, docPath, {
+          instance: { '@type': type, s: [[1], [2]] },
+        })
+        .then(document.verifyInsertFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentArrayWrongDimensions')
+      expect(r.body['api:error']['api:dimensions']).to.equal(1)
     })
 
     it('does not stringify boolean literals (#723)', async function () {

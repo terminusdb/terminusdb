@@ -23,7 +23,12 @@
               saved_request/5
           ]).
 
+:- use_module(config(terminus_config), [log_format/1,
+                                        log_level/1,
+                                        server_name/1]).
 :- use_module(utils).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
 :- use_module(library(http/json)).
 :- use_module(library(http/http_stream)).
 
@@ -61,7 +66,7 @@ json_log_raw_error(E, Dict) :-
                    nl).
 
 json_log_raw(Dict) :-
-    config:log_format(text),
+    log_format(text),
     !,
     (   get_dict(message, Dict, Message),
         get_dict(severity, Dict, Severity),
@@ -229,7 +234,7 @@ json_log_debug_formatted(Format, Arguments) :-
     json_log_debug(Message).
 
 log_enabled_for_level(Severity) :-
-    config:log_level(Level),
+    log_level(Level),
     log_enabled_for_level(Severity, Level).
 
 log_enabled_for_level('ERROR', 'DEBUG').

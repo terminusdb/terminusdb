@@ -14,6 +14,10 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(plunit)).
+
 payload_repository_head_and_pack(Data, Head, Pack) :-
     ground(Head),
     ground(Pack),

@@ -20,12 +20,17 @@
 :- use_module(core(util)).
 :- use_module(core(util/xsd_parser)).
 :- use_module(core(triple)).
+:- use_module(library(terminus_store)).
 :- use_module(core(transaction)).
 
 :- use_module(schema).
 
 :- use_module(library(http/json)).
 :- use_module(library(aggregate)).
+:- use_module(library(lists)).
+:- use_module(library(dicts)).
+:- use_module(library(solution_sequences)).
+:- use_module(library(uri), [uri_components/2]).
 
 
 is_rdf_list_(_Instance, Type) :-
@@ -105,12 +110,16 @@ member_list(Validation_Object, O, L) :-
     database_instance(Validation_Object, Instance),
     graph_member_list(Instance, O, L).
 
+member_array(Validation_Object, O, A) :-
+    database_instance(Validation_Object, Instance),
+    graph_member_array(Instance, O, A).
+
 card_count(Validation_Object,S_Id,P_Id,N) :-
     % choose as existential anything free
     instance_layer(Validation_Object, Layer),
     (   integer(S_Id),
         integer(P_Id)
-    ->  terminus_store:sp_card(Layer,S_Id,P_Id,N)
+    ->  sp_card(Layer,S_Id,P_Id,N)
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
     ).
@@ -193,9 +202,10 @@ refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
 refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
     % no bad cardinality possible
     fail.
-refute_cardinality_(array(_C),_Validation_Object,_S,_P,_Witness) :-
+refute_cardinality_(array(_C,_D),_Validation_Object,_S,_P,_Witness) :-
     % a property whose value is an array
     % No bad cardinality possible - absence means empty array
+    % But we should check the cardinality of elements!
     fail.
 refute_cardinality_(array,Validation_Object,S,P,Witness) :-
     % a property inside an array element
@@ -510,10 +520,18 @@ refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:predicate_id(Layer, Predicate_String, P_Id),
     atom_string(Predicate, Predicate_String),
-    \+ (   global_prefix_expand(sys:index, SYS_Index),
+    \+ (   global_prefix_expand(sys:index3, SYS_Index4),
+           global_prefix_expand(sys:index3, SYS_Index3),
+           global_prefix_expand(sys:index2, SYS_Index2),
+           global_prefix_expand(sys:index, SYS_Index),
            global_prefix_expand(sys:value, SYS_Value),
            global_prefix_expand(rdf:type, RDF_Type),
-           memberchk(Predicate, [SYS_Index, SYS_Value, RDF_Type])),
+           memberchk(Predicate, [SYS_Index4,
+                                 SYS_Index3,
+                                 SYS_Index2,
+                                 SYS_Index,
+                                 SYS_Value,
+                                 RDF_Type])),
     terminus_store:subject_id(Layer, Subject, S_Id),
     Witness = json{ '@type' : invalid_array_type,
                     subject: Subject,
@@ -581,14 +599,14 @@ refute_object_type_(optional(C),Validation_Object,Object,Witness) :-
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(array(C),Validation_Object,Object,Witness) :-
+refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
     database_instance(Validation_Object, Instance),
     xrdf_added(Instance,Object,sys:value,O),
     \+ is_instance(Validation_Object,O,C),
     Witness = witness{
                   '@type': array_instance_not_of_class,
                   class: C,
-                  instance: O,
+                  object: O,
                   array: Object
               }.
 refute_object_type_(list(C),Validation_Object,Object,Witness) :-
@@ -604,6 +622,24 @@ refute_object_type_(list(C),Validation_Object,Object,Witness) :-
                       object: Elt,
                       list: Object
                   }
+    ).
+refute_object_type_(table(C),Validation_Object,Object,Witness) :-
+    (   \+ is_rdf_list(Validation_Object, Object)
+    ->  Witness = witness{'@type':not_a_valid_table,
+                          class:C,
+                          table:Object}
+    ;   member_array(Validation_Object, Array_Elt, Object),
+        refute_object_type_(array(C,2),Validation_Object,Array_Elt,Array_Witness),
+        (   witness{'@type':array_element_not_of_class,
+                    object: Elt} :< Array_Witness,
+            Witness = witness{
+                          '@type': table_element_of_wrong_type,
+                          class: C,
+                          object: Elt,
+                          list: Array_Elt,
+                          table: Object
+                      }
+        )
     ).
 
 refute_built_in(Validation_Object,Subject,Predicate,Witness) :-

@@ -5,6 +5,14 @@
  */
 
 :- [load_paths].
+:- reexport(core(util/syntax)).
+:- use_foreign_library(foreign(librust)).
+:- if(is_enterprise).
+:- use_module(enterprise(init_enterprise)).
+:- endif.
+
+:- use_module(library(main)).
+:- use_module(library(settings)).
 :- initialization(main).
 
 initialise_hup :-
@@ -33,8 +41,6 @@ prolog:message(server_missing_config(BasePath)) -->
     ].
 
 
-:- reexport(core(util/syntax)).
-
 :- use_module(server(routes)).
 :- use_module(server(main)).
 
@@ -42,16 +48,22 @@ prolog:message(server_missing_config(BasePath)) -->
 %:- use_module(plugins(registry)).
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
-:- use_module(core(api), [bootstrap_files/0]).
+:- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
+
+:- use_module(config(terminus_config)).
+
+:- use_module(library(plunit)).
 
 :- set_test_options([run(manual)]). % ,concurrent(true)]).
 
 :- use_module(cli(main)).
+:- use_module(library(debug)).
 
 hup(_Signal) :-
   thread_send_message(main, stop).
 
 main(_Argv) :-
+    initialize_flags,
     initialise_log_settings,
     bootstrap_config_files,
     bootstrap_files,

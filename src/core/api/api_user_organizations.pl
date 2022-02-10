@@ -7,6 +7,8 @@
 :- use_module(core(query)).
 :- use_module(core(document)).
 
+:- use_module(library(plunit)).
+
 user_organizations(System_DB, Auth, Result) :-
     findall(
         _{ '@type' : 'Organization',

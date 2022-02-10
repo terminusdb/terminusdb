@@ -1,12 +1,11 @@
 :- module(config,[
-              version/1,
+              terminusdb_version/1,
               bootstrap_config_files/0,
               server/1,
               server_name/1,
               server_port/1,
               worker_amount/1,
               max_transaction_retries/1,
-              index_template/1,
               default_database_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
@@ -22,12 +21,18 @@
               clear_log_level/0,
               log_format/1,
               set_log_format/1,
-              clear_log_format/0
+              clear_log_format/0,
+              insecure_user_header_key/1,
+              check_all_env_vars/0,
+              is_enterprise/0,
+              check_insecure_user_header_enabled/1
           ]).
+
+:- use_module(library(pcre)).
 
 :- use_module(core(util)).
 
-version('10.0.13').
+terminusdb_version('10.0.17').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
@@ -58,18 +63,6 @@ max_transaction_retries(Value) :-
     ->  atom_number(Atom_Value, Value)
     ;   worker_amount(Num_Workers),
         Value is Num_Workers * 2).
-
-:- dynamic index_template_/1.
-
-index_template(Value) :-
-    index_template_(Value),
-    !.
-index_template(Value) :-
-    once(expand_file_search_path(config('index.tpl'), Template_Path)),
-    open(Template_Path, read, Template_Stream),
-    read_string(Template_Stream, _, Value),
-    assertz(index_template_(Value)),
-    close(Template_Stream).
 
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
@@ -180,3 +173,69 @@ set_log_format(Log_Format) :-
 
 clear_log_format :-
     retractall(log_format_override(_)).
+
+:- dynamic check_insecure_user_header_enabled_/1.
+
+/* Retract the dynamic predicate for testing. */
+clear_check_insecure_user_header_enabled :-
+    retractall(check_insecure_user_header_enabled_(_)).
+
+/**
+ * check_insecure_user_header_enabled(-Enabled) is semidet.
+ *
+ * Look up the env var for enabling the insecure user header.
+ */
+check_insecure_user_header_enabled(Enabled) :-
+    check_insecure_user_header_enabled_(Enabled),
+    !.
+check_insecure_user_header_enabled(Enabled) :-
+    Env_Var = 'TERMINUSDB_INSECURE_USER_HEADER_ENABLED',
+    getenv_default(Env_Var, false, Enabled),
+    die_if(\+ memberchk(Enabled, [false, true]),
+           error(bad_env_var_value(Env_Var, Enabled), _)),
+    assertz(check_insecure_user_header_enabled_(Enabled)).
+
+:- dynamic insecure_user_header_key_/1.
+
+/* Retract the dynamic predicate for testing. */
+clear_insecure_user_header_key :-
+    retractall(insecure_user_header_key_(_)).
+
+/**
+ * insecure_user_header_key(-Header_Key) is semidet.
+ *
+ * Check if the insecure user header is enabled, look up the env var for the
+ * insecure user header, and convert it to a key for checking an HTTP request.
+ */
+insecure_user_header_key(Header_Key) :-
+    insecure_user_header_key_(Header_Key),
+    !.
+insecure_user_header_key(Header_Key) :-
+    check_insecure_user_header_enabled(true),
+    Env_Var = 'TERMINUSDB_INSECURE_USER_HEADER',
+    do_or_die(getenv(Env_Var, Value),
+              error(missing_env_var(Env_Var), _)),
+    die_if(\+ re_match("[A-Za-z0-9-]+", Value),
+           error(bad_env_var_value(Env_Var, Value), _)),
+    string_lower(Value, Lower_String),
+    re_replace("-"/g, "_", Lower_String, Lower_String_No_Dashes),
+    atom_string(Header_Key, Lower_String_No_Dashes),
+    assertz(insecure_user_header_key_(Header_Key)).
+
+/**
+ * check_all_env_vars is det.
+ *
+ * Load and check all env vars.
+ *
+ * This should be done at initialization, so that the error-checking is
+ * performed as soon as possible and the the user is notified of any errors.
+ *
+ * Note that nothing should go wrong if this is not called. All of the
+ * predicates referenced here can be called at any time. This is only done to
+ * improve the user experience.
+ */
+check_all_env_vars :-
+    ignore(insecure_user_header_key(_)).
+
+is_enterprise :-
+    current_prolog_flag(terminusdb_enterprise, true).

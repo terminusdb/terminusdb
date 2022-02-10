@@ -20,6 +20,10 @@
 :- use_module(library(semweb/turtle)).
 :- use_module(core(document)).
 
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+
 :- multifile user:portray/1.
 user:portray(turtle_utils:open_string(_, Stream)) :-
     format("~q", [turtle_utils:open_string("... string elided...", Stream)]).
