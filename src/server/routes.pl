@@ -163,6 +163,7 @@ info_handler(get, Request, System_DB, Auth) :-
                  methods([options,get])]).
 
 ok_handler(_Method, _Request, _System_DB, _Auth) :-
+    format('Content-type: application/octets~n', []),
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
