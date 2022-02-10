@@ -13,6 +13,27 @@ function branch (params) {
   }
 }
 
+function branchNew (params, newBranchName) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const remoteName = params.string('remoteName', 'local')
+  const branchName = params.string('branchName', 'main')
+  const newOrgName = params.string('newOrgName', orgName)
+  const newDbName = params.string('newDbName', dbName)
+  const newRemoteName = params.string('newRemoteName', remoteName)
+  return {
+    path: `/api/branch/${newOrgName}/${newDbName}/${newRemoteName}/branch/${newBranchName}`,
+    origin: `/${orgName}/${dbName}/${remoteName}/branch/${branchName}`,
+    orgName,
+    dbName,
+    remoteName,
+    newOrgName,
+    newDbName,
+    newRemoteName,
+  }
+}
+
 function db (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -134,6 +155,7 @@ function woqlResource (params) {
 
 module.exports = {
   branch,
+  branchNew,
   db,
   diff,
   document,

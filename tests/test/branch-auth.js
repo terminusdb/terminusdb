@@ -19,76 +19,44 @@ describe('branch', function () {
 
   it('fails on bad origin descriptor', async function () {
     const { path } = endpoint.branch(agent.defaults())
-    const originDescriptor = 'desc-' + util.randomString()
-    const r = await agent
-      .post(path)
-      .send({ origin: originDescriptor })
-      .then(branch.verifyFailure)
+    const origin = 'desc-' + util.randomString()
+    const r = await agent.post(path).send({ origin }).then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:BadOriginAbsoluteDescriptor')
-    expect(r.body['api:error']['api:absolute_descriptor']).to.equal(originDescriptor)
+    expect(r.body['api:error']['api:absolute_descriptor']).to.equal(origin)
   })
 
-  it('succeeds on creating a branch with prefixes', async function () {
-    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
-    const newBranch = util.randomString()
-    await agent.post(`${path}/local/branch/${newBranch}`)
-      .send({
-        origin: `/${orgName}/${dbName}/local/branch/main`,
-        prefixes: {
-          doc: 'https://terminushub.com/document',
-          scm: 'https://terminushub.com/schema',
-        },
-      }).then(branch.verifySuccess)
-    // It would be nice if it actually verified with a query that the
-    // branch is created
+  it('succeeds creating and deleting a branch', async function () {
+    const { path, origin } = endpoint.branchNew(agent.defaults(), util.randomString())
+    await agent.post(path).send({ origin }).then(branch.verifySuccess)
+    await agent.delete(path).then(branch.verifySuccess)
   })
 
-  it('succeeds on creating a branch without prefixes', async function () {
-    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
-    const newBranch = util.randomString()
-    await agent.post(`${path}/local/branch/${newBranch}`)
-      .send({
-        origin: `/${orgName}/${dbName}/local/branch/main`,
-      }).then(branch.verifySuccess)
-    // It would be nice if it actually verified with a query that the
-    // branch is created
+  it('succeeds creating and deleting a branch with prefixes', async function () {
+    const { path, origin } = endpoint.branchNew(agent.defaults(), util.randomString())
+    const prefixes = {
+      '@base': 'https://terminushub.com/document',
+      '@schema': 'https://terminushub.com/schema',
+    }
+    await agent.post(path).send({ origin, prefixes }).then(branch.verifySuccess)
+    await agent.delete(path).then(branch.verifySuccess)
   })
 
-  it('succesfully delete empty branch', async function () {
-    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
-    const newBranch = util.randomString()
-    const newBranchPath = `${path}/local/branch/${newBranch}`
-    await agent.post(newBranchPath)
-      .send({
-        origin: `/${orgName}/${dbName}/local/branch/main`,
-      }).then(branch.verifySuccess)
-    await agent.delete(newBranchPath).then(branch.verifySuccess)
-  })
-
-  it('fails on creating a branch that already exists', async function () {
-    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
-    const newBranch = util.randomString()
-    await agent.post(`${path}/local/branch/${newBranch}`)
-      .send({
-        origin: `/${orgName}/${dbName}/local/branch/main`,
-      }).then(branch.verifySuccess)
-    const r = await agent.post(`${path}/local/branch/${newBranch}`)
-      .send({
-        origin: `/${orgName}/${dbName}/local/branch/main`,
-      }).then(branch.verifyFailure)
+  it('fails creating a branch that already exists', async function () {
+    const newBranchName = util.randomString()
+    const { path, origin } = endpoint.branchNew(agent.defaults(), newBranchName)
+    await agent.post(path).send({ origin }).then(branch.verifySuccess)
+    const r = await agent.post(path).send({ origin }).then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:BranchExistsError')
-    expect(r.body['api:error']['api:branch_name']).to.equal(newBranch)
+    expect(r.body['api:error']['api:branch_name']).to.equal(newBranchName)
   })
 
   it('fails on unknown origin database', async function () {
-    const { path, orgName, dbName } = endpoint.branch(agent.defaults())
-    const originDbName = 'origin-' + dbName
-    const r = await agent
-      .post(path)
-      .send({ origin: `${orgName}/${originDbName}` })
-      .then(branch.verifyFailure)
+    const params = agent.defaults()
+    params.dbName = util.randomString()
+    const { path, dbName, orgName, origin } = endpoint.branchNew(params, util.randomString())
+    const r = await agent.post(path).send({ origin }).then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:UnknownOriginDatabase')
     expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
-    expect(r.body['api:error']['api:database_name']).to.equal(originDbName)
+    expect(r.body['api:error']['api:database_name']).to.equal(dbName)
   })
 })
