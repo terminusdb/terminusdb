@@ -142,8 +142,8 @@ module.exports = {
   documentMeta,
   documentSystem,
   frameSystem,
-  triples,
   patch,
   remote,
+  triples,
   woqlResource,
 }
