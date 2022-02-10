@@ -25,6 +25,15 @@ describe('branch', function () {
     expect(r.body['api:error']['api:absolute_descriptor']).to.equal(origin)
   })
 
+  it('fails on commit graph descriptor', async function () {
+    const { orgName, dbName, path } = endpoint.branch(agent.defaults())
+    const origin = `${orgName}/${dbName}/local/_commits`
+    const r = await agent.post(path).send({ origin }).then(branch.verifyFailure)
+    expect(r.body['api:error']['@type']).to.equal('api:NotASourceBranchDescriptorError')
+    expect(r.body['api:error']['api:absolute_descriptor']).to.equal(origin)
+    expect(r.status).to.equal(400)
+  })
+
   it('succeeds creating a totally empty branch', async function () {
     // First create a schemaless DB to make sure it is totally empty
     const defaults = agent.defaults()

@@ -2072,38 +2072,6 @@ branch_handler(delete, Path, Request, System_DB, Auth) :-
                             _{'@type' : 'api:BranchResponse',
                               'api:status' : "api:success"}))).
 
-:- begin_tests(branch_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(create_branch_from_commit_graph_error, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'admin/test/local/_commits',
-                     prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}}),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               status_code(Status_Code)]),
-
-    * json_write_dict(current_output, JSON, []),
-    Status_Code = 400,
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    \+ has_branch(Repository_Descriptor, "foo").
-
-:- end_tests(branch_endpoint).
-
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
