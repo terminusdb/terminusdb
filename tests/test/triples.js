@@ -59,6 +59,7 @@ describe('triples', function () {
   })
 
   // TODO: Create test for this, it responds with an application/json type now... which it isn't.
+  // See issue: https://github.com/terminusdb/terminusdb/issues/981
   it('responds with a turtle mimetype')
 
   it('responds with proper status code on anonymous request')
