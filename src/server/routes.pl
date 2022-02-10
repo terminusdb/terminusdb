@@ -2078,26 +2078,6 @@ branch_handler(delete, Path, Request, System_DB, Auth) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(create_empty_branch, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}
-                    }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    has_branch(Repository_Descriptor, "foo").
-
 test(create_branch_from_commit_graph_error, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))

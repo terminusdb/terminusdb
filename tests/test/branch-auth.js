@@ -25,6 +25,20 @@ describe('branch', function () {
     expect(r.body['api:error']['api:absolute_descriptor']).to.equal(origin)
   })
 
+  it('succeeds creating a totally empty branch', async function () {
+    // First create a schemaless DB to make sure it is totally empty
+    const defaults = agent.defaults()
+    defaults.dbName = util.randomString()
+    const dbDefaults = endpoint.db(defaults)
+    const dbPath = dbDefaults.path
+    await db.createAfterDel(agent, dbPath, { schema: false })
+    // And then create the branch!
+    const { path, origin } = endpoint.branchNew(defaults, util.randomString())
+    await agent.post(path).send({ origin }).then(branch.verifySuccess)
+    await agent.delete(path).then(branch.verifySuccess)
+    await db.del(agent, dbPath)
+  })
+
   it('succeeds creating and deleting a branch', async function () {
     const { path, origin } = endpoint.branchNew(agent.defaults(), util.randomString())
     await agent.post(path).send({ origin }).then(branch.verifySuccess)
