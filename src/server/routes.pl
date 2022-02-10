@@ -2655,58 +2655,6 @@ test(remote_remove, [
     super_user_authority(Auth),
     list_remotes(system_descriptor{}, Auth, 'admin/test', []).
 
-test(remote_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    atomic_list_concat([URI, '?remote_name=origin'], GET_URI),
-    http_get(GET_URI,
-             JSON,
-             [json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    _{ 'api:remote_name' : "origin",
-       'api:remote_url' : Origin } :< JSON.
-
-test(remote_list, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    http_get(URI,
-             JSON,
-             [json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    _{ 'api:remote_names' : ["origin"]} :< JSON.
-
 
 
 :- end_tests(remote_endpoint).

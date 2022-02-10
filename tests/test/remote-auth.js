@@ -17,10 +17,37 @@ describe('remote-auth', function () {
       remote_name: 'origin',
       remote_location: 'http://somewhere.com/admin/foo',
     }).then(remote.verifySuccess)
-    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path).send({
+    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path).query({
       remote_name: 'origin',
     }).then(remote.verifySuccess)
-    expect(remoteGetResponse.body['api:remote_names']).to.include('origin')
+    expect(remoteGetResponse.body['api:remote_name']).to.equal('origin')
+    expect(remoteGetResponse.body['api:remote_url']).to.equal('http://somewhere.com/admin/foo')
+  })
+
+  it('get a remote succesfully', async function () {
+    const defaults = agent.defaults()
+    const remoteName = util.randomString()
+    await agent.post(endpoint.remote(defaults).path).send({
+      remote_name: remoteName,
+      remote_location: 'http://somewhere.com/admin/foo',
+    }).then(remote.verifySuccess)
+    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path)
+      .query({ remote_name: remoteName })
+      .then(remote.verifySuccess)
+    expect(remoteGetResponse.body['api:remote_name']).to.equal(remoteName)
+    expect(remoteGetResponse.body['api:remote_url']).to.equal('http://somewhere.com/admin/foo')
+  })
+
+  it('get a remote list succesfully', async function () {
+    const defaults = agent.defaults()
+    const remoteName = util.randomString()
+    await agent.post(endpoint.remote(defaults).path).send({
+      remote_name: remoteName,
+      remote_location: 'http://somewhere.com/admin/foo',
+    }).then(remote.verifySuccess)
+    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path)
+      .then(remote.verifySuccess)
+    expect(remoteGetResponse.body['api:remote_names']).to.include(remoteName)
   })
 
   it('sets a remote succesfully', async function () {
