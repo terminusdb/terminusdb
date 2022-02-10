@@ -11,6 +11,12 @@ describe('remote-auth', function () {
     await db.create(agent, path).then(db.verifyCreateSuccess)
   })
 
+  after(async function () {
+    const defaults = agent.defaults()
+    const { path } = endpoint.db(defaults)
+    await db.del(agent, path)
+  })
+
   it('adds a remote succesfully', async function () {
     const defaults = agent.defaults()
     await agent.post(endpoint.remote(defaults).path).send({
