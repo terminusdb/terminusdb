@@ -2620,45 +2620,6 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
                                        'api:status' : "api:success"}))).
 
 
-:- begin_tests(remote_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(library(terminus_store)).
-
-test(remote_remove, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    http_get(URI,
-             JSON,
-             [method(delete),
-              post(json(_{ remote_name : origin })),
-              json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:RemoteResponse",
-             'api:status':"api:success"},
-
-    super_user_authority(Auth),
-    list_remotes(system_descriptor{}, Auth, 'admin/test', []).
-
-
-
-:- end_tests(remote_endpoint).
-
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(patch), cors_handler(Method, patch_handler),
                 [method(Method),
