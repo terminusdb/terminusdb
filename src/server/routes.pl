@@ -2655,40 +2655,6 @@ test(remote_remove, [
     super_user_authority(Auth),
     list_remotes(system_descriptor{}, Auth, 'admin/test', []).
 
-test(remote_set, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    New_Origin = "http://somewhere.com/admin/foo",
-
-    http_put(URI,
-             json(_{ remote_name : origin,
-                           remote_location : New_Origin
-                   }),
-             JSON,
-             [json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:RemoteResponse",
-             'api:status':"api:success"},
-
-    super_user_authority(Auth),
-    show_remote(system_descriptor{}, Auth, 'admin/test', origin, New_Origin).
-
 test(remote_get, [
          setup(setup_temp_server(State, Server)),
          cleanup(teardown_temp_server(State))
