@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, endpoint } = require('../lib')
+const { Agent, db, endpoint, remote } = require('../lib')
 
 describe('remote-auth', function () {
   let agent
@@ -15,15 +15,10 @@ describe('remote-auth', function () {
     const remoteResponse = await agent.post(endpoint.remote(defaults).path).send({
       remote_name: 'origin',
       remote_location: 'http://somewhere.com/admin/foo',
-    })
-    expect(remoteResponse.status).to.equal(200)
-    expect(remoteResponse.body['@type']).to.equal('api:RemoteResponse')
-    expect(remoteResponse.body['api:status']).to.equal('api:success')
+    }).then(remote.verifySuccess)
     const remoteGetResponse = await agent.get(endpoint.remote(defaults).path).send({
       remote_name: 'origin',
-    })
-    expect(remoteGetResponse.body['@type']).to.equal('api:RemoteResponse')
-    expect(remoteGetResponse.body['api:status']).to.equal('api:success')
+    }).then(remote.verifySuccess)
     expect(remoteGetResponse.body['api:remote_names']).to.include('origin')
   })
 })
