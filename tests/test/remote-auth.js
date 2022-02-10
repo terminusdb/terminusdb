@@ -12,7 +12,7 @@ describe('remote-auth', function () {
     const defaults = agent.defaults()
     const { path } = endpoint.db(defaults)
     await db.create(agent, path).then(db.verifyCreateSuccess)
-    const remoteResponse = await agent.post(endpoint.remote(defaults).path).send({
+    await agent.post(endpoint.remote(defaults).path).send({
       remote_name: 'origin',
       remote_location: 'http://somewhere.com/admin/foo',
     }).then(remote.verifySuccess)
