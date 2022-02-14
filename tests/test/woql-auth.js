@@ -185,4 +185,164 @@ describe('woql-auth', function () {
       }
     })
   })
+
+  const woqlPostQuery = {
+    query: {
+      '@type': 'And',
+      and: [
+        {
+          '@type': 'Get',
+          columns: [
+            {
+              '@type': 'Column',
+              indicator: {
+                '@type': 'Indicator',
+                name: 'Name',
+              },
+              variable: 'Name',
+            },
+          ],
+          resource: {
+            '@type': 'QueryResource',
+            source: {
+              '@type': 'Source',
+            },
+            format: 'csv',
+            options: {
+              type: 'csv',
+            },
+          },
+        },
+      ],
+    }
+    ,
+  }
+
+  describe('testing woql.post', function () {
+    it('accepts woql.post with url', async function () {
+      const woqlPostQueryURL = Object.assign(woqlPostQuery)
+
+      woqlPostQueryURL.query.and[0].resource.source = {
+        '@type': 'Source',
+        url: 'https://raw.githubusercontent.com/terminusdb/terminusdb-tutorials/master/getting_started/python-client/Employees.csv',
+      }
+
+      const r = await woql
+        .post(agent, woqlPath, woqlPostQueryURL)
+        .then(woql.verifyGetSuccess)
+
+      expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
+      expect(r.body['api:variable_names'][0]).to.equal('Name')
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+      expect(r.body.bindings).to.deep.equal([
+        { Name: { '@type': 'xsd:string', '@value': 'Destiny Norris' } },
+        { Name: { '@type': 'xsd:string', '@value': 'Darci Prosser' } },
+        { Name: { '@type': 'xsd:string', '@value': 'Alanah Bloggs' } },
+        { Name: { '@type': 'xsd:string', '@value': 'Fabian Dalby' } },
+      ])
+      expect(r.body.deletes).to.equal(0)
+      expect(r.body.inserts).to.equal(0)
+      expect(r.body.transaction_retry_count).to.equal(0)
+    })
+  })
+
+  it('fails woql.post with invalid URL', async function () {
+    const woqlPostQueryInvalidURL = Object.assign(woqlPostQuery)
+
+    woqlPostQueryInvalidURL.query.and[0].resource.source = {
+      '@type': 'Source',
+      url: 'terminusdb-tutorials/getting_started/python-client/Employees.csv',
+    }
+
+    const r = await woql
+      .post(agent, woqlPath, woqlPostQueryInvalidURL)
+      .then(woql.verifyGetFailure)
+
+    // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
+    expect(r.body['api:error']['@type']).to.equal('api:InvalidURL')
+  })
+
+  it('accepts woql.post with post', async function () {
+    const woqlPostQueryPost = Object.assign(woqlPostQuery)
+
+    woqlPostQueryPost.query.and[0].resource.source = {
+      '@type': 'Source',
+      post: '/employees.csv',
+    }
+
+    const r = await woql
+      .post(agent, woqlPath, woqlPostQueryPost)
+      .then(woql.verifyGetFailure)
+
+    expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
+    expect(r.body['api:variable_names'][0]).to.equal('Name')
+    expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+    expect(r.body.bindings).to.deep.equal([
+      { Name: { '@type': 'xsd:string', '@value': 'Destiny Norris' } },
+      { Name: { '@type': 'xsd:string', '@value': 'Darci Prosser' } },
+      { Name: { '@type': 'xsd:string', '@value': 'Alanah Bloggs' } },
+      { Name: { '@type': 'xsd:string', '@value': 'Fabian Dalby' } },
+    ])
+    expect(r.body.deletes).to.equal(0)
+    expect(r.body.inserts).to.equal(0)
+    expect(r.body.transaction_retry_count).to.equal(0)
+  })
+
+  it('fails woql.post with invalid post path', async function () {
+    const woqlPostQueryPost = Object.assign(woqlPostQuery)
+
+    woqlPostQueryPost.query.and[0].resource.source = {
+      '@type': 'Source',
+      post: '/employees/employees.csv',
+    }
+
+    const r = await woql
+      .post(agent, woqlPath, woqlPostQueryPost)
+      .then(woql.verifyGetFailure)
+
+    // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
+    expect(r.body['api:error']['@type']).to.equal('vio:WOQLSyntaxError')
+  })
+
+  it('accepts woql.post with file', async function () {
+    const woqlPostQueryPost = Object.assign(woqlPostQuery)
+
+    woqlPostQueryPost.query.and[0].resource.source = {
+      '@type': 'Source',
+      file: '/employees.csv',
+    }
+
+    const r = await woql
+      .post(agent, woqlPath, woqlPostQueryPost)
+      .then(woql.verifyGetFailure)
+
+    expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
+    expect(r.body['api:variable_names'][0]).to.equal('Name')
+    expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+    expect(r.body.bindings).to.deep.equal([
+      { Name: { '@type': 'xsd:string', '@value': 'Destiny Norris' } },
+      { Name: { '@type': 'xsd:string', '@value': 'Darci Prosser' } },
+      { Name: { '@type': 'xsd:string', '@value': 'Alanah Bloggs' } },
+      { Name: { '@type': 'xsd:string', '@value': 'Fabian Dalby' } },
+    ])
+    expect(r.body.deletes).to.equal(0)
+    expect(r.body.inserts).to.equal(0)
+    expect(r.body.transaction_retry_count).to.equal(0)
+  })
+
+  it('fails woql.post with invalid file path', async function () {
+    const woqlPostQueryPost = Object.assign(woqlPostQuery)
+
+    woqlPostQueryPost.query.and[0].resource.source = {
+      '@type': 'Source',
+      file: '/employees/employees.csv',
+    }
+
+    const r = await woql
+      .post(agent, woqlPath, woqlPostQueryPost)
+      .then(woql.verifyGetFailure)
+
+    // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
+    expect(r.body['api:error']['@type']).to.equal('vio:WOQLSyntaxError')
+  })
 })
