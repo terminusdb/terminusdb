@@ -28,23 +28,23 @@ class Agent {
 
   // Add authentication
   auth () {
+    // The user name is used for some forms of authentication as well as
+    // constructing paths. Therefore, we require it here.
     this.userName = process.env.TERMINUSDB_USER
+    assert(this.userName, 'Missing environment variable: TERMINUSDB_USER')
 
     const token = process.env.TERMINUSDB_ACCESS_TOKEN
     const insecureUserHeader = process.env.TERMINUSDB_INSECURE_USER_HEADER
-    const errorMissingUserEnv = 'Missing environment variable: TERMINUSDB_USER'
     if (token) {
       this.agent.use((request) => {
         request.auth(token, { type: 'bearer' })
       })
     } else if (insecureUserHeader) {
-      assert(this.userName, errorMissingUserEnv)
       this.agent.use((request) => {
         request.set(insecureUserHeader, this.userName)
       })
     } else {
       const pass = process.env.TERMINUSDB_PASS
-      assert(this.userName, errorMissingUserEnv)
       assert(pass, 'Missing environment variable: TERMINUSDB_ACCESS_TOKEN, TERMINUSDB_INSECURE_USER_HEADER, or TERMINUSDB_PASS')
       this.agent.use((request) => {
         request.auth(this.userName, pass)
