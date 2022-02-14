@@ -42,7 +42,7 @@ class Agent {
       })
     } else {
       const pass = process.env.TERMINUSDB_PASS
-      assert(pass, 'Missing environment variable: TERMINUSDB_ACCESS_TOKEN, TERMINUSDB_INSECRE_USER_HEADER or TERMINUSDB_PASS')
+      assert(pass, 'Missing environment variable: TERMINUSDB_ACCESS_TOKEN, TERMINUSDB_INSECURE_USER_HEADER, or TERMINUSDB_PASS')
       this.agent.use((request) => {
         request.auth(this.userName, pass)
       })
