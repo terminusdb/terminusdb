@@ -1693,15 +1693,16 @@ file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     ;   File_Spec = remote(URI),
         Options = []),
     merge_options(Options,Default,New_Options),
-    copy_remote(URI,URI,Path,New_Options).
+    copy_remote(URI, Path, New_Options).
 file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     (   File_Spec = post(Name,Options)
     ;   File_Spec = post(Name),
         Options = []),
     atom_string(Name_Atom,Name),
     merge_options(Options,Default,New_Options),
-    memberchk(Name_Atom=Path, Files).
-
+    do_or_die(
+        memberchk(Name_Atom=Path, Files),
+        error(missing_file(Name_Atom), _)).
 
 %%
 % marshall_args(M_Pred, Trans) is det.
