@@ -534,7 +534,7 @@ describe('document', function () {
           },
         ],
       }
-      const r = await document
+      await document
         .insert(agent, docPath, { instance: instance })
         .then(document.verifyInsertSuccess)
     })
