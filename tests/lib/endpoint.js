@@ -142,6 +142,17 @@ function patch (params) {
   }
 }
 
+function prefixes (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/prefixes/${orgName}/${dbName}`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
 function woqlResource (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -165,6 +176,7 @@ module.exports = {
   documentSystem,
   frameSystem,
   patch,
+  prefixes,
   remote,
   triples,
   woqlResource,
