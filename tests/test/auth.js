@@ -1,32 +1,62 @@
 const { expect } = require('chai')
-const { Agent, db, endpoint } = require('../lib')
+const { Agent, db, endpoint, util } = require('../lib')
+
+let agent
+
+async function connect() {
+  const r = await agent.get('/api/')
+  expect(r.status).to.equal(401)
+  expect(r.body['api:status']).to.equal('api:failure')
+  expect(r.body['@type']).to.equal('api:ErrorResponse')
+  expect(r.body['api:error']['@type']).to.equal('api:IncorrectAuthenticationError')
+}
+
+async function create () {
+  const { path } = endpoint.db(agent.defaults())
+  const r = await db.create(agent, path)
+  expect(r.status).to.equal(401)
+  expect(r.body['api:status']).to.equal('api:failure')
+  expect(r.body['@type']).to.equal('api:ErrorResponse')
+  expect(r.body['api:error']['@type']).to.equal('api:IncorrectAuthenticationError')
+}
 
 describe('auth', function () {
-  let agent
+  describe('basic: unknown user', function () {
+    before(function () {
+      const user = util.randomString()
+      const pass = util.randomString()
+      const userPass = Buffer.from(`${user}:${pass}`).toString('base64')
+      agent = new Agent()
+      agent.set('Authorization', `Basic ${userPass}`)
+    })
 
-  before(function () {
-    agent = new Agent()
-    const userNamePass = Buffer.from('nonExistingUser:somePassword').toString('base64')
-    agent.set('Authorization', `Basic ${userNamePass}`)
+    it('fails connect', connect)
+
+    it('fails create', create)
   })
 
-  it('fails connect on non existing user', async function () {
-    const r = await agent.get('/api/')
-    expect(r.status).to.equal(401)
+  describe('basic: unknown pass', function () {
+    before(function () {
+      const pass = util.randomString()
+      const userPass = Buffer.from(`${agent.userName}:${pass}`).toString('base64')
+      agent = new Agent()
+      agent.set('Authorization', `Basic ${userPass}`)
+    })
+
+    it('fails connect', connect)
+
+    it('fails create', create)
   })
 
-  it('fails db create on non existing user', async function () {
-    const { path } = endpoint.db(agent.defaults())
-    const r = await db.create(agent, path)
-    expect(r.status).to.equal(401)
-  })
+  describe('bearer: unknown token', function () {
+    before(function () {
+      const token = util.randomString()
+      agent = new Agent()
+      agent.set('Authorization', `Bearer ${token}`)
+    })
 
-  it('fails db create on wrong password', async function () {
-    const newAgent = new Agent()
-    const userNamePass = Buffer.from('admin:THIS_IS_NOT_THE_CORRECT_PASSWORD').toString('base64')
-    newAgent.set('Authorization', `Basic ${userNamePass}`)
-    const { path } = endpoint.db(newAgent.defaults())
-    const r = await db.create(newAgent, path)
-    expect(r.status).to.equal(401)
+    it('fails connect', connect)
+
+    it('fails create', create)
   })
 })
