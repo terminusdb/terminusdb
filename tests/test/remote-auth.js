@@ -6,86 +6,53 @@ describe('remote-auth', function () {
 
   before(async function () {
     agent = new Agent().auth()
-    const defaults = agent.defaults()
-    const { path } = endpoint.db(defaults)
+    const { path } = endpoint.db(agent.defaults())
     await db.create(agent, path).then(db.verifyCreateSuccess)
   })
 
   after(async function () {
-    const defaults = agent.defaults()
-    const { path } = endpoint.db(defaults)
+    const { path } = endpoint.db(agent.defaults())
     await db.del(agent, path)
   })
 
-  it('adds a remote succesfully', async function () {
-    const defaults = agent.defaults()
-    await agent.post(endpoint.remote(defaults).path).send({
-      remote_name: 'origin',
-      remote_location: 'http://somewhere.com/admin/foo',
-    }).then(remote.verifySuccess)
-    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path).query({
-      remote_name: 'origin',
-    }).then(remote.verifySuccess)
-    expect(remoteGetResponse.body['api:remote_name']).to.equal('origin')
-    expect(remoteGetResponse.body['api:remote_url']).to.equal('http://somewhere.com/admin/foo')
-  })
-
-  it('get a remote succesfully', async function () {
-    const defaults = agent.defaults()
-    const remoteName = util.randomString()
-    await agent.post(endpoint.remote(defaults).path).send({
-      remote_name: remoteName,
-      remote_location: 'http://somewhere.com/admin/foo',
-    }).then(remote.verifySuccess)
-    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path)
-      .query({ remote_name: remoteName })
-      .then(remote.verifySuccess)
-    expect(remoteGetResponse.body['api:remote_name']).to.equal(remoteName)
-    expect(remoteGetResponse.body['api:remote_url']).to.equal('http://somewhere.com/admin/foo')
-  })
-
-  it('delete a remote succesfully', async function () {
-    const defaults = agent.defaults()
-    const remoteName = util.randomString()
-    await agent.post(endpoint.remote(defaults).path).send({
-      remote_name: remoteName,
-      remote_location: 'http://somewhere.com/admin/foo',
-    }).then(remote.verifySuccess)
-    await agent.delete(endpoint.remote(defaults).path)
-      .send({ remote_name: remoteName })
-      .then(remote.verifySuccess)
-    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path)
-      .query({ remote_name: remoteName })
-    expect(remoteGetResponse.status).to.equal(400)
-  })
-
-  it('get a remote list succesfully', async function () {
-    const defaults = agent.defaults()
-    const remoteName = util.randomString()
-    await agent.post(endpoint.remote(defaults).path).send({
-      remote_name: remoteName,
-      remote_location: 'http://somewhere.com/admin/foo',
-    }).then(remote.verifySuccess)
-    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path)
-      .then(remote.verifySuccess)
-    expect(remoteGetResponse.body['api:remote_names']).to.include(remoteName)
-  })
-
-  it('sets a remote succesfully', async function () {
-    const defaults = agent.defaults()
-    const remoteName = util.randomString()
-    await agent.post(endpoint.remote(defaults).path).send({
-      remote_name: remoteName,
-      remote_location: 'http://somewhere.com/admin/foo',
-    }).then(remote.verifySuccess)
-    await agent.put(endpoint.remote(defaults).path).send({
-      remote_name: remoteName,
-      remote_location: 'http://somewhere.com/admin/foo2',
-    }).then(remote.verifySuccess)
-    const remoteGetResponse = await agent.get(endpoint.remote(defaults).path)
-      .query({ remote_name: remoteName })
-      .then(remote.verifySuccess)
-    expect(remoteGetResponse.body['api:remote_name']).to.equal(remoteName)
-    expect(remoteGetResponse.body['api:remote_url']).to.equal('http://somewhere.com/admin/foo2')
+  it('passes post, get, put, delete, get', async function () {
+    const { path } = endpoint.remote(agent.defaults())
+    const query = {
+      remote_name: util.randomString(),
+      remote_location: 'http://example.com/foo',
+    }
+    // Post a remote
+    await agent.post(path).send(query).then(remote.verifySuccess)
+    {
+      // Query the remote
+      const { remote_name, remote_location } = query // eslint-disable-line camelcase
+      const r = await agent.get(path).query({ remote_name }).then(remote.verifySuccess)
+      expect(r.body['api:remote_name']).to.equal(remote_name)
+      expect(r.body['api:remote_url']).to.equal(remote_location)
+    }
+    {
+      // Query all remotes
+      const r = await agent.get(path).then(remote.verifySuccess)
+      expect(r.body['api:remote_names']).to.be.an('array').that.has.lengthOf(1)
+      expect(r.body['api:remote_names'][0]).to.equal(query.remote_name)
+    }
+    query.remote_location = 'http://example.com/bar'
+    // Put a new remote
+    await agent.put(path).send(query).then(remote.verifySuccess)
+    {
+      // Query the remote
+      const { remote_name, remote_location } = query // eslint-disable-line camelcase
+      const r = await agent.get(path).query({ remote_name }).then(remote.verifySuccess)
+      expect(r.body['api:remote_name']).to.equal(remote_name)
+      expect(r.body['api:remote_url']).to.equal(remote_location)
+    }
+    // Delete the remote
+    await agent.delete(path).send(query).then(remote.verifySuccess)
+    {
+      // Query the remote
+      const r = await agent.get(path).query(query).then(remote.verifyNotFound)
+      expect(r.body['api:error']['@type']).to.equal('api:RemoteDoesNotExist')
+      expect(r.body['api:error']['api:remote_name']).to.equal(query.remote_name)
+    }
   })
 })

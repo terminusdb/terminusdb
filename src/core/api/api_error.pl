@@ -1048,7 +1048,7 @@ api_error_jsonld_(remote,error(unresolvable_descriptor(Descriptor),_), JSON) :-
 api_error_jsonld_(remote,error(remote_does_not_exist(Name),_), JSON) :-
     format(string(Msg), "The remote does not exist for ~q", [Name]),
     JSON = _{'@type' : 'api:RemoteErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : 'api:not_found',
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RemoteDoesNotExist",
                               'api:remote_name' : Name}

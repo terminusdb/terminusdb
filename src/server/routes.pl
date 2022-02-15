@@ -2470,11 +2470,6 @@ test(optimize_system, [
                  time_limit(infinite),
                  methods([options,post,put,get,delete])]).
 
-/*
- * reset_handler(Mode, Path, Request, System, Auth) is det.
- *
- * Reset a branch to a new commit.
- */
 remote_handler(post, Path, Request, System_DB, Auth) :-
 
     do_or_die(
