@@ -8,10 +8,13 @@ describe('frame', function () {
     agent = new Agent().auth()
   })
 
-  it('succeeds in fetching a frame for the system schema', async function () {
+  it('passes frame for _system', async function () {
     const { path } = endpoint.frameSystem()
-    const r = await agent.post(path).set('X-HTTP-Method-Override', 'GET').send({ type: 'User' })
-    expect(r.body).to.deep.include({
+    const r = await agent
+      .post(path)
+      .set('X-HTTP-Method-Override', 'GET')
+      .send({ type: 'User' })
+    expect(r.body).to.deep.equal({
       '@documentation': {
         '@comment': 'A database user.',
         '@properties': {
