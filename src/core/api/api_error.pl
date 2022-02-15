@@ -346,8 +346,8 @@ api_error_jsonld_(frame,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON
                               'api:error_term' : String},
              'api:message' : Msg
             }.
-api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~q", [Val]),
+api_error_jsonld_(frame,error(casting_error(Val,Type),_), JSON) :-
+    format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
     JSON = _{'@type' : 'api:FrameErrorResponse',
              'api:status' : 'api:failure',
@@ -437,7 +437,7 @@ api_error_jsonld_(woql,error(unresolvable_absolute_descriptor(Descriptor), _), J
                               'api:absolute_descriptor' : Path}
             }.
 api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~q", [Val]),
+    format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
     JSON = _{'@type' : 'api:WoqlErrorResponse',
              'api:status' : 'api:failure',

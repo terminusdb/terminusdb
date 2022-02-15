@@ -94,8 +94,8 @@ describe('woql-auth', function () {
         .then(document.verifyInsertSuccess)
     })
 
-    it('fails on wrong cast', async function () {
-      const insertDocumentQueryWithWrongCast = {
+    it('fails InsertDocument with bad cast', async function () {
+      const query = {
         commit_info: { author: 'a', message: 'm' },
         query: {
           '@type': 'InsertDocument',
@@ -118,18 +118,17 @@ describe('woql-auth', function () {
                 {
                   '@type': 'FieldValuePair',
                   field: 'something',
-                  value: {
-                    '@type': 'Value', data: { '@type': 'xsd:integer', '@value': 'waefwaefweaf' },
-                  },
+                  value: { '@type': 'Value', data: { '@type': 'xsd:integer', '@value': 'STRING' } },
                 },
               ],
             },
           },
         },
       }
-      const r = await woql
-        .post(agent, woqlPath, insertDocumentQueryWithWrongCast)
+      const r = await woql.post(agent, woqlPath, query).then(woql.verifyGetFailure)
       expect(r.body['api:error']['@type']).to.equal('api:BadCast')
+      expect(r.body['api:error']['api:type']).to.equal('http://www.w3.org/2001/XMLSchema#integer')
+      expect(r.body['api:error']['api:value']).to.equal('STRING')
     })
 
     it('fails InsertDocument without commit_info', async function () {
