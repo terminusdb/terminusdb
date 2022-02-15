@@ -107,13 +107,32 @@ function frameSystem (params) {
   }
 }
 
-function triples (params) {
-  params = new Params(params)
-  const graph = params.stringRequired('graph')
-  const dbName = params.stringRequired('dbName')
+function triples (resource) {
   return {
-    path: `/api/triples/${dbName}/${graph}`,
+    path: `/api/triples/${resource}`,
+  }
+}
+
+function triplesBranch (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const remoteName = params.string('remoteName', 'local')
+  const branchName = params.string('branchName', 'main')
+  const graph = params.string('graph', 'instance')
+  return {
+    path: `/api/triples/${orgName}/${dbName}/${remoteName}/branch/${branchName}/${graph}`,
+    orgName,
     dbName,
+    remoteName,
+    branchName,
+    graph,
+  }
+}
+
+function triplesSystem () {
+  return {
+    path: '/api/triples/_system/schema',
   }
 }
 
@@ -179,5 +198,7 @@ module.exports = {
   prefixes,
   remote,
   triples,
+  triplesBranch,
+  triplesSystem,
   woqlResource,
 }
