@@ -2,14 +2,18 @@ const { expect } = require('chai')
 const { Agent } = require('../lib')
 
 describe('connect', function () {
-  let agent
-
-  before(function () {
-    agent = new Agent()
+  it('passes with no auth', async function () {
+    const agent = new Agent()
+    const r = await agent.get('/api/')
+    console.error(r)
+    expect(r.status).to.equal(200)
+    expect(r.body).to.be.an('array').that.has.lengthOf(0)
   })
 
-  it('responds with empty array', async function () {
+  it('passes with auth', async function () {
+    const agent = new Agent().auth()
     const r = await agent.get('/api/')
+    console.error(r)
     expect(r.status).to.equal(200)
     expect(r.body).to.be.an('array').that.has.lengthOf(0)
   })
