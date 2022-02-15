@@ -167,7 +167,7 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
+:- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
                  methods([options,head,post,delete])]).
 
@@ -195,44 +195,36 @@ db_handler(head, Organization, DB, Request, System_DB, Auth) :-
 
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
-    check_content_type_json(Request),
-    get_payload(Database_Document,Request),
-    do_or_die(
-        (_{ comment : Comment,
-            label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document,[comment,label]),_)),
-
-    Default_Prefixes = _{ '@base' : "terminusdb:///data/",
-                          '@schema' : "terminusdb:///schema#" },
-    (   _{ prefixes : Input_Prefixes } :< Database_Document
-    ->  Prefixes = Default_Prefixes.put(Input_Prefixes)
-    ;   Prefixes = Default_Prefixes),
-
-    (   _{ public : Public } :< Database_Document
-    ->  true
-    ;   Public = false),
-
-    (   _{ schema : Schema } :< Database_Document
-    ->  true
-    ;   Schema = true),
-
     api_report_errors(
         create_db,
         Request,
-        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
+        (   http_read_json_required(json_dict(JSON), Request),
+
+            param_value_json_required(JSON, comment, string, Comment),
+            param_value_json_required(JSON, label, string, Label),
+
+            param_value_json_optional(JSON, prefixes, object, _{}, Input_Prefixes),
+            Default_Prefixes = _{ '@base' : "terminusdb:///data/",
+                                  '@schema' : "terminusdb:///schema#" },
+            put_dict(Input_Prefixes, Default_Prefixes, Prefixes),
+
+            param_value_json_optional(JSON, public, boolean, false, Public),
+            param_value_json_optional(JSON, schema, boolean, true, Schema),
+
+            create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
+
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
                                        'api:status' : 'api:success'}))).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
-    (   get_payload(Document,Request),
-        _{ force: true} :< Document
-    ->  Force_Delete = true
-    ;   Force_Delete = false),
-
     /* DELETE: Delete database */
     api_report_errors(
         delete_db,
         Request,
-        (   delete_db(System_DB, Auth, Organization, DB, Force_Delete),
+        (   (   http_read_json_semidet(json_dict(JSON), Request),
+                param_value_json_optional(JSON, force, boolean, false, Force_Delete)
+            ->  true
+            ;   Force_Delete = false),
+            delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
 

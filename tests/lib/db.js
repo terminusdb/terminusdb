@@ -55,6 +55,13 @@ function verifyCreateFailure (r) {
   return r
 }
 
+function verifyCreateNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:DbCreateErrorResponse')
+  return r
+}
+
 function verifyDeleteSuccess (r) {
   expect(r.status).to.equal(200)
   expect(r.body['api:status']).to.equal('api:success')
@@ -83,6 +90,7 @@ module.exports = {
   createAfterDel,
   verifyCreateSuccess,
   verifyCreateFailure,
+  verifyCreateNotFound,
   verifyDeleteSuccess,
   verifyDeleteFailure,
   verifyDeleteNotFound,
