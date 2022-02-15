@@ -6,18 +6,16 @@ describe('branch', function () {
 
   before(async function () {
     agent = new Agent().auth()
-    const dbDefaults = endpoint.db(agent.defaults())
-    const dbPath = dbDefaults.path
-    await db.createAfterDel(agent, dbPath)
+    const { path } = endpoint.db(agent.defaults())
+    await db.createAfterDel(agent, path)
   })
 
   after(async function () {
-    const dbDefaults = endpoint.db(agent.defaults())
-    const dbPath = dbDefaults.path
-    await db.del(agent, dbPath)
+    const { path } = endpoint.db(agent.defaults())
+    await db.del(agent, path)
   })
 
-  it('fails on bad origin descriptor', async function () {
+  it('fails create with bad origin descriptor', async function () {
     const { path } = endpoint.branch(agent.defaults())
     const origin = 'desc-' + util.randomString()
     const r = await agent.post(path).send({ origin }).then(branch.verifyFailure)
@@ -25,36 +23,21 @@ describe('branch', function () {
     expect(r.body['api:error']['api:absolute_descriptor']).to.equal(origin)
   })
 
-  it('fails on commit graph descriptor', async function () {
+  it('fails create with _commits descriptor', async function () {
     const { orgName, dbName, path } = endpoint.branch(agent.defaults())
     const origin = `${orgName}/${dbName}/local/_commits`
     const r = await agent.post(path).send({ origin }).then(branch.verifyFailure)
     expect(r.body['api:error']['@type']).to.equal('api:NotASourceBranchDescriptorError')
     expect(r.body['api:error']['api:absolute_descriptor']).to.equal(origin)
-    expect(r.status).to.equal(400)
   })
 
-  it('succeeds creating a totally empty branch', async function () {
-    // First create a schemaless DB to make sure it is totally empty
-    const defaults = agent.defaults()
-    defaults.dbName = util.randomString()
-    const dbDefaults = endpoint.db(defaults)
-    const dbPath = dbDefaults.path
-    await db.createAfterDel(agent, dbPath, { schema: false })
-    // And then create the branch!
-    const { path, origin } = endpoint.branchNew(defaults, util.randomString())
-    await agent.post(path).send({ origin }).then(branch.verifySuccess)
-    await agent.delete(path).then(branch.verifySuccess)
-    await db.del(agent, dbPath)
-  })
-
-  it('succeeds creating and deleting a branch', async function () {
+  it('passes create and delete', async function () {
     const { path, origin } = endpoint.branchNew(agent.defaults(), util.randomString())
     await agent.post(path).send({ origin }).then(branch.verifySuccess)
     await agent.delete(path).then(branch.verifySuccess)
   })
 
-  it('succeeds creating and deleting a branch with prefixes', async function () {
+  it('passes create and delete with prefixes', async function () {
     const { path, origin } = endpoint.branchNew(agent.defaults(), util.randomString())
     const prefixes = {
       '@base': 'https://terminushub.com/document',
@@ -64,7 +47,7 @@ describe('branch', function () {
     await agent.delete(path).then(branch.verifySuccess)
   })
 
-  it('fails creating a branch that already exists', async function () {
+  it('fails create with existing branch', async function () {
     const newBranchName = util.randomString()
     const { path, origin } = endpoint.branchNew(agent.defaults(), newBranchName)
     await agent.post(path).send({ origin }).then(branch.verifySuccess)
@@ -73,7 +56,7 @@ describe('branch', function () {
     expect(r.body['api:error']['api:branch_name']).to.equal(newBranchName)
   })
 
-  it('fails on unknown origin database', async function () {
+  it('fails create with unknown origin database', async function () {
     const params = agent.defaults()
     params.dbName = util.randomString()
     const { path, dbName, orgName, origin } = endpoint.branchNew(params, util.randomString())
