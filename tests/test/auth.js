@@ -3,7 +3,7 @@ const { Agent, db, endpoint, util } = require('../lib')
 
 let agent
 
-async function connect() {
+async function connect () {
   const r = await agent.get('/api/')
   expect(r.status).to.equal(401)
   expect(r.body['api:status']).to.equal('api:failure')
