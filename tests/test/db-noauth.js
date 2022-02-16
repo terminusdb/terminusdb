@@ -31,9 +31,8 @@ describe('db-noauth', function () {
 
   describe('fails create with missing fields', function () {
     const parts = [
-      [{ }, 'comment'],
+      [{ }, 'label'],
       [{ comment: 'a comment' }, 'label'],
-      [{ label: 'a label' }, 'comment'],
     ]
     for (const [body, missingParam] of parts) {
       it(JSON.stringify(body), async function () {
