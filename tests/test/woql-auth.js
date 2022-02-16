@@ -325,21 +325,6 @@ describe('woql-auth', function () {
     expect(r.body.transaction_retry_count).to.equal(0)
   })
 
-  it('fails woql.post with invalid post path', async function () {
-    const woqlPostQueryPost = Object.assign(woqlPostQuery)
-
-    woqlPostQueryPost.query.and[0].resource.source = {
-      '@type': 'Source',
-      post: '/employees/employees.csv',
-    }
-
-    const r = await woql
-      .post(agent, woqlPath, woqlPostQueryPost)
-      .then(woql.verifyGetFailure)
-    // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
-    expect(r.body['api:error']['@type']).to.equal('api:WOQLSyntaxError')
-  })
-
   it('accepts woql.post with file', async function () {
     const query = {
       query: {
