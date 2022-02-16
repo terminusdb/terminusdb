@@ -13,6 +13,27 @@ function branch (params) {
   }
 }
 
+function branchNew (params, newBranchName) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const remoteName = params.string('remoteName', 'local')
+  const branchName = params.string('branchName', 'main')
+  const newOrgName = params.string('newOrgName', orgName)
+  const newDbName = params.string('newDbName', dbName)
+  const newRemoteName = params.string('newRemoteName', remoteName)
+  return {
+    path: `/api/branch/${newOrgName}/${newDbName}/${newRemoteName}/branch/${newBranchName}`,
+    origin: `/${orgName}/${dbName}/${remoteName}/branch/${branchName}`,
+    orgName,
+    dbName,
+    remoteName,
+    newOrgName,
+    newDbName,
+    newRemoteName,
+  }
+}
+
 function db (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -80,6 +101,41 @@ function documentSystem () {
   }
 }
 
+function frameSystem (params) {
+  return {
+    path: '/api/schema/_system',
+  }
+}
+
+function triples (resource) {
+  return {
+    path: `/api/triples/${resource}`,
+  }
+}
+
+function triplesBranch (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const remoteName = params.string('remoteName', 'local')
+  const branchName = params.string('branchName', 'main')
+  const graph = params.string('graph', 'instance')
+  return {
+    path: `/api/triples/${orgName}/${dbName}/${remoteName}/branch/${branchName}/${graph}`,
+    orgName,
+    dbName,
+    remoteName,
+    branchName,
+    graph,
+  }
+}
+
+function triplesSystem () {
+  return {
+    path: '/api/triples/_system/schema',
+  }
+}
+
 function remote (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -105,6 +161,17 @@ function patch (params) {
   }
 }
 
+function prefixes (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/prefixes/${orgName}/${dbName}`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
 function woqlResource (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
@@ -118,6 +185,7 @@ function woqlResource (params) {
 
 module.exports = {
   branch,
+  branchNew,
   db,
   diff,
   document,
@@ -125,7 +193,12 @@ module.exports = {
   documentCommits,
   documentMeta,
   documentSystem,
+  frameSystem,
   patch,
+  prefixes,
   remote,
+  triples,
+  triplesBranch,
+  triplesSystem,
   woqlResource,
 }
