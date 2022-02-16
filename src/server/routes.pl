@@ -119,89 +119,6 @@ connect_handler(get, Request, System_DB, Auth) :-
     write_cors_headers(Request),
     reply_json(Databases).
 
-:- begin_tests(jwt_auth, [
-                   condition(config:jwt_enabled)
-               ]
-              ).
-
-:- use_module(core(util/test_utils)).
-/*
- * Tests assume that  setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_PATH", "test/public_key_test.key.pub")
- * setenv("TERMINUSDB_SERVER_JWT_PUBLIC_KEY_ID", "testkey") are set
- */
-test(connection_authorized_user_jwt, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/'], URL),
-    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE',
-    http_get(URL, _, [authorization(bearer(Bearer))]).
-
-test(connection_unauthorized_user_jwt, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/'], URL),
-
-    % mangled the payload so it should not validate
-    Bearer = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodW0000000000aDAuY29tLyIsInN1YiI6ImF1dGgwfDVlZmVmY2NkYmIzMzEzMDAxMzlkNTAzNyIsImF1ZCI6WyJodHRwczovL3Rlcm1pbnVzaHViL3JlZ2lzdGVyVXNlciIsImh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTU5Mzc2OTE4MywiYXpwIjoiTUpKbmRHcDB6VWRNN28zUE9UUVBtUkpJbVkyaG8wYWkiLCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIn0.hxJphuKyWLbTLTgFq37tHQvNaxDwWxeOyDVbEemYoWDhBbSbjcjP034jJ0PhupYqtdadZV4un4j9QkJeYDLNtZLD7q4tErNK5bDw9gM1z9335BSu9htjLOZEF2_DqJYLGdbazWA3MAGkg6corOCXDVyBZpToekvylsGAMztkZaeAIgnsJlHxIIMMLQHrHNCBRPC1U6ZJQc7WZdgB-gefVlVQco0w8_Q0Z28DeshD9y3XChTMeTAAT-URwmz61RB6aUFMXpr4tTtYwyXGsWdu46LuDNxOV070eTybthDpDjyYSDsn-i4YbHvDGN5kUen9pw6b47CkSdhsSSjVQLsNkA',
-    http_get(URL, _, [authorization(bearer(Bearer)), status_code(Status)]),
-
-    Status = 401.
-
-:- end_tests(jwt_auth).
-
-:- begin_tests(connect_handler).
-:- use_module(core(util/test_utils)).
-
-test(connection_authorised_user_http_basic, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    admin_pass(Key),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, _, [authorization(basic(admin, Key))]).
-
-
-test(connection_authorised_insecure_user_header, [
-         setup(setup_temp_server(State, Server, [env_vars([
-                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
-                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
-                                 ])])),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, [json(Request_Data)], [request_header('X-Forwarded-User'='admin')]),
-    memberchk(name=DB_Name, Request_Data),
-    DB_Name = 'TEST_DB'.
-
-
-test(connection_unauthorised_insecure_user_header, [
-         setup(setup_temp_server(State, Server, [env_vars([
-                                     'TERMINUSDB_INSECURE_USER_HEADER_ENABLED'=true,
-                                     'TERMINUSDB_INSECURE_USER_HEADER'='X-Forwarded-User'
-                                 ])])),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, _, [request_header('X-Forwarded-User'='adminlolz'), status_code(Status)]),
-    Status = 401.
-
-
-test(connection_result_dbs, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    admin_pass(Key),
-    atomic_list_concat([Server, '/api/'], URL),
-    http_get(URL, Result, [json_object(dict),authorization(basic(admin, Key))]),
-
-    Result = [].
-
-:- end_tests(connect_handler).
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(info), cors_handler(Method, info_handler),
@@ -228,7 +145,7 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(db/Account/DB), cors_handler(Method, db_handler(Account, DB)),
+:- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
                  methods([options,head,post,delete])]).
 
@@ -256,44 +173,36 @@ db_handler(head, Organization, DB, Request, System_DB, Auth) :-
 
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
-    check_content_type_json(Request),
-    get_payload(Database_Document,Request),
-    do_or_die(
-        (_{ comment : Comment,
-            label : Label } :< Database_Document),
-        error(bad_api_document(Database_Document,[comment,label]),_)),
-
-    Default_Prefixes = _{ '@base' : "terminusdb:///data/",
-                          '@schema' : "terminusdb:///schema#" },
-    (   _{ prefixes : Input_Prefixes } :< Database_Document
-    ->  Prefixes = Default_Prefixes.put(Input_Prefixes)
-    ;   Prefixes = Default_Prefixes),
-
-    (   _{ public : Public } :< Database_Document
-    ->  true
-    ;   Public = false),
-
-    (   _{ schema : Schema } :< Database_Document
-    ->  true
-    ;   Schema = true),
-
     api_report_errors(
         create_db,
         Request,
-        (   create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
+        (   http_read_json_required(json_dict(JSON), Request),
+
+            param_value_json_required(JSON, comment, string, Comment),
+            param_value_json_required(JSON, label, string, Label),
+
+            param_value_json_optional(JSON, prefixes, object, _{}, Input_Prefixes),
+            Default_Prefixes = _{ '@base' : "terminusdb:///data/",
+                                  '@schema' : "terminusdb:///schema#" },
+            put_dict(Input_Prefixes, Default_Prefixes, Prefixes),
+
+            param_value_json_optional(JSON, public, boolean, false, Public),
+            param_value_json_optional(JSON, schema, boolean, true, Schema),
+
+            create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
+
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
                                        'api:status' : 'api:success'}))).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
-    (   get_payload(Document,Request),
-        _{ force: true} :< Document
-    ->  Force_Delete = true
-    ;   Force_Delete = false),
-
     /* DELETE: Delete database */
     api_report_errors(
         delete_db,
         Request,
-        (   delete_db(System_DB, Auth, Organization, DB, Force_Delete),
+        (   (   http_read_json_semidet(json_dict(JSON), Request),
+                param_value_json_optional(JSON, force, boolean, false, Force_Delete)
+            ->  true
+            ;   Force_Delete = false),
+            delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
 
@@ -304,116 +213,6 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
 :- use_module(core(api)).
 :- use_module(library(http/http_open)).
 
-test(db_create, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ '@base' : "https://terminushub.com/document",
-                           '@schema' : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              In, [json_object(dict),
-                   authorization(basic(admin, Key))]),
-    _{'api:status' : "api:success"} :< In.
-
-create_db_bad_prefixes(URI, Prefix_Name) :-
-    dict_create(Prefixes, _, [Prefix_Name-"x"]),
-    Doc = _{prefixes : Prefixes, comment : "c", label : "l"},
-    admin_pass(Key),
-    http_post(URI, json(Doc), JSON,
-              [json_object(dict),
-               authorization(basic(admin, Key)),
-               status_code(Code)]),
-    400 = Code,
-    _{'@type' : "api:DbCreateErrorResponse", 'api:error' : Error} :< JSON,
-    atom_string(Prefix_Name, Prefix_Name_String),
-    _{'@type' : "api:InvalidPrefix",
-      'api:prefix_name' : Prefix_Name_String,
-      'api:prefix_value' : "x"} :< Error.
-
-test(db_create_bad_prefixes, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    forall(member(Prefix_Name, ['@base', '@schema', other]),
-           create_db_bad_prefixes(URI, Prefix_Name)).
-
-test(db_create_bad_api_document, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ label : "A label" },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              JSON, [json_object(dict),
-                   status_code(Code),
-                   authorization(basic(admin, Key))]),
-    400 = Code,
-    _{'@type' : "api:BadAPIDocumentErrorResponse",
-      'api:error' : Error} :< JSON,
-    _{'@type' : "api:RequiredFieldsMissing"} :< Error.
-
-test(db_create_existing_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              Result, [json_object(dict),
-                       authorization(basic(admin, Key)),
-                       status_code(Status)]),
-
-    Status = 400,
-    _{'api:status' : "api:failure"} :< Result.
-
-test(db_create_in_unknown_organization_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    admin_pass(Key),
-    http_post(URI, json(Doc),
-              Result, [json_object(dict),
-                       authorization(basic(admin, Key)),
-                       status_code(Status)]),
-
-    Status = 400,
-    _{'api:status' : "api:failure"} :< Result.
-
-test(db_create_unauthenticated_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-                           scm : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-    http_post(URI, json(Doc),
-              Result, [json_object(dict),
-                       authorization(basic(admin, "THIS_IS_NOT_THE_CORRECT_PASSWORD")),
-                       status_code(Status)]),
-    Status = 401,
-    _{'api:status' : "api:failure"} :< Result.
 
 test(db_create_unauthorized_errors, [
          setup(setup_temp_server(State, Server)),
@@ -434,17 +233,6 @@ test(db_create_unauthorized_errors, [
     Status = 403,
     _{'api:status' : "api:forbidden"} :< Result.
 
-test(db_delete, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    create_db_without_schema("admin", "TEST_DB"),
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    admin_pass(Key),
-    http_delete(URI, Delete_In, [json_object(dict),
-                                 authorization(basic(admin, Key))]),
-
-    _{'api:status' : "api:success"} :< Delete_In.
 
 test(db_force_delete_unfinalized_system_only, [
          setup(setup_temp_server(State, Server)),
@@ -501,41 +289,6 @@ test(db_force_delete_unfinalized_system_and_label, [
     \+ database_exists("admin", "foo"),
     \+ safe_open_named_graph(Store, Label, _).
 
-test(db_delete_unknown_organization_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/THIS_ORG_DOES_NOT_EXIST/TEST_DB'], URI),
-    admin_pass(Key),
-    http_delete(URI,
-                Result,
-                [json_object(dict),
-                 authorization(basic(admin, Key)),
-                 status_code(Status)]),
-
-    Status = 400,
-
-    % TODO this test is actually equivalent to the one below.
-    % We need to differentiate these errors better, but I don't want to validate the exact error message.
-    % We need codes!
-    _{'api:status' : "api:failure"} :< Result.
-
-test(db_delete_nonexistent_errors, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    admin_pass(Key),
-    http_delete(URI,
-                Result,
-                [json_object(dict),
-                 authorization(basic(admin, Key)),
-                 status_code(Status)]),
-
-    Status = 404,
-
-    _{'api:status' : "api:not_found"} :< Result.
-
 
 test(db_auth_test, [
          setup(setup_temp_server(State, Server)),
@@ -554,20 +307,6 @@ test(db_auth_test, [
               In, [json_object(dict),
                    authorization(basic('TERMINUS_QA', "password"))]),
     _{'api:status' : "api:success"} :< In.
-
-test(bad_json, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-    admin_pass(Key),
-    Bad_JSON = "{\"x\"",
-    http_post(URI, bytes('application/json', Bad_JSON),
-              Return, [status_code(_),
-                       json_object(dict),
-                       authorization(basic(admin, Key))]),
-    Return = _{'api:message':"Submitted object was not valid JSON",
-               'api:status':"api:failure",'system:object':Bad_JSON}.
 
 :- end_tests(db_endpoint).
 
@@ -674,93 +413,6 @@ test(triples_update, [
 
     memberchk(system-(rdf:type)-'http://terminusdb.com/schema/system#SystemDatabase', Triples2).
 
-
-test(triples_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/triples/_system/schema'], URI),
-    admin_pass(Key),
-    http_get(URI, In, [json_object(dict),
-                       authorization(basic(admin, Key))]),
-    string(In).
-
-
-test(triples_put_two, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "Jumanji"),
-
-    TTL = "
-@prefix layer: <http://terminusdb.com/schema/layer#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-layer:LayerIdRestriction a owl:Restriction.",
-
-    atomic_list_concat([Server, '/api/triples/admin/Jumanji/local/branch/main/instance'], URI),
-    admin_pass(Key),
-
-    http_put(URI, json(_{commit_info : _{ author : "Test",
-                                           message : "testing" },
-                         turtle : TTL}),
-             _Result, [json_object(dict),
-                       authorization(basic(admin, Key))]),
-
-    TTL2 = "
-@prefix layer: <http://terminusdb.com/schema/layer#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-layer:LayerIdRestriction2 a owl:Restriction.",
-
-    http_put(URI, json(_{commit_info : _{ author : "Test",
-                                          message : "testing" },
-                         turtle : TTL2}),
-             _Result2, [json_object(dict),
-                        authorization(basic(admin, Key))]),
-
-    http_get(URI, Result, [json_object(dict),
-                           authorization(basic(admin, Key))]),
-
-    once(sub_string(Result, _, _, _,
-                    "LayerIdRestriction>\n  a owl:Restriction")),
-
-    once(sub_string(Result, _, _, _,
-                    "LayerIdRestriction2>\n  a owl:Restriction")).
-
-
-test(get_invalid_descriptor, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/triples/nonsense'], URI),
-    admin_pass(Key),
-
-    http_get(URI, In, [json_object(dict),
-                        authorization(basic(admin, Key)),
-                        status_code(Code)]),
-    _{'api:message':_Msg,
-      'api:status':"api:failure"} :< In,
-    Code = 400.
-
-
-test(get_bad_descriptor, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/triples/admin/fdsa'], URI),
-    admin_pass(Key),
-
-    http_get(URI, In, [json_object(dict),
-                        authorization(basic(admin, Key)),
-                        status_code(Code)]),
-    _{'api:message':_,
-      'api:status':"api:failure"} :< In,
-    Code = 400.
 
 :- end_tests(triples_endpoint).
 
@@ -950,44 +602,6 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
     write_cors_headers(Request),
     reply_json(Frame).
 
-:- begin_tests(frame_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(get_frame, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    atomic_list_concat([Server, '/api/schema/_system'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ type : "User"
-                    }),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               request_header('X-HTTP-Method-Override'='GET')
-              ]),
-
-    JSON =
-    _{'@documentation':
-      _{'@comment':"A database user.",
-        '@properties':
-        _{capability:"A set of capabilities which the user has access to.",
-          key_hash:"An optional key hash for authentication.",
-          name:"The users name."}},
-      '@key':_{'@fields':["name"],'@type':"Lexical"},
-      '@type':"Class",
-      capability:_{'@class':"Capability",'@type':"Set"},
-      key_hash:_{'@class':"xsd:string",'@type':"Optional"},
-      name:"xsd:string"}.
-
-
-:- end_tests(frame_endpoint).
-
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
 :- http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),
@@ -1040,109 +654,6 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             reply_json_dict(Response)
         )).
 
-% woql_handler Unit Tests
-
-:- begin_tests(woql_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(branch_db, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema(admin,test),
-    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
-
-    % TODO: We need branches to pull in the correct 'doc:' prefix.
-    Query0 =
-    _{'@type' : "AddTriple",
-      subject: _{ '@type' : "NodeValue",
-                  node: "test_subject"},
-      'predicate' : _{ '@type' : "NodeValue",
-                       node: "test_predicate"},
-      'object' : _{ '@type' : "Value",
-                    node: "test_object"}
-     },
-    * json_write_dict(current_output,Query0,[]),
-    Commit = commit_info{ author : 'The Gavinator',
-                          message : 'Peace and goodwill' },
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{'query' : Query0,
-                     'commit_info' : Commit }),
-              JSON0,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    _{bindings : [_{}], inserts: 1, deletes : 0} :< JSON0,
-
-    % Now query the insert...
-    Query1 =
-    _{'@type' : "Triple",
-      subject: _{'@type' : "NodeValue",
-                 variable: "Subject"},
-      predicate: _{'@type' : "NodeValue",
-                   variable: "Predicate"},
-      object: _{'@type' : "Value",
-                variable: "Object"}},
-
-    http_post(URI,
-              json(_{query : Query1}),
-              JSON1,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    (   _{'bindings' : L} :< JSON1
-    ->  L = [_{'Object':"test_object",
-               'Predicate':"@schema:test_predicate",
-               'Subject':"test_subject"}]
-    ).
-
-test(bad_cast, [
-         setup((setup_temp_server(State, Server),
-                create_db_with_test_schema("admin", "test"))),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-
-    Query0 =
-    _{'@type' : 'And',
-      and : [First_Insert,
-             Second_Insert]},
-
-    First_Insert =
-    _{ '@type' : "AddTriple",
-       subject: _{ '@type' : "NodeValue",
-                   node: "test_subject"},
-       predicate: _{ '@type' : "NodeValue",
-                     node: "rdf:type"},
-       object: _{ '@type' : "Value",
-                  node: "BS"}
-     },
-
-    Second_Insert =
-    _{ '@type' : "AddTriple",
-       subject: _{ '@type' : "NodeValue",
-                   node: "test_subject"},
-       predicate: _{ '@type' : "NodeValue",
-                     node: "rdf:label"},
-       object: _{ '@type' : "Value",
-                  data: _{ '@type' : "xsd:integer",
-                           '@value' : "asdf"}}},
-
-    admin_pass(Key),
-    atomic_list_concat([Server, '/api/woql/admin/test'], URI),
-    http_post(URI,
-              json(_{query : Query0, all_witnesses: true}),
-              JSON0,
-              [json_object(dict),
-               status_code(_),
-               authorization(basic(admin,Key))]),
-    "api:BadCast" = (JSON0.'api:error'.'@type').
-
-:- end_tests(woql_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
@@ -2536,166 +2047,6 @@ branch_handler(delete, Path, Request, System_DB, Auth) :-
                             _{'@type' : 'api:BranchResponse',
                               'api:status' : "api:success"}))).
 
-:- begin_tests(branch_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(create_empty_branch, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}
-                    }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    has_branch(Repository_Descriptor, "foo").
-
-test(create_branch_from_local_without_prefixes, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'/admin/test/local/branch/main'}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    has_branch(Repository_Descriptor, "foo").
-
-test(create_branch_from_local_with_prefixes, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'/admin/test/local/branch/main',
-                     prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}
-                    }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    has_branch(Repository_Descriptor, "foo").
-
-test(create_branch_that_already_exists_error, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/main'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'/admin/test/local/branch/main',
-                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               status_code(Status_Code)]),
-    Status_Code = 400,
-    * json_write_dict(current_output, JSON, []).
-
-test(create_branch_from_nonexisting_origin_error, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'/admin/test/local/branch/bar',
-                     base_uri:'http://terminushub.com/admin/test/foodocument'}),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               status_code(Status_Code)]),
-    Status_Code = 400,
-    * json_write_dict(current_output, JSON, []),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    \+ has_branch(Repository_Descriptor, "foo").
-
-test(create_branch_from_commit_graph_error, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{origin:'admin/test/local/_commits',
-                     prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}}),
-              JSON,
-              [json_object(dict),
-               authorization(basic(admin,Key)),
-               status_code(Status_Code)]),
-
-    * json_write_dict(current_output, JSON, []),
-    Status_Code = 400,
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    \+ has_branch(Repository_Descriptor, "foo").
-
-test(delete_empty_branch, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/branch/admin/test/local/branch/foo'], URI),
-    admin_pass(Key),
-    http_post(URI,
-              json(_{prefixes : _{ doc : "https://terminushub.com/document",
-                                   scm : "https://terminushub.com/schema"}
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    resolve_absolute_string_descriptor("admin/test/local/_commits", Repository_Descriptor),
-
-    has_branch(Repository_Descriptor, "foo"),
-
-    http_get(URI,
-             JSON2,
-             [method(delete),
-              json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    (JSON2.'api:status' = "api:success"),
-    \+ has_branch(Repository_Descriptor, "foo").
-
-:- end_tests(branch_endpoint).
-
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
@@ -2714,31 +2065,6 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request,
                             Prefixes,
                             [status(200)]))).
-
-:- begin_tests(prefixes_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-
-test(create_graph, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema("admin", "test"),
-
-    atomic_list_concat([Server, '/api/prefixes/admin/test'], URI),
-    admin_pass(Key),
-    http_get(URI,
-             JSON,
-             [json_object(dict),authorization(basic(admin,Key))]),
-
-    _{'@base':"http://somewhere.for.now/document/",
-      '@schema':"http://somewhere.for.now/schema#",
-      '@type':"Context"} :< JSON.
-
-:- end_tests(prefixes_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(user), cors_handler(Method, user_handler),
@@ -3127,11 +2453,6 @@ test(optimize_system, [
                  time_limit(infinite),
                  methods([options,post,put,get,delete])]).
 
-/*
- * reset_handler(Mode, Path, Request, System, Auth) is det.
- *
- * Reset a branch to a new commit.
- */
 remote_handler(post, Path, Request, System_DB, Auth) :-
 
     do_or_die(
@@ -3191,155 +2512,6 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
                                        'api:remote_names' : Remote_Names,
                                        'api:status' : "api:success"}))).
 
-
-:- begin_tests(remote_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(library(terminus_store)).
-
-test(remote_add, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:RemoteResponse",
-             'api:status':"api:success"},
-
-    super_user_authority(Auth),
-    show_remote(system_descriptor{}, Auth, 'admin/test', origin, Origin).
-
-test(remote_remove, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    http_get(URI,
-             JSON,
-             [method(delete),
-              post(json(_{ remote_name : origin })),
-              json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:RemoteResponse",
-             'api:status':"api:success"},
-
-    super_user_authority(Auth),
-    list_remotes(system_descriptor{}, Auth, 'admin/test', []).
-
-test(remote_set, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    New_Origin = "http://somewhere.com/admin/foo",
-
-    http_put(URI,
-             json(_{ remote_name : origin,
-                           remote_location : New_Origin
-                   }),
-             JSON,
-             [json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:RemoteResponse",
-             'api:status':"api:success"},
-
-    super_user_authority(Auth),
-    show_remote(system_descriptor{}, Auth, 'admin/test', origin, New_Origin).
-
-test(remote_get, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    atomic_list_concat([URI, '?remote_name=origin'], GET_URI),
-    http_get(GET_URI,
-             JSON,
-             [json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    _{ 'api:remote_name' : "origin",
-       'api:remote_url' : Origin } :< JSON.
-
-test(remote_list, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    create_db_without_schema("admin", "test"),
-    atomic_list_concat([Server, '/api/remote/admin/test'], URI),
-
-    Origin = "http://somewhere.com/admin/foo",
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ remote_name : origin,
-                      remote_location : Origin
-                    }),
-              _JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    http_get(URI,
-             JSON,
-             [json_object(dict),
-              authorization(basic(admin,Key))]),
-
-    _{ 'api:remote_names' : ["origin"]} :< JSON.
-
-
-
-:- end_tests(remote_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(patch), cors_handler(Method, patch_handler),
@@ -3444,39 +2616,6 @@ diff_handler(post, Request, System_DB, Auth) :-
 console_handler(get, _Request, _System_DB, _Auth) :-
     index_template(Index),
     throw(http_reply(bytes('text/html', Index))).
-
-:- begin_tests(console_route).
-:- use_module(core(util/test_utils)).
-
-test(console_route, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s/", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-test(console_route_empty, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-test(console_route_db, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s/db/gavin/baseball", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-test(console_route_home, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    format(string(ConsoleURL), "~s/home/somewhere", [Server]),
-    http_get(ConsoleURL, _, [request_header('Origin'=Server)]).
-
-:- end_tests(console_route).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).

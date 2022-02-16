@@ -496,6 +496,49 @@ describe('document', function () {
       }
     })
 
+    it('succeeds when ignoring optional combined with oneof (#992)', async function () {
+      const Parent = util.randomString()
+      const Choice = util.randomString()
+      const Container = util.randomString()
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': Parent,
+          optional: { '@type': 'Optional', '@class': 'xsd:integer' },
+        },
+        {
+          '@type': 'TaggedUnion',
+          '@id': Choice,
+          '@key': { '@type': 'ValueHash' },
+          '@inherits': [Parent],
+          '@subdocument': [],
+          integer: 'xsd:integer',
+          boolean: 'xsd:boolean',
+        },
+        {
+          '@type': 'Class',
+          '@id': Container,
+          contains: { '@type': 'Set', '@class': Parent },
+        },
+      ]
+      await document
+        .insert(agent, docPath, { schema: schema })
+        .then(document.verifyInsertSuccess)
+
+      const instance = {
+        '@type': Container,
+        contains: [
+          {
+            '@type': Choice,
+            integer: 12,
+          },
+        ],
+      }
+      await document
+        .insert(agent, docPath, { instance: instance })
+        .then(document.verifyInsertSuccess)
+    })
+
     it('fails when adding non-optional field to schema (#780)', async function () {
       // Insert an initial schema.
       const schema = { '@id': util.randomString(), '@type': 'Class' }

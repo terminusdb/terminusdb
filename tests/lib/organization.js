@@ -69,11 +69,19 @@ function verifyDelFailure (r) {
   return r
 }
 
+function verifyDelNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:DeleteOrganizationErrorResponse')
+  return r
+}
+
 module.exports = {
   add,
   del,
   verifyAddSuccess,
-  verifyDelSuccess,
   verifyAddFailure,
+  verifyDelSuccess,
   verifyDelFailure,
+  verifyDelNotFound,
 }

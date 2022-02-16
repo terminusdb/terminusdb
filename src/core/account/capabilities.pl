@@ -53,7 +53,8 @@ username_user_id(DB, Username, User_ID) :-
         (
             isa(User_ID,'User'),
             t(User_ID, name, Username^^xsd:string)
-        )
+        ),
+        [compress_prefixes(false)]
        ).
 
 

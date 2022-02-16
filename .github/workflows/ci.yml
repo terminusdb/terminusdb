@@ -20,6 +20,7 @@ env:
   TERMINUSDB_STORE_PROLOG_VERSION: v0.19.6
   TUS_VERSION: v0.0.5
   DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
+  SWIPL_LINTER_VERSION: v0.6
 
 jobs:
 
@@ -75,7 +76,7 @@ jobs:
 
         # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
       - name: Download script
-        run: curl -L 'https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/v0.5/pl_lint.pl' > pl_lint.pl
+        run: curl -L "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/${SWIPL_LINTER_VERSION}/pl_lint.pl" > pl_lint.pl
 
       - name: Run linter
         run: |
@@ -113,7 +114,13 @@ jobs:
       - name: Run server
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run --detach --publish 6363:6363 $DOCKER_IMAGE_NAME:local
+          docker run --detach \
+            -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
+            -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
+            -e TERMINUSDB_JWT_ENABLED=true \
+            -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
+            --publish 6363:6363 \
+            $DOCKER_IMAGE_NAME:local
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
@@ -127,6 +134,26 @@ jobs:
         env:
           TERMINUSDB_USER: admin
           TERMINUSDB_PASS: root
+        run: |
+          npm install
+          npm run check
+          npm test
+
+      - name: Run integration tests with insecure header
+        working-directory: tests
+        env:
+          TERMINUSDB_USER: admin
+          TERMINUSDB_INSECURE_USER_HEADER: X-Forwarded-User
+        run: |
+          npm install
+          npm run check
+          npm test
+
+      - name: Run integration tests with JWT
+        working-directory: tests
+        env:
+          TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
+          TERMINUSDB_USER: admin
         run: |
           npm install
           npm run check
