@@ -378,19 +378,30 @@ describe('woql-auth', function () {
     expect(r.body.transaction_retry_count).to.equal(0)
   })
 
-  it('fails woql.post with invalid file path', async function () {
-    const woqlPostQueryPost = Object.assign(woqlPostQuery)
-
-    woqlPostQueryPost.query.and[0].resource.source = {
-      '@type': 'Source',
-      file: '/employees/employees.csv',
+  it('fails woql.post with missing file', async function () {
+    const fileName = 'employees.csv'
+    const query = {
+      query: {
+        '@type': 'Get',
+        columns: [
+          {
+            '@type': 'Column',
+            indicator: { '@type': 'Indicator', name: 'Name' },
+            variable: 'Name',
+          },
+        ],
+        resource: {
+          '@type': 'QueryResource',
+          source: { '@type': 'Source', post: fileName },
+          format: 'csv',
+        },
+      },
     }
 
     const r = await woql
-      .post(agent, woqlPath, woqlPostQueryPost)
+      .post(agent, woqlPath, query)
       .then(woql.verifyGetFailure)
-
-    // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
-    expect(r.body['api:error']['@type']).to.equal('vio:WOQLSyntaxError')
+    expect(r.body['api:error']['@type']).to.equal('api:MissingFile')
+    expect(r.body['api:error']['api:file_name']).to.equal(fileName)
   })
 })

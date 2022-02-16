@@ -61,6 +61,15 @@ api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type_In, Value)
                               'api:value' : Value },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(missing_file(File_Name), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Missing file: ~s", [File_Name]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MissingFile',
+                              'api:file_name' : File_Name },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Data_Version_String), "~w", [Data_Version]),
@@ -1108,9 +1117,11 @@ error_type(add_organization, 'api:AddOrganizationErrorResponse').
 error_type(check_db, 'api:DbExistsErrorResponse').
 error_type(clone, 'api:CloneErrorResponse').
 error_type(create_db, 'api:DbCreateErrorResponse').
+error_type(csv, 'api:CsvErrorResponse').
 error_type(delete_db, 'api:DbDeleteErrorResponse').
 error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 error_type(delete_organization, 'api:DeleteOrganizationErrorResponse').
+error_type(frame, 'api:FrameErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type(prefix, 'api:PrefixErrorResponse').
