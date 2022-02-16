@@ -178,9 +178,13 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
         Request,
         (   http_read_json_required(json_dict(JSON), Request),
 
-            param_value_json_required(JSON, comment, string, Comment),
             param_value_json_required(JSON, label, string, Label),
 
+            % We do this because we want to allow an
+            % empty string to be a comment as well
+            (   get_dict(comment, JSON, Comment)
+            ->  true
+            ;   Comment = "" ),
             param_value_json_optional(JSON, prefixes, object, _{}, Input_Prefixes),
             Default_Prefixes = _{ '@base' : "terminusdb:///data/",
                                   '@schema' : "terminusdb:///schema#" },

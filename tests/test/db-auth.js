@@ -20,6 +20,15 @@ describe('db-auth', function () {
     await db.del(agent, path).then(db.verifyDeleteSuccess)
   })
 
+  it('accepts comment as empty string', async function () {
+    const { orgName, userName } = agent.defaults()
+    const dbName = util.randomString()
+    const { path } = endpoint.db({ orgName, userName, dbName })
+    // Create a database
+    await db.create(agent, path, { comment: '' }).then(db.verifyCreateSuccess)
+    await db.del(agent, path).then(db.verifyDeleteSuccess)
+  })
+
   it('fails delete with unknown database', async function () {
     const { path, orgName, dbName } = endpoint.db(agent.defaults())
     const r = await db.del(agent, path).then(db.verifyDeleteNotFound)
