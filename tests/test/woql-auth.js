@@ -364,7 +364,6 @@ describe('woql-auth', function () {
   })
 
   it('fails woql.post with missing file', async function () {
-    const fileName = 'employees.csv'
     const query = {
       query: {
         '@type': 'Get',
@@ -377,7 +376,7 @@ describe('woql-auth', function () {
         ],
         resource: {
           '@type': 'QueryResource',
-          source: { '@type': 'Source', post: fileName },
+          source: { '@type': 'Source', post: 'employees.csv' },
           format: 'csv',
         },
       },
@@ -387,6 +386,6 @@ describe('woql-auth', function () {
       .post(agent, woqlPath, query)
       .then(woql.verifyGetFailure)
     expect(r.body['api:error']['@type']).to.equal('api:MissingFile')
-    expect(r.body['api:error']['api:file_name']).to.equal(fileName)
+    expect(r.body['api:error']['api:file_name']).to.equal(query.query.resource.source.post)
   })
 })
