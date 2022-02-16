@@ -299,22 +299,33 @@ describe('woql-auth', function () {
     const r = await woql
       .post(agent, woqlPath, woqlPostQueryPost)
       .then(woql.verifyGetFailure)
-
     // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
-    expect(r.body['api:error']['@type']).to.equal('vio:WOQLSyntaxError')
+    expect(r.body['api:error']['@type']).to.equal('api:WOQLSyntaxError')
   })
 
   it('accepts woql.post with file', async function () {
-    const woqlPostQueryPost = Object.assign(woqlPostQuery)
-
-    woqlPostQueryPost.query.and[0].resource.source = {
-      '@type': 'Source',
-      file: '/employees.csv',
+    const query = {
+      query: {
+        '@type': 'Get',
+        columns: [
+          {
+            '@type': 'Column',
+            indicator: { '@type': 'Indicator', name: 'Name' },
+            variable: 'Name',
+          },
+        ],
+        resource: {
+          '@type': 'QueryResource',
+          source: { '@type': 'Source', post: 'employees.csv' },
+          format: 'csv',
+        },
+      },
     }
 
     const r = await woql
-      .post(agent, woqlPath, woqlPostQueryPost)
-      .then(woql.verifyGetFailure)
+      .multipart(agent, woqlPath, query)
+      .attach('file', 'test/employees.csv')
+      .then(woql.verifyGetSuccess)
 
     expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
     expect(r.body['api:variable_names'][0]).to.equal('Name')

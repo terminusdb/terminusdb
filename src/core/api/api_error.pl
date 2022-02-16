@@ -1731,7 +1731,7 @@ generic_exception_jsonld(bad_api_document(Document,Expected),JSON) :-
                              'api:document' : Document},
              'api:message' : Msg}.
 generic_exception_jsonld(missing_content_type(Expected), JSON) :-
-    format(string(Msg), "Missing 'Content-Type' header. Expected value: ~q", [Expected]),
+    format(string(Msg), "Missing 'Content-Type' header. Expected value: ~w", [Expected]),
     JSON = _{'@type' : 'api:MissingContentTypeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
