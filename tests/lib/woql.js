@@ -26,7 +26,7 @@ function multipart (agent, path, params) {
     .attach(
       'payload',
       Buffer.from(JSON.stringify(body)),
-      { filename: 'body.json', contentType: 'application/json' }
+      { filename: 'body.json', contentType: 'application/json' },
     )
 }
 
