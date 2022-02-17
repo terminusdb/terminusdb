@@ -223,38 +223,6 @@ describe('woql-auth', function () {
     })
   })
 
-  const woqlPostQuery = {
-    query: {
-      '@type': 'And',
-      and: [
-        {
-          '@type': 'Get',
-          columns: [
-            {
-              '@type': 'Column',
-              indicator: {
-                '@type': 'Indicator',
-                name: 'Name',
-              },
-              variable: 'Name',
-            },
-          ],
-          resource: {
-            '@type': 'QueryResource',
-            source: {
-              '@type': 'Source',
-            },
-            format: 'csv',
-            options: {
-              type: 'csv',
-            },
-          },
-        },
-      ],
-    }
-    ,
-  }
-
   it('fails QueryResource with bad url', async function () {
     const query = {
       query: {
