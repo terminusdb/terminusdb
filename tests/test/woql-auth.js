@@ -305,32 +305,6 @@ describe('woql-auth', function () {
     expect(r.body['api:error']).to.have.property('api:message')
   })
 
-  it('accepts woql.post with post', async function () {
-    const woqlPostQueryPost = Object.assign(woqlPostQuery)
-
-    woqlPostQueryPost.query.and[0].resource.source = {
-      '@type': 'Source',
-      post: '/employees.csv',
-    }
-
-    const r = await woql
-      .post(agent, woqlPath, woqlPostQueryPost)
-      .then(woql.verifyGetFailure)
-
-    expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
-    expect(r.body['api:variable_names'][0]).to.equal('Name')
-    expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
-    expect(r.body.bindings).to.deep.equal([
-      { Name: { '@type': 'xsd:string', '@value': 'Destiny Norris' } },
-      { Name: { '@type': 'xsd:string', '@value': 'Darci Prosser' } },
-      { Name: { '@type': 'xsd:string', '@value': 'Alanah Bloggs' } },
-      { Name: { '@type': 'xsd:string', '@value': 'Fabian Dalby' } },
-    ])
-    expect(r.body.deletes).to.equal(0)
-    expect(r.body.inserts).to.equal(0)
-    expect(r.body.transaction_retry_count).to.equal(0)
-  })
-
   it('passes QueryResource with post', async function () {
     const query = {
       query: {
@@ -352,7 +326,7 @@ describe('woql-auth', function () {
 
     const r = await woql
       .multipart(agent, woqlPath, query)
-      .attach('file', 'test/employees.csv')
+      .attach('file', 'served/employees.csv')
       .then(woql.verifyGetSuccess)
 
     expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
