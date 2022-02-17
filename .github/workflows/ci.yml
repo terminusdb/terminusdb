@@ -137,7 +137,7 @@ jobs:
         run: |
           npm install
           npm run check
-          npm test
+          DEBUG=start-server-and-test npm test
 
       - name: Run integration tests with insecure header
         working-directory: tests
