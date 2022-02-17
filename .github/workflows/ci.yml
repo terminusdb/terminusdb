@@ -120,6 +120,7 @@ jobs:
             -e TERMINUSDB_JWT_ENABLED=true \
             -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
             --publish 6363:6363 \
+            --net=host \
             $DOCKER_IMAGE_NAME:local
 
       - name: Set up Node.js
