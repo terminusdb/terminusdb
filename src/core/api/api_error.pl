@@ -38,26 +38,26 @@ api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
-api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type_In, Value), _), Type, JSON) :-
+api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    (   Expected_Type_In = atom
-    ->  Expected_Type = string
-    ;   Expected_Type = Expected_Type_In),
     (   Expected_Type = boolean
-    ->  Type_Msg = "to be 'true' or 'false'"
+    ->  Expected_Type_Displayed = "boolean (true, false)"
     ;   Expected_Type = graph
-    ->  Type_Msg = "to be 'schema' or 'instance'"
-    ;   Expected_Type = integer
-    ->  Type_Msg = "to be an integer"
+    ->  Expected_Type_Displayed = "graph (schema, instance)"
     ;   Expected_Type = nonnegative_integer
-    ->  Type_Msg = "to be a non-negative integer"
-    ;   format(string(Type_Msg), "to be a ~q", [Expected_Type])),
-    format(string(Msg), "Expected parameter '~s' ~s but found: ~q", [Param, Type_Msg, Value]),
+    ->  Expected_Type_Displayed = "non-negative integer"
+    ;   Expected_Type = atom
+    ->  Expected_Type_Displayed = "string"
+    ;   memberchk(Expected_Type, [non_empty_atom, non_empty_string])
+    ->  Expected_Type_Displayed = "non-empty string"
+    ;   Expected_Type_Displayed = Expected_Type
+    ),
+    format(string(Msg), "Expected parameter '~s' of type '~s` but found: ~q", [Param, Expected_Type_Displayed, Value]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadParameterType',
                               'api:parameter' : Param,
-                              'api:expected_type' : Expected_Type,
+                              'api:expected_type' : Expected_Type_Displayed,
                               'api:value' : Value },
              'api:message' : Msg
             }.

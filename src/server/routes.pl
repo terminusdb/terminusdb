@@ -178,8 +178,8 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
         Request,
         (   http_read_json_required(json_dict(JSON), Request),
 
-            param_value_json_required(JSON, comment, string, Comment),
-            param_value_json_required(JSON, label, string, Label),
+            param_value_json_optional(JSON, comment, string, "", Comment),
+            param_value_json_required(JSON, label, non_empty_string, Label),
 
             param_value_json_optional(JSON, prefixes, object, _{}, Input_Prefixes),
             Default_Prefixes = _{ '@base' : "terminusdb:///data/",
@@ -440,8 +440,8 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
-            param_value_search_or_json_optional(Search, JSON, id, atom, _, Id),
-            param_value_search_or_json_optional(Search, JSON, type, atom, _, Type),
+            param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
+            param_value_search_or_json_optional(Search, JSON, type, non_empty_atom, _, Type),
 
             % Use new compress_ids but still support old prefixed.
             % See https://github.com/terminusdb/terminusdb/issues/802
@@ -522,7 +522,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_message(Search, Message),
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, nuke, boolean, false, Nuke),
-            param_value_search_optional(Search, id, atom, _, Id),
+            param_value_search_optional(Search, id, non_empty_atom, _, Id),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -2158,8 +2158,8 @@ organization_handler(post, Request, System_DB, Auth) :-
         Request,
         (   http_read_json_required(json_dict(JSON), Request),
 
-            param_value_json_required(JSON, organization_name, string, Org),
-            param_value_json_required(JSON, user_name, string, User),
+            param_value_json_required(JSON, organization_name, non_empty_string, Org),
+            param_value_json_required(JSON, user_name, non_empty_string, User),
 
             add_user_organization_transaction(System_DB, Auth, User, Org),
             cors_reply_json(Request,
@@ -2171,7 +2171,7 @@ organization_handler(delete, Request, System_DB, Auth) :-
         Request,
         (   http_read_json_required(json_dict(JSON), Request),
 
-            param_value_json_required(JSON, organization_name, string, Name),
+            param_value_json_required(JSON, organization_name, non_empty_string, Name),
 
             delete_organization_transaction(System_DB, Auth, Name),
             cors_reply_json(Request,

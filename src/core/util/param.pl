@@ -41,13 +41,16 @@ param_check_json_(graph, "instance", instance).
 param_check_json_(object, Value_In, Value_Out) :-
     is_dict(Value_In),
     Value_Out = Value_In.
-param_check_json_(string, Value_In, Value_Out) :-
+param_check_json_(non_empty_string, Value_In, Value_Out) :-
     string(Value_In),
     Value_In \= "",
     Value_Out = Value_In.
-param_check_json_(atom, Value_In, Value_Out) :-
+param_check_json_(string, Value_In, Value_Out) :-
+    string(Value_In),
+    Value_Out = Value_In.
+param_check_json_(non_empty_atom, Value_In, Value_Out) :-
     % In JSON, all inputs must be strings but we want an atom as output.
-    param_check_json_(string, Value_In, Value_String),
+    param_check_json_(non_empty_string, Value_In, Value_String),
     atom_string(Value_Out, Value_String).
 
 /*
@@ -63,7 +66,7 @@ param_check_search(Type, Param, Value_In, Value_Out) :-
 
 param_check_search_(graph, schema, schema).
 param_check_search_(graph, instance, instance).
-param_check_search_(atom, Value_In, Value_Out) :-
+param_check_search_(non_empty_atom, Value_In, Value_Out) :-
     % In search lists, all strings are given as atoms.
     atom(Value_In),
     Value_In \= '',
@@ -106,13 +109,13 @@ param_value_search_optional(Search, Param, Type, Default, Value) :-
  * Get the value of the required parameter 'author' from a search list.
  */
 param_value_search_author(Search, Author) :-
-    param_value_search_required(Search, author, atom, Author).
+    param_value_search_required(Search, author, non_empty_atom, Author).
 
 /*
  * Get the value of the required parameter 'message' from a search list.
  */
 param_value_search_message(Search, Message) :-
-    param_value_search_required(Search, message, atom, Message).
+    param_value_search_required(Search, message, non_empty_atom, Message).
 
 /*
  * Get the value of the optional parameter 'graph_type' from a search list.

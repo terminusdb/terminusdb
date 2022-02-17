@@ -3,13 +3,20 @@ const { Agent, db, endpoint, util } = require('../lib')
 
 describe('db-auth', function () {
   let agent
+  let defaults
 
   before(function () {
     agent = new Agent().auth()
   })
 
+  beforeEach(function () {
+    // Use a unique database for each test.
+    defaults = agent.defaults()
+    defaults.dbName = util.randomString()
+  })
+
   it('passes exists', async function () {
-    const { path } = endpoint.db(agent.defaults())
+    const { path } = endpoint.db(defaults)
     // Create a database
     await db.create(agent, path).then(db.verifyCreateSuccess)
     // Check for database existence
@@ -20,8 +27,14 @@ describe('db-auth', function () {
     await db.del(agent, path).then(db.verifyDeleteSuccess)
   })
 
+  it('passes create with no comment', async function () {
+    const { path } = endpoint.db(defaults)
+    await agent.post(path).send({ label: 'hello' }).then(db.verifyCreateSuccess)
+    await db.del(agent, path).then(db.verifyDeleteSuccess)
+  })
+
   it('fails delete with unknown database', async function () {
-    const { path, orgName, dbName } = endpoint.db(agent.defaults())
+    const { path, orgName, dbName } = endpoint.db(defaults)
     const r = await db.del(agent, path).then(db.verifyDeleteNotFound)
     expect(r.body['api:error']['@type']).to.equal('api:UnknownDatabase')
     expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
@@ -29,16 +42,15 @@ describe('db-auth', function () {
   })
 
   it('fails delete after create with unknown organization', async function () {
-    const params = agent.defaults()
-    const pathWithKnownOrg = endpoint.db(params).path
-    params.orgName = util.randomString()
-    const pathWithUnknownOrg = endpoint.db(params).path
+    const pathWithKnownOrg = endpoint.db(defaults).path
+    defaults.orgName = util.randomString()
+    const pathWithUnknownOrg = endpoint.db(defaults).path
     // Create a database
     await db.create(agent, pathWithKnownOrg).then(db.verifyCreateSuccess)
     // Delete the database but with unknown organization
     const r = await db.del(agent, pathWithUnknownOrg).then(db.verifyDeleteNotFound)
     expect(r.body['api:error']['@type']).to.equal('api:UnknownOrganizationName')
-    expect(r.body['api:error']['api:organization_name']).to.equal(params.orgName)
+    expect(r.body['api:error']['api:organization_name']).to.equal(defaults.orgName)
     // Delete the created database
     await db.del(agent, pathWithKnownOrg).then(db.verifyDeleteSuccess)
   })
