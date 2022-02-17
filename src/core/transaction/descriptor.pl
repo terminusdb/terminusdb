@@ -221,8 +221,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     ;   Type = inference,
         system_inference_name(Graph_Name)),
     storage(Store),
-    safe_open_named_graph(Store, Graph_Name, Graph),
-    head(Graph, Layer),
+    safe_open_graph_head(Store, Graph_Name, Layer),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = labelled_graph{ label: Name,
@@ -254,8 +253,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     ;   Type = schema
     ->  repository_ontology(Repository_Name),
         storage(Store),
-        safe_open_named_graph(Store, Repository_Name, Graph),
-        head(Graph, Layer)
+        safe_open_graph_head(Store, Repository_Name, Layer)
     ),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor,
@@ -275,8 +273,7 @@ open_read_write_obj(Descriptor,
     ->  open_read_write_obj(Repo_Descriptor, Repository_Read_Write_Obj, Map, New_Map),
 
         repository_ontology(Repo_Name),
-        safe_open_named_graph(Store, Repo_Name, Repo_Graph),
-        head(Repo_Graph, Repo_Layer),
+        safe_open_graph_head(Store, Repo_Name, Repo_Layer),
 
         Repo_Layer_Desc =
         layer_descriptor{
@@ -290,8 +287,7 @@ open_read_write_obj(Descriptor,
     ;   Type = schema
     ->  New_Map = Map,
         ref_ontology(Ref_Name),
-        safe_open_named_graph(Store, Ref_Name, Graph),
-        head(Graph, Layer)
+        safe_open_graph_head(Store, Ref_Name, Layer)
     ),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor,
