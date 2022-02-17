@@ -32,7 +32,7 @@
 
 :- use_module(core(util)).
 
-terminusdb_version('10.0.17').
+terminusdb_version('10.0.18').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
