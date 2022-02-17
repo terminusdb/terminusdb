@@ -56,7 +56,7 @@ describe('woql-queryresource', function () {
   it('fails with url and missing file', async function () {
     const query = queryTemplate()
     query.query.resource.source.url = 'http://127.0.0.1:7474/not_found.csv'
-    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure(r)
+    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
     expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedFetch')
     expect(r.body['api:error']['api:url']).to.equal(query.query.resource.source.url)
   })
