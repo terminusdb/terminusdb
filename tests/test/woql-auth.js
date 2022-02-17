@@ -255,48 +255,54 @@ describe('woql-auth', function () {
     ,
   }
 
-  describe('testing woql.post', function () {
-    it('accepts woql.post with url', async function () {
-      const woqlPostQueryURL = Object.assign(woqlPostQuery)
-
-      woqlPostQueryURL.query.and[0].resource.source = {
-        '@type': 'Source',
-        url: 'https://raw.githubusercontent.com/terminusdb/terminusdb-tutorials/master/getting_started/python-client/Employees.csv',
-      }
-
-      const r = await woql
-        .post(agent, woqlPath, woqlPostQueryURL)
-        .then(woql.verifyGetSuccess)
-
-      expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
-      expect(r.body['api:variable_names'][0]).to.equal('Name')
-      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
-      expect(r.body.bindings).to.deep.equal([
-        { Name: { '@type': 'xsd:string', '@value': 'Destiny Norris' } },
-        { Name: { '@type': 'xsd:string', '@value': 'Darci Prosser' } },
-        { Name: { '@type': 'xsd:string', '@value': 'Alanah Bloggs' } },
-        { Name: { '@type': 'xsd:string', '@value': 'Fabian Dalby' } },
-      ])
-      expect(r.body.deletes).to.equal(0)
-      expect(r.body.inserts).to.equal(0)
-      expect(r.body.transaction_retry_count).to.equal(0)
-    })
-  })
-
-  it('fails woql.post with invalid URL', async function () {
-    const woqlPostQueryInvalidURL = Object.assign(woqlPostQuery)
-
-    woqlPostQueryInvalidURL.query.and[0].resource.source = {
-      '@type': 'Source',
-      url: 'terminusdb-tutorials/getting_started/python-client/Employees.csv',
+  it('fails QueryResource with bad url', async function () {
+    const query = {
+      query: {
+        '@type': 'Get',
+        columns: [
+          {
+            '@type': 'Column',
+            indicator: { '@type': 'Indicator', name: 'Name' },
+            variable: 'Name',
+          },
+        ],
+        resource: {
+          '@type': 'QueryResource',
+          source: { '@type': 'Source', url: util.randomString() },
+          format: 'csv',
+        },
+      },
     }
 
-    const r = await woql
-      .post(agent, woqlPath, woqlPostQueryInvalidURL)
-      .then(woql.verifyGetFailure)
+    const { path } = endpoint.woqlResource(agent.defaults())
+    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
+    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedBadUrl')
+    expect(r.body['api:error']['api:url']).to.equal(query.query.resource.source.url)
+  })
 
-    // this error type are just for testing purposes we will change it to a more informative type when it is implemented.
-    expect(r.body['api:error']['@type']).to.equal('api:InvalidURL')
+  it('fails QueryResource with file:/// url', async function () {
+    const query = {
+      query: {
+        '@type': 'Get',
+        columns: [
+          {
+            '@type': 'Column',
+            indicator: { '@type': 'Indicator', name: 'Name' },
+            variable: 'Name',
+          },
+        ],
+        resource: {
+          '@type': 'QueryResource',
+          source: { '@type': 'Source', url: 'file:///' + util.randomString() },
+          format: 'csv',
+        },
+      },
+    }
+
+    const { path } = endpoint.woqlResource(agent.defaults())
+    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
+    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedSocketError')
+    expect(r.body['api:error']).to.have.property('api:message')
   })
 
   it('accepts woql.post with post', async function () {
@@ -325,7 +331,7 @@ describe('woql-auth', function () {
     expect(r.body.transaction_retry_count).to.equal(0)
   })
 
-  it('accepts woql.post with file', async function () {
+  it('passes QueryResource with post', async function () {
     const query = {
       query: {
         '@type': 'Get',
@@ -363,7 +369,7 @@ describe('woql-auth', function () {
     expect(r.body.transaction_retry_count).to.equal(0)
   })
 
-  it('fails woql.post with missing file', async function () {
+  it('fails QueryResource with post and missing file', async function () {
     const query = {
       query: {
         '@type': 'Get',

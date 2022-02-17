@@ -130,6 +130,33 @@ api_global_error_jsonld(error(invalid_database_name(DB), _), Type, JSON) :-
                               'api:database_name' : DB },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(http_open_error(existence_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed to URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailed',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(domain_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed to bad URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedBadUrl',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(socket_error(_, Err_Msg)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed with socket error: ~w", [Err_Msg]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedSocketError',
+                              'api:message' : Err_Msg },
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
