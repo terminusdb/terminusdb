@@ -25,7 +25,9 @@
               insecure_user_header_key/1,
               check_all_env_vars/0,
               is_enterprise/0,
-              check_insecure_user_header_enabled/1
+              check_insecure_user_header_enabled/1,
+              clear_check_insecure_user_header_enabled/0,
+              clear_insecure_user_header_key/0
           ]).
 
 :- use_module(library(pcre)).
