@@ -76,7 +76,7 @@ describe('woql', function () {
     const r = await woql.post(agent, path, query)
     console.error(r.body)
     woql.verifyGetFailure(r)
-    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailed')
+    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedFetch')
     expect(r.body['api:error']['api:url']).to.equal(query.query.resource.source.url)
   })
 })
