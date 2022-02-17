@@ -7,9 +7,8 @@ describe('woql-queryresource', function () {
 
   before(async function () {
     agent = new Agent().auth()
-    const defaults = agent.defaults()
-    path = endpoint.woqlResource(defaults).path
-    await db.createAfterDel(agent, endpoint.db(defaults).path)
+    path = endpoint.woqlResource(agent.defaults()).path
+    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path)
   })
 
   after(async function () {
@@ -55,12 +54,10 @@ describe('woql-queryresource', function () {
   it('passes with post', async function () {
     const query = queryTemplate()
     query.query.resource.source.post = 'employees.csv'
-
     const r = await woql
       .multipart(agent, path, query)
       .attach('file', 'served/employees.csv')
       .then(woql.verifyGetSuccess)
-
     expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
     expect(r.body['api:variable_names'][0]).to.equal('Name')
     expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
