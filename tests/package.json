@@ -8,11 +8,13 @@
     "eslint-plugin-import": "^2.23.4",
     "eslint-plugin-mocha": "^9.0.0",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^5.1.0"
+    "eslint-plugin-promise": "^5.1.0",
+    "http-server": "^14.1.0"
   },
   "scripts": {
     "lint": "eslint --fix .",
     "check": "eslint .",
+    "start-server": "http-server ./served --port 7474",
     "test": "mocha"
   },
   "author": "Sean Leather <sean@terminusdb.com>",

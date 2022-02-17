@@ -68,6 +68,7 @@ useful bits you need to work on this test suite.
 
 * `lib/`: library of JavaScript source files used by the tests but are not tests
 * `test/`: Mocha source files with tests
+* `served/`: Files that are served by `http-server` during testing
 * `package.json`: Node.js package information
 * `package-lock.json`: specification of recursive dependency versions
 * `.eslintrc.js`: ESLint configuration
