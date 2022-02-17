@@ -14,7 +14,7 @@
   "scripts": {
     "lint": "eslint --fix .",
     "check": "eslint .",
-    "start-server": "http-server ./served --port 7474",
+    "start-server": "http-server ./served -c-1 --port 7474",
     "test": "mocha"
   },
   "author": "Sean Leather <sean@terminusdb.com>",
