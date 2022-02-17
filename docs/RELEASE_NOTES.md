@@ -1,3 +1,16 @@
+# TerminusDB Server v10.0.17 Beta Release Notes
+## Bug fixes
++ Fix valuehash generation for multidimensional arrays
++ Fix patch cost calculations
++ Cardinality failure on inherited tagged union in combination with optional
+
+## Enhancement
++ Allow optional comment on db creation
+
+## Other
++ Removed message api endpoint
++ Moved various unit tests into the integration tests
+
 # TerminusDB Server v10.0.16 Beta Release Notes
 ## Enhancements
 + Patch and diff api endpoints
