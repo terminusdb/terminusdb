@@ -5,7 +5,8 @@ const util = require('./util.js')
 
 function create (agent, path, params) {
   params = new Params(params)
-  const comment = params.string('comment', 'default comment')
+  // Clients use an empty comment string by default, so we do that here.
+  const comment = params.string('comment', '')
   const label = params.string('label', 'default label')
   const prefixes = params.object('prefixes')
   const schema = params.boolean('schema')

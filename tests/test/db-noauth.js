@@ -29,18 +29,17 @@ describe('db-noauth', function () {
     expect(r.text).to.be.undefined
   })
 
-  describe('fails create with missing fields', function () {
+  describe('fails create with missing label', function () {
     const parts = [
-      [{ }, 'comment'],
-      [{ comment: 'a comment' }, 'label'],
-      [{ label: 'a label' }, 'comment'],
+      { },
+      { comment: 'We test a non-empty comment string here.' },
     ]
-    for (const [body, missingParam] of parts) {
+    for (const body of parts) {
       it(JSON.stringify(body), async function () {
         const { path } = endpoint.db(agent.defaults())
         const r = await agent.post(path).send(body).then(db.verifyCreateFailure)
         expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
-        expect(r.body['api:error']['api:parameter']).to.equal(missingParam)
+        expect(r.body['api:error']['api:parameter']).to.equal('label')
       })
     }
   })
