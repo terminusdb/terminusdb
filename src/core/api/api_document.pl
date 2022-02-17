@@ -245,7 +245,7 @@ api_delete_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream, 
                                  (   is_list(JSON)
                                  ->  member(ID_Unchecked, JSON)
                                  ;   ID_Unchecked = JSON),
-                                 param_check_json(string, id, ID_Unchecked, ID)),
+                                 param_check_json(non_empty_string, id, ID_Unchecked, ID)),
                              api_delete_document_(Graph_Type, Transaction, ID))),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
