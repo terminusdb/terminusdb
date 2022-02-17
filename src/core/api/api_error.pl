@@ -132,16 +132,16 @@ api_global_error_jsonld(error(invalid_database_name(DB), _), Type, JSON) :-
             }.
 api_global_error_jsonld(error(http_open_error(existence_error(_, URL)), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "HTTP request failed to URL: ~w", [URL]),
+    format(string(Msg), "HTTP request could not fetch URL: ~w", [URL]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
-             'api:error' : _{ '@type' : 'api:HttpRequestFailed',
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedFetch',
                               'api:url' : URL },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(http_open_error(domain_error(_, URL)), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "HTTP request failed to bad URL: ~w", [URL]),
+    format(string(Msg), "HTTP request could not be made to URL: ~w", [URL]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:HttpRequestFailedBadUrl',
@@ -155,6 +155,15 @@ api_global_error_jsonld(error(http_open_error(socket_error(_, Err_Msg)), _), Typ
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:HttpRequestFailedSocketError',
                               'api:message' : Err_Msg },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(Err), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed for a reason unknown: ~w", [Err]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailed',
+                              'api:reason' : Err },
              'api:message' : Msg
             }.
 
