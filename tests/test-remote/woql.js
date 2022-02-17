@@ -28,7 +28,7 @@ describe('woql', function () {
         ],
         resource: {
           '@type': 'QueryResource',
-          source: { '@type': 'Source', url: 'http://localhost:7474/employees.csv' },
+          source: { '@type': 'Source', url: 'http://127.0.0.1:7474/employees.csv' },
           format: 'csv',
         },
       },
@@ -66,7 +66,7 @@ describe('woql', function () {
         ],
         resource: {
           '@type': 'QueryResource',
-          source: { '@type': 'Source', url: 'http://localhost:7474/missing.csv' },
+          source: { '@type': 'Source', url: 'http://127.0.0.1:7474/missing.csv' },
           format: 'csv',
         },
       },

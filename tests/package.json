@@ -17,7 +17,7 @@
     "check": "eslint .",
     "start-server": "http-server ./served -c-1 --port 7474",
     "test-local": "mocha test",
-    "test-remote": "start-server-and-test start-server http://localhost:7474 'mocha test-remote'",
+    "test-remote": "start-server-and-test start-server http://127.0.0.1:7474/ 'mocha test-remote'",
     "test": "npm run test-local && npm run test-remote"
   },
   "author": "Sean Leather <sean@terminusdb.com>",
