@@ -20,6 +20,7 @@
 :- use_module(core(util)).
 :- use_module(core(util/xsd_parser)).
 :- use_module(core(triple)).
+:- use_module(library(terminus_store)).
 :- use_module(core(transaction)).
 
 :- use_module(schema).
@@ -29,6 +30,7 @@
 :- use_module(library(lists)).
 :- use_module(library(dicts)).
 :- use_module(library(solution_sequences)).
+:- use_module(library(uri), [uri_components/2]).
 
 
 is_rdf_list_(_Instance, Type) :-
@@ -117,7 +119,7 @@ card_count(Validation_Object,S_Id,P_Id,N) :-
     instance_layer(Validation_Object, Layer),
     (   integer(S_Id),
         integer(P_Id)
-    ->  terminus_store:sp_card(Layer,S_Id,P_Id,N)
+    ->  sp_card(Layer,S_Id,P_Id,N)
     % If no triples, or either P or S is missing from the dictionary then it is empty.
     ;   N = 0
     ).
@@ -319,7 +321,10 @@ refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
 refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
     oneof_descriptor(Validation_Object, C, tagged_union(TU,TC)),
     instance_layer(Validation_Object, Layer),
-    terminus_store:predicate_id(Layer, Predicate, P_Id),
+    (   integer(P_Id)
+    ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
+    ;   Predicate = P_Id
+    ),
     class_predicate_type(Validation_Object,C,Predicate,_),
     atom_string(P,Predicate),
     dict_keys(TC,Keys),

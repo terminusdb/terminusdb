@@ -12,6 +12,7 @@
           ]).
 
 :- use_module(utils).
+:- use_module(config(terminus_config), [default_database_path/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -61,7 +62,7 @@ terminus_path(Path) :-
  *
  */
 db_path(Path) :-
-    config:default_database_path(PathWithoutSlash),
+    default_database_path(PathWithoutSlash),
     (   re_matchsub('\\./(.*)', PathWithoutSlash, Dict, []),
         get_dict(1,Dict,Sub)
     ->  working_directory(CWD, CWD),

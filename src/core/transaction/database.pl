@@ -20,6 +20,8 @@
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 
+:- use_module(config(terminus_config), [max_transaction_retries/1]).
+
 :- use_module(library(lists)).
 :- use_module(library(prolog_stack)).
 :- use_module(library(plunit)).
@@ -183,7 +185,7 @@ reset_query_context(Query_Context) :-
  * WARNING: This is a side-effecting operation
  */
 retry_transaction(Query_Context, Transaction_Retry_Count) :-
-    config:max_transaction_retries(Max_Transaction_Retries),
+    max_transaction_retries(Max_Transaction_Retries),
 
     between(0, Max_Transaction_Retries, Transaction_Retry_Count),
 

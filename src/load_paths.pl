@@ -1,6 +1,8 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
+:- use_module(library(prolog_pack)).
+
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
@@ -48,9 +50,9 @@ add_config_path :-
     asserta(user:file_search_path(config, Config)).
 
 :- add_config_path.
+:- use_module(config(terminus_config)).
 
 add_pack_path :-
-    use_module(config(terminus_config)),
     (   pack_dir(PackDir)
     ->  attach_packs(PackDir, [duplicate(replace)])
     ;   true).

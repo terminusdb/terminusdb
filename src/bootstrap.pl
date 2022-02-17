@@ -21,6 +21,7 @@
 :- use_module(cli(main)).
 :- use_module(core(query)).
 :- use_module(core(api)).
+:- use_module(config(terminus_config)).
 
 :- use_module(library(qsave)).
 

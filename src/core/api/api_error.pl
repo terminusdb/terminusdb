@@ -38,26 +38,26 @@ api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
-api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type_In, Value), _), Type, JSON) :-
+api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    (   Expected_Type_In = atom
-    ->  Expected_Type = string
-    ;   Expected_Type = Expected_Type_In),
     (   Expected_Type = boolean
-    ->  Type_Msg = "to be 'true' or 'false'"
+    ->  Expected_Type_Displayed = "boolean (true, false)"
     ;   Expected_Type = graph
-    ->  Type_Msg = "to be 'schema' or 'instance'"
-    ;   Expected_Type = integer
-    ->  Type_Msg = "to be an integer"
+    ->  Expected_Type_Displayed = "graph (schema, instance)"
     ;   Expected_Type = nonnegative_integer
-    ->  Type_Msg = "to be a non-negative integer"
-    ;   format(string(Type_Msg), "to be a ~q", [Expected_Type])),
-    format(string(Msg), "Expected parameter '~s' ~s but found: ~q", [Param, Type_Msg, Value]),
+    ->  Expected_Type_Displayed = "non-negative integer"
+    ;   Expected_Type = atom
+    ->  Expected_Type_Displayed = "string"
+    ;   memberchk(Expected_Type, [non_empty_atom, non_empty_string])
+    ->  Expected_Type_Displayed = "non-empty string"
+    ;   Expected_Type_Displayed = Expected_Type
+    ),
+    format(string(Msg), "Expected parameter '~s' of type '~s` but found: ~q", [Param, Expected_Type_Displayed, Value]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadParameterType',
                               'api:parameter' : Param,
-                              'api:expected_type' : Expected_Type,
+                              'api:expected_type' : Expected_Type_Displayed,
                               'api:value' : Value },
              'api:message' : Msg
             }.
@@ -92,6 +92,15 @@ api_global_error_jsonld(error(type_not_found(Unknown_Type), _), Type, JSON) :-
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:TypeNotFound',
                               'api:type' : Unknown_Type },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(unknown_organization(Organization), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Unknown organization name: ~s", [Organization]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:not_found',
+             'api:error' : _{ '@type' : 'api:UnknownOrganizationName',
+                              'api:organization_name' : Organization },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(invalid_organization_name(Organization), _), Type, JSON) :-
@@ -133,13 +142,6 @@ api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Val
                               'api:value' : Value },
              'api:message' : Msg}.
 %% DB Create
-api_error_jsonld_(create_db,error(unknown_organization(Organization_Name),_),JSON) :-
-    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:DbCreateErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name},
-             'api:message' : Msg}.
 api_error_jsonld_(create_db,error(database_already_exists(Organization_Name, Database_Name),_), JSON) :-
     JSON = _{'@type' : 'api:DbCreateErrorResponse',
              'api:status' : 'api:failure',
@@ -168,13 +170,6 @@ api_error_jsonld_(create_db, error(invalid_uri_prefix(Prefix_Name, Prefix_Value)
                              'api:prefix_value' : Prefix_Value},
              'api:message' : Msg}.
 %% DB Delete
-api_error_jsonld_(delete_db,error(unknown_organization(Organization_Name),_), JSON) :-
-    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:DbDeleteErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name},
-             'api:message' : Msg}.
 api_error_jsonld_(delete_db,error(unknown_database(Organization, Database), _), JSON) :-
     format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
     JSON = _{'@type' : 'api:DbDeleteErrorResponse',
@@ -351,8 +346,8 @@ api_error_jsonld_(frame,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON
                               'api:error_term' : String},
              'api:message' : Msg
             }.
-api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~q", [Val]),
+api_error_jsonld_(frame,error(casting_error(Val,Type),_), JSON) :-
+    format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
     JSON = _{'@type' : 'api:FrameErrorResponse',
              'api:status' : 'api:failure',
@@ -442,7 +437,7 @@ api_error_jsonld_(woql,error(unresolvable_absolute_descriptor(Descriptor), _), J
                               'api:absolute_descriptor' : Path}
             }.
 api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~q", [Val]),
+    format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
     JSON = _{'@type' : 'api:WoqlErrorResponse',
              'api:status' : 'api:failure',
@@ -478,15 +473,6 @@ api_error_jsonld_(clone,error(database_in_inconsistent_state,_), JSON) :-
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
              'api:message' : 'Database is in an inconsistent state. Partial creation has taken pla.e, but server could not finalize the database.'
-            }.
-api_error_jsonld_(clone,error(unknown_organization(Organization_Name),_), JSON) :-
-    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:CloneErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name
-                            },
-             'api:message' : Msg
             }.
 api_error_jsonld_(fetch,error(no_remote_authorization,_),JSON) :-
     format(string(Msg), "No remote authorization supplied", []),
@@ -907,13 +893,6 @@ api_error_jsonld_(update_organization,error(organization_update_requires_superus
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
             }.
-api_error_jsonld_(delete_organization,error(unknown_organization(Organization_Name),_),JSON) :-
-    format(string(Msg), "Organization '~s' does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:DeleteOrganizationErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name},
-             'api:message' : Msg}.
 api_error_jsonld_(delete_organization,error(delete_organization_requires_superuser,_), JSON) :-
     format(string(Msg), "Organization deletion requires super user authority", []),
     JSON = _{'@type' : "api:DeleteOrganizationErrorResponse",
@@ -1069,7 +1048,7 @@ api_error_jsonld_(remote,error(unresolvable_descriptor(Descriptor),_), JSON) :-
 api_error_jsonld_(remote,error(remote_does_not_exist(Name),_), JSON) :-
     format(string(Msg), "The remote does not exist for ~q", [Name]),
     JSON = _{'@type' : 'api:RemoteErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : 'api:not_found',
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RemoteDoesNotExist",
                               'api:remote_name' : Name}
@@ -1125,15 +1104,18 @@ api_error_jsonld_(replace_documents, Error, JSON) :-
 api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
 
+error_type(add_organization, 'api:AddOrganizationErrorResponse').
 error_type(check_db, 'api:DbExistsErrorResponse').
+error_type(clone, 'api:CloneErrorResponse').
 error_type(create_db, 'api:DbCreateErrorResponse').
 error_type(delete_db, 'api:DbDeleteErrorResponse').
-error_type(add_organization, 'api:AddOrganizationErrorResponse').
-error_type(woql, 'api:WoqlErrorResponse').
+error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+error_type(delete_organization, 'api:DeleteOrganizationErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
+error_type(prefix, 'api:PrefixErrorResponse').
 error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
-error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+error_type(woql, 'api:WoqlErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1493,6 +1475,16 @@ api_document_error_jsonld(get_documents,error(query_error(not_a_dict(Query)),_),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryNotADict'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents,error(wrong_array_dimensions(Array,Dimensions,Document),_), JSON) :-
+    format(string(Msg), "Document insertion failed as array ~q had wrong dimension ~q", [Array,Dimensions]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:DocumentArrayWrongDimensions',
+                              'api:array' : Array,
+                              'api:dimensions' : Dimensions,
+                              'api:document': Document},
              'api:message' : Msg
             }.
 api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
@@ -1893,29 +1885,6 @@ status_cli_code('api:server_error',131).
 :- begin_tests(error_reporting).
 
 :- use_module(core(query/json_woql)).
-
-test(size_syntax,[]) :-
-
-    catch(
-        (   Query = _{ '@type' : "http://terminusdb.com/schema/woql#Size",
-                       'http://terminusdb.com/schema/woql#resource' : 1,
-                       'http://terminusdb.com/schema/woql#size' : 2
-                     },
-            json_woql:json_to_woql_ast(Query, _, [])
-        ),
-        E,
-        once(api_error_jsonld(woql,E,JSON))
-    ),
-
-    JSON = _{'@type':'api:WoqlErrorResponse',
-             'api:error': _{'@type':'vio:WOQLSyntaxError',
-                            'vio:path':[],
-                            'vio:query': _{'@type':"http://terminusdb.com/schema/woql#Size",
-                                           'http://terminusdb.com/schema/woql#resource':1,
-                                           'http://terminusdb.com/schema/woql#size':2}},
-             'api:message':"Not well formed WOQL JSON-LD",
-             'api:status':'api:failure'}.
-
 
 test(bad_schema_document, []) :-
     api_error_jsonld(get_documents,

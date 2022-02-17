@@ -1,18 +1,28 @@
 const { expect } = require('chai')
 const { Params } = require('./params.js')
 
+const util = require('./util.js')
+
 function create (agent, path, params) {
   params = new Params(params)
-  const comment = params.string('comment', 'default comment')
+  // Clients use an empty comment string by default, so we do that here.
+  const comment = params.string('comment', '')
   const label = params.string('label', 'default label')
+  const prefixes = params.object('prefixes')
+  const schema = params.boolean('schema')
   params.assertEmpty()
+
+  const body = { comment, label }
+  if (util.isDefined(prefixes)) {
+    body.prefixes = prefixes
+  }
+  if (util.isDefined(schema)) {
+    body.schema = schema
+  }
 
   return agent
     .post(path)
-    .send({
-      comment: comment,
-      label: label,
-    })
+    .send(body)
 }
 
 function del (agent, path) {
@@ -46,6 +56,13 @@ function verifyCreateFailure (r) {
   return r
 }
 
+function verifyCreateNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:DbCreateErrorResponse')
+  return r
+}
+
 function verifyDeleteSuccess (r) {
   expect(r.status).to.equal(200)
   expect(r.body['api:status']).to.equal('api:success')
@@ -74,6 +91,7 @@ module.exports = {
   createAfterDel,
   verifyCreateSuccess,
   verifyCreateFailure,
+  verifyCreateNotFound,
   verifyDeleteSuccess,
   verifyDeleteFailure,
   verifyDeleteNotFound,

@@ -71,7 +71,7 @@ date_time_string(Date_Time,String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:dateTime(Y,M,D,HH,MM,SS,NS,Offset),Codes),
+    phrase(dateTime(Y,M,D,HH,MM,SS,NS,Offset),Codes),
     remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset, Date_Time).
 
 date_time_stamp_string(Date_Time,String) :-
@@ -103,7 +103,7 @@ date_time_stamp_string(Date_Time,String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
+    phrase(dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
     remove_date_time_offset(Y,M,D,HH,MM,SS,Offset,NS,Date_Time).
 
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
@@ -134,7 +134,7 @@ date_string(date(Y,M,D,Offset),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:date(Y,M,D,Offset),Codes).
+    phrase(date(Y,M,D,Offset),Codes).
 
 gyear_string(GYear, String) :-
     nonvar(GYear),
@@ -149,7 +149,7 @@ gyear_string(gyear(Year,Offset), String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:gYear(Year,Offset),Codes).
+    phrase(gYear(Year,Offset),Codes).
 
 gmonth_string(GMonth, String) :-
     nonvar(GMonth),
@@ -164,7 +164,7 @@ gmonth_string(gmonth(Month,Offset), String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:gMonth(Month,Offset),Codes).
+    phrase(gMonth(Month,Offset),Codes).
 
 
 gyear_month_string(GYearMonth, String) :-
@@ -180,7 +180,7 @@ gyear_month_string(gyear_month(Year,Month,Offset), String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:gYearMonth(Year,Month,Offset),Codes).
+    phrase(gYearMonth(Year,Month,Offset),Codes).
 
 gmonth_day_string(GMonthDay, String) :-
     nonvar(GMonthDay),
@@ -195,7 +195,7 @@ gmonth_day_string(gmonth_day(Month,Day,Offset), String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:gMonthDay(Month,Day,Offset),Codes).
+    phrase(gMonthDay(Month,Day,Offset),Codes).
 
 gday_string(GDay, String) :-
     nonvar(GDay),
@@ -210,7 +210,7 @@ gday_string(gday(Day,Offset), String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:gDay(Day,Offset),Codes).
+    phrase(gDay(Day,Offset),Codes).
 
 offset_to_sign_hour_minute(Offset, Sign, Hour, Minute) :-
     nonvar(Offset),
@@ -249,7 +249,7 @@ time_string(time(HN,MN,SN),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:time(HH,MM,SS,_NS,Offset),Codes),
+    phrase(time(HH,MM,SS,_NS,Offset),Codes),
     time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)).
 
 duration_string(Duration,String) :-
@@ -286,7 +286,7 @@ duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(xsd_parser:duration(Sign,Y,M,D,HH,MM,SS),Codes).
+    phrase(duration(Sign,Y,M,D,HH,MM,SS),Codes).
 
 current_xsd_date_time(XSD) :-
     get_time(Unix),
@@ -303,7 +303,8 @@ is_number_type(Type) :-
     ).
 
 literal_to_string(X^^'http://www.w3.org/2001/XMLSchema#string', X) :-
-    error:text(X).
+    text(X).
+
 
 /*
  * literal_to_turtle(+Literal,-Turtle_Literal) is det.

@@ -83,11 +83,11 @@ describe('organization', function () {
   })
 
   it('fails deleting unknown organization', async function () {
-    const organizationName = util.randomString()
+    const orgName = util.randomString()
     const r = await organization
-      .del(agent, { organization_name: organizationName })
-      .then(organization.verifyDelFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:UnknownOrganization')
-    expect(r.body['api:error']['api:organization_name']).to.equal(organizationName)
+      .del(agent, { organization_name: orgName })
+      .then(organization.verifyDelNotFound)
+    expect(r.body['api:error']['@type']).to.equal('api:UnknownOrganizationName')
+    expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
   })
 })

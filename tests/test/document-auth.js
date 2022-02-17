@@ -337,6 +337,30 @@ describe('document', function () {
       }
     })
 
+    it('fails for wrong array dimension (#975)', async function () {
+      const type = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: {
+            '@id': type,
+            '@type': 'Class',
+            s: {
+              '@type': 'Array',
+              '@dimensions': 1,
+              '@class': 'xsd:integer',
+            },
+          },
+        })
+        .then(document.verifyInsertSuccess)
+      const r = await document
+        .insert(agent, docPath, {
+          instance: { '@type': type, s: [[1], [2]] },
+        })
+        .then(document.verifyInsertFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentArrayWrongDimensions')
+      expect(r.body['api:error']['api:dimensions']).to.equal(1)
+    })
+
     it('does not stringify boolean literals (#723)', async function () {
       const type = util.randomString()
       const id = type + '/' + util.randomString()
@@ -470,6 +494,49 @@ describe('document', function () {
           expect(r.body['api:error']['api:document']).to.deep.equal(schema)
         })
       }
+    })
+
+    it('succeeds when ignoring optional combined with oneof (#992)', async function () {
+      const Parent = util.randomString()
+      const Choice = util.randomString()
+      const Container = util.randomString()
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': Parent,
+          optional: { '@type': 'Optional', '@class': 'xsd:integer' },
+        },
+        {
+          '@type': 'TaggedUnion',
+          '@id': Choice,
+          '@key': { '@type': 'ValueHash' },
+          '@inherits': [Parent],
+          '@subdocument': [],
+          integer: 'xsd:integer',
+          boolean: 'xsd:boolean',
+        },
+        {
+          '@type': 'Class',
+          '@id': Container,
+          contains: { '@type': 'Set', '@class': Parent },
+        },
+      ]
+      await document
+        .insert(agent, docPath, { schema: schema })
+        .then(document.verifyInsertSuccess)
+
+      const instance = {
+        '@type': Container,
+        contains: [
+          {
+            '@type': Choice,
+            integer: 12,
+          },
+        ],
+      }
+      await document
+        .insert(agent, docPath, { instance: instance })
+        .then(document.verifyInsertSuccess)
     })
 
     it('fails when adding non-optional field to schema (#780)', async function () {
