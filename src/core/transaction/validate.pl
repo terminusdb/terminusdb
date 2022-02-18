@@ -428,7 +428,7 @@ commit_validation_objects_([Object|Objects], [Object|Committed]) :-
     commit_validation_objects_(Sorted_Objects, Committed).
 
 commit_validation_objects(Unsorted_Objects, Committed) :-
-    % NOTE: We need to check to make sure we do not simlutaneously
+    % NOTE: We need to check to make sure we do not simultaneously
     % modify a parent and child of the same transaction object
     % - this could cause commit to fail when we attempt to make the
     % neccessary changes to the parent transaction object required
@@ -436,7 +436,36 @@ commit_validation_objects(Unsorted_Objects, Committed) :-
     % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_objects_(Sorted_Objects, Committed),
+    maplist({Committed}/[O]>>(
+                should_retain_layers_for_descriptor(O.descriptor)
+            ->  layers_for_validation(O, Committed, Layers),
+                retain_descriptor_layers(O.descriptor, Layers)
+            ;   true
+            ),
+            Sorted_Objects),
     log_commits(Sorted_Objects).
+
+layers_for_validation(Validation, Committed, Layers) :-
+    _{
+        instance_objects: [Instance_RWO],
+        schema_objects: [Schema_RWO]
+    } :< Validation,
+    Instance_Layer = (Instance_RWO.read),
+    Schema_Layer = (Schema_RWO.read),
+    (   var(Instance_Layer)
+    ->  Our_Layers = [Schema_Layer]
+    ;   Our_Layers = [Instance_Layer, Schema_Layer]),
+
+    (   get_dict(parent, Validation, Parent)
+    ->  append(Our_Layers, Remainder, Layers),
+        Descriptor = (Parent.Descriptor),
+        include({Descriptor}/[P]>>(
+                    Descriptor == (P.Descriptor)
+                ),
+                Committed,
+                [Parent_Validation]),
+        write_layers_for_validation(Parent_Validation, Remainder)
+    ;   Layers = Our_Layers).
 
 log_commits(_) :-
     % Skip logging work if debug log is not enabled
