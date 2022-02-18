@@ -632,13 +632,18 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
     api_report_errors(
         woql,
         Request,
-        (   http_read_json_required(json_dict(JSON), Request),
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  Files = []
+            ;   http_read_multipart_semidet(Request, Form_Data),
+                http_read_multipart_json_semidet(Form_Data, JSON, Other_Form_Data),
+                collect_multipart_files(Other_Form_Data, Files)
+            ->  true
+            ;   throw(error(missing_content_type("application/json or multipart/form-data"), _))
+            ),
 
             param_value_json_required(JSON, query, object, Query),
             param_value_json_optional(JSON, commit_info, object, commit_info{}, Commit_Info),
             param_value_json_optional(JSON, all_witnesses, boolean, false, All_Witnesses),
-
-            collect_posted_files(Request, Files),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -3053,6 +3058,10 @@ json_content_type(Request) :-
     memberchk(content_type(CT), Request),
     re_match('^application/json', CT, []).
 
+multipart_content_type(Request) :-
+    memberchk(content_type(Content_Type), Request),
+    http_parse_header_value(content_type, Content_Type, media(multipart/'form-data', _)).
+
 check_content_type(Request, Expected, ContentType) :-
     do_or_die(
         memberchk(content_type(ContentType), Request),
@@ -3112,6 +3121,19 @@ get_param(Key,Request,Value) :-
     Value = Document.get(Key).
 
 /*
+ * read_json_dict(+Atom, -JSON) is det.
+ * read_json_dict(+Text, -JSON) is det.
+ *
+ * - Read JSON from an atom or text and catch syntax errors.
+ */
+read_json_dict(AtomOrText, JSON) :-
+    catch(
+        atom_json_dict(AtomOrText, JSON, [default_tag(json)]),
+        error(syntax_error(json(_Kind)), _),
+        throw(error(malformed_json_payload(AtomOrText), _))
+    ).
+
+/*
  * http_read_utf8(-Output, Request) is det.
  *
  * - Read the request payload into Output.
@@ -3132,10 +3154,7 @@ http_read_utf8(stream(Stream), Request) :-
     open_string(String, Stream).
 http_read_utf8(json_dict(JSON), Request) :-
     http_read_utf8(string(String), Request),
-    open_string(String, Stream),
-    catch(json_read_dict(Stream, JSON, [default_tag(json)]),
-          error(syntax_error(json(_Kind)), _),
-          throw(error(malformed_json_payload(String), _))).
+    read_json_dict(String, JSON).
 
 /*
  * http_read_json_required(-Output, +Request) is det.
@@ -3160,6 +3179,33 @@ http_read_json_semidet(Output, Request) :-
     http_read_utf8(Output, Request).
 
 /*
+ * http_read_multipart_semidet(+Request, -Form_Data) is semidet.
+ *
+ * - Fail if the minimal requirements for multipart/form-data input are not met.
+ * - Read the request payload as multipart form data.
+ */
+http_read_multipart_semidet(Request, Form_Data) :-
+    multipart_content_type(Request),
+    http_read_data(Request, Form_Data, [on_filename(save_post_file), form_data(mime)]).
+
+/*
+ * http_read_multipart_json_semidet(+Form_Data, -JSON, -Form_Data_Out) is semidet.
+ *
+ * - Fail if the form data does not contain a part with type 'application/json'.
+ * - Read the JSON dict from the part.
+ * - Return the remaining parts.
+ */
+http_read_multipart_json_semidet([], _JSON, []) :-
+    !,
+    fail.
+http_read_multipart_json_semidet([mime(Mime_Header, Value, _) | Form_Data], JSON, Form_Data) :-
+    json_mime_type(Mime_Header),
+    !,
+    read_json_dict(Value, JSON).
+http_read_multipart_json_semidet([Part | Form_Data], JSON, [Part | Form_Data_Out]) :-
+    http_read_multipart_json_semidet(Form_Data, JSON, Form_Data_Out).
+
+/*
  * add_payload_to_request(Request:request,JSON:json) is det.
  *
  * Updates request with JSON-LD payload in payload(Document).
@@ -3167,13 +3213,8 @@ http_read_json_semidet(Output, Request) :-
  * using the endpoint wrappers so we don't forget to do it.
  */
 add_payload_to_request(Request,[multipart(Form_Data)|Request]) :-
-    memberchk(content_type(ContentType), Request),
-    http_parse_header_value(
-        content_type, ContentType,
-        media(multipart/'form-data', _)
-    ),
-    !,
-    http_read_data(Request, Form_Data, [on_filename(save_post_file),form_data(mime)]).
+    http_read_multipart_semidet(Request, Form_Data),
+    !.
 add_payload_to_request(Request,[payload(Document)|Request]) :-
     http_read_json_semidet(json_dict(Document), Request),
     !.
@@ -3190,7 +3231,7 @@ get_payload(Payload,Request) :-
     memberchk(multipart(Form_Data),Request),
     member(mime(Meta,Value,_),Form_Data),
     memberchk(name(payload), Meta),
-    atom_json_dict(Value,Payload, [default_tag(json)]).
+    read_json_dict(Value, Payload).
 
 /*
  * request_remote_authorization(Request, Authorization) is det.
@@ -3213,22 +3254,25 @@ save_post_file(In, file(Filename, File), Options) :-
     ).
 
 /*
- * Make a collection of all posted files for
- * use in a Context via WOQL's get/3.
+ * collect_multipart_files(+Parts, -Files) is det.
+ *
+ * Search through the form data parts to collect matching pairs of file name
+ * from request and temporary file name on server.
  */
-collect_posted_files(Request,Files) :-
-    memberchk(multipart(Parts), Request),
-    !,
-    convlist([mime(Mime_Header,Data,_),Filename=Temp_Filename]>>(
-                 memberchk(filename(Filename),Mime_Header),
-                 \+ json_mime_type(Mime_Header),
-                 setup_call_cleanup(
-                     tmp_file_stream(octet, Temp_Filename, Out),
-                     write(Out, Data),
-                     close(Out)
-                 )
-             ),Parts,Files).
-collect_posted_files(_Request,[]).
+collect_multipart_files(Parts, Files) :-
+    convlist(
+        [mime(Mime_Header, Data, _), Filename=Temp_Filename]>>(
+            memberchk(filename(Filename), Mime_Header),
+            setup_call_cleanup(
+                tmp_file_stream(octet, Temp_Filename, Out),
+                write(Out, Data),
+                close(Out)
+            )
+        ),
+        Parts,
+        Files
+    ).
+collect_multipart_files(_Parts, []).
 
 /*
  * Make a collection of all posted files for

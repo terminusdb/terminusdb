@@ -14,6 +14,22 @@ function post (agent, path, params) {
     .send(body)
 }
 
+function multipart (agent, path, params) {
+  params = new Params(params)
+  const body = {}
+  body.query = params.object('query')
+  body.commit_info = params.object('commit_info')
+  params.assertEmpty()
+
+  return agent
+    .post(path)
+    .attach(
+      'payload',
+      Buffer.from(JSON.stringify(body)),
+      { filename: 'body.json', contentType: 'application/json' },
+    )
+}
+
 function verifyGetSuccess (r) {
   expect(r.status).to.equal(200)
   expect(r.body['api:status']).to.equal('api:success')
@@ -30,6 +46,7 @@ function verifyGetFailure (r) {
 
 module.exports = {
   post,
+  multipart,
   verifyGetSuccess,
   verifyGetFailure,
 }

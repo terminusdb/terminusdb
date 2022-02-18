@@ -1,5 +1,5 @@
 :- module(remote_file,[
-              copy_remote/4
+              copy_remote/3
           ]).
 
 :- use_module(library(http/http_open)).
@@ -32,20 +32,20 @@
 :- use_module(file_utils).
 
 /*
- * copy_remote(+Remote, +Name, -File) is det.
+ * copy_remote(+URL, -File, +Options) is det.
  *
  */
-copy_remote(Remote, Name, File, Options) :-
-    (
-        (   memberchk(user(User),Options),
-            memberchk(password(Pass),Options),
-            http_open(Remote, In, [authorization(basic(User,Pass))])
-        ->  true
-            % or try with no pass..
-        ;   http_open(Remote, In, []))
-    ->  tmp_file_stream(binary, File, Stream),
-        copy_stream_data(In, Stream),
-        close(Stream)
-    ;   format(atom(M), 'Unable to retrieve blob id ~w from remote location ~w', [Name,Remote]),
-        throw(error(M))
-    ).
+copy_remote(URL, File, Options) :-
+    (   memberchk(user(User), Options),
+        memberchk(password(Pass), Options)
+    ->  Http_Open_Options = [authorization(basic(User, Pass))]
+    ;   Http_Open_Options = []
+    ),
+    catch(
+        http_open(URL, In, Http_Open_Options),
+        error(Err, _),
+        throw(error(http_open_error(Err), _))
+    ),
+    tmp_file_stream(binary, File, Stream),
+    copy_stream_data(In, Stream),
+    close(Stream).

@@ -8,12 +8,17 @@
     "eslint-plugin-import": "^2.23.4",
     "eslint-plugin-mocha": "^9.0.0",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^5.1.0"
+    "eslint-plugin-promise": "^5.1.0",
+    "http-server": "^14.1.0",
+    "start-server-and-test": "^1.14.0"
   },
   "scripts": {
     "lint": "eslint --fix .",
     "check": "eslint .",
-    "test": "mocha"
+    "start-server": "http-server ./served -c-1 --port 7474",
+    "test-local": "mocha test",
+    "test-served": "start-server-and-test start-server http://127.0.0.1:7474/ 'mocha test-served'",
+    "test": "npm run test-local && npm run test-served"
   },
   "author": "Sean Leather <sean@terminusdb.com>",
   "license": "Apache-2.0",

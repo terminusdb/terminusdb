@@ -61,6 +61,15 @@ api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _
                               'api:value' : Value },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(missing_file(File_Name), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Missing file: ~s", [File_Name]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MissingFile',
+                              'api:file_name' : File_Name },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Data_Version_String), "~w", [Data_Version]),
@@ -119,6 +128,42 @@ api_global_error_jsonld(error(invalid_database_name(DB), _), Type, JSON) :-
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:InvalidDatabaseName',
                               'api:database_name' : DB },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(existence_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request could not fetch URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedFetch',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(domain_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request could not be made to URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedBadUrl',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(socket_error(_, Err_Msg)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed with socket error: ~w", [Err_Msg]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedSocketError',
+                              'api:message' : Err_Msg },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(Err), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed for a reason unknown: ~w", [Err]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailed',
+                              'api:reason' : Err },
              'api:message' : Msg
             }.
 
@@ -1108,9 +1153,11 @@ error_type(add_organization, 'api:AddOrganizationErrorResponse').
 error_type(check_db, 'api:DbExistsErrorResponse').
 error_type(clone, 'api:CloneErrorResponse').
 error_type(create_db, 'api:DbCreateErrorResponse').
+error_type(csv, 'api:CsvErrorResponse').
 error_type(delete_db, 'api:DbDeleteErrorResponse').
 error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 error_type(delete_organization, 'api:DeleteOrganizationErrorResponse').
+error_type(frame, 'api:FrameErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type(prefix, 'api:PrefixErrorResponse').
@@ -1713,7 +1760,7 @@ generic_exception_jsonld(bad_api_document(Document,Expected),JSON) :-
                              'api:document' : Document},
              'api:message' : Msg}.
 generic_exception_jsonld(missing_content_type(Expected), JSON) :-
-    format(string(Msg), "Missing 'Content-Type' header. Expected value: ~q", [Expected]),
+    format(string(Msg), "Missing 'Content-Type' header. Expected value: ~w", [Expected]),
     JSON = _{'@type' : 'api:MissingContentTypeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.

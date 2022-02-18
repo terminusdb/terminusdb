@@ -67,7 +67,9 @@ useful bits you need to work on this test suite.
 ### Directory structure
 
 * `lib/`: library of JavaScript source files used by the tests but are not tests
-* `test/`: Mocha source files with tests
+* `test/`: test files run by Mocha
+* `test-served/`: test files run by Mocha with `http-server`
+* `served/`: files served by `http-server`
 * `package.json`: Node.js package information
 * `package-lock.json`: specification of recursive dependency versions
 * `.eslintrc.js`: ESLint configuration

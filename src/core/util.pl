@@ -62,7 +62,7 @@
               is_nonnegative_integer/1,
 
               % remote_file.pl
-              copy_remote/4,
+              copy_remote/3,
 
               % utils.pl
               down_from/3,

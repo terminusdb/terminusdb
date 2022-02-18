@@ -114,12 +114,13 @@ jobs:
       - name: Run server
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run --detach \
+          docker run \
+            --detach \
+            --net=host \
             -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
             -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
             -e TERMINUSDB_JWT_ENABLED=true \
             -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
-            --publish 6363:6363 \
             $DOCKER_IMAGE_NAME:local
 
       - name: Set up Node.js
