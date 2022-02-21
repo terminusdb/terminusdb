@@ -439,8 +439,10 @@ commit_validation_objects(Unsorted_Objects, Committed) :-
     commit_validation_objects_(Sorted_Objects, Committed),
     maplist({Committed}/[O]>>(
                 should_retain_layers_for_descriptor(O.descriptor)
-            ->  layers_for_validation(O, Committed, Layers),
-                retain_descriptor_layers(O.descriptor, Layers)
+            ->  do_or_die(layers_for_validation(O, Committed, Layers),
+                          error(wtf1, _)),
+                do_or_die(retain_descriptor_layers(O.descriptor, Layers),
+                          error(wtf2, _))
             ;   true
             ),
             Sorted_Objects),
@@ -453,15 +455,16 @@ layers_for_validation(Validation, Committed, Layers) :-
     } :< Validation,
     Instance_Layer = (Instance_RWO.read),
     Schema_Layer = (Schema_RWO.read),
-    (   var(Instance_Layer)
-    ->  Our_Layers = [Schema_Layer]
-    ;   Our_Layers = [Instance_Layer, Schema_Layer]),
+
+    Our_Layers_Var = [Instance_Layer, Schema_Layer],
+    exclude(var, Our_Layers_Var, Our_Layers),
 
     (   get_dict(parent, Validation, Parent)
     ->  append(Our_Layers, Remainder, Layers),
-        Descriptor = (Parent.Descriptor),
+        Descriptor = (Parent.descriptor),
         include({Descriptor}/[P]>>(
-                    Descriptor == (P.Descriptor)
+                    get_dict(descriptor, P, Parent_Descriptor),
+                    Descriptor == Parent_Descriptor
                 ),
                 Committed,
                 [Parent_Validation]),

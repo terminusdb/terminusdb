@@ -159,6 +159,7 @@
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
+:- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -675,8 +676,7 @@ retain_descriptor_layers_(Descriptor, Layers) :-
 
 compare_layers([], []).
 compare_layers([Layer1|Ls1], [Layer2|Ls2]) :-
-    layer_to_id(Layer1, Id),
-    layer_to_id(Layer2, Id),
+    layer_equals(Layer1, Layer2),
 
     compare_layers(Ls1, Ls2).
 
@@ -695,6 +695,9 @@ open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
 
 should_retain_layers_for_descriptor(system_descriptor{}).
+should_retain_layers_for_descriptor(D) :-
+    pinned_databases(Pinned),
+    memberchk(D, Pinned).
 
 layers_for_transaction(Transaction, Layers) :-
     _{
@@ -703,9 +706,9 @@ layers_for_transaction(Transaction, Layers) :-
     } :< Transaction,
     Instance_Layer = (Instance_RWO.read),
     Schema_Layer = (Schema_RWO.read),
-    (   var(Instance_Layer)
-    ->  Our_Layers = [Schema_Layer]
-    ;   Our_Layers = [Instance_Layer, Schema_Layer]),
+
+    Our_Layers_Var = [Instance_Layer, Schema_Layer],
+    exclude(var, Our_Layers_Var, Our_Layers),
 
     (   get_dict(parent, Transaction, Parent)
     ->  append(Our_Layers, Remainder, Layers),
