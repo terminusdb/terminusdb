@@ -20,7 +20,7 @@ env:
   TERMINUSDB_STORE_PROLOG_VERSION: v0.19.6
   TUS_VERSION: v0.0.5
   DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
-  SWIPL_LINTER_VERSION: v0.6
+  SWIPL_LINTER_VERSION: v0.7
 
 jobs:
 
