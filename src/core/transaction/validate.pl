@@ -34,6 +34,7 @@
 
 :- use_module(library(semweb/turtle)).
 :- use_module(library(lists)).
+:- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(plunit)).
@@ -464,7 +465,7 @@ layers_for_validation(Validation, Committed, Layers) :-
                 ),
                 Committed,
                 [Parent_Validation]),
-        write_layers_for_validation(Parent_Validation, Remainder)
+        layers_for_validation(Parent_Validation, Committed, Remainder)
     ;   Layers = Our_Layers).
 
 log_commits(_) :-
