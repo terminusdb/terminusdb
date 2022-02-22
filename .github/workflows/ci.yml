@@ -113,6 +113,9 @@ jobs:
       - name: Load Docker image
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
+          # Tag a dev image because the docker-compose.yml uses
+          # a dev tag. We want it to fetch it locally instead of
+          # remotely from Docker Hub
           docker image tag $DOCKER_IMAGE_NAME:local $DOCKER_IMAGE_NAME:dev
 
       - uses: actions/checkout@v2
