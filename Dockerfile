@@ -21,6 +21,6 @@ WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
 COPY --from=0 /usr/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
 COPY --from=1 /app/rust/target/release/libterminusdb_dylib.so /app/terminusdb/src/rust/librust.so
-RUN apt-get update && apt-get install -y --no-install-recommends make openssl \
+RUN apt-get update && apt-get install -y --no-install-recommends make \
     && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && make
 CMD ["/app/terminusdb/distribution/init_docker.sh"]
