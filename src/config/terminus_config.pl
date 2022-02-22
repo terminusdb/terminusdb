@@ -7,8 +7,6 @@
               worker_amount/1,
               max_transaction_retries/1,
               default_database_path/1,
-              jwt_jwks_endpoint/1,
-              jwt_enabled/0,
               registry_path/1,
               pack_dir/1,
               tmp_path/1,
@@ -68,28 +66,6 @@ max_transaction_retries(Value) :-
 
 default_database_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
-
-jwt_enabled_env_var :-
-    getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
-
-% jwt_enabled is used for conditional compilation of jwt_io, but want to use the
-% value passed to TERMINUSDB_JWT_ENABLED at compile time, which may be different
-% from runtime. Therefore, we save the TERMINUSDB_JWT_ENABLED value for runtime
-% again using conditional compilation here.
-:- if(jwt_enabled_env_var).
-jwt_enabled :-
-    true.
-:- else.
-jwt_enabled :-
-    false.
-:- endif.
-
-jwt_jwks_endpoint(Endpoint) :-
-    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', Value),
-    % Ignore an empty value in the environment variable.
-    (   Value = ''
-    ->  false
-    ;   Endpoint = Value).
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).

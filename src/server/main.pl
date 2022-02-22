@@ -15,9 +15,7 @@
 :- use_module(core(api)).
 
 % configuration predicates
-:- use_module(config(terminus_config),[jwt_enabled/0,
-                                       jwt_jwks_endpoint/1,
-                                       server/1,
+:- use_module(config(terminus_config),[server/1,
                                        server_port/1,
                                        worker_amount/1,
                                        is_enterprise/0]).
@@ -34,32 +32,11 @@
 
 :- use_module(library(option)).
 
-% JWT IO library
-:- if(jwt_enabled).
-
-% Load the library only if JWT is enabled
-:- use_module(library(jwt_io)).
-
-% Set up JWKS only if we have an endpoint
-load_jwt_conditionally :-
-    (   jwt_jwks_endpoint(Endpoint)
-    ->  jwt_io:setup_jwks(Endpoint)
-    ;   true).
-
-:- else.
-
-% Otherwise, do nothing
-load_jwt_conditionally :-
-    true.
-
-:- endif.
-
 
 terminus_server(Argv,Wait) :-
     server(Server),
     server_port(Port),
     worker_amount(Workers),
-    load_jwt_conditionally,
     HTTPOptions = [port(Port), workers(Workers)],
     catch(http_server(http_dispatch, HTTPOptions),
           E,

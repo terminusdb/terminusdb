@@ -75,11 +75,6 @@
 % Results should be cached!
 :- use_module(library(http/http_authenticate)).
 
-% Conditional loading of the JWT IO library...
-:- if(config:jwt_enabled).
-:- use_module(library(jwt_io)).
-:- endif.
-
 :- listen(http(Term), http_request_logger(Term)).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2777,30 +2772,6 @@ fetch_authorization_data(Request, Username, KS) :-
     http_authorization_data(Text, basic(Username, Key)),
     coerce_literal_string(Key, KS).
 
-:- if(config:jwt_enabled).
-/*
- *  fetch_jwt_data(+Request, -Username) is semi-determinate.
- *
- *  Fetches the HTTP JWT data
- */
-fetch_jwt_data(Token, Username) :-
-    atom_string(TokenAtom, Token),
-
-    do_or_die(jwt_decode(TokenAtom, Payload, []),
-              error(authentication_incorrect(jwt_decode_failed(TokenAtom)), _)),
-
-    do_or_die(
-        (   atom_json_dict(Payload, PayloadDict, []),
-            % replace with dict key get (or whatever it is called)
-            get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
-            atom_string(Username, UsernameString)),
-        error(malformed_jwt_payload(Payload))).
-:- else.
-fetch_jwt_data(_Token, _Username) :-
-    throw(error(authentication_incorrect(jwt_authentication_requested_but_no_key_configured),_)).
-:- endif.
-
-
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
  *
@@ -2826,30 +2797,6 @@ authenticate(System_Askable, Request, Auth) :-
     json_log_debug(_{
                        message: Message,
                        authMethod: basic,
-                       authResult: success,
-                       user: Username
-                   }).
-authenticate(System_Askable, Request, Auth) :-
-    memberchk(authorization(Text), Request),
-    pattern_string_split(" ", Text, ["Bearer", Token]),
-    !,
-    % Try JWT if no http keys
-    fetch_jwt_data(Token, Username),
-    (   username_auth(System_Askable, Username, Auth)
-    ->  true
-    ;   format(string(Message), "User '~w' failed to authenticate through JWT", Username),
-        json_log_debug(_{
-                           message: Message,
-                           authMethod: jwt,
-                           authResult: failure,
-                           user: Username
-                       }),
-        throw(error(authentication_incorrect(jwt_no_user_with_name(Username)),_))),
-
-    format(string(Message), "User '~w' authenticated through JWT", Username),
-    json_log_debug(_{
-                       message: Message,
-                       authMethod: jwt,
                        authResult: success,
                        user: Username
                    }).

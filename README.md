@@ -82,7 +82,7 @@ align="right"
 - **Schema Evolution:** continue to evolve your schema as your application grows 
 - **Data Ingestion:** ingest data from anywhere 
 - **UI Config:** use our [UI library](https://github.com/terminusdb/terminusdb-documents-ui) to generate a custom UI (under active development)
-- **Authentication & Authorization:** simple set up using JWT (tutorial under active development)
+- **Authentication & Authorization:** simple set up using forward headers
 - **HTTP Client:** easily allow your users to interact with your application
 - **Rich Query Language:** [Datalog](https://en.wikipedia.org/wiki/Datalog) (WOQL) query interface that can be used to express complex joins and recursive graph traversals
 - **Python Client:** process data in TerminusDB python client

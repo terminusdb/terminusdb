@@ -31,13 +31,6 @@ add_cli_path :-
 
 :- add_cli_path.
 
-add_jwt_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/prolog_jwt/prolog',Library),
-    asserta(user:file_search_path(library, Library)).
-
-:- add_jwt_path.
-
 add_config_path :-
     % Global directory
     % asserta(user:file_search_path(config, '/etc')),

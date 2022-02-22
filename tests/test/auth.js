@@ -47,16 +47,4 @@ describe('auth', function () {
 
     it('fails create', create)
   })
-
-  describe('bearer: unknown token', function () {
-    before(function () {
-      const token = util.randomString()
-      agent = new Agent()
-      agent.set('Authorization', `Bearer ${token}`)
-    })
-
-    it('fails connect', connect)
-
-    it('fails create', create)
-  })
 })

@@ -412,8 +412,7 @@ spawn_server_1(Path, URL, PID, Options) :-
         'LC_PAPER'='en_US.UTF-8',
 
         'TERMINUSDB_SERVER_PORT'=Port,
-        'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
+        'TERMINUSDB_SERVER_DB_PATH'=Path
     ],
 
     (   memberchk(env_vars(Env_List_User), Options)
@@ -428,7 +427,6 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TEMP', % Again...
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_SERVER_PACK_DIR',
-                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH',
                          'PATH'
                      ],
