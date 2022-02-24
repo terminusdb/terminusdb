@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document, endpoint } = require('../lib')
+const { Agent, db, document, endpoint, util } = require('../lib')
 
 describe('document-delete', function () {
   let agent
@@ -57,5 +57,14 @@ describe('document-delete', function () {
       .del(agent, docPath)
       .then(document.verifyDelFailure)
     expect(r.body['api:error']['@type']).to.equal('api:MissingTargets')
+  })
+
+  it('fails for document not found', async function () {
+    const id = util.randomString()
+    const r = await document
+      .del(agent, docPath, { query: { id } })
+      .then(document.verifyDelNotFound)
+    expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
+    expect(r.body['api:error']).to.have.property('api:document_id').that.equals(id)
   })
 })

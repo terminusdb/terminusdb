@@ -211,8 +211,22 @@ function verifyReplaceFailure (r) {
   return r
 }
 
+function verifyReplaceNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:ReplaceDocumentErrorResponse')
+  return r
+}
+
 function verifyDelSuccess (r) {
   expect(r.status).to.equal(200)
+  return r
+}
+
+function verifyDelNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:DeleteDocumentErrorResponse')
   return r
 }
 
@@ -239,7 +253,9 @@ module.exports = {
   verifyInsertSuccess,
   verifyInsertFailure,
   verifyReplaceFailure,
+  verifyReplaceNotFound,
   verifyDelSuccess,
+  verifyDelNotFound,
   expectMissingField,
   expectMissingParameter,
 }

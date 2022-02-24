@@ -44,9 +44,17 @@ function verifyGetFailure (r) {
   return r
 }
 
+function verifyNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:WoqlErrorResponse')
+  return r
+}
+
 module.exports = {
   post,
   multipart,
   verifyGetSuccess,
   verifyGetFailure,
+  verifyNotFound,
 }
