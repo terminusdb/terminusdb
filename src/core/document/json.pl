@@ -368,32 +368,35 @@ path_component(Path, Prefixes, [Path_String]) :-
     path_strings(Rev, Prefixes, Strings),
     merge_separator_split(Path_String, '/', Strings).
 
-json_idgen(JSON,DB,Context,Path,ID_Ex) :-
-    get_dict('@type',JSON,Type),
-    key_descriptor(DB,Context,Type,Descriptor),
-    (   Descriptor = lexical(Base,Fields)
-    ->  get_field_values(JSON, DB, Context, Fields, Values),
-        path_component([type(Base)|Path], Context, [Path_Base]),
-        idgen_lexical(Path_Base,Values,ID)
-    ;   Descriptor = hash(Base,Fields)
-    ->  get_field_values(JSON, DB, Context, Fields, Values),
-        path_component([type(Base)|Path], Context, [Path_Base]),
-        idgen_hash(Path_Base,Values,ID)
-    ;   Descriptor = value_hash(Base)
-    ->  get_all_path_values(JSON,Path_Values),
-        idgen_path_values_hash(Base,Path_Values,ID)
-    ;   (   Descriptor = random(Base)
-        ;   Descriptor = base(Base))
-    ->  (   get_dict('@id', JSON, Submitted_ID),
-            ground(Submitted_ID)
-        ->  path_component([type(Base)|Path], Context, [Path_Base]),
-            idgen_check_base(Submitted_ID, Path_Base, Context),
-            ID = Submitted_ID
-        ;   path_component([type(Base)|Path], Context, [Path_Base]),
-            idgen_random(Path_Base,ID)
-        )
+json_idgen(lexical(Base, Fields), JSON, DB, Context, Path, Id) :-
+    !,
+    get_field_values(JSON, DB, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_lexical(Path_Base, Values, Id).
+json_idgen(hash(Base, Fields), JSON, DB, Context, Path, Id) :-
+    !,
+    get_field_values(JSON, DB, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_hash(Path_Base, Values, Id).
+json_idgen(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
+    !,
+    get_all_path_values(JSON, Path_Values),
+    idgen_path_values_hash(Base, Path_Values, Id).
+json_idgen(Descriptor, JSON, _DB, Context, Path, Id) :-
+    (   Descriptor = random(Base)
+    ;   Descriptor = base(Base)
     ),
-    prefix_expand(ID, Context, ID_Ex).
+    !,
+    (   get_dict('@id', JSON, Submitted_Id),
+        ground(Submitted_Id)
+    ->  path_component([type(Base)|Path], Context, [Path_Base]),
+        idgen_check_base(Submitted_Id, Path_Base, Context),
+        Id = Submitted_Id
+    ;   path_component([type(Base)|Path], Context, [Path_Base]),
+        idgen_random(Path_Base, Id)
+    ).
+json_idgen(Descriptor, _JSON, _DB, _Context, _Path, _Id) :-
+    throw(error(unexpected_argument_instantiation(json_idgen, Descriptor), _)).
 
 idgen_check_base(Submitted_ID, Base, Context) :-
     prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
@@ -640,15 +643,17 @@ json_assign_ids(DB,Context,JSON,Path) :-
     ->  Next_Path = Path
     ;   Next_Path = []),
 
-    json_idgen(JSON, DB, Context, Next_Path, Generated_ID),
+    key_descriptor(DB, Context, Type, Descriptor),
+    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_ID),
+    prefix_expand(Generated_ID, Context, Generated_ID_Ex),
     (   ground(ID)
     ->  prefix_expand(ID, Context, ID_Ex),
-        do_or_die(ID_Ex = Generated_ID,
+        do_or_die(ID_Ex = Generated_ID_Ex,
                   error(submitted_id_does_not_match_generated_id(
                             ID_Ex,
-                            Generated_ID),
+                            Generated_ID_Ex),
                         _))
-    ;   ID = Generated_ID),
+    ;   ID = Generated_ID_Ex),
 
     dict_pairs(JSON, _, Pairs),
     maplist({DB, Context, ID, Next_Path}/[Property-Value]>>(
