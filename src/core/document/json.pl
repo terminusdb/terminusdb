@@ -404,6 +404,18 @@ idgen_check_base(Submitted_ID, Base, Context) :-
     do_or_die(atom_concat(Base_Ex, _, Submitted_ID_Ex),
               error(submitted_document_id_does_not_have_expected_prefix(Submitted_ID_Ex, Base_Ex),_)).
 
+check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
+    ground(Id),
+    !,
+    prefix_expand(Id, Context, Id_Ex),
+    prefix_expand(Generated_Id, Context, Generated_Id_Ex),
+    do_or_die(
+        Id_Ex = Generated_Id_Ex,
+        error(submitted_id_does_not_match_generated_id(Id, Generated_Id), _)
+    ).
+check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
+    prefix_expand(Id, Context, Id_Ex).
+
 class_descriptor_image(unit,[]).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(foreign(C),json{ '@type' : "@id", '@foreign' : C}).
@@ -644,16 +656,8 @@ json_assign_ids(DB,Context,JSON,Path) :-
     ;   Next_Path = []),
 
     key_descriptor(DB, Context, Type, Descriptor),
-    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_ID),
-    prefix_expand(Generated_ID, Context, Generated_ID_Ex),
-    (   ground(ID)
-    ->  prefix_expand(ID, Context, ID_Ex),
-        do_or_die(ID_Ex = Generated_ID_Ex,
-                  error(submitted_id_does_not_match_generated_id(
-                            ID_Ex,
-                            Generated_ID_Ex),
-                        _))
-    ;   ID = Generated_ID_Ex),
+    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
+    check_submitted_id_against_generated_id(Context, Generated_Id, ID),
 
     dict_pairs(JSON, _, Pairs),
     maplist({DB, Context, ID, Next_Path}/[Property-Value]>>(
@@ -2375,7 +2379,7 @@ delete_document(DB, Prefixes, Unlink, Id) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     (   xrdf(Instance, Id_Ex, rdf:type, _)
     ->  true
-    ;   throw(error(document_does_not_exist(Id),_))
+    ;   throw(error(document_not_found(Id), _))
     ),
     forall(
         xquad(Instance, G, Id_Ex, P, V),
@@ -2508,16 +2512,18 @@ replace_document(Transaction, Document, Create, Id) :-
 replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
-    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
-    get_dict('@id', Elaborated, Id),
+    database_prefixes(Transaction, Context),
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, Captures_Out),
+    get_dict('@id', Elaborated, Elaborated_Id),
+    check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
     catch(delete_document(Transaction, false, Id),
-          error(document_does_not_exist(_),_),
+          error(document_not_found(_), _),
           (   Create = true
           % If we're creating a document, we gotta be sure that it is not a subdocument
           ->  get_dict('@type', Elaborated, Type),
               die_if(is_subdocument(Transaction, Type),
                      error(inserted_subdocument_as_document, _))
-          ;   throw(error(document_does_not_exist(Id, Document),_)))),
+          ;   throw(error(document_not_found(Id, Document), _)))),
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
@@ -2815,7 +2821,7 @@ delete_schema_document(Transaction, Id) :-
     prefix_expand_schema(Id, Expanded_Context, Id_Ex),
     (   xrdf([Schema], Id_Ex, rdf:type, _)
     ->  true
-    ;   throw(error(document_does_not_exist(Id),_))
+    ;   throw(error(document_not_found(Id), _))
     ),
     forall(
         xrdf([Schema], Id_Ex, P, O),
@@ -2840,10 +2846,10 @@ replace_schema_document(Transaction, Document, Create, Id) :-
     !,
     (   get_dict('@id', Document, Id)
     ->  catch(delete_schema_document(Transaction, Id),
-              error(document_does_not_exist(_),_),
+              error(document_not_found(_), _),
               (   Create = true
               ->  true
-              ;   throw(error(document_does_not_exist(Id, Document),_)))),
+              ;   throw(error(document_not_found(Id, Document), _)))),
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),

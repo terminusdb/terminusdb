@@ -62,6 +62,17 @@ describe('document', function () {
       }
     })
 
+    it('fails replace for document not found', async function () {
+      const instance = { '@id': util.randomString() }
+      const r = await document
+        .replace(agent, docPath, { instance })
+        .then(document.verifyReplaceNotFound)
+      console.error(r.body)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
+      expect(r.body['api:error']['api:document_id']).to.equal('terminusdb:///data/' + instance['@id'])
+      expect(r.body['api:error']['api:document']).to.deep.equal(instance)
+    })
+
     describe('fails on bad schema @id (#647)', function () {
       const identifiers = [
         '',

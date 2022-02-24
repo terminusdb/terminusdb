@@ -166,6 +166,35 @@ api_global_error_jsonld(error(http_open_error(Err), _), Type, JSON) :-
                               'api:reason' : Err },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(document_not_found(Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document not found: ~q", [Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:DocumentNotFound',
+                              'api:document_id' : Id },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(document_not_found(Id, Document), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document not found: ~q", [Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:DocumentNotFound',
+                              'api:document_id' : Id,
+                              'api:document': Document },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted_Id, Generated_Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document was submitted with id ~q, but id ~q was generated", [Submitted_Id, Generated_Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SubmittedIdDoesNotMatchGeneratedId',
+                              'api:submitted_id': Submitted_Id,
+                              'api:generated_id': Generated_Id },
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
@@ -1404,14 +1433,6 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(document_not_found(Id),_), JSON) :-
-    format(string(Msg), "Document with id ~q not found", [Id]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{ '@type' : 'api:DocumentNotFound',
-                              'api:document_id' : Id},
-             'api:message' : Msg
-            }.
 api_document_error_jsonld(get_documents,error(query_is_only_supported_for_instance_graphs,_), JSON) :-
     format(string(Msg), "Query documents are currently only supported for instance graphs", []),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
@@ -1564,24 +1585,6 @@ api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _)
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(replace_documents, error(document_does_not_exist(Id, Document), _), JSON) :-
-    format(string(Msg), "Document submitted for replacement, but original is not found for ID ~q", [Id]),
-    JSON = _{'@type' : 'api:ReplaceDocumentErrorResponse',
-             'api:status' : "api:not_found",
-             'api:error' : _{ '@type' : 'api:OriginalDocumentNotFound',
-                              'api:document_id' : Id,
-                              'api:replacement_document': Document
-                            },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(delete_documents, error(document_does_not_exist(Id), _), JSON) :-
-    format(string(Msg), "Document with id ~q was not found", [Id]),
-    JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
-             'api:status' : "api:not_found",
-             'api:error' : _{ '@type' : 'api:DocumentNotFound',
-                              'api:document_id' : Id},
              'api:message' : Msg
             }.
 api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
