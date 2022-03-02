@@ -19,6 +19,7 @@ module.exports = {
   },
   plugins: [
     'mocha',
+    'json-format',
   ],
   rules: {
     'comma-dangle': ['error', 'always-multiline'],

@@ -426,7 +426,7 @@ describe('document', function () {
         .then(document.verifyInsertSuccess)
       await document
         .replace(agent, docPath, { instance: doc1 })
-        .then(document.verifyInsertSuccess)
+        .then(document.verifyReplaceSuccess)
       const r = await document
         .get(agent, docPath, { body: { id: doc2['@id'] } })
         .then(document.verifyGetSuccess)
@@ -459,7 +459,7 @@ describe('document', function () {
           ],
           create: true,
         })
-        .then(document.verifyInsertSuccess)
+        .then(document.verifyReplaceSuccess)
       const r = await document
         .get(agent, docPath, { query: { type: type1 } })
         .then(document.verifyGetSuccess)
