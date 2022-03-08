@@ -368,25 +368,29 @@ path_component(Path, Prefixes, [Path_String]) :-
     path_strings(Rev, Prefixes, Strings),
     merge_separator_split(Path_String, '/', Strings).
 
-json_idgen(lexical(Base, Fields), JSON, DB, Context, Path, Id) :-
-    !,
+json_idgen(Descriptor, JSON, DB, Context, Path, Id) :-
+    json_idgen_(Descriptor, JSON, DB, Context, Path, Id),
+    !.
+json_idgen(Descriptor, _JSON, _DB, _Context, _Path, _Id) :-
+    throw(error(unexpected_argument_instantiation(json_idgen, Descriptor), _)).
+
+json_idgen_(lexical(Base, Fields), JSON, DB, Context, Path, Id) :-
     get_field_values(JSON, DB, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
     idgen_lexical(Path_Base, Values, Id).
-json_idgen(hash(Base, Fields), JSON, DB, Context, Path, Id) :-
-    !,
+json_idgen_(hash(Base, Fields), JSON, DB, Context, Path, Id) :-
     get_field_values(JSON, DB, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
     idgen_hash(Path_Base, Values, Id).
-json_idgen(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
-    !,
+json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
     get_all_path_values(JSON, Path_Values),
     idgen_path_values_hash(Base, Path_Values, Id).
-json_idgen(Descriptor, JSON, _DB, Context, Path, Id) :-
-    (   Descriptor = random(Base)
-    ;   Descriptor = base(Base)
-    ),
-    !,
+json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_(base(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+
+json_idgen_base(Base, JSON, Context, Path, Id) :-
     (   get_dict('@id', JSON, Submitted_Id),
         ground(Submitted_Id)
     ->  path_component([type(Base)|Path], Context, [Path_Base]),
@@ -395,8 +399,6 @@ json_idgen(Descriptor, JSON, _DB, Context, Path, Id) :-
     ;   path_component([type(Base)|Path], Context, [Path_Base]),
         idgen_random(Path_Base, Id)
     ).
-json_idgen(Descriptor, _JSON, _DB, _Context, _Path, _Id) :-
-    throw(error(unexpected_argument_instantiation(json_idgen, Descriptor), _)).
 
 idgen_check_base(Submitted_ID, Base, Context) :-
     prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
