@@ -50,7 +50,7 @@ async function main () {
     if (util.isUndefinedOrNull(options.minSamples)) {
       options.minSamples = defaultMinSamples
     }
-    console.log(`>>> Running ${filePath} (>= ${options.minSamples} samples)`)
+    console.error(`>>> Running ${filePath} (>= ${options.minSamples} samples)`)
     // Create and run the benchmark.
     const bench = new Benchmark(filePath, options)
     await bench.run()
@@ -59,8 +59,8 @@ async function main () {
       throw bench.error
     }
     // Report the results.
-    console.log(bench.toJSON())
-    console.log('>>> Completed', filePath)
+    console.log(JSON.stringify(bench.toJSON()))
+    console.error('>>> Completed', filePath)
     console.log()
   }
 
