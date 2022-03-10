@@ -63,7 +63,6 @@ jobs:
             name: terminusdb-server-docker-image
             path: terminusdb-server-docker-image.tar.gz
 
-
   lint:
     runs-on: ubuntu-latest
     needs: build_docker
@@ -250,6 +249,39 @@ jobs:
 
     steps:
       - run: echo "Celebrate! 🥳"
+
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: build_docker
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run server
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            --detach \
+            --net=host \
+            $DOCKER_IMAGE_NAME:local
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/checkout@v2
+
+      - name: Run benchmarks
+        working-directory: tests
+        env:
+          TERMINUSDB_USER: admin
+          TERMINUSDB_PASS: root
+        run: |
+          npm ci
+          npm run bench
 
   # Begin deployment only for push events and certain refs.
   #

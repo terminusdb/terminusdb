@@ -1,0 +1,78 @@
+[
+  {
+    "@type": "Muppet",
+    "name": "Abby",
+    "handed": "left",
+    "role": "4-year-old fairy-in-training with tiny wings, a magic wand, and sparkles in her hair",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Fozzie Bear",
+    "handed": "right",
+    "role": "insecure, stand-up comic bear",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Swedish Chef",
+    "handed": "right",
+    "role": "bork, bork, bork!",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "The Count",
+    "handed": "right",
+    "role": "mysterious but friendly vampire who loves to count",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Cookie Monster",
+    "handed": "right",
+    "role": "me want cookie!",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Scooter",
+    "handed": "right",
+    "role": "stage manager and gofer",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Gonzo",
+    "handed": "right",
+    "role": "eccentric, hooked-nosed stunt performance enthusiast",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Rosita",
+    "handed": "right",
+    "role": "playful and optimistic turquoise Mexican female monster",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Beaker",
+    "handed": "right",
+    "role": "shy, long-suffering assistant of Dr. Bunsen Honeydew",
+    "connections": [
+      "Muppet/Dr.%20Bunsen%20Honeydew"
+    ],
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Dr. Bunsen Honeydew",
+    "handed": "right",
+    "role": "bald, yellow-skinned, bespectacled, lab-coated scientist",
+    "connections": [
+      "Muppet/Beaker"
+    ],
+    "pets": []
+  }
+]

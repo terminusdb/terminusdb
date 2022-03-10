@@ -204,6 +204,8 @@ function verifyInsertFailure (r) {
   return r
 }
 
+const verifyReplaceSuccess = verifyInsertSuccess
+
 function verifyReplaceFailure (r) {
   expect(r.status).to.equal(400)
   expect(r.body['api:status']).to.equal('api:failure')
@@ -252,6 +254,7 @@ module.exports = {
   verifyGetFailure,
   verifyInsertSuccess,
   verifyInsertFailure,
+  verifyReplaceSuccess,
   verifyReplaceFailure,
   verifyReplaceNotFound,
   verifyDelSuccess,
