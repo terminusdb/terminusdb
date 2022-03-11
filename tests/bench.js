@@ -65,8 +65,7 @@ async function main () {
     // Report the results or push it to list of results
     if (outputJson) {
       benches.push(bench.toJSON())
-    }
-    else {
+    } else {
       console.log(bench.toJSON())
       console.log('>>> Completed', filePath)
       console.log()
