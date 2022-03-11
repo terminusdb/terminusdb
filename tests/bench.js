@@ -16,7 +16,8 @@ const defaultMinSamples = 5
 
 async function main () {
   // Remove `node` and this file name from the arguments.
-  const args = process.argv.slice(2)
+  const args = process.argv.slice(2).filter(x => x !== '--json')
+  const outputJson = process.argv.includes('--json')
 
   // If there are file pattern arguments, use them. Otherwise, use a pattern for
   // all of the benchmark files.
@@ -27,7 +28,7 @@ async function main () {
 
   // Use this to verify that at least one benchmark was run.
   let iteration = 0
-
+  const benches = []
   // Iterate over each file path.
   for await (const filePathInput of filePaths) {
     // Normalize relative and non-relative input paths.
@@ -50,7 +51,9 @@ async function main () {
     if (util.isUndefinedOrNull(options.minSamples)) {
       options.minSamples = defaultMinSamples
     }
-    console.error(`>>> Running ${filePath} (>= ${options.minSamples} samples)`)
+    if (!outputJson) {
+      console.log(`>>> Running ${filePath} (>= ${options.minSamples} samples)`)
+    }
     // Create and run the benchmark.
     const bench = new Benchmark(filePath, options)
     await bench.run()
@@ -58,14 +61,22 @@ async function main () {
     if (bench.error) {
       throw bench.error
     }
-    // Report the results.
-    console.log(JSON.stringify(bench.toJSON()))
-    console.error('>>> Completed', filePath)
-    console.log()
-  }
 
+    // Report the results or push it to list of results
+    if (outputJson) {
+      benches.push(bench.toJSON())
+    }
+    else {
+      console.log(bench.toJSON())
+      console.log('>>> Completed', filePath)
+      console.log()
+    }
+  }
   if (iteration === 0) {
     throw new Error(`Error! No benchmarks found at these paths: ${filePatterns}`)
+  }
+  if (outputJson) {
+    console.log(JSON.stringify(benches))
   }
 }
 
