@@ -727,38 +727,49 @@ refute_type(Validation_Object,Type,Witness) :-
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Set'),
-    \+  xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : set_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : set_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:type, sys:'List'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : list_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : list_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:type, sys:'Table'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : table_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : table_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : optional_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : optional_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Array'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : array_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : array_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
-    (   \+ xrdf(Schema, Type, sys:class, _)
-    ->  Witness = json{ '@type' : cardinality_has_no_class,
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : cardinality_has_no_class,
                         type : Type }
     ;   \+ xrdf(Schema, Type, sys:cardinality, _)
     ->  Witness = json{ '@type' : cardinality_has_no_bound,
