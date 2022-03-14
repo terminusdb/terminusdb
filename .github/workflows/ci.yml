@@ -54,7 +54,10 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build . --file Dockerfile --tag $DOCKER_IMAGE_NAME:local
+          docker build . \
+            --file Dockerfile \
+            --tag $DOCKER_IMAGE_NAME:local \
+            --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
           docker save $DOCKER_IMAGE_NAME:local | gzip > terminusdb-server-docker-image.tar.gz
 
       - name: Upload Docker image
