@@ -24,12 +24,21 @@
 :- use_module(library(filesex)).
 :- use_module(library(crypto)).
 :- use_module(library(prolog_pack), [pack_property/2]).
+:- use_module(library(git), [git_hash/2]).
+
 /**
  * initialize_flags is det.
  *
  * Initialize flags shared by all main predicates.
  */
 initialize_flags :-
+    (   catch(git_hash(Git_Hash, []), _, false)
+    ->  true
+    ;   getenv('TERMINUSDB_GIT_HASH', Git_Hash)
+    ->  true
+    ;   Git_Hash = null
+    ),
+    set_prolog_flag(terminusdb_git_hash, Git_Hash),
     (   pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
     ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
     ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
