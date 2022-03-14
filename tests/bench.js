@@ -11,24 +11,32 @@ const globOptions = {
   extglob: false,
 }
 
-const allFilePattern = './bench/**/*.js'
+const outputJsonFlag = '--json'
+
+const defaultFilePatterns = ['./bench/**/*.js']
 const defaultMinSamples = 5
 
 async function main () {
-  // Remove `node` and this file name from the arguments.
-  const args = process.argv.slice(2).filter(x => x !== '--json')
-  const outputJson = process.argv.includes('--json')
+  // Remove `node` and `bench.js` from the arguments.
+  const args = process.argv.slice(2)
+  // File pattern args.
+  const argFilePatterns = args.filter((arg) => arg !== outputJsonFlag)
+  // Check if we are outputting JSON instead of logging to the console.
+  const outputJson = args.includes(outputJsonFlag)
 
   // If there are file pattern arguments, use them. Otherwise, use a pattern for
   // all of the benchmark files.
-  const filePatterns = args.length > 0 ? args : [allFilePattern]
+  const filePatterns = argFilePatterns.length > 0 ? argFilePatterns : defaultFilePatterns
 
   // Get an asynchronous stream of file paths from the file patterns.
   const filePaths = glob.stream(filePatterns, globOptions)
 
   // Use this to verify that at least one benchmark was run.
   let iteration = 0
+
+  // Accumulator for JSON output.
   const benches = []
+
   // Iterate over each file path.
   for await (const filePathInput of filePaths) {
     // Normalize relative and non-relative input paths.
@@ -51,9 +59,8 @@ async function main () {
     if (util.isUndefinedOrNull(options.minSamples)) {
       options.minSamples = defaultMinSamples
     }
-    if (!outputJson) {
-      console.log(`>>> Running ${filePath} (>= ${options.minSamples} samples)`)
-    }
+    // Print the benchmark to STDERR to keep STDOUT clean for JSON output.
+    console.error(`>>> ${filePath} (>=${options.minSamples} samples)`)
     // Create and run the benchmark.
     const bench = new Benchmark(filePath, options)
     await bench.run()
@@ -61,14 +68,11 @@ async function main () {
     if (bench.error) {
       throw bench.error
     }
-
     // Report the results or push it to list of results
     if (outputJson) {
       benches.push(bench.toJSON())
     } else {
       console.log(bench.toJSON())
-      console.log('>>> Completed', filePath)
-      console.log()
     }
   }
   if (iteration === 0) {
