@@ -112,6 +112,16 @@ api_global_error_jsonld(error(unknown_organization(Organization), _), Type, JSON
                               'api:organization_name' : Organization },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(unknown_database(Organization, Database), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:not_found',
+             'api:error' : _{'@type' : 'api:UnknownDatabase',
+                             'api:database_name' : Database,
+                             'api:organization_name' : Organization},
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(invalid_organization_name(Organization), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Invalid organization name: ~q", [Organization]),
@@ -198,14 +208,6 @@ api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
-api_error_jsonld_(check_db, error(unknown_database(Organization, Database), _), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:DbExistsErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Value), _), JSON) :-
     format(string(Msg), "Expected parameter '~s' to have '~q' but found: ~q", [Param, Expected_Value, Value]),
     JSON = _{'@type' : 'api:DbExistsErrorResponse',
@@ -244,14 +246,6 @@ api_error_jsonld_(create_db, error(invalid_uri_prefix(Prefix_Name, Prefix_Value)
                              'api:prefix_value' : Prefix_Value},
              'api:message' : Msg}.
 %% DB Delete
-api_error_jsonld_(delete_db,error(unknown_database(Organization, Database), _), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:DbDeleteErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_error_jsonld_(delete_db,error(database_not_finalized(Organization,Database), _),JSON) :-
     format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
     JSON = _{'@type' : 'api:DbDeleteErrorResponse',
@@ -903,15 +897,6 @@ api_error_jsonld_(prefix,error(invalid_absolute_path(Path),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
-api_error_jsonld_(prefix,error(unknown_database(Organization, Database),_), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:PrefixErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{ '@type' : 'api:UnknownDatabase',
-                              'api:database_name' : Database,
-                              'api:organization_name' : Organization},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(user_update,error(user_update_failed_without_error(Name,Document),_),JSON) :-
     atom_json_dict(Atom, Document,[]),
     format(string(Msg), "Update to user ~q failed without an error while updating with document ~q", [Name, Atom]),
@@ -1135,14 +1120,6 @@ api_error_jsonld_(remote,error(remote_exists(Name),_), JSON) :-
              'api:error' : _{ '@type' : "api:RemoteExists",
                               'api:remote_name' : Name}
             }.
-api_error_jsonld_(remote,error(unknown_database(Organization, Database), _), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:RemoteErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_error_jsonld_(rollup,error(invalid_absolute_path(Path),_), JSON) :-
     format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
     JSON = _{'@type' : 'api:RollupErrorResponse',
@@ -1190,6 +1167,9 @@ error_type(frame, 'api:FrameErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type(prefix, 'api:PrefixErrorResponse').
+error_type(pull, 'api:PullErrorResponse').
+error_type(push, 'api:PushErrorResponse').
+error_type(remote, 'api:RemoteErrorResponse').
 error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
 error_type(woql, 'api:WoqlErrorResponse').
 
@@ -1263,15 +1243,6 @@ api_document_error_jsonld(Type, error(invalid_path(Path), _), JSON) :-
                               'api:resource_path' : Path },
              'api:message' : Msg
             }.
-api_document_error_jsonld(Type,error(unknown_database(Organization, Database), _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_document_error_jsonld(Type,error(unresolvable_collection(Descriptor),_), JSON) :-
     document_error_type(Type, JSON_Type),
     resolve_absolute_string_descriptor(Path, Descriptor),
