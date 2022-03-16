@@ -124,66 +124,34 @@ card_count(Validation_Object,S_Id,P_Id,N) :-
     ;   N = 0
     ).
 
+test_cardinality_not_one(Validation_Object, Class, S, P, Witness) :-
+    \+ card_count(Validation_Object, S,P,1),
+    instance_layer(Validation_Object, Layer),
+    terminus_store:subject_id(Layer, Subject_String, S),
+    (   atom(P)
+    ->  P = Predicate
+    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
+        atom_string(Predicate, Predicate_String)
+    ),
+    atom_string(Subject, Subject_String),
+    Witness = witness{ '@type': instance_not_cardinality_one,
+                       instance: Subject,
+                       class: Class,
+                       predicate: Predicate
+                     }.
+
+refute_cardinality_(unit,Validation_Object,S,P,Witness) :-
+    global_prefix_expand(sys:'Unit', Sys_Unit),
+    test_cardinality_not_one(Validation_Object, Sys_Unit, S, P, Witness).
+
 refute_cardinality_(class(C),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object, S,P,1),
-    instance_layer(Validation_Object, Layer),
-    terminus_store:subject_id(Layer, Subject_String, S),
-    (   atom(P)
-    ->  P = Predicate
-    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
-        atom_string(Predicate, Predicate_String)
-    ),
-    atom_string(Subject, Subject_String),
-    Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: Subject,
-                       class: C,
-                       predicate: Predicate
-                     }.
+    test_cardinality_not_one(Validation_Object, C, S, P, Witness).
 refute_cardinality_(base_class(C),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object, S,P,1),
-    instance_layer(Validation_Object, Layer),
-    terminus_store:subject_id(Layer, Subject_String, S),
-    atom_string(Subject, Subject_String),
-    (   atom(P)
-    ->  P = Predicate
-    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
-        atom_string(Predicate, Predicate_String)
-    ),
-    Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: Subject,
-                       class: C,
-                       predicate: Predicate
-                     }.
+    test_cardinality_not_one(Validation_Object, C, S, P, Witness).
 refute_cardinality_(enum(C,_),Validation_Object, S,P,Witness) :-
-    \+ card_count(Validation_Object, S,P,1),
-    instance_layer(Validation_Object, Layer),
-    terminus_store:subject_id(Layer, Subject_String, S),
-    atom_string(Subject, Subject_String),
-    (   atom(P)
-    ->  P = Predicate
-    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
-        atom_string(Predicate, Predicate_String)
-    ),
-    Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: Subject,
-                       class: C,
-                       predicate: Predicate
-                     }.
+    test_cardinality_not_one(Validation_Object, C, S, P, Witness).
 refute_cardinality_(tagged_union(C,_),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object,S,P,1),
-    instance_layer(Validation_Object, Layer),
-    terminus_store:subject_id(Layer, Subject_String, S),
-    atom_string(Subject, Subject_String),
-    (   atom(P)
-    ->  P = Predicate
-    ;   terminus_store:predicate_id(Layer, Predicate_String, P),
-        atom_string(Predicate, Predicate_String)
-    ),
-    Witness = witness{ '@type': instance_not_cardinality_one,
-                       instance: Subject,
-                       class: C,
-                       predicate: Predicate
-                     }.
+    test_cardinality_not_one(Validation_Object, C, S, P, Witness).
 refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
     \+ card_count(Validation_Object,S,P,0),
     instance_layer(Validation_Object, Layer),

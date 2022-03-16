@@ -418,7 +418,8 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
 
-class_descriptor_image(unit,[]).
+class_descriptor_image(unit,json{ '@type': SysUnit}) :-
+    global_prefix_expand(sys:'Unit', SysUnit).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(foreign(C),json{ '@type' : "@id", '@foreign' : C}).
 class_descriptor_image(optional(C),json{ '@type' : C }).
@@ -771,8 +772,12 @@ value_expand_array(In, DB, Context, Elt_Type, Captures_In, Expanded, Dependencie
     value_expand_list(In, DB, Context, Elt_Type, Captures_In, Expanded, Dependencies, Captures_Out).
 
 % Unit type expansion
-context_value_expand(_,_,[],json{},Captures,[],[],Captures) :-
-    !.
+context_value_expand(_,_,Value,json{'@type': Unit_Type},Captures,[],[],Captures) :-
+    global_prefix_expand(sys:'Unit', Unit_Type),
+    !,
+    do_or_die(Value = [],
+              error(not_a_unit_type(Value), _)).
+
 context_value_expand(_,_,null,_,Captures,null,[],Captures) :-
     !.
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
@@ -9990,3 +9995,237 @@ test(wrong_dim_error,
                          ).
 
 :- end_tests(json_tables).
+
+:- begin_tests(json_unit_type).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema_class_with_unit_property('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Foo",
+  "field": "sys:Unit"
+}
+').
+
+test(class_with_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    write_schema(schema_class_with_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'field': []},
+                                          Id)
+                         ),
+
+    get_document(Desc, Id, Document),
+
+
+    _{'@type': 'Foo',
+      'field': []} :< Document.
+
+test(class_with_unit_property_but_nonnil_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_unit_type(42))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'field': 42},
+                                          _Id)
+                         ).
+
+test(class_with_unit_property_missing_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{
+                                      '@type':instance_not_cardinality_one,
+                                      class:'http://terminusdb.com/schema/sys#Unit',
+                                      instance:_,
+                                      predicate:'terminusdb:///schema#field'}]),_)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo"},
+                                          _Id)
+                         ).
+
+schema_class_with_oneof_unit_property('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Foo",
+  "@oneOf": {"a": "sys:Unit",
+             "b": "sys:Unit"}
+}
+').
+
+test(class_with_oneof_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    write_schema(schema_class_with_oneof_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          (   insert_document(C,
+                                              _{'@type': "Foo",
+                                                'a': []},
+                                              Id1),
+                              insert_document(C,
+                                              _{'@type': "Foo",
+                                                'b': []},
+                                              Id2)
+                          )),
+
+    get_document(Desc, Id1, Document1),
+    get_document(Desc, Id2, Document2),
+
+
+    _{'@type': 'Foo',
+      'a': []} :< Document1,
+    _{'@type': 'Foo',
+      'b': []} :< Document2.
+
+test(class_with_oneof_unit_property_but_nonnil_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_oneof_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_unit_type(42))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'a': 42},
+                                          _Id)
+                         ).
+
+test(class_with_oneof_unit_property_missing_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_oneof_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{
+                                      '@type':no_choice_is_cardinality_one,
+                                      choices:['terminusdb:///schema#a',
+                                               'terminusdb:///schema#b'],
+                                      class:'terminusdb:///schema#Foo',
+                                      instance:_}]),_)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo"},
+                                          _Id)
+                         ).
+
+schema_taggedunion_with_unit_property('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "TaggedUnion",
+  "@id": "Foo",
+  "a": "sys:Unit",
+  "b": "sys:Unit"
+}
+').
+
+test(taggedunion_with_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    write_schema(schema_taggedunion_with_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          (   insert_document(C,
+                                              _{'@type': "Foo",
+                                                'a': []},
+                                              Id1),
+                              insert_document(C,
+                                              _{'@type': "Foo",
+                                                'b': []},
+                                              Id2)
+                          )),
+
+    get_document(Desc, Id1, Document1),
+    get_document(Desc, Id2, Document2),
+
+
+    _{'@type': 'Foo',
+      'a': []} :< Document1,
+    _{'@type': 'Foo',
+      'b': []} :< Document2.
+
+test(taggedunion_with_unit_property_but_nonnil_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_taggedunion_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_unit_type(42))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'a': 42},
+                                          _Id)
+                         ).
+
+test(taggedunion_with_unit_property_missing_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_taggedunion_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{
+                                      '@type':no_choice_is_cardinality_one,
+                                      choices:['terminusdb:///schema#a',
+                                               'terminusdb:///schema#b'],
+                                      class:'terminusdb:///schema#Foo',
+                                      instance:_}]),_)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo"},
+                                          _Id)
+                         ).
+
+:- end_tests(json_unit_type).
