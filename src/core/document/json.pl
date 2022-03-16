@@ -1779,6 +1779,7 @@ array_type_id_predicate_value([O|T],D,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,
     array_type_id_predicate_value(O,E,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,V),
     array_type_id_predicate_value(T,D,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
 
+type_id_predicate_iri_value(unit,_,_,_,_,_,_,_,_,[]).
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
     enum_value(C, O, V).
 type_id_predicate_iri_value(foreign(_),_,_,Id,_,_,Prefixes,Compress_Ids,_,Value) :-
