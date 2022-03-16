@@ -1,0 +1,110 @@
+[
+  {
+    "@type": "Muppet",
+    "name": "Rowlf",
+    "handed": "right",
+    "role": "scruffy brown pianist dog",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Bert",
+    "handed": "right",
+    "role": "Ernie's best friend",
+    "connections": [
+      "Muppet/Ernie"
+    ],
+    "pets": [
+      {
+        "@type": "Pet",
+        "name": "Bernice"
+      }
+    ]
+  },
+  {
+    "@type": "Muppet",
+    "name": "Ernie",
+    "handed": "right",
+    "role": "Bert's best friend",
+    "connections": [
+      "Muppet/Bert"
+    ],
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Big Bird",
+    "handed": "right",
+    "role": "eight-foot two-inch tall bright yellow bird",
+    "pets": [
+      {
+        "@type": "Pet",
+        "name": "Goldie"
+      }
+    ]
+  },
+  {
+    "@type": "Muppet",
+    "name": "Mr. Snuffleupagus",
+    "handed": "right",
+    "role": "Big Bird's best friend, a large and friendly monster resembling an anteater",
+    "connections": [
+      "Muppet/Big%20Bird"
+    ],
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Kermit the Frog",
+    "handed": "left",
+    "role": "everyman protagonist",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Miss Piggy",
+    "handed": "right",
+    "role": "temperamental diva superstar and karate practitioner",
+    "connections": [
+      "Muppet/Kermit%20the%20Frog"
+    ],
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Oscar the Grouch",
+    "handed": "right",
+    "role": "misanthropic lover of trash",
+    "connections": [
+      "Muppet/Kermit%20the%20Frog"
+    ],
+    "pets": [
+      {
+        "@type": "Pet",
+        "name": "Fluffy"
+      },
+      {
+        "@type": "Pet",
+        "name": "Fred"
+      },
+      {
+        "@type": "Pet",
+        "name": "Slimey"
+      }
+    ]
+  },
+  {
+    "@type": "Muppet",
+    "name": "Animal",
+    "handed": "right",
+    "role": "wild and frenzied monster drummer",
+    "pets": []
+  },
+  {
+    "@type": "Muppet",
+    "name": "Grover",
+    "handed": "right",
+    "role": "enthusiastic blue monster who does not use contractions",
+    "pets": []
+  }
+]

@@ -25,14 +25,21 @@
               insecure_user_header_key/1,
               check_all_env_vars/0,
               is_enterprise/0,
-              check_insecure_user_header_enabled/1
+              check_insecure_user_header_enabled/1,
+              clear_check_insecure_user_header_enabled/0,
+              clear_insecure_user_header_key/0,
+              pinned_databases/1
           ]).
 
 :- use_module(library(pcre)).
 
 :- use_module(core(util)).
+:- use_module(core(query)).
 
-terminusdb_version('10.0.17').
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+
+terminusdb_version('10.0.18').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
@@ -239,3 +246,20 @@ check_all_env_vars :-
 
 is_enterprise :-
     current_prolog_flag(terminusdb_enterprise, true).
+
+parse_pinned_databases(Pinned_Env, Pinned) :-
+    merge_separator_split(Pinned_Env, ',', Pinned_Atoms),
+    maplist([Atom, Descriptor]>>(
+                do_or_die(resolve_absolute_string_descriptor(Atom, Descriptor),
+                          error(invalid_descriptor(Atom), _))
+            ),
+
+            Pinned_Atoms,
+            Pinned).
+
+:- table pinned_databases/1.
+pinned_databases(Pinned) :-
+    getenv('TERMINUSDB_PINNED_DATABASES', Pinned_Env),
+    !,
+    parse_pinned_databases(Pinned_Env, Pinned).
+pinned_databases([]).

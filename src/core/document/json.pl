@@ -368,32 +368,37 @@ path_component(Path, Prefixes, [Path_String]) :-
     path_strings(Rev, Prefixes, Strings),
     merge_separator_split(Path_String, '/', Strings).
 
-json_idgen(JSON,DB,Context,Path,ID_Ex) :-
-    get_dict('@type',JSON,Type),
-    key_descriptor(DB,Context,Type,Descriptor),
-    (   Descriptor = lexical(Base,Fields)
-    ->  get_field_values(JSON, DB, Context, Fields, Values),
-        path_component([type(Base)|Path], Context, [Path_Base]),
-        idgen_lexical(Path_Base,Values,ID)
-    ;   Descriptor = hash(Base,Fields)
-    ->  get_field_values(JSON, DB, Context, Fields, Values),
-        path_component([type(Base)|Path], Context, [Path_Base]),
-        idgen_hash(Path_Base,Values,ID)
-    ;   Descriptor = value_hash(Base)
-    ->  get_all_path_values(JSON,Path_Values),
-        idgen_path_values_hash(Base,Path_Values,ID)
-    ;   (   Descriptor = random(Base)
-        ;   Descriptor = base(Base))
-    ->  (   get_dict('@id', JSON, Submitted_ID),
-            ground(Submitted_ID)
-        ->  path_component([type(Base)|Path], Context, [Path_Base]),
-            idgen_check_base(Submitted_ID, Path_Base, Context),
-            ID = Submitted_ID
-        ;   path_component([type(Base)|Path], Context, [Path_Base]),
-            idgen_random(Path_Base,ID)
-        )
-    ),
-    prefix_expand(ID, Context, ID_Ex).
+json_idgen(Descriptor, JSON, DB, Context, Path, Id) :-
+    json_idgen_(Descriptor, JSON, DB, Context, Path, Id),
+    !.
+json_idgen(Descriptor, _JSON, _DB, _Context, _Path, _Id) :-
+    throw(error(unexpected_argument_instantiation(json_idgen, Descriptor), _)).
+
+json_idgen_(lexical(Base, Fields), JSON, DB, Context, Path, Id) :-
+    get_field_values(JSON, DB, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_lexical(Path_Base, Values, Id).
+json_idgen_(hash(Base, Fields), JSON, DB, Context, Path, Id) :-
+    get_field_values(JSON, DB, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_hash(Path_Base, Values, Id).
+json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
+    get_all_path_values(JSON, Path_Values),
+    idgen_path_values_hash(Base, Path_Values, Id).
+json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_(base(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+
+json_idgen_base(Base, JSON, Context, Path, Id) :-
+    (   get_dict('@id', JSON, Submitted_Id),
+        ground(Submitted_Id)
+    ->  path_component([type(Base)|Path], Context, [Path_Base]),
+        idgen_check_base(Submitted_Id, Path_Base, Context),
+        Id = Submitted_Id
+    ;   path_component([type(Base)|Path], Context, [Path_Base]),
+        idgen_random(Path_Base, Id)
+    ).
 
 idgen_check_base(Submitted_ID, Base, Context) :-
     prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
@@ -401,7 +406,20 @@ idgen_check_base(Submitted_ID, Base, Context) :-
     do_or_die(atom_concat(Base_Ex, _, Submitted_ID_Ex),
               error(submitted_document_id_does_not_have_expected_prefix(Submitted_ID_Ex, Base_Ex),_)).
 
-class_descriptor_image(unit,[]).
+check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
+    ground(Id),
+    !,
+    prefix_expand(Id, Context, Id_Ex),
+    prefix_expand(Generated_Id, Context, Generated_Id_Ex),
+    do_or_die(
+        Id_Ex = Generated_Id_Ex,
+        error(submitted_id_does_not_match_generated_id(Id, Generated_Id), _)
+    ).
+check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
+    prefix_expand(Id, Context, Id_Ex).
+
+class_descriptor_image(unit,json{ '@type': SysUnit}) :-
+    global_prefix_expand(sys:'Unit', SysUnit).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
 class_descriptor_image(foreign(C),json{ '@type' : "@id", '@foreign' : C}).
 class_descriptor_image(optional(C),json{ '@type' : C }).
@@ -640,15 +658,9 @@ json_assign_ids(DB,Context,JSON,Path) :-
     ->  Next_Path = Path
     ;   Next_Path = []),
 
-    json_idgen(JSON, DB, Context, Next_Path, Generated_ID),
-    (   ground(ID)
-    ->  prefix_expand(ID, Context, ID_Ex),
-        do_or_die(ID_Ex = Generated_ID,
-                  error(submitted_id_does_not_match_generated_id(
-                            ID_Ex,
-                            Generated_ID),
-                        _))
-    ;   ID = Generated_ID),
+    key_descriptor(DB, Context, Type, Descriptor),
+    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
+    check_submitted_id_against_generated_id(Context, Generated_Id, ID),
 
     dict_pairs(JSON, _, Pairs),
     maplist({DB, Context, ID, Next_Path}/[Property-Value]>>(
@@ -760,8 +772,12 @@ value_expand_array(In, DB, Context, Elt_Type, Captures_In, Expanded, Dependencie
     value_expand_list(In, DB, Context, Elt_Type, Captures_In, Expanded, Dependencies, Captures_Out).
 
 % Unit type expansion
-context_value_expand(_,_,[],json{},Captures,[],[],Captures) :-
-    !.
+context_value_expand(_,_,Value,json{'@type': Unit_Type},Captures,[],[],Captures) :-
+    global_prefix_expand(sys:'Unit', Unit_Type),
+    !,
+    do_or_die(Value = [],
+              error(not_a_unit_type(Value), _)).
+
 context_value_expand(_,_,null,_,Captures,null,[],Captures) :-
     !.
 context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captures_Out) :-
@@ -1768,6 +1784,7 @@ array_type_id_predicate_value([O|T],D,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,
     array_type_id_predicate_value(O,E,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,V),
     array_type_id_predicate_value(T,D,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
 
+type_id_predicate_iri_value(unit,_,_,_,_,_,_,_,_,[]).
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
     enum_value(C, O, V).
 type_id_predicate_iri_value(foreign(_),_,_,Id,_,_,Prefixes,Compress_Ids,_,Value) :-
@@ -2370,7 +2387,7 @@ delete_document(DB, Prefixes, Unlink, Id) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     (   xrdf(Instance, Id_Ex, rdf:type, _)
     ->  true
-    ;   throw(error(document_does_not_exist(Id),_))
+    ;   throw(error(document_not_found(Id), _))
     ),
     forall(
         xquad(Instance, G, Id_Ex, P, V),
@@ -2503,16 +2520,18 @@ replace_document(Transaction, Document, Create, Id) :-
 replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
-    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
-    get_dict('@id', Elaborated, Id),
+    database_prefixes(Transaction, Context),
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, Captures_Out),
+    get_dict('@id', Elaborated, Elaborated_Id),
+    check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
     catch(delete_document(Transaction, false, Id),
-          error(document_does_not_exist(_),_),
+          error(document_not_found(_), _),
           (   Create = true
           % If we're creating a document, we gotta be sure that it is not a subdocument
           ->  get_dict('@type', Elaborated, Type),
               die_if(is_subdocument(Transaction, Type),
                      error(inserted_subdocument_as_document, _))
-          ;   throw(error(document_does_not_exist(Id, Document),_)))),
+          ;   throw(error(document_not_found(Id, Document), _)))),
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
@@ -2810,7 +2829,7 @@ delete_schema_document(Transaction, Id) :-
     prefix_expand_schema(Id, Expanded_Context, Id_Ex),
     (   xrdf([Schema], Id_Ex, rdf:type, _)
     ->  true
-    ;   throw(error(document_does_not_exist(Id),_))
+    ;   throw(error(document_not_found(Id), _))
     ),
     forall(
         xrdf([Schema], Id_Ex, P, O),
@@ -2835,10 +2854,10 @@ replace_schema_document(Transaction, Document, Create, Id) :-
     !,
     (   get_dict('@id', Document, Id)
     ->  catch(delete_schema_document(Transaction, Id),
-              error(document_does_not_exist(_),_),
+              error(document_not_found(_), _),
               (   Create = true
               ->  true
-              ;   throw(error(document_does_not_exist(Id, Document),_)))),
+              ;   throw(error(document_not_found(Id, Document), _)))),
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
     ->  delete_schema_document(Transaction, 'terminusdb://context'),
@@ -9976,3 +9995,237 @@ test(wrong_dim_error,
                          ).
 
 :- end_tests(json_tables).
+
+:- begin_tests(json_unit_type).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema_class_with_unit_property('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Foo",
+  "field": "sys:Unit"
+}
+').
+
+test(class_with_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    write_schema(schema_class_with_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'field': []},
+                                          Id)
+                         ),
+
+    get_document(Desc, Id, Document),
+
+
+    _{'@type': 'Foo',
+      'field': []} :< Document.
+
+test(class_with_unit_property_but_nonnil_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_unit_type(42))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'field': 42},
+                                          _Id)
+                         ).
+
+test(class_with_unit_property_missing_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{
+                                      '@type':instance_not_cardinality_one,
+                                      class:'http://terminusdb.com/schema/sys#Unit',
+                                      instance:_,
+                                      predicate:'terminusdb:///schema#field'}]),_)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo"},
+                                          _Id)
+                         ).
+
+schema_class_with_oneof_unit_property('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Foo",
+  "@oneOf": {"a": "sys:Unit",
+             "b": "sys:Unit"}
+}
+').
+
+test(class_with_oneof_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    write_schema(schema_class_with_oneof_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          (   insert_document(C,
+                                              _{'@type': "Foo",
+                                                'a': []},
+                                              Id1),
+                              insert_document(C,
+                                              _{'@type': "Foo",
+                                                'b': []},
+                                              Id2)
+                          )),
+
+    get_document(Desc, Id1, Document1),
+    get_document(Desc, Id2, Document2),
+
+
+    _{'@type': 'Foo',
+      'a': []} :< Document1,
+    _{'@type': 'Foo',
+      'b': []} :< Document2.
+
+test(class_with_oneof_unit_property_but_nonnil_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_oneof_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_unit_type(42))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'a': 42},
+                                          _Id)
+                         ).
+
+test(class_with_oneof_unit_property_missing_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_class_with_oneof_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{
+                                      '@type':no_choice_is_cardinality_one,
+                                      choices:['terminusdb:///schema#a',
+                                               'terminusdb:///schema#b'],
+                                      class:'terminusdb:///schema#Foo',
+                                      instance:_}]),_)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo"},
+                                          _Id)
+                         ).
+
+schema_taggedunion_with_unit_property('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "TaggedUnion",
+  "@id": "Foo",
+  "a": "sys:Unit",
+  "b": "sys:Unit"
+}
+').
+
+test(taggedunion_with_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    write_schema(schema_taggedunion_with_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          (   insert_document(C,
+                                              _{'@type': "Foo",
+                                                'a': []},
+                                              Id1),
+                              insert_document(C,
+                                              _{'@type': "Foo",
+                                                'b': []},
+                                              Id2)
+                          )),
+
+    get_document(Desc, Id1, Document1),
+    get_document(Desc, Id2, Document2),
+
+
+    _{'@type': 'Foo',
+      'a': []} :< Document1,
+    _{'@type': 'Foo',
+      'b': []} :< Document2.
+
+test(taggedunion_with_unit_property_but_nonnil_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_taggedunion_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_unit_type(42))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo",
+                                            'a': 42},
+                                          _Id)
+                         ).
+
+test(taggedunion_with_unit_property_missing_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_taggedunion_with_unit_property,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{
+                                      '@type':no_choice_is_cardinality_one,
+                                      choices:['terminusdb:///schema#a',
+                                               'terminusdb:///schema#b'],
+                                      class:'terminusdb:///schema#Foo',
+                                      instance:_}]),_)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Foo"},
+                                          _Id)
+                         ).
+
+:- end_tests(json_unit_type).

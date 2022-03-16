@@ -21,7 +21,9 @@
               collection_descriptor_prefixes/2,
               collection_descriptor_default_write_graph/2,
               descriptor_to_loggable/2,
-              ensure_transaction_has_builder/2
+              ensure_transaction_has_builder/2,
+              should_retain_layers_for_descriptor/1,
+              retain_descriptor_layers/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -157,6 +159,7 @@
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
+:- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -221,8 +224,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     ;   Type = inference,
         system_inference_name(Graph_Name)),
     storage(Store),
-    safe_open_named_graph(Store, Graph_Name, Graph),
-    head(Graph, Layer),
+    safe_open_graph_head(Store, Graph_Name, Layer),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|Map]) :-
     Descriptor = labelled_graph{ label: Name,
@@ -254,8 +256,7 @@ open_read_write_obj(Descriptor, Read_Write_Obj, Map, [Descriptor=Read_Write_Obj|
     ;   Type = schema
     ->  repository_ontology(Repository_Name),
         storage(Store),
-        safe_open_named_graph(Store, Repository_Name, Graph),
-        head(Graph, Layer)
+        safe_open_graph_head(Store, Repository_Name, Layer)
     ),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor,
@@ -275,8 +276,7 @@ open_read_write_obj(Descriptor,
     ->  open_read_write_obj(Repo_Descriptor, Repository_Read_Write_Obj, Map, New_Map),
 
         repository_ontology(Repo_Name),
-        safe_open_named_graph(Store, Repo_Name, Repo_Graph),
-        head(Repo_Graph, Repo_Layer),
+        safe_open_graph_head(Store, Repo_Name, Repo_Layer),
 
         Repo_Layer_Desc =
         layer_descriptor{
@@ -290,8 +290,7 @@ open_read_write_obj(Descriptor,
     ;   Type = schema
     ->  New_Map = Map,
         ref_ontology(Ref_Name),
-        safe_open_named_graph(Store, Ref_Name, Graph),
-        head(Graph, Layer)
+        safe_open_graph_head(Store, Ref_Name, Layer)
     ),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
 open_read_write_obj(Descriptor,
@@ -419,14 +418,14 @@ read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
  * @New_Map has type list(descriptor=transaction_object)
  *      Updated map
  */
-open_descriptor(Descriptor, _, _, _, _) :-
+open_descriptor_(Descriptor, _, _, _, _) :-
     var(Descriptor),
     !,
     throw(error(instantiation_error, _)).
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, Map) :-
+open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map, Map) :-
     memberchk(Descriptor=Transaction_Object, Map),
     !.
-open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
+open_descriptor_(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
     blob(Layer, layer),
     !,
     layer_to_id(Layer, Id),
@@ -441,7 +440,7 @@ open_descriptor(Layer, _Commit_Info, Transaction_Object, Map, [Descriptor=Transa
                              schema_objects : [],
                              inference_objects : []
                          }.
-open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
+open_descriptor_(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
                  [system_descriptor{}=Transaction_Object|Map_2]) :-
     !,
 
@@ -457,8 +456,8 @@ open_descriptor(system_descriptor{}, _Commit_Info, Transaction_Object, Map,
                              schema_objects : [Schema_Object],
                              inference_objects : []
                          }.
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
-                [Descriptor=Transaction_Object|New_Map]) :-
+open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
+                 [Descriptor=Transaction_Object|New_Map]) :-
     id_descriptor{} :< Descriptor,
     !,
     (   get_dict(instance, Descriptor, Instance_ID)
@@ -481,7 +480,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                              schema_objects : Schema_Objects,
                              inference_objects : []
                          }.
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
+open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map, [Descriptor=Transaction_Object|Map]) :-
     layer_descriptor{} :< Descriptor,
     !,
     (   get_dict(instance, Descriptor, Instance_Layer)
@@ -499,7 +498,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map, [Descriptor=T
                              schema_objects : Schema_Objects,
                              inference_objects : []
                          }.
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
+open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_2]) :-
     label_descriptor{} :< Descriptor,
     !,
@@ -524,7 +523,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                              schema_objects: Schema_Objects,
                              inference_objects: []
                          }.
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
+open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_2]) :-
     database_descriptor{
         organization_name: Organization_Name,
@@ -548,7 +547,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                              schema_objects : [Repository_Ontology_Object],
                              inference_objects : []
                          }.
-open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
+open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_3]) :-
     repository_descriptor{
         database_descriptor : Database_Descriptor,
@@ -581,7 +580,7 @@ open_descriptor(Descriptor, _Commit_Info, Transaction_Object, Map,
                                              schema_objects : [Ref_Ontology_Object],
                                              inference_objects : []
                                            }.
-open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
+open_descriptor_(Descriptor, Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_2]) :-
     branch_descriptor{ repository_descriptor : Repository_Descriptor,
                        branch_name: Branch_Name } = Descriptor,
@@ -621,7 +620,7 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                              schema_objects : [Schema_Object],
                              inference_objects : []
                          }.
-open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
+open_descriptor_(Descriptor, Commit_Info, Transaction_Object, Map,
                  [Descriptor=Transaction_Object|Map_2]) :-
     commit_descriptor{ repository_descriptor : Repository_Descriptor,
                        commit_id: Commit_Id } = Descriptor,
@@ -662,12 +661,59 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map,
                              inference_objects : []
                          }.
 
+:- dynamic retained_descriptor_layers/2.
+
+retain_descriptor_layers(Descriptor, Layers) :-
+    (   retained_descriptor_layers(Descriptor, Stored_Layers),
+        compare_layers(Stored_Layers, Layers)
+    ->  true
+    ;   retain_descriptor_layers_(Descriptor, Layers)).
+
+retain_descriptor_layers_(Descriptor, Layers) :-
+     with_mutex(lock_on_first_descriptor_assert,
+                (   retractall(retained_descriptor_layers(Descriptor, _)),
+                    asserta(retained_descriptor_layers(Descriptor, Layers)))).
+
+compare_layers([], []).
+compare_layers([Layer1|Ls1], [Layer2|Ls2]) :-
+    layer_equals(Layer1, Layer2),
+
+    compare_layers(Ls1, Ls2).
+
+open_descriptor(Descriptor, Commit_Info, Transaction_Object, Map_In, Map_Out) :-
+    open_descriptor_(Descriptor, Commit_Info, Transaction_Object, Map_In, Map_Out),
+    (   should_retain_layers_for_descriptor(Descriptor)
+    ->  layers_for_transaction(Transaction_Object, Layers),
+        retain_descriptor_layers(Descriptor, Layers)
+    ;   true).
+
 open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
     open_descriptor(Descriptor, Commit_Info, Transaction_Object, [], _),
     log_descriptor_open(Descriptor).
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
+
+should_retain_layers_for_descriptor(system_descriptor{}).
+should_retain_layers_for_descriptor(D) :-
+    pinned_databases(Pinned),
+    memberchk(D, Pinned).
+
+layers_for_transaction(Transaction, Layers) :-
+    _{
+        instance_objects: [Instance_RWO],
+        schema_objects: [Schema_RWO]
+    } :< Transaction,
+    Instance_Layer = (Instance_RWO.read),
+    Schema_Layer = (Schema_RWO.read),
+
+    Our_Layers_Var = [Instance_Layer, Schema_Layer],
+    exclude(var, Our_Layers_Var, Our_Layers),
+
+    (   get_dict(parent, Transaction, Parent)
+    ->  append(Our_Layers, Remainder, Layers),
+        layers_for_transaction(Parent, Remainder)
+    ;   Layers = Our_Layers).
 
 log_descriptor_open(_Descriptor) :-
     % Skip all work if the debug log is not enabled
