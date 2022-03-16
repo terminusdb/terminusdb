@@ -1,3 +1,22 @@
+# TerminusDB Server v10.0.18 Beta Release Notes
+## Bug fixes
++ Fix QueryResource post and url
++ Fix operation id logging so nothing gets wrapped in quotes
++ Fix WOQL document updates with random key type
++ Type definitions with type families are now properly checked to ensure their contained type exists
++ More endpoints now properly report errors when the database does not exist
++ Unit type handling is now more robust
+
+## Enhancement
++ upgrade SWI-prolog to 8.4.2 in the docker container
++ Info endpoint reports the hash of the commit terminusdb was built with
++ On startup, TerminusDB now reports its version number
++ Common data layers are now pinned in memory
+
+## Other
++ Added benchmark tests
++ Added CLI tests
+
 # TerminusDB Server v10.0.17 Beta Release Notes
 ## Bug fixes
 + Fix valuehash generation for multidimensional arrays
