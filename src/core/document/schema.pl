@@ -609,20 +609,13 @@ refute_property(Validation_Object,Class,Witness) :-
     ).
 
 refute_class_or_base_type(Validation_Object,Class,Witness) :-
-    refute_base_type(Class,_Witness1),
+    \+ is_base_type(Class),
+    \+ is_unit(Class),
     refute_class(Validation_Object,Class,_Witness2),
     Witness = witness{
                  '@type': not_a_class_or_base_type,
                   class: Class
               }.
-
-refute_base_type(Type,_Witness) :-
-    is_base_type(Type),
-    !,
-    fail.
-refute_base_type(Type,Witness) :-
-    Witness = witness{ '@type': not_a_base_type,
-                       type: Type }.
 
 is_array(Validation_Object,Type) :-
     database_schema(Validation_Object,Schema),
