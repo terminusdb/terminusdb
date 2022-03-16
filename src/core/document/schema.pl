@@ -74,9 +74,17 @@ is_enum(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_enum(Schema, Class).
 
+is_choice(Validation_Object, Class) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_choice(Schema, Class).
+
 :- table is_schema_enum/2 as private.
 is_schema_enum(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Enum').
+
+:- table is_schema_choice/2 as private.
+is_schema_choice(Schema, Class) :-
+    xrdf(Schema, Class, rdf:type, sys:'Choice').
 
 is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
@@ -369,6 +377,7 @@ refute_schema(Validation_Object,Witness) :-
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
     ;   refute_class_meta(Validation_Object,Class,Witness)
+    ;   refute_class_oneof(Validation_Object,Class,Witness)
     ;   refute_diamond_property(Validation_Object,Prefixes,Class,Witness)).
 
 /* O(n^3)
@@ -598,9 +607,23 @@ refute_class_meta(Validation_Object,Class,Witness) :-
                        class: Class,
                        value: Result }.
 
+refute_class_oneof(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:oneOf, Choice),
+    (   is_schema_choice(Schema, Choice)
+    ->  refute_property_(Validation_Object, Choice, Witness)
+    ;   Witness = witness{ '@type': bad_choice_type,
+                           class: Class,
+                           choice: Choice }
+    ).
+
 refute_property(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, rdf:type, sys:'Class'),
+    refute_property_(Validation_Object, Class, Witness).
+
+refute_property_(Validation_Object, Class, Witness) :-
+    database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, P, Range),
     \+ is_built_in(P),
     (   is_type_family(Validation_Object, Range)
@@ -609,20 +632,13 @@ refute_property(Validation_Object,Class,Witness) :-
     ).
 
 refute_class_or_base_type(Validation_Object,Class,Witness) :-
-    refute_base_type(Class,_Witness1),
+    \+ is_base_type(Class),
+    \+ is_unit(Class),
     refute_class(Validation_Object,Class,_Witness2),
     Witness = witness{
                  '@type': not_a_class_or_base_type,
                   class: Class
               }.
-
-refute_base_type(Type,_Witness) :-
-    is_base_type(Type),
-    !,
-    fail.
-refute_base_type(Type,Witness) :-
-    Witness = witness{ '@type': not_a_base_type,
-                       type: Type }.
 
 is_array(Validation_Object,Type) :-
     database_schema(Validation_Object,Schema),

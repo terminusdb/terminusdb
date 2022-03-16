@@ -1516,16 +1516,6 @@ api_document_error_jsonld(get_documents,error(query_error(not_a_dict(Query)),_),
              'api:error' : _{ '@type' : 'api:QueryNotADict'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(wrong_array_dimensions(Array,Dimensions,Document),_), JSON) :-
-    format(string(Msg), "Document insertion failed as array ~q had wrong dimension ~q", [Array,Dimensions]),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:DocumentArrayWrongDimensions',
-                              'api:array' : Array,
-                              'api:dimensions' : Dimensions,
-                              'api:document': Document},
-             'api:message' : Msg
-            }.
 api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
     format(string(Msg), "Document insertion failed unexpectedly", []),
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
@@ -1697,6 +1687,27 @@ api_document_error_jsonld(Type, error(capture_already_bound(Capture_Id, Document
              'api:error' : _{ '@type' : 'api:CaptureIdAlreadyBound',
                               'api:capture': Capture_Id,
                               'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(wrong_array_dimensions(Array,Dimensions,Document),_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document insertion failed as array ~q had wrong dimension ~q", [Array,Dimensions]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:DocumentArrayWrongDimensions',
+                              'api:array' : Array,
+                              'api:dimensions' : Dimensions,
+                              'api:document': Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(not_a_unit_type(Value, Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unit value given is not a unit type: ~q", [Value]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NotAUnitType',
+                              'api:value' : Value,
+                              'api:document': Document},
              'api:message' : Msg
             }.
 
