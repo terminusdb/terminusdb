@@ -3311,7 +3311,7 @@ match_http_info(user_agent(User_Agent), _Method, _Protocol, _Host, _Port, _Url_S
 match_http_info(content_length(Size), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, Size_String, _Operation_Id) :-
     term_string(Size, Size_String).
 match_http_info(x_operation_id(Operation_Id), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, Operation_Id_String) :-
-    term_string(Operation_Id, Operation_Id_String).
+    atom_string(Operation_Id, Operation_Id_String).
 match_http_info(_, _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
 
 extract_http_info_([], _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).

@@ -62,6 +62,17 @@ describe('document', function () {
       }
     })
 
+    it('fails replace for document not found', async function () {
+      const instance = { '@id': util.randomString() }
+      const r = await document
+        .replace(agent, docPath, { instance })
+        .then(document.verifyReplaceNotFound)
+      console.error(r.body)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
+      expect(r.body['api:error']['api:document_id']).to.equal('terminusdb:///data/' + instance['@id'])
+      expect(r.body['api:error']['api:document']).to.deep.equal(instance)
+    })
+
     describe('fails on bad schema @id (#647)', function () {
       const identifiers = [
         '',
@@ -415,7 +426,7 @@ describe('document', function () {
         .then(document.verifyInsertSuccess)
       await document
         .replace(agent, docPath, { instance: doc1 })
-        .then(document.verifyInsertSuccess)
+        .then(document.verifyReplaceSuccess)
       const r = await document
         .get(agent, docPath, { body: { id: doc2['@id'] } })
         .then(document.verifyGetSuccess)
@@ -448,7 +459,7 @@ describe('document', function () {
           ],
           create: true,
         })
-        .then(document.verifyInsertSuccess)
+        .then(document.verifyReplaceSuccess)
       const r = await document
         .get(agent, docPath, { query: { type: type1 } })
         .then(document.verifyGetSuccess)
@@ -537,29 +548,6 @@ describe('document', function () {
       await document
         .insert(agent, docPath, { instance: instance })
         .then(document.verifyInsertSuccess)
-    })
-
-    it('fails when adding non-optional field to schema (#780)', async function () {
-      // Insert an initial schema.
-      const schema = { '@id': util.randomString(), '@type': 'Class' }
-      await document
-        .insert(agent, docPath, { schema: schema })
-        .then(document.verifyInsertSuccess)
-      // Insert an initial instance.
-      const instance = { '@type': schema['@id'] }
-      await document
-        .insert(agent, docPath, { instance: instance })
-        .then(document.verifyInsertSuccess)
-      // Update the schema with a new field that is not Optional.
-      schema.name = 'xsd:string'
-      const r = await document
-        .replace(agent, docPath, { schema: schema })
-        .then(document.verifyReplaceFailure)
-      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-      expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('instance_not_cardinality_one')
-      expect(r.body['api:error']['api:witnesses'][0].class).to.equal('http://www.w3.org/2001/XMLSchema#string')
-      expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#name')
     })
 
     it('accepts & returns subdocument schema with @documentation (#670)', async function () {

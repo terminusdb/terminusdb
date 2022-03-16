@@ -30,6 +30,10 @@ function isObject (val) {
   return val instanceof Object
 }
 
+function isNonEmptyObject (val) {
+  return isUndefinedOrNull(val) || Object.keys(val).length === 0
+}
+
 function isUndefinedOrNull (val) {
   return val === undefined || val === null
 }
@@ -46,15 +50,26 @@ function typeString (val) {
   }
 }
 
+function firstCapture (val, re) {
+  const result = re.exec(val)
+  if (result && result[1]) {
+    return result[1]
+  } else {
+    throw new Error(`Failure in firstCapture('${val}', ${re})`)
+  }
+}
+
 module.exports = {
   deepClone,
+  firstCapture,
   isBoolean,
   isDefined,
   isInteger,
+  isNonEmptyObject,
   isNonNegativeInteger,
-  isString,
   isObject,
-  randomString,
+  isString,
   isUndefinedOrNull,
+  randomString,
   typeString,
 }
