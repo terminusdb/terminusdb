@@ -34,6 +34,7 @@
 
 :- use_module(library(semweb/turtle)).
 :- use_module(library(lists)).
+:- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(plunit)).
@@ -428,7 +429,7 @@ commit_validation_objects_([Object|Objects], [Object|Committed]) :-
     commit_validation_objects_(Sorted_Objects, Committed).
 
 commit_validation_objects(Unsorted_Objects, Committed) :-
-    % NOTE: We need to check to make sure we do not simlutaneously
+    % NOTE: We need to check to make sure we do not simultaneously
     % modify a parent and child of the same transaction object
     % - this could cause commit to fail when we attempt to make the
     % neccessary changes to the parent transaction object required
@@ -436,7 +437,39 @@ commit_validation_objects(Unsorted_Objects, Committed) :-
     % instance).
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_objects_(Sorted_Objects, Committed),
+    maplist({Committed}/[O]>>(
+                should_retain_layers_for_descriptor(O.descriptor)
+            ->  do_or_die(layers_for_validation(O, Committed, Layers),
+                          error(wtf1, _)),
+                do_or_die(retain_descriptor_layers(O.descriptor, Layers),
+                          error(wtf2, _))
+            ;   true
+            ),
+            Sorted_Objects),
     log_commits(Sorted_Objects).
+
+layers_for_validation(Validation, Committed, Layers) :-
+    _{
+        instance_objects: [Instance_RWO],
+        schema_objects: [Schema_RWO]
+    } :< Validation,
+    Instance_Layer = (Instance_RWO.read),
+    Schema_Layer = (Schema_RWO.read),
+
+    Our_Layers_Var = [Instance_Layer, Schema_Layer],
+    exclude(var, Our_Layers_Var, Our_Layers),
+
+    (   get_dict(parent, Validation, Parent)
+    ->  append(Our_Layers, Remainder, Layers),
+        Descriptor = (Parent.descriptor),
+        include({Descriptor}/[P]>>(
+                    get_dict(descriptor, P, Parent_Descriptor),
+                    Descriptor == Parent_Descriptor
+                ),
+                Committed,
+                [Parent_Validation]),
+        layers_for_validation(Parent_Validation, Committed, Remainder)
+    ;   Layers = Our_Layers).
 
 log_commits(_) :-
     % Skip logging work if debug log is not enabled
