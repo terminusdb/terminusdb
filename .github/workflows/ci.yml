@@ -17,9 +17,10 @@ on:
   workflow_dispatch:
 
 env:
+  TERMINUSDB_DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
+  TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
   TERMINUSDB_STORE_PROLOG_VERSION: v0.19.7
   TUS_VERSION: v0.0.5
-  DOCKER_IMAGE_NAME: terminusdb/terminusdb-server
   SWIPL_LINTER_VERSION: v0.7
   NODE_VERSION: '16'
 
@@ -56,9 +57,9 @@ jobs:
         run: |
           docker build . \
             --file Dockerfile \
-            --tag $DOCKER_IMAGE_NAME:local \
+            --tag $TERMINUSDB_DOCKER_IMAGE_TAG \
             --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
-          docker save $DOCKER_IMAGE_NAME:local | gzip > terminusdb-server-docker-image.tar.gz
+          docker save $TERMINUSDB_DOCKER_IMAGE_TAG | gzip > terminusdb-server-docker-image.tar.gz
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v2
@@ -84,7 +85,7 @@ jobs:
       - name: Run linter
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run --name terminusdb -v $(pwd)/pl_lint.pl:/app/pl_lint.pl $DOCKER_IMAGE_NAME:local \
+          docker run --name terminusdb -v $(pwd)/pl_lint.pl:/app/pl_lint.pl $TERMINUSDB_DOCKER_IMAGE_TAG \
             swipl -f src/load_paths.pl /app/pl_lint.pl
 
   # Unit tests
@@ -101,7 +102,7 @@ jobs:
       - name: Run unit tests
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run --name terminusdb $DOCKER_IMAGE_NAME:local /app/terminusdb/terminusdb test
+          docker run --name terminusdb $TERMINUSDB_DOCKER_IMAGE_TAG /app/terminusdb/terminusdb test
 
   python_integration_tests:
     runs-on: ubuntu-latest
@@ -119,7 +120,7 @@ jobs:
           # Tag a dev image because the docker-compose.yml uses
           # a dev tag. We want it to fetch it locally instead of
           # remotely from Docker Hub
-          docker image tag $DOCKER_IMAGE_NAME:local $DOCKER_IMAGE_NAME:dev
+          docker image tag $TERMINUSDB_DOCKER_IMAGE_TAG $TERMINUSDB_DOCKER_IMAGE_NAME:dev
 
       - uses: actions/checkout@v2
         with:
@@ -152,7 +153,7 @@ jobs:
           docker run \
             --detach \
             --net=host \
-            $DOCKER_IMAGE_NAME:local
+            $TERMINUSDB_DOCKER_IMAGE_TAG
 
       - uses: actions/setup-node@v2
         with:
@@ -188,7 +189,7 @@ jobs:
             --net=host \
             -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
             -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
-            $DOCKER_IMAGE_NAME:local
+            $TERMINUSDB_DOCKER_IMAGE_TAG
 
       - uses: actions/setup-node@v2
         with:
@@ -223,7 +224,7 @@ jobs:
             --net=host \
             -e TERMINUSDB_JWT_ENABLED=true \
             -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
-            $DOCKER_IMAGE_NAME:local
+            $TERMINUSDB_DOCKER_IMAGE_TAG
 
       - uses: actions/setup-node@v2
         with:
@@ -269,7 +270,7 @@ jobs:
           docker run \
             --detach \
             --net=host \
-            $DOCKER_IMAGE_NAME:local
+            $TERMINUSDB_DOCKER_IMAGE_TAG
 
       - uses: actions/setup-node@v2
         with:
@@ -322,7 +323,7 @@ jobs:
         run: |
           echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
 
-          IMAGE_ID=$DOCKER_IMAGE_NAME
+          IMAGE_ID=$TERMINUSDB_DOCKER_IMAGE_NAME
           # Change all uppercase to lowercase
           IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
           # Strip git ref prefix from version
@@ -334,14 +335,14 @@ jobs:
           echo VERSION=$VERSION
 
           docker load < terminusdb-server-docker-image.tar.gz
-          docker tag $DOCKER_IMAGE_NAME:local $IMAGE_ID:$VERSION
+          docker tag $TERMINUSDB_DOCKER_IMAGE_TAG $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
 
           # Use dev-COMMITHASH tag for each development
           # version. We clean up after a certain amount of time.
           if [ "$VERSION" == "dev" ]; then
              DEV_COMMIT_TAG=${IMAGE_ID}:${VERSION}-${GITHUB_SHA}
-             docker tag $DOCKER_IMAGE_NAME:local $DEV_COMMIT_TAG
+             docker tag $TERMINUSDB_DOCKER_IMAGE_TAG $DEV_COMMIT_TAG
              docker push $DEV_COMMIT_TAG
           fi
 
