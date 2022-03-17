@@ -1,4 +1,3 @@
-const assert = require('assert')
 const superagent = require('superagent')
 
 const { Params } = require('./params.js')
@@ -28,28 +27,26 @@ class Agent {
 
   // Add authentication
   auth () {
-    // The user name is used for some forms of authentication as well as
-    // constructing paths. Therefore, we require it here.
-    this.userName = process.env.TERMINUSDB_USER
-    assert(this.userName, 'Missing environment variable: TERMINUSDB_USER')
+    this.user = process.env.TERMINUSDB_USER || 'admin'
+    this.password = process.env.TERMINUSDB_PASSWORD || 'root'
 
     const token = process.env.TERMINUSDB_ACCESS_TOKEN
     const insecureUserHeader = process.env.TERMINUSDB_INSECURE_USER_HEADER
+
     if (token) {
       this.agent.use((request) => {
         request.auth(token, { type: 'bearer' })
       })
     } else if (insecureUserHeader) {
       this.agent.use((request) => {
-        request.set(insecureUserHeader, this.userName)
+        request.set(insecureUserHeader, this.user)
       })
     } else {
-      const pass = process.env.TERMINUSDB_PASS
-      assert(pass, 'Missing environment variable: TERMINUSDB_ACCESS_TOKEN, TERMINUSDB_INSECURE_USER_HEADER, or TERMINUSDB_PASS')
       this.agent.use((request) => {
-        request.auth(this.userName, pass)
+        request.auth(this.user, this.password)
       })
     }
+
     return this
   }
 
@@ -57,7 +54,8 @@ class Agent {
     return {
       orgName: this.orgName,
       dbName: this.dbName,
-      userName: this.userName,
+      user: this.user,
+      password: this.password,
     }
   }
 
