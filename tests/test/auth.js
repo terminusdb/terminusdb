@@ -38,7 +38,7 @@ describe('auth', function () {
   describe('basic: unknown pass', function () {
     before(function () {
       const pass = util.randomString()
-      const userPass = Buffer.from(`${agent.userName}:${pass}`).toString('base64')
+      const userPass = Buffer.from(`${agent.user}:${pass}`).toString('base64')
       agent = new Agent()
       agent.set('Authorization', `Basic ${userPass}`)
     })

@@ -71,15 +71,13 @@ describe('organization', function () {
   })
 
   it('fails adding unknown user', async function () {
-    const userName = util.randomString()
-    const r = await organization
-      .add(agent, {
-        organization_name: util.randomString(),
-        user_name: userName,
-      })
-      .then(organization.verifyAddFailure)
+    const args = {
+      organization_name: util.randomString(),
+      user_name: util.randomString(),
+    }
+    const r = await organization.add(agent, args).then(organization.verifyAddFailure)
     expect(r.body['api:error']['@type']).to.equal('api:UnknownUser')
-    expect(r.body['api:error']['api:user_name']).to.equal(userName)
+    expect(r.body['api:error']['api:user_name']).to.equal(args.user_name)
   })
 
   it('fails deleting unknown organization', async function () {
