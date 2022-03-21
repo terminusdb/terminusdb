@@ -2007,12 +2007,15 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
-documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefixes, Result) :-
-    Template = json{ '@comment' : Comment},
+documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements), Prefixes, Result) :-
+    (   Comment_Option = some(Comment)
+    ->  Template = json{ '@comment' : Comment}
+    ;   Template = json{}
+    ),
     (   Elements = json{}
     ->  Result = Template
     ;   dict_pairs(Elements, _, Pairs),
-        maplist({Type,Prefixes}/[Enum-Comment,Small-Comment]>>(
+        maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
                     enum_value(Type,Val,Enum),
                     compress_schema_uri(Val, Prefixes, Small)
                 ),
@@ -2021,12 +2024,15 @@ documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefix
         dict_pairs(JSONs,json,JSON_Pairs),
         Result = (Template.put('@values', JSONs))
     ).
-documentation_descriptor_json(property_documentation(Comment, Elements), Prefixes, Result) :-
-    Template = json{ '@comment' : Comment},
+documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes, Result) :-
+    (   Comment_Option = some(Comment)
+    ->  Template = json{ '@comment' : Comment}
+    ;   Template = json{}
+    ),
     (   Elements = json{}
     ->  Result = Template
     ;   dict_pairs(Elements, _, Pairs),
-        maplist({Prefixes}/[Prop-Comment,Small-Comment]>>(
+        maplist({Prefixes}/[Prop-X,Small-X]>>(
                     compress_schema_uri(Prop, Prefixes, Small)
                 ),
                 Pairs,
@@ -7245,31 +7251,6 @@ test(incompatible_key_change,
     with_transaction(Context3,
                      replace_schema_document(Context3, New_Schema),
                      _).
-
-test(comment_free_documentation_object,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 create_db_with_empty_schema("admin", "foo"),
-                 resolve_absolute_string_descriptor("admin/foo", Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         )
-     ]) :-
-
-    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
-    Schema = _{ '@type' : "Class",
-                '@documentation' :
-                _{ '@properties' : _{ name : "Your name" } },
-                '@id' : "Thing",
-                'name' : "xsd:string"
-              },
-
-    with_transaction(Context1,
-                     insert_schema_document(Context1, Schema),
-                     _),
-    true.
 
 test(compatible_key_change_same_value,
      [
