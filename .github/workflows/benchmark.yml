@@ -1,59 +1,40 @@
 name: Benchmark
 
 on:
-  push:
-    # We only use the `main` branch, because the benchmark graphs are linear.
-    # The results are confusing when commits from different branches are
-    # interleaved.
-    branches:
-      - main
-    # Don't run if only the docs are changed.
-    paths-ignore:
-      - 'docs/**'
-      - LICENSE
-      - README.md
-  workflow_dispatch:
+  workflow_call:
+
+env:
+  NODE_VERSION: '16'
 
 jobs:
+
   benchmark:
-    concurrency: benchmark
+    name: Run
     runs-on: ubuntu-latest
-    if: github.repository_owner == 'terminusdb'
-    env:
-      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2.3.1
-
-      - name: Check out terminusdb-http-perf
-        uses: actions/checkout@v2
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
         with:
-          repository: terminusdb-labs/terminusdb-http-perf
-          path: terminusdb-http-perf
+          name: terminusdb-server-docker-image
 
-      - name: Add SSH Key
+      - name: Run server
         run: |
-          mkdir -p ${HOME}/.ssh
-          ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
-          chmod 600 ${HOME}/.ssh/github_actions
-          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
-          ssh-add ${HOME}/.ssh/github_actions
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            --detach \
+            --net=host \
+            terminusdb/terminusdb-server:local
 
-
-      - name: Run benchmark
-        run: |
-          ssh "${{ secrets.SSH_USER }}"@"${{ secrets.SSH_HOST }}" "benchmark $GITHUB_SHA" > data-points.json
-
-      - name: Transform results
-        run: ./terminusdb-http-perf/metrics.sh data-points.json > results.json
-
-      - name: Store results
-        uses: terminusdb-labs/benchmark-tracker@beta
+      - uses: actions/setup-node@v2
         with:
-          tool: generic
-          output-file-path: results.json
-          benchmark-data-dir-path: benchmark
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/checkout@v2
+
+      - name: Run benchmarks
+        working-directory: tests
+        run: |
+          npm ci
+          npm run bench
+
