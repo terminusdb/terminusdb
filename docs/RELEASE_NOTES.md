@@ -1,3 +1,8 @@
+# TerminusDB Server v10.0.19 Beta Release Notes
+## Other
++ Use default user and password for tests
++ Use environment variable for CLI tests
+
 # TerminusDB Server v10.0.18 Beta Release Notes
 ## Bug fixes
 + Fix QueryResource post and url
