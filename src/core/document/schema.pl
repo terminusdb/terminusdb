@@ -787,7 +787,8 @@ refute_type(Validation_Object,Type,Witness) :-
     ->  refute_class_or_base_type(Validation_Object, Class, Witness)
     ;   Witness = json{ '@type' : cardinality_has_no_class,
                         type : Type }
-    ;   \+ xrdf(Schema, Type, sys:cardinality, _)
+    ;   \+ xrdf(Schema, Type, sys:min_cardinality, _),
+        \+ xrdf(Schema, Type, sys:max_cardinality, _)
     ->  Witness = json{ '@type' : cardinality_has_no_bound,
                         type : Type }
     ).
@@ -835,11 +836,18 @@ schema_type_descriptor(Schema, Type, array(Class,Dimensions)) :-
     (   xrdf(Schema, Type, sys:dimensions, Dimensions^^xsd:nonNegativeInteger)
     ->  true
     ;   Dimensions = 1).
-schema_type_descriptor(Schema, Type, card(Class,N)) :-
+schema_type_descriptor(Schema, Type, cardinality(Class,N,M)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
-    xrdf(Schema, Type, sys:cardinality, N^^xsd:nonNegativeInteger).
+    (   xrdf(Schema, Type, sys:min_cardinality, N^^xsd:nonNegativeInteger)
+    ->  true
+    ;   N = 0
+    ),
+    (   xrdf(Schema, Type, sys:max_cardinality, M^^xsd:nonNegativeInteger)
+    ->  true
+    ;   M = inf
+    ).
 schema_type_descriptor(Schema, Type, optional(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
