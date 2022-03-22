@@ -67,7 +67,7 @@ describe('document', function () {
       const r = await document
         .replace(agent, docPath, { instance })
         .then(document.verifyReplaceNotFound)
-      console.error(r.body)
+
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
       expect(r.body['api:error']['api:document_id']).to.equal('terminusdb:///data/' + instance['@id'])
       expect(r.body['api:error']['api:document']).to.deep.equal(instance)
@@ -614,7 +614,7 @@ describe('document', function () {
                 a: {
                   '@type': 'Cardinality',
                   '@class': 'xsd:integer',
-                  '@max_cardinality': 1,
+                  '@max_cardinality': 2,
                 },
               },
               {
@@ -632,7 +632,6 @@ describe('document', function () {
       })
 
       it('responds with success for card', async function () {
-        console.log(card)
         await document
           .insert(agent, docPath, {
             instance: { '@type': card, a: [42] },
@@ -647,6 +646,75 @@ describe('document', function () {
           })
           .then(document.verifyInsertFailure)
       })
+
+      it('responds with success for min', async function () {
+
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': min, a: [42,43] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for min', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': min },
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with success for max', async function () {
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': max, a: [42,43] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with success for nothing in max', async function () {
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': max},
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+
+      it('responds with failure for max', async function () {
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': max, a: [42,23,12]},
+              message: "message"
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with success for minmax', async function () {
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': minmax, a: [42,43] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for under minmax', async function () {
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': minmax},
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with failure for over minmax', async function () {
+        await document
+          .insert(agent, docPath, {
+              instance: { '@type': minmax, a: [42,23,12]},
+          })
+          console.log(document)
+//          .then(document.verifyInsertFailure)
+      })
+
     })
   })
 })
