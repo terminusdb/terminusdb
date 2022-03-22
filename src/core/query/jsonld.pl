@@ -193,8 +193,9 @@ context_prefix_expand(K,Context,Key) :-
     ).
 
 % For document templating
-prefix_expand(K,_Context,K) :-
+prefix_expand(K,_Context,K2) :-
     var(K),
+    K = K2,
     !.
 prefix_expand('',_,_) :-
     throw(error(empty_key, _)).
