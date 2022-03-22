@@ -571,5 +571,82 @@ describe('document', function () {
         .then(document.verifyGetSuccess)
       expect(r.body).to.deep.equal(schema)
     })
+
+    describe('tests cardinality in schema', function () {
+      let card
+      let min
+      let max
+      let minmax
+
+      before(async function () {
+        card = util.randomString()
+        min = util.randomString()
+        max = util.randomString()
+        minmax = util.randomString()
+
+        const dbDefaults = endpoint.db(agent.defaults())
+        dbPath = dbDefaults.path
+        docPath = endpoint.document(dbDefaults).path
+        await document
+          .insert(agent, docPath, {
+            schema: [
+              {
+                '@type': 'Class',
+                '@id': card,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@cardinality': 1,
+                },
+              },
+              {
+                '@type': 'Class',
+                '@id': min,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@min_cardinality': 1,
+                },
+              },
+              {
+                '@type': 'Class',
+                '@id': max,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@max_cardinality': 1,
+                },
+              },
+              {
+                '@type': 'Class',
+                '@id': minmax,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@min_cardinality': 1,
+                  '@max_cardinality': 2,
+                },
+              },
+            ],
+          })
+      })
+
+      it('responds with success for card', async function () {
+        console.log(card)
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': card, a: [42] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for card', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': card },
+          })
+          .then(document.verifyInsertFailure)
+      })
+    })
   })
 })
