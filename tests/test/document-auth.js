@@ -648,10 +648,9 @@ describe('document', function () {
       })
 
       it('responds with success for min', async function () {
-
         await document
           .insert(agent, docPath, {
-              instance: { '@type': min, a: [42,43] },
+            instance: { '@type': min, a: [42, 43] },
           })
           .then(document.verifyInsertSuccess)
       })
@@ -667,7 +666,7 @@ describe('document', function () {
       it('responds with success for max', async function () {
         await document
           .insert(agent, docPath, {
-              instance: { '@type': max, a: [42,43] },
+            instance: { '@type': max, a: [42, 43] },
           })
           .then(document.verifyInsertSuccess)
       })
@@ -675,17 +674,16 @@ describe('document', function () {
       it('responds with success for nothing in max', async function () {
         await document
           .insert(agent, docPath, {
-              instance: { '@type': max},
+            instance: { '@type': max },
           })
           .then(document.verifyInsertSuccess)
       })
 
-
       it('responds with failure for max', async function () {
         await document
           .insert(agent, docPath, {
-              instance: { '@type': max, a: [42,23,12]},
-              message: "message"
+            instance: { '@type': max, a: [42, 23, 12] },
+            message: 'message',
           })
           .then(document.verifyInsertFailure)
       })
@@ -693,7 +691,7 @@ describe('document', function () {
       it('responds with success for minmax', async function () {
         await document
           .insert(agent, docPath, {
-              instance: { '@type': minmax, a: [42,43] },
+            instance: { '@type': minmax, a: [42, 43] },
           })
           .then(document.verifyInsertSuccess)
       })
@@ -701,7 +699,7 @@ describe('document', function () {
       it('responds with failure for under minmax', async function () {
         await document
           .insert(agent, docPath, {
-              instance: { '@type': minmax},
+            instance: { '@type': minmax },
           })
           .then(document.verifyInsertFailure)
       })
@@ -709,12 +707,10 @@ describe('document', function () {
       it('responds with failure for over minmax', async function () {
         await document
           .insert(agent, docPath, {
-              instance: { '@type': minmax, a: [42,23,12]},
+            instance: { '@type': minmax, a: [42, 23, 12] },
           })
-          console.log(document)
-//          .then(document.verifyInsertFailure)
+          .then(document.verifyInsertFailure)
       })
-
     })
   })
 })
