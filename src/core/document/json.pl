@@ -413,7 +413,7 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     prefix_expand(Generated_Id, Context, Generated_Id_Ex),
     do_or_die(
         Id_Ex = Generated_Id_Ex,
-        error(submitted_id_does_not_match_generated_id(Id, Generated_Id), _)
+        error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
@@ -4729,7 +4729,8 @@ test(binary_tree_context,
     database_prefixes(DB,Prefixes),
     type_context(DB,'BinaryTree', Prefixes, Binary_Context),
 
-    Binary_Context = json{ 'http://s/leaf':json{'@id':'http://s/leaf'},
+    Binary_Context = json{ 'http://s/leaf':json{'@id':'http://s/leaf',
+                                                '@type':'http://terminusdb.com/schema/sys#Unit'},
                            'http://s/node':json{'@id':'http://s/node','@type':"@id"}
                          },
     type_context(DB,'Node', Prefixes, Node_Context),
@@ -6213,7 +6214,10 @@ test(status_update2,
      ]) :-
 
 
-     Schema_Atom = '[{
+     Schema_Atom = '[
+      { "@type" :"Class",
+        "@id" : "APIKey" },
+      {
         "@id": "User",
         "@inherits": "Entity",
         "@key": {
