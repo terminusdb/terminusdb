@@ -10332,7 +10332,7 @@ test(fail_card,
                           cardinality:2,
                           class:'http://www.w3.org/2001/XMLSchema#integer',
                           instance:_,
-                          object_list:["23"^^'http://www.w3.org/2001/XMLSchema#string',"42"^^'http://www.w3.org/2001/XMLSchema#string'],
+                          object_list:[23,42],
                           predicate:'terminusdb:///schema#a'}
               ]),
           _)
@@ -10426,7 +10426,7 @@ test(fail_card_max_over,
                                         cardinality:2,
                                         class:'http://www.w3.org/2001/XMLSchema#integer',
                                         instance:_,
-                                        object_list:["42"^^'http://www.w3.org/2001/XMLSchema#string',"43"^^'http://www.w3.org/2001/XMLSchema#string'],
+                                        object_list:[42,43],
                                         predicate:'terminusdb:///schema#a'}]),
           _)
      ]) :-

@@ -265,6 +265,7 @@ refute_cardinality_(cardinality(C,N,M),Validation_Object,S,P,Witness) :-
 internal_simple_json(X^^_, X) :-
     (   string(X)
     ;   atom(X)
+    ;   number(X)
     ),
     !.
 internal_simple_json(X, X) :-
