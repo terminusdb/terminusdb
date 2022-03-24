@@ -1,0 +1,182 @@
+name: Check
+
+on:
+  workflow_call:
+
+env:
+  NODE_VERSION: '16'
+
+jobs:
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run tests
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            terminusdb/terminusdb-server:local \
+            make test
+
+  python_client:
+    name: Python client tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          # Tag a dev image because the docker-compose.yml uses
+          # a dev tag. We want it to fetch it locally instead of
+          # remotely from Docker Hub
+          docker image tag \
+            terminusdb/terminusdb-server:local \
+            terminusdb/terminusdb-server:dev
+
+      - uses: actions/checkout@v2
+        with:
+          repository: terminusdb/terminusdb-client-python
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install shed pytest tox
+          tox -e deps
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Test with pytest
+        run: tox -e test
+
+  integration_tests_basic:
+    name: Integration tests (basic)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run server
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            --detach \
+            --net=host \
+            terminusdb/terminusdb-server:local
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
+      - uses: actions/checkout@v2
+
+      - name: Run tests
+        working-directory: tests
+        env:
+          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+        run: |
+          npm install-ci-test
+          npm run check
+
+  integration_tests_header:
+    name: Integration tests (header)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run server
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            --detach \
+            --net=host \
+            -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
+            -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
+            terminusdb/terminusdb-server:local
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/checkout@v2
+
+      - name: Run tests
+        working-directory: tests
+        env:
+          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_INSECURE_USER_HEADER: X-Forwarded-User
+        run: npm install-ci-test
+
+  integration_tests_jwt:
+    name: Integration tests (JWT)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run server
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            --detach \
+            --net=host \
+            -e TERMINUSDB_JWT_ENABLED=true \
+            -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
+            terminusdb/terminusdb-server:local
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/checkout@v2
+
+      - name: Run tests
+        working-directory: tests
+        env:
+          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
+        run: npm install-ci-test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    env:
+      SWIPL_LINTER_VERSION: v0.7
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
+      - name: Download lint
+        run: curl -L "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$SWIPL_LINTER_VERSION/pl_lint.pl" > pl_lint.pl
+
+      - name: Run lint
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            -v $(pwd)/pl_lint.pl:/app/pl_lint.pl \
+            terminusdb/terminusdb-server:local \
+            swipl -f src/load_paths.pl /app/pl_lint.pl

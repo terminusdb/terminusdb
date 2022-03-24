@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  workflow_call:
+
+jobs:
+
+  build:
+    name: Docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build Docker image
+        run: |
+          docker build . \
+            --file Dockerfile \
+            --tag terminusdb/terminusdb-server:local \
+            --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
+          docker save terminusdb/terminusdb-server:local \
+            | gzip > terminusdb-server-docker-image.tar.gz
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v2
+        with:
+            name: terminusdb-server-docker-image
+            path: terminusdb-server-docker-image.tar.gz
