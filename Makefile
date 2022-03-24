@@ -55,6 +55,11 @@ enterprise-module: $(RUST_TARGET)
 debug: $(RUST_TARGET)
 	echo "main, halt." | $(SWIPL) -f src/bootstrap.pl
 
+# Run the unit tests in swipl.
+.PHONY: test
+test: $(RUST_TARGET)
+	$(SWIPL) -t 'run_tests, halt.' -f src/interactive.pl
+
 # Quick command for interactive
 .PHONY: i
 i: $(RUST_TARGET)
@@ -91,7 +96,7 @@ docs-clean:
 $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
-	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -f src/bootstrap.pl 2>&1 | \
+	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
