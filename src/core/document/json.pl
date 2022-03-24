@@ -2945,7 +2945,7 @@ test(write_json_stream_to_builder, [
 
 :- end_tests(json_stream).
 
-:- begin_tests(json).
+:- begin_tests(json,[concurrent(true)]).
 
 :- use_module(core(util/test_utils)).
 
@@ -6906,7 +6906,7 @@ test(enum_documentation,
 
 :- end_tests(json).
 
-:- begin_tests(schema_checker).
+:- begin_tests(schema_checker, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7628,7 +7628,7 @@ test(insert_extra_array_value,
 :- end_tests(schema_checker).
 
 
-:- begin_tests(woql_document).
+:- begin_tests(woql_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7800,7 +7800,7 @@ test(named_parametric_query, [
 
 :- end_tests(woql_document).
 
-:- begin_tests(arithmetic_document).
+:- begin_tests(arithmetic_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8150,7 +8150,7 @@ test(points_to_abstract, [
 
 :- end_tests(arithmetic_document).
 
-:- begin_tests(employee_documents).
+:- begin_tests(employee_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8370,7 +8370,7 @@ test(update_enum,[
 
 :- end_tests(employee_documents).
 
-:- begin_tests(polity_documents).
+:- begin_tests(polity_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8562,7 +8562,7 @@ test(insert_polity,
 
 :- end_tests(polity_documents).
 
-:- begin_tests(system_documents).
+:- begin_tests(system_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8603,7 +8603,7 @@ test(database_expansion,
 :- end_tests(system_documents).
 
 
-:- begin_tests(python_client_bugs).
+:- begin_tests(python_client_bugs, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8742,7 +8742,7 @@ test(key_exchange_problem,
 :- end_tests(python_client_bugs).
 
 
-:- begin_tests(javascript_client_bugs).
+:- begin_tests(javascript_client_bugs, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8940,7 +8940,7 @@ test(subdocument_update,
 
 :- end_tests(javascript_client_bugs).
 
-:- begin_tests(document_id_generation).
+:- begin_tests(document_id_generation, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9137,7 +9137,7 @@ test(normalizable_float,
 :- end_tests(document_id_generation).
 
 
-:- begin_tests(foreign_types).
+:- begin_tests(foreign_types, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9303,7 +9303,7 @@ test(foreign_type,
 
 :- end_tests(foreign_types).
 
-:- begin_tests(id_capture).
+:- begin_tests(id_capture, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9814,7 +9814,7 @@ test(double_capture,
 
 :- end_tests(id_capture).
 
-:- begin_tests(json_tables).
+:- begin_tests(json_tables, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 
 geojson_point_schema('
@@ -10000,7 +10000,7 @@ test(wrong_dim_error,
 
 :- end_tests(json_tables).
 
-:- begin_tests(json_unit_type).
+:- begin_tests(json_unit_type, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
