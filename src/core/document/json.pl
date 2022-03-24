@@ -2023,7 +2023,8 @@ documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements)
                 JSON_Pairs),
         dict_pairs(JSONs,json,JSON_Pairs),
         Result = (Template.put('@values', JSONs))
-    ).
+    ),
+    Result \= json{}.
 documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes, Result) :-
     (   Comment_Option = some(Comment)
     ->  Template = json{ '@comment' : Comment}
@@ -2039,7 +2040,8 @@ documentation_descriptor_json(property_documentation(Comment_Option, Elements), 
                 JSON_Pairs),
         dict_pairs(JSONs,json,JSON_Pairs),
         Result = (Template.put('@properties', JSONs))
-    ).
+    ),
+    Result \= json{}.
 
 oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON) :-
     dict_pairs(Map, _, Pairs),
