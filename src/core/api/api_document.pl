@@ -905,8 +905,7 @@ test(replace_existing_subdocument_as_document, [
 
     api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream_2, false, no_data_version, _New_Data_Version_2, _Ids_2),
 
-    get_document(Desc, Id, Inner_Document),
-    print_term(Inner_Document, []),nl.
+    get_document(Desc, Id, _Inner_Document).
 
 
 :- end_tests(subdocument_as_document).
