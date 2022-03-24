@@ -39,7 +39,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
-terminusdb_version('10.0.19').
+terminusdb_version('10.0.20').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.

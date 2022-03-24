@@ -241,8 +241,11 @@ refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
                            object_list: L
                          }
     ).
-refute_cardinality_(cardinality(C,N),Validation_Object,S,P,Witness) :-
-    \+ card_count(Validation_Object,S,P,N),
+refute_cardinality_(cardinality(C,N,M),Validation_Object,S,P,Witness) :-
+    card_count(Validation_Object,S,P,Count),
+    \+ (   N =< Count,
+           Count =< M
+       ),
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject, S),
     (   atom(P)
@@ -256,12 +259,13 @@ refute_cardinality_(cardinality(C,N),Validation_Object,S,P,Witness) :-
                        instance: Subject,
                        object_list: L,
                        predicate: Predicate,
-                       cardinality: N
+                       cardinality: Count
                      }.
 
 internal_simple_json(X^^_, X) :-
     (   string(X)
     ;   atom(X)
+    ;   number(X)
     ),
     !.
 internal_simple_json(X, X) :-

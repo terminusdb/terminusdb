@@ -413,7 +413,7 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     prefix_expand(Generated_Id, Context, Generated_Id_Ex),
     do_or_die(
         Id_Ex = Generated_Id_Ex,
-        error(submitted_id_does_not_match_generated_id(Id, Generated_Id), _)
+        error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
@@ -435,8 +435,8 @@ class_descriptor_image(array(C,D),json{ '@container' : "@array",
                                         '@type' : C }).
 class_descriptor_image(set(C),json{ '@container' : "@set",
                                     '@type' : C }).
-class_descriptor_image(cardinality(C,_), json{ '@container' : "@set",
-                                               '@type' : C }).
+class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
+                                                 '@type' : C }).
 
 get_context_documentation(DB, ID, Documentation) :-
     database_schema(DB, Schema),
@@ -802,7 +802,8 @@ context_value_expand(DB,Context,Value,Expansion,Captures_In,V,Dependencies,Captu
     ->  Value_List = Value
     ;   string(Value)
     ->  Value_List = [Value]
-    ;   get_dict('@value',Value,Value_List)
+    ;   is_dict(Value),
+        get_dict('@value',Value,Value_List)
     ->  true
     %   fallthrough case - we were expecting a container but we have
     %   single dictionary which is not a direct value. It must be a
@@ -948,11 +949,22 @@ is_type_family(Dict) :-
     maybe_expand_schema_type(Type_Constructor,Expanded),
     type_family_constructor(Expanded).
 
-type_family_parts(JSON,['Cardinality',Class,Cardinality]) :-
+type_family_parts(JSON,['Cardinality',Class,Min_Cardinality,Max_Cardinality]) :-
     get_dict('@type',JSON,"Cardinality"),
     !,
     get_dict('@class',JSON, Class),
-    get_dict('@cardinality',JSON, Cardinality).
+    (   get_dict('@cardinality',JSON, Cardinality)
+    ->  Min_Cardinality = Cardinality,
+        Max_Cardinality = Cardinality
+    ;   (   get_dict('@min_cardinality',JSON, Min_Cardinality)
+        ->  true
+        ;   Min_Cardinality = 0
+        ),
+        (   get_dict('@max_cardinality',JSON, Max_Cardinality)
+        ->  true
+        ;   Max_Cardinality = inf
+        )
+    ).
 type_family_parts(JSON,[Family,Class]) :-
     get_dict('@type',JSON, Family),
     get_dict('@class',JSON, Class).
@@ -1272,9 +1284,21 @@ json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
     prefix_expand_schema(V,Context,V_Ex).
 json_schema_predicate_value('@cardinality',V,_,_,P,json{'@type' : Type,
                                                         '@value' : V }) :-
+    global_prefix_expand(xsd:nonNegativeInteger,Type),
+    !,
+    (   global_prefix_expand(sys:max_cardinality, P)
+    ;   global_prefix_expand(sys:min_cardinality, P)
+    ).
+json_schema_predicate_value('@min_cardinality',V,_,_,P,json{'@type' : Type,
+                                                            '@value' : V }) :-
     !,
     global_prefix_expand(xsd:nonNegativeInteger,Type),
-    global_prefix_expand(sys:cardinality, P).
+    global_prefix_expand(sys:min_cardinality, P).
+json_schema_predicate_value('@max_cardinality',V,_,_,P,json{'@type' : Type,
+                                                            '@value' : V }) :-
+    !,
+    global_prefix_expand(xsd:nonNegativeInteger,Type),
+    global_prefix_expand(sys:max_cardinality, P).
 json_schema_predicate_value('@dimensions',V,_,_,P,json{'@type' : Type,
                                                        '@value' : V }) :-
     !,
@@ -2945,7 +2969,7 @@ test(write_json_stream_to_builder, [
 
 :- end_tests(json_stream).
 
-:- begin_tests(json).
+:- begin_tests(json,[concurrent(true)]).
 
 :- use_module(core(util/test_utils)).
 
@@ -3997,7 +4021,7 @@ test(type_family_id, []) :-
                         '@class':'Person'},
                    _{},
                    [property(friend_of), type('Person')],
-                   'Person/friend_of/Cardinality+Person+3').
+                   'Person/friend_of/Cardinality+Person+3+3').
 
 test(schema_elaborate, []) :-
 
@@ -4028,7 +4052,10 @@ test(schema_elaborate, []) :-
          'https://s#friend_of':
          json{'@id':'https://s#Person/friend_of/Cardinality+Person',
               '@type':'http://terminusdb.com/schema/sys#Cardinality',
-              'http://terminusdb.com/schema/sys#cardinality':
+              'http://terminusdb.com/schema/sys#max_cardinality':
+              json{'@type':'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+                   '@value':3},
+              'http://terminusdb.com/schema/sys#min_cardinality':
               json{'@type':'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
                    '@value':3},
               'http://terminusdb.com/schema/sys#class':
@@ -4062,11 +4089,14 @@ test(schema_elaborate, []) :-
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://terminusdb.com/schema/sys#Optional'),
         t('https://s#Person/friend_of/Cardinality+Person',
-          'http://terminusdb.com/schema/sys#cardinality',
-          3^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
-        t('https://s#Person/friend_of/Cardinality+Person',
           'http://terminusdb.com/schema/sys#class',
           'https://s#Person'),
+        t('https://s#Person/friend_of/Cardinality+Person',
+          'http://terminusdb.com/schema/sys#max_cardinality',
+          3^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
+        t('https://s#Person/friend_of/Cardinality+Person',
+          'http://terminusdb.com/schema/sys#min_cardinality',
+          3^^'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
         t('https://s#Person/friend_of/Cardinality+Person',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://terminusdb.com/schema/sys#Cardinality')
@@ -4729,7 +4759,8 @@ test(binary_tree_context,
     database_prefixes(DB,Prefixes),
     type_context(DB,'BinaryTree', Prefixes, Binary_Context),
 
-    Binary_Context = json{ 'http://s/leaf':json{'@id':'http://s/leaf'},
+    Binary_Context = json{ 'http://s/leaf':json{'@id':'http://s/leaf',
+                                                '@type':'http://terminusdb.com/schema/sys#Unit'},
                            'http://s/node':json{'@id':'http://s/node','@type':"@id"}
                          },
     type_context(DB,'Node', Prefixes, Node_Context),
@@ -6213,7 +6244,10 @@ test(status_update2,
      ]) :-
 
 
-     Schema_Atom = '[{
+     Schema_Atom = '[
+      { "@type" :"Class",
+        "@id" : "APIKey" },
+      {
         "@id": "User",
         "@inherits": "Entity",
         "@key": {
@@ -6902,7 +6936,7 @@ test(enum_documentation,
 
 :- end_tests(json).
 
-:- begin_tests(schema_checker).
+:- begin_tests(schema_checker, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7624,7 +7658,7 @@ test(insert_extra_array_value,
 :- end_tests(schema_checker).
 
 
-:- begin_tests(woql_document).
+:- begin_tests(woql_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7796,7 +7830,7 @@ test(named_parametric_query, [
 
 :- end_tests(woql_document).
 
-:- begin_tests(arithmetic_document).
+:- begin_tests(arithmetic_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8146,7 +8180,7 @@ test(points_to_abstract, [
 
 :- end_tests(arithmetic_document).
 
-:- begin_tests(employee_documents).
+:- begin_tests(employee_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8366,7 +8400,7 @@ test(update_enum,[
 
 :- end_tests(employee_documents).
 
-:- begin_tests(polity_documents).
+:- begin_tests(polity_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8558,7 +8592,7 @@ test(insert_polity,
 
 :- end_tests(polity_documents).
 
-:- begin_tests(system_documents).
+:- begin_tests(system_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8599,7 +8633,7 @@ test(database_expansion,
 :- end_tests(system_documents).
 
 
-:- begin_tests(python_client_bugs).
+:- begin_tests(python_client_bugs, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8738,7 +8772,7 @@ test(key_exchange_problem,
 :- end_tests(python_client_bugs).
 
 
-:- begin_tests(javascript_client_bugs).
+:- begin_tests(javascript_client_bugs, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8936,7 +8970,7 @@ test(subdocument_update,
 
 :- end_tests(javascript_client_bugs).
 
-:- begin_tests(document_id_generation).
+:- begin_tests(document_id_generation, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9133,7 +9167,7 @@ test(normalizable_float,
 :- end_tests(document_id_generation).
 
 
-:- begin_tests(foreign_types).
+:- begin_tests(foreign_types, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9299,7 +9333,7 @@ test(foreign_type,
 
 :- end_tests(foreign_types).
 
-:- begin_tests(id_capture).
+:- begin_tests(id_capture, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9810,7 +9844,7 @@ test(double_capture,
 
 :- end_tests(id_capture).
 
-:- begin_tests(json_tables).
+:- begin_tests(json_tables, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 
 geojson_point_schema('
@@ -9996,7 +10030,7 @@ test(wrong_dim_error,
 
 :- end_tests(json_tables).
 
-:- begin_tests(json_unit_type).
+:- begin_tests(json_unit_type, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -10229,3 +10263,181 @@ test(taggedunion_with_unit_property_missing_field,
                          ).
 
 :- end_tests(json_unit_type).
+
+:- begin_tests(json_cardinality).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema_cardinality('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Card",
+  "a": { "@type" : "Cardinality",
+         "@class" : "xsd:integer",
+         "@cardinality" : 1}
+}
+
+{ "@type": "Class",
+  "@id": "Min",
+  "a": { "@type" : "Cardinality",
+         "@class" : "xsd:integer",
+         "@min_cardinality" : 1}
+}
+
+{ "@type": "Class",
+  "@id": "Max",
+  "a": { "@type" : "Cardinality",
+         "@class" : "xsd:integer",
+         "@max_cardinality" : 1}
+}
+
+{ "@type": "Class",
+  "@id": "MinMax",
+  "a": { "@type" : "Cardinality",
+         "@class" : "xsd:integer",
+         "@min_cardinality" : 1,
+         "@max_cardinality" : 2}
+}
+').
+
+test(insert_card,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Card",
+                                            'a': 42},
+                                          _Id)
+                         ).
+
+test(fail_card,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure(
+              [
+                  witness{'@type':instance_has_wrong_cardinality,
+                          cardinality:2,
+                          class:'http://www.w3.org/2001/XMLSchema#integer',
+                          instance:_,
+                          object_list:[23,42],
+                          predicate:'terminusdb:///schema#a'}
+              ]),
+          _)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Card",
+                                            'a': [42,23]},
+                                          _Id)
+                         ).
+
+test(insert_card_min,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Min",
+                                            'a': 42},
+                                          _Id)
+                         ).
+
+test(fail_card_min_under,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure([witness{'@type':instance_has_wrong_cardinality,
+                                        cardinality:0,
+                                        class:'http://www.w3.org/2001/XMLSchema#integer',
+                                        instance:_,
+                                        object_list:[],predicate:'terminusdb:///schema#a'}]),
+          _)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Min"},
+                                          _Id)
+                         ).
+
+test(card_max_zero,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Max"},
+                                          _Id)
+                         ).
+
+test(card_max_one,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Max",
+                                            'a' : 42},
+                                          _Id)
+                         ).
+
+test(fail_card_max_over,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure([witness{'@type':instance_has_wrong_cardinality,
+                                        cardinality:2,
+                                        class:'http://www.w3.org/2001/XMLSchema#integer',
+                                        instance:_,
+                                        object_list:[42,43],
+                                        predicate:'terminusdb:///schema#a'}]),
+          _)
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Max",
+                                            'a': [42,43]},
+                                          _Id)
+                         ).
+
+
+:- end_tests(json_cardinality).
