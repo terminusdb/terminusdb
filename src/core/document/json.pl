@@ -2602,7 +2602,8 @@ all_class_frames(Transaction, Frames) :-
         (   is_simple_class(Transaction, Class),
             class_frame(Transaction, Class, Frame)),
         Data),
-    dict_pairs(Frames, json, Data).
+    database_context_object(Transaction, Context),
+    dict_pairs(Frames, json, ['@context'-Context|Data]).
 all_class_frames(Query_Context, Frames) :-
     is_query_context(Query_Context),
     !,
@@ -8218,7 +8219,11 @@ test(all_class_frames, [
     open_descriptor(Desc, DB),
     all_class_frames(DB,  Frames),
 
-    Frames = json{'http://s/Address':
+    Frames = json{'@context':_{ '@base':"http://i/",
+								'@schema':"http://s/",
+								'@type':'Context'
+							  },
+                  'http://s/Address':
                   json{'@type':'Class',
                        '@documentation':json{'@comment':"This is address"},
                        '@key':json{'@type':"Random"},
