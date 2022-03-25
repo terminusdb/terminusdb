@@ -513,7 +513,7 @@ validation_objects_to_transaction_objects(Validation_Objects, Transaction_Object
     mapm(validation_object_to_transaction_object, Validation_Objects, Transaction_Objects, [], _Map).
 
 
-:- begin_tests(inserts).
+:- begin_tests(inserts, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(transaction)).

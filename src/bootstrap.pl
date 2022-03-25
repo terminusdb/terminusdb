@@ -14,7 +14,7 @@
 :- use_module(core(util)).
 :- use_module(library(plunit)).
 
-:- set_test_options([run(manual), load(always)]).
+:- set_test_options([run(manual), load(always), concurrent(true)]).
 
 :- use_module(server(routes)).
 :- use_module(server(main)).

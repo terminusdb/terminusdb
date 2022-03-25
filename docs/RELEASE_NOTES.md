@@ -1,3 +1,13 @@
+# TerminusDB Server v10.0.20 Beta Release Notes
+## Bug fixes
++ Fix: Forward id capture was capturing unexpanded ID
+
+## Enhancement
++ Introducing cardinality type family
+
+## Other
++ Various CI fixes to run unit tests properly
+
 # TerminusDB Server v10.0.19 Beta Release Notes
 ## Other
 + Use default user and password for tests
