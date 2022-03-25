@@ -913,19 +913,25 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_documentation_descriptor(Schema, Type, Descriptor).
 
-schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment, Elements)) :-
+schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment_Option, Elements)) :-
     xrdf(Schema, Type, sys:documentation, Obj),
     is_schema_enum(Schema,Type),
     !,
-    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
+    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+    ->  Comment_Option = some(Comment)
+    ;   Comment_Option = none
+    ),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:values, Enum),
                 xrdf(Schema, Enum, Key, Value^^xsd:string)),
             Pairs),
     dict_pairs(Elements,json,Pairs).
-schema_documentation_descriptor(Schema, Type, property_documentation(Comment, Elements)) :-
+schema_documentation_descriptor(Schema, Type, property_documentation(Comment_Option, Elements)) :-
     xrdf(Schema, Type, sys:documentation, Obj),
-    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
+    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+    ->  Comment_Option = some(Comment)
+    ;   Comment_Option = none
+    ),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:properties, Property),
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
