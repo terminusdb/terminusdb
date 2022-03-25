@@ -309,7 +309,7 @@ api_replace_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream,
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-:- begin_tests(delete_document).
+:- begin_tests(delete_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 
@@ -389,7 +389,7 @@ test(delete_objects_with_mixed_string_stream,
 
 :- end_tests(delete_document).
 
-:- begin_tests(replace_document).
+:- begin_tests(replace_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 
@@ -486,7 +486,7 @@ test(key_missing, [
             }.
 
 :- end_tests(document_error_reporting).
-:- begin_tests(document_id_capture).
+:- begin_tests(document_id_capture, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
@@ -780,7 +780,7 @@ test(basic_capture_list_replace, [
 :- end_tests(document_id_capture).
 
 
-:- begin_tests(subdocument_as_document).
+:- begin_tests(subdocument_as_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
@@ -905,8 +905,7 @@ test(replace_existing_subdocument_as_document, [
 
     api_replace_documents(SystemDB, Auth, "admin/testdb", instance, "author", "message", Stream_2, false, no_data_version, _New_Data_Version_2, _Ids_2),
 
-    get_document(Desc, Id, Inner_Document),
-    print_term(Inner_Document, []),nl.
+    get_document(Desc, Id, _Inner_Document).
 
 
 :- end_tests(subdocument_as_document).

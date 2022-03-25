@@ -49,7 +49,7 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                          ;   true)),
                      _).
 
-:- begin_tests(fast_forward_api).
+:- begin_tests(fast_forward_api, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
