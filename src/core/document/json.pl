@@ -8232,10 +8232,10 @@ test(all_class_frames, [
     open_descriptor(Desc, DB),
     all_class_frames(DB,  Frames),
 
-    Frames = json{'@context':_{ '@base':"http://i/",
-								'@schema':"http://s/",
-								'@type':'Context'
-							  },
+    Frames = json{'@context':
+                  _{'@base':"http://i/",
+                    '@schema':"http://s/",
+                    '@type':'Context'},
                   'http://s/Address':
                   json{'@type':'Class',
                        '@documentation':json{'@comment':"This is address"},
