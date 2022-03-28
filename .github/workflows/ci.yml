@@ -2,25 +2,17 @@ name: CI
 
 on:
   push:
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - LICENSE
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - LICENSE
   workflow_dispatch:
 
 jobs:
 
-  skip_duplicate_runs:
-    name: Skip duplicate runs
+  is_duplicate_run:
+    name: Duplicate run?
     runs-on: ubuntu-latest
 
     outputs:
-      should_skip: ${{ steps.check_skip.outputs.should_skip }}
+      duplicate_run: ${{ steps.check_skip.outputs.should_skip }}
 
     steps:
       - uses: fkirc/skip-duplicate-actions@master
@@ -34,10 +26,31 @@ jobs:
           # Do not skip push events. They are used by the push_docker job.
           do_not_skip: '["push", "workflow_dispatch", "schedule"]'
 
+  is_build_required:
+    name: Build required?
+    runs-on: ubuntu-latest
+
+    outputs:
+      build_required: ${{ steps.filter.outputs.change_other_than_docs_alone }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            change_other_than_docs_alone:
+              - '!(**.md|docs/**|LICENSE)'
+
   build:
     name: Build
-    needs: skip_duplicate_runs
-    if: needs.skip_duplicate_runs.outputs.should_skip != 'true'
+    needs:
+      - is_duplicate_run
+      - is_build_required
+    if: |
+      needs.is_duplicate_run.outputs.duplicate_run == 'false' &&
+      needs.is_build_required.outputs.build_required == 'true'
     uses: ./.github/workflows/build.yml
 
   check:
@@ -51,17 +64,26 @@ jobs:
     uses: ./.github/workflows/benchmark.yml
 
   # This is required for status checks.
-  all_checks_pass:
+  all_checks_pass_with_build:
     name: All checks pass
     runs-on: ubuntu-latest
     needs: check
     steps:
       - run: echo "Celebrate! 🥳"
 
+  # This is required for status checks.
+  all_checks_pass_without_build:
+    name: All checks pass
+    runs-on: ubuntu-latest
+    needs: is_build_required
+    if: needs.is_build_required.outputs.build_required == 'false'
+    steps:
+      - run: echo "Nothing to be done. 😌"
+
   push_docker:
     name: Push Docker image
     runs-on: ubuntu-latest
-    needs: all_checks_pass
+    needs: all_checks_pass_with_build
     if: |
       github.repository == 'terminusdb/terminusdb' &&
       github.event_name == 'push' && (
