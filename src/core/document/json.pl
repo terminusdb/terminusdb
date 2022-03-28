@@ -29,9 +29,11 @@
               replace_schema_document/3,
               replace_schema_document/4,
               nuke_schema_documents/1,
+              json_read_required_context/3,
+              insert_context_document/2,
+              replace_context_document/2,
               database_prefixes/2,
               database_schema_prefixes/2,
-              insert_context_document/2,
               run_insert_document/4,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
@@ -2278,26 +2280,18 @@ replace_json_schema(Query_Context, Stream) :-
     query_default_collection(Query_Context, TO),
     replace_json_schema(TO, Stream).
 
+json_read_required_context(Stream, Context, Tail_Stream) :-
+    % Read a new context from the list or stream and replace the existing one.
+    do_or_die(
+        (   json_read_list_stream_head(Stream, Context, Tail_Stream),
+            is_dict(Context),
+            get_dict('@type', Context, "@context")
+        ),
+        error(no_context_found_in_schema, _)).
 
-write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
+write_json_stream_to_builder(Stream, Builder, schema) :-
     !,
-    json_read_dict(JSON_Stream, JSON, [default_tag(json),end_of_file(eof)]),
-
-    % First object could be a list, in which case we treat the list as the full schema
-    (   JSON = eof
-    ->  Context =eof
-    ;   JSON = []
-    ->  Context = eof
-    ;   is_list(JSON)
-    ->  [Context|Rest] = JSON
-    ;   Context = JSON),
-
-    (   Context = eof
-    ;   is_dict(Context),
-        \+ get_dict('@type', Context, "@context")
-    ->  throw(error(no_context_found_in_schema,_))
-    ;   true
-    ),
+    json_read_required_context(Stream, Context, Tail_Stream),
 
     % TODO: if people submit garbage, this is the place we first encounter said garbage.
     % If it's not valid json, or somewhat valid json but not json of the expected format, this will most likely give a very cryptic error.
@@ -2309,9 +2303,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, schema) :-
     put_dict(Context,Prefixes,Expanded_Context),
 
     forall(
-        (   var(Rest)
-        ->  json_read_dict_stream(JSON_Stream, Dict)
-        ;   member(Dict, Rest)),
+        json_read_tail_stream(Tail_Stream, Dict),
         (
             forall(
                 json_schema_triple(Dict,Expanded_Context,t(S,P,O)),
@@ -2329,7 +2321,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
     do_or_die(ground(Captures_Out),
               error(not_all_captures_ground(Captures_Out),_)).
 write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
-    json_stream_read_single_dict(JSON_Stream, Dict),
+    json_read_term(JSON_Stream, Dict),
     !,
     json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,New_Captures_In),
 
@@ -2876,6 +2868,10 @@ delete_schema_document(Query_Context, Id) :-
     query_default_collection(Query_Context, TO),
     delete_schema_document(TO, Id).
 
+replace_context_document(Transaction, Context) :-
+    delete_schema_document(Transaction, 'terminusdb://context'),
+    insert_context_document(Transaction, Context).
+
 replace_schema_document(DB, Document) :-
     replace_schema_document(DB, Document, false, _Id).
 
@@ -2893,8 +2889,7 @@ replace_schema_document(Transaction, Document, Create, Id) :-
               ;   throw(error(document_not_found(Id, Document), _)))),
         insert_schema_document_unsafe(Transaction, Document)
     ;   get_dict('@type', Document, "@context")
-    ->  delete_schema_document(Transaction, 'terminusdb://context'),
-        insert_context_document(Transaction, Document),
+    ->  replace_context_document(Transaction, Document),
         Id='@context'
     ;   throw(error(missing_field('@id', Document), _))
     ).
