@@ -1911,7 +1911,7 @@ filter_transaction(type_name_filter{ type : schema}, Transaction, New_Transactio
                           schema_objects : (Transaction.schema_objects)
                       }.
 
-:- begin_tests(woql, [concurrent(true)]).
+:- begin_tests(woql, []).
 
 % At some point this should be exhaustive. Currently we add as we find bugs.
 
@@ -4990,7 +4990,7 @@ test(insert_document_forget_uri, [
 
 :- end_tests(woql).
 
-:- begin_tests(store_load_data, [concurrent(true)]).
+:- begin_tests(store_load_data, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(query)).
