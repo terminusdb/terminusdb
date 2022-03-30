@@ -1623,8 +1623,8 @@ list_array_index_element([N|D],L,[I|Idx],Elt) :-
 set_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
     (   reference(H,HRef),
         Triple = t(ID,Key,HRef)
-    ;   set_id_key_context_triple(T,ID,Key,Context,Triple)
     ;   json_triple_(H,Context,Triple)
+    ;   set_id_key_context_triple(T,ID,Key,Context,Triple)
     ).
 
 reference(Dict,ID) :-
