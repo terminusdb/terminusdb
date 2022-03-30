@@ -30,6 +30,7 @@
 :- use_module(library(pcre)).
 :- use_module(library(option)).
 :- use_module(library(yall)).
+:- use_module(library(zlib)).
 
 % unit tests
 :- use_module(library(plunit)).
@@ -3084,6 +3085,15 @@ check_content_length(Request) :-
         memberchk(content_length(_), Request),
         error(missing_content_length, _)).
 
+content_encoded(Request, Encoding) :-
+    memberchk(content_encoding(Encoding), Request),
+    do_or_die(
+        accepted_encoding(Encoding),
+        error(unsupported_content_encoding(Encoding), _)).
+
+accepted_encoding(deflate).
+accepted_encoding(gzip).
+
 /*
  * get_param_default(Key,Request:request,Value,Default) is semidet.
  *
@@ -3142,16 +3152,18 @@ read_json_dict(AtomOrText, JSON) :-
  *   - string(String) to read into a string
  *   - json_dict(JSON) to read into a JSON dict
  */
-http_read_utf8(string(String), Request) :-
-    % Force the input encoding to be UTF-8 to avoid the default octet encoding.
-    % TODO: SWI-Prolog v8.4.1 allows us to set the encoding using the `input_encoding`
-    % option as follows. When we upgrade, we can change this.
-    %http_read_data(Request, String, [to(string), input_encoding(utf8)]).
-    % But, for now, we just override it:
-    http_read_data([content_type('application/json; charset=UTF-8')|Request], String, [to(string)]).
 http_read_utf8(stream(Stream), Request) :-
-    http_read_utf8(string(String), Request),
-    open_string(String, Stream).
+    (   content_encoded(Request, Encoding)
+    ->  memberchk(input(Input_Stream), Request),
+        zopen(Input_Stream, Uncompressed_Stream, [format(Encoding), multi_part(false)]),
+        read_string(Uncompressed_Stream, _, S1),
+        open_string(S1, Stream)
+    ;   http_read_data(Request, String, [to(string), input_encoding(utf8)]),
+        open_string(String, Stream)
+    ).
+http_read_utf8(string(String), Request) :-
+    http_read_utf8(stream(Stream), Request),
+    read_string(Stream, _Length, String).
 http_read_utf8(json_dict(JSON), Request) :-
     http_read_utf8(string(String), Request),
     read_json_dict(String, JSON).
