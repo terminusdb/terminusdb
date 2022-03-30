@@ -2983,7 +2983,7 @@ test(write_json_stream_to_builder, [
 :- use_module(core(util/test_utils)).
 
 test(expand_context_with_documentation, []) :-
-    fail,
+
     Context =
     _{ '@type' : "@context",
        '@base' : "http://i/",
