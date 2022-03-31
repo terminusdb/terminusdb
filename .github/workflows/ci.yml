@@ -31,9 +31,10 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      build_required: |
+      build_required: ${{ steps.filter.outputs.change_other_than_docs_alone }}
+      push_docker_required: |
         ${{
-          steps.filter.outputs.change_other_than_docs_alone ||
+          github.repository == 'terminusdb/terminusdb' &&
           github.event_name == 'push' && (
             github.ref == 'refs/heads/main' ||
             startsWith(github.ref, 'refs/tags/v')
@@ -55,9 +56,13 @@ jobs:
     needs:
       - is_duplicate_run
       - is_build_required
+    # Build if there is no duplicate run in progress and either a build is
+    # required due to changed files or we need to push a Docker image.
     if: |
-      needs.is_duplicate_run.outputs.duplicate_run == 'false' &&
-      needs.is_build_required.outputs.build_required == 'true'
+      needs.is_duplicate_run.outputs.duplicate_run == 'false' && (
+        needs.is_build_required.outputs.build_required == 'true' ||
+        needs.is_build_required.outputs.push_docker_required == 'true'
+      )
     uses: ./.github/workflows/build.yml
 
   check:
@@ -90,13 +95,10 @@ jobs:
   push_docker:
     name: Push Docker image
     runs-on: ubuntu-latest
-    needs: all_checks_pass_with_build
-    if: |
-      github.repository == 'terminusdb/terminusdb' &&
-      github.event_name == 'push' && (
-        github.ref == 'refs/heads/main' ||
-        startsWith(github.ref, 'refs/tags/v')
-      )
+    needs:
+      - is_build_required
+      - all_checks_pass_with_build
+    if: needs.is_build_required.outputs.push_docker_required == 'true'
 
     steps:
       - name: Download Docker image
