@@ -10480,4 +10480,3 @@ test(big,
     ).
 
 :- end_tests(big).
-
