@@ -10465,7 +10465,8 @@ gen_big(Depth,Width,Big) :-
              'big' : List}.
 
 test(big,
-     [setup((setup_temp_store(State),
+     [blocked('too slow'),
+      setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
              write_schema(schema_big,Desc)
             )),
