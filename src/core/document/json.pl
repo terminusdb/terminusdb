@@ -1730,7 +1730,7 @@ index_list_array([Idxs-V|T], Idx_Tail, D, Dimension, I, [null|Result]) :-
     J is I + 1,
     index_list_array([Idxs-V|T], Idx_Tail, D, Dimension, J, Result).
 
-:- begin_tests(multidim_array).
+:- begin_tests(multidim_array,[concurrent(true)]).
 
 test(one_d, []) :-
     Id_List = [[0]-a,
@@ -2904,7 +2904,7 @@ replace_schema_document(Query_Context, Document, Create, Id) :-
     query_default_collection(Query_Context, TO),
     replace_schema_document(TO, Document, Create, Id).
 
-:- begin_tests(json_stream).
+:- begin_tests(json_stream, [concurrent(true)]).
 :- use_module(core(util)).
 :- use_module(library(terminus_store)).
 :- use_module(core(query), [ask/2]).
@@ -2978,7 +2978,7 @@ test(write_json_stream_to_builder, [
 
 :- end_tests(json_stream).
 
-:- begin_tests(json,[]).
+:- begin_tests(json,[concurrent(true)]).
 
 :- use_module(core(util/test_utils)).
 
@@ -6950,7 +6950,7 @@ test(enum_documentation,
 
 :- end_tests(json).
 
-:- begin_tests(schema_checker, []).
+:- begin_tests(schema_checker, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7647,7 +7647,7 @@ test(insert_extra_array_value,
 :- end_tests(schema_checker).
 
 
-:- begin_tests(woql_document, []).
+:- begin_tests(woql_document, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8169,7 +8169,7 @@ test(points_to_abstract, [
 
 :- end_tests(arithmetic_document).
 
-:- begin_tests(employee_documents, []).
+:- begin_tests(employee_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8585,7 +8585,7 @@ test(insert_polity,
 
 :- end_tests(polity_documents).
 
-:- begin_tests(system_documents, []).
+:- begin_tests(system_documents, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8765,7 +8765,7 @@ test(key_exchange_problem,
 :- end_tests(python_client_bugs).
 
 
-:- begin_tests(javascript_client_bugs, []).
+:- begin_tests(javascript_client_bugs, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9160,7 +9160,7 @@ test(normalizable_float,
 :- end_tests(document_id_generation).
 
 
-:- begin_tests(foreign_types, []).
+:- begin_tests(foreign_types, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9837,7 +9837,7 @@ test(double_capture,
 
 :- end_tests(id_capture).
 
-:- begin_tests(json_tables, []).
+:- begin_tests(json_tables, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 
 geojson_point_schema('
@@ -10023,7 +10023,7 @@ test(wrong_dim_error,
 
 :- end_tests(json_tables).
 
-:- begin_tests(json_unit_type, []).
+:- begin_tests(json_unit_type, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -10257,7 +10257,7 @@ test(taggedunion_with_unit_property_missing_field,
 
 :- end_tests(json_unit_type).
 
-:- begin_tests(json_cardinality).
+:- begin_tests(json_cardinality, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -10434,3 +10434,50 @@ test(fail_card_max_over,
 
 
 :- end_tests(json_cardinality).
+
+:- begin_tests(big).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema_big('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Big",
+  "big": { "@type" : "Set",
+           "@class" : "Big" }
+}
+').
+
+gen_big(0,_,Big) :-
+    !,
+    Big = _{ '@type' :  "Big",
+             big : []}.
+gen_big(Depth,Width,Big) :-
+    findall(Inner_Big,
+            (Depth_Next is Depth - 1,
+             between(0,Width,_),
+             gen_big(Depth_Next,Width,Inner_Big)),
+            List),
+    Big = _{ '@type' :  "Big",
+             'big' : List}.
+
+test(big,
+     [blocked('too slow'),
+      setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_big,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    gen_big(5,7,Big),
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Big,_)
+    ).
+
+:- end_tests(big).

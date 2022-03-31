@@ -161,7 +161,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     env:
-      SWIPL_LINTER_VERSION: v0.7
+      SWIPL_LINTER_VERSION: v0.8
 
     steps:
       - name: Download Docker image

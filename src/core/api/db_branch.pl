@@ -270,7 +270,7 @@ branch_delete(System_DB, Auth, Path) :-
 
     branch_delete_(Descriptor).
 
-:- begin_tests(branch_api).
+:- begin_tests(branch_api, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
