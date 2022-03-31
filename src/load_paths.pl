@@ -1,14 +1,21 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
-:- use_module(library(prolog_pack)).
-
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
     asserta(user:file_search_path(terminus_home, Dir)).
 
 :- add_terminus_home_path.
+
+add_library_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/library',Lib),
+    asserta(user:file_search_path(library, Lib)).
+
+:- add_library_path.
+
+:- use_module(library(prolog_pack)).
 
 add_core_path :-
     user:file_search_path(terminus_home, Dir),

@@ -257,7 +257,7 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     run_transactions([Database_Transaction_Object], true, _),
     benchmark_subject_stop('rebase on branch').
 
-:- begin_tests(rebase).
+:- begin_tests(rebase, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
