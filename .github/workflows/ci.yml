@@ -32,7 +32,7 @@ jobs:
 
     outputs:
       build_required: ${{ steps.filter.outputs.change_other_than_docs_alone }}
-      push_docker_required: |
+      push_docker_required: >-
         ${{
           github.repository == 'terminusdb/terminusdb' &&
           github.event_name == 'push' && (
