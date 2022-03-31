@@ -53,7 +53,7 @@ prolog:message(server_missing_config(BasePath)) -->
 :- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
 :- use_module(config(terminus_config)).
 
-:- set_test_options([run(manual), concurrent(true)]).
+:- set_test_options([run(manual)]).
 
 :- use_module(cli(main)).
 :- use_module(library(debug)).

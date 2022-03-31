@@ -1623,8 +1623,8 @@ list_array_index_element([N|D],L,[I|Idx],Elt) :-
 set_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
     (   reference(H,HRef),
         Triple = t(ID,Key,HRef)
-    ;   set_id_key_context_triple(T,ID,Key,Context,Triple)
     ;   json_triple_(H,Context,Triple)
+    ;   set_id_key_context_triple(T,ID,Key,Context,Triple)
     ).
 
 reference(Dict,ID) :-
@@ -2007,12 +2007,15 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
-documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefixes, Result) :-
-    Template = json{ '@comment' : Comment},
+documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements), Prefixes, Result) :-
+    (   Comment_Option = some(Comment)
+    ->  Template = json{ '@comment' : Comment}
+    ;   Template = json{}
+    ),
     (   Elements = json{}
     ->  Result = Template
     ;   dict_pairs(Elements, _, Pairs),
-        maplist({Type,Prefixes}/[Enum-Comment,Small-Comment]>>(
+        maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
                     enum_value(Type,Val,Enum),
                     compress_schema_uri(Val, Prefixes, Small)
                 ),
@@ -2020,20 +2023,25 @@ documentation_descriptor_json(enum_documentation(Type,Comment, Elements), Prefix
                 JSON_Pairs),
         dict_pairs(JSONs,json,JSON_Pairs),
         Result = (Template.put('@values', JSONs))
-    ).
-documentation_descriptor_json(property_documentation(Comment, Elements), Prefixes, Result) :-
-    Template = json{ '@comment' : Comment},
+    ),
+    Result \= json{}.
+documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes, Result) :-
+    (   Comment_Option = some(Comment)
+    ->  Template = json{ '@comment' : Comment}
+    ;   Template = json{}
+    ),
     (   Elements = json{}
     ->  Result = Template
     ;   dict_pairs(Elements, _, Pairs),
-        maplist({Prefixes}/[Prop-Comment,Small-Comment]>>(
+        maplist({Prefixes}/[Prop-X,Small-X]>>(
                     compress_schema_uri(Prop, Prefixes, Small)
                 ),
                 Pairs,
                 JSON_Pairs),
         dict_pairs(JSONs,json,JSON_Pairs),
         Result = (Template.put('@properties', JSONs))
-    ).
+    ),
+    Result \= json{}.
 
 oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON) :-
     dict_pairs(Map, _, Pairs),
@@ -2626,7 +2634,8 @@ all_class_frames(Transaction, Frames) :-
         (   is_simple_class(Transaction, Class),
             class_frame(Transaction, Class, Frame)),
         Data),
-    dict_pairs(Frames, json, Data).
+    database_context_object(Transaction, Context),
+    dict_pairs(Frames, json, ['@context'-Context|Data]).
 all_class_frames(Query_Context, Frames) :-
     is_query_context(Query_Context),
     !,
@@ -2969,11 +2978,12 @@ test(write_json_stream_to_builder, [
 
 :- end_tests(json_stream).
 
-:- begin_tests(json,[concurrent(true)]).
+:- begin_tests(json,[]).
 
 :- use_module(core(util/test_utils)).
 
 test(expand_context_with_documentation, []) :-
+
     Context =
     _{ '@type' : "@context",
        '@base' : "http://i/",
@@ -4201,22 +4211,25 @@ test(set_id_key_context_triple, []) :-
                 Triple),
             Triples),
 
-    Triples = [
-        t(elt,p,"task_a4963868aa3ad8365a4b164a7f206ffc"),
-        t(elt,p,"task_f9e4104c952e71025a1d68218d88bab1"),
-        t("task_f9e4104c952e71025a1d68218d88bab1",
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-          task),
-        t("task_f9e4104c952e71025a1d68218d88bab1",
-          name,
-          "Take out rubbish"^^'http://www.w3.org/2001/XMLSchema#string'),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-          task),
-        t("task_a4963868aa3ad8365a4b164a7f206ffc",
-          name,
-          "Get Groceries"^^'http://www.w3.org/2001/XMLSchema#string')
-    ].
+    Triples = [ t(elt,
+				  p,
+				  "task_a4963868aa3ad8365a4b164a7f206ffc"),
+				t("task_a4963868aa3ad8365a4b164a7f206ffc",
+				  'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+				  task),
+				t("task_a4963868aa3ad8365a4b164a7f206ffc",
+				  name,
+				  "Get Groceries" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
+				t(elt,
+				  p,
+				  "task_f9e4104c952e71025a1d68218d88bab1"),
+				t("task_f9e4104c952e71025a1d68218d88bab1",
+				  'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+				  task),
+				t("task_f9e4104c952e71025a1d68218d88bab1",
+				  name,
+				  "Take out rubbish" ^^ 'http://www.w3.org/2001/XMLSchema#string')
+			  ].
 
 
 test(list_elaborate,
@@ -4494,36 +4507,36 @@ test(set_elaborate,
     json_triples(DB, JSON, Triples),
     Triples =
     [ t('http://i/BookClub/Marxist%20book%20club',
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'http://s/BookClub'),
-      t('http://i/BookClub/Marxist%20book%20club',
-        'http://s/name',
-        "Marxist book club"^^'http://www.w3.org/2001/XMLSchema#string'),
-      t('http://i/BookClub/Marxist%20book%20club',
-        'http://s/people',
-        'http://i/Person/jim+1982-05-03'),
-      t('http://i/BookClub/Marxist%20book%20club',
-        'http://s/people',
-        'http://i/Person/jane+1979-12-28'),
-      t('http://i/Person/jane+1979-12-28',
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'http://s/Person'),
-      t('http://i/Person/jane+1979-12-28',
-        'http://s/birthdate',
-        date(1979,12,28,0)^^'http://www.w3.org/2001/XMLSchema#date'),
-      t('http://i/Person/jane+1979-12-28',
-        'http://s/name',
-        "jane"^^'http://www.w3.org/2001/XMLSchema#string'),
-      t('http://i/Person/jim+1982-05-03',
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'http://s/Person'),
-      t('http://i/Person/jim+1982-05-03',
-        'http://s/birthdate',
-        date(1982,5,3,0)^^'http://www.w3.org/2001/XMLSchema#date'),
-      t('http://i/Person/jim+1982-05-03',
-        'http://s/name',
-        "jim"^^'http://www.w3.org/2001/XMLSchema#string')
-    ],
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://s/BookClub'),
+	  t('http://i/BookClub/Marxist%20book%20club',
+		'http://s/name',
+		"Marxist book club" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
+	  t('http://i/BookClub/Marxist%20book%20club',
+		'http://s/people',
+		'http://i/Person/jim+1982-05-03'),
+	  t('http://i/Person/jim+1982-05-03',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://s/Person'),
+	  t('http://i/Person/jim+1982-05-03',
+		'http://s/birthdate',
+		date(1982,5,3,0) ^^ 'http://www.w3.org/2001/XMLSchema#date'),
+	  t('http://i/Person/jim+1982-05-03',
+		'http://s/name',
+		"jim"^^'http://www.w3.org/2001/XMLSchema#string'),
+	  t('http://i/BookClub/Marxist%20book%20club',
+		'http://s/people',
+		'http://i/Person/jane+1979-12-28'),
+	  t('http://i/Person/jane+1979-12-28',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://s/Person'),
+	  t('http://i/Person/jane+1979-12-28',
+		'http://s/birthdate',
+		date(1979,12,28,0) ^^ 'http://www.w3.org/2001/XMLSchema#date'),
+	  t('http://i/Person/jane+1979-12-28',
+		'http://s/name',
+		"jane"^^'http://www.w3.org/2001/XMLSchema#string')
+	],
 
     run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
 
@@ -6792,29 +6805,30 @@ test(double_choice_triples,[]) :-
         Triple,
         json_triple_(Document, Context, Triple),
         Triples),
+
     Triples = [
         t('http://s/DoubleChoice',
-          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-          'http://terminusdb.com/schema/sys#Class'),
-        t('http://s/DoubleChoice',
-          'http://terminusdb.com/schema/sys#oneOf',
-          'http://s/oneOf/DoubleChoice/a+b'),
-        t('http://s/DoubleChoice',
-          'http://terminusdb.com/schema/sys#oneOf',
-          'http://s/oneOf/DoubleChoice/c+d'),
-        t('http://s/oneOf/DoubleChoice/c+d',
-          'http://s/c',
-          'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://s/oneOf/DoubleChoice/c+d',
-          'http://s/d',
-          'http://www.w3.org/2001/XMLSchema#integer'),
-        t('http://s/oneOf/DoubleChoice/a+b',
-          'http://s/a',
-          'http://www.w3.org/2001/XMLSchema#string'),
-        t('http://s/oneOf/DoubleChoice/a+b',
-          'http://s/b',
-          'http://www.w3.org/2001/XMLSchema#integer')
-    ].
+		  'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		  'http://terminusdb.com/schema/sys#Class'),
+		t('http://s/DoubleChoice',
+		  'http://terminusdb.com/schema/sys#oneOf',
+		  'http://s/oneOf/DoubleChoice/a+b'),
+		t('http://s/oneOf/DoubleChoice/a+b',
+		  'http://s/a',
+		  'http://www.w3.org/2001/XMLSchema#string'),
+		t('http://s/oneOf/DoubleChoice/a+b',
+		  'http://s/b',
+		  'http://www.w3.org/2001/XMLSchema#integer'),
+		t('http://s/DoubleChoice',
+		  'http://terminusdb.com/schema/sys#oneOf',
+		  'http://s/oneOf/DoubleChoice/c+d'),
+		t('http://s/oneOf/DoubleChoice/c+d',
+		  'http://s/c',
+		  'http://www.w3.org/2001/XMLSchema#string'),
+		t('http://s/oneOf/DoubleChoice/c+d',
+		  'http://s/d',
+		  'http://www.w3.org/2001/XMLSchema#integer')
+	].
 
 test(double_choice_frame,
      [
@@ -6936,7 +6950,7 @@ test(enum_documentation,
 
 :- end_tests(json).
 
-:- begin_tests(schema_checker, [concurrent(true)]).
+:- begin_tests(schema_checker, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7245,31 +7259,6 @@ test(incompatible_key_change,
     with_transaction(Context3,
                      replace_schema_document(Context3, New_Schema),
                      _).
-
-test(comment_free_documentation_object,
-     [
-         setup(
-             (   setup_temp_store(State),
-                 create_db_with_empty_schema("admin", "foo"),
-                 resolve_absolute_string_descriptor("admin/foo", Desc)
-             )),
-         cleanup(
-             teardown_temp_store(State)
-         )
-     ]) :-
-
-    create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
-    Schema = _{ '@type' : "Class",
-                '@documentation' :
-                _{ '@properties' : _{ name : "Your name" } },
-                '@id' : "Thing",
-                'name' : "xsd:string"
-              },
-
-    with_transaction(Context1,
-                     insert_schema_document(Context1, Schema),
-                     _),
-    true.
 
 test(compatible_key_change_same_value,
      [
@@ -7658,7 +7647,7 @@ test(insert_extra_array_value,
 :- end_tests(schema_checker).
 
 
-:- begin_tests(woql_document, [concurrent(true)]).
+:- begin_tests(woql_document, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -7830,7 +7819,7 @@ test(named_parametric_query, [
 
 :- end_tests(woql_document).
 
-:- begin_tests(arithmetic_document, [concurrent(true)]).
+:- begin_tests(arithmetic_document, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8180,7 +8169,7 @@ test(points_to_abstract, [
 
 :- end_tests(arithmetic_document).
 
-:- begin_tests(employee_documents, [concurrent(true)]).
+:- begin_tests(employee_documents, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8248,7 +8237,11 @@ test(all_class_frames, [
     open_descriptor(Desc, DB),
     all_class_frames(DB,  Frames),
 
-    Frames = json{'http://s/Address':
+    Frames = json{'@context':
+                  _{'@base':"http://i/",
+                    '@schema':"http://s/",
+                    '@type':'Context'},
+                  'http://s/Address':
                   json{'@type':'Class',
                        '@documentation':json{'@comment':"This is address"},
                        '@key':json{'@type':"Random"},
@@ -8400,7 +8393,7 @@ test(update_enum,[
 
 :- end_tests(employee_documents).
 
-:- begin_tests(polity_documents, [concurrent(true)]).
+:- begin_tests(polity_documents, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8592,7 +8585,7 @@ test(insert_polity,
 
 :- end_tests(polity_documents).
 
-:- begin_tests(system_documents, [concurrent(true)]).
+:- begin_tests(system_documents, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8633,7 +8626,7 @@ test(database_expansion,
 :- end_tests(system_documents).
 
 
-:- begin_tests(python_client_bugs, [concurrent(true)]).
+:- begin_tests(python_client_bugs, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8772,7 +8765,7 @@ test(key_exchange_problem,
 :- end_tests(python_client_bugs).
 
 
-:- begin_tests(javascript_client_bugs, [concurrent(true)]).
+:- begin_tests(javascript_client_bugs, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -8970,7 +8963,7 @@ test(subdocument_update,
 
 :- end_tests(javascript_client_bugs).
 
-:- begin_tests(document_id_generation, [concurrent(true)]).
+:- begin_tests(document_id_generation, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9167,7 +9160,7 @@ test(normalizable_float,
 :- end_tests(document_id_generation).
 
 
-:- begin_tests(foreign_types, [concurrent(true)]).
+:- begin_tests(foreign_types, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9333,7 +9326,7 @@ test(foreign_type,
 
 :- end_tests(foreign_types).
 
-:- begin_tests(id_capture, [concurrent(true)]).
+:- begin_tests(id_capture, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -9844,7 +9837,7 @@ test(double_capture,
 
 :- end_tests(id_capture).
 
-:- begin_tests(json_tables, [concurrent(true)]).
+:- begin_tests(json_tables, []).
 :- use_module(core(util/test_utils)).
 
 geojson_point_schema('
@@ -10030,7 +10023,7 @@ test(wrong_dim_error,
 
 :- end_tests(json_tables).
 
-:- begin_tests(json_unit_type, [concurrent(true)]).
+:- begin_tests(json_unit_type, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 

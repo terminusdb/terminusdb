@@ -1,3 +1,12 @@
+# TerminusDB Server v10.0.21 Beta Release Notes
+## Bug fixes
++ Fix to allow optional `@comment` in `@documentation`
+
+## Enhancement
++ Add `@context` to class frames
++ Add preliminary support for Content-Encoding compression to some endpoints
++ Minor speedup in document insertion
+
 # TerminusDB Server v10.0.20 Beta Release Notes
 ## Bug fixes
 + Fix: Forward id capture was capturing unexpanded ID

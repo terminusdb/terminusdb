@@ -550,26 +550,45 @@ describe('document', function () {
         .then(document.verifyInsertSuccess)
     })
 
-    it('accepts & returns subdocument schema with @documentation (#670)', async function () {
-      const schema =
-        {
-          '@id': util.randomString(),
-          '@type': 'Class',
-          '@subdocument': [],
-          '@key': { '@type': 'Random' },
-          '@documentation': {
-            '@comment': 'A random subdocument number?',
-            '@properties': { n: 'A number!' },
-          },
-          n: 'xsd:integer',
-        }
-      await document
-        .insert(agent, docPath, { schema: schema })
-        .then(document.verifyInsertSuccess)
+    it('passes insert schema with subdocument and @documentation (#670)', async function () {
+      const schema = {
+        '@id': util.randomString(),
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@documentation': {
+          '@comment': 'A random subdocument number?',
+          '@properties': { n: 'A number!' },
+        },
+        n: 'xsd:integer',
+      }
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
       const r = await document
         .get(agent, docPath, { query: { graph_type: 'schema', id: schema['@id'] } })
         .then(document.verifyGetSuccess)
       expect(r.body).to.deep.equal(schema)
+    })
+
+    it('passes insert schema with no @comment in @documentation (#1041)', async function () {
+      const schema = [
+        {
+          '@id': util.randomString(),
+          '@type': 'Class',
+          '@documentation': { '@properties': { n: 'A number!' } },
+          n: 'xsd:integer',
+        },
+        {
+          '@id': util.randomString(),
+          '@type': 'Enum',
+          '@documentation': { '@values': { i: 'An item?' } },
+          '@value': ['i'],
+        },
+      ]
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { query: { graph_type: 'schema', id: schema['@id'], as_list: true } })
+        .then(document.verifyGetSuccess)
+      expect(r.body).to.deep.include.members(schema)
     })
 
     describe('tests cardinality in schema', function () {
