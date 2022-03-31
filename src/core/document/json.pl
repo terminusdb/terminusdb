@@ -10434,3 +10434,50 @@ test(fail_card_max_over,
 
 
 :- end_tests(json_cardinality).
+
+:- begin_tests(big).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+schema_big('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Big",
+  "big": { "@type" : "Set",
+           "@class" : "Big" }
+}
+').
+
+gen_big(0,_,Big) :-
+    !,
+    Big = _{ '@type' :  "Big",
+             big : []}.
+gen_big(Depth,Width,Big) :-
+    findall(Inner_Big,
+            (Depth_Next is Depth - 1,
+             between(0,Width,_),
+             gen_big(Depth_Next,Width,Inner_Big)),
+            List),
+    Big = _{ '@type' :  "Big",
+             'big' : List}.
+
+test(big,
+     [blocked('too slow'),
+      setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_big,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    gen_big(5,7,Big),
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Big,_)
+    ).
+
+:- end_tests(big).

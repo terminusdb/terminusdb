@@ -170,7 +170,7 @@ context_prefix_expand(K,Context,Key) :-
     (   uri_has_protocol(K)
     ->  K = Key
     %   Prefixed URI
-    ;   uri_has_prefix(K)
+    ;   re_match('^[^:]*:[^:]*',K) % uri_has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
@@ -206,7 +206,7 @@ prefix_expand(K,Context,Key) :-
     (   uri_has_protocol(K)
     ->  K = Key
     %   Is prefixed
-    ;   uri_has_prefix(K)
+    ;   re_match('^[^:]*:[^:]*',K) % uri_has_prefix(K)
     ->  split_atom(K,':',[Prefix,Suffix]),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,Suffix,Key)
