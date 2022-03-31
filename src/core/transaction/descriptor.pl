@@ -1133,7 +1133,7 @@ collection_descriptor_default_write_graph(Descriptor, Graph_Descriptor) :-
                                      }.
 collection_descriptor_default_write_graph(_, empty).
 
-:- begin_tests(open_descriptor).
+:- begin_tests(open_descriptor, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(library(terminus_store)).
 :- use_module(core(api)).

@@ -54,7 +54,7 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(library(plunit)).
 
-:- set_test_options([run(manual)]).
+:- set_test_options([run(manual),concurrent(true)]).
 
 :- use_module(cli(main)).
 :- use_module(library(debug)).
