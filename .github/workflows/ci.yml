@@ -56,12 +56,12 @@ jobs:
     needs:
       - is_duplicate_run
       - is_build_required
-    # Build if there is no duplicate run in progress and either a build is
-    # required due to changed files or we need to push a Docker image.
+    # Build if we need to push a Docker image or there is no duplicate run in
+    # progress and a build is required due to changed files.
     if: |
-      needs.is_duplicate_run.outputs.duplicate_run == 'false' && (
-        needs.is_build_required.outputs.build_required == 'true' ||
-        needs.is_build_required.outputs.push_docker_required == 'true'
+      needs.is_build_required.outputs.push_docker_required == 'true' || (
+        needs.is_duplicate_run.outputs.duplicate_run == 'false' &&
+        needs.is_build_required.outputs.build_required == 'true'
       )
     uses: ./.github/workflows/build.yml
 
