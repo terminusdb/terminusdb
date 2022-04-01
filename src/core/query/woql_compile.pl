@@ -277,20 +277,15 @@ resolve_dictionary_(List, List_Resolved, C1, C2) :-
     mapm([A,B,CA,CB]>>(
              resolve_dictionary_(A,B,CA,CB)
          ), List, List_Resolved, C1, C2).
-resolve_dictionary_(true, true, C, C) :-
-    !.
-resolve_dictionary_(false, false, C, C) :-
-    !.
-resolve_dictionary_(null, null, C, C) :-
-    !.
-resolve_dictionary_(S, A, C, C) :-
-    string(S),
-    !,
-    atom_string(A, S).
 resolve_dictionary_(Val, Dict_Val, C1, C2) :-
     resolve(Val, Res_Val, C1, C2),
-    when(ground(Res_Val),
-         value_jsonld(Res_Val, Dict_Val)).
+    when((   ground(Res_Val)
+         ;   ground(Dict_Val)),
+         (   %format(user_error,"We have converted: ~q",[Res_Val]),
+             (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+             ->  true
+             ;   Res_Val = Dict_Val)
+         )).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -4835,6 +4830,22 @@ test(test_matching, [
     create_context(Descriptor, Commit_Info, C1),
     run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
     (Response.bindings) = [ _{'X':2, 'Y':1} ].
+
+test(test_matching_bool_null, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+
+    AST = (_{ a : true, b : v('X')} = _{ a : v('Y'), b : null}),
+
+    create_context(Descriptor, Commit_Info, C1),
+    run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
+    (Response.bindings) = [ _{'X':null, 'Y':true} ].
 
 test(json_dict_vars, [
          setup((setup_temp_store(State),
