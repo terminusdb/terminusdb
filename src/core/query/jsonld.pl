@@ -6,6 +6,7 @@
               compress/3,
               term_jsonld/2,
               term_jsonld/3,
+              value_jsonld/2,
               jsonld_id/2,
               jsonld_type/2,
               get_key_document/4,
@@ -408,18 +409,24 @@ test(compress_base, [])
 :- end_tests(jsonld_compress).
 
 /*
- * term_jsonld(Term,JSON) is det.
  *
- * expand a prolog internal json representation to dicts.
  */
-term_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
+value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
     (   compound(D)
     ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
                  [], V^^_)
     ;   D=V),
     !.
-term_jsonld(D@L,json{'@language' : L, '@value' : D}) :-
+value_jsonld(D@L,json{'@language' : L, '@value' : D}) :-
     !.
+value_jsonld(D,D) :-
+    atom(D).
+
+/*
+ * term_jsonld(Term,JSON) is det.
+ *
+ * expand a prolog internal json representation to dicts.
+ */
 term_jsonld(Term,JSON) :-
     is_list(Term),
     maplist([A=B,A-JSON_B]>>term_jsonld(B,JSON_B), Term, JSON_List),
@@ -430,7 +437,8 @@ term_jsonld(Term,JSON) :-
     is_list(Term),
     !,
     maplist([Obj,JSON]>>term_jsonld(Obj,JSON), Term, JSON).
-term_jsonld(URI,URI).
+term_jsonld(Term,JSON) :-
+    value_jsonld(Term,JSON).
 
 /* With prefix compression */
 term_jsonld(Var,_,null) :-

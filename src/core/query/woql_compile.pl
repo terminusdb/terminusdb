@@ -265,17 +265,32 @@ resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
     dict_keys(Dict,Keys),
     mapm({Dict}/[Key,Key-Value,CA,CB]>>(
              get_dict(Key,Dict,V),
-             resolve_dictionary_(V,Value,CA,CB)
+             (   Key = '@type'
+             ->  resolve_predicate(V,Value,CA,CB)
+             ;   resolve_dictionary_(V,Value,CA,CB)
+             )
          ), Keys, Pairs, C1, C2),
     dict_pairs(Dict_Resolved,json,Pairs).
+resolve_dictionary_(List, List_Resolved, C1, C2) :-
+    is_list(List),
+    !,
+    mapm([A,B,CA,CB]>>(
+             resolve_dictionary_(A,B,CA,CB)
+         ), List, List_Resolved, C1, C2).
 resolve_dictionary_(true, true, C, C) :-
     !.
 resolve_dictionary_(false, false, C, C) :-
     !.
 resolve_dictionary_(null, null, C, C) :-
     !.
-resolve_dictionary_(Val, New_Val, C1, C2) :-
-    resolve(Val, New_Val, C1, C2).
+resolve_dictionary_(S, A, C, C) :-
+    string(S),
+    !,
+    atom_string(A, S).
+resolve_dictionary_(Val, Dict_Val, C1, C2) :-
+    resolve(Val, Res_Val, C1, C2),
+    when(ground(Res_Val),
+         value_jsonld(Res_Val, Dict_Val)).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -4987,6 +5002,30 @@ test(insert_document_forget_uri, [
     _{'@id':_,
       '@type':'City',
       name:"Dublin"} = Res2.'Doc'.
+
+
+test(operator_clash, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    AST = (v('Name') = "Bill"^^xsd:string,
+           insert_document(json{'@type':'City',
+                                name:v('Name')})),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+    Response = _{'@type':'api:WoqlResponse',
+                 'api:status':'api:success',
+                 'api:variable_names':['Name'],
+                 bindings:[_{'Name':json{'@type':'xsd:string',
+                                         '@value':"Bill"}}],
+                 deletes:0,
+                 inserts:2,
+                 transaction_retry_count:_}.
 
 :- end_tests(woql).
 
