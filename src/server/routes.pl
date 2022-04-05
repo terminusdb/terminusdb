@@ -2552,6 +2552,7 @@ patch_handler(post, Request, System_DB, Auth) :-
                  methods([options,post])]).
 :- http_handler(api(diff), cors_handler(Method, diff_handler),
                 [method(Method),
+                 priority(1),
                  time_limit(infinite),
                  methods([options,post])]).
 
