@@ -74,16 +74,17 @@ describe('diff-id', function () {
         })
         .then(document.verifyInsertSuccess)
       const dv1 = r1.header['terminusdb-data-version']
-      const [doc_id] = r1.body
-
+      const [prefix, doc_id] = r1.body.split(`terminusdb:///data/${id}/`)
       const {path} = endpoint.version_diff(agent.defaults())
+
       const r2 = await agent.post(path).send(
         { before_data_version: dv1,
           document_id : doc_id,
-          after: { '@type': id, a : 'vegan sausage' }
+          after: { '@type': `terminusdb:///data/${id}`, '@id' : doc_id, a : 'vegan sausage' }
         })
       expect(r2.body).to.deep.equal({
-        '@id': r2.body['@id'],
+        '@id': doc_id,
+        '@type' : `terminusdb:///data/${id}`,
         a: {
           '@after': 'vegan sausage',
           '@before': 'pickles and eggs',
