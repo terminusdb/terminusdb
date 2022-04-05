@@ -2545,6 +2545,10 @@ patch_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
 :- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path)),
                 [method(Method),
                  prefix,
@@ -2558,9 +2562,9 @@ patch_handler(post, Request, System_DB, Auth) :-
  */
 diff_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
-    do_or_die((_{ before : Before,
-                 after : After
-                } :< Document,
+    do_or_die((   _{ before : Before,
+                     after : After
+                   } :< Document,
                Compare_Version = document
               ;   _{ document_id : Doc_ID,
                      before_data_version : Before_Version
