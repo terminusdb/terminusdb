@@ -1,4 +1,4 @@
-:- module(api_patch, [api_patch/5,api_diff/6,api_diff_id/8]).
+:- module(api_patch, [api_patch/5,api_diff/6,api_diff_id/8, api_diff_id_document/8]).
 
 :- use_module(core(util)).
 :- use_module(core(document)).
@@ -17,32 +17,34 @@ api_diff(_System_DB, _Auth, Before, After, Keep, Diff) :-
               error(unground_patch, _)),
     simple_diff(Before,After,Keep,Diff).
 
+document_from_version_header(Branch_Descriptor, Version_Header, Doc_Id, Document, Map_In, Map_Out) :-
+    do_or_die(
+        read_data_version(Version_Header, data_version(branch, Commit_Id)),
+        error(bad_data_version(Version_Header), _)
+    ),
+
+    resolve_relative_descriptor(Branch_Descriptor,
+                                ["commit", Commit_Id],
+                                Commit_Descriptor),
+
+    do_or_die(
+        open_descriptor(Commit_Descriptor, commit_info{}, Transaction, Map_In, Map_Out),
+        error(unresolvable_collection(Commit_Descriptor),_)),
+
+    get_document(Transaction, Doc_Id, Document).
+
+
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Keep, Diff) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
 
-    do_or_die(
-        read_data_version(Before_Version, data_version(branch, Before_Commit_Id)),
-        error(bad_data_version(Before_Version), _)
-    ),
-    do_or_die(
-        read_data_version(After_Version, data_version(branch, After_Commit_Id)),
-        error(bad_data_version(After_Version), _)
-    ),
-
-    resolve_relative_descriptor(Branch_Descriptor,
-                                ["commit", Before_Commit_Id],
-                                Before_Commit_Descriptor),
-    resolve_relative_descriptor(Branch_Descriptor,
-                                ["commit", After_Commit_Id],
-                                After_Commit_Descriptor),
-    do_or_die(
-        open_descriptor(Before_Commit_Descriptor, commit_info{}, Before_Transaction, [], After_Map),
-        error(unresolvable_collection(Before_Commit_Descriptor),_)),
-    do_or_die(
-        open_descriptor(After_Commit_Descriptor, commit_info{}, After_Transaction, After_Map, _),
-        error(unresolvable_collection(After_Commit_Descriptor),_)),
-
-    get_document(Before_Transaction, Doc_Id, Before),
-    get_document(After_Transaction, Doc_Id, After),
+    document_from_version_header(Branch_Descriptor, Before_Version, Doc_Id, Before, [], Map),
+    document_from_version_header(Branch_Descriptor, After_Version, Doc_Id, After, Map, _),
 
     simple_diff(Before,After,Keep,Diff).
+
+api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_Id, Keep, Diff) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
+
+    document_from_version_header(Branch_Descriptor, Before_Version, Doc_Id, Before, [], _),
+
+    simple_diff(Before,After_Document,Keep,Diff).

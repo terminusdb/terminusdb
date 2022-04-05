@@ -60,5 +60,37 @@ describe('diff-id', function () {
       })
       expect(r3.status).to.equal(200)
     })
+
+    it('diff db document against submitted document', async function () {
+      const id = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: { '@type': 'Class', '@id': id, a : 'xsd:string' },
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': id, a : 'pickles and eggs' },
+        })
+        .then(document.verifyInsertSuccess)
+      const dv1 = r1.header['terminusdb-data-version']
+      const [doc_id] = r1.body
+
+      const {path} = endpoint.version_diff(agent.defaults())
+      const r2 = await agent.post(path).send(
+        { before_data_version: dv1,
+          document_id : doc_id,
+          after: { '@type': id, a : 'vegan sausage' }
+        })
+      expect(r2.body).to.deep.equal({
+        '@id': r2.body['@id'],
+        a: {
+          '@after': 'vegan sausage',
+          '@before': 'pickles and eggs',
+          '@op': 'SwapValue'
+        }
+      })
+      expect(r2.status).to.equal(200)
+    })
   })
 })

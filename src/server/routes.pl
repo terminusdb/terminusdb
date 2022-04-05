@@ -2583,12 +2583,14 @@ diff_handler(post, Request, System_DB, Auth) :-
 
 diff_id_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
-    do_or_die(_{ document_id : Doc_ID,
-                 before_data_version : Before_Version,
-                 after_data_version : After_Version
-               } :< Document,
-              error(bad_api_document(Document, [document_id, before_data_version,
-                                                after_data_version]), _)),
+    do_or_die((_{ document_id : Doc_ID,
+                  before_data_version : Before_Version
+                } :< Document,
+               (   _{ after_data_version: After_Version} :< Document,
+                   Compare_Version = true
+               ;   _{ after: After_Document} :< Document,
+                   Compare_Version = false)),
+              error(bad_api_document(Document, [document_id, before_data_version, after]), _)),
 
     (   _{ keep : Keep } :< Document
     ->  true
@@ -2598,7 +2600,9 @@ diff_id_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         diff,
         Request,
-        (   api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_ID, Keep, Patch),
+        (   (   Compare_Version = true
+            ->  api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_ID, Keep, Patch)
+            ;   api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_ID, Keep, Patch)),
             cors_reply_json(Request, Patch)
         )
     ).

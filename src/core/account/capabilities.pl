@@ -513,7 +513,7 @@ check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
 
 document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
     atom_string(Graph_Type, Graph_Type_String),
-B    atom_string(ReadWrite, ReadWrite_String),
+    atom_string(ReadWrite, ReadWrite_String),
 
     document_auth_action_type_(Descriptor_Type, Graph_Type, ReadWrite, Action).
 
