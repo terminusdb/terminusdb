@@ -154,7 +154,7 @@ function diff (params) {
   }
 }
 
-function version_diff (params) {
+function versionDiff (params) {
   params = new Params(params)
   const orgName = params.stringRequired('orgName')
   const dbName = params.stringRequired('dbName')
@@ -199,7 +199,7 @@ module.exports = {
   branchNew,
   db,
   diff,
-  version_diff,
+  versionDiff,
   document,
   documentCommit,
   documentCommits,

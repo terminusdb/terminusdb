@@ -2545,14 +2545,13 @@ patch_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(diff), cors_handler(Method, diff_handler),
+:- http_handler(api(diff/Path), cors_handler(Method, diff_id_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(diff/Path), cors_handler(Method, diff_id_handler(Path)),
+:- http_handler(api(diff), cors_handler(Method, diff_handler),
                 [method(Method),
-                 prefix,
                  time_limit(infinite),
                  methods([options,post])]).
 
