@@ -154,6 +154,17 @@ function diff (params) {
   }
 }
 
+function version_diff (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  return {
+    path: `/api/diff/${orgName}/${dbName}`,
+    orgName: orgName,
+    dbName: dbName,
+  }
+}
+
 function patch (params) {
   params = new Params(params)
   return {
@@ -188,6 +199,7 @@ module.exports = {
   branchNew,
   db,
   diff,
+  version_diff,
   document,
   documentCommit,
   documentCommits,

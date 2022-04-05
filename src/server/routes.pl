@@ -2550,6 +2550,11 @@ patch_handler(post, Request, System_DB, Auth) :-
                  prefix,
                  time_limit(infinite),
                  methods([options,post])]).
+:- http_handler(api(diff/Path), cors_handler(Method, diff_id_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
 
 /*
  * diff_handler(Mode, Request, System, Auth) is det.
@@ -2557,12 +2562,11 @@ patch_handler(post, Request, System_DB, Auth) :-
  * Reset a branch to a new commit.
  */
 diff_handler(post, Request, System_DB, Auth) :-
-    do_or_die(
-        (   get_payload(Document, Request),
-            _{ before : Before,
-               after : After
-             } :< Document),
-        error(bad_api_document(Document, [before, after]), _)),
+    get_payload(Document, Request),
+    do_or_die(_{ before : Before,
+                 after : After
+               } :< Document,
+              error(bad_api_document(Document, [before, after]), _)),
 
     (   _{ keep : Keep } :< Document
     ->  true
@@ -2573,6 +2577,28 @@ diff_handler(post, Request, System_DB, Auth) :-
         diff,
         Request,
         (   api_diff(System_DB, Auth, Before, After, Keep, Patch),
+            cors_reply_json(Request, Patch)
+        )
+    ).
+
+diff_id_handler(post, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    do_or_die(_{ document_id : Doc_ID,
+                 before_data_version : Before_Version,
+                 after_data_version : After_Version
+               } :< Document,
+              error(bad_api_document(Document, [document_id, before_data_version,
+                                                after_data_version]), _)),
+
+    (   _{ keep : Keep } :< Document
+    ->  true
+    ;   Keep = _{ '@id' : true, '_id' : true }
+    ),
+
+    api_report_errors(
+        diff,
+        Request,
+        (   api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_ID, Keep, Patch),
             cors_reply_json(Request, Patch)
         )
     ).

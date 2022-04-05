@@ -1,6 +1,7 @@
 :- module(data_version, [
               compare_data_versions/2,
               read_data_version_header/2,
+              read_data_version/2,
               write_data_version_header/1,
               transaction_data_version/2,
               validation_data_version/3,
@@ -38,11 +39,11 @@ read_data_version_header(Request, Data_Version) :-
     memberchk(terminusdb_data_version(Header), Request),
     !,
     do_or_die(
-        data_version:read_data_version_header_(Header, Data_Version),
+        data_version:read_data_version(Header, Data_Version),
         error(bad_data_version(Header), _)).
 read_data_version_header(_Request, no_data_version).
 
-read_data_version_header_(Header, data_version(Label, Value)) :-
+read_data_version(Header, data_version(Label, Value)) :-
     split_atom(Header,':',[Label,Value]),
     atom_length(Label,Label_Length),
     atom_length(Value,Value_Length),
@@ -54,28 +55,28 @@ read_data_version_header_(Header, data_version(Label, Value)) :-
 :- begin_tests(read_data_version_header_tests).
 
 test("empty header", [fail]) :-
-    read_data_version_header_('', _).
+    read_data_version('', _).
 
 test("empty label and value", [fail]) :-
-    read_data_version_header_(':', _).
+    read_data_version(':', _).
 
 test("empty label", [fail]) :-
-    read_data_version_header_(':value', _).
+    read_data_version(':value', _).
 
 test("empty value", [fail]) :-
-    read_data_version_header_('label:', _).
+    read_data_version('label:', _).
 
 test("extraneous colons", [fail]) :-
-    read_data_version_header_('label:value1:value2', _).
+    read_data_version('label:value1:value2', _).
 
 test("short label", [fail]) :-
-    read_data_version_header_('lab:value', _).
+    read_data_version('lab:value', _).
 
 test("short value", [fail]) :-
-    read_data_version_header_('label:val', _).
+    read_data_version('label:val', _).
 
 test("pass") :-
-    read_data_version_header_('label:value', data_version(label, value)).
+    read_data_version('label:value', data_version(label, value)).
 
 :- end_tests(read_data_version_header_tests).
 

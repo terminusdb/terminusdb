@@ -243,6 +243,7 @@
               % data_version.pl
               compare_data_versions/2,
               read_data_version_header/2,
+              read_data_version/2,
               write_data_version_header/1,
               transaction_data_version/2,
               validation_data_version/3,
