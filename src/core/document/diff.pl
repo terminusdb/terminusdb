@@ -70,8 +70,10 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     !,
     is_list(After),
     simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost).
-simple_diff(Same,Same,_,_,_,_,_) :-
+simple_diff(Before,After,_,_,_,_,_) :-
     % Copy is implicit
+    string_normalise(Before, Value),
+    string_normalise(After, Value),
     !,
     fail.
 simple_diff(Before,After,_Keep,Diff,_State,Cost,New_Cost) :-
@@ -80,13 +82,21 @@ simple_diff(Before,After,_Keep,Diff,_State,Cost,New_Cost) :-
                  '@after' : After },
     New_Cost is Cost + 1.
 
+string_normalise(Value, Norm) :-
+    (   atom(Value), \+ memberchk(Value,[null,true,false])
+    ->  atom_string(Value,Norm)
+    ;   Value = Norm
+    ).
+
 simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost) :-
     get_dict(Key,Keep,true),
     !,
     do_or_die(
-        (   get_dict(Key,Before,Value),
-            get_dict(Key,After,Value)
+        (   get_dict(Key,Before,Before_Value),
+            string_normalise(Before_Value, Value),
+            get_dict(Key,After,After_Value),
+            string_normalise(After_Value, Value)
         ),
         error(explicitly_copied_key_has_changed(Key),_)),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost).
