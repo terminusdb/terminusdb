@@ -19,6 +19,7 @@
               check_descriptor_auth/4,
               is_super_user/1,
               is_super_user/2,
+              resolve_descriptor_auth/6,
 
               % user_management.pl
               add_user/3,

@@ -26,32 +26,6 @@
 :- use_module(library(plunit)).
 :- use_module(library(pprint), [print_term/2]).
 
-document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
-    atom_string(Graph_Type, Graph_Type_String),
-    atom_string(ReadWrite, ReadWrite_String),
-
-    document_auth_action_type_(Descriptor_Type, Graph_Type, ReadWrite, Action).
-document_auth_action_type_(system_descriptor, _, _, '@schema':'Action/manage_capabilities').
-document_auth_action_type_(database_descriptor, _, read, '@schema':'Action/meta_read_access').
-document_auth_action_type_(database_descriptor, instance, write, '@schema':'Action/meta_write_access').
-document_auth_action_type_(repository_descriptor, _, read, '@schema':'Action/commit_read_access').
-document_auth_action_type_(repository_descriptor, instance, write, '@schema':'Action/commit_write_access').
-document_auth_action_type_(branch_descriptor, instance, read, '@schema':'Action/instance_read_access').
-document_auth_action_type_(branch_descriptor, instance, write, '@schema':'Action/instance_write_access').
-document_auth_action_type_(branch_descriptor, schema, read, '@schema':'Action/schema_read_access').
-document_auth_action_type_(branch_descriptor, schema, write, '@schema':'Action/schema_write_access').
-document_auth_action_type_(commit_descriptor, instance, read, '@schema':'Action/instance_read_access').
-document_auth_action_type_(commit_descriptor, schema, read, '@schema':'Action/schema_read_access').
-
-resolve_descriptor_auth(ReadWrite, SystemDB, Auth, Path, Graph_Type, Descriptor) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Path, Descriptor),
-        error(invalid_path(Path), _)),
-    Descriptor_Type{} :< Descriptor,
-    do_or_die(document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action),
-              error(document_access_impossible(Descriptor, Graph_Type, ReadWrite), _)),
-    check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
-
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
         open_descriptor(Descriptor, Transaction),
