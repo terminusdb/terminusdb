@@ -96,5 +96,125 @@ describe('diff-id', function () {
       })
       expect(r2.status).to.equal(200)
     })
+
+    it('diff db document against submitted document normalizing ids and type', async function () {
+      const id = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: { '@type': 'Class', '@id': id, a: 'xsd:string' },
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': id, a: 'pickles and eggs' },
+        })
+        .then(document.verifyInsertSuccess)
+
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docId] = r1.body
+      const resultId = docId.split('terminusdb:///data/')[1]
+      const { path } = endpoint.versionDiff(agent.defaults())
+
+      const r2 = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          document_id: docId,
+          after: { '@type': id, '@id': docId, a: 'vegan sausage' },
+        })
+      expect(r2.body).to.deep.equal({
+        '@id': resultId,
+        a: {
+          '@after': 'vegan sausage',
+          '@before': 'pickles and eggs',
+          '@op': 'SwapValue',
+        },
+      })
+      expect(r2.status).to.equal(200)
+    })
+
+    it('diff db document against submitted document normalizing expanded property', async function () {
+      const id = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: { '@type': 'Class', '@id': id, a: 'xsd:string' },
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': id, a: 'pickles and eggs' },
+        })
+        .then(document.verifyInsertSuccess)
+
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docId] = r1.body
+      const resultId = docId.split('terminusdb:///data/')[1]
+      const { path } = endpoint.versionDiff(agent.defaults())
+
+      const r2 = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          document_id: docId,
+          after: {
+            '@type': id,
+            '@id': docId,
+            'terminusdb:///schema#a': 'vegan sausage',
+          },
+        })
+      expect(r2.body).to.deep.equal({
+        '@id': resultId,
+        a: {
+          '@after': 'vegan sausage',
+          '@before': 'pickles and eggs',
+          '@op': 'SwapValue',
+        },
+      })
+      expect(r2.status).to.equal(200)
+    })
+
+    it('diff db document against submitted document with non-existent property', async function () {
+      const id = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: { '@type': 'Class', '@id': id, a: 'xsd:string' },
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': id, a: 'pickles and eggs' },
+        })
+        .then(document.verifyInsertSuccess)
+
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docId] = r1.body
+      const { path } = endpoint.versionDiff(agent.defaults())
+
+      const r2 = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          document_id: docId,
+          after: {
+            '@type': id,
+            '@id': docId,
+            b: 3,
+          },
+        })
+      expect(r2.body).to.deep.equal(
+        {
+          '@type': 'api:DiffErrorResponse',
+          'api:error': {
+            '@type': 'api:UnrecognizedProperty',
+            'api:document': {
+              '@id': docId,
+              '@type': id,
+              b: 3,
+            },
+            'api:property': 'b',
+            'api:type': id,
+          },
+          'api:message': `Submitted document contained unrecognized property b for type "${id}"`,
+          'api:status': 'api:failure',
+        })
+      expect(r2.status).to.equal(400)
+    })
   })
 })

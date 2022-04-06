@@ -61,7 +61,10 @@
               simple_diff/4,
 
               % patch.pl
-              simple_patch/3
+              simple_patch/3,
+
+              % normalize.pl
+              normalize_document/3
           ]).
 
 :- use_module('document/validation').
@@ -71,3 +74,4 @@
 :- use_module('document/query').
 :- use_module('document/patch').
 :- use_module('document/diff').
+:- use_module('document/normalize').
