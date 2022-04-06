@@ -1154,6 +1154,8 @@ api_error_jsonld_(replace_documents, Error, JSON) :-
     api_document_error_jsonld(replace_documents, Error, JSON).
 api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
+api_error_jsonld_(diff, Error, JSON) :-
+    api_document_error_jsonld(diff, Error, JSON).
 
 error_type(add_organization, 'api:AddOrganizationErrorResponse').
 error_type(check_db, 'api:DbExistsErrorResponse').
@@ -1224,6 +1226,7 @@ document_error_type(get_documents, 'api:GetDocumentErrorResponse').
 document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
 document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+document_error_type(diff, 'api:DiffErrorResponse').
 
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),

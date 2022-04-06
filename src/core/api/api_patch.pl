@@ -17,7 +17,8 @@ api_diff(_System_DB, _Auth, Before, After, Keep, Diff) :-
               error(unground_patch, _)),
     simple_diff(Before,After,Keep,Diff).
 
-document_from_version_header(Branch_Descriptor, Version_Header, Doc_Id, Document, Map_In, Map_Out) :-
+document_from_version_header(Branch_Descriptor, Version_Header, Doc_Id, Document, Transaction,
+                             Map_In, Map_Out) :-
     do_or_die(
         read_data_version(Version_Header, data_version(branch, Commit_Id)),
         error(bad_data_version(Version_Header), _)
@@ -37,14 +38,15 @@ document_from_version_header(Branch_Descriptor, Version_Header, Doc_Id, Document
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Keep, Diff) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
 
-    document_from_version_header(Branch_Descriptor, Before_Version, Doc_Id, Before, [], Map),
-    document_from_version_header(Branch_Descriptor, After_Version, Doc_Id, After, Map, _),
+    document_from_version_header(Branch_Descriptor, Before_Version, Doc_Id, Before, _, [], Map),
+    document_from_version_header(Branch_Descriptor, After_Version, Doc_Id, After, _, Map, _),
 
     simple_diff(Before,After,Keep,Diff).
 
 api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_Id, Keep, Diff) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
 
-    document_from_version_header(Branch_Descriptor, Before_Version, Doc_Id, Before, [], _),
+    document_from_version_header(Branch_Descriptor, Before_Version, Doc_Id, Before, Transaction, [], _),
 
-    simple_diff(Before,After_Document,Keep,Diff).
+    normalize_document(Transaction, After_Document, Normal_Document),
+    simple_diff(Before,Normal_Document,Keep,Diff).

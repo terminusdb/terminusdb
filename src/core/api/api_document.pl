@@ -9,7 +9,8 @@
               api_delete_document/9,
               api_replace_documents/11,
               api_nuke_documents/8,
-              api_generate_document_ids/6
+              api_generate_document_ids/6,
+              call_catch_document_mutation/2
           ]).
 
 :- use_module(core(util)).
