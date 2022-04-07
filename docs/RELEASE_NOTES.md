@@ -1,3 +1,13 @@
+# TerminusDB Server v10.0.22 Beta Release Notes
+## Enhancement
++ Speed improvement to document interface
++ Add WOQL document templates to simplify inserting and updating documents via
+  WOQL
++ Add JSON diff between objects and commits
+
+## Other
++ Make unit tests run concurrently properly
+
 # TerminusDB Server v10.0.21 Beta Release Notes
 ## Bug fixes
 + Fix to allow optional `@comment` in `@documentation`
