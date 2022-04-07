@@ -2545,7 +2545,11 @@ patch_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(diff), cors_handler(Method, diff_handler),
+:- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2556,13 +2560,22 @@ patch_handler(post, Request, System_DB, Auth) :-
  *
  * Reset a branch to a new commit.
  */
-diff_handler(post, Request, System_DB, Auth) :-
-    do_or_die(
-        (   get_payload(Document, Request),
-            _{ before : Before,
-               after : After
-             } :< Document),
-        error(bad_api_document(Document, [before, after]), _)),
+diff_handler(post, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    do_or_die((   _{ before : Before,
+                     after : After
+                   } :< Document,
+               Compare_Version = document
+              ;   _{ document_id : Doc_ID,
+                     before_data_version : Before_Version
+                   } :< Document,
+                  (   _{ after_data_version: After_Version}
+                      :< Document,
+                      Compare_Version = true
+                  ;   _{ after: After_Document} :< Document,
+                      Compare_Version = false)
+              ),
+              error(bad_api_document(Document, [before, after]), _)),
 
     (   _{ keep : Keep } :< Document
     ->  true
@@ -2572,7 +2585,15 @@ diff_handler(post, Request, System_DB, Auth) :-
     api_report_errors(
         diff,
         Request,
-        (   api_diff(System_DB, Auth, Before, After, Keep, Patch),
+        (   (   Compare_Version = document
+            ->  api_diff(System_DB, Auth, Before, After, Keep, Patch)
+            ;   Compare_Version = true
+            ->  api_diff_id(System_DB, Auth, Path, Before_Version,
+                            After_Version, Doc_ID, Keep, Patch)
+            ;   api_diff_id_document(System_DB, Auth, Path,
+                                     Before_Version, After_Document,
+                                     Doc_ID, Keep, Patch)
+            ),
             cors_reply_json(Request, Patch)
         )
     ).

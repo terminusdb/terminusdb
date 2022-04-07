@@ -50,6 +50,7 @@
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
 :- use_module(library(plunit)).
+:- use_module(library(when)).
 
 % We rename the imported `when` here, because `when` is also a term in the WOQL
 % AST, and our linter cannot distinguish the two.
@@ -265,17 +266,27 @@ resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
     dict_keys(Dict,Keys),
     mapm({Dict}/[Key,Key-Value,CA,CB]>>(
              get_dict(Key,Dict,V),
-             resolve_dictionary_(V,Value,CA,CB)
+             (   Key = '@type'
+             ->  resolve_predicate(V,Value,CA,CB)
+             ;   resolve_dictionary_(V,Value,CA,CB)
+             )
          ), Keys, Pairs, C1, C2),
     dict_pairs(Dict_Resolved,json,Pairs).
-resolve_dictionary_(true, true, C, C) :-
-    !.
-resolve_dictionary_(false, false, C, C) :-
-    !.
-resolve_dictionary_(null, null, C, C) :-
-    !.
-resolve_dictionary_(Val, New_Val, C1, C2) :-
-    resolve(Val, New_Val, C1, C2).
+resolve_dictionary_(List, List_Resolved, C1, C2) :-
+    is_list(List),
+    !,
+    mapm([A,B,CA,CB]>>(
+             resolve_dictionary_(A,B,CA,CB)
+         ), List, List_Resolved, C1, C2).
+resolve_dictionary_(Val, Dict_Val, C1, C2) :-
+    resolve(Val, Res_Val, C1, C2),
+    when((   ground(Res_Val)
+         ;   ground(Dict_Val)),
+         (   %format(user_error,"We have converted: ~q",[Res_Val]),
+             (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+             ->  true
+             ;   Res_Val = Dict_Val)
+         )).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -1911,7 +1922,7 @@ filter_transaction(type_name_filter{ type : schema}, Transaction, New_Transactio
                           schema_objects : (Transaction.schema_objects)
                       }.
 
-:- begin_tests(woql, []).
+:- begin_tests(woql, [concurrent(true)]).
 
 % At some point this should be exhaustive. Currently we add as we find bugs.
 
@@ -4821,6 +4832,22 @@ test(test_matching, [
     run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
     (Response.bindings) = [ _{'X':2, 'Y':1} ].
 
+test(test_matching_bool_null, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+
+    AST = (_{ a : true, b : v('X')} = _{ a : v('Y'), b : null}),
+
+    create_context(Descriptor, Commit_Info, C1),
+    run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
+    (Response.bindings) = [ _{'X':null, 'Y':true} ].
+
 test(json_dict_vars, [
          setup((setup_temp_store(State),
                 add_user("TERMINUSQA",some('password'),_Auth),
@@ -4988,9 +5015,33 @@ test(insert_document_forget_uri, [
       '@type':'City',
       name:"Dublin"} = Res2.'Doc'.
 
+
+test(operator_clash, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    AST = (v('Name') = "Bill"^^xsd:string,
+           insert_document(json{'@type':'City',
+                                name:v('Name')})),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+    Response = _{'@type':'api:WoqlResponse',
+                 'api:status':'api:success',
+                 'api:variable_names':['Name'],
+                 bindings:[_{'Name':json{'@type':'xsd:string',
+                                         '@value':"Bill"}}],
+                 deletes:0,
+                 inserts:2,
+                 transaction_retry_count:_}.
+
 :- end_tests(woql).
 
-:- begin_tests(store_load_data, []).
+:- begin_tests(store_load_data, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(query)).

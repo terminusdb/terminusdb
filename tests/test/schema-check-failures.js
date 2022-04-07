@@ -81,4 +81,45 @@ describe('schema-check-failures', function () {
       })
     }
   })
+
+  it('fails insert instance with two @oneOf fields', async function () {
+    const path = endpoint.document(agent.defaults()).path
+    const schema = {
+      '@id': util.randomString(),
+      '@type': 'Class',
+      '@oneOf': { integer: 'xsd:integer', string: 'xsd:string' },
+    }
+    await document.insert(agent, path, { schema }).then(document.verifyInsertSuccess)
+    {
+      const instance = [
+        {
+          '@id': schema['@id'] + '/' + util.randomString(),
+          '@type': schema['@id'],
+          integer: 5,
+        },
+        {
+          '@id': schema['@id'] + '/' + util.randomString(),
+          '@type': schema['@id'],
+          string: util.randomString(),
+        },
+      ]
+      await document.insert(agent, path, { instance }).then(document.verifyInsertSuccess)
+    }
+    {
+      const instance = {
+        '@id': schema['@id'] + '/' + util.randomString(),
+        '@type': schema['@id'],
+        integer: -29,
+        string: util.randomString(),
+      }
+      const r = await document.insert(agent, path, { instance }).then(document.verifyInsertFailure)
+      expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
+      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('forbidden_oneof_property_present')
+      expect(r.body['api:error']['api:witnesses'][0].class).to.equal('terminusdb:///schema#' + schema['@id'])
+      expect(r.body['api:error']['api:witnesses'][0].instance).to.equal('terminusdb:///data/' + instance['@id'])
+      expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#string')
+    }
+  })
 })

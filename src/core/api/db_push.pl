@@ -207,7 +207,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ;   throw(error(unknown_status_code,_))
     ).
 
-:- begin_tests(push).
+:- begin_tests(push, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 :- use_module(core(triple)).

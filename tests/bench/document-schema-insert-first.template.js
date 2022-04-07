@@ -1,4 +1,4 @@
-const { Agent, db, document, endpoint } = require('../lib')
+const { Agent, db, document, endpoint, util } = require('../lib')
 
 const agent = new Agent().auth()
 const defaults = agent.defaults()
@@ -17,6 +17,10 @@ module.exports = (schema) => {
     afterEach: async () => {
       // Delete the database.
       await db.del(agent, endpoint.db(defaults).path).then(db.verifyDeleteSuccess)
+      // Print the response body for debugging.
+      if (util.isNonEmptyObject(response.body)) {
+        console.error(JSON.stringify(response.body, null, 2))
+      }
       // Verify the response.
       document.verifyInsertSuccess(response)
     },
