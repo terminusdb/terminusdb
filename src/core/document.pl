@@ -62,6 +62,7 @@
 
               % patch.pl
               simple_patch/3,
+              patch_cost/2,
 
               % normalize.pl
               normalize_document/3
