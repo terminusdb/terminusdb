@@ -1,4 +1,4 @@
-:- module(api_patch, [api_patch/5,api_diff/6,api_diff_id/8, api_diff_id_document/8]).
+:- module(api_patch, [api_patch/5,api_diff/6,api_diff_id/8, api_diff_id_document/8,api_diff_all_documents/7]).
 
 :- use_module(core(util)).
 :- use_module(core(document)).
@@ -18,11 +18,11 @@ api_diff(_System_DB, _Auth, Before, After, Keep, Diff) :-
     simple_diff(Before,After,Keep,Diff).
 
 coerce_to_commit(Commit_Or_Version, Commit_Id) :-
-    (   read_data_version(Version_Header, data_version(Type, Commit_Id))
+    (   read_data_version(Commit_Or_Version, data_version(Type, Commit_Id))
     ->  do_or_die(
             (   branch = Type
             ;   commit = Type),
-            error(bad_data_version(Version_Header), _)
+            error(bad_data_version(Commit_Or_Version), _)
         )
     ;   Commit_Id = Commit_Or_Version
     ).
@@ -61,8 +61,8 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
 changed_id(Transaction,Containing) :-
     ask(Transaction,
         distinct(Containing,
-                 (   distinct(Id, (   added(Id, _, _)
-                                  ;   deleted(Id, _, _),
+                 (   distinct(Id, (   addition(Id, _, _)
+                                  ;   removal(Id, _, _),
                                       once(t(Id, _, _))
                                   )),
                      once((path(Containing, star(p), Id),
@@ -70,7 +70,7 @@ changed_id(Transaction,Containing) :-
                            (   t(Type,rdf:type,sys:'Class',schema)
                            ;   t(Type,rdf:type,sys:'TaggedUnion',schema)),
                            not(t(Type,sys:subdocument, _,schema))))
-                 ;   delete(Id, rdf:type, Type),
+                 ;   removal(Id, rdf:type, Type),
                      once(((   t(Type,rdf:type,sys:'Class',schema)
                            ;   t(Type,rdf:type,sys:'TaggedUnion',schema)),
                            not(t(Type,sys:subdocument, _,schema))))
@@ -91,12 +91,12 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                                              ["commit", Commit_Id],
                                              Commit_Descriptor),
                  do_or_die(
-                     open_transaction(Commit_Descriptor, Transaction),
-                     changed_id(Transaction, Changed)
-                 )
+                     open_descriptor(Commit_Descriptor, Transaction),
+                     error(unresolvable_collection(Commit_Descriptor), _)),
+                 changed_id(Transaction, Changed)
              )).
 
-api_diff_all_ids(System_DB, Auth, Path, Before_Version, After_Version, Keep, Diffs) :-
+api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Keep, Diffs) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
@@ -105,14 +105,16 @@ api_diff_all_ids(System_DB, Auth, Path, Before_Version, After_Version, Keep, Dif
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
                 (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
                 ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
-                    ->  simple_diff(Before,After,Keep,Diff),
-                        (   patch_cost(Diff, 1)
+                    % This turns diff twice. that is bad.
+                    ->  simple_diff(Before, After, _{}, Simple_Diff),
+                        (   Simple_Diff = _{}
                         ->  fail
-                        ;   true
-                        )
+                        ;   simple_diff(Before,After,Keep,Diff))
                     ;   Diff = _{ '@delete' : Before }
                     )
-                ;   Diff = _{ '@insert' : After }
+                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+                    ->  Diff = _{ '@insert' : After }
+                    ;   fail)
                 )
             ),
             Diffs

@@ -2565,15 +2565,17 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die((   _{ before : Before,
                      after : After
                    } :< Document,
-               Compare_Version = document
-              ;   _{ document_id : Doc_ID,
-                     before_data_version : Before_Version
+               Operation = document
+              ;   _{ before_data_version : Before_Version
                    } :< Document,
                   (   _{ after_data_version: After_Version}
                       :< Document,
-                      Compare_Version = true
-                  ;   _{ after: After_Document} :< Document,
-                      Compare_Version = false)
+                      (   _{ document_id: Doc_ID} :< Document
+                      ->  Operation = versioned_document
+                      ;   Operation = all_documents)
+                  ;   _{ after: After_Document,
+                         document_id : Doc_ID} :< Document,
+                      Operation = versioned_document_document)
               ),
               error(bad_api_document(Document, [before, after]), _)),
 
@@ -2585,11 +2587,13 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         diff,
         Request,
-        (   (   Compare_Version = document
+        (   (   Operation = document
             ->  api_diff(System_DB, Auth, Before, After, Keep, Patch)
-            ;   Compare_Version = true
+            ;   Operation = versioned_document
             ->  api_diff_id(System_DB, Auth, Path, Before_Version,
                             After_Version, Doc_ID, Keep, Patch)
+            ;   Operation = all_documents
+            ->  api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Keep, Patch)
             ;   api_diff_id_document(System_DB, Auth, Path,
                                      Before_Version, After_Document,
                                      Doc_ID, Keep, Patch)
