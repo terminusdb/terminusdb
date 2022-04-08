@@ -6,6 +6,9 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 
+:- use_module(library(solution_sequences)).
+:- use_module(library(lists)).
+
 api_patch(_System_DB, _Auth, Patch, Before, After) :-
     % no auth yet.
     simple_patch(Patch,Before,After).
