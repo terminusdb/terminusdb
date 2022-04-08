@@ -44,4 +44,4 @@ jobs:
 
       - run: make
 
-      - run: ./terminusdb test
+      - run: make test
