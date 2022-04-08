@@ -329,7 +329,15 @@ patch_cost(Patch,Cost) :-
     !,
     (   diff_op(Patch,Op)
     ->  patch_cost_op(Op,Patch,Cost)
-    ;   Cost = 1).
+    %   This is a copy - but may have deep patches
+    ;   Closure = [Dict,C]>>(   C = 0
+                            ;   dict_keys(Dict,Keys),
+                                member(K,Keys),
+                                get_dict(K,Dict,Val),
+                                patch_cost(Val, C)
+                            ),
+        aggregate(sum(C),call(Closure,Patch,C),Cost)
+    ).
 patch_cost(Patch,Cost) :-
     is_list(Patch),
     !,
