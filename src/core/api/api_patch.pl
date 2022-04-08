@@ -106,16 +106,16 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Kee
                 (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
                 ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
                     % This turns diff twice. that is bad.
-                    ->  simple_diff(Before, After, _{}, Simple_Diff),
-                        (   Simple_Diff = _{}
-                        ->  fail
-                        ;   simple_diff(Before,After,Keep,Diff))
-                    ;   Diff = _{ '@delete' : Before }
+                    ->  simple_diff(Before,After,Keep,Diff)
+                    ;   Diff = _{ '@op' : 'Delete',
+                                  '@delete' : Before }
                     )
                 ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
-                    ->  Diff = _{ '@insert' : After }
+                    ->  Diff = _{ '@op' : 'Insert',
+                                  '@insert' : After }
                     ;   fail)
-                )
+                ),
+                \+ patch_cost(Diff, 0)
             ),
             Diffs
            ).

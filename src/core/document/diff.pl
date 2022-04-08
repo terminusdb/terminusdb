@@ -346,9 +346,17 @@ patch_cost(Patch,Cost) :-
                          patch_cost(Elt, C)
                      ),
     aggregate(sum(C),call(Closure,Patch,C),Cost).
-patch_cost(_Patch,1).
 % This is an explicit copy.
+patch_cost(_Patch,0).
 
+patch_cost_op('Insert',Patch,Cost) :-
+    get_dict_or_null('@insert', Patch, Doc),
+    json_size(Doc, Insert_Cost),
+    Cost is Insert_Cost + 1.
+patch_cost_op('Delete',Patch,Cost) :-
+    get_dict_or_null('@delete', Patch, Doc),
+    json_size(Doc, Insert_Cost),
+    Cost is Insert_Cost + 1.
 patch_cost_op('SwapValue',Patch,Cost) :-
     % Should this look at the size?
     get_dict_or_null('@before', Patch, Before),

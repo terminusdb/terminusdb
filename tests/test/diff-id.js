@@ -216,5 +216,95 @@ describe('diff-id', function () {
         })
       expect(r2.status).to.equal(400)
     })
+
+    it('diff everything between two commits', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [{ '@type': 'Class', '@id': class1, a: 'xsd:string', b : class2 },
+                   { '@type': 'Class', '@id': class2, c: 'xsd:integer', '@subdocument' : [],
+                     '@key' : { '@type' : 'Lexical', '@fields' : ['c'] }},
+                  ],
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class1, a: 'pickles and eggs',
+                      b: { '@type' : class2,
+                           c : 3
+                         }
+                    },
+        })
+        .then(document.verifyInsertSuccess)
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docId] = r1.body
+      const r2 = await document
+        .replace(agent, docPath, {
+          instance: { '@type': class1, a: 'pickles and eggs',
+                      '@id' : docId,
+                      b: { '@type' : class2,
+                           c : 4
+                         }
+                    },
+        })
+        .then(document.verifyInsertSuccess)
+      const dv2 = r2.header['terminusdb-data-version']
+
+      const { path } = endpoint.versionDiff(agent.defaults())
+
+      const r3 = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          after_data_version: dv2
+        })
+      expect(r3.status).to.equal(200)
+
+    })
+
+    it('diff unchanged', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [{ '@type': 'Class', '@id': class1, a: 'xsd:string'},
+                   { '@type': 'Class', '@id': class2, b: 'xsd:string'}
+                  ],
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class1, a: 'pickles and eggs'},
+        })
+        .then(document.verifyInsertSuccess)
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docId] = r1.body
+      const r2 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class2, b: 'frog legs' },
+        })
+        .then(document.verifyInsertSuccess)
+      const dv2 = r2.header['terminusdb-data-version']
+      const [docId2_long] = r2.body
+      const docId2 = docId2_long.split('terminusdb:///data/')[1]
+      const { path } = endpoint.versionDiff(agent.defaults())
+
+      const r3 = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          after_data_version: dv2,
+        })
+      expect(r3.status).to.equal(200)
+      expect(r3.body).to.deep.equal([
+        {
+          '@insert': {
+            '@id': docId2,
+            '@type': class2,
+            b: 'frog legs'
+          },
+          '@op': 'Insert'
+        }
+      ])
+    })
   })
 })
