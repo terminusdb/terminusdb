@@ -123,3 +123,8 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Kee
             Diffs
            ).
 
+api_apply_squash_commit(System_DB, Auth, Path, Before_Version, After_Version) :-
+    true.
+
+api_apply(System_DB, Auth, Path, Diffs) :-
+    true.
