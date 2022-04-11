@@ -165,7 +165,6 @@ api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Ca
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 prepare_full_replace(true, schema, Stream, Transaction, Tail_Stream) :-
-    !,
     % Read a new context from the stream and replace the existing one.
     json_read_required_context(Stream, Context, Tail_Stream),
     replace_context_document(Transaction, Context).
@@ -185,8 +184,8 @@ api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Rep
                          ->  api_nuke_documents_(Graph_Type, Transaction)
                          ;   true
                          ),
-                         ensure_transaction_has_builder(Graph_Type, Transaction),
                          prepare_full_replace(Full_Replace, Graph_Type, Stream, Transaction, Tail_Stream),
+                         ensure_transaction_has_builder(Graph_Type, Transaction),
                          findall(Id,
                                  (   json_read_tail_stream(Tail_Stream, Document),
                                      nb_thread_var(
