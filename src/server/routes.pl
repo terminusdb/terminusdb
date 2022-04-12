@@ -421,6 +421,7 @@ test(triples_update, [
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
+                 chunked,
                  methods([options,post,delete,get,put])]).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
