@@ -21,7 +21,6 @@
 :- use_module(core(account)).
 
 :- use_module(library(assoc)).
-:- use_module(library(http/json)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
@@ -165,14 +164,14 @@ api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Ca
         do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-replace_existing_graph(schema, Transaction, Stream, _Captures_Var) :-
-    replace_json_schema(Transaction, Stream).
-replace_existing_graph(instance, Transaction, Stream, Captures_Var) :-
-    [RWO] = (Transaction.instance_objects),
-    delete_all(RWO),
-    forall(json_read_dict_list_stream(Stream, Document),
-           nb_thread_var({Transaction,Document}/[State,Captures_Out]>>(api_insert_document_(instance, Transaction, Document, State, _, Captures_Out)),
-                         Captures_Var)).
+prepare_full_replace(true, schema, Stream, Transaction, Tail_Stream) :-
+    !,
+    % Read a new context from the stream and replace the existing one.
+    json_read_required_context(Stream, Context, Tail_Stream),
+    replace_context_document(Transaction, Context).
+prepare_full_replace(_Full_Replace, _Graph_Type, Stream, _Transaction, Tail_Stream) :-
+    % For other inserts, do nothing. Tail_Stream is effectively just Stream.
+    json_init_tail_stream(Stream, Tail_Stream).
 
 api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Requested_Data_Version, New_Data_Version, Ids) :-
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
@@ -183,18 +182,24 @@ api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Rep
                          empty_assoc(Captures),
                          nb_thread_var_init(Captures, Captures_Var),
                          (   Full_Replace = true
-                         ->  replace_existing_graph(Graph_Type, Transaction, Stream, Captures_Var),
-                             Ids = []
-                         ;   ensure_transaction_has_builder(Graph_Type, Transaction),
-                             findall(Id,
-                                     (   json_read_dict_list_stream(Stream, Document),
-                                         nb_thread_var({Graph_Type,Transaction,Document,Id}/[State,Captures_Out]>>(api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)),
-                                                       Captures_Var)),
-                                     Ids),
-
-                             die_if(nonground_captures(Captures_Var, Nonground),
-                                    error(not_all_captures_found(Nonground), _)),
-                             die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _)))),
+                         ->  api_nuke_documents_(Graph_Type, Transaction)
+                         ;   true
+                         ),
+                         ensure_transaction_has_builder(Graph_Type, Transaction),
+                         prepare_full_replace(Full_Replace, Graph_Type, Stream, Transaction, Tail_Stream),
+                         findall(Id,
+                                 (   json_read_tail_stream(Tail_Stream, Document),
+                                     nb_thread_var(
+                                         {Graph_Type, Transaction, Document, Id}/[State, Captures_Out]>>(
+                                             api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)
+                                         ),
+                                         Captures_Var)),
+                                 Ids),
+                         die_if(nonground_captures(Captures_Var, Nonground),
+                                error(not_all_captures_found(Nonground), _)),
+                         die_if(has_duplicates(Ids, Duplicates),
+                                error(same_ids_in_one_transaction(Duplicates), _))
+                     ),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
@@ -217,10 +222,7 @@ api_delete_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream, 
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          forall(
-                             (   json_read_dict_stream(Stream,JSON),
-                                 (   is_list(JSON)
-                                 ->  member(ID_Unchecked, JSON)
-                                 ;   ID_Unchecked = JSON),
+                             (   json_read_list_stream(Stream, ID_Unchecked),
                                  param_check_json(non_empty_string, id, ID_Unchecked, ID)),
                              api_delete_document_(Graph_Type, Transaction, ID))),
                      Meta_Data),
@@ -264,7 +266,7 @@ api_replace_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream,
                          findall(Id,
                                  nb_thread_var(
                                      {Graph_Type, Transaction,Stream,Id}/[State,Captures_Out]>>
-                                     (   json_read_dict_list_stream(Stream,Document),
+                                     (   json_read_list_stream(Stream, Document),
                                          call_catch_document_mutation(
                                              Document,
                                              api_replace_document_(Graph_Type,

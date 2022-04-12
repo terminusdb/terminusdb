@@ -603,9 +603,6 @@ describe('document', function () {
         max = util.randomString()
         minmax = util.randomString()
 
-        const dbDefaults = endpoint.db(agent.defaults())
-        dbPath = dbDefaults.path
-        docPath = endpoint.document(dbDefaults).path
         await document
           .insert(agent, docPath, {
             schema: [

@@ -67,6 +67,7 @@ function insert (agent, path, params) {
   const bodyString = params.string('bodyString')
   const author = params.string('author', 'default_author')
   const message = params.string('message', 'default_message')
+  const fullReplace = params.boolean('fullReplace')
   const schema = params.object('schema')
   const instance = params.object('instance')
   params.assertEmpty()
@@ -77,10 +78,14 @@ function insert (agent, path, params) {
     request.query(queryString)
   } else {
     request.query({
-      graph_type: schema ? 'schema' : 'instance',
+      graph_type: util.isDefined(schema) ? 'schema' : 'instance',
       author: author,
       message: message,
     })
+  }
+
+  if (util.isDefined(fullReplace)) {
+    request.query({ full_replace: fullReplace })
   }
 
   if (util.isDefined(bodyString)) {
@@ -185,10 +190,17 @@ function verifyInsertSuccess (r) {
 
   // Verify the `@id` values are the ones expected.
   if (Array.isArray(r.request._data)) {
-    expect(r.body.length).to.equal(r.request._data.length)
+    let data = r.request._data
+
+    // Support fullReplace with @context as the first element.
+    if (data.length > 0 && data[0]['@type'] === '@context') {
+      data = data.slice(1)
+    }
+
+    expect(r.body.length).to.equal(data.length)
 
     for (let i = 0; i < r.body.length; i++) {
-      verifyId(r.request._data[i]['@id'], r.body[i])
+      verifyId(data[i]['@id'], r.body[i])
     }
   } else if (util.isObject(r.request._data)) {
     expect(r.body.length).to.equal(1)

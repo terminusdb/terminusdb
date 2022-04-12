@@ -13,7 +13,6 @@
               json_schema_elaborate/3,
               context_triple/2,
               database_prefixes/2,
-              insert_context_document/2,
               run_insert_document/4,
               create_graph_from_json/5,
               write_json_stream_to_builder/3,
@@ -44,6 +43,9 @@
               replace_schema_document/3,
               replace_schema_document/4,
               nuke_schema_documents/1,
+              json_read_required_context/3,
+              insert_context_document/2,
+              replace_context_document/2,
 
               % instance.pl
               is_instance/3,
