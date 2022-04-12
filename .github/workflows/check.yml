@@ -48,7 +48,6 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: terminusdb/terminusdb-client-python
-          ref: pin-pyupgrade
 
       - name: Install dependencies
         run: |
