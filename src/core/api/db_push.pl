@@ -81,7 +81,8 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
                        Remote_Branch)
         ->  (   branch_head_commit(Remote_Repository_Context,
                                    Remote_Branch,
-                                   Remote_Commit_Uri)
+                                   Remote_Commit_Uri),
+                \+ commit_uri_is_initial(Remote_Repository_Context, Remote_Commit_Uri)
             ->  Remote_Commit_Uri_Option = some(Remote_Commit_Uri)
             ;   Remote_Commit_Uri_Option = none
             ),
