@@ -76,6 +76,8 @@
               apply_commit_on_branch/8,
               apply_commit_on_commit/7,
               apply_commit_on_commit/8,
+              commit_uri_is_valid/2,
+              commit_uri_is_initial/2,
               commit_is_valid/2,
               commit_is_initial/2,
               commit_type/3,
