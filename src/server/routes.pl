@@ -422,6 +422,7 @@ test(triples_update, [
                 [method(Method),
                  prefix,
                  chunked,
+                 time_limit(infinite),
                  methods([options,post,delete,get,put])]).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
