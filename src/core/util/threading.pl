@@ -167,7 +167,8 @@ test(normal_result) :-
 
     List = Result.
 
-test(error) :-
+test(error,
+     [error(foo)]) :-
     Instructions = [sleep(3),
                     error(foo),
                     sleep(5),
