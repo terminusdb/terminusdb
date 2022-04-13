@@ -1,288 +1,250 @@
-# Build From Source
+# TerminusDB build instructions
 
-[Debian / Ubuntu](#debian-or-ubuntu)
+These instructions give the general steps we use for building TerminusDB from
+[source][].
 
-[Fedora / Red Hat](#fedora-or-red-hat)
+We strive to be as accurate as possible; however, we cannot account for every
+possible system configuration. Use these instructions as a guideline, and let us
+know with an [issue][] or on [Discord][] if you have any problems.
 
-[Arch Linux](#arch-linux)
+[source]: https://github.com/terminusdb/terminusdb
+[issue]: https://github.com/terminusdb/terminusdb/issues
+[Discord]: https://discord.gg/yTJKAma
 
-[Mac OS](#mac-os)
+## Tested systems
 
-## Debian or Ubuntu
+We have tested the steps below with these systems and install tools:
 
-The following directions should work on debian or ubuntu.
+* Debian and Ubuntu using `apt-get`
+* Fedora using `dnf`
+* Arch Linux using `pacman`
+* Other Linux systems using `snap`
+* macOS using `brew`
 
-### Rust
+## Steps
 
-Install Rust by following the following instructions on the official
-Rust installation guide.
+The instructions are broken into steps describing the operations for each
+system.
 
-https://www.rust-lang.org/tools/install
+### 1. Install tool dependencies
 
-### swi-prolog
+#### 1.1 Install common tools
 
-To use TerminusDB Server, you will need the swi-prolog installation of
-prolog. The TerminusDB team tends to use the latest stable for local
-development and packaging, but likely, other versions of swi-prolog since
-8.2.4 will work as well.
-Currently we don't have an officially supported version of swi-prolog,
-but latest stable is likely to work. Ubuntu's version of swi-prolog
-is outdated, so the repo needs to be added.
+> :left_speech_bubble: TerminusDB uses a few common tools for building and
+> running.
 
-To install swi-prolog in Debian variants simply use the apt package
-manager:
+The main tools used are GNU `make`, `clang`, and `git`. These should be in your
+path (e.g. `which make`) after installation. We provide our preferred steps
+below.
 
+**Using `apt-get`**
+
+```sh
+sudo apt-get install findutils make clang git
 ```
-# add the repo if Ubuntu is the OS
-cat /etc/*release | grep ubuntu >/dev/null && (sudo apt-get install software-properties-common; sudo apt-add-repository ppa:swi-prolog/stable)
+
+**Using `dnf`**
+
+```sh
+sudo dnf install findutils make clang git
+```
+
+**Using `pacman`**
+
+```sh
+sudo pacman -S findutils make clang git
+```
+
+#### 1.2 Install Rust
+
+> :left_speech_bubble: TerminusDB uses the systems programming language [Rust][]
+> for the underlying [triple][] store, [`terminusdb-store`][store], as well as
+> for other functionality.
+
+[Rust]: https://www.rust-lang.org/
+[triple]: https://en.wikipedia.org/wiki/Semantic_triple
+[store]: https://github.com/terminusdb/terminusdb-store
+
+Install the Rust tools by following the [official instructions][rust_install].
+
+[rust_install]: https://www.rust-lang.org/tools/install
+
+The main tools used are [`cargo`][cargo] and [`rustc`][rustc]. These should be
+in your path (e.g. `which cargo`) after installation.
+
+[cargo]: https://doc.rust-lang.org/cargo/
+[rustc]: https://doc.rust-lang.org/rustc/
+
+#### 1.3 Install SWI-Prolog
+
+> :left_speech_bubble: Much of TerminusDB is written in the logic programming
+> language [Prolog][prolog]. Our development environment is
+> [SWI-Prolog][swi_prolog], a well-maintained implementation with many
+> [swi_prolog_features][]. We test daily with the latest
+> [`stable`][swi_prolog_stable] release. (We cannot guarantee that it will work
+> with a `devel` release or an older `stable` release.)
+
+[prolog]: https://en.wikipedia.org/wiki/Prolog
+[swi_prolog]: https://www.swi-prolog.org/
+[swi_prolog_features]: https://www.swi-prolog.org/features.html
+[swi_prolog_stable]: https://www.swi-prolog.org/download/stable
+
+Install the `stable` SWI-Prolog environment following the [official
+instructions][swi_prolog_install], or use our preferred steps below.
+
+The main tool used is `swipl`. This should be in your path (e.g. `which swipl`)
+after installation.
+
+[swi_prolog_install]: https://www.swi-prolog.org/Download.html
+
+**Using `apt-get`**
+
+Install `apt-add-repository` if needed:
+
+```sh
+sudo apt-get install software-properties-common
+```
+
+Add the SWI-Prolog PPA for the `stable` release:
+
+```sh
+sudo apt-add-repository ppa:swi-prolog/stable
 sudo apt-get update
-sudo apt install swi-prolog
 ```
 
-the swi-prolog project website also contains downloadable packages for
-swi-prolog for different operating systems:
-[stable](https://www.swi-prolog.org/download/stable)
-[devel](https://www.swi-prolog.org/download/devel).
+Install `swi-prolog`:
 
-If you want to experiment with multiple builds of swi-prolog, you may
-be interested in [swivm](https://github.com/fnogatz/swivm). This tool
-lets you build and install multiple versions of swi-prolog and switch
-between them.
-
-Once installed, you will have to install one library dependency for
-our storage backend: [terminus_store_prolog](https://github.com/terminusdb/terminus_store_prolog).
-
-We also require the use of the SWI Prolog library TUS, which is used to enable
-resumable file uploads.
-
-This can be done by typing:
-
-```
-$ swipl
-Welcome to SWI-Prolog (threaded, 64 bits, version 8.1.10-28-g8a26a53c1)
-SWI-Prolog comes with ABSOLUTELY NO WARRANTY. This is free software.
-Please run ?- license. for legal details.
-
-For online help and background, visit http://www.swi-prolog.org
-For built-in help, use ?- help(Topic). or ?- apropos(Word).
-
-1 ?- pack_install(terminus_store_prolog).
-% Contacting server ...
-
-2 ?- pack_install(tus).
-
-% Contacting server ...
+```sh
+sudo apt-get install swi-prolog
 ```
 
-### TerminusDB Server
+**Using `dnf`**
 
-The TerminusDB Server source tree should then be cloned from GitHub and compiled:
-
-```
-git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
-make
-```
-
-This will create a binary called `terminusdb`.
-You need to set the admin user password which is used as a
-super-user API key for access. This can be done with the
-`terminusdb` binary. The script should also be used to
-configure the server name, as shown in the example. It will also
-create the system database.
-
-```
-./terminusdb store init --key "my_password_here"
-```
-
-At this point you can enter the terminusDB directory and start the server:
-
-```
-./terminusdb serve
-```
-
-Now you are ready to interact with the HTTP server.
-
-## Fedora or Red Hat
-
-These instructions have been tested on Fedora 30 and might result in different results depending on your
-Fedora / Red Hat release.
-
-
-### Rust
-
-Install Rust by following the following instructions on the official
-Rust installation guide.
-
-https://www.rust-lang.org/tools/install
-
-### SWIPL
-
-SWI-Prolog is needed to run terminusdb-server. Install SWI-PROLOG with:
-
-```
+```sh
 sudo dnf install pl pl-devel
 ```
 
-### SWIPL libraries
+**Using `snap`**
 
-Run SWIPL and install the required dependencies, note that you need to have
-rust installed to compile the dependencies:
-
-```
-$ swipl
-Welcome to SWI-Prolog (threaded, 64 bits, version 8.1.10-28-g8a26a53c1)
-SWI-Prolog comes with ABSOLUTELY NO WARRANTY. This is free software.
-Please run ?- license. for legal details.
-
-For online help and background, visit http://www.swi-prolog.org
-For built-in help, use ?- help(Topic). or ?- apropos(Word).
-
-1 ?- pack_install(terminus_store_prolog).
-% Contacting server ....
-  ?- pack_install(tus).
+```sh
+snap install swi-prolog
 ```
 
+**Using `pacman`**
 
-### TerminusDB Server
-
-The TerminusDB Server source tree should then be cloned from GitHub and compiled:
-
-```
-git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
-make
+```sh
+sudo pacman -S swi-prolog
 ```
 
-This will create a binary called `terminusdb`.
-You need to set the admin user password which is used as a
-super-user API key for access. This can be done with the
-`terminusdb` binary. The script should also be used to
-configure the server name, as shown in the example. It will also
-create the system database.
+**Using `brew`**
 
-```
-./terminusdb store init --key "my_password_here"
-```
-
-At this point you can enter the terminusDB directory and start the server:
-
-```
-./terminusdb serve
-```
-
-Now you are ready to interact with the HTTP server.
-
-
-## Arch Linux
-
-
-### Rust
-
-Install Rust by following the following instructions on the official
-Rust installation guide.
-
-https://www.rust-lang.org/tools/install
-
-### Library dependencies
-
-1. Install all dependencies of all the required libraries:
-
-```
-sudo pacman -S git swi-prolog make automake autoconf libtool zlib pkgconf gcc
-```
-
-### SWIPL libraries
-
-Run SWIPL and install the required dependencies, note that you need to have
-rust installed to compile the dependencies:
-
-```
-$ swipl
-Welcome to SWI-Prolog (threaded, 64 bits, version 8.1.10-28-g8a26a53c1)
-SWI-Prolog comes with ABSOLUTELY NO WARRANTY. This is free software.
-Please run ?- license. for legal details.
-
-For online help and background, visit http://www.swi-prolog.org
-For built-in help, use ?- help(Topic). or ?- apropos(Word).
-
-1 ?- pack_install(terminus_store_prolog).
-% Contacting server ....
-  ?- pack_install(tus).
-```
-
-
-### TerminusDB Server
-
-The TerminusDB Server source tree should then be cloned from GitHub and compiled:
-
-```
-git clone https://github.com/terminusdb/terminusdb
-cd terminusdb
-make
-```
-
-This will create a binary called `terminusdb`.
-You need to set the admin user password which is used as a
-super-user API key for access. This can be done with the
-`terminusdb` binary. The script should also be used to
-configure the server name, as shown in the example. It will also
-create the system database.
-
-```
-./terminusdb store init --key "my_password_here"
-```
-
-At this point you can enter the terminusDB directory and start the server:
-
-```
-./terminusdb serve
-```
-
-Now you are ready to interact with the HTTP server.
-
-## Mac OS
-
-### Installing SWI Prolog and Rust
-
-First of all, SWI Prolog and Rust should be installed from [homebrew](https://brew.sh/) by executing in a terminal:
-
-```
+```sh
 brew install swi-prolog
-brew install rust
 ```
 
-### Installing and compiling the storage back-end
+### 2. Install library dependencies
 
-Run SWI-Prolog by running `swipl` inside a terminal.
+> :left_speech_bubble: TerminusDB requires two libraries to be installed as
+> [packs][] with SWI-Prolog. These are [`tus`][tus] (resumable file uploads over
+> HTTP) and [`terminus_store_prolog`][terminus_store_prolog] (Prolog binding to
+> `terminusdb-store`).
 
-In the SWI-Prolog prompt, enter the following:
+[packs]: https://www.swi-prolog.org/pack/list
+[tus]: https://github.com/terminusdb/tus
+[terminus_store_prolog]: https://github.com/terminusdb/terminus_store_prolog
 
+> :memo: All of the following commands assume your current working directory is
+> the top-level directory of this repository.
+
+Install the library dependencies with:
+
+```sh
+make install-deps
 ```
-pack_install(terminus_store_prolog).
-```
 
-TUS is also needed as a dependency:
+For documentation on managing packs in general, see
+[`prolog_pack.pl`][prolog_pack].
 
-```
-pack_install(tus).
-```
+[prolog_pack]: https://www.swi-prolog.org/pldoc/doc/_SWI_/library/prolog_pack.pl
 
-Press Y if it asks for confirmation, be sure to check the GitHub URLs to check whether you trust the package.
+### 3. Build
 
-If the compilation has finished, press Ctrl+D to exit the SWI Prolog interactive prompt.
+Build the `terminusdb` executable with:
 
-### Running TerminusDB-server
-
-Clone the Git repository and execute the `terminusdb` binary file, the `terminusdb store init` command  will initialize
-the system database:
-
-```
-git clone https://github.com/terminusdb/terminusdb.git
-cd terminusdb
+```sh
 make
-./terminusdb store init --key root
+```
+
+### 4. Test
+
+Run the unit tests with:
+
+```sh
+make test
+```
+
+For running the integration tests, see the [`README.md`][integration_tests] in
+the top-level `tests/` directory.
+
+[integration_tests]: ../tests/README.md
+
+### 5. Initialize the store
+
+> :left_speech_bubble: Before TerminusDB can be used, the store must be
+> initialized. Initialization creates a subdirectory `storage/`, the location of
+> the system database and all of the databases you will create, in the current
+> working directory.
+
+Initialize the store with default settings:
+
+```sh
+./terminusdb store init
+```
+
+> :memo: The default initial store has one user, `admin`, whose password is
+> `root`.
+
+To initialize the store with the `admin` password set to `my_password`, use:
+
+```sh
+./terminusdb store init --key "my_password"
+```
+
+To wipe your `storage/` directory and start over, use this (along with `--key`
+if you want to also set the `admin` password):
+
+```sh
+./terminusdb store init --force
+```
+
+### 5. Start and stop the server
+
+Start the TerminusDB server with:
+
+```
 ./terminusdb serve
 ```
 
-It should now start on https://127.0.0.1:6363.
+It will start up with a message like this:
+
+```prolog
+% Started server at http://localhost:6363/
+```
+
+To stop the server, type `^C^C` (`Control-C` twice). You will get a SWI-Prolog
+prompt like this:
+
+```
+Action (h for help) ?
+```
+
+Type `e` to exit.
+
+## Notes
+
+### Manage multiple versions of SWI-Prolog
+
+If you want to install multiple versions of SWI-Prolog and easily switch between
+them, you might try [`swivm`][swivm].
+
+[swivm]: https://github.com/fnogatz/swivm
