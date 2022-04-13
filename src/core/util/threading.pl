@@ -1,5 +1,7 @@
 :- module('util/threading',
-          [cpu_concurrent_findall/4]).
+          [cpu_concurrent_findall/4,
+           cpu_concurrent_forall/2,
+           cpu_concurrent_findfirst/4]).
 
 initialize_cpu_pool :-
     current_thread_pool(cpu_thread_pool),
@@ -133,6 +135,32 @@ interrupt_threads([C-T|Threads], Min_Kill) :-
     ;   true),
     interrupt_threads(Threads, Min_Kill).
 
+:- meta_predicate cpu_concurrent_forall(:, :).
+cpu_concurrent_forall(Generator, Action) :-
+    catch(
+        (   cpu_concurrent_findall(_,
+                                   Generator,
+                                   (   Action
+                                   ->  true
+                                   ;   throw(failure)),
+                                   _),
+            Result=success),
+        failure,
+        Result=failure),
+
+    Result = success.
+
+:- meta_predicate cpu_concurrent_findall(+, :, :, -).
+cpu_concurrent_findfirst(Template, Generator, Action, Result) :-
+    catch(cpu_concurrent_findall(Template,
+                                 Generator,
+                                 (   Action,
+                                     throw(success(Template))),
+                                 _),
+          success(R),
+          Result = R),
+    nonvar(Result).
+
 :- begin_tests(cpu_concurrent_findall).
 test(normal_result) :-
     List = [a, c, x, y, b, 42],
@@ -213,4 +241,10 @@ test(error) :-
                                throw(error(E, -))
                            ;   X = default),
                            _Result).
+
+test(all_false) :-
+    cpu_concurrent_findall(_,
+                           member(_, [a,b,c,d,e,f]),
+                           false,
+                           []).
 :- end_tests(cpu_concurrent_findall).
