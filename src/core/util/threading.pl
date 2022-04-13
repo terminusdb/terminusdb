@@ -3,6 +3,11 @@
            cpu_concurrent_forall/2,
            cpu_concurrent_findfirst/4]).
 
+:- use_module(library(thread_pool)).
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
+
 initialize_cpu_pool :-
     current_thread_pool(cpu_thread_pool),
     !.
