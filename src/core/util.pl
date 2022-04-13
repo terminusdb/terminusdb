@@ -256,6 +256,7 @@
 % note: test_utils is intentionally omitted
 :- use_module(util/syntax).
 :- use_module(util/file_utils).
+:- use_module(util/threading).
 :- use_module(util/types).
 :- use_module(util/remote_file).
 :- use_module(util/utils).
