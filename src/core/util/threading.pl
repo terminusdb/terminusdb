@@ -90,7 +90,6 @@ cpu_concurrent_findall(Template, Generator, Concurrent, Result) :-
 
 :- meta_predicate cpu_concurrent_findall_(+, +, :, :, -).
 cpu_concurrent_findall_(Queue, Template, Generator, Concurrent, Final_Count) :-
-    % TODO figure out how to not continue findall if an error or failure was encountered
     setup_call_cleanup(
         message_queue_create(Error_Queue, []),
         (
