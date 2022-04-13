@@ -19,11 +19,9 @@ services:
       # Uncomment the option you decide on and comment out others.
       # Don't forget to change the default password!
 
-      # Security Option 1: TerminusDB is set up behind a TLS-terminating reverse
+      # TerminusDB should be set up behind a TLS-terminating reverse
       # proxy with admin authentication provided by password.
-      # - TERMINUSDB_PUBLIC_URL=https://example.com
       # - TERMINUSDB_ADMIN_PASS=root  #  Change before exposing to the internet.
 
-    # Volumes mounted to the container.
-    # Syntax is `[SOURCE:]TARGET[:MODE]` See: https://docs.docker.com/compose/compose-file/#volumes
-    # SOURCE: host filesystem path or volume name. TARGET: container filesystem path
+      # The storage path of terminusdb databases is /app/terminusdb/storage in case
+      # you want to persist storage somewhere else.
