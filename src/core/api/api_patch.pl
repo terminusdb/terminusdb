@@ -99,32 +99,57 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                  changed_id(Transaction, Changed)
              )).
 
+document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Keep, Diff) :-
+    commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
+    (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
+    ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
+        ->  simple_diff(Before,After,Keep,Diff)
+        ;   Diff = _{ '@op' : 'Delete',
+                      '@delete' : Before }
+        )
+    ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+        ->  Diff = _{ '@op' : 'Insert',
+                      '@insert' : After }
+        ;   fail)
+    ),
+    \+ patch_cost(Diff, 0).
+
 api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Keep, Diffs) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
 
     findall(Diff,
-            (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
-                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
-                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
-                    % This turns diff twice. that is bad.
-                    ->  simple_diff(Before,After,Keep,Diff)
-                    ;   Diff = _{ '@op' : 'Delete',
-                                  '@delete' : Before }
-                    )
-                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
-                    ->  Diff = _{ '@op' : 'Insert',
-                                  '@insert' : After }
-                    ;   fail)
-                ),
-                \+ patch_cost(Diff, 0)
-            ),
+            document_diffs_from_commits(Branch_Descriptor,
+                                        Before_Commit_Id,
+                                        After_Commit_Id,
+                                        Keep,
+                                        Diff),
             Diffs
            ).
 
-api_apply_squash_commit(System_DB, Auth, Path, Before_Version, After_Version) :-
-    true.
+api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
+    coerce_to_commit(Before_Version, Before_Commit_Id),
+    coerce_to_commit(After_Version, After_Commit_Id),
 
-api_apply(System_DB, Auth, Path, Diffs) :-
-    true.
+    create_context(Path, Commit_Info, Context),
+    with_transaction(
+        Context,
+        (   findall(Witness,
+                    (   document_diffs_from_commits(Branch_Descriptor,
+                                                    Before_Commit_Id,
+                                                    After_Commit_Id,
+                                                    _{'@id':true, '@type':true},
+                                                    Diff),
+                        apply_diff(Context,Diff,Witness,Options),
+                        \+ Witness = null
+                    ),
+                    Witnesses),
+            (   Witnesses = []
+            ->  true
+            ;   throw(error(apply_squash_witnesses(Witnesses)))
+            )
+        ),
+        _
+    ).
