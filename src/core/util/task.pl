@@ -56,44 +56,44 @@ wakeup_task_runner(Goal) :-
     Goal,
     wakeup_task_runner.
 
-:- dynamic task_queue/1.
+:- dynamic task_queue/2.
 work_available(Work) :-
-    task_queue(cleanup(Task)),
-    retract(task_queue(cleanup(Task))),
+    task_queue(cleanup, Task),
+    retract(task_queue(cleanup, Task)),
     Work = cleanup(Task).
 work_available(Work) :-
-    task_queue(reap(Task)),
+    task_queue(reap, Task),
     task_info(Task, _, Status),
     (   Status = result(exception(_))
     ;   Status = result(failure)
     ;   Status = result(final(_))
     ;   Status = killed
     ;   Status = strange),
-    retract(task_queue(reap(Task))),
+    retract(task_queue(reap, Task)),
     Work = reap(Task).
 work_available(Work) :-
-    task_queue(reap(Task)),
+    task_queue(reap, Task),
     task_info(Task, _, Status),
     (   Status = result(success(_))
     ;   Status = waiting),
     task_worker(available, Worker),
-    retract(task_queue(reap(Task))),
+    retract(task_queue(reap, Task)),
     Work = start(Task, Worker).
 work_available(Work) :-
     task_worker(available, Worker),
-    task_queue(start(Task)),
-    retract(task_queue(start(Task))),
+    task_queue(start, Task),
+    retract(task_queue(start, Task)),
     Work = start(Task, Worker).
 work_available(Work) :-
     task_worker(available, Worker),
-    task_queue(wait(Waiting_Task, Task)),
+    task_queue(wait(Task), Waiting_Task),
     task_info(Task, _, result(_)),
-    retract(task_queue(wait(Waiting_Task, Task))),
+    retract(task_queue(wait(Task), Waiting_Task)),
     Work = start(Waiting_Task, Worker).
 work_available(Work) :-
-    task_queue(wait_blocking(Waiting_Queue, Task)),
+    task_queue(wait_blocking(Waiting_Queue, Task), none),
     task_info(Task, _, result(_)),
-    retract(task_queue(wait_blocking(Waiting_Queue, Task))),
+    retract(task_queue(wait_blocking(Waiting_Queue, Task), none)),
     Work = wakeup_queue(Waiting_Queue).
 
 consume_work :-
@@ -134,6 +134,8 @@ perform_cleanup_task(Task) :-
     forall(task_info(Child, some(Task), _),
            perform_cleanup_task(Child)),
 
+    retractall(task_queue(_, Task)),
+
     task_info(Task, _, Result),
     (   (   Result = final(_)
         ;   Result = failure
@@ -150,7 +152,7 @@ perform_cleanup_task(Task) :-
     % At this point, this task and all its children are terminated or
     % have a signal sent to them to be terminated. What is left to do
     % is reap.
-    assert(task_queue(reap(Task))).
+    assert(task_queue(reap, Task)).
 
 run_task_worker(Name) :-
     repeat,
@@ -166,7 +168,7 @@ task_worker_step(next(Engine), Name) :-
     task_log('INFO', "result: ~q", [Result]),
     (   Result = the(waiting(Other_Task))
     ->  task_set_state(Engine, _, waiting),
-        assert(task_queue(wait(Engine, Other_Task)))
+        assert(task_queue(wait(Other_Task), Engine))
     ;   Result = the(exception(task_kill))
     ->  task_set_state(Engine, _, killed)
     ;   Result = the(exception(E))
@@ -226,7 +228,7 @@ task_spawn(Template, Goal, Task) :-
     ;   Parent = none),
     wakeup_task_runner(
         transaction((assert(task_info(Task, Parent, starting)),
-                     assert(task_queue(start(Task)))))
+                     assert(task_queue(start, Task))))
     ).
 
 :- meta_predicate task_spawn(:, -).
@@ -305,7 +307,7 @@ thread_wait_for_result(Task, Result) :-
     ->  true
     ;   setup_call_cleanup(
             message_queue_create(Q),
-            (   wakeup_task_runner(assert(task_queue(wait_blocking(Q, Task)))),
+            (   wakeup_task_runner(assert(task_queue(wait_blocking(Q, Task), none))),
                 thread_get_message(Q, _)),
             message_queue_destroy(Q)),
         (   task_info(Task, _, result(Result))
@@ -323,7 +325,7 @@ wait_for_result(Task, Result) :-
     !.
 
 cleanup_task(Task) :-
-    assert(task_queue(cleanup(Task))),
+    assert(task_queue(cleanup, Task)),
     wakeup_task_runner.
 
 demonstration(Result) :-
