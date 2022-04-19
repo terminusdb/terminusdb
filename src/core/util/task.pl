@@ -74,18 +74,19 @@ work_available(Work) :-
     retract(task_queue(wait_blocking(Waiting_Queue, Task))),
     Work = wakeup_queue(Waiting_Queue).
 
-wait_for_work_available(Work) :-
+consume_work :-
     repeat,
-    thread_get_message(_),
-    work_available(Work),
-    !.
+    (   once(work_available(Work))
+    ->  task_runner_step(Work)
+    ;   !),
+    fail.
 
 run_task_runner :-
     setup_call_cleanup(
         init_task_runner,
         (   repeat,
-            wait_for_work_available(Work),
-            task_runner_step(Work),
+            thread_get_message(_),
+            consume_work,
             fail),
         cleanup_task_runner).
 
@@ -294,8 +295,11 @@ demonstration(Result) :-
                                   R = 10),
                               T3),
                    wait_for_result(T1, R1),
+                   format("result 1: ~q~n", [R1]),
                    wait_for_result(T2, R2),
+                   format("result 2: ~q~n", [R2]),
                    wait_for_result(T3, R3),
+                   format("result 3: ~q~n", [R3]),
 
                    R is R1 + R2 + R3),
                Task),
