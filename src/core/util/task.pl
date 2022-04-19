@@ -19,21 +19,14 @@ setup_default_task_logger :-
 
 :- setup_default_task_logger.
 
-
 start_task_runner :-
-    thread_create(run_task_runner, _, [alias(task_runner)]).
+    (   is_thread(task_runner)
+    ->  true
+    ;   thread_create(run_task_runner, _, [alias(task_runner)])).
 
 kill_task_runner :-
     ignore(thread_signal(task_runner, throw(task(kill)))),
     thread_join(task_runner, _).
-
-run_task_runner :-
-    setup_call_cleanup(
-        init_task_runner,
-        (   repeat,
-            task_runner_step,
-            fail),
-        cleanup_task_runner).
 
 :- dynamic task_worker/2.
 init_task_runner :-
@@ -55,13 +48,37 @@ cleanup_task_runner :-
            ignore((thread_signal(Worker, throw(task(kill))),
                    thread_join(Worker, _)))).
 
-task_runner_step :-
-    thread_get_message(Message),
-    (   Message = start(Engine)
-    ->  thread_wait(task_worker(available, Worker), [wait_preds([+(task_worker/2)])]),
-        claim_worker(Worker),
-        thread_send_message(Worker, start(Engine))
-    ;   task_log('ERROR', "Unknown Message: ~q", [Message])).
+:- dynamic task_queue/1.
+
+work_available(Work) :-
+    task_worker(available, Worker),
+    task_queue(start(Task)),
+    retract(task_queue(start(Task))),
+    Work = start(Task, Worker).
+work_available(Work) :-
+    task_worker(available, Worker),
+    task_queue(wait(Waiting_Task, Task)),
+    task_info(Task, _, result(_)),
+    retract(task_queue(wait(Waiting_Task, Task))),
+    Work = start(Waiting_Task, Worker).
+
+run_task_runner :-
+    setup_call_cleanup(
+        init_task_runner,
+        (   repeat,
+            thread_wait(work_available(Work),
+                        [wait_preds([+(task_worker/2),
+                                     +(task_queue/1)])]),
+            task_runner_step(Work),
+            fail),
+        cleanup_task_runner).
+
+task_runner_step(start(Task, Worker)) :-
+    !,
+    claim_worker(Worker),
+    thread_send_message(Worker, next(Task)).
+task_runner_step(Message) :-
+    task_log('ERROR', "Unknown Message: ~q", [Message]).
 
 run_task_worker(Name) :-
     repeat,
@@ -69,21 +86,25 @@ run_task_worker(Name) :-
     task_worker_step(Message,Name),
     fail.
 
-task_worker_step(start(Engine), Name) :-
+task_worker_step(next(Engine), Name) :-
     !,
     task_set_state(Engine, _, started),
     engine_next_reified(Engine, Result),
     task_log('INFO', "result: ~q", [Result]),
-    (   Result = the(Answer)
+    (   Result = the(waiting)
+    ->  task_set_state(Engine, _, waiting),
+        task_log('INFO', 'task is now waiting: ~q', [Engine])
+    ;   Result = the(Answer)
     ->  task_set_state(Engine, _, result(Answer))
     ;   Result = no
         ->  task_set_state(Engine, _, result(failure))
-    ;   Result = result(exception(E))
-        ->  task_set_state(Engine, _, exception(E))
-    ;   task_set_state(Engine, _, strange)),
+    ;   Result = exception(E)
+    ->  task_set_state(Engine, _, result(exception(E)))
+    ;   task_set_state(Engine, _, result(strange))),
     free_worker(Name),
 
-    (   Result = the(success(_))
+    (   (   Result = the(success(_))
+        ;   Result = the(waiting))
     ->  true % there are more results so we can't destroy the engine just yet
     ;   engine_destroy(Engine),
         task_log('INFO', "destroyed task engine ~q", [Engine])).
@@ -103,8 +124,10 @@ claim_worker(Worker) :-
     ).
 
 free_worker(Worker) :-
+    task_log('DEBUG', "Before transaction for freeing worker ~q", [Worker]),
     transaction(
         (
+            task_log('DEBUG', "In transaction for freeing worker ~q", [Worker]),
             (   task_worker(busy, Worker)
             ->  true
             ;   throw(error(worker_not_busy(Worker), _))),
@@ -116,24 +139,17 @@ free_worker(Worker) :-
 
 :- dynamic task_info/3.
 
-% todo - we need to be a lot smarter about spawning
-% this needs to be able to iterate over results with backtracking
-% we can detect when we're done backtracking using prolog_current_choice(C)
-% C will revert to what it was before calling goal when there's no more choice points.
-% So that should allow us to return not just success or failure, but iterate over successes and mark the very last success (when backtracking is done) to ensure steadfastness.
-:- meta_predicate task_spawn(+, :).
-task_spawn(Template, Goal) :-
+:- meta_predicate task_spawn(+, :, -).
+task_spawn(Template, Goal, Task) :-
     engine_create(Result,
                   reify_result(Template, Goal, Result),
-                  Engine),
+                  Task),
     (   engine_self(P),
         task_info(P, _, _)
     ->  Parent = some(P)
     ;   Parent = none),
-    format("parent ~q~n", [Parent]),
-    assert(task_info(Engine, Parent, starting)),
-    thread_send_message(task_runner,
-                        start(Engine)).
+    assert(task_info(Task, Parent, starting)),
+    assert(task_queue(start(Task))).
 
 :- meta_predicate task_spawn(:).
 task_spawn(Goal) :-
@@ -173,3 +189,51 @@ reify_result(Template, Clause, Result) :-
         ->  Result = final(Template)
         ;   Result = success(Template))
     ;   Result = failure).
+
+wait_for_result(Task, Result) :-
+    engine_self(E),
+    task_info(E, _, _),
+    !,
+    task_wait_for_result(E, Task, Result).
+wait_for_result(Task, Result) :-
+    % not a task, block thread.
+    thread_wait_for_result(Task, Result).
+
+task_might_get_result(Task) :-
+    snapshot((once(task_info(Task, _, State)),
+              (   State = result(_)
+              ;   State = starting
+              ;   State = started
+              ;   State = waiting))).
+
+assert_task_might_get_result(Task) :-
+    (   task_might_get_result(Task)
+    ->  true
+    ;   throw(error(waiting_for_task_that_wont_have_result(Task), _))).
+
+task_wait_for_result(_Self, Task, Result) :-
+    task_info(Task, Parent, result(Result)),
+    !,
+    retract(task_info(Task, Parent, result(Result))).
+task_wait_for_result(Self, Task, Result) :-
+    assert_task_might_get_result(Task),
+    assert(task_queue(wait(Self, Task))),
+    engine_yield(waiting),
+    task_info(Task, Parent, result(Result)),
+    retract(task_info(Task, Parent, result(Result))).
+
+thread_wait_for_result(Task, Result) :-
+    % I'd prefer using assert_task_might_get_result here but it
+    % weirdly kills the transaction mechanism and I'm not sure why.
+    thread_wait((   task_might_get_result(Task)
+                ->  R=result(Result),
+                    task_info(Task, Parent, R)
+                ;   R=no_result),
+                [wait_preds([+(task_info/3)])]),
+
+    (   R = no_result
+    ->  throw(error(waiting_for_task_that_wont_have_result(Task), _))
+    ;   true),
+    format("done waiting!~n"),
+
+    retract(task_info(Task, Parent, result(Result))).
