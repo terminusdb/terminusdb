@@ -58,6 +58,28 @@ wakeup_task_runner(Goal) :-
 
 :- dynamic task_queue/1.
 work_available(Work) :-
+    task_queue(cleanup(Task)),
+    retract(task_queue(cleanup(Task))),
+    Work = cleanup(Task).
+work_available(Work) :-
+    task_queue(reap(Task)),
+    task_info(Task, _, Status),
+    (   Status = result(exception(_))
+    ;   Status = result(failure)
+    ;   Status = result(final(_))
+    ;   Status = killed
+    ;   Status = strange),
+    retract(task_queue(reap(Task))),
+    Work = reap(Task).
+work_available(Work) :-
+    task_queue(reap(Task)),
+    task_info(Task, _, Status),
+    (   Status = result(success(_))
+    ;   Status = waiting),
+    task_worker(available, Worker),
+    retract(task_queue(reap(Task))),
+    Work = start(Task, Worker).
+work_available(Work) :-
     task_worker(available, Worker),
     task_queue(start(Task)),
     retract(task_queue(start(Task))),
@@ -97,8 +119,38 @@ task_runner_step(start(Task, Worker)) :-
 task_runner_step(wakeup_queue(Q)) :-
     !,
     thread_send_message(Q, true).
+task_runner_step(cleanup(Task)) :-
+    !,
+    perform_cleanup_task(Task).
+task_runner_step(reap(Task)) :-
+    !,
+    % If we're here, the task has naturally ended or has been killed.
+    % All that is left to do is remove its task info.
+    retract(task_info(Task, _, _)).
 task_runner_step(Message) :-
     task_log('ERROR', "Unknown Message: ~q", [Message]).
+
+perform_cleanup_task(Task) :-
+    forall(task_info(Child, some(Task), _),
+           perform_cleanup_task(Child)),
+
+    task_info(Task, _, Result),
+    (   (   Result = final(_)
+        ;   Result = failure
+        ;   Result = exception(_)
+        ;   Result = killed)
+    % engine already killed, great
+    ->  true
+    % all other cases, we have to inject
+    % this may error because we're racing the task and it may terminate after the previous check but before the receiving of the signal
+    ;   catch(thread_signal(Task, throw(task_kill)),
+              error(existence_error(thread, Task), _),
+              true)),
+
+    % At this point, this task and all its children are terminated or
+    % have a signal sent to them to be terminated. What is left to do
+    % is reap.
+    assert(task_queue(reap(Task))).
 
 run_task_worker(Name) :-
     repeat,
@@ -115,6 +167,8 @@ task_worker_step(next(Engine), Name) :-
     (   Result = the(waiting(Other_Task))
     ->  task_set_state(Engine, _, waiting),
         assert(task_queue(wait(Engine, Other_Task)))
+    ;   Result = the(exception(task_kill))
+    ->  task_set_state(Engine, _, killed)
     ;   Result = the(exception(E))
     ->  task_set_state(Engine, _, result(exception(E)))
     ;   Result = the(Answer)
@@ -175,9 +229,9 @@ task_spawn(Template, Goal, Task) :-
                      assert(task_queue(start(Task)))))
     ).
 
-:- meta_predicate task_spawn(:).
-task_spawn(Goal) :-
-    task_spawn(_, Goal).
+:- meta_predicate task_spawn(:, -).
+task_spawn(Goal, Task) :-
+    task_spawn(_, Goal, Task).
 
 task_set_state(Engine, Old_State, New_State) :-
     transaction((task_info(Engine, Parent, Old_State),
@@ -236,29 +290,29 @@ assert_task_might_get_result(Task) :-
     ;   throw(error(waiting_for_task_that_wont_have_result(Task), _))).
 
 task_wait_for_result(Task, Result) :-
-    task_info(Task, Parent, result(Result)),
+    task_info(Task, _, result(Result)),
     !,
-    retract(task_info(Task, Parent, result(Result))).
+    cleanup_task(Task).
 task_wait_for_result(Task, Result) :-
     assert_task_might_get_result(Task),
     engine_yield(waiting(Task)),
-    task_info(Task, Parent, result(Result)),
-    retract(task_info(Task, Parent, result(Result))).
+    task_info(Task, _, result(Result)),
+    cleanup_task(Task).
 
 thread_wait_for_result(Task, Result) :-
     assert_task_might_get_result(Task),
-    (   task_info(Task, Parent, result(Result))
+    (   task_info(Task, _, result(Result))
     ->  true
     ;   setup_call_cleanup(
             message_queue_create(Q),
             (   wakeup_task_runner(assert(task_queue(wait_blocking(Q, Task)))),
                 thread_get_message(Q, _)),
             message_queue_destroy(Q)),
-        (   task_info(Task, Parent, result(Result))
+        (   task_info(Task, _, result(Result))
         ->  true
         ;   throw(error(task_had_no_result(Task), _)))),
 
-    retract(task_info(Task, Parent, result(Result))).
+    cleanup_task(Task).
 
 wait_for_result(Task, Result) :-
     wait_for_result_reified(Task, Reified_Result),
@@ -267,6 +321,10 @@ wait_for_result(Task, Result) :-
     ;   Reified_Result = exception(E),
         throw(E)),
     !.
+
+cleanup_task(Task) :-
+    assert(task_queue(cleanup(Task))),
+    wakeup_task_runner.
 
 demonstration(Result) :-
     task_spawn(R,
@@ -294,6 +352,12 @@ demonstration(Result) :-
                                   format("task 3 done waiting~n"),
                                   R = 10),
                               T3),
+                   task_spawn(R,
+                              (   sleep(30),
+                                  format("I will never be printed~n"),
+                                  % useless task that we will just kill when the rest is done
+                                  true),
+                              _T4),
                    wait_for_result(T1, R1),
                    format("result 1: ~q~n", [R1]),
                    wait_for_result(T2, R2),
@@ -305,6 +369,3 @@ demonstration(Result) :-
                Task),
 
     wait_for_result(Task, Result).
-
-
-
