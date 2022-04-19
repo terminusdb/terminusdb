@@ -128,7 +128,11 @@ task_runner_step(reap(Task)) :-
     !,
     % If we're here, the task has naturally ended or has been killed.
     % All that is left to do is remove its task info.
-    retract(task_info(Task, _, _)).
+    % This will also destroy the engine in case this has not yet happened.
+    retract(task_info(Task, _, _)),
+    catch(engine_destroy(Task),
+          error(existence_error(engine, Task), _),
+          true).
 task_runner_step(Message) :-
     task_log('ERROR', "Unknown Message: ~q", [Message]).
 
@@ -142,12 +146,10 @@ perform_cleanup_task(Task) :-
     (   (   Result = final(_)
         ;   Result = failure
         ;   Result = exception(_)
-        ;   Result = killed)
-    % engine already killed, great
+        ;   Result = killed
+        ;   Result = starting)
+    % engine already killed, or not yet started, great
     ->  true
-    ;   Result = starting
-    % We've not yet started this engine so we can just destroy it
-    ->  engine_destroy(Task)
     % all other cases, we have to inject
     % this may error because we're racing the task and it may terminate after the previous check but before the receiving of the signal
     ;   catch(thread_signal(Task, throw(task_kill)),
