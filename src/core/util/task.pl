@@ -17,7 +17,7 @@ setup_default_task_logger :-
     retractall(loggers(default_task_logger)),
     asserta(loggers(default_task_logger)).
 
-:- setup_default_task_logger.
+%:- setup_default_task_logger.
 
 start_task_runner :-
     (   is_thread(task_runner)
@@ -114,6 +114,8 @@ task_worker_step(next(Engine), Name) :-
     (   Result = the(waiting(Other_Task))
     ->  task_set_state(Engine, _, waiting),
         assert(task_queue(wait(Engine, Other_Task)))
+    ;   Result = the(exception(E))
+    ->  task_set_state(Engine, _, result(exception(E)))
     ;   Result = the(Answer)
     ->  task_set_state(Engine, _, result(Answer))
     ;   Result = no
@@ -158,7 +160,10 @@ free_worker(Worker) :-
 :- meta_predicate task_spawn(+, :, -).
 task_spawn(Template, Goal, Task) :-
     engine_create(Result,
-                  reify_result(Template, Goal, Result),
+                  catch_with_backtrace(
+                      reify_result(Template, Goal, Result),
+                      E,
+                      Result=exception(E)),
                   Task),
     (   engine_self(P),
         task_info(P, _, _)
@@ -208,12 +213,12 @@ reify_result(Template, Clause, Result) :-
         ;   Result = success(Template))
     ;   Result = failure).
 
-wait_for_result(Task, Result) :-
+wait_for_result_reified(Task, Result) :-
     engine_self(E),
     task_info(E, _, _),
     !,
     task_wait_for_result(Task, Result).
-wait_for_result(Task, Result) :-
+wait_for_result_reified(Task, Result) :-
     % not a task, block thread.
     thread_wait_for_result(Task, Result).
 
@@ -254,10 +259,18 @@ thread_wait_for_result(Task, Result) :-
 
     retract(task_info(Task, Parent, result(Result))).
 
+wait_for_result(Task, Result) :-
+    wait_for_result_reified(Task, Reified_Result),
+    (   Reified_Result = success(Result)
+    ;   Reified_Result = final(Result)
+    ;   Reified_Result = exception(E),
+        throw(E)),
+    !.
+
 demonstration(Result) :-
     task_spawn(R,
                (   task_spawn(R,
-                              (   sleep(5),
+                              (   sleep(4),
                                   format("task 1 done waiting~n"),
                                   R = 12),
                               T1),
@@ -267,13 +280,13 @@ demonstration(Result) :-
                                   R = 20),
                               T2),
                    task_spawn(R,
-                              (   sleep(4),
+                              (   sleep(5),
                                   format("task 3 done waiting~n"),
                                   R = 10),
                               T3),
-                   wait_for_result(T1, final(R1)),
-                   wait_for_result(T2, final(R2)),
-                   wait_for_result(T3, final(R3)),
+                   wait_for_result(T1, R1),
+                   wait_for_result(T2, R2),
+                   wait_for_result(T3, R3),
 
                    R is R1 + R2 + R3),
                Task),
