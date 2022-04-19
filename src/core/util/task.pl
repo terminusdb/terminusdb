@@ -48,8 +48,15 @@ cleanup_task_runner :-
            ignore((thread_signal(Worker, throw(task(kill))),
                    thread_join(Worker, _)))).
 
-:- dynamic task_queue/1.
+wakeup_task_runner :-
+    thread_send_message(task_runner, true).
 
+:- meta_predicate wakeup_task_runner(:).
+wakeup_task_runner(Goal) :-
+    Goal,
+    wakeup_task_runner.
+
+:- dynamic task_queue/1.
 work_available(Work) :-
     task_worker(available, Worker),
     task_queue(start(Task)),
@@ -61,14 +68,23 @@ work_available(Work) :-
     task_info(Task, _, result(_)),
     retract(task_queue(wait(Waiting_Task, Task))),
     Work = start(Waiting_Task, Worker).
+work_available(Work) :-
+    task_queue(wait_blocking(Waiting_Queue, Task)),
+    task_info(Task, _, result(_)),
+    retract(task_queue(wait_blocking(Waiting_Queue, Task))),
+    Work = wakeup_queue(Waiting_Queue).
+
+wait_for_work_available(Work) :-
+    repeat,
+    thread_get_message(_),
+    work_available(Work),
+    !.
 
 run_task_runner :-
     setup_call_cleanup(
         init_task_runner,
         (   repeat,
-            thread_wait(work_available(Work),
-                        [wait_preds([+(task_worker/2),
-                                     +(task_queue/1)])]),
+            wait_for_work_available(Work),
             task_runner_step(Work),
             fail),
         cleanup_task_runner).
@@ -77,6 +93,9 @@ task_runner_step(start(Task, Worker)) :-
     !,
     claim_worker(Worker),
     thread_send_message(Worker, next(Task)).
+task_runner_step(wakeup_queue(Q)) :-
+    !,
+    thread_send_message(Q, true).
 task_runner_step(Message) :-
     task_log('ERROR', "Unknown Message: ~q", [Message]).
 
@@ -84,6 +103,7 @@ run_task_worker(Name) :-
     repeat,
     thread_get_message(Message),
     task_worker_step(Message,Name),
+    wakeup_task_runner,
     fail.
 
 task_worker_step(next(Engine), Name) :-
@@ -91,9 +111,9 @@ task_worker_step(next(Engine), Name) :-
     task_set_state(Engine, _, started),
     engine_next_reified(Engine, Result),
     task_log('INFO', "result: ~q", [Result]),
-    (   Result = the(waiting)
+    (   Result = the(waiting(Other_Task))
     ->  task_set_state(Engine, _, waiting),
-        task_log('INFO', 'task is now waiting: ~q', [Engine])
+        assert(task_queue(wait(Engine, Other_Task)))
     ;   Result = the(Answer)
     ->  task_set_state(Engine, _, result(Answer))
     ;   Result = no
@@ -104,10 +124,9 @@ task_worker_step(next(Engine), Name) :-
     free_worker(Name),
 
     (   (   Result = the(success(_))
-        ;   Result = the(waiting))
+        ;   Result = the(waiting(_)))
     ->  true % there are more results so we can't destroy the engine just yet
-    ;   engine_destroy(Engine),
-        task_log('INFO', "destroyed task engine ~q", [Engine])).
+    ;   engine_destroy(Engine)).
 task_worker_step(Message, _Name) :-
     task_log('ERROR', "Unknown worker message: ~q", [Message]).
 
@@ -124,16 +143,13 @@ claim_worker(Worker) :-
     ).
 
 free_worker(Worker) :-
-    task_log('DEBUG', "Before transaction for freeing worker ~q", [Worker]),
     transaction(
         (
-            task_log('DEBUG', "In transaction for freeing worker ~q", [Worker]),
             (   task_worker(busy, Worker)
             ->  true
             ;   throw(error(worker_not_busy(Worker), _))),
             retractall(task_worker(_, Worker)),
-            asserta(task_worker(available, Worker)),
-            task_log('DEBUG', "Freed worker ~q", [Worker])
+            asserta(task_worker(available, Worker))
         )
     ).
 
@@ -148,8 +164,10 @@ task_spawn(Template, Goal, Task) :-
         task_info(P, _, _)
     ->  Parent = some(P)
     ;   Parent = none),
-    assert(task_info(Task, Parent, starting)),
-    assert(task_queue(start(Task))).
+    wakeup_task_runner(
+        transaction((assert(task_info(Task, Parent, starting)),
+                     assert(task_queue(start(Task)))))
+    ).
 
 :- meta_predicate task_spawn(:).
 task_spawn(Goal) :-
@@ -194,46 +212,73 @@ wait_for_result(Task, Result) :-
     engine_self(E),
     task_info(E, _, _),
     !,
-    task_wait_for_result(E, Task, Result).
+    task_wait_for_result(Task, Result).
 wait_for_result(Task, Result) :-
     % not a task, block thread.
     thread_wait_for_result(Task, Result).
 
 task_might_get_result(Task) :-
-    snapshot((once(task_info(Task, _, State)),
-              (   State = result(_)
-              ;   State = starting
-              ;   State = started
-              ;   State = waiting))).
+    once(task_info(Task, _, State)),
+    (   State = result(_)
+    ;   State = starting
+    ;   State = started
+    ;   State = waiting).
 
 assert_task_might_get_result(Task) :-
     (   task_might_get_result(Task)
     ->  true
     ;   throw(error(waiting_for_task_that_wont_have_result(Task), _))).
 
-task_wait_for_result(_Self, Task, Result) :-
+task_wait_for_result(Task, Result) :-
     task_info(Task, Parent, result(Result)),
     !,
     retract(task_info(Task, Parent, result(Result))).
-task_wait_for_result(Self, Task, Result) :-
+task_wait_for_result(Task, Result) :-
     assert_task_might_get_result(Task),
-    assert(task_queue(wait(Self, Task))),
-    engine_yield(waiting),
+    engine_yield(waiting(Task)),
     task_info(Task, Parent, result(Result)),
     retract(task_info(Task, Parent, result(Result))).
 
 thread_wait_for_result(Task, Result) :-
-    % I'd prefer using assert_task_might_get_result here but it
-    % weirdly kills the transaction mechanism and I'm not sure why.
-    thread_wait((   task_might_get_result(Task)
-                ->  R=result(Result),
-                    task_info(Task, Parent, R)
-                ;   R=no_result),
-                [wait_preds([+(task_info/3)])]),
-
-    (   R = no_result
-    ->  throw(error(waiting_for_task_that_wont_have_result(Task), _))
-    ;   true),
-    format("done waiting!~n"),
+    assert_task_might_get_result(Task),
+    (   task_info(Task, Parent, result(Result))
+    ->  true
+    ;   setup_call_cleanup(
+            message_queue_create(Q),
+            (   wakeup_task_runner(assert(task_queue(wait_blocking(Q, Task)))),
+                thread_get_message(Q, _)),
+            message_queue_destroy(Q)),
+        (   task_info(Task, Parent, result(Result))
+        ->  true
+        ;   throw(error(task_had_no_result(Task), _)))),
 
     retract(task_info(Task, Parent, result(Result))).
+
+demonstration(Result) :-
+    task_spawn(R,
+               (   task_spawn(R,
+                              (   sleep(5),
+                                  format("task 1 done waiting~n"),
+                                  R = 12),
+                              T1),
+                   task_spawn(R,
+                              (   sleep(3),
+                                  format("task 2 done waiting~n"),
+                                  R = 20),
+                              T2),
+                   task_spawn(R,
+                              (   sleep(4),
+                                  format("task 3 done waiting~n"),
+                                  R = 10),
+                              T3),
+                   wait_for_result(T1, final(R1)),
+                   wait_for_result(T2, final(R2)),
+                   wait_for_result(T3, final(R3)),
+
+                   R is R1 + R2 + R3),
+               Task),
+
+    wait_for_result(Task, Result).
+
+
+
