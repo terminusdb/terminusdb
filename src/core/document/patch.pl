@@ -816,6 +816,24 @@ test(deep_read_state_failure, []) :-
                                            '@expected':"Timbuktu",
                                            '@op':'Conflict'}}}.
 
+test(after_matches_patch, []) :-
+
+    Before = _{ '@id' : "Person/Ludwig",
+                '@type' : "Person",
+                name : "Ludwig"
+              },
+    Patch = _{ '@id' : "Person/Ludwig",
+               name : _{ '@op' : "SwapValue",
+                         '@before' : "Ludo",
+                         '@after' : "Ludwig" }
+             },
+    simple_patch(Patch,Before,success(After), [match_final_state(true)]),
+
+    After = _{ '@id' : "Person/Ludwig",
+               '@type' : "Person",
+               name : "Ludwig"
+             }.
+
 
 :- end_tests(simple_patch).
 

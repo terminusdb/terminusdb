@@ -2605,6 +2605,65 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * apply_handler(Mode, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+apply_handler(post, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    do_or_die((   _{ before : Before,
+                     after : After
+                   } :< Document,
+
+%%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * apply_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+apply_handler(post, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    do_or_die((   _{ before_path: Before_Commit,
+                     after_path : After_Commit,
+                     commit_info : Commit_Info
+                   } :< Document
+              ),
+              error(bad_api_document(Document, [before,after]))
+             ),
+
+    api_report_errors(
+        apply,
+        Request,
+        catch(
+            (   api_apply_squash_commit(System_DB, Auth, Path, Before, After),
+                cors_reply_json(Request,
+                                json{'@type' : "api:ApplyResponse",
+                                     'api:status' : "api:success"})),
+            error(apply_squash_witnesses(Witnesses)),
+            cors_reply_json(json{'@type' : "api:ApplyError",
+                                 'api:witnesses' : Witnesses,
+                                 'api:status' : 'api:conflict'},
+                            [status(409)]))
+    ).
+
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
