@@ -83,6 +83,7 @@ work_available(Work) :-
     task_worker(available, Worker),
     task_queue(start, Task),
     retract(task_queue(start, Task)),
+    task_info(Task, _, starting),
     Work = start(Task, Worker).
 work_available(Work) :-
     task_worker(available, Worker),
@@ -114,6 +115,7 @@ run_task_runner :-
 
 task_runner_step(start(Task, Worker)) :-
     !,
+    task_set_state(Task, _, started),
     claim_worker(Worker),
     thread_send_message(Worker, next(Task)).
 task_runner_step(wakeup_queue(Q)) :-
@@ -143,6 +145,9 @@ perform_cleanup_task(Task) :-
         ;   Result = killed)
     % engine already killed, great
     ->  true
+    ;   Result = starting
+    % We've not yet started this engine so we can just destroy it
+    ->  engine_destroy(Task)
     % all other cases, we have to inject
     % this may error because we're racing the task and it may terminate after the previous check but before the receiving of the signal
     ;   catch(thread_signal(Task, throw(task_kill)),
@@ -163,7 +168,6 @@ run_task_worker(Name) :-
 
 task_worker_step(next(Engine), Name) :-
     !,
-    task_set_state(Engine, _, started),
     engine_next_reified(Engine, Result),
     task_log('INFO', "result: ~q", [Result]),
     (   Result = the(waiting(Other_Task))
