@@ -11,7 +11,7 @@
 
 api_patch(_System_DB, _Auth, Patch, Before, After) :-
     % no auth yet.
-    simple_patch(Patch,Before,After).
+    simple_patch(Patch,Before,After,[match_final_state(true)]).
 
 api_diff(_System_DB, _Auth, Before, After, Keep, Diff) :-
     % no auth yet.

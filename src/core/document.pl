@@ -61,8 +61,7 @@
               simple_diff/4,
 
               % patch.pl
-              simple_patch/3,
-              simple_patch/5,
+              simple_patch/4,
               patch_cost/2,
 
               % normalize.pl

@@ -2534,12 +2534,15 @@ patch_handler(post, Request, System_DB, Auth) :-
              } :< Document),
         error(bad_api_document(Document, [before, patch]), _)),
 
+    % We should take options about final state here.
     api_report_errors(
         patch,
         Request,
-        (   (   api_patch(System_DB, Auth, Patch, Before, After)
+        (   api_patch(System_DB, Auth, Patch, Before, Result),
+            (   Result = success(After)
             ->  cors_reply_json(Request, After)
-            ;   cors_reply_json(Request, null, [status(404)])
+            ;   Result = conflict(Conflict)
+            ->  cors_reply_json(Request, Conflict, [status(404)])
             )
         )
     ).

@@ -33,8 +33,12 @@ apply_diff(Context, Diff, Conflict, Options) :-
         error(missing_field('@id', Diff), _)
     ),
     get_document(Context, ID, JSON_In),
-    simple_patch(Diff,JSON_In,JSON_Out,Conflict,Options),
-    replace_document(Context, JSON_Out, _).
+    simple_patch(Diff,JSON_In,Result,Options),
+    (   Result = success(JSON_Out)
+    ->  replace_document(Context, JSON_Out, _),
+        Conflict = null
+    ;   Result = success(Conflict)
+    ).
 
 
 
