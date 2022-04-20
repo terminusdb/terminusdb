@@ -360,9 +360,8 @@ wait_for_results_bt_reified(Task, Result) :-
         true,
         (   repeat,
             wait_for_result_reified(Task, Result),
-            format("result: ~q~n", [Result]),
             (   reified_result_is_final(Result)
-            ->  !, format("result was final!~n")
+            ->  !
             ;   wakeup_task_runner(assert(task_queue(start, Task))))),
         cleanup_task(Task)).
 
