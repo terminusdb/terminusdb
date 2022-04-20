@@ -433,8 +433,70 @@ describe('diff-id', function () {
           match_final_state: true,
         })
 
+      expect(r4.status).to.equal(409)
       expect(r4.body['api:witnesses'][0]['@op']).to.equal('InsertConflict')
       expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2Long)
+    })
+
+    it('apply squash commit to obtain a read conflict', async function () {
+      const class1 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            { '@type': 'Class', '@id': class1, a: 'xsd:string' },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class1, a: 'chicken legs' },
+        })
+        .then(document.verifyInsertSuccess)
+      const [docIdLong] = r1.body
+      const docId = docIdLong.split('terminusdb:///data/')[1]
+
+      const branchName = util.randomString()
+      const newDefaults = endpoint.branchNew(agent.defaults(), branchName)
+
+      await agent.post(newDefaults.path)
+        .send({ origin: newDefaults.origin }).then(branch.verifySuccess)
+      const newDocPath = endpoint.document(newDefaults).path + '/local/branch/' + branchName
+      const r2 = await document
+        .replace(agent, newDocPath, {
+          instance: { '@id': docId, '@type': class1, a: 'frog legs' },
+        })
+        .then(document.verifyReplaceSuccess)
+      const dv2 = r2.header['terminusdb-data-version']
+
+      const r3 = await document
+        .replace(agent, newDocPath, {
+          instance: { '@id': docId, '@type': class1, a: 'vegan frog legs' },
+        })
+        .then(document.verifyReplaceSuccess)
+      const dv3 = r3.header['terminusdb-data-version']
+
+      const app = endpoint.apply(agent.defaults())
+
+      const r4 = await agent.post(app.path)
+        .send({
+          before_commit: dv2,
+          after_commit: dv3,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: true,
+        })
+
+      expect(r4.body['api:witnesses']).to.deep.equal(
+        [
+          {
+            a: {
+              '@expected': 'frog legs',
+              '@found': 'chicken legs',
+              '@op': 'Conflict',
+            },
+          },
+        ])
+      expect(r4.status).to.equal(409)
     })
   })
 })
