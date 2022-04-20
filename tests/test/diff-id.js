@@ -327,12 +327,11 @@ describe('diff-id', function () {
           ],
         })
         .then(document.verifyInsertSuccess)
-      const r1 = await document
+      await document
         .insert(agent, docPath, {
           instance: { '@type': class1, a: 'pickles and eggs' },
         })
-            .then(document.verifyInsertSuccess)
-      const dv1 = r1.header['terminusdb-data-version']
+        .then(document.verifyInsertSuccess)
 
       const r2 = await document
         .insert(agent, docPath, {
@@ -397,7 +396,7 @@ describe('diff-id', function () {
         .insert(agent, docPath, {
           instance: { '@type': class1, a: 'pickles and eggs' },
         })
-            .then(document.verifyInsertSuccess)
+        .then(document.verifyInsertSuccess)
       const dv1 = r1.header['terminusdb-data-version']
 
       const r2 = await document
@@ -406,7 +405,6 @@ describe('diff-id', function () {
         })
         .then(document.verifyInsertSuccess)
 
-      const dv2 = r2.header['terminusdb-data-version']
       const [docId2Long] = r2.body
       const docId2 = docId2Long.split('terminusdb:///data/')[1]
 
@@ -438,6 +436,5 @@ describe('diff-id', function () {
       expect(r4.body['api:witnesses'][0]['@op']).to.equal('InsertConflict')
       expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2Long)
     })
-
   })
 })
