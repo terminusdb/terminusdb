@@ -83,7 +83,9 @@ work_available(Work) :-
     task_worker(available, Worker),
     task_queue(start, Task),
     retract(task_queue(start, Task)),
-    task_info(Task, _, starting),
+    task_info(Task, _, State),
+    (   State = starting
+    ;   State = ready),
     Work = start(Task, Worker).
 work_available(Work) :-
     task_worker(available, Worker),
@@ -170,8 +172,10 @@ run_task_worker(Name) :-
 
 task_worker_step(next(Engine), Name) :-
     !,
+    thread_self(Thread_Self),
+    task_log('DEBUG', "~q: claimed worker ~q", [Engine, Thread_Self]),
     engine_next_reified(Engine, Result),
-    task_log('INFO', "result: ~q", [Result]),
+    task_log('DEBUG', "~q: result: ~q", [Engine, Result]),
     (   Result = the(waiting(Other_Task))
     ->  task_set_state(Engine, _, waiting),
         assert(task_queue(wait(Other_Task), Engine))
@@ -191,7 +195,8 @@ task_worker_step(next(Engine), Name) :-
     (   (   Result = the(success(_))
         ;   Result = the(waiting(_)))
     ->  true % there are more results so we can't destroy the engine just yet
-    ;   engine_destroy(Engine)).
+    ;   engine_destroy(Engine)),
+    task_log('DEBUG', "~q: freed worker ~q", [Engine, Thread_Self]).
 task_worker_step(Message, _Name) :-
     task_log('ERROR', "Unknown worker message: ~q", [Message]).
 
@@ -202,8 +207,7 @@ claim_worker(Worker) :-
             ->  true
             ;   throw(error(worker_unavailable(Worker), _))),
             retractall(task_worker(_, Worker)),
-            asserta(task_worker(busy, Worker)),
-            task_log('DEBUG', "Claimed worker ~q", [Worker])
+            asserta(task_worker(busy, Worker))
         )
     ).
 
@@ -236,6 +240,17 @@ task_spawn(Template, Goal, Task) :-
         transaction((assert(task_info(Task, Parent, starting)),
                      assert(task_queue(start, Task))))
     ).
+
+task_continue(Task) :-
+    (   task_info(Task, _, State)
+    ->  true
+    ;   throw(error(existence_error(task, Task)), _)),
+
+    (   State = ready
+    ->  true
+    ;   throw(error(task_not_ready(Task),_))),
+
+    wakeup_task_runner(assert(task_queue(start, Task))).
 
 :- meta_predicate task_spawn(:, -).
 task_spawn(Goal, Task) :-
@@ -276,12 +291,22 @@ reify_result(Template, Clause, Result) :-
         ;   Result = success(Template))
     ;   Result = failure).
 
+reified_result_is_final(final(_)).
+reified_result_is_final(exception(_)).
+reified_result_is_final(failure).
+reified_result_is_final(killed).
+
 wait_for_result_reified(Task, Result) :-
+    wait_for_result_reified_(Task, Result),
+    (   reified_result_is_final(Result)
+    ->  cleanup_task(Task)
+    ;   task_set_state(Task, _, ready)).
+wait_for_result_reified_(Task, Result) :-
     engine_self(E),
     task_info(E, _, _),
     !,
     task_wait_for_result(Task, Result).
-wait_for_result_reified(Task, Result) :-
+wait_for_result_reified_(Task, Result) :-
     % not a task, block thread.
     thread_wait_for_result(Task, Result).
 
@@ -299,13 +324,11 @@ assert_task_might_get_result(Task) :-
 
 task_wait_for_result(Task, Result) :-
     task_info(Task, _, result(Result)),
-    !,
-    cleanup_task(Task).
+    !.
 task_wait_for_result(Task, Result) :-
     assert_task_might_get_result(Task),
     engine_yield(waiting(Task)),
-    task_info(Task, _, result(Result)),
-    cleanup_task(Task).
+    task_info(Task, _, result(Result)).
 
 thread_wait_for_result(Task, Result) :-
     assert_task_might_get_result(Task),
@@ -318,17 +341,33 @@ thread_wait_for_result(Task, Result) :-
             message_queue_destroy(Q)),
         (   task_info(Task, _, result(Result))
         ->  true
-        ;   throw(error(task_had_no_result(Task), _)))),
+        ;   throw(error(task_had_no_result(Task), _)))).
 
-    cleanup_task(Task).
-
-wait_for_result(Task, Result) :-
-    wait_for_result_reified(Task, Reified_Result),
+unreify_result(Reified_Result, Result) :-
     (   Reified_Result = success(Result)
     ;   Reified_Result = final(Result)
     ;   Reified_Result = exception(E),
         throw(E)),
     !.
+
+wait_for_result(Task, Result) :-
+    wait_for_result_reified(Task, Reified_Result),
+    unreify_result(Reified_Result, Result).
+
+wait_for_results_bt_reified(Task, Result) :-
+    setup_call_cleanup(
+        true,
+        (   repeat,
+            wait_for_result_reified(Task, Result),
+            format("result: ~q~n", [Result]),
+            (   reified_result_is_final(Result)
+            ->  !, format("result was final!~n")
+            ;   wakeup_task_runner(assert(task_queue(start, Task))))),
+        cleanup_task(Task)).
+
+wait_for_results_bt(Task, Result) :-
+    wait_for_results_bt_reified(Task, Reified_Result),
+    unreify_result(Reified_Result, Result).
 
 cleanup_task(Task) :-
     assert(task_queue(cleanup, Task)),
