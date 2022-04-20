@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document, endpoint, util } = require('../lib')
+const { Agent, branch, db, document, endpoint, util } = require('../lib')
 
 describe('diff-id', function () {
   let agent
@@ -315,5 +315,129 @@ describe('diff-id', function () {
         },
       ])
     })
+
+    it('apply squash commit', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            { '@type': 'Class', '@id': class1, a: 'xsd:string' },
+            { '@type': 'Class', '@id': class2, b: 'xsd:string' },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class1, a: 'pickles and eggs' },
+        })
+            .then(document.verifyInsertSuccess)
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const r2 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class2, b: 'frog legs' },
+        })
+        .then(document.verifyInsertSuccess)
+
+      const dv2 = r2.header['terminusdb-data-version']
+      const [docId2Long] = r2.body
+      const docId2 = docId2Long.split('terminusdb:///data/')[1]
+
+      const branchName = util.randomString()
+      const newDefaults = endpoint.branchNew(agent.defaults(), branchName)
+
+      await agent.post(newDefaults.path)
+        .send({ origin: newDefaults.origin }).then(branch.verifySuccess)
+      const newDocPath = endpoint.document(newDefaults).path
+
+      const r3 = await document
+        .replace(agent, newDocPath, {
+          instance: { '@id': docId2, '@type': class2, b: 'vegan frog legs' },
+        })
+        .then(document.verifyInsertSuccess)
+      const dv3 = r3.header['terminusdb-data-version']
+
+      const app = endpoint.apply(agent.defaults())
+
+      const r4 = await agent.post(app.path)
+        .send({
+          before_commit: dv2,
+          after_commit: dv3,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: true,
+        })
+
+      expect(r4.status).to.equal(200)
+
+      const r5 = await document
+        .get(agent, docPath, { query: { type: class2, as_list: true } })
+
+      expect(r5.body).to.deep.equal([
+        {
+          '@id': docId2,
+          '@type': class2,
+          b: 'vegan frog legs',
+        }])
+    })
+
+    it('apply squash commit to obtain conflict', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: [
+            { '@type': 'Class', '@id': class1, a: 'xsd:string' },
+            { '@type': 'Class', '@id': class2, b: 'xsd:string' },
+          ],
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class1, a: 'pickles and eggs' },
+        })
+            .then(document.verifyInsertSuccess)
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const r2 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': class2, b: 'frog legs' },
+        })
+        .then(document.verifyInsertSuccess)
+
+      const dv2 = r2.header['terminusdb-data-version']
+      const [docId2Long] = r2.body
+      const docId2 = docId2Long.split('terminusdb:///data/')[1]
+
+      const branchName = util.randomString()
+      const newDefaults = endpoint.branchNew(agent.defaults(), branchName)
+
+      await agent.post(newDefaults.path)
+        .send({ origin: newDefaults.origin }).then(branch.verifySuccess)
+      const newDocPath = endpoint.document(newDefaults).path
+
+      const r3 = await document
+        .replace(agent, newDocPath, {
+          instance: { '@id': docId2, '@type': class2, b: 'vegan frog legs' },
+        })
+        .then(document.verifyInsertSuccess)
+      const dv3 = r3.header['terminusdb-data-version']
+
+      const app = endpoint.apply(agent.defaults())
+
+      const r4 = await agent.post(app.path)
+        .send({
+          before_commit: dv1,
+          after_commit: dv3,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: true,
+        })
+
+      expect(r4.body['api:witnesses'][0]['@op']).to.equal('InsertConflict')
+      expect(r4.body['api:witnesses'][0]['@id_already_exists']).to.equal(docId2Long)
+    })
+
   })
 })

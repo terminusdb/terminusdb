@@ -21,12 +21,29 @@
 % Apply a diff to a commit.
 %
 % [matches_final_state(true)] (default is false)
-apply_diff(Context, Diff, null, _Options) :-
+apply_diff(Context, Diff, Conflict, _Options) :-
     get_dict('@delete', Diff, Delete_ID),
-    delete_document(Context, Delete_ID).
-apply_diff(Context, Diff, null, _Options) :-
+    !,
+    catch(
+        (   delete_document(Context, Delete_ID),
+            Conflict = null
+        ),
+        error(document_not_found(ID), _),
+        Conflict = json{ '@op' : 'DeleteConflict',
+                         '@id_does_not_exists' : ID
+                       }
+    ).
+apply_diff(Context, Diff, Conflict, _Options) :-
     get_dict('@insert', Diff, Insert),
-    insert_document(Context, Insert, _Inserted_Id).
+    !,
+    catch(
+        (   insert_document(Context, Insert, _Inserted_Id),
+            Conflict = null
+        ),
+        error(can_not_insert_existing_object_with_id(Id), _),
+        Conflict = json{ '@op' : 'InsertConflict',
+                         '@id_already_exists' : Id }
+    ).
 apply_diff(Context, Diff, Conflict, Options) :-
     do_or_die(
         get_dict('@id', Diff, ID),

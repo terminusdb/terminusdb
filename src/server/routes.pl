@@ -2648,10 +2648,13 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
                                 json{'@type' : "api:ApplyResponse",
                                      'api:status' : "api:success"})),
             error(apply_squash_witnesses(Witnesses)),
-            cors_reply_json(json{'@type' : "api:ApplyError",
-                                 'api:witnesses' : Witnesses,
-                                 'api:status' : 'api:conflict'},
-                            [status(409)]))
+            (   format(user_error, '~nWhat the fuck~n', []),
+                cors_reply_json(Request,
+                                json{'@type' : "api:ApplyError",
+                                     'api:witnesses' : Witnesses,
+                                     'api:status' : 'api:conflict'},
+                                [status(409)]))
+        )
     ).
 
 

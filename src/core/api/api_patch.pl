@@ -139,8 +139,8 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
+    create_context(Branch_Descriptor, Commit_Info, Context),
 
-    create_context(Path, Commit_Info, Context),
     with_transaction(
         Context,
         (   findall(Witness,

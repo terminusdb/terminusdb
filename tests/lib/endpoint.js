@@ -194,6 +194,18 @@ function woqlResource (params) {
   }
 }
 
+function apply (params) {
+  params = new Params(params)
+  const orgName = params.stringRequired('orgName')
+  const dbName = params.stringRequired('dbName')
+  const branchName = params.string('branchName', 'main')
+  const remoteName = params.string('remoteName', 'local')
+
+  return {
+    path: `/api/apply/${orgName}/${dbName}/${remoteName}/branch/${branchName}`,
+  }
+}
+
 module.exports = {
   branch,
   branchNew,
@@ -213,4 +225,5 @@ module.exports = {
   triplesBranch,
   triplesSystem,
   woqlResource,
+  apply,
 }
