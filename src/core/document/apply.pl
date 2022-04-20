@@ -54,7 +54,7 @@ apply_diff(Context, Diff, Conflict, Options) :-
     (   Result = success(JSON_Out)
     ->  replace_document(Context, JSON_Out, _),
         Conflict = null
-    ;   Result = success(Conflict)
+    ;   Result = conflict(Conflict)
     ).
 
 
