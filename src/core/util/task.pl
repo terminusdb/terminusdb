@@ -75,7 +75,8 @@ work_available(Work) :-
     task_queue(reap, Task),
     task_info(Task, _, Status),
     (   Status = result(success(_))
-    ;   Status = waiting),
+    ;   Status = waiting
+    ;   Status = ready),
     task_worker(available, Worker),
     retract(task_queue(reap, Task)),
     Work = start(Task, Worker).
