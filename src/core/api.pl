@@ -135,7 +135,8 @@
               api_diff/6,
               api_diff_id/8,
               api_diff_id_document/8,
-              api_diff_all_documents/7
+              api_diff_all_documents/7,
+              api_apply_squash_commit/7
           ]).
 
 :- use_module(api/api_init).

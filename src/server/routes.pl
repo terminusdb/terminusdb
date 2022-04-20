@@ -2613,47 +2613,37 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
                  methods([options,post])]).
 
 /*
- * apply_handler(Mode, Request, System, Auth) is det.
- *
- * Reset a branch to a new commit.
- */
-apply_handler(post, Path, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-    do_or_die((   _{ before : Before,
-                     after : After
-                   } :< Document,
-
-%%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
-                [method(Method),
-                 time_limit(infinite),
-                 methods([options,post])]).
-:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path)),
-                [method(Method),
-                 prefix,
-                 time_limit(infinite),
-                 methods([options,post])]).
-
-/*
  * apply_handler(Mode, Path, Request, System, Auth) is det.
  *
  * Reset a branch to a new commit.
  */
 apply_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
-    do_or_die((   _{ before_path: Before_Commit,
-                     after_path : After_Commit,
-                     commit_info : Commit_Info
+    do_or_die((   _{ before_commit: Before_Commit,
+                     after_commit: After_Commit,
+                     commit_info: Commit_Info
                    } :< Document
               ),
-              error(bad_api_document(Document, [before,after]))
+              error(bad_api_document(Document, [before_commit,after_commit,commit_info,type]))
              ),
+
+    (   _{ match_final_state: Match_Final_State } :< Document
+    ->  true
+    ;   Match_Final_State = true
+    ),
+
+    (   _{ type: Type } :< Document
+    ->  atom_string(Type_Atom, Type)
+    ;   Type_Atom = squash
+    ),
 
     api_report_errors(
         apply,
         Request,
         catch(
-            (   api_apply_squash_commit(System_DB, Auth, Path, Before, After),
+            (   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
+                                        Before_Commit, After_Commit,
+                                        [type(Type_Atom),match_final_state(Match_Final_State)]),
                 cors_reply_json(Request,
                                 json{'@type' : "api:ApplyResponse",
                                      'api:status' : "api:success"})),

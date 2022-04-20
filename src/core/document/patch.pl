@@ -16,6 +16,17 @@
 
 :- use_module(library(option)).
 
+%
+% simple_patch(+Diff,+JSON,-Success_or_Conflict,+Options) is det.
+%
+% Success_or_Conflict : success(Success_JSON)
+%                     | conflict(Conflict_JSON)
+%
+% Options include:
+%
+% * match_final_state(Bool): whether we ignore the described read
+%   state in the event of a matching final state (idempotence)
+%
 simple_patch(Diff,JSON_In,Maybe_JSON_Out,Options) :-
     is_dict(JSON_In),
     !,
@@ -33,7 +44,7 @@ simple_patch(Diff,Before,After,Options) :-
     !,
     simple_op_diff_value(Op, Diff, Before, After, Options).
 simple_patch(Before,Original,Final,Options) :-
-    check_before_after(Original,Before,Original,Final, Options).
+    check_before_after(Original,Before,Original,Final,Options).
 
 simple_patch_list(Diff,List_In,Result,Options) :-
     is_list(List_In),
