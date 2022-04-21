@@ -591,6 +591,17 @@ describe('document', function () {
       expect(r.body).to.deep.include.members(schema)
     })
 
+    it('fails insert instance with unknown property (#1030)', async function () {
+      const schema = { '@id': util.randomString(), '@type': 'Class' }
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
+      const instance = { '@type': schema['@id'], unknownProperty: 'abc' }
+      const r = await document.insert(agent, docPath, { instance }).then(document.verifyInsertFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:UnrecognizedProperty')
+      expect(r.body['api:error']['api:document']).to.deep.equal(instance)
+      expect(r.body['api:error']['api:property']).to.equal('unknownProperty')
+      expect(r.body['api:error']['api:type']).to.equal(schema['@id'])
+    })
+
     describe('tests cardinality in schema', function () {
       let card
       let min
