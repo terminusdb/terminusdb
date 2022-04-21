@@ -176,7 +176,6 @@ api_insert_document_unsafe_(instance, Transaction, Document, state(Captures_In),
         error(document_insertion_failed_unexpectedly(Document), _)).
 
 insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
-    !,
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -197,7 +196,7 @@ insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
         ),
         Ids
     ).
-insert_documents_(_Full_Replace, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
+insert_documents_(false, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
     findall(
         Id,
         (   json_read_list_stream(Stream, Document),
