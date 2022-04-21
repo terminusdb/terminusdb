@@ -18,12 +18,14 @@
               delete_document/2,
               insert_document/3,
               insert_document/6,
+              insert_document_unsafe/5,
               replace_document/2,
               replace_document/3,
               replace_document/4,
               replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
+              insert_schema_document_unsafe/2,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,
@@ -2512,6 +2514,21 @@ insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures
     !,
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
+
+insert_document_unsafe(Transaction, Document, Captures_In, Id, Captures_Out) :-
+    json_elaborate(Transaction, Document, Captures_In, Elaborated, _Dependencies, Captures_Out),
+    % Are we trying to insert a subdocument?
+    do_or_die(
+        get_dict('@type', Elaborated, Type),
+        error(missing_field('@type', Elaborated), _)),
+    die_if(
+        is_subdocument(Transaction, Type),
+        error(inserted_subdocument_as_document, _)),
+    % After elaboration, the Elaborated document will have an '@id'
+    do_or_die(
+        get_dict('@id', Elaborated, Id),
+        error(missing_field('@id', Elaborated), _)),
+    insert_document_expanded(Transaction, Elaborated, Id).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),

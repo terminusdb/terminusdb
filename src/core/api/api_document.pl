@@ -155,7 +155,6 @@ api_insert_document_(schema, Transaction, Document, state(Captures), Id, Capture
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
-
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
 api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
@@ -164,14 +163,53 @@ api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Ca
         do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-prepare_full_replace(true, schema, Stream, Transaction, Tail_Stream) :-
+api_insert_document_unsafe_(schema, Transaction, Document, state(Captures), Id, Captures) :-
+    do_or_die(
+        insert_schema_document_unsafe(Transaction, Document),
+        error(document_insertion_failed_unexpectedly(Document), _)),
+    do_or_die(
+        Id = (Document.get('@id')),
+        error(document_has_no_id_somehow, _)).
+api_insert_document_unsafe_(instance, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
+    do_or_die(
+        insert_document_unsafe(Transaction, Document, Captures_In, Id, Captures_Out),
+        error(document_insertion_failed_unexpectedly(Document), _)).
+
+insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
     !,
-    % Read a new context from the stream and replace the existing one.
-    json_read_required_context(Stream, Context, Tail_Stream),
-    replace_context_document(Transaction, Context).
-prepare_full_replace(_Full_Replace, _Graph_Type, Stream, _Transaction, Tail_Stream) :-
-    % For other inserts, do nothing. Tail_Stream is effectively just Stream.
-    json_init_tail_stream(Stream, Tail_Stream).
+    api_nuke_documents_(Graph_Type, Transaction),
+    (   Graph_Type = schema
+    ->  % For a schema full replace, read the context and replace the existing one.
+        json_read_required_context(Stream, Context, Tail_Stream),
+        replace_context_document(Transaction, Context)
+    ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
+        json_init_tail_stream(Stream, Tail_Stream)
+    ),
+    findall(
+        Id,
+        (   json_read_tail_stream(Tail_Stream, Document),
+            nb_thread_var(
+                {Graph_Type, Transaction, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_unsafe_(Graph_Type, Transaction, Document, State, Id, Captures_Out)
+                ),
+                Captures_Var
+            )
+        ),
+        Ids
+    ).
+insert_documents_(_Full_Replace, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
+    findall(
+        Id,
+        (   json_read_list_stream(Stream, Document),
+            nb_thread_var(
+                {Graph_Type, Transaction, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)
+                ),
+                Captures_Var
+            )
+        ),
+        Ids
+    ).
 
 api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Requested_Data_Version, New_Data_Version, Ids) :-
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
@@ -181,20 +219,8 @@ api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Full_Rep
                      (   set_stream_position(Stream, Pos),
                          empty_assoc(Captures),
                          nb_thread_var_init(Captures, Captures_Var),
-                         (   Full_Replace = true
-                         ->  api_nuke_documents_(Graph_Type, Transaction)
-                         ;   true
-                         ),
                          ensure_transaction_has_builder(Graph_Type, Transaction),
-                         prepare_full_replace(Full_Replace, Graph_Type, Stream, Transaction, Tail_Stream),
-                         findall(Id,
-                                 (   json_read_tail_stream(Tail_Stream, Document),
-                                     nb_thread_var(
-                                         {Graph_Type, Transaction, Document, Id}/[State, Captures_Out]>>(
-                                             api_insert_document_(Graph_Type, Transaction, Document, State, Id, Captures_Out)
-                                         ),
-                                         Captures_Var)),
-                                 Ids),
+                         insert_documents_(Full_Replace, Graph_Type, Stream, Transaction, Captures_Var, Ids),
                          die_if(nonground_captures(Captures_Var, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
                          die_if(has_duplicates(Ids, Duplicates),
