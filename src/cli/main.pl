@@ -431,6 +431,32 @@ opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
            shortflags([f]),
            default(false),
            help('force the deletion of the database (unsafe)')]]).
+opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
+         'Insert documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc insert` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document insert'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type]),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -640,7 +666,7 @@ run_command(optimize,Databases,_Opts) :-
 run_command(query,[Database,Query],Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
     option(author(Author), Opts),
-    option(author(Message), Opts),
+    option(message(Message), Opts),
     create_context(Descriptor,commit_info{ author : Author,
                                            message : Message}, Context),
     api_report_errors(
@@ -932,6 +958,17 @@ run_command(db,delete,[DB_Path],Opts) :-
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
+run_command(doc,insert, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    api_report_errors(
+        insert_documents,
+        api_insert_documents(
+            System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
+            no_data_version, _New_Data_Version, _Ids)).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
