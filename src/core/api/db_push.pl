@@ -16,6 +16,7 @@
 
 :- use_module(library(tus)).
 :- use_module(library(plunit)).
+:- use_module(library(lists)).
 
 % error conditions:
 % - branch to push does not exist
