@@ -154,8 +154,11 @@ remote_unpack_url(URL, Pack_URL) :-
     merge_separator_split(Pack_URL,'/',All_Parts).
 
 remote_tus_url(URL, TUS_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|_Rest]),
-    merge_separator_split(TUS_URL,'/',[Protocol,Blank,Server,"api","files"]).
+    pattern_string_split('/', URL, Parts),
+    do_or_die(append(Pre, [_Organization,_Database], Parts),
+              error(db_url_malformatted(URL), _)),
+    append(Pre, ["api", "files"], All_Parts),
+    merge_separator_split(TUS_URL,'/',All_Parts).
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
