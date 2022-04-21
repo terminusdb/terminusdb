@@ -64,9 +64,12 @@
               member_last/3,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
-              json_read_dict_stream/2,
-              json_read_dict_list_stream/2,
-              json_stream_read_single_dict/2,
+              json_read_term/2,
+              json_read_term_stream/2,
+              json_read_list_stream/2,
+              json_read_list_stream_head/3,
+              json_init_tail_stream/2,
+              json_read_tail_stream/2,
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
@@ -94,6 +97,8 @@
 :- use_module(library(random)).
 :- use_module(library(process), [process_create/3, process_wait/2]).
 :- use_module(library(uri), [uri_encoded/3]).
+:- use_module(library(plunit)).
+:- use_module(library(debug)).
 
 /*
  * The opposite of between/3
@@ -915,25 +920,181 @@ time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
     MN is MM + MMOff mod 60,
     SN is SS + SSOff mod 60.
 
-json_read_dict_stream(Stream,Term) :-
-    repeat,
-    (   json_stream_read_single_dict(Stream,Term)
-    *-> true
-    ;   !,
-        fail).
-
-json_read_dict_list_stream(Stream, Term) :-
-    json_read_dict_stream(Stream, Term_1),
-    (   is_list(Term_1)
-    ->  member(Term, Term_1)
-    ;   Term = Term_1).
-
-json_stream_read_single_dict(Stream,Term) :-
-    json_read_dict(Stream, Term, [default_tag(json),end_of_file(eof)]),
+% Read a JSON Term from Stream. Fail if no JSON terms are found in Stream.
+json_read_term(Stream, Term) :-
+    json_read_dict(Stream, Term, [default_tag(json), end_of_file(eof)]),
     (   Term = eof
     ->  !,
         fail
-    ;   true).
+    ;   true
+    ).
+
+% Read a JSON Term from Stream. Repeat with backtracking until eof. Fail if no
+% JSON terms are found in Stream.
+json_read_term_stream(Stream, Term) :-
+    repeat,
+    (   json_read_term(Stream, Term)
+    *-> true
+    ;   !,
+        fail
+    ).
+
+% Read a JSON Term from Stream. If the term is a list, backtrack on members of
+% the list and output each as Term. If term is not a list, output it as Term.
+% Repeat until eof. Fail if no JSON terms are found in Stream.
+json_read_list_stream(Stream, Term) :-
+    json_read_term_stream(Stream, Term_1),
+    (   is_list(Term_1)
+    ->  member(Term, Term_1)
+    ;   Term = Term_1
+    ).
+
+% json_read_list_stream_head(Stream, Term, Tail_Stream)
+%
+% behaves as
+%
+% json_read_list_stream(Stream, Term)
+%
+% but reads only the first Term without backtracking. The remaining terms in the
+% Stream should now be read from the Tail_Stream with
+%
+% json_read_tail_stream(Tail_Stream, Term)
+json_read_list_stream_head(Stream, Term, tail_stream(Tail, Stream)) :-
+    json_read_term(Stream, T),
+    (   is_list(T)
+    ->  [Term|Tail] = T
+    ;   Term = T,
+        Tail = []
+    ).
+
+% json_init_tail_stream(Stream, Tail_Stream)
+%
+% behaves as
+%
+% json_read_list_stream_head(Stream, Term, Tail_Stream)
+%
+% without reading any terms. To read the terms from Tail_Stream, use
+%
+% json_read_tail_stream(Tail_Stream, Term)
+json_init_tail_stream(Stream, tail_stream([], Stream)).
+
+% json_read_tail_stream(Tail_Stream, Term)
+%
+% behaves as
+%
+% json_read_list_stream(Stream, Term)
+%
+% except that Tail_Stream may have elements from an initial list read from
+% Stream.
+json_read_tail_stream(tail_stream(Tail, Stream), Term) :-
+    (   member(Term, Tail)
+    ;   json_read_list_stream(Stream, Term)
+    ).
+
+:- begin_tests(json_read_term).
+
+test("empty", [fail]) :-
+    open_string("", Stream),
+    json_read_term(Stream, _Term).
+
+test("space", [fail]) :-
+    open_string(" ", Stream),
+    json_read_term(Stream, _Term).
+
+test("illegal", [error(syntax_error(json(illegal_json)))]) :-
+    open_string("{", Stream),
+    json_read_term(Stream, _Term).
+
+test("number", []) :-
+    open_string(" 9", Stream),
+    json_read_term(Stream, 9).
+
+test("string", []) :-
+    open_string("\"a\"", Stream),
+    json_read_term(Stream, "a").
+
+test("empty array", []) :-
+    open_string("[]", Stream),
+    json_read_term(Stream, []).
+
+test("consecutive arrays", [fail]) :-
+    open_string("[][9]", Stream),
+    json_read_term(Stream, []),
+    json_read_term(Stream, [9]),
+    json_read_term(Stream, _Term3).
+
+test("empty object", []) :-
+    open_string("{}", Stream),
+    json_read_term(Stream, json{}).
+
+test("object", []) :-
+    open_string("{\"a\":9}", Stream),
+    json_read_term(Stream, json{a: 9}).
+
+:- end_tests(json_read_term).
+
+:- begin_tests(json_read_term_stream).
+
+test("empty", [fail]) :-
+    open_string("  ", Stream),
+    json_read_term_stream(Stream, _Term).
+
+test("not a stream", [error(domain_error(stream_or_alias,"not a stream"))]) :-
+    json_read_term_stream("not a stream", _Term).
+
+test("illegal", [error(syntax_error(json(illegal_json)))]) :-
+    open_string("]", Stream),
+    json_read_term_stream(Stream, _Term).
+
+test("two objects", []) :-
+    open_string("{\"a\":9}\n\n{\"b\":8}", Stream),
+    findall(Term, json_read_term_stream(Stream, Term), Terms),
+    assertion(Terms = [json{a: 9}, json{b: 8}]).
+
+test("two lists", []) :-
+    open_string("[{\"a\":9}]\n\n[1,2]", Stream),
+    findall(Term, json_read_term_stream(Stream, Term), Terms),
+    assertion(Terms = [[json{a: 9}], [1, 2]]).
+
+:- end_tests(json_read_term_stream).
+
+:- begin_tests(json_read_list_stream).
+
+test("empty", [fail]) :-
+    open_string("\n", Stream),
+    json_read_list_stream(Stream, _Term).
+
+test("two objects", []) :-
+    open_string("{\"a\":9}\n\n{\"b\":8}", Stream),
+    findall(Term, json_read_list_stream(Stream, Term), Terms),
+    assertion(Terms = [json{a: 9}, json{b: 8}]).
+
+test("two lists", []) :-
+    open_string("[{\"a\":9}]\n\n[1,2]", Stream),
+    findall(Term, json_read_list_stream(Stream, Term), Terms),
+    assertion(Terms = [json{a: 9}, 1, 2]).
+
+:- end_tests(json_read_list_stream).
+
+:- begin_tests(json_read_list_stream_head_tail).
+
+test("empty", [fail]) :-
+    open_string("\n\n", Stream),
+    json_read_list_stream_head(Stream, _Term, _Stream_Out).
+
+test("three items", []) :-
+    open_string("{\"a\":9}\n\n{\"b\":8}  4.05", Stream),
+    json_read_list_stream_head(Stream, json{a: 9}, Tail_Stream),
+    findall(Term, json_read_tail_stream(Tail_Stream, Term), Terms),
+    assertion(Terms = [json{b: 8}, 4.05]).
+
+test("three lists", []) :-
+    open_string("[{\"a\":9}]\n\n[1 , 2][{\"b\":8}]", Stream),
+    json_read_list_stream_head(Stream, json{a: 9}, Tail_Stream),
+    findall(Term, json_read_tail_stream(Tail_Stream, Term), Terms),
+    assertion(Terms = [1, 2, json{b: 8}]).
+
+:- end_tests(json_read_list_stream_head_tail).
 
 :- meta_predicate skip_generate_nsols(:, +, +).
 skip_generate_nsols(Goal, Skip, Count) :-
