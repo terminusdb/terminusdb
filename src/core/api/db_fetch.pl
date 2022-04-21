@@ -60,8 +60,11 @@ remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has
         _Meta_Data).
 
 remote_pack_url(URL, Pack_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
+    pattern_string_split('/', URL, Parts),
+    do_or_die(append(Pre, [Organization,Database], Parts),
+              error(db_url_malformatted(URL), _)),
+    append(Pre, ["api", "pack", Organization, Database], All_Parts),
+    merge_separator_split(Pack_URL,'/',All_Parts).
 
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
