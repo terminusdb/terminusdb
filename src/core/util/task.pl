@@ -95,9 +95,22 @@ work_available(Work) :-
     retract(task_queue(wait(Task), Waiting_Task)),
     Work = start(Waiting_Task, Worker).
 work_available(Work) :-
+    task_worker(available, Worker),
+    task_queue(wait_any(Tasks), Waiting_Task),
+    member(Task, Tasks),
+    task_info(Task, _, result(_)),
+    retract(task_queue(wait_any(Tasks), Waiting_Task)),
+    Work = start(Waiting_Task, Worker).
+work_available(Work) :-
     task_queue(wait_blocking(Waiting_Queue, Task), none),
     task_info(Task, _, result(_)),
     retract(task_queue(wait_blocking(Waiting_Queue, Task), none)),
+    Work = wakeup_queue(Waiting_Queue).
+work_available(Work) :-
+    task_queue(wait_any_blocking(Waiting_Queue, Tasks), none),
+    member(Task, Tasks),
+    task_info(Task, _, result(_)),
+    retract(task_queue(wait_any_blocking(Waiting_Queue, Tasks), none)),
     Work = wakeup_queue(Waiting_Queue).
 
 consume_work :-
@@ -180,6 +193,9 @@ task_worker_step(next(Engine), Name) :-
     (   Result = the(waiting(Other_Task))
     ->  task_set_state(Engine, _, waiting),
         assert(task_queue(wait(Other_Task), Engine))
+    ;   Result = the(waiting_any(Other_Tasks))
+    ->  task_set_state(Engine, _, waiting),
+        assert(task_queue(wait_any(Other_Tasks), Engine))
     ;   Result = the(exception(task_kill))
     ->  task_set_state(Engine, _, killed)
     ;   Result = the(exception(E))
@@ -194,7 +210,8 @@ task_worker_step(next(Engine), Name) :-
     free_worker(Name),
 
     (   (   Result = the(success(_))
-        ;   Result = the(waiting(_)))
+        ;   Result = the(waiting(_))
+        ;   Result = the(waiting_any(_)))
     ->  true % there are more results so we can't destroy the engine just yet
     ;   engine_destroy(Engine)),
     task_log('DEBUG', "~q: freed worker ~q", [Engine, Thread_Self]).
@@ -362,11 +379,83 @@ wait_for_results_bt_reified(Task, Result) :-
             wait_for_result_reified(Task, Result),
             (   reified_result_is_final(Result)
             ->  !
-            ;   wakeup_task_runner(assert(task_queue(start, Task))))),
+            ;   task_set_state(Task, _, starting),
+                wakeup_task_runner(assert(task_queue(start, Task))))),
         cleanup_task(Task)).
 
 wait_for_results_bt(Task, Result) :-
     wait_for_results_bt_reified(Task, Reified_Result),
+    unreify_result(Reified_Result, Result).
+
+wait_for_any_result_reified(Tasks, Task-Result) :-
+    wait_for_any_result_reified_(Tasks, Task-Result),
+    (   reified_result_is_final(Result)
+    ->  cleanup_task(Task)
+    ;   task_set_state(Task, _, ready)).
+wait_for_any_result_reified_(Tasks, Result) :-
+    engine_self(E),
+    task_info(E, _, _),
+    !,
+    task_wait_for_any_result(Tasks, Result).
+wait_for_any_result_reified_(Tasks, Result) :-
+    % not a task, block thread.
+    thread_wait_for_any_result(Tasks, Result).
+
+task_wait_for_any_result(Tasks, Task-Result) :-
+    member(Task, Tasks),
+    task_info(Task, _, result(Result)),
+    !.
+task_wait_for_any_result(Tasks, Task-Result) :-
+    forall(member(Task, Tasks),
+           assert_task_might_get_result(Task)),
+    engine_yield(waiting_any(Tasks)),
+    member(Task, Tasks),
+    task_info(Task, _, result(Result)),
+    !.
+
+thread_wait_for_any_result(Tasks, Task-Result) :-
+    forall(member(Task, Tasks),
+           assert_task_might_get_result(Task)),
+    (   member(Task, Tasks),
+        task_info(Task, _, result(Result))
+    ->  true
+    ;   setup_call_cleanup(
+            message_queue_create(Q),
+            (   wakeup_task_runner(assert(task_queue(wait_any_blocking(Q, Tasks), none))),
+                thread_get_message(Q, _)),
+            message_queue_destroy(Q)),
+        (   member(Task, Tasks),
+            task_info(Task, _, result(Result))
+        ->  true
+        ;   throw(error(tasks_had_no_result(Tasks), _)))).
+
+wait_for_any_result(Tasks, Task-Result) :-
+    wait_for_any_result_reified(Tasks, Task-Reified_Result),
+    unreify_result(Reified_Result, Result).
+
+wait_for_all_results_bt_reified([], _Result) :-
+    !,
+    fail.
+wait_for_all_results_bt_reified(Tasks, Result) :-
+    setup_call_cleanup(
+        true,
+        (   repeat,
+            wait_for_any_result_reified(Tasks, Task-R),
+            (   reified_result_is_final(R)
+            ->  !,
+                (   [Task] = Tasks
+                ->  Result = Task-R
+                ;   delete(Tasks, Task, New_Tasks),
+                    (   Result = Task-R
+                    ;   wait_for_all_results_bt_reified(New_Tasks, Result)))
+            ;   Result = Task-R,
+                task_set_state(Task, _, starting),
+                wakeup_task_runner(assert(task_queue(start, Task))))),
+        forall(member(Task, Tasks),
+               cleanup_task(Task))).
+
+wait_for_all_results_bt(Tasks, Task-Result) :-
+    wait_for_all_results_bt_reified(Tasks, Task-Reified_Result),
     unreify_result(Reified_Result, Result).
 
 cleanup_task(Task) :-
@@ -416,3 +505,26 @@ demonstration(Result) :-
                Task),
 
     wait_for_result(Task, Result).
+
+demonstration_2(Result) :-
+    task_spawn(Result,
+               (   task_spawn(R,
+                              (   sleep(2),
+                                  (   R = 1
+                                  ;   (   sleep(3),
+                                          R=2))),
+                              T1),
+
+                   task_spawn(R,
+                              (   sleep(3),
+                                  R = 3),
+                              T2),
+
+                   findall(R,
+                           wait_for_all_results_bt([T1, T2], R),
+                           Result)),
+               Task),
+
+    wait_for_result(Task, Result).
+
+
