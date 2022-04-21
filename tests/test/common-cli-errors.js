@@ -11,12 +11,6 @@ describe('common-cli-errors', function () {
   })
 
   after(async function () {
-    const dir = './storage'
-    console.error(dir, ':')
-    const files = await fs.readdir(dir)
-    files.forEach((file) => {
-      console.error(file)
-    })
     await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
     delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
