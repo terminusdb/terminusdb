@@ -1113,6 +1113,25 @@ doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Strea
         System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
         no_data_version, _New_Data_Version, Ids).
 
+create_authorization(Opts,Authorization) :-
+    option(token(Token), Opts),
+    (   var(Token)
+    ->  option(user(User), Opts),
+        (   var(User)
+        ->  prompt(_,'Username: '),
+            read_string(user_input, ['\n'], [], _, User)
+        ;   true),
+
+        option(password(Password), Opts),
+        (   var(Password)
+        ->  prompt(_,'Password: '),
+            read_string(user_input, ['\n'], [], _, Password)
+        ;   true),
+
+        basic_authorization(User,Password,Authorization)
+    ;   token_authorization(Token,Authorization)
+    ).
+
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
     catch_with_backtrace(
