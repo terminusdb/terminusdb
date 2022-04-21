@@ -5,13 +5,13 @@ const { util } = require('../lib')
 
 describe('common-cli-errors', function () {
   before(async function () {
-    process.env.TERMINUSDB_SERVER_DB_PATH = `${process.cwd()}/storage/${util.randomString()}`
+    process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
     const r = await exec('./terminusdb.sh store init --force')
     expect(r.stdout).to.match(/^Successfully initialised database/)
   })
 
   after(async function () {
-    const dir = `${process.cwd()}/storage`
+    const dir = './storage'
     console.error(dir, ':')
     const files = await fs.readdir(dir)
     files.forEach((file) => {
