@@ -146,8 +146,11 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
     ).
 
 remote_unpack_url(URL, Pack_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","unpack"|Rest]).
+    pattern_string_split('/', URL, Parts),
+    do_or_die(append(Pre, [Organization,Database], Parts),
+              error(db_url_malformatted(URL), _)),
+    append(Pre, ["api", "unpack", Organization, Database], All_Parts),
+    merge_separator_split(Pack_URL,'/',All_Parts).
 
 remote_tus_url(URL, TUS_URL) :-
     pattern_string_split('/', URL, [Protocol,Blank,Server|_Rest]),
