@@ -967,7 +967,7 @@ run_command(doc,insert, [Path], Opts) :-
     api_report_errors(
         insert_documents,
         api_insert_documents(
-            System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
+            System_DB, Auth, Path, Graph_Type, Author, Message, false, current_input,
             no_data_version, _New_Data_Version, _Ids)).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
