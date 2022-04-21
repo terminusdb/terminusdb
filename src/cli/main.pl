@@ -169,6 +169,12 @@ opt_spec(push,'terminusdb push DB_SPEC',
            longflags([prefixes]),
            default(false),
            help('send prefixes for database')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -189,6 +195,12 @@ opt_spec(clone,'terminusdb clone URI <DB_SPEC>',
            longflags([help]),
            default(false),
            help('print help for the `clone` command')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -271,6 +283,12 @@ opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
            longflags([remote]),
            default(origin),
            help('the name of the remote to use')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -668,19 +686,7 @@ run_command(push,[Path],Opts) :-
     ->  Branch = Remote_Branch
     ;   true),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         push,
@@ -712,18 +718,8 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     ;   true),
     option(comment(Comment), Opts),
     option(public(Public), Opts),
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
 
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         clone,
@@ -750,19 +746,7 @@ run_command(pull,[Path],Opts) :-
     ->  Branch = Remote_Branch
     ;   true),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         pull,
@@ -787,19 +771,7 @@ run_command(fetch,[Path],Opts) :-
     % FIXME NOTE: This is very awkward and brittle.
     atomic_list_concat([Path,'/',Remote_Name,'/_commits'], Remote_Path),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         fetch,
@@ -1023,14 +995,28 @@ run_command(triples,load,[Path,File],Opts) :-
                                                author : Author},
                      Format,TTL)),
     format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
-
-
-% turtle
-% user
-% document
-
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
+
+create_authorization(Opts,Authorization) :-
+    option(token(Token), Opts),
+    (   var(Token)
+    ->  option(user(User), Opts),
+        (   var(User)
+        ->  prompt(_,'Username: '),
+            read_string(user_input, ['\n'], [], _, User)
+        ;   true),
+
+        option(password(Password), Opts),
+        (   var(Password)
+        ->  prompt(_,'Password: '),
+            read_string(user_input, ['\n'], [], _, Password)
+        ;   true),
+
+        basic_authorization(User,Password,Authorization)
+    ;   token_authorization(Token,Authorization)
+    ).
+
 
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-

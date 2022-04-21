@@ -205,6 +205,8 @@
 
               % http_utils.pl
               basic_authorization/3,
+              bearer_authorization/2,
+              token_authorization/2,
 
               % json_log.pl
               json_log_error/1,
