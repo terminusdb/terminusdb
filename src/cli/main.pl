@@ -660,7 +660,7 @@ run_command(optimize,Databases,_Opts) :-
 run_command(query,[Database,Query],Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
     option(author(Author), Opts),
-    option(author(Message), Opts),
+    option(message(Message), Opts),
     create_context(Descriptor,commit_info{ author : Author,
                                            message : Message}, Context),
     api_report_errors(
