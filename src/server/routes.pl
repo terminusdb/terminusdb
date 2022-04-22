@@ -1347,7 +1347,10 @@ auth_wrapper(Goal,Request) :-
     open_descriptor(system_descriptor{}, System_Database),
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
-                 call(Goal, [domain(Domain)], Request)),
+                 (   file_upload_storage_path(Path)
+                 ->  Options = [tus_storage_path(Path)]
+                 ;   Options = []),
+                 call(Goal, [domain(Domain)|Options], Request)),
           error(authentication_incorrect(_Reason),_),
           (   reply_json(_{'@type' : 'api:ErrorResponse',
                            'api:status' : 'api:failure',
