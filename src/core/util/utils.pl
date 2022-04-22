@@ -78,7 +78,10 @@
               nb_thread_var_init/2,
               nb_thread_var/2,
               uri_encoded_string/3,
-              text/1
+              text/1,
+              with_memory_file/1,
+              with_memory_file_stream/3,
+              with_memory_file_stream/4
           ]).
 
 /** <module> Utils
@@ -99,6 +102,7 @@
 :- use_module(library(uri), [uri_encoded/3]).
 :- use_module(library(plunit)).
 :- use_module(library(debug)).
+:- use_module(library(memfile)).
 
 /*
  * The opposite of between/3
@@ -1167,3 +1171,35 @@ text(X) :-
     ;   '$is_code_list'(X, _)
     ),
     !.
+
+/* with_memory_file(+Goal).
+ *
+ * Create a new memory file Mem_File and call the Goal with Mem_File as the
+ * argument. When Goal completes or throws an exception, close Mem_File.
+ */
+with_memory_file(Goal) :-
+    setup_call_cleanup(
+        new_memory_file(Mem_File),
+        call(Goal, Mem_File),
+        free_memory_file(Mem_File)
+    ).
+
+/* with_memory_file_stream(+Mem_File, +Mode, +Options, +Goal).
+ *
+ * Open the memory file Mem_File with the Mode and Options. Call the Goal with
+ * the Stream from the memory file. When Goal completes or throws an exception,
+ * close the stream.
+ */
+with_memory_file_stream(Mem_File, Mode, Options, Goal) :-
+    setup_call_cleanup(
+        open_memory_file(Mem_File, Mode, Stream, Options),
+        call(Goal, Stream),
+        close(Stream)
+    ).
+
+/* with_memory_file_stream(+Mem_File, +Mode, +Goal).
+ *
+ * Same as with_memory_file_stream/4 with no options.
+ */
+with_memory_file_stream(Mem_File, Mode, Goal) :-
+    with_memory_file_stream(Mem_File, Mode, [], Goal).
