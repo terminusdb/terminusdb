@@ -489,6 +489,7 @@ describe('diff-id', function () {
       expect(r4.body['api:witnesses']).to.deep.equal(
         [
           {
+            '@id': docId,
             a: {
               '@expected': 'frog legs',
               '@found': 'chicken legs',

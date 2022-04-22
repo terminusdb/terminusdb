@@ -54,7 +54,8 @@ apply_diff(Context, Diff, Conflict, Options) :-
     (   Result = success(JSON_Out)
     ->  replace_document(Context, JSON_Out, _),
         Conflict = null
-    ;   Result = conflict(Conflict)
+    ;   Result = conflict(Conflict_Prototype),
+        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
     ).
 
 
