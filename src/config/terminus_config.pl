@@ -108,6 +108,7 @@ tmp_path(Value) :-
     atom_concat(Dir,'/tmp',TmpPathRelative),
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
+:- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-
     getenv('TERMINUSDB_FILE_STORAGE_PATH', Path).
 
