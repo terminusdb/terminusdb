@@ -457,6 +457,20 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            shortflags([g]),
            default(instance),
            help('graph type (instance or schema)')]]).
+opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
+         'Query documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc get` sub command')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type]),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -980,6 +994,24 @@ run_command(doc,insert, [Path], Opts) :-
     ),
     format("Inserted documents:~n"),
     format("~q~n", [Ids]).
+run_command(doc,get, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(graph_type(Graph_Type), Opts),
+    api_report_errors(
+        get_documents,
+        (   api_get_documents(
+                System_DB, Auth, Path, Graph_Type, true, true, 0,
+                unlimited, no_data_version, _Actual_Data_Version, Goal
+            ),
+            forall(
+                call(Goal, Document),
+                (   json_write_dict(user_output, Document, [width(0)]),
+                    format(user_output, "~n", [])
+                )
+            )
+        )
+    ).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
