@@ -988,12 +988,12 @@ run_command(doc,insert, [Path], Opts) :-
                 api_insert_documents(
                     System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
                     no_data_version, _New_Data_Version, Ids
-                )
+                ),
+                length(Ids, Number_Inserted),
+                format("Inserted ~d document(s).~n", [Number_Inserted])
             ))
         ))
-    ),
-    format("Inserted documents:~n"),
-    format("~q~n", [Ids]).
+    ).
 run_command(doc,get, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
