@@ -141,6 +141,9 @@
               nb_thread_var/2,
               uri_encoded_string/3,
               text/1,
+              with_memory_file/1,
+              with_memory_file_stream/3,
+              with_memory_file_stream/4,
 
               % speculative_parse.pl
               %guess_date/2,
