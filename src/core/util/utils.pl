@@ -102,6 +102,7 @@
 :- use_module(library(uri), [uri_encoded/3]).
 :- use_module(library(plunit)).
 :- use_module(library(debug)).
+:- use_module(library(memfile)).
 
 /*
  * The opposite of between/3
