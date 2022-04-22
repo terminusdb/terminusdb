@@ -20,6 +20,8 @@ describe('common-cli-errors', function () {
       'pull --user=admin --password=root',
       'push --user=admin --password=root',
       'remote list',
+      'doc insert --data=""',
+      'doc get',
     ]
     for (const command of commands) {
       it(command, async function () {
