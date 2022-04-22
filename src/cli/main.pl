@@ -18,7 +18,9 @@
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(library(optparse)).
-:- use_module(core(util), [do_or_die/2, basic_authorization/3, intersperse/3]).
+:- use_module(core(util),
+       [do_or_die/2, basic_authorization/3, intersperse/3,
+        with_memory_file/1, with_memory_file_stream/3]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
