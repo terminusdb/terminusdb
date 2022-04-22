@@ -1083,25 +1083,6 @@ run_command(triples,load,[Path,File],Opts) :-
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
 
-create_authorization(Opts,Authorization) :-
-    option(token(Token), Opts),
-    (   var(Token)
-    ->  option(user(User), Opts),
-        (   var(User)
-        ->  prompt(_,'Username: '),
-            read_string(user_input, ['\n'], [], _, User)
-        ;   true),
-
-        option(password(Password), Opts),
-        (   var(Password)
-        ->  prompt(_,'Password: '),
-            read_string(user_input, ['\n'], [], _, Password)
-        ;   true),
-
-        basic_authorization(User,Password,Authorization)
-    ;   token_authorization(Token,Authorization)
-    ).
-
 doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
