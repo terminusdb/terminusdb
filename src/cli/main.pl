@@ -966,9 +966,20 @@ run_command(doc,insert, [Path], Opts) :-
     option(graph_type(Graph_Type), Opts),
     api_report_errors(
         insert_documents,
-        api_insert_documents(
-            System_DB, Auth, Path, Graph_Type, Author, Message, false, current_input,
-            no_data_version, _New_Data_Version, _Ids)).
+        with_memory_file([Mem_File]>>(
+            % Copy stdin to a memory file.
+            with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+            % Read the memory file to insert documents.
+            with_memory_file_stream(Mem_File, read, [Stream]>>(
+                api_insert_documents(
+                    System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
+                    no_data_version, _New_Data_Version, Ids
+                )
+            ))
+        ))
+    ),
+    format("Inserted documents:~n"),
+    format("~q~n", [Ids]).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
