@@ -30,6 +30,7 @@ if [[ $use_docker -eq 0 ]]; then
       --rm \
       --user $user \
       --volume $PWD:/app/terminusdb/tests \
+      --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
       --workdir /app/terminusdb/tests \
       "$TERMINUSDB_DOCKER_IMAGE_TAG" \
       /app/terminusdb/terminusdb \
