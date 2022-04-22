@@ -456,7 +456,13 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            longflags([graph_type]),
            shortflags([g]),
            default(instance),
-           help('graph type (instance or schema)')]]).
+           help('graph type (instance or schema)')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')]]).
 opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
          'Query documents.',
          [[opt(help),
@@ -978,21 +984,17 @@ run_command(doc,insert, [Path], Opts) :-
     option(author(Author), Opts),
     option(message(Message), Opts),
     option(graph_type(Graph_Type), Opts),
+    option(data(Data), Opts),
     api_report_errors(
         insert_documents,
-        with_memory_file([Mem_File]>>(
-            % Copy stdin to a memory file.
-            with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
-            % Read the memory file to insert documents.
-            with_memory_file_stream(Mem_File, read, [Stream]>>(
-                api_insert_documents(
-                    System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
-                    no_data_version, _New_Data_Version, Ids
-                ),
-                length(Ids, Number_Inserted),
-                format("Inserted ~d document(s).~n", [Number_Inserted])
-            ))
-        ))
+        (   (   var(Data)
+            ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids))
+            ;   open_string(Data, Stream),
+                doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Stream)
+            ),
+            length(Ids, Number_Inserted),
+            format("Document(s) inserted: ~d~n", [Number_Inserted])
+        )
     ).
 run_command(doc,get, [Path], Opts) :-
     super_user_authority(Auth),
@@ -1111,6 +1113,17 @@ run_command(triples,load,[Path,File],Opts) :-
 
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
+
+doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, cli:doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids)).
+
+doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Stream) :-
+    api_insert_documents(
+        System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
+        no_data_version, _New_Data_Version, Ids).
 
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
