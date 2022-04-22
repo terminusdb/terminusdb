@@ -2884,6 +2884,7 @@ authenticate(System_Askable, Request, Auth) :-
     insecure_user_header_key(Header_Key),
     Header =.. [Header_Key, Username],
     memberchk(Header, Request),
+    !,
     (   username_auth(System_Askable, Username, Auth)
     ->  true
     ;   format(string(Message), "User '~w' failed to authenticate with header '~w'", [Username, Header_Key]),
