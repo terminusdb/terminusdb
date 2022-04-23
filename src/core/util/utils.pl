@@ -81,7 +81,8 @@
               text/1,
               with_memory_file/1,
               with_memory_file_stream/3,
-              with_memory_file_stream/4
+              with_memory_file_stream/4,
+              terminal_slash/2
           ]).
 
 /** <module> Utils
@@ -1203,3 +1204,15 @@ with_memory_file_stream(Mem_File, Mode, Options, Goal) :-
  */
 with_memory_file_stream(Mem_File, Mode, Goal) :-
     with_memory_file_stream(Mem_File, Mode, [], Goal).
+
+/*
+ * terminal_slash(+Atom, -Slashed) is det.
+ *
+ * Adds a slash if needed on the end of a path
+ */
+terminal_slash(Atom, Slashed) :-
+    split_string(Atom, '/', '', List),
+    last(List, Last),
+    (   Last = ""
+    ->  Atom = Slashed
+    ;   atomic_list_concat([Atom, '/'], Slashed)).
