@@ -45,7 +45,10 @@ unpack(System_DB, Auth, Path, Payload_or_Resource) :-
         % We are TUS!
     ->  tus_uri_resource(Resource_URL, Resource),
         www_form_encode(Auth, Domain),
-        tus_resource_path(Resource, Resource_Path, [domain(Domain)]),
+        (   file_upload_storage_path(Storage_Path)
+        ->  Options = [tus_storage_path(Storage_Path)]
+        ;   Options = []),
+        tus_resource_path(Resource, Resource_Path, [domain(Domain)|Options]),
         read_file_to_string(Resource_Path, Payload, [encoding(octet)])
         % We are a raw payload
     ;   payload(Payload) = Payload_or_Resource
