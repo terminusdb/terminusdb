@@ -1352,7 +1352,7 @@ tus_auth_wrapper(Goal,Request) :-
                      atom_concat(Base, 'api/files', Endpoint),
                      Options0 = [resumable_endpoint_base(Endpoint)]
                  ;   Options0 = []
-                 )
+                 ),
                  (   file_upload_storage_path(Path)
                  ->  Options = [tus_storage_path(Path)|Options0]
                  ;   Options = Options0),
