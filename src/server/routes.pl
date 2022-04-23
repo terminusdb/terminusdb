@@ -1337,19 +1337,25 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 %:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(files), auth_wrapper(tus_dispatch),
+:- http_handler(api(files), tus_auth_wrapper(tus_dispatch),
                 [ methods([options,head,post,patch,delete]),
                   prefix
                 ]).
 
-:- meta_predicate auth_wrapper(2,?).
-auth_wrapper(Goal,Request) :-
+:- meta_predicate tus_auth_wrapper(2,?).
+tus_auth_wrapper(Goal,Request) :-
     open_descriptor(system_descriptor{}, System_Database),
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
+                 (   memberchk(x_api_base(Pre_Base), Request)
+                 ->  terminal_slash(Pre_Base, Base),
+                     atom_concat(Base, 'api/files', Endpoint),
+                     Options0 = [resumable_endpoint_base(Endpoint)]
+                 ;   Options0 = []
+                 )
                  (   file_upload_storage_path(Path)
-                 ->  Options = [tus_storage_path(Path)]
-                 ;   Options = []),
+                 ->  Options = [tus_storage_path(Path)|Options0]
+                 ;   Options = Options0),
                  call(Goal, [domain(Domain)|Options], Request)),
           error(authentication_incorrect(_Reason),_),
           (   reply_json(_{'@type' : 'api:ErrorResponse',
