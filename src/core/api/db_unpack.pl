@@ -8,6 +8,7 @@
 :- use_module(core(transaction)).
 :- use_module(db_pack).
 :- use_module(core(account)).
+:- use_module(config(terminus_config)).
 
 :- use_module(library(lists)).
 :- use_module(library(tus)).
