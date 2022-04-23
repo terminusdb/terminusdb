@@ -1347,7 +1347,7 @@ tus_auth_wrapper(Goal,Request) :-
     open_descriptor(system_descriptor{}, System_Database),
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
-                 (   memberchk(x_api_base(Pre_Base), Request)
+                 (   memberchk(x_terminusdb_api_base(Pre_Base), Request)
                  ->  terminal_slash(Pre_Base, Base),
                      atom_concat(Base, 'api/files', Endpoint),
                      Options0 = [resumable_endpoint_base(Endpoint)]

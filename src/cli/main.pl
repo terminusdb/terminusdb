@@ -260,6 +260,12 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([remote]),
            default(origin),
            help('the name of the remote to use')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -789,6 +795,7 @@ run_command(pull,[Path],Opts) :-
     ),
 
     option(remote(Remote_Name_Atom), Opts),
+
     atom_string(Remote_Name_Atom,Remote_Name),
     option(remote_branch(Remote_Branch), Opts),
     (   var(Remote_Branch)
