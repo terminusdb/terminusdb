@@ -5,6 +5,7 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(library(lists)).
 
 api_log(System_DB, Auth, Path, Log) :-
     do_or_die(
