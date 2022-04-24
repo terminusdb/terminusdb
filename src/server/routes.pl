@@ -2596,14 +2596,17 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         diff,
         Request,
-        (   (   Compare_Version = document
-            ->  api_diff(System_DB, Auth, Before, After, Keep, Patch)
-            ;   Compare_Version = true
-            ->  api_diff_id(System_DB, Auth, Path, Before_Version,
-                            After_Version, Doc_ID, Keep, Patch)
-            ;   api_diff_id_document(System_DB, Auth, Path,
-                                     Before_Version, After_Document,
-                                     Doc_ID, Keep, Patch)
+        (   do_or_die(
+                (   Compare_Version = document
+                ->  api_diff(System_DB, Auth, Before, After, Keep, Patch)
+                ;   Compare_Version = true
+                ->  api_diff_id(System_DB, Auth, Path, Before_Version,
+                                After_Version, Doc_ID, Keep, Patch)
+                ;   api_diff_id_document(System_DB, Auth, Path,
+                                         Before_Version, After_Document,
+                                         Doc_ID, Keep, Patch)
+                ),
+                error(could_not_generate_patch, _)
             ),
             cors_reply_json(Request, Patch)
         )
