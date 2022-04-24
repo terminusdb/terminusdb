@@ -358,6 +358,51 @@ opt_spec(unbundle,'terminusdb unbundle DATABASE_SPEC FILE OPTIONS',
            default(false),
            help('print help for the `unbundle` command')]
          ]).
+opt_spec(diff,'terminusdb diff OPTIONS',
+         'Create a diff between two JSONs, a JSON and a commit, or two commits.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `diff` command')],
+          [opt(before),
+           type(atom),
+           longflags([before]),
+           shortflags([b]),
+           default('_'),
+           help('JSON document which is the *before*')],
+          [opt(after),
+           type(atom),
+           longflags([after]),
+           shortflags([a]),
+           default('_'),
+           help('JSON document which is the *after*')],
+          [opt(keep),
+           type(atom),
+           longflags([keep]),
+           shortflags([k]),
+           default('{"@id" : true, "_id" : true}'),
+           help('Skeleton of the document to retain as context')],
+          [opt(docid),
+           type(atom),
+           longflags([docid]),
+           shortflags([d]),
+           default('_'),
+           help('document id to use for comparisons')],
+          [opt(before_commit),
+           type(atom),
+           longflags([before_commit]),
+           shortflags([p]),
+           default('_'),
+           help('Commit of the *before* document(s)')],
+          [opt(after_commit),
+           type(atom),
+           longflags([after_commit]),
+           shortflags([s]),
+           default('_'),
+           help('Commit of the *after* document(s)')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -497,7 +542,7 @@ opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `doc insert` sub command')],
+           help('print help for the `doc delete` sub command')],
           [opt(message),
            type(atom),
            longflags([message]),
@@ -942,6 +987,39 @@ run_command(unbundle,[Path, Filename], _Opts) :-
         (   E = error(existence_error(source_sink, File), _)
         ->  format(current_output, "~nFile ~s does not exist", [File])
         ;   throw(E))).
+run_command(diff, _Args, Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(before(Before_Atom), Opts),
+    option(after(After_Atom), Opts),
+    option(keep(Keep_Atom), Opts),
+    option(docid(DocId), Opts),
+    option(before_commit(Before_Commit), Opts),
+    option(after_commit(After_Commit), Opts),
+
+    api_report_errors(
+        diff,
+        (   \+ var(Before_Atom), \+ var(After_Atom)
+        ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
+            atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff(System_DB, Auth, Before, After, Keep, Patch)
+        ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit)
+        ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_id(System_DB, Auth, Path, Before_Commit,
+                        After_Commit, DocId, Keep, Patch)
+        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
+        ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_id_document(System_DB, Auth, Path,
+                                 Before_Commit, After,
+                                 DocId, Keep, Patch)
+        )
+    ),
+    json_write_dict(user_output, Patch, [width(0)]),
+    nl.
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
