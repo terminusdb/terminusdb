@@ -1,7 +1,7 @@
 :- module(api, [
               % init.pl
               bootstrap_files/0,
-	      index_template/1,
+	          index_template/1,
               initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2,
@@ -13,7 +13,7 @@
 
               % db_create.pl
               create_db/9,
-	      create_db_unfinalized/10,
+	          create_db_unfinalized/10,
               create_schema/3,
               create_ref_layer/1,
 
@@ -136,7 +136,11 @@
               api_diff_id/8,
               api_diff_id_document/8,
               api_diff_all_documents/7,
-              api_apply_squash_commit/7
+              api_apply_squash_commit/7,
+
+              % api_log.pl
+              api_log/4,
+              format_log/2
           ]).
 
 :- use_module(api/api_init).
@@ -169,3 +173,4 @@
 :- use_module(api/api_document).
 :- use_module(api/api_user_organizations).
 :- use_module(api/api_patch).
+:- use_module(api/api_log).

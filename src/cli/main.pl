@@ -403,6 +403,14 @@ opt_spec(diff,'terminusdb diff OPTIONS',
            default('_'),
            help('Commit of the *after* document(s)')]
          ]).
+opt_spec(log,'terminusdb log DB_SPEC',
+         'Get the log for a branch given by DB_SPEC.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `log` command')]]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -1020,9 +1028,13 @@ run_command(diff, _Args, Opts) :-
     ),
     json_write_dict(user_output, Patch, [width(0)]),
     nl.
+run_command(log,[Path], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_log(System_DB, Auth, Path, Log),
+    format_log(current_output,Log).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
-
 
 % Subcommands
 run_command(branch,create,[Path],Opts) :-
