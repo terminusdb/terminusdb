@@ -1014,8 +1014,7 @@ run_command(diff, _Args, Opts) :-
             atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
             api_diff(System_DB, Auth, Before, After, Keep, Patch)
         ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit)
-        ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
-            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+        ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
             api_diff_id(System_DB, Auth, Path, Before_Commit,
                         After_Commit, DocId, Keep, Patch)
         ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)

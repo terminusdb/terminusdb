@@ -38,7 +38,7 @@ coerce_to_commit(Commit_Or_Version, Commit_Id) :-
     ).
 
 document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
-                             Map_In, Map_Out) :-
+                     Map_In, Map_Out) :-
     resolve_relative_descriptor(Branch_Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
