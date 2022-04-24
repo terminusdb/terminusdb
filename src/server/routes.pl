@@ -2611,8 +2611,7 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
             ;   api_diff_id_document(System_DB, Auth, Path,
                                      Before_Version, After_Document,
                                      Doc_ID, Keep, Patch)
-            ),
-            cors_reply_json(Request, Patch)
+            )
         )
     ).
 

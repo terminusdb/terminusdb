@@ -27,7 +27,8 @@ api_log(System_DB, Auth, Path, Log) :-
             (   member(This_Uri, History_Commit_Uris),
                 get_document(Repository_Descriptor, This_Uri, Commit_Doc)
             ),
-            Log).
+            Rev_Log),
+    reverse(Rev_Log, Log).
 
 format_log(Stream, Log) :-
     forall(

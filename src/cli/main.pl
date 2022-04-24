@@ -358,8 +358,9 @@ opt_spec(unbundle,'terminusdb unbundle DATABASE_SPEC FILE OPTIONS',
            default(false),
            help('print help for the `unbundle` command')]
          ]).
-opt_spec(diff,'terminusdb diff OPTIONS',
-         'Create a diff between two JSONs, a JSON and a commit, or two commits.',
+opt_spec(diff,'terminusdb diff [Path] OPTIONS',
+         'Create a diff between two JSONs, a JSON and a commit (path required),
+or two commits (path required).',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -995,7 +996,7 @@ run_command(unbundle,[Path, Filename], _Opts) :-
         (   E = error(existence_error(source_sink, File), _)
         ->  format(current_output, "~nFile ~s does not exist", [File])
         ;   throw(E))).
-run_command(diff, _Args, Opts) :-
+run_command(diff, Args, Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
@@ -1008,21 +1009,26 @@ run_command(diff, _Args, Opts) :-
 
     api_report_errors(
         diff,
-        (   \+ var(Before_Atom), \+ var(After_Atom)
-        ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
-            atom_json_dict(After_Atom, After, [default_tag(json)]),
-            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            api_diff(System_DB, Auth, Before, After, Keep, Patch)
-        ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit)
-        ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            api_diff_id(System_DB, Auth, Path, Before_Commit,
-                        After_Commit, DocId, Keep, Patch)
-        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
-        ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
-            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            api_diff_id_document(System_DB, Auth, Path,
-                                 Before_Commit, After,
-                                 DocId, Keep, Patch)
+        do_or_die(
+            (   \+ var(Before_Atom), \+ var(After_Atom)
+            ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
+                atom_json_dict(After_Atom, After, [default_tag(json)]),
+                atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+                api_diff(System_DB, Auth, Before, After, Keep, Patch)
+            ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
+                [Path] = Args
+            ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+                api_diff_id(System_DB, Auth, Path, Before_Commit,
+                            After_Commit, DocId, Keep, Patch)
+            ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
+            ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
+                atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+                api_diff_id_document(System_DB, Auth, Path,
+                                     Before_Commit, After,
+                                     DocId, Keep, Patch)
+            ;   throw(error(could_not_find_two_documents), _)
+            ),
+            error(could_not_generate_patch,_)
         )
     ),
     json_write_dict(user_output, Patch, [width(0)]),
