@@ -490,6 +490,50 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            shortflags([d]),
            default('_'),
            help('document data')]]).
+opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
+         'Delete documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc insert` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document insert'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type]),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(id),
+           type(atom),
+           longflags([id]),
+           shortflags([i]),
+           default('_'),
+           help('document id to delete')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')],
+          [opt(nuke),
+           type(boolean),
+           longflags([nuke]),
+           shortflags([n]),
+           default(false),
+           help('nuke all documents')]]).
 opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
          'Query documents.',
          [[opt(help),
@@ -978,6 +1022,31 @@ run_command(doc,insert, [Path], Opts) :-
             format("Document(s) inserted: ~d~n", [Number_Inserted])
         )
     ).
+run_command(doc,delete, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    option(id(Id), Opts),
+    option(nuke(Nuke), Opts),
+
+    api_report_errors(
+        delete_documents,
+        (   Nuke = true
+        ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message, no_data_version, _),
+            format("All Documents Deleted~n", [])
+        ;   ground(Id)
+        ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id, no_data_version, _),
+            format("Document Deleted~n", [])
+        ;   (   var(Data)
+            ->  with_memory_file(cli:doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message))
+            ;   open_string(Data, Stream),
+                api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, no_data_version, _)
+            ),
+            format("Documents Deleted~n", [])
+        )
+    ).
 run_command(doc,get, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1089,6 +1158,16 @@ run_command(triples,load,[Path,File],Opts) :-
     format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
+
+doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message)).
+
+doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Stream) :-
+    api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
+                         no_data_version, _).
 
 doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Mem_File) :-
     % Copy stdin to a memory file.

@@ -1191,6 +1191,7 @@ with_memory_file(Goal) :-
  * the Stream from the memory file. When Goal completes or throws an exception,
  * close the stream.
  */
+:- meta_predicate with_memory_file_stream(+,+,+,1).
 with_memory_file_stream(Mem_File, Mode, Options, Goal) :-
     setup_call_cleanup(
         open_memory_file(Mem_File, Mode, Stream, Options),
