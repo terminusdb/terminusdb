@@ -16,7 +16,7 @@ describe('organization', function () {
     for (const [bodyString, missingParam] of options) {
       it(bodyString, async function () {
         const r = await organization
-          .add(agent, { bodyString: bodyString })
+          .add(agent, { bodyString })
           .then(organization.verifyAddFailure)
         expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
         expect(r.body['api:error']['api:parameter']).to.equal(missingParam)

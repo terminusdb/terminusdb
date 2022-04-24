@@ -79,8 +79,8 @@ function insert (agent, path, params) {
   } else {
     request.query({
       graph_type: util.isDefined(schema) ? 'schema' : 'instance',
-      author: author,
-      message: message,
+      author,
+      message,
     })
   }
 
@@ -115,11 +115,11 @@ function replace (agent, path, params) {
   } else {
     request.query({
       graph_type: schema ? 'schema' : 'instance',
-      author: author,
-      message: message,
+      author,
+      message,
     })
     if (util.isDefined(create)) {
-      request.query({ create: create })
+      request.query({ create })
     }
   }
 
