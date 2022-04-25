@@ -1131,6 +1131,7 @@ run_command(doc,delete, [Path], Opts) :-
     option(graph_type(Graph_Type), Opts),
     option(id(Id), Opts),
     option(nuke(Nuke), Opts),
+    option(data(Data), Opts),
 
     api_report_errors(
         delete_documents,
