@@ -33,7 +33,7 @@
 :- use_module(library(plunit), [run_tests/0, run_tests/1]).
 :- use_module(library(settings)).
 
-:- use_module(config(terminus_config), [check_all_env_vars/0]).
+:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
