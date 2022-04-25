@@ -57,12 +57,12 @@ api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Keep, 
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
         ->  simple_diff(Before,After,Keep,Diff)
-        ;   Diff = _{ '@op' : 'Delete',
-                      '@delete' : Before }
+        ;   Diff = json{ '@op' : 'Delete',
+                         '@delete' : Before }
         )
     ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
-        ->  Diff = _{ '@op' : 'Insert',
-                      '@insert' : After }
+        ->  Diff = json{ '@op' : 'Insert',
+                         '@insert' : After }
         ;   fail)
     ).
 
@@ -118,12 +118,12 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
         ->  simple_diff(Before,After,Keep,Diff)
-        ;   Diff = _{ '@op' : 'Delete',
-                      '@delete' : Before }
+        ;   Diff = json{ '@op' : 'Delete',
+                         '@delete' : Before }
         )
     ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
-        ->  Diff = _{ '@op' : 'Insert',
-                      '@insert' : After }
+        ->  Diff = json{ '@op' : 'Insert',
+                         '@insert' : After }
         ;   fail)
     ),
     \+ patch_cost(Diff, 0).
