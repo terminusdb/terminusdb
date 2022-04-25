@@ -44,7 +44,7 @@ describe('document-get', function () {
 
     docPath = endpoint.document(dbDefaults).path
     await document
-      .insert(agent, docPath, { schema: schema })
+      .insert(agent, docPath, { schema })
       .then(document.verifyInsertSuccess)
     await document
       .insert(agent, docPath, { instance: instances })
@@ -334,7 +334,7 @@ describe('document-get', function () {
       it(JSON.stringify(query), async function () {
         Object.assign(query, { '@type': 'Person' })
         const r = await document
-          .get(agent, docPath, { body: { query: query } })
+          .get(agent, docPath, { body: { query } })
           .then(document.verifyGetSuccess)
         expectInstances([r.body], instances.slice(index, index + 1))
       })

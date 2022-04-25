@@ -8,8 +8,8 @@ function branch (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/branch/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -40,8 +40,8 @@ function db (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/db/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -51,8 +51,8 @@ function document (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/document/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -64,10 +64,10 @@ function documentCommit (params) {
   const remoteName = params.string('remoteName', 'local')
   return {
     path: `/api/document/${orgName}/${dbName}/${remoteName}/commit/${commitId}`,
-    orgName: orgName,
-    dbName: dbName,
-    remoteName: remoteName,
-    commitId: commitId,
+    orgName,
+    dbName,
+    remoteName,
+    commitId,
   }
 }
 
@@ -78,9 +78,9 @@ function documentCommits (params) {
   const remoteName = params.string('remoteName', 'local')
   return {
     path: `/api/document/${orgName}/${dbName}/${remoteName}/_commits`,
-    orgName: orgName,
-    dbName: dbName,
-    remoteName: remoteName,
+    orgName,
+    dbName,
+    remoteName,
   }
 }
 
@@ -90,8 +90,8 @@ function documentMeta (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/document/${orgName}/${dbName}/_meta`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -142,8 +142,8 @@ function remote (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/remote/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -160,8 +160,8 @@ function versionDiff (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/diff/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -178,8 +178,8 @@ function prefixes (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/prefixes/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
@@ -189,8 +189,8 @@ function woqlResource (params) {
   const dbName = params.stringRequired('dbName')
   return {
     path: `/api/woql/${orgName}/${dbName}`,
-    orgName: orgName,
-    dbName: dbName,
+    orgName,
+    dbName,
   }
 }
 
