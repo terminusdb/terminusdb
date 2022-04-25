@@ -5,11 +5,14 @@ const { util } = require('../lib')
 
 describe('common-cli-errors', function () {
   before(async function () {
-    await exec('./terminusdb.sh store init --force')
+    process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
+    const r = await exec('./terminusdb.sh store init --force')
+    expect(r.stdout).to.match(/^Successfully initialised database/)
   })
 
   after(async function () {
-    await fs.rm('storage', { recursive: true })
+    await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
+    delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
 
   describe('fails for unknown database', function () {
@@ -17,6 +20,8 @@ describe('common-cli-errors', function () {
       'pull --user=admin --password=root',
       'push --user=admin --password=root',
       'remote list',
+      'doc insert --data=""',
+      'doc get',
     ]
     for (const command of commands) {
       it(command, async function () {

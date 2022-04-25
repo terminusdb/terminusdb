@@ -32,6 +32,8 @@
               apply_commit_on_branch/8,
               apply_commit_on_commit/7,
               apply_commit_on_commit/8,
+              commit_uri_is_valid/2,
+              commit_uri_is_initial/2,
               commit_is_valid/2,
               commit_is_initial/2,
               invalidate_commit/2,
@@ -1073,15 +1075,21 @@ test(common_ancestor_after_branch_and_some_commits,
 
 :- end_tests(common_ancestor).
 
-commit_is_valid(Context, Commit_Id) :-
-    commit_id_uri(Context, Commit_Id, Commit_Uri),
+commit_uri_is_valid(Context, Commit_Uri) :-
     once(ask(Context,
              t(Commit_Uri, rdf:type, '@schema':'ValidCommit'))).
 
-commit_is_initial(Context, Commit_Id) :-
+commit_is_valid(Context, Commit_Id) :-
     commit_id_uri(Context, Commit_Id, Commit_Uri),
+    commit_uri_is_valid(Context, Commit_Uri).
+
+commit_uri_is_initial(Context, Commit_Uri) :-
     once(ask(Context,
              t(Commit_Uri, rdf:type, '@schema':'InitialCommit'))).
+
+commit_is_initial(Context, Commit_Id) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    commit_uri_is_initial(Context, Commit_Uri).
 
 invalidate_commit(Context, Commit_Id) :-
     (   commit_is_valid(Context, Commit_Id)

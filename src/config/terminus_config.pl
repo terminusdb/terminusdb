@@ -39,7 +39,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
-terminusdb_version('10.0.22').
+terminusdb_version('10.0.23').
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
@@ -108,6 +108,7 @@ tmp_path(Value) :-
     atom_concat(Dir,'/tmp',TmpPathRelative),
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
+:- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-
     getenv('TERMINUSDB_FILE_STORAGE_PATH', Path).
 

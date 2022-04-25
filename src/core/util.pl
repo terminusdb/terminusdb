@@ -126,9 +126,12 @@
               convlist/4,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
-              json_read_dict_stream/2,
-              json_read_dict_list_stream/2,
-              json_stream_read_single_dict/2,
+              json_read_term/2,
+              json_read_term_stream/2,
+              json_read_list_stream/2,
+              json_read_list_stream_head/3,
+              json_init_tail_stream/2,
+              json_read_tail_stream/2,
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
@@ -138,6 +141,10 @@
               nb_thread_var/2,
               uri_encoded_string/3,
               text/1,
+              with_memory_file/1,
+              with_memory_file_stream/3,
+              with_memory_file_stream/4,
+              terminal_slash/2,
 
               % speculative_parse.pl
               %guess_date/2,
@@ -202,6 +209,8 @@
 
               % http_utils.pl
               basic_authorization/3,
+              bearer_authorization/2,
+              token_authorization/2,
 
               % json_log.pl
               json_log_error/1,

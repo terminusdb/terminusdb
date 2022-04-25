@@ -421,6 +421,8 @@ test(triples_update, [
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
+                 chunked,
+                 time_limit(infinite),
                  methods([options,post,delete,get,put])]).
 
 document_handler(get, Path, Request, System_DB, Auth) :-
@@ -1335,17 +1337,26 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 %:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(files), auth_wrapper(tus_dispatch),
+:- http_handler(api(files), tus_auth_wrapper(tus_dispatch),
                 [ methods([options,head,post,patch,delete]),
                   prefix
                 ]).
 
-:- meta_predicate auth_wrapper(2,?).
-auth_wrapper(Goal,Request) :-
+:- meta_predicate tus_auth_wrapper(2,?).
+tus_auth_wrapper(Goal,Request) :-
     open_descriptor(system_descriptor{}, System_Database),
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
-                 call(Goal, [domain(Domain)], Request)),
+                 (   memberchk(x_terminusdb_api_base(Pre_Base), Request)
+                 ->  terminal_slash(Pre_Base, Base),
+                     atom_concat(Base, 'api/files', Endpoint),
+                     Options0 = [resumable_endpoint_base(Endpoint)]
+                 ;   Options0 = []
+                 ),
+                 (   file_upload_storage_path(Path)
+                 ->  Options = [tus_storage_path(Path)|Options0]
+                 ;   Options = Options0),
+                 call(Goal, [domain(Domain)|Options], Request)),
           error(authentication_incorrect(_Reason),_),
           (   reply_json(_{'@type' : 'api:ErrorResponse',
                            'api:status' : 'api:failure',
@@ -2879,6 +2890,7 @@ authenticate(System_Askable, Request, Auth) :-
     insecure_user_header_key(Header_Key),
     Header =.. [Header_Key, Username],
     memberchk(Header, Request),
+    !,
     (   username_auth(System_Askable, Username, Auth)
     ->  true
     ;   format(string(Message), "User '~w' failed to authenticate with header '~w'", [Username, Header_Key]),

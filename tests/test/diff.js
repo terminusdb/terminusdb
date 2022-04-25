@@ -24,12 +24,12 @@ describe('diff', function () {
     const after = { asdf: 'blarf' }
     const r = await agent
       .post(diffPath)
-      .send({ before: before, after: after })
+      .send({ before, after })
     expect(r.status).to.equal(200)
     const patch = r.body
     const r2 = await agent
       .post(patchPath)
-      .send({ before: before, patch: patch })
+      .send({ before, patch })
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })
@@ -41,12 +41,12 @@ describe('diff', function () {
     const after = { asdf: { bar: 'blarf' } }
     const r = await agent
       .post(diffPath)
-      .send({ before: before, after: after })
+      .send({ before, after })
     expect(r.status).to.equal(200)
     const patch = r.body
     const r2 = await agent
       .post(patchPath)
-      .send({ before: before, patch: patch })
+      .send({ before, patch })
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })
@@ -58,12 +58,12 @@ describe('diff', function () {
     const after = { asdf: { bar: [0, 1] } }
     const r = await agent
       .post(diffPath)
-      .send({ before: before, after: after })
+      .send({ before, after })
     expect(r.status).to.equal(200)
     const patch = r.body
     const r2 = await agent
       .post(patchPath)
-      .send({ before: before, patch: patch })
+      .send({ before, patch })
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })
@@ -75,12 +75,12 @@ describe('diff', function () {
     const after = { asdf: { bar: [{ baz: 'quuz' }] } }
     const r = await agent
       .post(diffPath)
-      .send({ before: before, after: after })
+      .send({ before, after })
     expect(r.status).to.equal(200)
     const patch = r.body
     const r2 = await agent
       .post(patchPath)
-      .send({ before: before, patch: patch })
+      .send({ before, patch })
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })

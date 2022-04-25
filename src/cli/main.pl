@@ -18,7 +18,10 @@
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(library(optparse)).
-:- use_module(core(util), [do_or_die/2, basic_authorization/3, intersperse/3]).
+:- use_module(core(util),
+              [do_or_die/2, token_authorization/2,
+               basic_authorization/3, intersperse/3,
+               with_memory_file/1, with_memory_file_stream/3]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -169,6 +172,12 @@ opt_spec(push,'terminusdb push DB_SPEC',
            longflags([prefixes]),
            default(false),
            help('send prefixes for database')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -189,6 +198,12 @@ opt_spec(clone,'terminusdb clone URI <DB_SPEC>',
            longflags([help]),
            default(false),
            help('print help for the `clone` command')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -245,6 +260,12 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([remote]),
            default(origin),
            help('the name of the remote to use')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -271,6 +292,12 @@ opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
            longflags([remote]),
            default(origin),
            help('the name of the remote to use')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -431,6 +458,52 @@ opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
            shortflags([f]),
            default(false),
            help('force the deletion of the database (unsafe)')]]).
+opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
+         'Insert documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc insert` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document insert'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type]),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')]]).
+opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
+         'Query documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc get` sub command')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type]),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -640,7 +713,7 @@ run_command(optimize,Databases,_Opts) :-
 run_command(query,[Database,Query],Opts) :-
     resolve_absolute_string_descriptor(Database,Descriptor),
     option(author(Author), Opts),
-    option(author(Message), Opts),
+    option(message(Message), Opts),
     create_context(Descriptor,commit_info{ author : Author,
                                            message : Message}, Context),
     api_report_errors(
@@ -668,19 +741,7 @@ run_command(push,[Path],Opts) :-
     ->  Branch = Remote_Branch
     ;   true),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         push,
@@ -712,18 +773,8 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     ;   true),
     option(comment(Comment), Opts),
     option(public(Public), Opts),
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
 
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         clone,
@@ -744,25 +795,14 @@ run_command(pull,[Path],Opts) :-
     ),
 
     option(remote(Remote_Name_Atom), Opts),
+
     atom_string(Remote_Name_Atom,Remote_Name),
     option(remote_branch(Remote_Branch), Opts),
     (   var(Remote_Branch)
     ->  Branch = Remote_Branch
     ;   true),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         pull,
@@ -787,19 +827,7 @@ run_command(fetch,[Path],Opts) :-
     % FIXME NOTE: This is very awkward and brittle.
     atomic_list_concat([Path,'/',Remote_Name,'/_commits'], Remote_Path),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         fetch,
@@ -932,6 +960,42 @@ run_command(db,delete,[DB_Path],Opts) :-
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
+run_command(doc,insert, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    option(data(Data), Opts),
+    api_report_errors(
+        insert_documents,
+        (   (   var(Data)
+            ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids))
+            ;   open_string(Data, Stream),
+                doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Stream)
+            ),
+            length(Ids, Number_Inserted),
+            format("Document(s) inserted: ~d~n", [Number_Inserted])
+        )
+    ).
+run_command(doc,get, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(graph_type(Graph_Type), Opts),
+    api_report_errors(
+        get_documents,
+        (   api_get_documents(
+                System_DB, Auth, Path, Graph_Type, true, true, 0,
+                unlimited, no_data_version, _Actual_Data_Version, Goal
+            ),
+            forall(
+                call(Goal, Document),
+                (   json_write_dict(user_output, Document, [width(0)]),
+                    format(user_output, "~n", [])
+                )
+            )
+        )
+    ).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
@@ -1023,14 +1087,38 @@ run_command(triples,load,[Path,File],Opts) :-
                                                author : Author},
                      Format,TTL)),
     format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
-
-
-% turtle
-% user
-% document
-
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
+
+doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, cli:doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids)).
+
+doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Stream) :-
+    api_insert_documents(
+        System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
+        no_data_version, _New_Data_Version, Ids).
+
+create_authorization(Opts,Authorization) :-
+    option(token(Token), Opts),
+    (   var(Token)
+    ->  option(user(User), Opts),
+        (   var(User)
+        ->  prompt(_,'Username: '),
+            read_string(user_input, ['\n'], [], _, User)
+        ;   true),
+
+        option(password(Password), Opts),
+        (   var(Password)
+        ->  prompt(_,'Password: '),
+            read_string(user_input, ['\n'], [], _, Password)
+        ;   true),
+
+        basic_authorization(User,Password,Authorization)
+    ;   token_authorization(Token,Authorization)
+    ).
 
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-

@@ -91,7 +91,7 @@ describe('woql-auth', function () {
 
     before(async function () {
       await document
-        .insert(agent, docPath, { schema: schema })
+        .insert(agent, docPath, { schema })
         .then(document.verifyInsertSuccess)
     })
 

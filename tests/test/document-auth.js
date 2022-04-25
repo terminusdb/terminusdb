@@ -87,7 +87,7 @@ describe('document', function () {
         it(JSON.stringify(id), async function () {
           const schema = { '@id': id, '@type': 'Class' }
           const r = await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertFailure)
           expect(r.body['api:error']['@type']).to.equal('api:BadFieldValue')
           expect(r.body['api:error']['api:field']).to.equal('@id')
@@ -108,7 +108,7 @@ describe('document', function () {
             schema['@id'] = util.randomString()
           }
           const r = await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertFailure)
           document.expectMissingField(r, missingField, schema)
         })
@@ -129,7 +129,7 @@ describe('document', function () {
         it(JSON.stringify(type), async function () {
           const schema = { '@id': util.randomString(), '@type': type }
           const r = await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertFailure)
           expect(r.body['api:error']['@type']).to.equal('api:BadFieldValue')
           expect(r.body['api:error']['api:field']).to.equal('@type')
@@ -154,13 +154,13 @@ describe('document', function () {
         it(id, async function () {
           const schema = { '@id': id, '@type': 'Class' }
           await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertSuccess)
           const r = await document
-            .get(agent, docPath, { query: { graph_type: 'schema', id: id } })
+            .get(agent, docPath, { query: { graph_type: 'schema', id } })
             .then(document.verifyGetSuccess)
           await document
-            .del(agent, docPath, { query: { graph_type: 'schema', id: id } })
+            .del(agent, docPath, { query: { graph_type: 'schema', id } })
             .then(document.verifyDelSuccess)
           expect(r.body).to.deep.equal(schema)
         })
@@ -207,7 +207,7 @@ describe('document', function () {
       {
         schema['@id'] = util.randomString()
         const r = await document
-          .insert(agent, docPath, { schema: schema })
+          .insert(agent, docPath, { schema })
           .then(document.verifyInsertFailure)
         expect(r.body['api:error']['@type']).to.equal('api:SubdocumentKeyMissing')
         expect(r.body['api:error']['api:document']['@id']).to.equal(schema['@id'])
@@ -216,7 +216,7 @@ describe('document', function () {
         schema['@id'] = util.randomString()
         schema['@key'] = { useless_key: 'useless_value' }
         const r = await document
-          .insert(agent, docPath, { schema: schema })
+          .insert(agent, docPath, { schema })
           .then(document.verifyInsertFailure)
         expect(r.body['api:error']['@type']).to.equal('api:DocumentKeyTypeMissing')
         expect(r.body['api:error']['api:document']['@id']).to.equal(schema['@id'])
@@ -226,7 +226,7 @@ describe('document', function () {
         schema['@id'] = util.randomString()
         schema['@key'] = { '@type': 'Unknown' }
         const r = await document
-          .insert(agent, docPath, { schema: schema })
+          .insert(agent, docPath, { schema })
           .then(document.verifyInsertFailure)
         expect(r.body['api:error']['@type']).to.equal('api:DocumentKeyTypeUnknown')
         expect(r.body['api:error']['api:document']['@id']).to.equal(schema['@id'])
@@ -237,7 +237,7 @@ describe('document', function () {
     it('fails when @key value is not an object (#587)', async function () {
       const schema = { '@id': util.randomString(), '@type': 'Class', '@key': false }
       const r = await document
-        .insert(agent, docPath, { schema: schema })
+        .insert(agent, docPath, { schema })
         .then(document.verifyInsertFailure)
       expect(r.body['api:error']['@type']).to.equal('api:DocumentKeyNotObject')
       expect(r.body['api:error']['api:key_value']).to.equal(false)
@@ -383,7 +383,7 @@ describe('document', function () {
       }
       await document
         .insert(agent, docPath, {
-          schema: schema,
+          schema,
         })
         .then(document.verifyInsertSuccess)
       await document
@@ -392,7 +392,7 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { query: { id: id } })
+        .get(agent, docPath, { query: { id } })
         .then(document.verifyGetSuccess)
       expect(r.body['@id']).to.equal(id)
       expect(r.body['@type']).to.equal(type)
@@ -481,7 +481,7 @@ describe('document', function () {
       for (const keyType of keyTypes) {
         it(`fails when @fields is missing for ${keyType}`, async function () {
           schema['@key'] = { '@type': keyType }
-          const r = await document.insert(agent, docPath, { schema: schema })
+          const r = await document.insert(agent, docPath, { schema })
           document.verifyInsertFailure(r)
           expect(r.body['api:error']['@type']).to.equal('api:KeyMissingFields')
           expect(r.body['api:error']['api:key_type']).to.equal(keyType)
@@ -490,7 +490,7 @@ describe('document', function () {
 
         it(`fails when @fields value is not an array for ${keyType}`, async function () {
           schema['@key'] = { '@type': keyType, '@fields': { key: 'value' } }
-          const r = await document.insert(agent, docPath, { schema: schema })
+          const r = await document.insert(agent, docPath, { schema })
           document.verifyInsertFailure(r)
           expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsNotAnArray')
           expect(r.body['api:error']['api:fields']).to.deep.equal(schema['@key']['@fields'])
@@ -499,7 +499,7 @@ describe('document', function () {
 
         it(`fails when @fields value is empty array for ${keyType} (#727)`, async function () {
           schema['@key'] = { '@type': keyType, '@fields': [] }
-          const r = await document.insert(agent, docPath, { schema: schema })
+          const r = await document.insert(agent, docPath, { schema })
           document.verifyInsertFailure(r)
           expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsIsEmpty')
           expect(r.body['api:error']['api:document']).to.deep.equal(schema)
@@ -533,7 +533,7 @@ describe('document', function () {
         },
       ]
       await document
-        .insert(agent, docPath, { schema: schema })
+        .insert(agent, docPath, { schema })
         .then(document.verifyInsertSuccess)
 
       const instance = {
@@ -546,7 +546,7 @@ describe('document', function () {
         ],
       }
       await document
-        .insert(agent, docPath, { instance: instance })
+        .insert(agent, docPath, { instance })
         .then(document.verifyInsertSuccess)
     })
 
@@ -591,6 +591,17 @@ describe('document', function () {
       expect(r.body).to.deep.include.members(schema)
     })
 
+    it('fails insert instance with unknown property (#1030)', async function () {
+      const schema = { '@id': util.randomString(), '@type': 'Class' }
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
+      const instance = { '@type': schema['@id'], unknownProperty: 'abc' }
+      const r = await document.insert(agent, docPath, { instance }).then(document.verifyInsertFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:UnrecognizedProperty')
+      expect(r.body['api:error']['api:document']).to.deep.equal(instance)
+      expect(r.body['api:error']['api:property']).to.equal('unknownProperty')
+      expect(r.body['api:error']['api:type']).to.equal(schema['@id'])
+    })
+
     describe('tests cardinality in schema', function () {
       let card
       let min
@@ -603,9 +614,6 @@ describe('document', function () {
         max = util.randomString()
         minmax = util.randomString()
 
-        const dbDefaults = endpoint.db(agent.defaults())
-        dbPath = dbDefaults.path
-        docPath = endpoint.document(dbDefaults).path
         await document
           .insert(agent, docPath, {
             schema: [
