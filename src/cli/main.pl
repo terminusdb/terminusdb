@@ -1020,13 +1020,19 @@ run_command(diff, Args, Opts) :-
             ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
                 api_diff_id(System_DB, Auth, Path, Before_Commit,
                             After_Commit, DocId, Keep, Patch)
+            ;   \+ var(After_Commit), \+ var(Before_Commit),
+                [Path] = Args
+            ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+                api_diff_all_documents(System_DB, Auth, Path,
+                                       Before_Commit, After_Commit,
+                                       Keep, Patch)
             ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
             ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
                 atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
                 api_diff_id_document(System_DB, Auth, Path,
                                      Before_Commit, After,
                                      DocId, Keep, Patch)
-            ;   throw(error(could_not_find_two_documents), _)
+            ;   throw(error(could_not_find_two_documents, _))
             ),
             error(could_not_generate_patch,_)
         )

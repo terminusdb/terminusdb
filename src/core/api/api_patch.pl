@@ -54,10 +54,17 @@ api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Keep, 
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
 
-    document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map),
-    document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _),
-
-    simple_diff(Before,After,Keep,Diff).
+    (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
+    ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
+        ->  simple_diff(Before,After,Keep,Diff)
+        ;   Diff = _{ '@op' : 'Delete',
+                      '@delete' : Before }
+        )
+    ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+        ->  Diff = _{ '@op' : 'Insert',
+                      '@insert' : After }
+        ;   fail)
+    ).
 
 api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_Id, Keep, Diff) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
