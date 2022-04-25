@@ -1,7 +1,7 @@
 :- module(api, [
               % init.pl
               bootstrap_files/0,
-	          index_template/1,
+              index_template/1,
               initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2,
@@ -13,7 +13,7 @@
 
               % db_create.pl
               create_db/9,
-	          create_db_unfinalized/10,
+              create_db_unfinalized/10,
               create_schema/3,
               create_ref_layer/1,
 
