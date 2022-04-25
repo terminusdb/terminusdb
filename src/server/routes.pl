@@ -2579,7 +2579,7 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die((   _{ before : Before,
                      after : After
                    } :< Document,
-               Operation = document
+                  Operation = document
               ;   _{ before_data_version : Before_Version
                    } :< Document,
                   (   _{ after_data_version: After_Version}
