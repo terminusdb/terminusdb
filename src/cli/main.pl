@@ -1009,32 +1009,28 @@ run_command(diff, Args, Opts) :-
 
     api_report_errors(
         diff,
-        do_or_die(
-            (   \+ var(Before_Atom), \+ var(After_Atom)
-            ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
-                atom_json_dict(After_Atom, After, [default_tag(json)]),
-                atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-                api_diff(System_DB, Auth, Before, After, Keep, Patch)
-            ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
-                [Path] = Args
-            ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-                api_diff_id(System_DB, Auth, Path, Before_Commit,
-                            After_Commit, DocId, Keep, Patch)
-            ;   \+ var(After_Commit), \+ var(Before_Commit),
-                [Path] = Args
-            ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-                api_diff_all_documents(System_DB, Auth, Path,
-                                       Before_Commit, After_Commit,
-                                       Keep, Patch)
-            ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
-            ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
-                atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-                api_diff_id_document(System_DB, Auth, Path,
-                                     Before_Commit, After,
-                                     DocId, Keep, Patch)
-            ;   throw(error(could_not_find_two_documents, _))
-            ),
-            error(could_not_generate_patch,_)
+        (   \+ var(Before_Atom), \+ var(After_Atom)
+        ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
+            atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff(System_DB, Auth, Before, After, Keep, Patch)
+        ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
+            [Path] = Args
+        ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_id(System_DB, Auth, Path, Before_Commit,
+                        After_Commit, DocId, Keep, Patch)
+        ;   \+ var(After_Commit), \+ var(Before_Commit),
+            [Path] = Args
+        ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_all_documents(System_DB, Auth, Path,
+                                   Before_Commit, After_Commit,
+                                   Keep, Patch)
+        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
+        ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_id_document(System_DB, Auth, Path,
+                                 Before_Commit, After,
+                                 DocId, Keep, Patch)
         )
     ),
     json_write_dict(user_output, Patch, [width(0)]),
