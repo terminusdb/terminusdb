@@ -317,15 +317,15 @@ empty_table(Columns,Rows,[Row|Table]) :-
     empty_table(Columns,New_Rows,Table).
 
 table_check_delete(Delete,Original,Conflict,_Options) :-
-    _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
+    json{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
       '@value': Before} = Delete,
     table_window(X,W,Y,H,Original,Window),
     (   Before = Window
     ->  Conflict = null
-    ;   Conflict = _{ '@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
-                      '@expected' : Before,
-                      '@found' : Window
-                    }
+    ;   Conflict = json{ '@at' : json{'@height':H,'@width':W,'@x':X,'@y':Y},
+                         '@expected' : Before,
+                         '@found' : Window
+                       }
     ).
 
 table_check_deletes([],_Before,[],_Options).
@@ -341,10 +341,10 @@ table_add_copy(Copy,Original,Final0,Final1,Conflict,_Options) :-
     ->  replace_table_window(X,Y,Window,Final0,Final1),
         Conflict = null
     ;   replace_table_window(X,Y,Window,Final0,Final1),
-        Conflict = _{ '@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
-                      '@expected': Before,
-                      '@found' : Window
-                    }
+        Conflict = json{ '@at' : json{'@height':H,'@width':W,'@x':X,'@y':Y},
+                         '@expected': Before,
+                         '@found' : Window
+                       }
     ).
 
 table_add_copies([],_,After,After,[],_Options).
@@ -361,11 +361,11 @@ table_add_move(Move,Original,Final0,Final1,Conflict,_Options) :-
     ->  replace_table_window(X2,Y2,Window,Final0,Final1),
         Conflict = null
     ;   replace_table_window(X2,Y2,Window,Final0,Final1),
-        Conflict = _{'@from' : _{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
-                     '@to' : _{'@height':H2,'@width':W2,'@x':X2,'@y':Y2},
-                     '@expected': Before,
-                     '@found' : Window
-                    }
+        Conflict = json{'@from' : json{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
+                        '@to' : json{'@height':H2,'@width':W2,'@x':X2,'@y':Y2},
+                        '@expected': Before,
+                        '@found' : Window
+                       }
     ).
 
 table_add_moves([],_,After,After,[],_Options).
@@ -382,13 +382,13 @@ table_add_insert(Insert,Final0,Final1,Conflict,_Options) :-
     ->  replace_table_window(X,Y,After,Final0,Final1),
         Conflict = null
     ;   replace_table_window(X,Y,After,Final0,Final1),
-        Conflict = _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
-                     '@found' : Window
-                    }
+        Conflict = json{'@at' : json{'@height':H,'@width':W,'@x':X,'@y':Y},
+                        '@found' : Window
+                       }
     ).
 
 table_add_inserts([],After,After,[],_Options).
-table_add_inserts([Insert|Inserts],After0,AfterN,[Conflict|Conflicts]) :-
+table_add_inserts([Insert|Inserts],After0,AfterN,[Conflict|Conflicts],Options) :-
     table_add_insert(Insert,After0,After1,Conflict,Options),
     table_add_inserts(Inserts,After1,AfterN,Conflicts,Options).
 
@@ -845,6 +845,24 @@ test(after_matches_patch, []) :-
                name : "Ludwig"
              }.
 
+
+test(table_inserts_works, []) :-
+    Inserts = [json{'@at':json{'@height':1, '@width':1, '@x':4, '@y':0},
+                    '@value':[['Telecoms']]},
+               json{'@at':json{'@height':1, '@width':1, '@x':4, '@y':1},
+                    '@value':[['Telecoms']]}],
+    Table = [['Job Title', 'Company', 'Location', 'Company Size', 'Company Industry'],
+             ['Sr. Mgt.', 'Boeing', 'USA', 'Large', 'Aerospace']],
+
+    table_add_inserts(Inserts, Table, Output, Conflicts, [match_final_state(true)]),
+
+    Output = [['Job Title','Company','Location','Company Size','Telecoms'],
+              ['Sr. Mgt.','Boeing','USA','Large','Telecoms']],
+
+    Conflicts = [json{'@at':json{'@height':1,'@width':1,'@x':4,'@y':0},
+                      '@found':[['Company Industry']]},
+                 json{'@at':json{'@height':1,'@width':1,'@x':4,'@y':1},
+                      '@found':[['Aerospace']]}].
 
 :- end_tests(simple_patch).
 
