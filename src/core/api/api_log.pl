@@ -36,7 +36,7 @@ format_log(Stream, Log) :-
         member(Commit_Doc, Log),
         (   get_dict('identifier', Commit_Doc, Id),
             format(Stream,'~s~n', [Id]),
-            format(Stream,'----------------------------------~n', []),
+            format(Stream,'--------------------------------~n', []),
             get_dict('timestamp', Commit_Doc, TimeStamp),
             stamp_date_time(TimeStamp, DateTime, 0),
             format_time(Stream, 'Date: %FT%T%:z', DateTime),
