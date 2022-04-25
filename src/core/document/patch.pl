@@ -177,8 +177,15 @@ empty_table(Columns,Rows,[Row|Table]) :-
 
 table_check_delete(Delete,Before) :-
     _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
-      '@value': V} = Delete,
-    table_window(X,W,Y,H,Before,V).
+      '@value': Before} = Delete,
+    table_window(X,W,Y,H,Original,Window),
+    (   Before = Window
+    ->  Conflict = null
+    ;   Conflict = json{ '@at' : json{'@height':H,'@width':W,'@x':X,'@y':Y},
+                         '@expected' : Before,
+                         '@found' : Window
+                       }
+    ).
 
 table_check_deletes([],_Before).
 table_check_deletes([Delete|Deletes],Before) :-
@@ -187,9 +194,17 @@ table_check_deletes([Delete|Deletes],Before) :-
 
 table_add_copy(Copy,Before,After0,After1) :-
     _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
-      '@value': Window} = Copy,
-    table_window(X,W,Y,H,Before,Window),
-    replace_table_window(X,Y,Window,After0,After1).
+      '@value': Before } = Copy,
+    table_window(X,W,Y,H,Original,Window),
+    (   Before = Window
+    ->  replace_table_window(X,Y,Window,Final0,Final1),
+        Conflict = null
+    ;   replace_table_window(X,Y,Window,Final0,Final1),
+        Conflict = json{ '@at' : json{'@height':H,'@width':W,'@x':X,'@y':Y},
+                         '@expected': Before,
+                         '@found' : Window
+                       }
+    ).
 
 table_add_copies([],_,After,After).
 table_add_copies([Copy|Copies],Before,After0,AfterN) :-
@@ -198,25 +213,43 @@ table_add_copies([Copy|Copies],Before,After0,AfterN) :-
 
 table_add_move(Move,Before,After0,After1) :-
     _{'@from' : _{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
-      '@to' : _{'@height':_H2,'@width':_W2,'@x':X2,'@y':Y2},
-      '@value': Window} = Move,
-    table_window(X1,W1,Y1,H1,Before,Window),
-    replace_table_window(X2,Y2,Window,After0,After1).
+      '@to' : _{'@height':H2,'@width':W2,'@x':X2,'@y':Y2},
+      '@value': Before} = Move,
+    table_window(X1,W1,Y1,H1,Original,Window),
+    (   Before = Window
+    ->  replace_table_window(X2,Y2,Window,Final0,Final1),
+        Conflict = null
+    ;   replace_table_window(X2,Y2,Window,Final0,Final1),
+        Conflict = json{'@from' : json{'@height':H1,'@width':W1,'@x':X1,'@y':Y1},
+                        '@to' : json{'@height':H2,'@width':W2,'@x':X2,'@y':Y2},
+                        '@expected': Before,
+                        '@found' : Window
+                       }
+    ).
 
-table_add_moves([],_,After,After).
-table_add_moves([Move|Moves],Before,After0,AfterN) :-
-    table_add_move(Move,Before,After0,After1),
-    table_add_moves(Moves,Before,After1,AfterN).
+table_add_moves([],_,After,After,[],_Options).
+table_add_moves([Move|Moves],Before,After0,AfterN,[Conflict|Conflicts],Options) :-
+    table_add_move(Move,Before,After0,After1,Conflict,Options),
+    table_add_moves(Moves,Before,After1,AfterN,Conflicts,Options).
 
-table_add_insert(Insert,After0,After1) :-
-    _{'@at' : _{'@height':_H,'@width':_W,'@x':X,'@y':Y},
-      '@value': Window} = Insert,
-    replace_table_window(X,Y,Window,After0,After1).
+table_add_insert(Insert,Final0,Final1,Conflict,_Options) :-
+    _{'@at' : _{'@height':H,'@width':W,'@x':X,'@y':Y},
+      '@value': After} = Insert,
+    empty_table(H,W,Empty),
+    table_window(X,W,Y,H,Final0,Window),
+    (   Empty = Window
+    ->  replace_table_window(X,Y,After,Final0,Final1),
+        Conflict = null
+    ;   replace_table_window(X,Y,After,Final0,Final1),
+        Conflict = json{'@at' : json{'@height':H,'@width':W,'@x':X,'@y':Y},
+                        '@found' : Window
+                       }
+    ).
 
-table_add_inserts([],After,After).
-table_add_inserts([Insert|Inserts],After0,AfterN) :-
-    table_add_insert(Insert,After0,After1),
-    table_add_inserts(Inserts,After1,AfterN).
+table_add_inserts([],After,After,[],_Options).
+table_add_inserts([Insert|Inserts],After0,AfterN,[Conflict|Conflicts],Options) :-
+    table_add_insert(Insert,After0,After1,Conflict,Options),
+    table_add_inserts(Inserts,After1,AfterN,Conflicts,Options).
 
 diff_op(Diff, Op) :-
     is_dict(Diff),
@@ -598,6 +631,22 @@ test(deep_read_state_failure, []) :-
              },
     \+ simple_patch(Patch,Before,_After).
 
+test(after_matches_patch, []) :-
+    Inserts = [json{'@at':json{'@height':1, '@width':1, '@x':4, '@y':0},
+                    '@value':[['Telecoms']]},
+               json{'@at':json{'@height':1, '@width':1, '@x':4, '@y':1},
+                    '@value':[['Telecoms']]}],
+    Table = [['Job Title', 'Company', 'Location', 'Company Size', 'Company Industry'],
+             ['Sr. Mgt.', 'Boeing', 'USA', 'Large', 'Aerospace']],
+
+    table_add_inserts(Inserts, Table, Output, Conflicts, [match_final_state(true)]),
+
+    Output = [['Job Title','Company','Location','Company Size','Telecoms'],
+              ['Sr. Mgt.','Boeing','USA','Large','Telecoms']],
+
+    Conflicts = [json{'@at':json{'@height':1,'@width':1,'@x':4,'@y':0},
+                      '@found':[['Company Industry']]},
+                 json{'@at':json{'@height':1,'@width':1,'@x':4,'@y':1},
+                      '@found':[['Aerospace']]}].
 
 :- end_tests(simple_patch).
-
