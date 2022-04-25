@@ -21,6 +21,7 @@ describe('common-cli-errors', function () {
       'push --user=admin --password=root',
       'remote list',
       'doc insert --data=""',
+      'doc delete --data=""',
       'doc get',
     ]
     for (const command of commands) {
