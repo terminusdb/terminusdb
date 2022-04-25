@@ -33,7 +33,7 @@
 :- use_module(library(plunit), [run_tests/0, run_tests/1]).
 :- use_module(library(settings)).
 
-:- use_module(config(terminus_config), [check_all_env_vars/0]).
+:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
@@ -650,7 +650,7 @@ run(Argv) :-
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
     (   (   Argv = [Cmd|_],
-            member(Cmd, [help, store, test])
+            member(Cmd, ['--version', help, store, test])
         ;   open_descriptor(system_descriptor{}, _))
     ->  run_(Argv)
     ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
@@ -672,6 +672,12 @@ run_([Command|_Rest]) :-
     setof(Subcommand, command_subcommand(Command,Subcommand), Subcommands),
     format(current_output, "terminusdb ~s [subcommand]~n~twhere subcommand is one of: ~q~n", [Command, Subcommands]),
     format(current_output, "type: terminusdb ~s [subcommand] --help for more details~n", [Command]).
+run_(['--version'|_]) :-
+    terminusdb_version(TerminusDB_Version),
+    current_prolog_flag(terminusdb_git_hash, Git_Hash),
+    current_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version),
+    format(user_output, "TerminusDB v~s (~s)~n", [TerminusDB_Version, Git_Hash]),
+    format(user_output, "terminusdb-store v~s~n", [TerminusDB_Store_Version]).
 run_(_) :-
     setof(Command, command(Command), Commands),
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
