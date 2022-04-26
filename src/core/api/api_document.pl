@@ -921,7 +921,7 @@ test(replace_existing_subdocument_as_document, [
 % Regression in 10.0.23 caused schema replace to use the previous
 % context for expanding type and property names. This caused the test
 % below to fail.
-test(insert_subdocument_as_document, [
+test(full_replace_schema, [
          setup((setup_temp_store(State),
                 create_db_with_empty_schema("admin", "testdb"))),
          cleanup(teardown_temp_store(State))
@@ -943,5 +943,22 @@ test(insert_subdocument_as_document, [
     open_descriptor(TestDB, T),
 
     get_schema_document(T, "Thing", _Document).
+test(full_replace_instance, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{"@type": "City", "name": "Utrecht"}
+', Stream),
+    api_insert_documents(System, Auth, "admin/testdb", instance, "test", "test", true, Stream, no_data_version, _, [Id]),
+
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, T),
+
+    get_document(T, Id, Document),
+    _{'@type': 'City', 'name': "Utrecht"} :< Document.
 :- end_tests(full_replace).
 
