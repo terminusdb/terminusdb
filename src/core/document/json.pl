@@ -18,7 +18,7 @@
               delete_document/2,
               insert_document/3,
               insert_document/6,
-              insert_document_unsafe/5,
+              insert_document_unsafe/6,
               replace_document/2,
               replace_document/3,
               replace_document/4,

@@ -188,8 +188,8 @@ insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
         Id,
         (   json_read_tail_stream(Tail_Stream, Document),
             nb_thread_var(
-                {Graph_Type, Transaction, Document, Context, Id}/[State, Captures_Out]>>(
-                    api_insert_document_unsafe_(Graph_Type, Transaction, Document, Context, State, Id, Captures_Out)
+                {Graph_Type, Transaction, Context, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_unsafe_(Graph_Type, Transaction, Context, Document, State, Id, Captures_Out)
                 ),
                 Captures_Var
             )
