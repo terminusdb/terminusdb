@@ -182,6 +182,7 @@ insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
         json_read_required_context(Stream, Context, Tail_Stream),
         replace_context_document(Transaction, Context)
     ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
+        database_prefixes(Transaction, Context),
         json_init_tail_stream(Stream, Tail_Stream)
     ),
     findall(
