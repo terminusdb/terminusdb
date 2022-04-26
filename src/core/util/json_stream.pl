@@ -32,7 +32,7 @@ json_stream_start(Stream_Started) :-
  * This is the last thing to do after writing all the JSON dictionaries to the
  * stream.
  */
-:- meta_predicate json_stream_end(+,1,?).
+:- meta_predicate json_stream_end(1,+,?).
 json_stream_end(Initial_Goal, As_List, stream_started(Started)) :-
     !,
     % Write the headers in case they weren't written.

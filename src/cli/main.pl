@@ -647,10 +647,10 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            default(instance),
            help('graph type (instance or schema)')],
           [opt(skip),
-           type(number),
+           type(atom),
            longflags([skip]),
            shortflags([s]),
-           default(0),
+           default('0'),
            help('number of documents to skip')],
           [opt(count),
            type(atom),
@@ -659,19 +659,19 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            default(unlimited),
            help('number of documents to return')],
           [opt(minimized),
-           type(bool),
+           type(boolean),
            longflags([minimized]),
            shortflags([m]),
            default(true),
            help('return minimized prefixes')],
           [opt(as_list),
-           type(bool),
+           type(boolean),
            longflags([as_list, 'as-list']),
            shortflags([l]),
            default(false),
            help('return results as a JSON list (as opposed to JSON-lines)')],
           [opt(unfold),
-           type(bool),
+           type(boolean),
            longflags([unfold]),
            shortflags([u]),
            default(true),
@@ -1278,15 +1278,21 @@ run_command(doc,get, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     option(graph_type(Graph_Type), Opts),
-    option(skip(Skip), Opts),
-    option(count(Count), Opts),
-    option(mimized(Minimized), Opts),
+    option(skip(S), Opts),
+    option(count(N), Opts),
+    option(minimized(Minimized), Opts),
     option(as_list(As_List), Opts),
     option(unfold(Unfold), Opts),
     option(id(Id), Opts),
     option(type(Type), Opts),
     option(compress_ids(Compress_Ids), Opts),
     option(query(Query), Opts),
+
+    (   N = unlimited
+    ->  Count = unlimited
+    ;   atom_number(N,Count)
+    ),
+    atom_number(S,Skip),
 
     (   Minimized = true
     ->  JSON_Options = [width(0)]
@@ -1299,7 +1305,7 @@ run_command(doc,get, [Path], Opts) :-
             As_List, Unfold, Id, Type, Compress_Ids, Query,
             JSON_Options,
             no_data_version, _Actual_Data_Version,
-            [true]>>(format('[')))
+            [L]>>(ignore((L=true,format('[')))))
     ).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
