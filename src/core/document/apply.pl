@@ -12,6 +12,7 @@
 :- use_module(library(when)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(option)).
 
 :- use_module(core(document/patch)).
 :- use_module(core(document/json)).
