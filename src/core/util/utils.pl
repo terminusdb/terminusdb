@@ -1204,6 +1204,7 @@ with_memory_file_stream(Mem_File, Mode, Options, Goal) :-
  *
  * Same as with_memory_file_stream/4 with no options.
  */
+:- meta_predicate with_memory_file_stream(+,+,1).
 with_memory_file_stream(Mem_File, Mode, Goal) :-
     with_memory_file_stream(Mem_File, Mode, [], Goal).
 
