@@ -270,9 +270,10 @@ describe('diff-id', function () {
           after_data_version: dv2,
         })
       expect(r3.status).to.equal(200)
+      expect(r3.body[0].b.c).to.deep.equal({ '@after': 4, '@before': 3, '@op': 'SwapValue' })
     })
 
-    it('diff unchanged', async function () {
+    it('diff inserted object', async function () {
       const class1 = util.randomString()
       const class2 = util.randomString()
       await document

@@ -85,10 +85,10 @@ simple_patch_table(Diff,Table_In,Table_Out,Options) :-
             (   maplist({Options}/[Patch,Elt,Patched]>>
                         simple_patch(Patch,Elt,Patched,Options),
                         Diff_Row,Row_In,Row_Candidates),
-                promote_pairs_conflict(Row_Candidates,Row_Out)
+                promote_list_conflict(Row_Candidates,Row_Out)
             ),
             Diff,Table_In,Candidates_Out),
-    promote_pairs_conflict(Candidates_Out,Table_Out).
+    promote_list_conflict(Candidates_Out,Table_Out).
 
 %%% Conflict utils
 pairs_and_conflicts_from_keys([], _, _, [], _Options).

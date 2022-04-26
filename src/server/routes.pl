@@ -2616,7 +2616,7 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
         )
     ).
 
-%%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Apply handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
                 [method(Method),
                  prefix,

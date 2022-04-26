@@ -167,3 +167,85 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
         ),
         _
     ).
+
+
+
+:- begin_tests(apply).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(document)).
+:- use_module(core(triple)).
+:- use_module(core(api/api_document)).
+:- use_module(library(http/json)).
+
+test(delete_missing,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Author = "gavin",
+    Message = "test.",
+    Graph_Type = instance,
+
+    open_string('{"@type" : "City", "name" : "Warsaw"}', Stream),
+    api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, false, Stream, no_data_version, Data_Version1, Ids),
+    atom_json_dict(Id_Atom, Ids, []),
+    open_string(Id_Atom, Stream2),
+    api_delete_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream2, Data_Version1, Data_Version2),
+
+    Commit_Info = commit_info{ author : Author, message: Message },
+    Options1 = [match_final_state(true)],
+    Data_Version1 = data_version(branch,Commit1),
+    Data_Version2 = data_version(branch,Commit2),
+    % Matches because we have Options1
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info, Commit1, Commit2, Options1),
+    % Does not match because we have Options2
+    Options2 = [match_final_state(false)],
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info, Commit1, Commit2, Options2),
+        E,
+        E = error(apply_squash_witnesses([json{'@id_does_not_exists':_,
+                                               '@op':'DeleteConflict'}]))
+    ).
+
+test(insert_twice,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Author = "gavin",
+    Message = "test.",
+    Graph_Type = instance,
+
+    open_string('{"@type" : "City", "name" : "Warsaw"}', Stream1),
+    api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, false, Stream1, no_data_version, Data_Version1, _Ids1),
+    open_string('{"@type" : "City", "name" : "Dublin"}', Stream2),
+    api_insert_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, false, Stream2, Data_Version1, Data_Version2, _Ids2),
+
+    Commit_Info = commit_info{ author : Author, message: Message },
+    Options1 = [match_final_state(true)],
+    Data_Version1 = data_version(branch,Commit1),
+    Data_Version2 = data_version(branch,Commit2),
+    % Matches because we have Options1
+    api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info, Commit1, Commit2, Options1),
+    % Does not match because we have Options2
+    Options2 = [match_final_state(false)],
+    catch(
+        api_apply_squash_commit(SystemDB, Auth, Path, Commit_Info, Commit1, Commit2, Options2),
+        E,
+        E = error(apply_squash_witnesses(
+                      [json{'@id_already_exists':_,
+                            '@op':'InsertConflict'}]))
+    ).
+
+:- end_tests(apply).

@@ -21,19 +21,31 @@
 % Apply a diff to a commit.
 %
 % [matches_final_state(true)] (default is false)
-apply_diff(Context, Diff, Conflict, _Options) :-
-    get_dict('@delete', Diff, Delete_ID),
+apply_diff(Context, Diff, Conflict, Options) :-
+    get_dict('@delete', Diff, Delete_Candidate),
     !,
+    (   is_dict(Delete_Candidate)
+    ->  do_or_die(get_dict('@id', Delete_Candidate, Delete_ID),
+                  error(missing_field('@id', Delete_Candidate), _))
+    ;   (   string(Delete_Candidate)
+        ;   atom(Delete_Candidate)
+        )
+    ->  Delete_Candidate = Delete_ID
+    ;   throw(error(missing_field('@id', Delete_Candidate), _))
+    ),
     catch(
         (   delete_document(Context, Delete_ID),
             Conflict = null
         ),
         error(document_not_found(ID), _),
-        Conflict = json{ '@op' : 'DeleteConflict',
-                         '@id_does_not_exists' : ID
-                       }
+        (   option(match_final_state(true), Options)
+        ->  Conflict = null
+        ;   Conflict = json{ '@op' : 'DeleteConflict',
+                             '@id_does_not_exists' : ID
+                           }
+        )
     ).
-apply_diff(Context, Diff, Conflict, _Options) :-
+apply_diff(Context, Diff, Conflict, Options) :-
     get_dict('@insert', Diff, Insert),
     !,
     catch(
@@ -41,8 +53,13 @@ apply_diff(Context, Diff, Conflict, _Options) :-
             Conflict = null
         ),
         error(can_not_insert_existing_object_with_id(Id), _),
-        Conflict = json{ '@op' : 'InsertConflict',
-                         '@id_already_exists' : Id }
+        (   option(match_final_state(true), Options),
+            get_document(Context,Id,Document),
+            Document = Insert
+        ->  Conflict = null
+        ;   Conflict = json{ '@op' : 'InsertConflict',
+                             '@id_already_exists' : Id }
+        )
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
     do_or_die(
@@ -59,14 +76,12 @@ apply_diff(Context, Diff, Conflict, Options) :-
     ).
 
 
-
-
-
-
 /*
-
-     main    (a-b)
----a-------c  [o]
+Schematic of application
+            apply
+            (a-b)
+     main
+---a-------c-[d]
     \
      \_____b
       dev
