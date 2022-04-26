@@ -1178,6 +1178,7 @@ text(X) :-
  * Create a new memory file Mem_File and call the Goal with Mem_File as the
  * argument. When Goal completes or throws an exception, close Mem_File.
  */
+:- meta_predicate with_memory_file(1).
 with_memory_file(Goal) :-
     setup_call_cleanup(
         new_memory_file(Mem_File),

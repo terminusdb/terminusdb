@@ -256,7 +256,12 @@
               write_data_version_header/1,
               transaction_data_version/2,
               validation_data_version/3,
-              meta_data_version/3
+              meta_data_version/3,
+
+              % json_stream.pl
+              json_stream_start/1,
+              json_stream_end/3,
+              json_stream_write_dict/5
           ]).
 
 % note: test_utils is intentionally omitted
@@ -272,3 +277,4 @@
 :- use_module(util/param).
 :- use_module(util/json_log).
 :- use_module(util/data_version).
+:- use_module(util/json_stream).

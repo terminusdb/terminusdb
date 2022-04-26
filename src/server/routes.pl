@@ -458,29 +458,13 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             ;   JSON_Options = []),
 
             read_data_version_header(Request, Requested_Data_Version),
-
-            cors_json_stream_start(Stream_Started),
-
-            (   nonvar(Query) % dictionaries do not need tags to be bound
-            ->  api_get_documents_by_query(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
-                forall(
-                    call(Goal, Document),
-                    cors_json_stream_write_dict(Request, As_List, Actual_Data_Version, Stream_Started, Document, JSON_Options))
-            ;   ground(Id)
-            ->  api_get_document_by_id(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Requested_Data_Version, Actual_Data_Version, Id, Document),
-                cors_json_stream_write_dict(Request, As_List, Actual_Data_Version, Stream_Started, Document, JSON_Options)
-            ;   ground(Type)
-            ->  api_get_documents_by_type(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
-                forall(
-                    call(Goal, Document),
-                    cors_json_stream_write_dict(Request, As_List, Actual_Data_Version, Stream_Started, Document, JSON_Options))
-            ;   api_get_documents(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
-                forall(
-                    call(Goal, Document),
-                    cors_json_stream_write_dict(Request, As_List, Actual_Data_Version, Stream_Started, Document, JSON_Options))
-            ),
-
-            cors_json_stream_end(Request, As_List, Actual_Data_Version, Stream_Started)
+            api_read_document_selector(
+                System_DB, Auth, Path, Graph_Type, Skip, Count,
+                As_List, Unfold, Id, Type, Compress_Ids, Query,
+                JSON_Options,
+                Requested_Data_Version, Actual_Data_Version,
+                cors_json_stream_write_headers_(Request, Actual_Data_Version)
+            )
         )).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
@@ -2998,13 +2982,13 @@ cors_reply_json(Request, JSON, Options) :-
     reply_json(JSON, [json_object(dict)|Options]).
 
 /**
- * cors_json_stream_write_headers_(+Request, +As_List, +Data_Version) is det.
+ * cors_json_stream_write_headers_(+Request, +Data_Version, +As_List) is det.
  *
  * Write CORS and JSON headers. This should only be called in the following:
  *   - cors_json_stream_end
  *   - cors_json_stream_write_dict
  */
-cors_json_stream_write_headers_(Request, As_List, Data_Version) :-
+cors_json_stream_write_headers_(Request, Data_Version, As_List) :-
     write_cors_headers(Request),
     write_data_version_header(Data_Version),
     (   As_List = true
@@ -3013,81 +2997,6 @@ cors_json_stream_write_headers_(Request, As_List, Data_Version) :-
     ;   % Write the JSON stream header.
         format("Content-type: application/json; stream=true; charset=UTF-8~n~n")).
 
-/**
-* cors_json_stream_start(-Stream_Started) is det.
- *
- * Initialize the sequence of predicates used for writing a JSON stream to
- * output.
- *
- * After this, use cors_json_stream_write_dict to write JSON dictionaries to the
- * stream.
- *
- * (The implemntation is simple, but the predicate name is good documentation.)
- */
-cors_json_stream_start(Stream_Started) :-
-    var(Stream_Started),
-    !,
-    Stream_Started = stream_started(false).
-cors_json_stream_start(Stream_Started) :-
-    throw(error(unexpected_argument_instantiation(cors_json_stream_start, Stream_Started), _)).
-
-/**
- * cors_json_stream_end(+Request, +As_List, +Data_Version, +Stream_Started) is det.
- *
- * Finalize the sequence of predicates used for writing a JSON stream to output.
- *
- * This is the last thing to do after writing all the JSON dictionaries to the
- * stream.
- */
-cors_json_stream_end(Request, As_List, Data_Version, stream_started(Started)) :-
-    !,
-    % Write the headers in case they weren't written.
-    (   Started = true
-    ->  true
-    ;   cors_json_stream_write_headers_(Request, As_List, Data_Version)),
-
-    % Write the list end character (right square bracket).
-    (   As_List = true
-    ->  format("]~n")
-    ;   true).
-cors_json_stream_end(_Request, _As_List, _Data_Version, Stream_Started) :-
-    throw(error(unexpected_argument_instantiation(cors_json_stream_end, Stream_Started), _)).
-
-/**
- * cors_json_stream_write_dict(+Request, +As_List, +Data_Version, +Stream_Started, +JSON, +JSON_Options) is det.
- *
- * Write a single JSON dictionary to the stream or list with the appropriate
- * separators. If this is the first dictionary in the stream, write the headers
- * before writing the dictionary.
- *
- * After writing all the JSON dictionaries to the stream, use
- * cors_json_stream_end to end it.
- */
-cors_json_stream_write_dict(Request, As_List, Data_Version, Stream_Started, JSON, JSON_Options) :-
-    % Get the current value of Stream_Started before we possibly update it with
-    % nb_setarg.
-    Stream_Started = stream_started(Started),
-
-    % Write the headers in case they weren't written. Update Stream_Started, so
-    % that we don't write them again.
-    (   Started = true
-    ->  true
-    ;   nb_setarg(1, Stream_Started, true),
-        cors_json_stream_write_headers_(Request, As_List, Data_Version)),
-
-    % Write the list separator (comma).
-    (   Started = true,
-        As_List = true
-    ->  format(",")
-    ;   true),
-
-    % Write the JSON dictionary.
-    json_write_dict(current_output, JSON, JSON_Options),
-
-    % Write the stream separator (newline).
-    (   As_List = true
-    ->  true
-    ;   format("~n")).
 
 %%%%%%%%%%%%%%%%%%%% Response Predicates %%%%%%%%%%%%%%%%%%%%%%%%%
 

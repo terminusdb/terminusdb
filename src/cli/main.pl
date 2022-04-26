@@ -543,7 +543,13 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            longflags([data]),
            shortflags([d]),
            default('_'),
-           help('document data')]]).
+           help('document data')],
+          [opt(full_replace),
+           type(boolean),
+           longflags([full_replace,'full-replace']),
+           shortflags([f]),
+           default(false),
+           help('delete all previous documents and substitute these')]]).
 opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
          'Delete documents.',
          [[opt(help),
@@ -556,7 +562,7 @@ opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
            type(atom),
            longflags([message]),
            shortflags([m]),
-           default('cli: document insert'),
+           default('cli: document delete'),
            help('message to associate with the commit')],
           [opt(author),
            type(atom),
@@ -588,6 +594,44 @@ opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
            shortflags([n]),
            default(false),
            help('nuke all documents')]]).
+opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
+         'Replace documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc replace` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document replace'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type,'graph-type']),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')],
+          [opt(create),
+           type(atom),
+           longflags([create]),
+           shortflags([c]),
+           default(false),
+           help('create document if it does not exist')]]).
 opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
          'Query documents.',
          [[opt(help),
@@ -601,7 +645,61 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            longflags([graph_type]),
            shortflags([g]),
            default(instance),
-           help('graph type (instance or schema)')]]).
+           help('graph type (instance or schema)')],
+          [opt(skip),
+           type(number),
+           longflags([skip]),
+           shortflags([s]),
+           default(0),
+           help('number of documents to skip')],
+          [opt(count),
+           type(atom),
+           longflags([count]),
+           shortflags([c]),
+           default(unlimited),
+           help('number of documents to return')],
+          [opt(minimized),
+           type(bool),
+           longflags([minimized]),
+           shortflags([m]),
+           default(true),
+           help('return minimized prefixes')],
+          [opt(as_list),
+           type(bool),
+           longflags([as_list, 'as-list']),
+           shortflags([l]),
+           default(false),
+           help('return results as a JSON list (as opposed to JSON-lines)')],
+          [opt(unfold),
+           type(bool),
+           longflags([unfold]),
+           shortflags([u]),
+           default(true),
+           help('include subdocuments, or only subdocument ids')],
+          [opt(id),
+           type(atom),
+           longflags([id]),
+           shortflags([i]),
+           default('_'),
+           help('id of document to retrieve')],
+          [opt(type),
+           type(atom),
+           longflags([type]),
+           shortflags([t]),
+           default('_'),
+           help('type of document to retrieve')],
+          [opt(compress_ids),
+           type(boolean),
+           longflags([compress_ids, 'compress-ids']),
+           shortflags([z]),
+           default(true),
+           help('return compressed / minimized ids using default prefixes')],
+          [opt(query),
+           type(atom),
+           longflags([query]),
+           shortflags([q]),
+           default('_'),
+           help('document query search template')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -1107,19 +1205,21 @@ run_command(db,delete,[DB_Path],Opts) :-
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
-run_command(doc,insert, [Path], Opts) :-
+run_command(doc,insert,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     option(author(Author), Opts),
     option(message(Message), Opts),
     option(graph_type(Graph_Type), Opts),
     option(data(Data), Opts),
+    option(full_replace(Full), Opts),
+
     api_report_errors(
         insert_documents,
         (   (   var(Data)
-            ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids))
+            ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
             ;   open_string(Data, Stream),
-                doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Stream)
+                doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
             ),
             length(Ids, Number_Inserted),
             format("Document(s) inserted: ~d~n", [Number_Inserted])
@@ -1144,30 +1244,62 @@ run_command(doc,delete, [Path], Opts) :-
         ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id, no_data_version, _),
             format("Document Deleted~n", [])
         ;   (   var(Data)
-            ->  with_memory_file(cli:doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message))
+            ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message))
             ;   open_string(Data, Stream),
                 api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, no_data_version, _)
             ),
             format("Documents Deleted~n", [])
         )
     ).
+run_command(doc,replace, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    option(create(Create), Opts),
+    option(data(Data), Opts),
+
+    api_report_errors(
+        replace_documents,
+        (   (   var(Data)
+            ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids))
+            ;   open_string(Data, Stream),
+                api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
+                                      Create, no_data_version, _, Ids)
+            ),
+            length(Ids, Number_Inserted),
+            format("Document(s) replaced: ~d~n", [Number_Inserted]),
+            json_write_dict(user_output, Ids, [width(0)]),
+            format(user_output, "~n", [])
+        )
+    ).
 run_command(doc,get, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     option(graph_type(Graph_Type), Opts),
+    option(skip(Skip), Opts),
+    option(count(Count), Opts),
+    option(mimized(Minimized), Opts),
+    option(as_list(As_List), Opts),
+    option(unfold(Unfold), Opts),
+    option(id(Id), Opts),
+    option(type(Type), Opts),
+    option(compress_ids(Compress_Ids), Opts),
+    option(query(Query), Opts),
+
+    (   Minimized = true
+    ->  JSON_Options = [width(0)]
+    ;   JSON_Options = []),
+
     api_report_errors(
         get_documents,
-        (   api_get_documents(
-                System_DB, Auth, Path, Graph_Type, true, true, 0,
-                unlimited, no_data_version, _Actual_Data_Version, Goal
-            ),
-            forall(
-                call(Goal, Document),
-                (   json_write_dict(user_output, Document, [width(0)]),
-                    format(user_output, "~n", [])
-                )
-            )
-        )
+        api_read_document_selector(
+            System_DB, Auth, Path, Graph_Type, Skip, Count,
+            As_List, Unfold, Id, Type, Compress_Ids, Query,
+            JSON_Options,
+            no_data_version, _Actual_Data_Version,
+            [true]>>(format('[')))
     ).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
@@ -1263,6 +1395,16 @@ run_command(triples,load,[Path,File],Opts) :-
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
 
+doc_replace_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids)).
+
+doc_replace_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids, Stream) :-
+    api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
+                          Create, no_data_version, _, Ids).
+
 doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
@@ -1273,15 +1415,15 @@ doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Stream) :-
     api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
                          no_data_version, _).
 
-doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Mem_File) :-
+doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
     % Read the memory file to insert documents.
-    with_memory_file_stream(Mem_File, read, cli:doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids)).
+    with_memory_file_stream(Mem_File, read, doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids)).
 
-doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Ids, Stream) :-
+doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids, Stream) :-
     api_insert_documents(
-        System_DB, Auth, Path, Graph_Type, Author, Message, false, Stream,
+        System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream,
         no_data_version, _New_Data_Version, Ids).
 
 create_authorization(Opts,Authorization) :-

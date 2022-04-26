@@ -10,7 +10,8 @@
               api_replace_documents/11,
               api_nuke_documents/8,
               api_generate_document_ids/6,
-              call_catch_document_mutation/2
+              call_catch_document_mutation/2,
+              api_read_document_selector/16
           ]).
 
 :- use_module(core(util)).
@@ -311,6 +312,32 @@ api_replace_documents(SystemDB, Auth, Path, Graph_Type, Author, Message, Stream,
                      ),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+:- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,?,+,+,-,1).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Skip, Count, As_List, Unfold, Id, Type, Compress_Ids, Query, JSON_Options, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    json_stream_start(Stream_Started),
+
+    (   nonvar(Query) % dictionaries do not need tags to be bound
+    ->  api_get_documents_by_query(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
+        forall(
+            call(Goal, Document),
+            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+    ;   ground(Id)
+    ->  api_get_document_by_id(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Requested_Data_Version, Actual_Data_Version, Id, Document),
+        json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options)
+    ;   ground(Type)
+    ->  api_get_documents_by_type(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
+        forall(
+            call(Goal, Document),
+            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+    ;   api_get_documents(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
+        forall(
+            call(Goal, Document),
+            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+    ),
+
+    json_stream_end(Initial_Goal, As_List, Stream_Started).
+
 
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).
