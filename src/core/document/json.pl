@@ -25,7 +25,7 @@
               replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
-              insert_schema_document_unsafe/2,
+              insert_schema_document_unsafe/3,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,

@@ -911,3 +911,36 @@ test(replace_existing_subdocument_as_document, [
 
 
 :- end_tests(subdocument_as_document).
+
+:- begin_tests(full_replace).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+% Regression in 10.0.23 caused schema replace to use the previous
+% context for expanding type and property names. This caused the test
+% below to fail.
+test(insert_subdocument_as_document, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://some.weird.place#",
+  "@base": "http://some.weird.place/"
+}
+
+{ "@type": "Class",
+  "@id": "Thing"
+}', Stream),
+    api_insert_documents(System, Auth, "admin/testdb", schema, "test", "test", true, Stream, no_data_version, _, _),
+
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, T),
+
+    get_schema_document(T, "Thing", _Document).
+:- end_tests(full_replace).
+
