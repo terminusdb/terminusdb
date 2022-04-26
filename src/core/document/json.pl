@@ -2515,8 +2515,8 @@ insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
 
-insert_document_unsafe(Transaction, Document, Captures_In, Id, Captures_Out) :-
-    json_elaborate(Transaction, Document, Captures_In, Elaborated, _Dependencies, Captures_Out),
+insert_document_unsafe(Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2801,10 +2801,13 @@ insert_schema_document(Query_Context, Document) :-
     insert_schema_document(TO, Document).
 
 insert_schema_document_unsafe(Transaction, Document) :-
+    database_prefixes(Transaction, Context),
+    insert_schema_document_unsafe(Transaction, Context, Document).
+
+insert_schema_document_unsafe(Transaction, Context, Document) :-
     is_transaction(Transaction),
     !,
     % Is this a context? If so do something else.
-    database_prefixes(Transaction, Context),
     database_schema(Transaction, [Schema]),
 
     default_prefixes(Prefixes),
@@ -2813,11 +2816,11 @@ insert_schema_document_unsafe(Transaction, Document) :-
         json_schema_triple(Document, Expanded_Context, t(S,P,O)),
         insert(Schema, S, P, O, _)
     ).
-insert_schema_document_unsafe(Query_Context, Document) :-
+insert_schema_document_unsafe(Query_Context, Context, Document) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_schema_document_unsafe(TO, Document).
+    insert_schema_document_unsafe(TO, Context, Document).
 
 delete_schema_list(_, _, RDF_Nil) :-
     global_prefix_expand(rdf:nil, RDF_Nil),
