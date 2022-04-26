@@ -431,7 +431,7 @@ describe('diff-id', function () {
           after_commit: dv3,
           commit_info: { author: 'gavin', message: 'something' },
           type: 'squash',
-          match_final_state: true,
+          match_final_state: false,
         })
 
       expect(r4.status).to.equal(409)
