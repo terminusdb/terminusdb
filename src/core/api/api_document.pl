@@ -163,16 +163,16 @@ api_insert_document_(instance, Transaction, Document, state(Captures_In), Id, Ca
         do_or_die(insert_document(Transaction, Document, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, Transaction, Document, state(Captures), Id, Captures) :-
+api_insert_document_unsafe_(schema, Transaction, Context, Document, state(Captures), Id, Captures) :-
     do_or_die(
-        insert_schema_document_unsafe(Transaction, Document),
+        insert_schema_document_unsafe(Transaction, Context, Document),
         error(document_insertion_failed_unexpectedly(Document), _)),
     do_or_die(
         Id = (Document.get('@id')),
         error(document_has_no_id_somehow, _)).
-api_insert_document_unsafe_(instance, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
+api_insert_document_unsafe_(instance, Transaction, Context, Document, state(Captures_In), Id, Captures_Out) :-
     do_or_die(
-        insert_document_unsafe(Transaction, Document, Captures_In, Id, Captures_Out),
+        insert_document_unsafe(Transaction, Context, Document, Captures_In, Id, Captures_Out),
         error(document_insertion_failed_unexpectedly(Document), _)).
 
 insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
@@ -182,14 +182,15 @@ insert_documents_(true, Graph_Type, Stream, Transaction, Captures_Var, Ids) :-
         json_read_required_context(Stream, Context, Tail_Stream),
         replace_context_document(Transaction, Context)
     ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
+        database_prefixes(Transaction, Context),
         json_init_tail_stream(Stream, Tail_Stream)
     ),
     findall(
         Id,
         (   json_read_tail_stream(Tail_Stream, Document),
             nb_thread_var(
-                {Graph_Type, Transaction, Document, Id}/[State, Captures_Out]>>(
-                    api_insert_document_unsafe_(Graph_Type, Transaction, Document, State, Id, Captures_Out)
+                {Graph_Type, Transaction, Context, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_unsafe_(Graph_Type, Transaction, Context, Document, State, Id, Captures_Out)
                 ),
                 Captures_Var
             )
@@ -911,3 +912,53 @@ test(replace_existing_subdocument_as_document, [
 
 
 :- end_tests(subdocument_as_document).
+
+:- begin_tests(full_replace).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+
+% Regression in 10.0.23 caused schema replace to use the previous
+% context for expanding type and property names. This caused the test
+% below to fail.
+test(full_replace_schema, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://some.weird.place#",
+  "@base": "http://some.weird.place/"
+}
+
+{ "@type": "Class",
+  "@id": "Thing"
+}', Stream),
+    api_insert_documents(System, Auth, "admin/testdb", schema, "test", "test", true, Stream, no_data_version, _, _),
+
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, T),
+
+    get_schema_document(T, "Thing", _Document).
+test(full_replace_instance, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{"@type": "City", "name": "Utrecht"}
+', Stream),
+    api_insert_documents(System, Auth, "admin/testdb", instance, "test", "test", true, Stream, no_data_version, _, [Id]),
+
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, T),
+
+    get_document(T, Id, Document),
+    _{'@type': 'City', 'name': "Utrecht"} :< Document.
+:- end_tests(full_replace).
+
