@@ -329,7 +329,15 @@ patch_cost(Patch,Cost) :-
     !,
     (   diff_op(Patch,Op)
     ->  patch_cost_op(Op,Patch,Cost)
-    ;   Cost = 1).
+    %   This is a copy - but may have deep patches
+    ;   Closure = [Dict,C]>>(   C = 0
+                            ;   dict_keys(Dict,Keys),
+                                member(K,Keys),
+                                get_dict(K,Dict,Val),
+                                patch_cost(Val, C)
+                            ),
+        aggregate(sum(C),call(Closure,Patch,C),Cost)
+    ).
 patch_cost(Patch,Cost) :-
     is_list(Patch),
     !,
@@ -338,9 +346,17 @@ patch_cost(Patch,Cost) :-
                          patch_cost(Elt, C)
                      ),
     aggregate(sum(C),call(Closure,Patch,C),Cost).
-patch_cost(_Patch,1).
 % This is an explicit copy.
+patch_cost(_Patch,0).
 
+patch_cost_op('Insert',Patch,Cost) :-
+    get_dict_or_null('@insert', Patch, Doc),
+    json_size(Doc, Insert_Cost),
+    Cost is Insert_Cost + 1.
+patch_cost_op('Delete',Patch,Cost) :-
+    get_dict_or_null('@delete', Patch, Doc),
+    json_size(Doc, Insert_Cost),
+    Cost is Insert_Cost + 1.
 patch_cost_op('SwapValue',Patch,Cost) :-
     % Should this look at the size?
     get_dict_or_null('@before', Patch, Before),
@@ -671,6 +687,6 @@ test(deep_list_patch, []) :-
     Before = json{ asdf: json{ bar: [json{ baz: 'quux' }] } },
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
     simple_diff(Before,After,json{},Diff),
-    simple_patch(Diff,Before,After).
+    simple_patch(Diff,Before,success(After),[]).
 
 :- end_tests(simple_diff).

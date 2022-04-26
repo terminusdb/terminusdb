@@ -1227,6 +1227,7 @@ document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
 document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 document_error_type(diff, 'api:DiffErrorResponse').
+document_error_type(apply, 'api:ApplyErrorResponse').
 
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),
@@ -1907,6 +1908,7 @@ status_http_code('api:unauthorized',401).
 status_http_code('api:forbidden',403).
 status_http_code('api:not_found',404).
 status_http_code('api:method_not_allowed',405).
+status_http_code('api:conflict',409).
 status_http_code('api:server_error',500).
 
 status_cli_code('api:success',0).
