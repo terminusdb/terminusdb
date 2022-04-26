@@ -1,3 +1,11 @@
+# TerminusDB Server v10.0.24 Beta Release Notes
+## Bug fixes
++ full_replace on schemas ignored newly submitted prefixes
++ For push operations, TUS will now submit proper Content-Length header
+
+## Enhancements
++ CLI tool now has a --version flag that reports the version
+
 # TerminusDB Server v10.0.23 Beta Release Notes
 ## Bug fixes
 + Fix full_replace flag handling of duplicate IDs
