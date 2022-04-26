@@ -2553,7 +2553,7 @@ patch_handler(post, Request, System_DB, Auth) :-
             (   Result = success(After)
             ->  cors_reply_json(Request, After)
             ;   Result = conflict(Conflict)
-            ->  cors_reply_json(Request, Conflict, [status(404)])
+            ->  cors_reply_json(Request, Conflict, [status(409)])
             )
         )
     ).
