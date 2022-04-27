@@ -144,6 +144,7 @@
               with_memory_file/1,
               with_memory_file_stream/3,
               with_memory_file_stream/4,
+              terminal_slash/2,
 
               % speculative_parse.pl
               %guess_date/2,
@@ -208,6 +209,8 @@
 
               % http_utils.pl
               basic_authorization/3,
+              bearer_authorization/2,
+              token_authorization/2,
 
               % json_log.pl
               json_log_error/1,

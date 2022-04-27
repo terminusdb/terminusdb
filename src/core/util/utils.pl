@@ -81,7 +81,8 @@
               text/1,
               with_memory_file/1,
               with_memory_file_stream/3,
-              with_memory_file_stream/4
+              with_memory_file_stream/4,
+              terminal_slash/2
           ]).
 
 /** <module> Utils
@@ -1190,6 +1191,7 @@ with_memory_file(Goal) :-
  * the Stream from the memory file. When Goal completes or throws an exception,
  * close the stream.
  */
+:- meta_predicate with_memory_file_stream(+,+,+,1).
 with_memory_file_stream(Mem_File, Mode, Options, Goal) :-
     setup_call_cleanup(
         open_memory_file(Mem_File, Mode, Stream, Options),
@@ -1203,3 +1205,15 @@ with_memory_file_stream(Mem_File, Mode, Options, Goal) :-
  */
 with_memory_file_stream(Mem_File, Mode, Goal) :-
     with_memory_file_stream(Mem_File, Mode, [], Goal).
+
+/*
+ * terminal_slash(+Atom, -Slashed) is det.
+ *
+ * Adds a slash if needed on the end of a path
+ */
+terminal_slash(Atom, Slashed) :-
+    split_string(Atom, '/', '', List),
+    last(List, Last),
+    (   Last = ""
+    ->  Atom = Slashed
+    ;   atomic_list_concat([Atom, '/'], Slashed)).

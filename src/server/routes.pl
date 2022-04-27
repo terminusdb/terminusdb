@@ -1337,17 +1337,26 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 %:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(files), auth_wrapper(tus_dispatch),
+:- http_handler(api(files), tus_auth_wrapper(tus_dispatch),
                 [ methods([options,head,post,patch,delete]),
                   prefix
                 ]).
 
-:- meta_predicate auth_wrapper(2,?).
-auth_wrapper(Goal,Request) :-
+:- meta_predicate tus_auth_wrapper(2,?).
+tus_auth_wrapper(Goal,Request) :-
     open_descriptor(system_descriptor{}, System_Database),
     catch((      authenticate(System_Database, Request, Auth),
                  www_form_encode(Auth, Domain),
-                 call(Goal, [domain(Domain)], Request)),
+                 (   memberchk(x_terminusdb_api_base(Pre_Base), Request)
+                 ->  terminal_slash(Pre_Base, Base),
+                     atom_concat(Base, 'api/files', Endpoint),
+                     Options0 = [resumable_endpoint_base(Endpoint)]
+                 ;   Options0 = []
+                 ),
+                 (   file_upload_storage_path(Path)
+                 ->  Options = [tus_storage_path(Path)|Options0]
+                 ;   Options = Options0),
+                 call(Goal, [domain(Domain)|Options], Request)),
           error(authentication_incorrect(_Reason),_),
           (   reply_json(_{'@type' : 'api:ErrorResponse',
                            'api:status' : 'api:failure',
@@ -2536,12 +2545,15 @@ patch_handler(post, Request, System_DB, Auth) :-
              } :< Document),
         error(bad_api_document(Document, [before, patch]), _)),
 
+    % We should take options about final state here.
     api_report_errors(
         patch,
         Request,
-        (   (   api_patch(System_DB, Auth, Patch, Before, After)
+        (   api_patch(System_DB, Auth, Patch, Before, Result),
+            (   Result = success(After)
             ->  cors_reply_json(Request, After)
-            ;   cors_reply_json(Request, null, [status(404)])
+            ;   Result = conflict(Conflict)
+            ->  cors_reply_json(Request, Conflict, [status(409)])
             )
         )
     ).
@@ -2567,15 +2579,17 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die((   _{ before : Before,
                      after : After
                    } :< Document,
-               Compare_Version = document
-              ;   _{ document_id : Doc_ID,
-                     before_data_version : Before_Version
+                  Operation = document
+              ;   _{ before_data_version : Before_Version
                    } :< Document,
                   (   _{ after_data_version: After_Version}
                       :< Document,
-                      Compare_Version = true
-                  ;   _{ after: After_Document} :< Document,
-                      Compare_Version = false)
+                      (   _{ document_id: Doc_ID} :< Document
+                      ->  Operation = versioned_document
+                      ;   Operation = all_documents)
+                  ;   _{ after: After_Document,
+                         document_id : Doc_ID} :< Document,
+                      Operation = versioned_document_document)
               ),
               error(bad_api_document(Document, [before, after]), _)),
 
@@ -2587,16 +2601,69 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         diff,
         Request,
-        (   (   Compare_Version = document
+        (   (   Operation = document
             ->  api_diff(System_DB, Auth, Before, After, Keep, Patch)
-            ;   Compare_Version = true
+            ;   Operation = versioned_document
             ->  api_diff_id(System_DB, Auth, Path, Before_Version,
                             After_Version, Doc_ID, Keep, Patch)
+            ;   Operation = all_documents
+            ->  api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Keep, Patch)
             ;   api_diff_id_document(System_DB, Auth, Path,
                                      Before_Version, After_Document,
                                      Doc_ID, Keep, Patch)
             ),
             cors_reply_json(Request, Patch)
+        )
+    ).
+
+%%%%%%%%%%%%%%%%%%%% Apply handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,post])]).
+
+/*
+ * apply_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+apply_handler(post, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    do_or_die((   _{ before_commit: Before_Commit,
+                     after_commit: After_Commit,
+                     commit_info: Commit_Info
+                   } :< Document
+              ),
+              error(bad_api_document(Document, [before_commit,after_commit,commit_info,type]))
+             ),
+
+    (   _{ match_final_state: Match_Final_State } :< Document
+    ->  true
+    ;   Match_Final_State = true
+    ),
+
+    (   _{ type: Type } :< Document
+    ->  atom_string(Type_Atom, Type)
+    ;   Type_Atom = squash
+    ),
+
+    api_report_errors(
+        apply,
+        Request,
+        catch(
+            (   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
+                                        Before_Commit, After_Commit,
+                                        [type(Type_Atom),match_final_state(Match_Final_State)]),
+                cors_reply_json(Request,
+                                json{'@type' : "api:ApplyResponse",
+                                     'api:status' : "api:success"})),
+            error(apply_squash_witnesses(Witnesses)),
+            (   cors_reply_json(Request,
+                                json{'@type' : "api:ApplyError",
+                                     'api:witnesses' : Witnesses,
+                                     'api:status' : 'api:conflict'},
+                                [status(409)]))
         )
     ).
 
@@ -2881,6 +2948,7 @@ authenticate(System_Askable, Request, Auth) :-
     insecure_user_header_key(Header_Key),
     Header =.. [Header_Key, Username],
     memberchk(Header, Request),
+    !,
     (   username_auth(System_Askable, Username, Auth)
     ->  true
     ;   format(string(Message), "User '~w' failed to authenticate with header '~w'", [Username, Header_Key]),

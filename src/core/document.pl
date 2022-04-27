@@ -32,14 +32,14 @@
               delete_document/2,
               insert_document/3,
               insert_document/6,
-              insert_document_unsafe/5,
+              insert_document_unsafe/6,
               replace_document/2,
               replace_document/3,
               replace_document/4,
               replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
-              insert_schema_document_unsafe/2,
+              insert_schema_document_unsafe/3,
               delete_schema_document/2,
               replace_schema_document/2,
               replace_schema_document/3,
@@ -65,10 +65,14 @@
               simple_diff/4,
 
               % patch.pl
-              simple_patch/3,
+              simple_patch/4,
+              patch_cost/2,
 
               % normalize.pl
-              normalize_document/3
+              normalize_document/3,
+
+              % apply.pl
+              apply_diff/4
           ]).
 
 :- use_module('document/validation').
@@ -79,3 +83,4 @@
 :- use_module('document/patch').
 :- use_module('document/diff').
 :- use_module('document/normalize').
+:- use_module('document/apply').

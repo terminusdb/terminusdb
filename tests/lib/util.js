@@ -2,6 +2,12 @@
 
 const crypto = require('crypto')
 
+const defaultContext = {
+  '@base': 'terminusdb:///data/',
+  '@schema': 'terminusdb:///schema#',
+  '@type': '@context',
+}
+
 function deepClone (object) {
   return JSON.parse(JSON.stringify(object))
 }
@@ -61,6 +67,7 @@ function firstCapture (val, re) {
 
 module.exports = {
   deepClone,
+  defaultContext,
   firstCapture,
   isBoolean,
   isDefined,

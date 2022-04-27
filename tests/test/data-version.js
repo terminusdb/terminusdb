@@ -119,7 +119,7 @@ describe('data-version', function () {
         throw new Error(`Missing InitialCommit in response: ${r1.body}`)
       }
       const commitId = initialCommit.identifier
-      const commitParams = Object.assign({ commitId: commitId }, dbDefaults)
+      const commitParams = Object.assign({ commitId }, dbDefaults)
       const commitPath = endpoint.documentCommit(commitParams).path
       const header = 'commit:' + commitId
       const r2 = await document

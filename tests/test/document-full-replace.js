@@ -1,12 +1,6 @@
 const { expect } = require('chai')
 const { Agent, db, document, endpoint, util } = require('../lib')
 
-const context = {
-  '@base': 'terminusdb:///data/',
-  '@schema': 'terminusdb:///schema#',
-  '@type': '@context',
-}
-
 describe('document-full-replace', function () {
   let agent
 
@@ -22,7 +16,7 @@ describe('document-full-replace', function () {
   it('passes insert schema twice', async function () {
     const option = {
       schema: [
-        context,
+        util.defaultContext,
         { '@type': 'Class', '@id': util.randomString() },
         { '@type': 'Class', '@id': util.randomString() },
       ],
@@ -58,7 +52,7 @@ describe('document-full-replace', function () {
           { '@type': 'Enum', '@id': id, '@value': ['hello'] },
         ]
         if (fullReplace) {
-          option.schema = [context].concat(schema)
+          option.schema = [util.defaultContext].concat(schema)
         } else {
           option.schema = schema
         }
@@ -94,7 +88,7 @@ describe('document-full-replace', function () {
   it('passes insert schema with full_replace', async function () {
     const id = util.randomString()
     const schema = [
-      context,
+      util.defaultContext,
       { '@type': 'Class', '@id': id, x: 'xsd:integer' },
     ]
     await document

@@ -59,7 +59,7 @@ describe('document-get-hierarchy', function () {
 
     docPath = endpoint.document(dbDefaults).path
     await document
-      .insert(agent, docPath, { schema: schema })
+      .insert(agent, docPath, { schema })
       .then(document.verifyInsertSuccess)
     await document
       .insert(agent, docPath, { instance: instances })

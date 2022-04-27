@@ -7,12 +7,6 @@ describe('document-get', function () {
   let dbPath
   let docPath
 
-  const context = {
-    '@base': 'terminusdb:///data/',
-    '@schema': 'terminusdb:///schema#',
-    '@type': '@context',
-  }
-
   const schema = {
     '@id': 'Person',
     '@type': 'Class',
@@ -44,7 +38,7 @@ describe('document-get', function () {
 
     docPath = endpoint.document(dbDefaults).path
     await document
-      .insert(agent, docPath, { schema: schema })
+      .insert(agent, docPath, { schema })
       .then(document.verifyInsertSuccess)
     await document
       .insert(agent, docPath, { instance: instances })
@@ -60,11 +54,11 @@ describe('document-get', function () {
     const schemaPrefix =
       params.boolean('prefixed', true)
         ? ''
-        : context['@schema']
+        : util.defaultContext['@schema']
     params.assertEmpty()
 
     expect(objects.length).to.equal(2)
-    expect(objects[0]).to.deep.equal(context)
+    expect(objects[0]).to.deep.equal(util.defaultContext)
 
     let schema2
     if (schemaPrefix) {
@@ -121,7 +115,7 @@ describe('document-get', function () {
     const [schemaPrefix, basePrefix] =
       params.boolean('prefixed', true)
         ? ['', '']
-        : [context['@schema'], context['@base']]
+        : [util.defaultContext['@schema'], util.defaultContext['@base']]
     params.assertEmpty()
 
     if (count > instances.length - skip) {
@@ -334,7 +328,7 @@ describe('document-get', function () {
       it(JSON.stringify(query), async function () {
         Object.assign(query, { '@type': 'Person' })
         const r = await document
-          .get(agent, docPath, { body: { query: query } })
+          .get(agent, docPath, { body: { query } })
           .then(document.verifyGetSuccess)
         expectInstances([r.body], instances.slice(index, index + 1))
       })

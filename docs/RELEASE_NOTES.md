@@ -1,3 +1,24 @@
+# TerminusDB Server v10.0.24 Beta Release Notes
+## Bug fixes
++ full_replace on schemas ignored newly submitted prefixes
++ For push operations, TUS will now submit proper Content-Length header
+
+## Enhancements
++ CLI tool now has a --version flag that reports the version
+
+# TerminusDB Server v10.0.23 Beta Release Notes
+## Bug fixes
++ Fix full_replace flag handling of duplicate IDs
++ Push can now overwrite a remote branch if this remote branch has no commits
++ Ensure that push, pull, fetch and clone all work with TerminusX
+
+## Enhancements
++ Refactor full_replace to reuse code path with normal insert
++ Support chunked document retrieval
++ Document interface no longer has a timeout
++ Update build instruction documentation
++ Improved integration tests to run CLI tests without deleting an existing store
+
 # TerminusDB Server v10.0.22 Beta Release Notes
 ## Enhancement
 + Speed improvement to document interface
