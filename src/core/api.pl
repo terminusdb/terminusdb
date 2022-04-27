@@ -126,6 +126,7 @@
               api_replace_documents/11,
               api_nuke_documents/8,
               api_generate_document_ids/6,
+              api_read_document_selector/16,
 
               % api_user_organizations.pl
               user_organizations/3,
