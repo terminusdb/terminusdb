@@ -114,6 +114,22 @@ work_available(Work) :-
     task_info(Task, _, result(_)),
     retract(task_queue(wait_any_blocking(Waiting_Queue, Tasks), none)),
     Work = wakeup_queue(Waiting_Queue).
+work_available(Work) :-
+    task_worker(available, Worker),
+    task_queue(wait_send(Queue), Task),
+    Work = start(Task, Worker),
+    (   message_queue_property(Queue, max_size(Max_Size))
+    ->  message_queue_property(Queue, size(Size)),
+        Max_Size > Size
+    ;   true),
+    retract(task_queue(wait_send(Queue), Task)).
+work_available(Work) :-
+    task_worker(available, Worker),
+    task_queue(wait_receive(Queue), Task),
+    message_queue_property(Queue, size(Size)),
+    Size > 0,
+    Work = start(Task, Worker),
+    retract(task_queue(wait_receive(Queue), Task)).
 
 consume_work :-
     repeat,
@@ -198,6 +214,12 @@ task_worker_step(next(Engine), Name) :-
     ;   Result = the(waiting_any(Other_Tasks))
     ->  task_set_state(Engine, _, waiting),
         assert(task_queue(wait_any(Other_Tasks), Engine))
+    ;   Result = the(waiting_send(Queue))
+    ->  task_set_state(Engine, _, waiting),
+        assert(task_queue(wait_send(Queue), Engine))
+    ;   Result = the(waiting_receive(Queue))
+    ->  task_set_state(Engine, _, waiting),
+        assert(task_queue(wait_receive(Queue), Engine))
     ;   Result = the(exception(task_kill))
     ->  task_set_state(Engine, _, killed)
     ;   Result = the(exception(E))
@@ -213,9 +235,12 @@ task_worker_step(next(Engine), Name) :-
 
     (   (   Result = the(success(_))
         ;   Result = the(waiting(_))
-        ;   Result = the(waiting_any(_)))
+        ;   Result = the(waiting_any(_))
+        ;   Result = the(waiting_send(_))
+        ;   Result = the(waiting_receive(_)))
     ->  true % there are more results so we can't destroy the engine just yet
-    ;   engine_destroy(Engine)),
+    ;   engine_destroy(Engine),
+        task_log('DEBUG', "~q: destroyed", [Engine])),
     task_log('DEBUG', "~q: freed worker ~q", [Engine, Thread_Self]).
 task_worker_step(Message, _Name) :-
     task_log('ERROR', "Unknown worker message: ~q", [Message]).
@@ -252,8 +277,7 @@ task_spawn(Template, Goal, Task) :-
                       E,
                       Result=exception(E)),
                   Task),
-    (   engine_self(P),
-        task_info(P, _, _)
+    (   on_task_engine(P)
     ->  Parent = some(P)
     ;   Parent = none),
     wakeup_task_runner(
@@ -300,6 +324,12 @@ prolog_current_choice_reified(Choice, N) :-
 prolog_current_choice_reified(Choice) :-
     prolog_current_choice_reified(Choice, 0).
 
+on_task_engine :-
+    on_task_engine(_).
+
+on_task_engine(E) :-
+    engine_self(E),
+    task_info(E, _, _).
 
 :- meta_predicate reify_result(+, :, -).
 reify_result(Template, Clause, Result) :-
@@ -322,8 +352,7 @@ wait_for_result_reified(Task, Result) :-
     ->  cleanup_task(Task)
     ;   task_set_state(Task, _, ready)).
 wait_for_result_reified_(Task, Result) :-
-    engine_self(E),
-    task_info(E, _, _),
+    on_task_engine,
     !,
     task_wait_for_result(Task, Result).
 wait_for_result_reified_(Task, Result) :-
@@ -395,8 +424,7 @@ wait_for_any_result_reified(Tasks, Task-Result) :-
     ->  cleanup_task(Task)
     ;   task_set_state(Task, _, ready)).
 wait_for_any_result_reified_(Tasks, Result) :-
-    engine_self(E),
-    task_info(E, _, _),
+    on_task_engine,
     !,
     task_wait_for_any_result(Tasks, Result).
 wait_for_any_result_reified_(Tasks, Result) :-
@@ -464,6 +492,52 @@ cleanup_task(Task) :-
     assert(task_queue(cleanup, Task)),
     wakeup_task_runner.
 
+%%% Message Queues %%%
+task_message_queue_create(Queue) :-
+    task_message_queue_create(Queue, []).
+
+task_message_queue_create(Queue, Options) :-
+    % TODO if this is a task we should register the queue somewhere with the current task listed as parent, so it will cleanup
+    message_queue_create(Queue, Options).
+
+task_message_queue_destroy(Queue) :-
+    setup_call_cleanup(true,
+                       % TODO CLEANUP
+                       true,
+                       message_queue_destroy(Queue)).
+
+task_get_message(Queue, Message) :-
+    on_task_engine,
+    !,
+    task_wait_get_message(Queue, Message).
+task_get_message(Queue, Message) :-
+    thread_get_message(Queue, Message),
+    wakeup_task_runner.
+
+task_wait_get_message(Queue, Message) :-
+    repeat,
+    (   thread_get_message(Queue, Message, [timeout(0)])
+    ->  !,
+        wakeup_task_runner
+    ;   engine_yield(waiting_receive(Queue)),
+        fail).
+
+task_send_message(Queue, Message) :-
+    on_task_engine,
+    !,
+    task_wait_send_message(Queue, Message).
+task_send_message(Queue, Message) :-
+    thread_send_message(Queue, Message),
+    wakeup_task_runner.
+
+task_wait_send_message(Queue, Message) :-
+    repeat,
+    (   thread_send_message(Queue, Message, [timeout(0)])
+    ->  !,
+        wakeup_task_runner
+    ;   engine_yield(waiting_send(Queue)),
+        fail).
+
 demonstration(Result) :-
     task_spawn(R,
                (   task_spawn(R,
@@ -530,3 +604,55 @@ demonstration_2(Result) :-
     wait_for_result(Task, Result).
 
 
+demonstration_3 :-
+    task_message_queue_create(Queue1),
+    task_message_queue_create(Queue2),
+
+    task_spawn(Message,
+               (
+                   task_get_message(Queue1, Message),
+                   format("message 1: ~q~n", [Message]),
+                   sleep(2),
+                   task_send_message(Queue2, world)
+               ),
+               E1),
+    task_spawn(Message,
+               (   sleep(2),
+                   task_send_message(Queue1, hello),
+                   task_get_message(Queue2, Message),
+                   format("message 2: ~q~n", [Message])
+               ),
+               E2),
+
+    wait_for_result(E1, R1),
+    wait_for_result(E2, R2),
+    format("~q ~q~n", [R1, R2]).
+
+
+demonstration_4 :-
+    task_message_queue_create(Queue, [max_size(1)]),
+
+    task_spawn(_,
+               (
+                   string_chars("Hello, world", Cs),
+                   forall(member(C, Cs),
+                          task_send_message(Queue, C)),
+
+                   task_send_message(Queue, done)
+               ),
+               E1),
+    task_spawn(_,
+               (   repeat,
+                   sleep(1),
+                   task_get_message(Queue, Message),
+                   (   Message = done
+                   ->  !,
+                       nl
+                   ;   write(Message),
+                       nl,
+                       fail)
+               ),
+               E2),
+
+    wait_for_result(E1, _),
+    wait_for_result(E2, _).
