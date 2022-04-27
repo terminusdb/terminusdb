@@ -264,7 +264,7 @@ task_spawn(Template, Goal, Task) :-
 task_continue(Task) :-
     (   task_info(Task, _, State)
     ->  true
-    ;   throw(error(existence_error(task, Task)), _)),
+    ;   throw(error(existence_error(task, Task), _))),
 
     (   State = ready
     ->  true
