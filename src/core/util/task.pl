@@ -1,5 +1,7 @@
 :- module(task, []).
 
+:- use_module(library(lists)).
+
 :- dynamic loggers/1.
 
 task_log(Severity, Message) :-
