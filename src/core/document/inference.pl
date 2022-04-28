@@ -1,5 +1,6 @@
 :- module('document/inference', [
-              infer_type/4
+              infer_type/4,
+              check_type/5
           ]).
 
 :- use_module(library(plunit)).
@@ -175,10 +176,20 @@ infer_type(Database, Super, Dictionary, Type, Annotated) :-
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated).
 
-infer_type(Database, _Prefixes, Super, Dictionary, Type, Annotated),
+infer_type(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated),
 get_dict('@type', Dictionary, Type) =>
-    class_subsumed(Database, Super, Type),
-    Annotated = success(Dictionary).
+    % Will need to do expansions here..
+    (   (   class_subsumed(Database, Super, Type)
+        ;   Super = 'http://terminusdb.com/schema/sys#Top'
+        )
+    ->  expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
+        check_type(Database,Prefixes,Dictionary_Expanded,Type,Annotated),
+        Inferred_Type = Type
+    ;   Annotated = witness(json{ '@type' : ascribed_type_not_subsumed,
+                                  'document' : Dictionary,
+                                  'ascribed_type' : Type,
+                                  'required_type' : Super})
+    ).
 infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated) =>
     expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
     findall(Candidate-Annotated0,
@@ -337,6 +348,26 @@ test(infer_nonunique_failure,
                                'terminusdb:///schema#NonUniqueB',
                                'terminusdb:///schema#NonUnique'],
                    document:json{name:"Goober"}}.
+
+test(annotated_success,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : 'NonUnique',
+        name : "Goober"
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,_Type,success(Annotated)),
+    Annotated = json{'@type':'NonUnique',
+                     'terminusdb:///schema#name'
+                     :json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                           '@value':"Goober"}}.
 
 
 :- end_tests(infer).
