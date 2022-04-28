@@ -1,4 +1,7 @@
-:- module(task, []).
+:- module(task, [task_generate/3,
+                 task_generate/4,
+                 task_concurrent_goal/5,
+                 task_concurrent_goal/6]).
 
 :- use_module(library(lists)).
 
@@ -554,21 +557,34 @@ task_wait_send_message(Queue, Message) :-
         fail).
 
 task_concurrent_goal(Template1, Generator, Template2, Goal, Result) :-
-    % TODO queue limits
+    task_concurrent_goal(Template1, Generator, Template2, Goal, Result, []).
+task_concurrent_goal(Template1, Generator, Template2, Goal, Result, Options) :-
+    (   memberchk(gen_limit(Gen_Limit), Options)
+    ->  Work_Queue_Options = [max_size(Gen_Limit)]
+    ;   Work_Queue_Options = []),
+
+    (   memberchk(result_limit(Result_Limit), Options)
+    ->  Result_Queue_Options = [max_size(Result_Limit)]
+    ;   Result_Queue_Options = []),
+
+    (   memberchk(workers(Worker_Count), Options)
+    ->  true
+    ;   current_prolog_flag(cpu_count, Worker_Count)),
+
+    Collect_Queue_Size is Worker_Count * 2,
+
     setup_call_cleanup(
-        (   task_message_queue_create(Work_Queue),
-            task_message_queue_create(Collect_Queue),
-            task_message_queue_create(Result_Queue)),
+        (   task_message_queue_create(Work_Queue, Work_Queue_Options),
+            task_message_queue_create(Collect_Queue, [max_size(Collect_Queue_Size)]),
+            task_message_queue_create(Result_Queue, Result_Queue_Options)),
 
         (
             task_spawn(_,
                        task_concurrent_goal_generate(Template1, Generator, Work_Queue, Collect_Queue),
                        Generate_Task),
 
-            % TODO worker limits
-            current_prolog_flag(cpu_count, CPU_Count),
             findall(Worker_Task,
-                    (   between(1, CPU_Count, _Worker),
+                    (   between(1, Worker_Count, _Worker),
                         task_spawn(_,
                                    task_concurrent_goal_worker(Template1, Template2, Goal, Work_Queue, Collect_Queue),
                                    Worker_Task)),
