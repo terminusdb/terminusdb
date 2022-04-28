@@ -1,7 +1,8 @@
-:- module(task, [task_generate/3,
-                 task_generate/4,
-                 task_concurrent_goal/5,
-                 task_concurrent_goal/6]).
+:- module(task, [start_task_runner/0,
+                 task_generate/2,
+                 task_generate/3,
+                 task_concurrent_goal/4,
+                 task_concurrent_goal/5]).
 
 :- use_module(library(lists)).
 
@@ -556,22 +557,26 @@ task_wait_send_message(Queue, Message) :-
     ;   engine_yield(waiting_send(Queue)),
         fail).
 
-task_concurrent_goal(Template1, Generator, Template2, Goal, Result) :-
-    task_concurrent_goal(Template1, Generator, Template2, Goal, Result, []).
-task_concurrent_goal(Template1, Generator, Template2, Goal, Result, Options) :-
-    (   memberchk(gen_limit(Gen_Limit), Options)
-    ->  Work_Queue_Options = [max_size(Gen_Limit)]
-    ;   Work_Queue_Options = []),
-
-    (   memberchk(result_limit(Result_Limit), Options)
-    ->  Result_Queue_Options = [max_size(Result_Limit)]
-    ;   Result_Queue_Options = []),
-
+task_concurrent_goal(Template1, Generator, Goal, Template2,) :-
+    task_concurrent_goal(Template1, Generator, Goal, Template2, []).
+task_concurrent_goal(Template1, Generator, Goal, Template2, Options) :-
     (   memberchk(workers(Worker_Count), Options)
     ->  true
     ;   current_prolog_flag(cpu_count, Worker_Count)),
 
-    Collect_Queue_Size is Worker_Count * 2,
+    (   (   memberchk(gen_limit(Gen_Limit), Options)
+        ;   memberchk(gen_limit_scale(Gen_Limit_Scale), Options),
+            Gen_Limit is ceil(Worker_Count * Gen_Limit_Scale))
+    ->  Work_Queue_Options = [max_size(Gen_Limit)]
+    ;   Work_Queue_Options = []),
+
+    (   (   memberchk(result_limit(Result_Limit), Options)
+        ;   memberchk(result_limit_scale(Result_Limit_Scale), Options),
+            Result_Limit is ceil(Worker_Count * Result_Limit_Scale))
+    ->  Result_Queue_Options = [max_size(Result_Limit)]
+    ;   Result_Queue_Options = []),
+
+    Collect_Queue_Size is Worker_Count * 10,
 
     setup_call_cleanup(
         (   task_message_queue_create(Work_Queue, Work_Queue_Options),
@@ -599,7 +604,7 @@ task_concurrent_goal(Template1, Generator, Template2, Goal, Result, Options) :-
                 (   repeat,
                     task_get_message(Result_Queue, Message),
                     (   Message = result(Reified_Result)
-                    ->  (   unreify_result(Reified_Result, Result)
+                    ->  (   unreify_result(Reified_Result, Template2)
                         ->  true
                         ;   !,
                             fail)
@@ -687,10 +692,10 @@ task_concurrent_goal_process(Result_Queue, Results, Cur, New_Cur, New_Results) :
     task_concurrent_goal_process(Result_Queue, Next_Results, Next_Cur, New_Cur, New_Results).
 task_concurrent_goal_process(_Result_Queue, Results, Cur, Cur, Results).
 
-task_generate(Template, Goal, Result) :-
-    task_generate(Template, Goal, Result, []).
+task_generate(Template, Goal) :-
+    task_generate(Template, Goal, []).
 
-task_generate(Template, Goal, Result, Options) :-
+task_generate(Template, Goal, Options) :-
     (   memberchk(bound(N), Options)
     ->  true
     ;   N = 10),
@@ -714,7 +719,7 @@ task_generate(Template, Goal, Result, Options) :-
                     (   reified_result_is_final(Reified_Result)
                     ->  !
                     ;   true),
-                    unreify_result(Reified_Result, Result)
+                    unreify_result(Reified_Result, Template)
                 ),
                 cleanup_task(Generator_Task))
         ),
