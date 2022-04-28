@@ -118,18 +118,23 @@ work_available(Work) :-
     task_worker(available, Worker),
     task_queue(wait_send(Queue), Task),
     Work = start(Task, Worker),
-    (   message_queue_property(Queue, max_size(Max_Size))
-    ->  message_queue_property(Queue, size(Size)),
+    (   message_queue_property_noraise(Queue, max_size(Max_Size))
+    ->  message_queue_property_noraise(Queue, size(Size)),
         Max_Size > Size
     ;   true),
     retract(task_queue(wait_send(Queue), Task)).
 work_available(Work) :-
     task_worker(available, Worker),
     task_queue(wait_receive(Queue), Task),
-    message_queue_property(Queue, size(Size)),
+    message_queue_property_noraise(Queue, size(Size)),
     Size > 0,
     Work = start(Task, Worker),
     retract(task_queue(wait_receive(Queue), Task)).
+
+message_queue_property_noraise(Queue, Property) :-
+    catch(message_queue_property(Queue, Property),
+          error(existence_error(message_queue, Queue), _),
+          fail).
 
 consume_work :-
     repeat,
@@ -141,10 +146,12 @@ consume_work :-
 run_task_runner :-
     setup_call_cleanup(
         init_task_runner,
-        (   repeat,
-            thread_get_message(_),
-            consume_work,
-            fail),
+        catch((   repeat,
+                  thread_get_message(_),
+                  consume_work,
+                  fail),
+              E,
+              task_log('ERROR', "task runner thread crashed: ~q", [E])),
         cleanup_task_runner).
 
 task_runner_step(start(Task, Worker)) :-
@@ -190,6 +197,7 @@ perform_cleanup_task(Task) :-
               error(existence_error(thread, Task), _),
               true)),
 
+
     % At this point, this task and all its children are terminated or
     % have a signal sent to them to be terminated. What is left to do
     % is reap.
@@ -221,7 +229,8 @@ task_worker_step(next(Engine), Name) :-
     ->  task_set_state(Engine, _, waiting),
         assert(task_queue(wait_receive(Queue), Engine))
     ;   Result = the(exception(task_kill))
-    ->  task_set_state(Engine, _, killed)
+    ->  task_set_state(Engine, _, killed),
+        assert(task_queue(reap, Engine))
     ;   Result = the(exception(E))
     ->  task_set_state(Engine, _, result(exception(E)))
     ;   Result = the(Answer)
@@ -504,7 +513,9 @@ task_message_queue_destroy(Queue) :-
     setup_call_cleanup(true,
                        % TODO CLEANUP
                        true,
-                       message_queue_destroy(Queue)).
+                       catch(message_queue_destroy(Queue),
+                             error(existence_error(message_queue, Queue), _),
+                             true)).
 
 task_get_message(Queue, Message) :-
     on_task_engine,
@@ -537,6 +548,124 @@ task_wait_send_message(Queue, Message) :-
         wakeup_task_runner
     ;   engine_yield(waiting_send(Queue)),
         fail).
+
+task_concurrent_goal(Template1, Generator, Template2, Goal, Result) :-
+    % TODO queue limits
+    setup_call_cleanup(
+        (   task_message_queue_create(Work_Queue),
+            task_message_queue_create(Collect_Queue),
+            task_message_queue_create(Result_Queue)),
+
+        (
+            task_spawn(_,
+                       task_concurrent_goal_generate(Template1, Generator, Work_Queue, Collect_Queue),
+                       Generate_Task),
+
+            % TODO worker limits
+            current_prolog_flag(cpu_count, CPU_Count),
+            findall(Worker_Task,
+                    (   between(1, CPU_Count, _Worker),
+                        task_spawn(_,
+                                   task_concurrent_goal_worker(Template1, Template2, Goal, Work_Queue, Collect_Queue),
+                                   Worker_Task)),
+                    Worker_Tasks),
+
+            task_spawn(_,
+                       task_concurrent_goal_collect(Collect_Queue, Result_Queue),
+                       Collect_Task),
+
+            setup_call_cleanup(
+                true,
+                (   repeat,
+                    task_get_message(Result_Queue, Message),
+                    (   Message = result(Reified_Result)
+                    ->  (   unreify_result(Reified_Result, Result)
+                        ->  true
+                        ;   !,
+                            fail)
+                    ;   Message = done
+                        ->  !,
+                            fail
+                    ;   throw(error(unknown_result_message(Message), _)))),
+                % TODO We really need some better approach to killing these tasks.
+                % If something crashed before we get to this point we never end up doing the required cleanup.
+                % We need some way to mark tasks as having a blocking thread as parent. Then the cleanup can just cleanup every task with this thread as its parent.
+                (   cleanup_task(Generate_Task),
+                    forall(member(Task, Worker_Tasks),
+                           cleanup_task(Task)),
+                    cleanup_task(Collect_Task)))),
+
+        (   task_message_queue_destroy(Work_Queue),
+            task_message_queue_destroy(Collect_Queue),
+            task_message_queue_destroy(Result_Queue))).
+
+task_concurrent_goal_generate(Template, Generator, Work_Queue, Collect_Queue) :-
+    Counter = count(0),
+    catch(forall(call(Generator),
+                 (   Counter = count(Count),
+                     task_send_message(Work_Queue, run(Count,Template)),
+                     New_Count is Count + 1,
+                     nb_setarg(1, Counter, New_Count))),
+          E,
+          task_send_message(Collect_Queue, generate_error(Count, E))),
+
+    Counter = count(Count),
+    (   var(E)
+    ->  task_send_message(Collect_Queue, generate_done(Count))
+    ;   true).
+
+task_concurrent_goal_worker(Template1, Template2, Goal, Work_Queue, Collect_Queue) :-
+    engine_self(E),
+    repeat,
+    task_get_message(Work_Queue, run(Count,Template1)),
+    task_send_message(Collect_Queue, start(Count, E)),
+    reify_result(Template2, Goal, Result),
+    task_send_message(Collect_Queue, result(Count, Result)),
+    fail.
+
+task_concurrent_goal_collect(Collect_Queue, Result_Queue) :-
+    empty_assoc(Results),
+    task_concurrent_goal_collect(Collect_Queue, Result_Queue, Results, 0, _Done).
+
+task_concurrent_goal_collect(Collect_Queue, Result_Queue, Results0, Cur, Done) :-
+    task_get_message(Collect_Queue, Element),
+    (   Element = start(Count, Engine)
+    ->  (   (   Cur > Count
+            ;   get_assoc(Count, Results0, _))
+        % it's possible that the result message overtook the start message in a race. In that case we should just ignore it.
+        ->  true
+        ;   put_assoc(Count, Results0, running_on(Engine), Results2))
+    ;   Element = result(Count, Result)
+    % TODO check for error or failure and make sure we kill stuff then
+    ->  (   del_assoc(Count, Results0, _, Results1)
+        ->  true
+        ;   Results1 = Results0),
+        put_assoc(Count, Results1, result(Result), Results2)
+    ;   Element = generate_error(Count, Error)
+    ->  (   del_assoc(Count, Results0, _, Results1)
+        ->  true
+        ;   Results1 = Results0),
+        put_assoc(Count, Results1, generate_error(Error), Results2)
+    ;   Element = generate_done(Count)
+    ->  Done = Count,
+        Results2 = Results0
+    ;   throw(error(idunno, _))),
+
+    task_concurrent_goal_process(Result_Queue, Results2, Cur, New_Cur, New_Results),
+
+    (   New_Cur == Done
+    ->  task_send_message(Result_Queue, done)
+    ;   task_concurrent_goal_collect(Collect_Queue, Result_Queue, New_Results, New_Cur, Done)).
+
+task_concurrent_goal_process(Result_Queue, Results, Cur, New_Cur, New_Results) :-
+    get_assoc(Cur, Results, Result),
+    Result \= running_on(_),
+    !,
+    task_send_message(Result_Queue, Result),
+    Next_Cur is Cur + 1,
+    del_assoc(Cur, Results, _, Next_Results),
+    task_concurrent_goal_process(Result_Queue, Next_Results, Next_Cur, New_Cur, New_Results).
+task_concurrent_goal_process(_Result_Queue, Results, Cur, Cur, Results).
 
 demonstration(Result) :-
     task_spawn(R,
