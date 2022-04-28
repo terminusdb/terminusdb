@@ -87,6 +87,10 @@ make_db_public(System_Context,DB_Uri) :-
         (   insert('User/anonymous', capability, Capability_Uri))).
 
 create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
+    validate_prefixes(Prefixes),
+    error_on_excluded_organization(Organization_Name),
+    error_on_excluded_database(Database_Name),
+
     % Run the initial checks and insertion of db object in system graph inside of a transaction.
     % If anything fails, everything is retried, including the auth checks.
     create_context(System_DB, System_Context),
@@ -162,10 +166,6 @@ validate_prefixes(Prefixes) :-
                      error(invalid_uri_prefix(Prefix_Name, Prefix_Value), _))).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes) :-
-    validate_prefixes(Prefixes),
-    error_on_excluded_organization(Organization_Name),
-    error_on_excluded_database(Database_Name),
-
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
 
     % update system with finalized
