@@ -81,6 +81,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(util/tables)).
 
+:- use_module(core(document/inference)).
+
 encode_id_fragment(Elt, Encoded) :-
     ground(Elt),
     !,
