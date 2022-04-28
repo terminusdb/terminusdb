@@ -133,12 +133,6 @@ member(Collection, ["Array", "List"]) =>
                  Annotated_Dictionary),
         Annotated = success(Annotated_Dictionary)
     ).
-/*
-check_type_pair(Key,Range,Database,Prefixes,Dictionary,Annotated),
-_{ '@id' : _, '@type' : Type } :< Range =>
-    get_dict(Key,Dictionary,Value),
-    check_value_type(Database, Prefixes, Value, Type).
-*/
 
 check_value_type(Database,Prefixes,Value,Type,Annotated),
 is_dict(Value) =>
@@ -345,10 +339,11 @@ test(infer_nonunique_failure,
     open_descriptor(Desc,Database),
     infer_type(Database,Document,_Type,witness(Witness)),
     Witness = json{'@type':no_unique_type_for_document,
-                   candidates:['terminusdb:///schema#NonUniqueA',
-                               'terminusdb:///schema#NonUniqueB',
-                               'terminusdb:///schema#NonUnique'],
-                   document:json{name:"Goober"}}.
+                   candidates:Candidates,
+                   document:json{name:"Goober"}},
+    sort(Candidates,['terminusdb:///schema#NonUnique',
+                     'terminusdb:///schema#NonUniqueA',
+                     'terminusdb:///schema#NonUniqueB']).
 
 test(annotated_success,
      [setup((setup_temp_store(State),
