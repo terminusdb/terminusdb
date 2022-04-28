@@ -49,7 +49,8 @@
               class_property_dictionary/3,
               class_property_dictionary/4,
               prefix_expand_schema/3,
-              prefix_expand/3
+              prefix_expand/3,
+              type_context/4
           ]).
 
 :- use_module(instance).

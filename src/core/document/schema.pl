@@ -134,6 +134,7 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
 class_subsumed(Validation_Object,Class,Subsumed) :-
     database_schema(Validation_Object,Schema),
     schema_class_subsumed(Schema,Class,Subsumed).
+
 schema_class_subsumed(_Schema,Class,Class).
 schema_class_subsumed(Schema,Class,Subsumed) :-
     schema_class_super(Schema,Class,Subsumed).

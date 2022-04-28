@@ -84,3 +84,4 @@
 :- use_module('document/diff').
 :- use_module('document/normalize').
 :- use_module('document/apply').
+:- use_module('document/inference').
