@@ -33,6 +33,9 @@
 :- use_module(library(plunit), [run_tests/0, run_tests/1]).
 :- use_module(library(settings)).
 
+% Add progress bar
+:- use_module(library(progress_bar)).
+
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
 cli_toplevel :-
@@ -978,10 +981,14 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
 
     create_authorization(Opts,Authorization),
 
+    Progress_Bar = [Total,Index,TS]>>print_message(
+                                         informational,
+                                         pb(cli_progress_bar('clone ',Index/Total,TS))),
+
     api_report_errors(
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
-              authorized_fetch(Authorization), _Meta_Data)),
+              authorized_fetch(Authorization), Progress_Bar, _Meta_Data)),
     format(current_output, "~nCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),

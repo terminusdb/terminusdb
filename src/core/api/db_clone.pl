@@ -14,9 +14,15 @@
 
 :- meta_predicate clone(+,+,+,+,+,+,+,+,3,-).
 clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
+    Progress_Bar = [_,_,_]>>true,
+    clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,
+          Progress_Bar,Meta_Data).
+
+:- meta_predicate clone(+,+,+,+,+,+,+,+,3,3,-).
+clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Progress_Bar,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
-        clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data),
+        clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Progress_Bar,Meta_Data),
         exception(E),
 
         (   clone_cleanup_required(E)

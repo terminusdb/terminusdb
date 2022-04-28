@@ -16,6 +16,11 @@
 
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
 remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
+    Progress_Bar = [_,_,_]>>true,
+    remote_fetch(System_DB, Auth, Path, Fetch_Predicate, Progress_Bar, New_Head_Layer_Id, Head_Has_Updated).
+
+:- meta_predicate remote_fetch(+, +, +, 3, 3, -, -).
+remote_fetch(System_DB, Auth, Path, Fetch_Predicate, Progress_Bar, New_Head_Layer_Id, Head_Has_Updated) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Repository_Descriptor),
         error(invalid_absolute_path(Path),_)),
