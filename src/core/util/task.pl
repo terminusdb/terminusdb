@@ -281,10 +281,7 @@ free_worker(Worker) :-
 :- meta_predicate task_spawn(+, :, -).
 task_spawn(Template, Goal, Task) :-
     engine_create(Result,
-                  catch_with_backtrace(
-                      reify_result(Template, Goal, Result),
-                      E,
-                      Result=exception(E)),
+                  reify_result_ex(Template, Goal, Result),
                   Task),
     (   on_task_engine(P)
     ->  Parent = some(P)
@@ -349,6 +346,13 @@ reify_result(Template, Clause, Result) :-
         ->  Result = final(Template)
         ;   Result = success(Template))
     ;   Result = failure).
+
+:- meta_predicate reify_result_ex(+, :, -).
+reify_result_ex(Template, Clause, Result) :-
+    catch_with_backtrace(
+        reify_result(Template, Clause, Result),
+        E,
+        Result=exception(E)).
 
 reified_result_is_final(final(_)).
 reified_result_is_final(exception(_)).
@@ -619,7 +623,7 @@ task_concurrent_goal_worker(Template1, Template2, Goal, Work_Queue, Collect_Queu
     repeat,
     task_get_message(Work_Queue, run(Count,Template1)),
     task_send_message(Collect_Queue, start(Count, E)),
-    reify_result(Template2, Goal, Result),
+    reify_result_ex(Template2, Goal, Result),
     task_send_message(Collect_Queue, result(Count, Result)),
     fail.
 
@@ -666,6 +670,40 @@ task_concurrent_goal_process(Result_Queue, Results, Cur, New_Cur, New_Results) :
     del_assoc(Cur, Results, _, Next_Results),
     task_concurrent_goal_process(Result_Queue, Next_Results, Next_Cur, New_Cur, New_Results).
 task_concurrent_goal_process(_Result_Queue, Results, Cur, Cur, Results).
+
+task_generate(Template, Goal, Result) :-
+    task_generate(Template, Goal, Result, []).
+
+task_generate(Template, Goal, Result, Options) :-
+    (   memberchk(bound(N), Options)
+    ->  true
+    ;   N = 10),
+
+    setup_call_cleanup(
+        task_message_queue_create(Queue, [max_size(N)]),
+        (
+            task_spawn(_,
+                       % TODO handle generator errors
+                       (   reify_result_ex(Template, call(Goal), Reified_Result),
+                           task_send_message(Queue, Reified_Result),
+                           (   reified_result_is_final(Reified_Result)
+                           ->  true
+                           ;   fail)),
+                       Generator_Task),
+
+            setup_call_cleanup(
+                true,
+                (   repeat,
+                    task_get_message(Queue, Reified_Result),
+                    (   reified_result_is_final(Reified_Result)
+                    ->  !
+                    ;   true),
+                    unreify_result(Reified_Result, Result)
+                ),
+                cleanup_task(Generator_Task))
+        ),
+        task_message_queue_destroy(Queue)
+    ).
 
 demonstration(Result) :-
     task_spawn(R,
