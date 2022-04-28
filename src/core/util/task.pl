@@ -557,7 +557,7 @@ task_wait_send_message(Queue, Message) :-
     ;   engine_yield(waiting_send(Queue)),
         fail).
 
-task_concurrent_goal(Template1, Generator, Goal, Template2,) :-
+task_concurrent_goal(Template1, Generator, Goal, Template2) :-
     task_concurrent_goal(Template1, Generator, Goal, Template2, []).
 task_concurrent_goal(Template1, Generator, Goal, Template2, Options) :-
     (   memberchk(workers(Worker_Count), Options)
@@ -704,7 +704,6 @@ task_generate(Template, Goal, Options) :-
         task_message_queue_create(Queue, [max_size(N)]),
         (
             task_spawn(_,
-                       % TODO handle generator errors
                        (   reify_result_ex(Template, call(Goal), Reified_Result),
                            task_send_message(Queue, Reified_Result),
                            (   reified_result_is_final(Reified_Result)
