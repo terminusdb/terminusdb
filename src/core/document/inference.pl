@@ -6,6 +6,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
+:- use_module(library(apply)).
 
 :- use_module(core(transaction)).
 :- use_module(core(query)).
