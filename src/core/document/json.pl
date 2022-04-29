@@ -45,6 +45,7 @@
               write_json_string_to_instance/2,
               replace_json_schema/2,
               class_frame/3,
+              class_frame/4,
               all_class_frames/2,
               class_property_dictionary/3,
               class_property_dictionary/4,
@@ -2014,51 +2015,70 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
 
-documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements), Prefixes, Result) :-
+documentation_descriptor_json(Descriptor, Prefixes, Result) :-
+    documentation_descriptor_json(Descriptor,Prefixes,true,Result).
+
+documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements),
+                              Prefixes, Compress_Ids,
+                              Result) :-
     (   Comment_Option = some(Comment)
     ->  Template = json{ '@comment' : Comment}
     ;   Template = json{}
     ),
     (   Elements = json{}
     ->  Result = Template
-    ;   dict_pairs(Elements, _, Pairs),
-        maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
-                    enum_value(Type,Val,Enum),
-                    compress_schema_uri(Val, Prefixes, Small)
-                ),
-                Pairs,
-                JSON_Pairs),
-        dict_pairs(JSONs,json,JSON_Pairs),
+    ;   (   Compress_Ids = true
+        ->  dict_pairs(Elements, _, Pairs),
+            maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
+                        enum_value(Type,Val,Enum),
+                        compress_schema_uri(Val, Prefixes, Small)
+                    ),
+                    Pairs,
+                    JSON_Pairs),
+            dict_pairs(JSONs,json,JSON_Pairs)
+        ;   JSONs = Elements
+        ),
         Result = (Template.put('@values', JSONs))
     ),
     Result \= json{}.
-documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes, Result) :-
+documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes,
+                              Compress_Ids,
+                              Result) :-
     (   Comment_Option = some(Comment)
     ->  Template = json{ '@comment' : Comment}
     ;   Template = json{}
     ),
     (   Elements = json{}
     ->  Result = Template
-    ;   dict_pairs(Elements, _, Pairs),
-        maplist({Prefixes}/[Prop-X,Small-X]>>(
-                    compress_schema_uri(Prop, Prefixes, Small)
-                ),
-                Pairs,
-                JSON_Pairs),
-        dict_pairs(JSONs,json,JSON_Pairs),
+    ;   (   Compress_Ids = true
+        ->  dict_pairs(Elements, _, Pairs),
+            maplist({Prefixes}/[Prop-X,Small-X]>>(
+                        compress_schema_uri(Prop, Prefixes, Small)
+                    ),
+                    Pairs,
+                    JSON_Pairs),
+            dict_pairs(JSONs,json,JSON_Pairs)
+        ;   JSONs = Elements
+        ),
         Result = (Template.put('@properties', JSONs))
     ),
     Result \= json{}.
 
-oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON) :-
-    dict_pairs(Map, _, Pairs),
-    maplist({Prefixes}/[Prop-Val,Small-Small_Val]>>(
-                compress_schema_uri(Prop, Prefixes, Small),
-                compress_schema_uri(Val, Prefixes, Small_Val)
-            ),
-            Pairs,
-            JSON_Pairs),
-    dict_pairs(JSON,json,JSON_Pairs).
+oneof_descriptor_json(Descriptor, Prefixes, JSON) :-
+    oneof_descriptor_json(Descriptor, Prefixes, true, JSON).
+
+oneof_descriptor_json(tagged_union(_, Map), Prefixes, Compress_Ids, JSON) :-
+    (   Compress_Ids = true
+    ->  dict_pairs(Map, _, Pairs),
+        maplist({Prefixes}/[Prop-Val,Small-Small_Val]>>(
+                    compress_schema_uri(Prop, Prefixes, Small),
+                    compress_schema_uri(Val, Prefixes, Small_Val)
+                ),
+                Pairs,
+                JSON_Pairs),
+        dict_pairs(JSON,json,JSON_Pairs)
+    ;   JSON = Map
+    ).
 
 type_descriptor_json(unit, _Prefix, "Unit").
 type_descriptor_json(class(C), Prefixes, Class_Comp) :-
@@ -2655,6 +2675,9 @@ all_class_frames(Query_Context, Frames) :-
     all_class_frames(TO, Frames).
 
 class_frame(Transaction, Class, Frame) :-
+    class_frame(Transaction, Class, true, Frame).
+
+class_frame(Transaction, Class, Compress_Ids, Frame) :-
     (   is_transaction(Transaction)
     ;   is_validation_object(Transaction)
     ),
@@ -2667,7 +2690,9 @@ class_frame(Transaction, Class, Frame) :-
         Predicate_Comp-Subframe,
         (   class_predicate_conjunctive_type(Transaction, Class_Ex, Predicate, Type_Desc),
             type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Subframe),
-            compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
+            (   Compress_Ids = true
+            ->  compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
+            ;   Predicate = Predicate_Comp)
         ),
         Pairs),
     % Subdocument
@@ -2686,22 +2711,25 @@ class_frame(Transaction, Class, Frame) :-
     % oneOf
     (   findall(JSON,
                 (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
-                    oneof_descriptor_json(OneOf_Desc,Prefixes,JSON)),
+                    oneof_descriptor_json(OneOf_Desc,Prefixes,Compress_Ids,JSON)),
                 OneOf_JSONs),
         OneOf_JSONs \= []
     ->  Pairs5 = ['@oneOf'-OneOf_JSONs|Pairs4]
     ;   Pairs5 = Pairs4),
     % documentation
     (   documentation_descriptor(Transaction, Class_Ex, Documentation_Desc),
-	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json)
+	    documentation_descriptor_json(Documentation_Desc,Prefixes,Compress_Ids,Documentation_Json)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
     % enum
     (   is_enum(Transaction,Class_Ex)
     ->  database_schema(Transaction, Schema),
         schema_type_descriptor(Schema, Class, enum(Class,List)),
-        maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
-                List, Enum_List),
+        (   Compress_Ids = true
+        ->  maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
+                    List, Enum_List)
+        ;   List = Enum_List
+        ),
         Pairs7 = ['@type'-'Enum','@values'-Enum_List|Pairs6]
     ;   Pairs7 = ['@type'-'Class'|Pairs6]),
 
@@ -2711,16 +2739,16 @@ class_frame(Transaction, Class, Frame) :-
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
-class_frame(Query_Context, Class, Frame) :-
+class_frame(Query_Context, Class, Compress_Ids, Frame) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    class_frame(TO, Class, Frame).
-class_frame(Desc, Class, Frame) :-
+    class_frame(TO, Class, Compress_Ids, Frame).
+class_frame(Desc, Class, Compress_Ids, Frame) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc, Trans),
-    class_frame(Trans, Class, Frame).
+    class_frame(Trans, Class, Compress_Ids, Frame).
 
 class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
     prefix_expand_schema(Class, Prefixes, Class_Ex),
@@ -6861,8 +6889,29 @@ test(double_choice_frame,
      ]) :-
 
     class_frame(Desc,'DoubleChoice',Frame),
+
     Frame = json{'@oneOf':[json{a:'xsd:string',b:'xsd:integer'},
                            json{c:'xsd:string',d:'xsd:integer'}],
+                 '@type':'Class'}.
+
+test(double_choice_frame_uncompressed,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    class_frame(Desc,'DoubleChoice',false,Frame),
+    Frame = json{'@oneOf':[
+                     tagged_union{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+                                  'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
+                     tagged_union{'http://s/c':'http://www.w3.org/2001/XMLSchema#string',
+                                  'http://s/d':'http://www.w3.org/2001/XMLSchema#integer'}],
                  '@type':'Class'}.
 
 test(mixed_frame,

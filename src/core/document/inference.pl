@@ -46,10 +46,9 @@ Error: Could not find a principal type.
 % DB, Prefixes |- Dictionary <= Type
 check_type(Database,Prefixes,Dictionary,Type,Annotated) :-
     \+ is_abstract(Database, Type),
-    class_frame(Database, Type, Frame),
+    class_frame(Database, Type, false, Frame),
     dict_pairs(Frame,json,Pairs),
-    expand_dictionary_pairs(Pairs,Prefixes,Pairs_Expanded),
-    check_type_pairs(Pairs_Expanded,Database,Prefixes,success(Dictionary),Annotated).
+    check_type_pairs(Pairs,Database,Prefixes,success(Dictionary),Annotated).
 
 expand_dictionary_pairs([],_Prefixes,[]).
 expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value|Expanded_Pairs]) :-
@@ -72,13 +71,48 @@ promote_result_list(List, Promoted) :-
         Promoted = witness(Witnesses)
     ).
 
+process_choices([],_Database,_Prefixes,Result,Result).
+process_choices([_|_],_Database,_Prefixes,witness(Witness),witness(Witness)).
+process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated) :-
+    findall(
+        Key-Result,
+        (   get_dict(Key,Choice,Type),
+            get_dict(Key,Dictionary,Value),
+            infer_type(Database,Prefixes,Value,Type,Result)
+        ),
+        Results),
+    (   Results = [Key-Result]
+    ->  (   Result = success(D)
+        ->  put_dict(Key,Dictionary,D,OutDict),
+            process_choices(Choices,Database,Prefixes,success(OutDict),Annotated)
+        ;   Result = witness(D)
+        ->  dict_pairs(Witness, json, [Key-D]),
+            Annotated = witness(Witness)
+        )
+    ;   Results = []
+    ->  Annotated =
+        witness(json{'@type' : no_choice_is_cardinality_one,
+                     choice : Choice,
+                     document : Dictionary})
+    ;   Annotated =
+        witness(json{'@type' : choice_has_too_many_answers,
+                     choice : Choice,
+                     document : Dictionary})
+    ).
+
 check_type_pair(_Key,_Range,_Database,_Prefixes,witness(Failure),Annotated) =>
     witness(Failure) = Annotated.
+check_type_pair('@oneOf',Range,Database,Prefixes,success(Dictionary),Annotated) =>
+    process_choices(Range,Database,Prefixes,success(Dictionary),Annotated).
 check_type_pair(Key,_Range,_Database,_Prefixes,success(Dictionary),Annotated),
 has_at(Key) =>
     success(Dictionary) = Annotated.
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated),
 atom(Type) =>
+    nl,writeq('........................'),nl,
+    writeq(Type),nl,
+    writeq(Key),
+    write(Dictionary),
     prefix_expand_schema(Type, Prefixes, Type_Ex),
     (   get_dict(Key,Dictionary,Value)
     ->  (   check_value_type(Database, Prefixes, Value, Type_Ex, Annotated_Value)
@@ -308,6 +342,23 @@ multi('
   "@id" : "Mentioned",
   "thing" : "xsd:string"
 }
+
+{ "@type" : "Enum",
+  "@id" : "Rocks",
+  "@value" : [ "big", "medium", "small" ]
+}
+
+{ "@type" : "Enum",
+  "@id" : "Gas",
+  "@value" : [ "light", "medium", "heavy" ]
+}
+
+{ "@type" : "Class",
+  "@id" : "Planet",
+  "@oneOf" : { "rocks" : "Rocks",
+               "gas" : "Gas" }
+}
+
 ').
 
 test(infer_multi_success,
@@ -438,5 +489,29 @@ test(reference_success,
                      json{'@id':'terminusdb:///data/Mentioned/something_or_other',
                           '@type':"@id"}}.
 
+test(planet_choice,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+
+    Document =
+    json{
+        rocks : "big"
+    },
+    infer_type(Database,Document,Type,success(Annotated0)),
+    writeq(Annotated0),
+
+    Document =
+    json{
+        gas : "light"
+    },
+    infer_type(Database,Document,Type,success(Annotated1)),
+    writeq(Annotated1),
+
+    nl.
 
 :- end_tests(infer).
