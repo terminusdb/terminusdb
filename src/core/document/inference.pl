@@ -16,6 +16,17 @@
 
 /*
 
+Todo:
+
+1. Add disjoint union
+2. Add enum
+3. Add unit
+
+*/
+
+
+/*
+
            Top{}
              |
          NamedThing{name}
