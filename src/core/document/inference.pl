@@ -68,28 +68,40 @@ has_at(Key) =>
     success(Dictionary) = Annotated.
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated),
 atom(Type) =>
-    get_dict(Key,Dictionary,Value),
-    check_value_type(Database, Prefixes, Value, Type, Annotated_Value),
-    (   Annotated_Value = success(Success_Value)
-    ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
-        Annotated = success(Annotated_Success)
-    ;   Annotated_Value = witness(Witness_Value)
-    ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-        Annotated = witness(Witness)
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    (   get_dict(Key,Dictionary,Value)
+    ->  (   check_value_type(Database, Prefixes, Value, Type_Ex, Annotated_Value)
+        ->  (   Annotated_Value = success(Success_Value)
+            ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
+                Annotated = success(Annotated_Success)
+            ;   Annotated_Value = witness(Witness_Value)
+            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            )
+        ;   Annotated = witness(json{ '@type' : value_invalid_at_type,
+                                      document : Dictionary,
+                                      value : Value,
+                                      type : Type_Ex })
+        )
+    ;   Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
+                                  document : Dictionary,
+                                  key : Key })
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
     (   get_dict(Key,Dictionary,Value)
-    ->  check_value_type(Database, Prefixes, Value, Type, Annotated)
+    ->  check_value_type(Database, Prefixes, Value, Type_Ex, Annotated)
     ;   Annotated = witness(json{ '@type' : missing_property,
                                   '@property' : Key})
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : "Set", '@class' : Type} :< Range =>
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
     (   get_dict(Key,Dictionary,Values)
     ->  maplist(
-            {Database,Prefixes,Type}/
-            [Value,Exp]>>check_value_type(Database,Prefixes,Value,Type,Exp),
+            {Database,Prefixes,Type_Ex}/
+            [Value,Exp]>>check_value_type(Database,Prefixes,Value,Type_Ex,Exp),
             Values,Expanded),
         promote_result_list(Expanded,Result_List),
         (   Result_List = witness(_)
@@ -97,7 +109,7 @@ _{ '@type' : "Set", '@class' : Type} :< Range =>
         ;   Result_List = success(List),
             put_dict(Key,Dictionary,
                      json{ '@container' : "@set",
-                           '@type' : Type,
+                           '@type' : Type_Ex,
                            '@value' : List },
                      Annotated_Dict),
             success(Annotated_Dict) = Annotated)
@@ -105,17 +117,19 @@ _{ '@type' : "Set", '@class' : Type} :< Range =>
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : "Optional", '@class' : Class } :< Range =>
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
     (   get_dict(Key, Dictionary, Value)
-    ->  check_value_type(Database, Prefixes, Value, Class, Annotated)
+    ->  check_value_type(Database, Prefixes, Value, Class_Ex, Annotated)
     ;   success(Dictionary) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : Collection, '@class' : Type } :< Range,
 member(Collection, ["Array", "List"]) =>
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
     get_dict(Key,Dictionary,Values),
     maplist(
-        {Database,Prefixes,Type}/
-        [Value,Exp]>>check_value_type(Database,Prefixes,Value,Type,Exp),
+        {Database,Prefixes,Type_Ex}/
+        [Value,Exp]>>check_value_type(Database,Prefixes,Value,Type_Ex,Exp),
         Values,Expanded),
     promote_result_list(Expanded,Result_List),
     (   Result_List = witness(_)
@@ -140,17 +154,35 @@ is_dict(Value) =>
 check_value_type(_Database,_Prefixes,Value,_Type,_Annotated),
 is_list(Value) =>
     fail.
-check_value_type(_Database,Prefixes,Value,Type, Annotated) =>
-    prefix_expand(Type, Prefixes,Type_Ex),
+check_value_type(_Database,_Prefixes,Value,Type,Annotated),
+is_base_type(Type) =>
     catch(
         (   json_value_cast_type(Value,Type,_),
-            Annotated = success(json{'@type' : Type_Ex,
+            Annotated = success(json{'@type' : Type,
                                      '@value' : Value })
         ),
         error(casting_error(Val, Type), _),
         Annotated = witness(json{'@type':could_not_interpret_as_type,
                                  'value': Val,
                                  'type' : Type })
+    ).
+check_value_type(Database,Prefixes,Value,Type,Annotated) =>
+    (   is_simple_class(Database,Type)
+    ->  (   (   string(Value)
+            ;   atom(Value))
+        ->  prefix_expand(Value,Prefixes,Exp),
+            Annotated = success(json{ '@type' : "@id",
+                                      '@id' : Exp })
+        ;   is_dict(Value),
+            get_dict('@type', Value, "@id")
+        ->  Annotated = success(Value)
+        ;   Annotated = witness(json{ '@type' : not_an_object_identifier,
+                                      value : Value,
+                                      type : Type })
+        )
+    ;   Annotated = witness(json{ '@type' : invalid_class,
+                                  value : Value,
+                                  type : Type })
     ).
 
 check_type_pairs([],_,_,Dictionary,Dictionary).
@@ -255,6 +287,16 @@ multi('
   "@id" : "NonUniqueB",
   "@inherits" : "NonUnique"
 }
+
+{ "@type" : "Class",
+  "@id" : "Mentions",
+  "mentions" : "Mentioned"
+}
+
+{ "@type" : "Class",
+  "@id" : "Mentioned",
+  "thing" : "xsd:string"
+}
 ').
 
 test(infer_multi_success,
@@ -283,7 +325,7 @@ test(infer_multi_success,
                           '@value':"asdf"},
                      'terminusdb:///schema#set_decimal':
                      json{'@container':"@set",
-                          '@type':'xsd:decimal',
+                          '@type':'http://www.w3.org/2001/XMLSchema#decimal',
                           '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':1},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
@@ -315,14 +357,13 @@ test(infer_multisub_success,
                           '@value':30},
                      'terminusdb:///schema#set_decimal':
                      json{'@container':"@set",
-                          '@type':'xsd:decimal',
+                          '@type':'http://www.w3.org/2001/XMLSchema#decimal',
                           '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':1},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':3},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':3}]}}.
-
 
 test(infer_nonunique_failure,
      [setup((setup_temp_store(State),
@@ -364,6 +405,27 @@ test(annotated_success,
                      'terminusdb:///schema#name'
                      :json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                            '@value':"Goober"}}.
+
+
+test(reference_success,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        mentions : "Mentioned/something_or_other"
+    },
+    open_descriptor(Desc,Database),
+    infer_type(Database,Document,Type,success(Annotated)),
+    Type = 'terminusdb:///schema#Mentions',
+    Annotated = json{'@type':'terminusdb:///schema#Mentions',
+                     'terminusdb:///schema#mentions':
+                     json{'@id':'terminusdb:///data/Mentioned/something_or_other',
+                          '@type':"@id"}}.
 
 
 :- end_tests(infer).
