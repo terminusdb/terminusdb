@@ -18,9 +18,9 @@
 
 Todo:
 
-1. Add disjoint union
-2. Add enum
-3. Add unit
+[X] Add disjoint union
+[X] Add enum
+[ ] Add unit
 
 */
 
@@ -43,12 +43,35 @@ Error: Could not find a principal type.
 */
 
 
-% DB, Prefixes |- Dictionary <= Type
-check_type(Database,Prefixes,Dictionary,Type,Annotated) :-
+% DB, Prefixes |- Value <= Type
+check_type(Database,Prefixes,Value,Type,Annotated) :-
     \+ is_abstract(Database, Type),
     class_frame(Database, Type, false, Frame),
+    check_frame(Frame,Database,Prefixes,Value,Type,Annotated).
+
+check_frame(Frame,_Database,_Prefixes,Enum_Value,Type,Annotated),
+is_dict(Frame),
+_{'@type' : 'http://terminusdb.com/schema/sys#Enum',
+  '@values': Enums
+ } :< Frame =>
+
+    (   string(Enum_Value)
+    ->  (   enum_value(Type,Enum_Value,Value),
+            get_dict('@values', Frame, Enums),
+            memberchk(Value, Enums)
+        ->  Annotated = success(Value)
+        ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
+                                      enum : Type,
+                                      value : Enum_Value}))
+    ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
+                                  enum : Type,
+                                  value : Enum_Value})
+    ).
+check_frame(Frame,Database,Prefixes,Value,_Type,Annotated),
+is_dict(Frame),
+get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
     dict_pairs(Frame,json,Pairs),
-    check_type_pairs(Pairs,Database,Prefixes,success(Dictionary),Annotated).
+    check_type_pairs(Pairs,Database,Prefixes,success(Value),Annotated).
 
 expand_dictionary_pairs([],_Prefixes,[]).
 expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value|Expanded_Pairs]) :-
@@ -78,7 +101,7 @@ process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated
         Key-Result,
         (   get_dict(Key,Choice,Type),
             get_dict(Key,Dictionary,Value),
-            infer_type(Database,Prefixes,Value,Type,Result)
+            check_type(Database,Prefixes,Value,Type,Result)
         ),
         Results),
     (   Results = [Key-Result]
@@ -107,12 +130,12 @@ check_type_pair('@oneOf',Range,Database,Prefixes,success(Dictionary),Annotated) 
 check_type_pair(Key,_Range,_Database,_Prefixes,success(Dictionary),Annotated),
 has_at(Key) =>
     success(Dictionary) = Annotated.
+check_type_pair(_Key,Type,Database,_Prefixes,success(_Dictionary),_Annotated),
+atom(Type),
+is_enum(Database,Type) =>
+    throw(error(checking_of_enum_unimplemented)).
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated),
 atom(Type) =>
-    nl,writeq('........................'),nl,
-    writeq(Type),nl,
-    writeq(Key),
-    write(Dictionary),
     prefix_expand_schema(Type, Prefixes, Type_Ex),
     (   get_dict(Key,Dictionary,Value)
     ->  (   check_value_type(Database, Prefixes, Value, Type_Ex, Annotated_Value)
@@ -273,6 +296,9 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated) =>
     (   Successes = [Type-success(Annotated0)]
     ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
         Annotated = success(Annotated1)
+    ;   Successes = []
+    ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                  'document' : Dictionary})
     ;   maplist([Type-_,Type]>>true,Successes,Types)
     ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
                                   'document' : Dictionary,
@@ -359,6 +385,11 @@ multi('
                "gas" : "Gas" }
 }
 
+{ "@type" : "TaggedUnion",
+  "@id" : "ThisOrThat",
+  "this" : "Rocks",
+  "that" : "Gas"
+}
 ').
 
 test(infer_multi_success,
@@ -503,15 +534,64 @@ test(planet_choice,
         rocks : "big"
     },
     infer_type(Database,Document,Type,success(Annotated0)),
-    writeq(Annotated0),
-
-    Document =
+    Type = 'terminusdb:///schema#Planet',
+    Annotated0 = json{'@type':'terminusdb:///schema#Planet',
+                      'terminusdb:///schema#rocks':'terminusdb:///schema#Rocks/big'},
+    Document1 =
     json{
         gas : "light"
     },
-    infer_type(Database,Document,Type,success(Annotated1)),
-    writeq(Annotated1),
+    infer_type(Database,Document1,Type1,success(Annotated1)),
+    Type1 = 'terminusdb:///schema#Planet',
+    Annotated1 = json{'@type':'terminusdb:///schema#Planet',
+                      'terminusdb:///schema#gas':'terminusdb:///schema#Gas/light'},
 
-    nl.
+    Document2 =
+    json{
+        rocks : "big",
+        gas : "light"
+    },
+
+    infer_type(Database,Document2,_,
+               witness(json{'@type':no_unique_type_for_document,
+                            document:json{gas:"light",rocks:"big"}})),
+
+    Document3 =
+    json{
+        rocks : "not a rock"
+    },
+
+    infer_type(Database,Document3,_,
+               witness(json{'@type':no_unique_type_for_document,document:json{rocks:"not a rock"}})),
+
+    Document4 =
+    json{
+        '@type' : "Planet",
+        rocks : "not a rock"
+    },
+
+    infer_type(Database,Document4,_,
+               witness(json{'terminusdb:///schema#rocks':
+                            json{'@type':not_a_valid_enum,
+                                 enum:'terminusdb:///schema#Rocks',
+                                 value:"not a rock"}})).
+
+test(this_or_that,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+
+    Document =
+    json{
+        this : "big"
+    },
+    infer_type(Database,Document,Type,success(Annotated)),
+    Type = 'terminusdb:///schema#ThisOrThat',
+
+    Annotated = json{'@type':'terminusdb:///schema#ThisOrThat','terminusdb:///schema#this':'terminusdb:///schema#Rocks/big'}.
 
 :- end_tests(infer).
