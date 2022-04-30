@@ -20,7 +20,8 @@ Todo:
 
 [X] Add disjoint union
 [X] Add enum
-[ ] Add unit
+[X] Add unit
+[ ] Add ID captures
 
 */
 
@@ -134,6 +135,14 @@ check_type_pair(_Key,Type,Database,_Prefixes,success(_Dictionary),_Annotated),
 atom(Type),
 is_enum(Database,Type) =>
     throw(error(checking_of_enum_unimplemented)).
+check_type_pair(Key,Type,_Database,_Prefixes,success(Dictionary),Annotated),
+Type = 'http://terminusdb.com/schema/sys#Unit' =>
+    (   get_dict(Key, Dictionary, [])
+    ->  Annotated = success(Dictionary)
+    ;   Annotated = witness(json{ '@type' : not_a_sys_unit,
+                                  key : Key,
+                                  document : Dictionary })
+    ).
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated),
 atom(Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),
@@ -390,6 +399,11 @@ multi('
   "this" : "Rocks",
   "that" : "Gas"
 }
+
+{ "@type" : "Class",
+  "@id" : "UnitTest",
+  "unit" : "sys:Unit"
+}
 ').
 
 test(infer_multi_success,
@@ -593,5 +607,23 @@ test(this_or_that,
     Type = 'terminusdb:///schema#ThisOrThat',
 
     Annotated = json{'@type':'terminusdb:///schema#ThisOrThat','terminusdb:///schema#this':'terminusdb:///schema#Rocks/big'}.
+
+test(unit,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+
+    Document =
+    json{
+        unit : []
+    },
+    infer_type(Database,Document,Type,
+               success(json{'@type':'terminusdb:///schema#UnitTest',
+                            'terminusdb:///schema#unit':[]})),
+    Type = 'terminusdb:///schema#UnitTest'.
 
 :- end_tests(infer).

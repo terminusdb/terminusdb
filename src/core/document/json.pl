@@ -2630,8 +2630,8 @@ type_descriptor_sub_frame(Type,DB,Prefix,Frame) :-
 
 type_descriptor_sub_frame(unit, _DB, _Prefix, Compress_Ids, Unit) :-
     (   Compress_Ids
-    ->  global_prefix_expand(sys:"Unit", Unit)
-    ;   Unit = "Unit"
+    ->  Unit = "Unit"
+    ;   global_prefix_expand(sys:"Unit", Unit)
     ).
 type_descriptor_sub_frame(class(C), DB, Prefixes, Compress_Ids, Frame) :-
     (   is_abstract(DB, C)
