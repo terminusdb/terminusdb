@@ -2086,7 +2086,7 @@ oneof_descriptor_json(tagged_union(_, Map), Prefixes, Compress_Ids, JSON) :-
     ).
 
 type_descriptor_json(Type, Prefix, JSON) :-
-    type_descriptor_json(true, Type, Prefix, JSON).
+    type_descriptor_json(Type, Prefix, true, JSON).
 
 type_descriptor_json(unit, _Prefix, Compress_Ids, Unit) :-
     (   Compress_Ids = true
