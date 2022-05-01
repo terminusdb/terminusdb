@@ -21,7 +21,7 @@ Todo:
 [X] Add disjoint union
 [X] Add enum
 [X] Add unit
-[ ] Add ID captures
+[X] Add ID captures
 
 */
 
@@ -196,7 +196,14 @@ check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : "Optional", '@class' : Class } :< Range =>
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     (   get_dict(Key, Dictionary, Value)
-    ->  check_value_type(Database, Prefixes, Value, Class_Ex, Annotated)
+    ->  check_value_type(Database, Prefixes, Value, Class_Ex, Annotated_Value),
+        (   Annotated_Value = success(Success_Value)
+        ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
+            Annotated = success(Annotated_Success)
+        ;   Annotated_Value = witness(Witness_Value)
+        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+            Annotated = witness(Witness)
+        )
     ;   success(Dictionary) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
@@ -225,6 +232,11 @@ member(Collection, ["Array", "List"]) =>
         Annotated = success(Annotated_Dictionary)
     ).
 
+check_value_type(_Database,_Prefixes,Value,_Type,Annotated),
+is_dict(Value),
+get_dict('@ref', Value, _) =>
+    put_dict('@type', Value, "@id", Result),
+    Annotated = success(Result).
 check_value_type(Database,Prefixes,Value,Type,Annotated),
 is_dict(Value) =>
     infer_type(Database, Prefixes, Type, Value, Type, Annotated).
@@ -282,7 +294,6 @@ infer_type(Database, Super, Dictionary, Type, Annotated) :-
 
 infer_type(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated),
 get_dict('@type', Dictionary, Type) =>
-    % Will need to do expansions here..
     (   (   class_subsumed(Database, Super, Type)
         ;   Super = 'http://terminusdb.com/schema/sys#Top'
         )
@@ -306,8 +317,13 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated) =>
     ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
         Annotated = success(Annotated1)
     ;   Successes = []
-    ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                  'document' : Dictionary})
+    ->  (   [_-witness(Witness)] = Results
+        ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                      'reason' : Witness,
+                                      'document' : Dictionary})
+        ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                      'document' : Dictionary})
+        )
     ;   maplist([Type-_,Type]>>true,Successes,Types)
     ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
                                   'document' : Dictionary,
@@ -403,6 +419,13 @@ multi('
 { "@type" : "Class",
   "@id" : "UnitTest",
   "unit" : "sys:Unit"
+}
+
+{ "@type" : "Class",
+  "@id" : "Person",
+  "forename" : "xsd:string",
+  "surname" : "xsd:string",
+  "rival" : { "@type" : "Optional", "@class" : "Person" }
 }
 ').
 
@@ -625,5 +648,56 @@ test(unit,
                success(json{'@type':'terminusdb:///schema#UnitTest',
                             'terminusdb:///schema#unit':[]})),
     Type = 'terminusdb:///schema#UnitTest'.
+
+
+test(capture_ref,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+
+    Document0 =
+    json{
+        '@type':"Person",
+        '@capture' : "Id_Tom",
+        forename : "Tom",
+        surname : "Sawyer"
+    },
+    infer_type(Database,Document0,"Person",success(Result)),
+    Result = json{ '@capture':"Id_Tom",
+				   '@type':"Person",
+				   'terminusdb:///schema#forename':
+                   json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						 '@value':"Tom"
+					   },
+				   'terminusdb:///schema#surname':
+                   json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						 '@value':"Sawyer"
+					   }
+				 },
+    Document1 =
+    json{ '@type': "Person",
+          forename: "Jerry",
+          surname: "Lewis",
+          rival: json{'@ref': "Id_Tom"} },
+
+    infer_type(Database,Document1,"Person",
+               success(json{ '@type':"Person",
+	                         'terminusdb:///schema#forename':
+                             json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						           '@value':"Jerry"
+						         },
+	                         'terminusdb:///schema#rival':
+                             json{ '@ref':"Id_Tom",
+						           '@type':"@id"
+					             },
+	                         'terminusdb:///schema#surname':
+                             json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						           '@value':"Lewis"
+						         }
+	                       })).
 
 :- end_tests(infer).

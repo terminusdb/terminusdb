@@ -892,10 +892,9 @@ enum_value(Type,Value,ID) :-
 
 
 oneof_value(Val,Context,NewPath,Transformed) :-
-    dict_pairs(Val,json,Pairs),
     findall(
         Prop-Value,
-        (   member(P_Choice-V_Choice,Pairs),
+        (   get_dict(P_Choice,Val,V_Choice),
             json_schema_predicate_value(P_Choice,V_Choice,Context,NewPath,Prop,Value)
         ),
         PVs),
