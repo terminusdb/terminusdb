@@ -749,7 +749,7 @@ test(capture_ref,
     infer_type(Database,Document0,Type0,success(Result0)),
     Type0 = 'terminusdb:///schema#Person',
     Result0 = json{ '@capture':"Id_Tom",
-				    '@type':"Person",
+				    '@type':'terminusdb:///schema#Person',
 				    'terminusdb:///schema#forename':
                     json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 						  '@value':"Tom"
@@ -767,7 +767,7 @@ test(capture_ref,
 
     infer_type(Database,Document1,Type1,success(Result1)),
     Type1 = 'terminusdb:///schema#Person',
-    Result1 = json{ '@type':"Person",
+    Result1 = json{ '@type':'terminusdb:///schema#Person',
 	                'terminusdb:///schema#forename':
                     json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 						  '@value':"Jerry"
