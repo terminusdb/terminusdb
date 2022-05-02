@@ -285,9 +285,10 @@ get_dict('@ref', Value, _) =>
 check_value_type(Database,Prefixes,Value,Type,Annotated),
 is_dict(Value) =>
     infer_type(Database, Prefixes, Type, Value, Type, Annotated).
-check_value_type(_Database,_Prefixes,Value,_Type,_Annotated),
+check_value_type(_Database,_Prefixes,Value,Type,_Annotated),
 is_list(Value) =>
-    fail.
+    throw(error(schema_check_failure(witness{ '@type' : unexpected_list,
+                                              value: Value, type : Type }), _)).
 check_value_type(_Database,_Prefixes,Value,Type,Annotated),
 is_base_type(Type) =>
     catch(
@@ -356,6 +357,11 @@ candidate_subsumed(Database, Super, Candidate, Dictionary) =>
 infer_type(Database, Prefixes, Dictionary, Type, Annotated) :-
     infer_type(Database, Prefixes,
                'http://terminusdb.com/schema/sys#Top', Dictionary, Type, Annotated).
+
+/*
+infer_type(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated) :-
+    infer_type_case(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated).
+*/
 
 infer_type(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated),
 get_dict('@type', Dictionary, Type) =>
