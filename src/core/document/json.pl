@@ -7249,16 +7249,18 @@ test(diamond_ok,
     open_descriptor(Desc, Transaction),
     class_frame(Transaction, "Bottom", Frame),
 
-    Frame = json{
-                '@type':'Class',
-                bottom_face:json{'@class':'Bottom',
-                                 '@type':"Optional"},
-                left_face:json{'@class':'Left','@type':"Set"},
-                right_face:json{'@class':'Right','@type':"List"},
-                thing:'xsd:string',
-                top_face:json{'@class':'Top','@type':"Array",
-                              '@dimensions':1}
-            }.
+    Frame = json{ '@type':'Class',
+				  bottom_face:json{ '@class':'Bottom',
+							        '@type':'Optional'
+							      },
+				  left_face:json{'@class':'Left','@type':'Set'},
+				  right_face:json{'@class':'Right','@type':'List'},
+				  thing:'xsd:string',
+				  top_face:json{ '@class':'Top',
+						         '@dimensions':1,
+						         '@type':'Array'
+						       }
+				}.
 
 test(extract_bottom,
      [
@@ -8259,11 +8261,11 @@ test(outer_frame, [
                            '@subdocument':[]},
                 inners:json{'@class':json{'@class':'Inner',
                                           '@subdocument':[]},
-                            '@type':"Set"},
+                            '@type':'Set'},
                 name:'xsd:string',
                 number:'xsd:integer',
                 things:json{'@id':'Things',
-                            '@type':"Enum",
+                            '@type':'Enum',
                             '@values':[thing1,thing2]}}.
 
 
@@ -8351,54 +8353,68 @@ test(all_class_frames, [
     open_descriptor(Desc, DB),
     all_class_frames(DB,  Frames),
 
-    Frames = json{'@context':
-                  _{'@base':"http://i/",
-                    '@schema':"http://s/",
-                    '@type':'Context'},
-                  'http://s/Address':
-                  json{'@type':'Class',
-                       '@documentation':json{'@comment':"This is address"},
-                       '@key':json{'@type':"Random"},
-                       '@subdocument':[],
-                       country:'Country',
-                       postal_code:'xsd:string',
-                       street:'xsd:string'},
-                  'http://s/Coordinate':
-                  json{'@type':'Class',
-                       '@key':json{'@type':"Random"},
-                       x:'xsd:decimal',
-                       y:'xsd:decimal'},
-                  'http://s/Country':
-                  json{'@type':'Class',
-                       '@key':json{'@type':"ValueHash"},
-                       name:'xsd:string',
-                       perimeter:json{'@class':'Coordinate',
-                                      '@type':"List"}},
-                  'http://s/Employee':
-                  json{'@type':'Class',
-                       '@key':json{'@type':"Random"},
-                       address_of:json{'@class':'Address',
-                                       '@subdocument':[]},
-                       age:'xsd:integer',
-                       contact_number:json{'@class':'xsd:string',
-                                           '@type':"Optional"},
-                       friend_of:json{'@class':'Person','@type':"Set"},
-                       managed_by:'Employee',
-                       name:'xsd:string'},
-                  'http://s/Person':
-                  json{'@type':'Class',
-                       '@documentation':
-                       json{'@comment':"This is a person",
-                            '@properties':json{age:"Age of the person.",
-                                               name:"Name of the person."}},
-                       '@key':json{'@type':"Random"},
-                       age:'xsd:integer',
-                       friend_of:json{'@class':'Person',
-                                      '@type':"Set"},
-                       name:'xsd:string'},
-                  'http://s/Team':
-                  json{'@type':'Enum',
-                       '@values':['IT','Marketing']}}.
+    Frames = json{ '@context':_{ '@base':"http://i/",
+						         '@schema':"http://s/",
+						         '@type':'Context'
+						       },
+				   'http://s/Address':json{ '@documentation':
+                                            json{ '@comment':"This is address"
+										        },
+							                '@key':json{'@type':"Random"},
+							                '@subdocument':[],
+							                '@type':'Class',
+							                country:'Country',
+							                postal_code:'xsd:string',
+							                street:'xsd:string'
+							              },
+				   'http://s/Coordinate':json{ '@key':json{ '@type':"Random"
+									                      },
+								               '@type':'Class',
+								               x:'xsd:decimal',
+								               y:'xsd:decimal'
+							                 },
+				   'http://s/Country':json{ '@key':json{ '@type':"ValueHash"
+									                   },
+							                '@type':'Class',
+							                name:'xsd:string',
+							                perimeter:json{ '@class':'Coordinate',
+									                        '@type':'List'
+									                      }
+							              },
+				   'http://s/Employee':json{ '@key':json{ '@type':"Random"
+									                    },
+							                 '@type':'Class',
+							                 address_of:json{ '@class':'Address',
+										                      '@subdocument':[]
+									                        },
+							                 age:'xsd:integer',
+							                 contact_number:json{ '@class':'xsd:string',
+										                          '@type':'Optional'
+										                        },
+							                 friend_of:json{ '@class':'Person',
+									                         '@type':'Set'
+									                       },
+							                 managed_by:'Employee',
+							                 name:'xsd:string'
+							               },
+				   'http://s/Person':json{ '@documentation':
+                                           json{ '@comment':"This is a person",
+										         '@properties':json{ age:"Age of the person.",
+													                 name:"Name of the person."
+												                   }
+										                        },
+							               '@key':json{'@type':"Random"},
+							               '@type':'Class',
+							               age:'xsd:integer',
+							               friend_of:json{ '@class':'Person',
+									                       '@type':'Set'
+									                     },
+							               name:'xsd:string'
+							             },
+				   'http://s/Team':json{ '@type':'Enum',
+							             '@values':['IT','Marketing']
+							           }
+				 }.
 
 test(doc_frame, [
          setup(
