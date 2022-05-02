@@ -138,10 +138,6 @@ check_type_pair('@oneOf',Range,Database,Prefixes,success(Dictionary),Annotated) 
 check_type_pair(Key,_Range,_Database,_Prefixes,success(Dictionary),Annotated),
 has_at(Key) =>
     success(Dictionary) = Annotated.
-check_type_pair(_Key,Type,Database,_Prefixes,success(_Dictionary),_Annotated),
-atom(Type),
-is_enum(Database,Type) =>
-    throw(error(checking_of_enum_unimplemented)).
 check_type_pair(Key,Type,_Database,_Prefixes,success(Dictionary),Annotated),
 Type = 'http://terminusdb.com/schema/sys#Unit' =>
     (   get_dict(Key, Dictionary, [])
@@ -172,6 +168,26 @@ atom(Type) =>
                                   key : Key })
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
+_{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum} :< Range =>
+    (   get_dict(Key,Dictionary,Value)
+    ->  (   check_value_type(Database, Prefixes, Value, Enum, Annotated_Value)
+        ->  (   Annotated_Value = success(Success_Value)
+            ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
+                Annotated = success(Annotated_Success)
+            ;   Annotated_Value = witness(Witness_Value)
+            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            )
+        ;   Annotated = witness(json{ '@type' : value_invalid_at_type,
+                                      document : Dictionary,
+                                      value : Value,
+                                      type : Enum })
+        )
+    ;   Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
+                                  document : Dictionary,
+                                  key : Key })
+    ).
+check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
     (   get_dict(Key,Dictionary,Value)
     ->  check_value_type(Database, Prefixes, Value, Type, Annotated)
@@ -188,8 +204,9 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
                 [Value,Exp]>>check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp),
                 Values,Expanded),
             promote_result_list(Expanded,Result_List),
-            (   Result_List = witness(_)
-            ->  Annotated = Result_List
+            (   Result_List = witness(Witness_Value)
+            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
             ;   Result_List = success(List),
                 put_dict(Key,Dictionary,
                          json{ '@container' : "@set",
@@ -198,8 +215,9 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
                 success(Annotated_Dict) = Annotated
             )
         ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result),
-            (   Result = witness(_)
-            ->  Annotated = Result
+            (   Result = witness(Witness_Value)
+            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
             ;   Result = success(Term),
                 put_dict(Key,Dictionary,
                          json{ '@container' : "@set",
