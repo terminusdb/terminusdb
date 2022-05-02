@@ -77,6 +77,15 @@ get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
     check_type_pairs(Pairs,Database,Prefixes,success(Value),Annotated).
 
 expand_dictionary_pairs([],_Prefixes,[]).
+expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value_Ex|Expanded_Pairs]) :-
+    (   Key = '@id'
+    ->  Key = Key_Ex,
+        prefix_expand(Value, Prefixes, Value_Ex)
+    ;   prefix_expand_schema(Key, Prefixes, Key_Ex),
+        Value = Value_Ex
+    ),
+    expand_dictionary_pairs(Pairs,Prefixes,Expanded_Pairs).
+
 expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value|Expanded_Pairs]) :-
     prefix_expand_schema(Key, Prefixes, Key_Ex),
     expand_dictionary_pairs(Pairs,Prefixes,Expanded_Pairs).
@@ -325,7 +334,8 @@ get_dict('@type', Dictionary, Type) =>
     (   (   class_subsumed(Database, Super, Type_Ex)
         ;   Super = 'http://terminusdb.com/schema/sys#Top'
         )
-    ->  expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
+    ->  put_dict('@type', Dictionary, Type_Ex, New_Dictionary),
+        expand_dictionary_keys(New_Dictionary,Prefixes,Dictionary_Expanded),
         check_type(Database,Prefixes,Dictionary_Expanded,Type_Ex,Annotated),
         Inferred_Type = Type_Ex
     ;   Annotated = witness(json{ '@type' : ascribed_type_not_subsumed,
@@ -788,5 +798,20 @@ test(infer_enum_set,
                                  '@type':"@id"}]}}),
     Type1 = 'terminusdb:///schema#EnumSet'.
 
+test(system_capability,
+     [setup((setup_temp_store(State)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(system_descriptor{},System_Database),
+
+    Document = json{'@id':"Capability/server_access",
+                    '@type':"Capability",
+                    role:"Role/admin",
+                    scope:"Organization/admin"},
+
+    infer_type(System_Database,Document,Type,Result),
+    writeq(Result).
 
 :- end_tests(infer).
