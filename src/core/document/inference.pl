@@ -62,7 +62,7 @@ _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
     ->  (   enum_value(Type,Enum_Value,Value),
             get_dict('@values', Frame, Enums),
             memberchk(Value, Enums)
-        ->  Annotated = success(Value)
+        ->  Annotated = success(json{ '@type' : "@id", '@id' : Value})
         ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
                                       enum : Type,
                                       value : Enum_Value}))
@@ -608,7 +608,10 @@ test(planet_choice,
     infer_type(Database,Document,Type,success(Annotated0)),
     Type = 'terminusdb:///schema#Planet',
     Annotated0 = json{'@type':'terminusdb:///schema#Planet',
-                      'terminusdb:///schema#rocks':'terminusdb:///schema#Rocks/big'},
+                      'terminusdb:///schema#rocks':
+                      json{ '@type' : "@id",
+                            '@id' : 'terminusdb:///schema#Rocks/big'
+                          }},
     Document1 =
     json{
         gas : "light"
@@ -616,7 +619,9 @@ test(planet_choice,
     infer_type(Database,Document1,Type1,success(Annotated1)),
     Type1 = 'terminusdb:///schema#Planet',
     Annotated1 = json{'@type':'terminusdb:///schema#Planet',
-                      'terminusdb:///schema#gas':'terminusdb:///schema#Gas/light'},
+                      'terminusdb:///schema#gas':
+                      json{'@type' : "@id",
+                           '@id' : 'terminusdb:///schema#Gas/light'}},
 
     Document2 =
     json{
@@ -642,8 +647,7 @@ test(planet_choice,
         rocks : "not a rock"
     },
 
-    infer_type(Database,Document3,_,
-               Result3),
+    infer_type(Database,Document3,_,Result3),
     Result3 =
     witness(json{'@type':no_unique_type_for_document,
                  document:json{rocks:"not a rock"},
@@ -658,11 +662,12 @@ test(planet_choice,
         rocks : "not a rock"
     },
 
-    infer_type(Database,Document4,_,
-               witness(json{'terminusdb:///schema#rocks':
-                            json{'@type':not_a_valid_enum,
-                                 enum:'terminusdb:///schema#Rocks',
-                                 value:"not a rock"}})).
+    infer_type(Database,Document4,_,Result4),
+    Result4 =
+    witness(json{'terminusdb:///schema#rocks':
+                 json{'@type':not_a_valid_enum,
+                      enum:'terminusdb:///schema#Rocks',
+                      value:"not a rock"}}).
 
 test(this_or_that,
      [setup((setup_temp_store(State),
@@ -681,7 +686,9 @@ test(this_or_that,
     Type = 'terminusdb:///schema#ThisOrThat',
 
     Annotated = json{'@type':'terminusdb:///schema#ThisOrThat',
-                     'terminusdb:///schema#this':'terminusdb:///schema#Rocks/big'}.
+                     'terminusdb:///schema#this':
+                     json{ '@id' : 'terminusdb:///schema#Rocks/big',
+                           '@type' : "@id"}}.
 
 test(unit,
      [setup((setup_temp_store(State),
@@ -768,12 +775,17 @@ test(infer_enum_set,
     },
 
     infer_type(Database,Document1,Type1,Result),
-    Result = success(json{'@type':'terminusdb:///schema#EnumSet',
-                          'terminusdb:///schema#enum':
-                          json{'@container':"@set",
-                               '@value':['terminusdb:///schema#Rocks/big',
-                                         'terminusdb:///schema#Rocks/medium',
-                                         'terminusdb:///schema#Rocks/small']}}),
+    Result =
+    success(
+        json{'@type':'terminusdb:///schema#EnumSet',
+             'terminusdb:///schema#enum':
+             json{'@container':"@set",
+                  '@value':[json{'@id':'terminusdb:///schema#Rocks/big',
+                                 '@type':"@id"},
+                            json{'@id':'terminusdb:///schema#Rocks/medium',
+                                 '@type':"@id"},
+                            json{'@id':'terminusdb:///schema#Rocks/small',
+                                 '@type':"@id"}]}}),
     Type1 = 'terminusdb:///schema#EnumSet'.
 
 
