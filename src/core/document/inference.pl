@@ -54,7 +54,7 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     class_frame(Database, Type, false, Frame),
     check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures).
 
-no_captures(captures(C,[],C)).
+no_captures(captures(C,T-T,C)).
 
 check_frame(Frame,_Database,_Prefixes,Enum_Value,Type,Annotated,Captures),
 is_dict(Frame),
@@ -106,23 +106,22 @@ promote_result_list(List, Promoted) :-
         Promoted = witness(Witnesses)
     ).
 
-process_choices([],_Database,_Prefixes,Result,Result,captures(In,[],In)).
-process_choices([_|_],_Database,_Prefixes,witness(Witness),witness(Witness),captures(In,[],In)).
+process_choices([],_Database,_Prefixes,Result,Result,captures(In,T-T,In)).
+process_choices([_|_],_Database,_Prefixes,witness(Witness),witness(Witness),captures(In,T-T,In)).
 process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated,Captures) :-
-    Captures = captures(In,Dep,Out),
+    Captures = captures(In,DepH-DepT,Out),
     findall(
-        Key-Result-captures(In,Dep0,Out0),
+        Key-Result-captures(In,DepH-DepT0,Out0),
         (   get_dict(Key,Choice,Type),
             get_dict(Key,Dictionary,Value),
-            check_type(Database,Prefixes,Value,Type,Result,captures(In,Dep0,Out0))
+            check_type(Database,Prefixes,Value,Type,Result,captures(In,DepH-DepT0,Out0))
         ),
         Results),
-    (   Results = [Key-Result-captures(_,Dep1,C1)]
+    (   Results = [Key-Result-captures(_,_-DepT0,C1)]
     ->  (   Result = success(D)
         ->  put_dict(Key,Dictionary,D,OutDict),
-            Capture1 = captures(C1,Dep2,Out),
-            process_choices(Choices,Database,Prefixes,success(OutDict),Annotated,Capture1),
-            append(Dep1,Dep2,Dep)
+            Capture1 = captures(C1,DepT0-DepT,Out),
+            process_choices(Choices,Database,Prefixes,success(OutDict),Annotated,Capture1)
         ;   Result = witness(D)
         ->  no_captures(Captures),
             dict_pairs(Witness, json, [Key-D]),
@@ -141,11 +140,10 @@ process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated
                      document : Dictionary})
     ).
 
-check_type_pairs([],_,_,Dictionary,Dictionary,captures(In,[],In)).
-check_type_pairs([Key-Range|Pairs],Database,Prefixes,Dictionary,Annotated,captures(In,Dep,Out)) :-
-    check_type_pair(Key,Range,Database,Prefixes,Dictionary,Dictionary0,captures(In,Dep0,Middle)),
-    check_type_pairs(Pairs,Database,Prefixes,Dictionary0,Annotated,captures(Middle,Dep1,Out)),
-    append(Dep0,Dep1,Dep).
+check_type_pairs([],_,_,Dictionary,Dictionary,captures(In,T-T,In)).
+check_type_pairs([Key-Range|Pairs],Database,Prefixes,Dictionary,Annotated,captures(In,DepH-DepT,Out)) :-
+    check_type_pair(Key,Range,Database,Prefixes,Dictionary,Dictionary0,captures(In,DepH-DepM,Middle)),
+    check_type_pairs(Pairs,Database,Prefixes,Dictionary0,Annotated,captures(Middle,DepM-DepT,Out)).
 
 check_type_pair(_Key,_Range,_Database,_Prefixes,witness(Failure),Annotated,Captures) =>
     no_captures(Captures),
@@ -225,15 +223,14 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
     % Note: witness here should really have more context given.
     (   get_dict(Key,Dictionary,Values)
     ->  (   is_list(Values)
-        ->  Captures = captures(In,Dep,Out),
+        ->  Captures = captures(In,DepH-DepT,Out),
             mapm(
                 {Database,Prefixes,Type}/
-                [Value,Exp,Dep0,In0,Out0]>>(
-                    Capture0 = captures(In0,Dep0,Out0),
+                [Value,Exp,DepH0-In0,DepT0-Out0]>>(
+                    Capture0 = captures(In0,DepH0-DepT0,Out0),
                     check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
                 ),
-                Values,Expanded,Dep_List,In,Out),
-            append(Dep_List,Dep),
+                Values,Expanded,DepH-In,DepT-Out),
             promote_result_list(Expanded,Result_List),
             (   Result_List = witness(Witness_Value)
             ->  dict_pairs(Witness, json, [Key-Witness_Value]),
@@ -279,15 +276,14 @@ _{ '@type' : Collection, '@class' : Type } :< Range,
 member(Collection, ['http://terminusdb.com/schema/sys#Array',
                     'http://terminusdb.com/schema/sys#List']) =>
     (   get_dict(Key,Dictionary,Values)
-    ->  Captures = captures(In,Dep,Out),
+    ->  Captures = captures(In,DepH-DepT,Out),
         mapm(
             {Database,Prefixes,Type}/
-            [Value,Exp,Dep0,In0,Out0]>>(
-                Capture0 = captures(In0,Dep0,Out0),
+            [Value,Exp,DepH0-In0,DepT0-Out0]>>(
+                Capture0 = captures(In0,DepH0-DepT0,Out0),
                 check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
             ),
-            Values,Expanded,Dep_List,In,Out),
-        append(Dep_List,Dep),
+            Values,Expanded,DepH-In,DepT-Out),
         promote_result_list(Expanded,Result_List),
         (   Result_List = witness(_)
         ->  Annotated = Result_List
@@ -319,12 +315,12 @@ is_dict(Type) =>
     get_dict('@id',Type,Type_Id),
     check_frame(Type,Database,Prefixes,Value,Type_Id,Annotated,Captures).
 
-check_value_type(_Database,_Prefixes,Value,_Type,Annotated,captures(Capture_In,Dep,Capture_Out)),
+check_value_type(_Database,_Prefixes,Value,_Type,Annotated,captures(Capture_In,Dep-DepT,Capture_Out)),
 is_dict(Value),
 get_dict('@ref', Value, Ref) =>
     capture_ref(Capture_In, Ref, Capture_Var, Capture_Out),
     put_dict(_{'@id' : Capture_Var, '@type': "@id"},Value, Result),
-    Dep = [Capture_Var],
+    Dep = [Capture_Var|DepT],
     Annotated = success(Result).
 check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
@@ -398,15 +394,15 @@ candidate_subsumed(Database, Super, Candidate, Dictionary) =>
 infer_type(Database, Prefixes, Dictionary, Type, Annotated) :-
     empty_assoc(In),
     infer_type(Database, Prefixes, Dictionary, Type, Annotated,
-               captures(In,_Dep,_Out)).
+               captures(In,_H-_T,_Out)).
 
 infer_type(Database, Prefixes, Dictionary, Type, Annotated, Captures) :-
     infer_type(Database, Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
                Type, Annotated, Captures).
 
-infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,Dep,Out)) :-
+infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,DepH-DepT,Out)) :-
     infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated0,
-                        captures(In,Dep,Middle)),
+                        captures(In,DepH-DepT,Middle)),
     (   success(Dict) = Annotated0
     ->  update_id_field(Dict,Prefixes,Result),
         update_captures(Result,Middle,Out),
@@ -430,16 +426,16 @@ get_dict('@type', Dictionary, Type) =>
                                   'ascribed_type' : Type_Ex,
                                   'required_type' : Super})
     ).
-infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated,captures(In,Dep,Out)) =>
+infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated,captures(In,DepH-DepT,Out)) =>
     expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
-    findall(Candidate-Annotated0-captures(In,Dep0,Out0),
-            (   Captures0 = captures(In,Dep0,Out0),
+    findall(Candidate-Annotated0-captures(In,DepH-DepT0,Out0),
+            (   Captures0 = captures(In,DepH-DepT0,Out0),
                 candidate_subsumed(Database, Super, Candidate, Dictionary_Expanded),
                 check_type(Database,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0)
             ),
             Results),
     exclude([_-witness(_)-_]>>true, Results, Successes),
-    (   Successes = [Type-success(Annotated0)-captures(In,Dep,Out)]
+    (   Successes = [Type-success(Annotated0)-captures(In,_-DepT,Out)]
     ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
         Annotated = success(Annotated1)
     ;   Successes = []
@@ -837,7 +833,7 @@ test(capture_ref,
 
     empty_assoc(In),
     database_prefixes(Database,Prefixes),
-    infer_type(Database,Prefixes,Document0,Type0,success(Result0),captures(In,[],Out)),
+    infer_type(Database,Prefixes,Document0,Type0,success(Result0),captures(In,[]-[],Out)),
     assoc_to_list(Out,["Id_Tom"-Tom]),
     Type0 = 'terminusdb:///schema#Person',
     Result0 = json{ '@id': Tom1,
@@ -859,8 +855,9 @@ test(capture_ref,
           surname: "Lewis",
           rival: json{'@ref': "Id_Tom"} },
 
-    infer_type(Database,Prefixes,Document1,Type1,success(Result1),captures(Out,Dep2,Out)),
-    Dep2 = [Tom2],
+    infer_type(Database,Prefixes,Document1,Type1,success(Result1),captures(Out,Dep2H-Dep2T,Out)),
+    Dep2T = [],
+    Dep2H = [Tom2],
     Tom2 == Tom,
     Type1 = 'terminusdb:///schema#Person',
     Result1 = json{ '@id':_,
