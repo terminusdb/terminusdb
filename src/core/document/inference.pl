@@ -86,10 +86,6 @@ expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value_Ex|Expanded_Pai
     ),
     expand_dictionary_pairs(Pairs,Prefixes,Expanded_Pairs).
 
-expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value|Expanded_Pairs]) :-
-    prefix_expand_schema(Key, Prefixes, Key_Ex),
-    expand_dictionary_pairs(Pairs,Prefixes,Expanded_Pairs).
-
 expand_dictionary_keys(Dictionary, Prefixes, Expanded) :-
     dict_pairs(Dictionary, json, Pairs),
     expand_dictionary_pairs(Pairs,Prefixes,Expanded_Pairs),
@@ -184,21 +180,35 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>
+    % Note: witness here should really have more context given.
     (   get_dict(Key,Dictionary,Values)
-    ->  maplist(
-            {Database,Prefixes,Type}/
-            [Value,Exp]>>check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp),
-            Values,Expanded),
-        promote_result_list(Expanded,Result_List),
-        (   Result_List = witness(_)
-        ->  Annotated = Result_List
-        ;   Result_List = success(List),
-            put_dict(Key,Dictionary,
-                     json{ '@container' : "@set",
-                           '@value' : List },
-                     Annotated_Dict),
-            success(Annotated_Dict) = Annotated)
-    ;   success(Dictionary) = Annotated
+    ->  (   is_list(Values)
+        ->  maplist(
+                {Database,Prefixes,Type}/
+                [Value,Exp]>>check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp),
+                Values,Expanded),
+            promote_result_list(Expanded,Result_List),
+            (   Result_List = witness(_)
+            ->  Annotated = Result_List
+            ;   Result_List = success(List),
+                put_dict(Key,Dictionary,
+                         json{ '@container' : "@set",
+                               '@value' : List },
+                         Annotated_Dict),
+                success(Annotated_Dict) = Annotated
+            )
+        ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result),
+            (   Result = witness(_)
+            ->  Annotated = Result
+            ;   Result = success(Term),
+                put_dict(Key,Dictionary,
+                         json{ '@container' : "@set",
+                               '@value' : [Term] },
+                         Annotated_Dict),
+                success(Annotated_Dict) = Annotated
+            )
+        )
+        ;   success(Dictionary) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< Range =>
@@ -805,13 +815,22 @@ test(system_capability,
      ]) :-
 
     open_descriptor(system_descriptor{},System_Database),
-
     Document = json{'@id':"Capability/server_access",
                     '@type':"Capability",
                     role:"Role/admin",
                     scope:"Organization/admin"},
-
+    !,
     infer_type(System_Database,Document,Type,Result),
-    writeq(Result).
+    Type = 'http://terminusdb.com/schema/system#Capability',
+    Result = success(
+                 json{'@id':'terminusdb://system/data/Capability/server_access',
+                      '@type':'http://terminusdb.com/schema/system#Capability',
+                      'http://terminusdb.com/schema/system#role':
+                      json{'@container':"@set",
+                           '@value':[json{'@id':'terminusdb://system/data/Role/admin',
+                                          '@type':"@id"}]},
+                 'http://terminusdb.com/schema/system#scope':
+                 json{'@id':'terminusdb://system/data/Organization/admin',
+                      '@type':"@id"}}).
 
 :- end_tests(infer).
