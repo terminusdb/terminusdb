@@ -582,8 +582,14 @@ json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     database_prefixes(DB,Context),
     json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies, Captures_Out).
 
+:- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
+    %infer_type(DB,Context,JSON,_,Result),
+    %(   Result = witness(Witness)
+    %->  throw(type_error(Witness))
+    %;   Result = success(Elaborated)
+    %),
     do_or_die(
         json_assign_ids(DB,Context,Elaborated),
         error(unable_to_assign_ids)).
@@ -2648,30 +2654,48 @@ type_descriptor_sub_frame(class(C), DB, Prefixes, Compress_Ids, Frame) :-
     ).
 type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Compress_Ids, Class_Comp) :-
     compress_schema_uri(Compress_Ids,C, Prefixes, Class_Comp).
-type_descriptor_sub_frame(optional(C), DB, Prefixes, Compress_Ids, json{ '@type' : "Optional",
+type_descriptor_sub_frame(optional(C), DB, Prefixes, Compress_Ids, json{ '@type' : Optional,
                                                                          '@class' : Frame }) :-
+    (   Compress_Ids = true
+    ->  Optional = 'Optional'
+    ;   global_prefix_expand(sys:'Optional', Optional)),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(set(C), DB, Prefixes, Compress_Ids, json{ '@type' : "Set",
+type_descriptor_sub_frame(set(C), DB, Prefixes, Compress_Ids, json{ '@type' : Set,
                                                                     '@class' : Frame }) :-
+    (   Compress_Ids = true
+    ->  Set = 'Set'
+    ;   global_prefix_expand(sys:'Set', Set)),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(array(C,Dim), DB, Prefixes, Compress_Ids, json{ '@type' : "Array",
+type_descriptor_sub_frame(array(C,Dim), DB, Prefixes, Compress_Ids, json{ '@type' : Array,
                                                                           '@dimensions' : Dim,
                                                                           '@class' : Frame }) :-
+    (   Compress_Ids = true
+    ->  Array = 'Array'
+    ;   global_prefix_expand(sys:'Array', Array)),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(list(C), DB, Prefixes, Compress_Ids, json{ '@type' : "List",
+type_descriptor_sub_frame(list(C), DB, Prefixes, Compress_Ids, json{ '@type' : List,
                                                                      '@class' : Frame }) :-
+    (   Compress_Ids = true
+    ->  List = 'List'
+    ;   global_prefix_expand(sys:'List', List)),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, Compress_Ids, json{ '@type' : "Enum",
+type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, Compress_Ids, json{ '@type' : Enum,
                                                                            '@id' : Class_Comp,
                                                                            '@values' : Enum_List}) :-
+    (   Compress_Ids = true
+    ->  Enum = 'Enum'
+    ;   global_prefix_expand(sys:'Enum', Enum)),
     compress_schema_uri(Compress_Ids, C, Prefixes, Class_Comp),
-    maplist({C}/[V,Enum]>>(
-                enum_value(C,Enum,V)
-            ), List, Enum_List).
+    (   Compress_Ids = true
+    ->  maplist({C}/[V,Enum]>>(
+                    enum_value(C,Enum,V)
+                ), List, Enum_List)
+    ;   List = Enum_List
+    ).
 
 all_class_frames(Transaction, Frames) :-
     (   is_transaction(Transaction)

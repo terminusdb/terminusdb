@@ -1,5 +1,6 @@
 :- module('document/inference', [
               infer_type/4,
+              infer_type/5,
               check_type/5
           ]).
 
@@ -13,6 +14,7 @@
 :- use_module(core('document/schema')).
 :- use_module(core('document/json')).
 :- use_module(core(util)).
+:- use_module(core(triple)).
 
 /*
 
@@ -166,19 +168,17 @@ atom(Type) =>
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
     (   get_dict(Key,Dictionary,Value)
-    ->  check_value_type(Database, Prefixes, Value, Type_Ex, Annotated)
+    ->  check_value_type(Database, Prefixes, Value, Type, Annotated)
     ;   Annotated = witness(json{ '@type' : missing_property,
                                   '@property' : Key})
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
-_{ '@type' : "Set", '@class' : Type} :< Range =>
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+_{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>
     (   get_dict(Key,Dictionary,Values)
     ->  maplist(
-            {Database,Prefixes,Type_Ex}/
-            [Value,Exp]>>check_value_type(Database,Prefixes,Value,Type_Ex,Exp),
+            {Database,Prefixes,Type}/
+            [Value,Exp]>>check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp),
             Values,Expanded),
         promote_result_list(Expanded,Result_List),
         (   Result_List = witness(_)
@@ -186,17 +186,15 @@ _{ '@type' : "Set", '@class' : Type} :< Range =>
         ;   Result_List = success(List),
             put_dict(Key,Dictionary,
                      json{ '@container' : "@set",
-                           '@type' : Type_Ex,
                            '@value' : List },
                      Annotated_Dict),
             success(Annotated_Dict) = Annotated)
     ;   success(Dictionary) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
-_{ '@type' : "Optional", '@class' : Class } :< Range =>
-    prefix_expand_schema(Class, Prefixes, Class_Ex),
+_{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< Range =>
     (   get_dict(Key, Dictionary, Value)
-    ->  check_value_type(Database, Prefixes, Value, Class_Ex, Annotated_Value),
+    ->  check_simple_or_compound_type(Database, Prefixes, Value, Class, Annotated_Value),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -208,20 +206,20 @@ _{ '@type' : "Optional", '@class' : Class } :< Range =>
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated),
 _{ '@type' : Collection, '@class' : Type } :< Range,
-member(Collection, ["Array", "List"]) =>
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+member(Collection, ['http://terminusdb.com/schema/sys#Array',
+                    'http://terminusdb.com/schema/sys#List']) =>
     get_dict(Key,Dictionary,Values),
     maplist(
-        {Database,Prefixes,Type_Ex}/
-        [Value,Exp]>>check_value_type(Database,Prefixes,Value,Type_Ex,Exp),
+        {Database,Prefixes,Type}/
+        [Value,Exp]>>check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp),
         Values,Expanded),
     promote_result_list(Expanded,Result_List),
     (   Result_List = witness(_)
     ->  Annotated = Result_List
     ;   Result_List = success(List)
-    ->  (   Collection = "Array"
+    ->  (   Collection = 'http://terminusdb.com/schema/sys#Array'
         ->  Container = "@array"
-        ;   Collection = "List"
+        ;   Collection = 'http://terminusdb.com/schema/sys#List'
         ->  Container = "@list"
         ),
         put_dict(Key,Dictionary,
@@ -231,6 +229,15 @@ member(Collection, ["Array", "List"]) =>
                  Annotated_Dictionary),
         Annotated = success(Annotated_Dictionary)
     ).
+
+check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated),
+atom(Type) =>
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    check_value_type(Database,Prefixes,Value,Type_Ex,Annotated).
+check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated),
+is_dict(Type) =>
+    get_dict('@id',Type,Type_Id),
+    check_frame(Type,Database,Prefixes,Value,Type_Id,Annotated).
 
 check_value_type(_Database,_Prefixes,Value,_Type,Annotated),
 is_dict(Value),
@@ -279,36 +286,57 @@ check_type_pairs([Key-Range|Pairs],Database,Prefixes,Dictionary,Annotated) :-
     check_type_pair(Key,Range,Database,Prefixes,Dictionary,Dictionary0),
     check_type_pairs(Pairs,Database,Prefixes,Dictionary0,Annotated).
 
-candidate_subsumed(Database,'http://terminusdb.com/schema/sys#Top', Candidate) =>
+:- table schema_class_has_property/3 as private.
+schema_class_has_property(Schema, Class,Property) :-
+    xrdf(Schema,Class,Property,_).
+schema_class_has_property(Schema, Class, Property) :-
+    xrdf(Schema,Class,sys:inherits,Parent),
+    schema_class_has_property(Schema, Parent, Property).
+schema_class_has_property(Schema, Class, Property) :-
+    xrdf(Schema,Class,sys:oneOf,OneOf),
+    xrdf(Schema,OneOf,Property,_).
+
+schema_matches_shape(Schema,Candidate,Dictionary) :-
+    dict_keys(Dictionary,Keys),
+    exclude(has_at,Keys,Properties),
+    maplist({Schema,Candidate}/[Prop]>>schema_class_has_property(Schema,Candidate,Prop),
+            Properties).
+
+matches_shape(Database,Candidate,Dictionary) :-
+    database_schema(Database,Schema),
+    schema_matches_shape(Schema,Candidate,Dictionary).
+
+candidate_subsumed(Database,'http://terminusdb.com/schema/sys#Top', Candidate, Dictionary) =>
+    matches_shape(Database, Candidate, Dictionary),
     is_simple_class(Database, Candidate),
     \+ is_subdocument(Database, Candidate),
     \+ is_abstract(Database, Candidate).
-candidate_subsumed(Database, Super, Candidate) =>
+candidate_subsumed(Database, Super, Candidate, Dictionary) =>
+    matches_shape(Database, Candidate, Dictionary),
     class_subsumed(Database, Super, Candidate).
 
-infer_type(Database, Super, Dictionary, Type, Annotated) :-
-    database_prefixes(Database, DB_Prefixes),
-    default_prefixes(Default_Prefixes),
-    Prefixes = (Default_Prefixes.put(DB_Prefixes)),
-    infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated).
+infer_type(Database, Prefixes, Dictionary, Type, Annotated) :-
+    infer_type(Database, Prefixes,
+               'http://terminusdb.com/schema/sys#Top', Dictionary, Type, Annotated).
 
 infer_type(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated),
 get_dict('@type', Dictionary, Type) =>
-    (   (   class_subsumed(Database, Super, Type)
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    (   (   class_subsumed(Database, Super, Type_Ex)
         ;   Super = 'http://terminusdb.com/schema/sys#Top'
         )
     ->  expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
-        check_type(Database,Prefixes,Dictionary_Expanded,Type,Annotated),
-        Inferred_Type = Type
+        check_type(Database,Prefixes,Dictionary_Expanded,Type_Ex,Annotated),
+        Inferred_Type = Type_Ex
     ;   Annotated = witness(json{ '@type' : ascribed_type_not_subsumed,
                                   'document' : Dictionary,
-                                  'ascribed_type' : Type,
+                                  'ascribed_type' : Type_Ex,
                                   'required_type' : Super})
     ).
 infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated) =>
     expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
     findall(Candidate-Annotated0,
-            (   candidate_subsumed(Database, Super, Candidate),
+            (   candidate_subsumed(Database, Super, Candidate, Dictionary_Expanded),
                 check_type(Database,Prefixes,Dictionary_Expanded,Candidate,Annotated0)
             ),
             Results),
@@ -333,7 +361,10 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated) =>
     ).
 
 infer_type(Database, Dictionary, Type, Annotated) :-
-    infer_type(Database, 'http://terminusdb.com/schema/sys#Top', Dictionary, Type, Annotated).
+    database_prefixes(Database, DB_Prefixes),
+    default_prefixes(Default_Prefixes),
+    Prefixes = (Default_Prefixes.put(DB_Prefixes)),
+    infer_type(Database, Prefixes, Dictionary, Type, Annotated).
 
 :- begin_tests(infer).
 :- use_module(core(util/test_utils)).
@@ -427,6 +458,11 @@ multi('
   "surname" : "xsd:string",
   "rival" : { "@type" : "Optional", "@class" : "Person" }
 }
+
+{ "@type" : "Class",
+  "@id" : "EnumSet",
+  "enum" : { "@type" : "Set", "@class" : "Rocks"}
+}
 ').
 
 test(infer_multi_success,
@@ -445,6 +481,7 @@ test(infer_multi_success,
     },
     open_descriptor(Desc,Database),
     infer_type(Database,Document,Type,success(Annotated)),
+
     Type = 'terminusdb:///schema#Multi',
     Annotated = json{'@type':'terminusdb:///schema#Multi',
                      'terminusdb:///schema#mandatory_decimal':
@@ -455,7 +492,6 @@ test(infer_multi_success,
                           '@value':"asdf"},
                      'terminusdb:///schema#set_decimal':
                      json{'@container':"@set",
-                          '@type':'http://www.w3.org/2001/XMLSchema#decimal',
                           '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':1},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
@@ -487,7 +523,6 @@ test(infer_multisub_success,
                           '@value':30},
                      'terminusdb:///schema#set_decimal':
                      json{'@container':"@set",
-                          '@type':'http://www.w3.org/2001/XMLSchema#decimal',
                           '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':1},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
@@ -588,10 +623,19 @@ test(planet_choice,
         rocks : "big",
         gas : "light"
     },
-
-    infer_type(Database,Document2,_,
-               witness(json{'@type':no_unique_type_for_document,
-                            document:json{gas:"light",rocks:"big"}})),
+    infer_type(Database,Document2,_,Result2),
+    Result2 =
+    witness(
+        json{'@type':no_unique_type_for_document,
+             document:json{gas:"light",rocks:"big"},
+             reason:
+             json{'@type':choice_has_too_many_answers,
+                  choice:
+                  tagged_union{
+                      'terminusdb:///schema#gas':'terminusdb:///schema#Gas',
+                      'terminusdb:///schema#rocks':'terminusdb:///schema#Rocks'},
+                  document:json{'terminusdb:///schema#gas':"light",
+                                'terminusdb:///schema#rocks':"big"}}}),
 
     Document3 =
     json{
@@ -599,7 +643,14 @@ test(planet_choice,
     },
 
     infer_type(Database,Document3,_,
-               witness(json{'@type':no_unique_type_for_document,document:json{rocks:"not a rock"}})),
+               Result3),
+    Result3 =
+    witness(json{'@type':no_unique_type_for_document,
+                 document:json{rocks:"not a rock"},
+                 reason:json{'terminusdb:///schema#rocks':
+                             json{'@type':not_a_valid_enum,
+                                  enum:'terminusdb:///schema#Rocks',
+                                  value:"not a rock"}}}),
 
     Document4 =
     json{
@@ -629,7 +680,8 @@ test(this_or_that,
     infer_type(Database,Document,Type,success(Annotated)),
     Type = 'terminusdb:///schema#ThisOrThat',
 
-    Annotated = json{'@type':'terminusdb:///schema#ThisOrThat','terminusdb:///schema#this':'terminusdb:///schema#Rocks/big'}.
+    Annotated = json{'@type':'terminusdb:///schema#ThisOrThat',
+                     'terminusdb:///schema#this':'terminusdb:///schema#Rocks/big'}.
 
 test(unit,
      [setup((setup_temp_store(State),
@@ -666,38 +718,63 @@ test(capture_ref,
         forename : "Tom",
         surname : "Sawyer"
     },
-    infer_type(Database,Document0,"Person",success(Result)),
-    Result = json{ '@capture':"Id_Tom",
-				   '@type':"Person",
-				   'terminusdb:///schema#forename':
-                   json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-						 '@value':"Tom"
-					   },
-				   'terminusdb:///schema#surname':
-                   json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-						 '@value':"Sawyer"
-					   }
-				 },
+    infer_type(Database,Document0,Type0,success(Result0)),
+    Type0 = 'terminusdb:///schema#Person',
+    Result0 = json{ '@capture':"Id_Tom",
+				    '@type':"Person",
+				    'terminusdb:///schema#forename':
+                    json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						  '@value':"Tom"
+					    },
+				    'terminusdb:///schema#surname':
+                    json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						  '@value':"Sawyer"
+					    }
+				  },
     Document1 =
     json{ '@type': "Person",
           forename: "Jerry",
           surname: "Lewis",
           rival: json{'@ref': "Id_Tom"} },
 
-    infer_type(Database,Document1,"Person",
-               success(json{ '@type':"Person",
-	                         'terminusdb:///schema#forename':
-                             json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-						           '@value':"Jerry"
-						         },
-	                         'terminusdb:///schema#rival':
-                             json{ '@ref':"Id_Tom",
-						           '@type':"@id"
-					             },
-	                         'terminusdb:///schema#surname':
-                             json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-						           '@value':"Lewis"
-						         }
-	                       })).
+    infer_type(Database,Document1,Type1,success(Result1)),
+    Type1 = 'terminusdb:///schema#Person',
+    Result1 = json{ '@type':"Person",
+	                'terminusdb:///schema#forename':
+                    json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						  '@value':"Jerry"
+						},
+	                'terminusdb:///schema#rival':
+                    json{ '@ref':"Id_Tom",
+						  '@type':"@id"
+					    },
+	                'terminusdb:///schema#surname':
+                    json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+						  '@value':"Lewis"
+						}
+	              }.
+
+test(infer_enum_set,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+
+    Document1 = json{
+        enum : ["big", "medium", "small"]
+    },
+
+    infer_type(Database,Document1,Type1,Result),
+    Result = success(json{'@type':'terminusdb:///schema#EnumSet',
+                          'terminusdb:///schema#enum':
+                          json{'@container':"@set",
+                               '@value':['terminusdb:///schema#Rocks/big',
+                                         'terminusdb:///schema#Rocks/medium',
+                                         'terminusdb:///schema#Rocks/small']}}),
+    Type1 = 'terminusdb:///schema#EnumSet'.
+
 
 :- end_tests(infer).
