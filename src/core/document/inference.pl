@@ -111,7 +111,7 @@ process_choices([_|_],_Database,_Prefixes,witness(Witness),witness(Witness),capt
 process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated,Captures) :-
     Captures = captures(In,Dep,Out),
     findall(
-        Key-Result-capture(In,Dep0,Out0),
+        Key-Result-captures(In,Dep0,Out0),
         (   get_dict(Key,Choice,Type),
             get_dict(Key,Dictionary,Value),
             check_type(Database,Prefixes,Value,Type,Result,captures(In,Dep0,Out0))
@@ -124,15 +124,18 @@ process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated
             process_choices(Choices,Database,Prefixes,success(OutDict),Annotated,Capture1),
             append(Dep1,Dep2,Dep)
         ;   Result = witness(D)
-        ->  dict_pairs(Witness, json, [Key-D]),
+        ->  no_captures(Captures),
+            dict_pairs(Witness, json, [Key-D]),
             Annotated = witness(Witness)
         )
     ;   Results = []
-    ->  Annotated =
+    ->  no_captures(Captures),
+        Annotated =
         witness(json{'@type' : no_choice_is_cardinality_one,
                      choice : Choice,
                      document : Dictionary})
-    ;   Annotated =
+    ;   no_captures(Captures),
+        Annotated =
         witness(json{'@type' : choice_has_too_many_answers,
                      choice : Choice,
                      document : Dictionary})
@@ -709,7 +712,8 @@ test(planet_choice,
     },
     infer_type(Database,Document,Type,success(Annotated0)),
     Type = 'terminusdb:///schema#Planet',
-    Annotated0 = json{'@type':'terminusdb:///schema#Planet',
+    Annotated0 = json{'@id':_,
+                      '@type':'terminusdb:///schema#Planet',
                       'terminusdb:///schema#rocks':
                       json{ '@type' : "@id",
                             '@id' : 'terminusdb:///schema#Rocks/big'
@@ -720,7 +724,8 @@ test(planet_choice,
     },
     infer_type(Database,Document1,Type1,success(Annotated1)),
     Type1 = 'terminusdb:///schema#Planet',
-    Annotated1 = json{'@type':'terminusdb:///schema#Planet',
+    Annotated1 = json{'@id':_,
+                      '@type':'terminusdb:///schema#Planet',
                       'terminusdb:///schema#gas':
                       json{'@type' : "@id",
                            '@id' : 'terminusdb:///schema#Gas/light'}},
@@ -787,7 +792,8 @@ test(this_or_that,
     infer_type(Database,Document,Type,success(Annotated)),
     Type = 'terminusdb:///schema#ThisOrThat',
 
-    Annotated = json{'@type':'terminusdb:///schema#ThisOrThat',
+    Annotated = json{'@id':_,
+                     '@type':'terminusdb:///schema#ThisOrThat',
                      'terminusdb:///schema#this':
                      json{ '@id' : 'terminusdb:///schema#Rocks/big',
                            '@type' : "@id"}}.
@@ -806,7 +812,8 @@ test(unit,
         unit : []
     },
     infer_type(Database,Document,Type,
-               success(json{'@type':'terminusdb:///schema#UnitTest',
+               success(json{'@id':_,
+                            '@type':'terminusdb:///schema#UnitTest',
                             'terminusdb:///schema#unit':[]})),
     Type = 'terminusdb:///schema#UnitTest'.
 
@@ -827,9 +834,14 @@ test(capture_ref,
         forename : "Tom",
         surname : "Sawyer"
     },
-    infer_type(Database,Document0,Type0,success(Result0)),
+
+    empty_assoc(In),
+    database_prefixes(Database,Prefixes),
+    infer_type(Database,Prefixes,Document0,Type0,success(Result0),captures(In,[],Out)),
+    assoc_to_list(Out,["Id_Tom"-Tom]),
     Type0 = 'terminusdb:///schema#Person',
-    Result0 = json{ '@capture':"Id_Tom",
+    Result0 = json{ '@id': Tom1,
+                    '@capture':"Id_Tom",
 				    '@type':'terminusdb:///schema#Person',
 				    'terminusdb:///schema#forename':
                     json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
@@ -840,28 +852,34 @@ test(capture_ref,
 						  '@value':"Sawyer"
 					    }
 				  },
+    Tom1 == Tom,
     Document1 =
     json{ '@type': "Person",
           forename: "Jerry",
           surname: "Lewis",
           rival: json{'@ref': "Id_Tom"} },
 
-    infer_type(Database,Document1,Type1,success(Result1)),
+    infer_type(Database,Prefixes,Document1,Type1,success(Result1),captures(Out,Dep2,Out)),
+    Dep2 = [Tom2],
+    Tom2 == Tom,
     Type1 = 'terminusdb:///schema#Person',
-    Result1 = json{ '@type':'terminusdb:///schema#Person',
+    Result1 = json{ '@id':_,
+                    '@type':'terminusdb:///schema#Person',
 	                'terminusdb:///schema#forename':
                     json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 						  '@value':"Jerry"
 						},
 	                'terminusdb:///schema#rival':
                     json{ '@ref':"Id_Tom",
+                          '@id' : Tom3,
 						  '@type':"@id"
 					    },
 	                'terminusdb:///schema#surname':
                     json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 						  '@value':"Lewis"
 						}
-	              }.
+	              },
+    Tom3 == Tom.
 
 test(infer_enum_set,
      [setup((setup_temp_store(State),
@@ -879,7 +897,8 @@ test(infer_enum_set,
     infer_type(Database,Document1,Type1,Result),
     Result =
     success(
-        json{'@type':'terminusdb:///schema#EnumSet',
+        json{'@id': _,
+             '@type':'terminusdb:///schema#EnumSet',
              'terminusdb:///schema#enum':
              json{'@container':"@set",
                   '@value':[json{'@id':'terminusdb:///schema#Rocks/big',
