@@ -587,14 +587,12 @@ json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
 
 :- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out) :-
-    json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
-    /*infer_type(DB,Context,JSON,_,Result),
+    %json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
+    infer_type(DB,Context,JSON,_,Result,captures(Captures_In,Dependencies-[],Captures_Out)),
     (   Result = witness(Witness)
     ->  throw(error(schema_check_failure([Witness]),_))
     ;   Result = success(Elaborated)
     ),
-    Dependencies = [],
-    Captures_In = Captures_Out,*/
     do_or_die(
         json_assign_ids(DB,Context,Elaborated),
         error(unable_to_assign_ids)).
@@ -3324,12 +3322,15 @@ test(id_expand,
                               '@type' : 'Employee',
                               name : "jane",
                               staff_number : "12",
-                              birthdate : "1979-12-28"
-                          }
+                              birthdate : "1979-12-28",
+                              tasks: []
+                          },
+                   tasks : []
                },
 
     open_descriptor(Desc, DB),
     json_elaborate(DB, Document, Elaborated),
+
     Elaborated =
     json{
         '@id':'http://i/Employee/gavin',
@@ -3347,14 +3348,22 @@ test(id_expand,
 						                          },
 			                  'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 							                                '@value':"12"
-							                              }
+							                              },
+                              'http://s/tasks':json{ '@container':"@list",
+									                 '@type':'http://s/Task',
+									                 '@value':[]
+                                                   }
 			                },
         'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 			                  '@value':"gavin"
 			                },
         'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
 				                      '@value':"13"
-				                    }
+				                    },
+        'http://s/tasks':json{ '@container':"@list",
+							   '@type':'http://s/Task',
+							   '@value':[]
+                             }
     }.
 
 test(triple_convert,
@@ -3380,15 +3389,16 @@ test(triple_convert,
                               '@type' : 'Employee',
                               name : "jane",
                               staff_number : "12",
-                              birthdate : "1979-12-28"
-                          }
+                              birthdate : "1979-12-28",
+                              tasks: []
+                          },
+                   tasks: []
                },
 
     open_descriptor(Desc, DB),
     json_triples(DB, Document, Triples),
 
     sort(Triples, Sorted),
-
     Sorted = [
         t('http://i/Employee/gavin',
           'http://s/birthdate',
@@ -3401,6 +3411,9 @@ test(triple_convert,
           'http://s/staff_number',
           "13"^^'http://www.w3.org/2001/XMLSchema#string'),
         t('http://i/Employee/gavin',
+          'http://s/tasks',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+        t('http://i/Employee/gavin',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://s/Employee'),
         t('http://i/Employee/jane',
@@ -3412,6 +3425,9 @@ test(triple_convert,
         t('http://i/Employee/jane',
           'http://s/staff_number',
           "12"^^'http://www.w3.org/2001/XMLSchema#string'),
+        t('http://i/Employee/jane',
+          'http://s/tasks',
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
         t('http://i/Employee/jane',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://s/Employee')
@@ -3539,7 +3555,8 @@ test(get_value,
                 '@type':'Employee',
                 birthdate:"1979-12-28",
                 name:"jane",
-                staff_number:"12"},
+                staff_number:"12",
+                tasks:[]},
 
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,Elaborated),
@@ -3549,7 +3566,10 @@ test(get_value,
     Values = [['@type']-'http://s/Employee',
               ['http://s/birthdate']-(date(1979,12,28,0)^^'http://www.w3.org/2001/XMLSchema#date'),
               ['http://s/name']-("jane"^^'http://www.w3.org/2001/XMLSchema#string'),
-              ['http://s/staff_number']-("12"^^'http://www.w3.org/2001/XMLSchema#string')].
+              ['http://s/staff_number']-("12"^^'http://www.w3.org/2001/XMLSchema#string'),
+              ['http://s/tasks','@type']-'http://s/Task',
+	          ['http://s/tasks','@value']-[]].
+
 
 schema2('
 { "@type" : "@context",
@@ -3830,26 +3850,27 @@ test(idgen_hash,
     JSON = json{'@type':'Employee',
                 birthdate:"1979-12-28",
                 name:"jane",
-                staff_number:"13"
+                staff_number:"13",
+                tasks : []
                },
 
     open_descriptor(Desc, DB),
     json_elaborate(DB, JSON, Elaborated),
 
     Elaborated =
-    json{
-        '@id':'http://i/Employee/0eda88cddbf73a4c404cfc706100e97c20cadc8ffb71669474c503bff0972e41',
-        '@type':'http://s/Employee',
-        'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
-				                   '@value':"1979-12-28"
-			                     },
-        'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-			                  '@value':"jane"
-			                },
-        'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
-				                      '@value':"13"
-				                    }
-    }.
+    json{ '@id':'http://i/Employee/0eda88cddbf73a4c404cfc706100e97c20cadc8ffb71669474c503bff0972e41',
+          '@type':'http://s/Employee',
+          'http://s/birthdate':json{ '@type':'http://www.w3.org/2001/XMLSchema#date',
+				                     '@value':"1979-12-28"
+			                       },
+          'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+			                    '@value':"jane"
+			                  },
+          'http://s/staff_number':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+				                        '@value':"13"
+				                      },
+          'http://s/tasks':json{'@container':"@list",'@type':'http://s/Task','@value':[]}
+        }.
 
 test(idgen_value_hash,
      [

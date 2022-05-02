@@ -56,24 +56,27 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
 
 no_captures(captures(C,T-T,C)).
 
+check_enum(Enum_Value,Type,Enums,Annotated),
+string(Enum_Value) =>
+    (   enum_value(Type,Enum_Value,Value),
+        memberchk(Value, Enums)
+    ->  Annotated = success(json{ '@type' : "@id", '@id' : Value})
+    ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
+                                  enum : Type,
+                                  value : Enum_Value})
+    ).
+check_enum(Enum_Value,Type,_,Annotated) =>
+    Annotated = witness(json{ '@type' : not_a_valid_enum,
+                              enum : Type,
+                              value : Enum_Value}).
+
 check_frame(Frame,_Database,_Prefixes,Enum_Value,Type,Annotated,Captures),
 is_dict(Frame),
 _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
   '@values': Enums
  } :< Frame =>
     no_captures(Captures),
-    (   string(Enum_Value)
-    ->  (   enum_value(Type,Enum_Value,Value),
-            get_dict('@values', Frame, Enums),
-            memberchk(Value, Enums)
-        ->  Annotated = success(json{ '@type' : "@id", '@id' : Value})
-        ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
-                                      enum : Type,
-                                      value : Enum_Value}))
-    ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
-                                  enum : Type,
-                                  value : Enum_Value})
-    ).
+    check_enum(Enum_Value,Type,Enums,Annotated).
 check_frame(Frame,Database,Prefixes,Value,_Type,Annotated,Captures),
 is_dict(Frame),
 get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
@@ -187,23 +190,18 @@ atom(Type) =>
                                   document : Dictionary,
                                   key : Key })
     ).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
-_{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum} :< Range =>
+check_type_pair(Key,Range,_Database,_Prefixes,success(Dictionary),Annotated,Captures),
+_{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
+   '@values' : Enums} :< Range =>
     no_captures(Captures),
     (   get_dict(Key,Dictionary,Value)
-    ->  (   check_value_type(Database, Prefixes, Value, Enum, Annotated_Value,Captures)
-        ->  (   Annotated_Value = success(Success_Value)
-            ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
-                Annotated = success(Annotated_Success)
-            ;   Annotated_Value = witness(Witness_Value)
-            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-                Annotated = witness(Witness)
-            )
-        ;   no_captures(Captures),
-            Annotated = witness(json{ '@type' : value_invalid_at_type,
-                                      document : Dictionary,
-                                      value : Value,
-                                      type : Enum })
+    ->  check_enum(Value,Enum,Enums,Annotated_Value),
+        (   Annotated_Value = success(Success_Value)
+        ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
+            Annotated = success(Annotated_Success)
+        ;   Annotated_Value = witness(Witness_Value)
+        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+            Annotated = witness(Witness)
         )
     ;   no_captures(Captures),
         Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
