@@ -585,8 +585,9 @@ test(annotated_success,
         name : "Goober"
     },
     open_descriptor(Desc,Database),
-    infer_type(Database,Document,_Type,success(Annotated)),
-    Annotated = json{'@type':'NonUnique',
+    infer_type(Database,Document,Type,success(Annotated)),
+    Type = 'terminusdb:///schema#NonUnique',
+    Annotated = json{'@type':'terminusdb:///schema#NonUnique',
                      'terminusdb:///schema#name'
                      :json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                            '@value':"Goober"}}.
