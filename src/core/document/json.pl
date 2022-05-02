@@ -52,7 +52,10 @@
               prefix_expand_schema/3,
               prefix_expand/3,
               type_context/4,
-              enum_value/3
+              enum_value/3,
+              update_id_field/3,
+              update_captures/3,
+              capture_ref/4
           ]).
 
 :- use_module(instance).
@@ -585,11 +588,13 @@ json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
 :- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
-    %infer_type(DB,Context,JSON,_,Result),
-    %(   Result = witness(Witness)
-    %->  throw(type_error(Witness))
-    %;   Result = success(Elaborated)
-    %),
+    /*infer_type(DB,Context,JSON,_,Result),
+    (   Result = witness(Witness)
+    ->  throw(error(schema_check_failure([Witness]),_))
+    ;   Result = success(Elaborated)
+    ),
+    Dependencies = [],
+    Captures_In = Captures_Out,*/
     do_or_die(
         json_assign_ids(DB,Context,Elaborated),
         error(unable_to_assign_ids)).
@@ -634,12 +639,12 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     % Insert an id. If id was part of the input document, it is
     % prefix-expanded. If not, it is kept as a variable, to be unified
     % with what it should be later on.
-    update_id(Elaborated,Context,Result),
+    update_id_field(Elaborated,Context,Result),
 
     %% do we need to capture something?
     update_captures(Result, Captures_Out_1, Captures_Out).
 
-update_id(Elaborated,Context,Result) :-
+update_id_field(Elaborated,Context,Result) :-
     (   get_dict('@value', Elaborated, _) % no id on values
     ->  Elaborated = Result
     ;   (   get_dict('@id', Elaborated, Id)
@@ -2370,6 +2375,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
     write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
     do_or_die(ground(Captures_Out),
               error(not_all_captures_ground(Captures_Out),_)).
+
 write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
     json_read_term(JSON_Stream, Dict),
     !,
