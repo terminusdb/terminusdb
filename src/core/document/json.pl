@@ -618,7 +618,7 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     (    get_dict('@type', JSON, Type)
     ->   New_JSON = JSON
     ;    (   do_or_die(
-                 get_dict('@id', JSON, Id),
+                 get_dict('@id', JSON, _Id),
                  % Note that, even though we check for @id here, we primarily
                  % expect a @type, so that is the reported error.
                  error(missing_field('@type', JSON), _)),
@@ -634,26 +634,34 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
     % Insert an id. If id was part of the input document, it is
     % prefix-expanded. If not, it is kept as a variable, to be unified
     % with what it should be later on.
+    update_id(Elaborated,Context,Result),
+
+    %% do we need to capture something?
+    update_captures(Result, Captures_Out_1, Captures_Out).
+
+update_id(Elaborated,Context,Result) :-
     (   get_dict('@value', Elaborated, _) % no id on values
-    ->  New_JSON = Result
+    ->  Elaborated = Result
     ;   (   get_dict('@id', Elaborated, Id)
         ->  prefix_expand(Id, Context, Id_Ex)
         ;   Id_Ex = _),
-
         put_dict('@id', Elaborated, Id_Ex, Result)
-    ),
+    ).
 
-    %% do we need to capture something?
-    (   get_dict('@capture', Elaborated, Capture_Group)
-    ->  do_or_die(string(Capture_Group),
-                  error(capture_is_not_a_string(Capture_Group), _)),
-        (   get_assoc(Capture_Group, Captures_Out_1, Capture_Var)
-        ->  do_or_die(var(Capture_Var),
-                      error(capture_already_bound(Capture_Group), _)),
-            Capture_Var = Id_Ex,
-            Captures_Out = Captures_Out_1
-        ;   put_assoc(Capture_Group, Captures_Out_1, Id_Ex, Captures_Out))
-    ;   Captures_Out = Captures_Out_1).
+update_captures(Elaborated,In,Out) :-
+    get_dict('@id', Elaborated, Id),
+    get_dict('@capture', Elaborated, Capture_Group),
+    !,
+    do_or_die(string(Capture_Group),
+              error(capture_is_not_a_string(Capture_Group), _)),
+    (   get_assoc(Capture_Group, In, Capture_Var)
+    ->  do_or_die(var(Capture_Var),
+                  error(capture_already_bound(Capture_Group), _)),
+        Capture_Var = Id,
+        Out = In
+    ;   put_assoc(Capture_Group, In, Id, Out)
+    ).
+update_captures(_Elaborated,Capture,Capture).
 
 json_assign_ids(DB,Context,JSON) :-
     json_assign_ids(DB,Context,JSON,[]).
