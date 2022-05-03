@@ -1970,9 +1970,11 @@ test(subsumption, [setup(setup_temp_store(State)),
 
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
+
     % Tag the dicts so we can sort them
-    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-    Orderable = [json{'Parent':'Organization'}].
+    term_variables(JSON.bindings, Vars),
+    maplist([json]>>true,Vars),
+    JSON.bindings = [json{'Parent':'Organization'}].
 
 test(substring, [
          setup((setup_temp_store(State),

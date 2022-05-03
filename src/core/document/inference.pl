@@ -10,6 +10,7 @@
 :- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(dicts)).
+:- use_module(library(assoc)).
 
 :- use_module(core(transaction)).
 :- use_module(core(query)).
@@ -443,7 +444,7 @@ get_dict('@ref', Value, Ref) =>
     Annotated = success(Result).
 check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
-    infer_type(Database, Prefixes, Type, Value, Type, Annotated, Captures).
+    infer_type(Database, Prefixes, Type, Value, _, Annotated, Captures).
 check_value_type(_Database,_Prefixes,Value,Type,_Annotated,_Captures),
 is_list(Value) =>
     throw(error(schema_check_failure(witness{ '@type' : unexpected_list,
@@ -536,7 +537,7 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,D
 infer_type_or_check(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated,Captures),
 get_dict('@type', Dictionary, Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),
-    (   (   class_subsumed(Database, Super, Type_Ex)
+    (   (   class_subsumed(Database, Type_Ex, Super)
         ;   Super = 'http://terminusdb.com/schema/sys#Top'
         )
     ->  put_dict('@type', Dictionary, Type_Ex, New_Dictionary),

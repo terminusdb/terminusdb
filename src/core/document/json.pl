@@ -66,6 +66,7 @@
 :- use_module(library(uri)).
 :- use_module(library(crypto)).
 :- use_module(library(when)).
+:- use_module(library(option)).
 
 % performance
 :- use_module(library(apply)).
