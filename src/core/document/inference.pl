@@ -233,7 +233,14 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type(Database, Prefixes, Value, Type, Annotated,Captures)
+    ->  check_value_type(Database, Prefixes, Value, Type, Annotated_Value, Captures),
+        (   Annotated_Value = success(Success_Value)
+        ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
+            Annotated = success(Annotated_Success)
+        ;   Annotated_Value = witness(Witness_Value)
+        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+            Annotated = witness(Witness)
+        )
     ;   no_captures(Captures),
         Annotated = witness(json{ '@type' : missing_property,
                                   '@property' : Key})

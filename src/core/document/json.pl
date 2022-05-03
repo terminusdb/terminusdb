@@ -590,7 +590,9 @@ json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out)
     %json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
     infer_type(DB,Context,JSON,_,Result,captures(Captures_In,Dependencies-[],Captures_Out)),
     (   Result = witness(Witness)
-    ->  throw(error(schema_check_failure([Witness]),_))
+    ->  term_variables(Witness, Vars),
+        maplist([null]>>true,Vars),
+        throw(error(schema_check_failure([Witness]),_))
     ;   Result = success(Elaborated)
     ),
     do_or_die(
@@ -5223,8 +5225,26 @@ test(partial_document_elaborate_list_without_required,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(key_missing_required_field('http://s/name'),
-               _)
+         error(
+             schema_check_failure(
+                 [json{'@type':mandatory_key_does_not_exist_in_document,
+                       document:
+                       json{'@id':'http://i/BookClub/Murder%20Mysteries',
+                            '@type':'http://s/BookClub',
+                            'http://s/book_list':
+                            json{'@container':"@array",'@dimensions':1,
+                                 '@type':'http://s/Book',
+                                 '@value':[
+                                     json{'@id':null,'@type':'http://s/Book',
+                                          'http://s/name':
+                                          json{'@type':
+                                               'http://www.w3.org/2001/XMLSchema#string','@value':"And Then There Were None"}},
+                                     json{'@id':null,
+                                          '@type':'http://s/Book',
+                                          'http://s/name':
+                                          json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                               '@value':"In Cold Blood"}}]}},
+                       key:'http://s/name'}]),_)
      ]) :-
 
     JSON = json{'@id' : 'BookClub/Murder%20Mysteries',
@@ -5273,12 +5293,13 @@ test(optional_missing,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':instance_not_cardinality_one,
-                          instance:_,
-                          class:'http://www.w3.org/2001/XMLSchema#dateTime',
-                          predicate:'http://s/timestamp'}
-                 ])
-         )
+                 [json{'@type':mandatory_key_does_not_exist_in_document,
+                       document:json{'@type':'http://s/Event',
+                                     'http://s/action':
+                                     json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                          '@value':"test"}},
+                       key:'http://s/timestamp'}]),
+             _)
      ]) :-
 
     JSON = json{ '@type' : "Event",
@@ -5840,7 +5861,6 @@ test(subdocument_hash_key,
        non_squash : _{ '@type' : "Not_A_Squash",
                        genus : "Malus Mill" }},
 
-
     create_context(Desc, _{ author : "me", message : "Adding doc." }, Context2),
     with_transaction(
         Context2,
@@ -5904,7 +5924,6 @@ test(subdocument_lexical_key,
        me : "It's me",
        non_squash : _{ '@type' : "Not_A_Squash",
                        genus : "Malus Mill" }},
-
 
     create_context(Desc, _{ author : "me", message : "Adding doc." }, Context2),
     with_transaction(
@@ -5999,10 +6018,14 @@ test(document_with_no_required_field,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure(
-                   [witness{'@type':instance_not_cardinality_one,
-                            class:'http://www.w3.org/2001/XMLSchema#string',
-                            instance:'http://i/Moo/doug',predicate:'http://s/name'}]), _)
+         error(
+             schema_check_failure(
+                 [json{'@type':mandatory_key_does_not_exist_in_document,
+                       document:
+                       json{'@id':'http://i/Moo/doug',
+                            '@type':'http://s/Moo'},
+                       key:'http://s/name'}]),
+             _)
      ]) :-
 
     Document = _{ '@id' : "Moo/doug",
@@ -6680,10 +6703,17 @@ test(two_oneof_an_error,
                  write_schema(schema2,Desc)
              )),
          error(
-             schema_check_failure([witness{'@type':forbidden_oneof_property_present,
-                                           class:'http://s/Choice2',
-                                           instance:_,
-                                           predicate:_}]),
+             schema_check_failure(
+                 [ json{ '@type':choice_has_too_many_answers,
+				         choice:tagged_union{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+							                  'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
+						                    },
+				         document:json{ '@type':'http://s/Choice2',
+						                'http://s/a':"asdf",
+						                'http://s/b':1
+						              }
+				       }
+			     ]),
              _),
          cleanup(
              teardown_temp_store(State)
@@ -6708,8 +6738,15 @@ test(no_oneof_an_error,
              teardown_temp_store(State)
          ),
          error(
-             schema_check_failure([witness{'@type':no_choice_is_cardinality_one,
-                                           choices:['http://s/a','http://s/b'],class:'http://s/Choice2',instance:_}]),
+             schema_check_failure(
+                 [json{ '@type':no_choice_is_cardinality_one,
+				        choice:
+                        tagged_union{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+							          'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
+						            },
+				        document:json{'@type':'http://s/Choice2'}
+				      }
+			     ]),
              _)
      ]) :-
 
@@ -6747,14 +6784,19 @@ test(inheritence_of_tagged_union_fails,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(
-             schema_check_failure(
-                 [witness{'@type':forbidden_oneof_property_present,
-                          class:'http://s/Choice',
-                          instance:_,
-                          predicate:_}
-                 ]),
-             _)
+         error(schema_check_failure(
+                   [json{ '@type':choice_has_too_many_answers,
+				          choice:tagged_union{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+							                   'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
+						                     },
+				          document:json{ '@type':'http://s/InheritsChoice',
+						                 'http://s/a':"asdf",
+						                 'http://s/b':1,
+						                 'http://s/c':"fdsa"
+						               }
+				        }
+			       ]),
+               _)
      ]) :-
 
     Document = json{'@type' : 'InheritsChoice',
@@ -6834,11 +6876,15 @@ test(inherits_two_oneofs_error,
          ),
          error(
              schema_check_failure(
-                 [witness{'@type':forbidden_oneof_property_present,
-                          class:'http://s/Choice2',
-                          instance:_,
-                          predicate:_}
-                 ]),
+                 [json{'@type':choice_has_too_many_answers,
+                       choice:
+                       tagged_union{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+                                    'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
+                       document:
+                       json{'@type':'http://s/InheritsChoices',
+                            'http://s/a':"beep",
+                            'http://s/b':1,
+                            'http://s/c':"some_string"}}]),
              _)
      ]) :-
 
@@ -6881,14 +6927,17 @@ test(double_choice_error,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(
-             schema_check_failure(
-                 [witness{'@type':forbidden_oneof_property_present,
-                          class:'http://s/DoubleChoice',
-                          instance:_,
-                          predicate:_}
-                 ]),
-             _)
+         error(schema_check_failure(
+                   [json{'@type':choice_has_too_many_answers,
+                         choice:
+                         tagged_union{'http://s/a':
+                                      'http://www.w3.org/2001/XMLSchema#string',
+                                      'http://s/b':
+                                      'http://www.w3.org/2001/XMLSchema#integer'},
+                         document:json{'@type':'http://s/DoubleChoice',
+                                       'http://s/a':"beep",
+                                       'http://s/b':1,
+                                       'http://s/c':"some_string"}}]),_)
      ]) :-
 
     Document = json{'@type' : 'DoubleChoice',
