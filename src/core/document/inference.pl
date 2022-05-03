@@ -80,6 +80,15 @@ drop_key(Key,Dict,New) :-
     ;   Dict = New
     ).
 
+check_frame(_Frame,_Database,_Prefixes,Value,Type,Annotated,Captures),
+Type = 'http://terminusdb.com/schema/sys#Unit' =>
+    no_captures(Captures),
+    (   Value = []
+    ->  Annotated = success([])
+    ;   no_captures(Captures),
+        Annotated = witness(json{ '@type' : not_a_sys_unit,
+                                  document : Value })
+    ).
 check_frame(Frame,_Database,_Prefixes,Enum_Value,Type,Annotated,Captures),
 is_dict(Frame),
 _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
@@ -91,7 +100,10 @@ check_frame(Frame,Database,Prefixes,Value,_Type,Annotated,Captures),
 is_dict(Frame),
 get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
     dict_pairs(Frame,json,Pairs),
-    check_type_pairs(Pairs,Database,Prefixes,success(Value),Annotated,Captures).
+    (   is_dict(Value)
+    ->  expand_dictionary_keys(Value,Prefixes,Expanded)
+    ;   Value = Expanded),
+    check_type_pairs(Pairs,Database,Prefixes,success(Expanded),Annotated,Captures).
 
 expand_dictionary_pairs([],_Prefixes,[]).
 expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value_Ex|Expanded_Pairs]) :-
@@ -126,18 +138,18 @@ process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated
     findall(
         Key-Result-captures(In,DepH-DepT0,Out0),
         (   get_dict(Key,Choice,Type),
-            get_dict(Key,Dictionary,Value),
-            check_type(Database,Prefixes,Value,Type,Result,captures(In,DepH-DepT0,Out0))
+            get_dict(Key,Dictionary,_Value),
+            check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Result,captures(In,DepH-DepT0,Out0))
         ),
         Results),
-    (   Results = [Key-Result-captures(_,_-DepT0,C1)]
-    ->  (   Result = success(D)
-        ->  put_dict(Key,Dictionary,D,OutDict),
+    (   Results = [Key-Result-captures(_,DepH-DepT0,C1)]
+    ->  (   Result = success(OutDict)
+        ->  %put_dict(Key,Dictionary,D,OutDict),
             Capture1 = captures(C1,DepT0-DepT,Out),
             process_choices(Choices,Database,Prefixes,success(OutDict),Annotated,Capture1)
-        ;   Result = witness(D)
+        ;   Result = witness(Witness)
         ->  no_captures(Captures),
-            dict_pairs(Witness, json, [Key-D]),
+            %dict_pairs(Witness, json, [Key-D]),
             Annotated = witness(Witness)
         )
     ;   Results = []
@@ -441,6 +453,9 @@ is_base_type(Type) =>
                                  'value': Val,
                                  'type' : Type })
     ).
+check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
+is_enum(Database,Type) =>
+    check_type(Database, Prefixes, Value, Type, Annotated, Captures).
 check_value_type(Database,Prefixes,Value,Type,Annotated,Captures) =>
     no_captures(Captures),
     (   is_simple_class(Database,Type)
@@ -815,6 +830,7 @@ test(planet_choice,
         rocks : "big"
     },
     infer_type(Database,Document,Type,success(Annotated0)),
+
     Type = 'terminusdb:///schema#Planet',
     Annotated0 = json{'@id':_,
                       '@type':'terminusdb:///schema#Planet',
