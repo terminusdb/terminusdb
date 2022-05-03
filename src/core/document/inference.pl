@@ -270,9 +270,33 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< 
         success(Dictionary) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
-_{ '@type' : Collection, '@class' : Type } :< Range,
-member(Collection, ['http://terminusdb.com/schema/sys#Array',
-                    'http://terminusdb.com/schema/sys#List']) =>
+_{ '@type' : 'http://terminusdb.com/schema/sys#Array', '@class' : Type,
+   '@dimensions' : N } :< Range =>
+    (   get_dict(Key,Dictionary,Values)
+    ->  check_n_dim_array(Values, N, Database, Prefixes, Type, Result_List, Captures),
+        (   Result_List = witness(_)
+        ->  Annotated = Result_List
+        ;   Result_List = success(List)
+        ->  put_dict(Key,Dictionary,
+                     json{ '@container' : "@array",
+                           '@dimensions' : N,
+                           '@type' : Type,
+                           '@value' : List },
+                     Annotated_Dictionary),
+            Annotated = success(Annotated_Dictionary)
+        )
+    ;   no_captures(Captures),
+        put_dict(Key,Dictionary,
+                 json{ '@container' : "@array",
+                       '@dimensions' : N,
+                       '@type' : Type,
+                       '@value' : [] },
+                 Annotated_Dictionary),
+        Annotated = success(Annotated_Dictionary)
+    ).
+check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+_{ '@type' : 'http://terminusdb.com/schema/sys#List',
+   '@class' : Type} :< Range =>
     (   get_dict(Key,Dictionary,Values)
     ->  Captures = captures(In,DepH-DepT,Out),
         mapm(
@@ -286,13 +310,8 @@ member(Collection, ['http://terminusdb.com/schema/sys#Array',
         (   Result_List = witness(_)
         ->  Annotated = Result_List
         ;   Result_List = success(List)
-        ->  (   Collection = 'http://terminusdb.com/schema/sys#Array'
-            ->  Container = "@array"
-            ;   Collection = 'http://terminusdb.com/schema/sys#List'
-            ->  Container = "@list"
-            ),
-            put_dict(Key,Dictionary,
-                     json{ '@container' : Container,
+        ->  put_dict(Key,Dictionary,
+                     json{ '@container' : "@list",
                            '@type' : Type,
                            '@value' : List },
                      Annotated_Dictionary),
@@ -303,6 +322,51 @@ member(Collection, ['http://terminusdb.com/schema/sys#Array',
                                   document : Dictionary,
                                   key : Key })
     ).
+
+has_n_dim([], _).
+has_n_dim([V|_], 1) :-
+    \+ is_list(V),
+    !.
+has_n_dim([V|_], N) :-
+    has_n_dim(V, M),
+    N is M + 1.
+
+check_n_dim_array(Values, N, Database, Prefixes, Type, Expanded, Captures) :-
+    (   has_n_dim(Values,N)
+    ->  catch(
+            (   check_n_dim_array_(Values, N, Database, Prefixes, Type,
+                                   Expanded_Candidate, Captures),
+                Expanded = success(Expanded_Candidate)
+            ),
+            witness(W),
+            (   no_captures(Captures),
+                Expanded = witness(W)
+            )
+        )
+    ;   no_captures(Captures),
+        Expanded = witness(json{ '@type' : invalid_array_dimensions,
+                                 array : Values,
+                                 dimensions : N })
+    ).
+
+is_witness(witness(_)).
+
+check_n_dim_array_([], _, _Database, _Prefixes, _Type, [], captures(In,T-T,In)).
+check_n_dim_array_([Value|Values], 1, Database, Prefixes, Type, [E|Expanded],
+                   captures(In,H-T,Out)) :-
+    check_simple_or_compound_type(Database, Prefixes,Value,Type, Exp, captures(In,H-MT,Mid)),
+    (   is_witness(Exp)
+    ->  throw(Exp)
+    ;   Exp = success(E)
+    ),
+    check_n_dim_array_(Values, 1, Database, Prefixes, Type, Expanded, captures(Mid,MT-T,Out)).
+check_n_dim_array_([Value|Values], N, Database, Prefixes, Type, [Exp|Expanded],
+                   captures(In,H-T,Out)) :-
+    M is N - 1,
+    check_n_dim_array_(Value, M, Database, Prefixes, Type, Exp,
+                       captures(In,H-MT,Mid)),
+    check_n_dim_array_(Values, N, Database, Prefixes, Type, Expanded,
+                       captures(Mid,MT-T,Out)).
 
 check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
 atom(Type) =>
@@ -554,6 +618,13 @@ multi('
 { "@type" : "Class",
   "@id" : "EnumSet",
   "enum" : { "@type" : "Set", "@class" : "Rocks"}
+}
+
+{ "@type" : "Class",
+  "@id" : "HasArray",
+  "array" : { "@type" : "Array",
+              "@class" : "Person",
+              "@dimensions" : 2 }
 }
 ').
 
@@ -928,5 +999,79 @@ test(system_capability,
                  'http://terminusdb.com/schema/system#scope':
                  json{'@id':'terminusdb://system/data/Organization/admin',
                       '@type':"@id"}}).
+
+
+test(array_of_obj,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+    Document =
+    json{
+        array : [
+            [ json{ forename: "Jerry",
+                    surname: "Lewis"},
+              json{ forename: "Jerry",
+                    surname: "Lewis"}
+            ]
+        ]
+    },
+    infer_type(Database,Document,Type,Result),
+
+    Type = 'terminusdb:///schema#HasArray',
+    Result = success(
+                 json{'@id':_,
+                      '@type':'terminusdb:///schema#HasArray',
+                      'terminusdb:///schema#array':
+                      json{'@container':"@array",'@dimensions':2,
+                           '@type':'terminusdb:///schema#Person',
+                           '@value':
+                           [[json{'@id':_,
+                                  '@type':'terminusdb:///schema#Person',
+                                  'terminusdb:///schema#forename':
+                                  json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@value':"Jerry"},
+                                  'terminusdb:///schema#surname':
+                                  json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@value':"Lewis"}},
+                             json{'@id':_,'@type':'terminusdb:///schema#Person',
+                                  'terminusdb:///schema#forename':
+                                  json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@value':"Jerry"},
+                                  'terminusdb:///schema#surname':
+                                  json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                       '@value':"Lewis"}}]]}}).
+
+
+test(array_of_obj_failure,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+    Document =
+    json{
+        array : [
+            [ json{ forename: "Jerry",
+                    surname: "Lewis"},
+              json{ rock: "big"}
+            ]
+        ]
+    },
+    infer_type(Database,Document,_,Result),
+
+    Result = witness(
+                 json{'@type':no_unique_type_for_document,
+                      document:
+                      json{array:[[json{forename:"Jerry",surname:"Lewis"},
+                                   json{rock:"big"}]]},
+                      reason:json{'@type':no_unique_type_for_document,
+                                  document:json{rock:"big"}}}).
+
 
 :- end_tests(infer).
