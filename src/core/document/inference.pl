@@ -742,20 +742,19 @@ test(infer_multisub_success,
     infer_type(Database,Document,Type,success(Annotated)),
 
     Type = 'terminusdb:///schema#HasSubdocument',
-    Annotated = json{'@id':_,
-                     '@type':'terminusdb:///schema#HasSubdocument',
-                     'terminusdb:///schema#mandatory_decimal':
-                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                          '@value':30},
-                     'terminusdb:///schema#set_decimal':
-                     json{'@container':"@set",
-                          '@type' : 'http://www.w3.org/2001/XMLSchema#decimal',
-                          '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                         '@value':1},
-                                    json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                         '@value':3},
-                                    json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                         '@value':3}]}}.
+    Annotated =
+    json{'@id':_27242,
+     '@type':'terminusdb:///schema#HasSubdocument',
+     'terminusdb:///schema#subdocument':
+     json{'@id':_27080,
+          '@type':'terminusdb:///schema#MultiSub',
+          'terminusdb:///schema#mandatory_decimal':
+          json{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':30},
+          'terminusdb:///schema#set_decimal':
+          json{'@container':"@set",'@type':'http://www.w3.org/2001/XMLSchema#decimal',
+               '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':1},
+                         json{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':3},
+                         json{'@type':'http://www.w3.org/2001/XMLSchema#decimal','@value':3}]}}}.
 
 test(infer_nonunique_failure,
      [setup((setup_temp_store(State),
