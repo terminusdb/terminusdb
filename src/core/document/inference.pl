@@ -234,8 +234,10 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
             ->  dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
             ;   Result_List = success(List),
+                presentation_type(Type, Presentation),
                 put_dict(Key,Dictionary,
                          json{ '@container' : "@set",
+                               '@type' : Presentation,
                                '@value' : List },
                          Annotated_Dict),
                 success(Annotated_Dict) = Annotated
@@ -245,8 +247,10 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
             ->  dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
             ;   Result = success(Term),
+                presentation_type(Type, Presentation),
                 put_dict(Key,Dictionary,
                          json{ '@container' : "@set",
+                               '@type' : Presentation,
                                '@value' : [Term] },
                          Annotated_Dict),
                 success(Annotated_Dict) = Annotated
@@ -277,19 +281,21 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Array', '@class' : Type,
         (   Result_List = witness(_)
         ->  Annotated = Result_List
         ;   Result_List = success(List)
-        ->  put_dict(Key,Dictionary,
+        ->  presentation_type(Type, Presentation),
+            put_dict(Key,Dictionary,
                      json{ '@container' : "@array",
                            '@dimensions' : N,
-                           '@type' : Type,
+                           '@type' : Presentation,
                            '@value' : List },
                      Annotated_Dictionary),
             Annotated = success(Annotated_Dictionary)
         )
     ;   no_captures(Captures),
+        presentation_type(Type, Presentation),
         put_dict(Key,Dictionary,
                  json{ '@container' : "@array",
                        '@dimensions' : N,
-                       '@type' : Type,
+                       '@type' : Presentation,
                        '@value' : [] },
                  Annotated_Dictionary),
         Annotated = success(Annotated_Dictionary)
@@ -310,9 +316,10 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#List',
         (   Result_List = witness(_)
         ->  Annotated = Result_List
         ;   Result_List = success(List)
-        ->  put_dict(Key,Dictionary,
+        ->  presentation_type(Type, Presentation),
+            put_dict(Key,Dictionary,
                      json{ '@container' : "@list",
-                           '@type' : Type,
+                           '@type' : Presentation,
                            '@value' : List },
                      Annotated_Dictionary),
             Annotated = success(Annotated_Dictionary)
@@ -322,6 +329,14 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#List',
                                   document : Dictionary,
                                   key : Key })
     ).
+
+presentation_type(Type, Presentation),
+is_dict(Type),
+_{ '@type' : 'http://terminusdb.com/schema/sys#Enum', '@id' : Result} :< Type =>
+    Presentation = Result.
+presentation_type(Type, Presentation),
+atom(Type) =>
+    Presentation = Type.
 
 has_n_dim([], _).
 has_n_dim([V|_], 1) :-
@@ -354,6 +369,7 @@ is_witness(witness(_)).
 check_n_dim_array_([], _, _Database, _Prefixes, _Type, [], captures(In,T-T,In)).
 check_n_dim_array_([Value|Values], 1, Database, Prefixes, Type, [E|Expanded],
                    captures(In,H-T,Out)) :-
+    !,
     check_simple_or_compound_type(Database, Prefixes,Value,Type, Exp, captures(In,H-MT,Mid)),
     (   is_witness(Exp)
     ->  throw(Exp)
@@ -656,6 +672,7 @@ test(infer_multi_success,
                           '@value':"asdf"},
                      'terminusdb:///schema#set_decimal':
                      json{'@container':"@set",
+                          '@type' : 'http://www.w3.org/2001/XMLSchema#decimal',
                           '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':1},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
@@ -689,6 +706,7 @@ test(infer_multisub_success,
                           '@value':30},
                      'terminusdb:///schema#set_decimal':
                      json{'@container':"@set",
+                          '@type' : 'http://www.w3.org/2001/XMLSchema#decimal',
                           '@value':[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
                                          '@value':1},
                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
@@ -961,12 +979,14 @@ test(infer_enum_set,
     },
 
     infer_type(Database,Document1,Type1,Result),
+
     Result =
     success(
         json{'@id': _,
              '@type':'terminusdb:///schema#EnumSet',
              'terminusdb:///schema#enum':
              json{'@container':"@set",
+                  '@type' : 'terminusdb:///schema#Rocks',
                   '@value':[json{'@id':'terminusdb:///schema#Rocks/big',
                                  '@type':"@id"},
                             json{'@id':'terminusdb:///schema#Rocks/medium',
@@ -994,6 +1014,7 @@ test(system_capability,
                       '@type':'http://terminusdb.com/schema/system#Capability',
                       'http://terminusdb.com/schema/system#role':
                       json{'@container':"@set",
+                           '@type' : 'http://terminusdb.com/schema/system#Role',
                            '@value':[json{'@id':'terminusdb://system/data/Role/admin',
                                           '@type':"@id"}]},
                  'http://terminusdb.com/schema/system#scope':
