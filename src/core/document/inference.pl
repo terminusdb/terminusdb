@@ -51,7 +51,8 @@ Error: Could not find a principal type.
 % DB, Prefixes |- Value <= Type
 check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     \+ is_abstract(Database, Type),
-    class_frame(Database, Type, false, Frame),
+    class_frame(Database, Type, Frame, [expand_abstract(false),
+                                        compress_ids(false)]),
     check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures).
 
 no_captures(captures(C,T-T,C)).

@@ -1895,13 +1895,16 @@ type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,_,Prefixes,_Compress,_Unfol
         V = json{ '@type' : T2C, '@value' : D}
     ).
 
-compress_dict_uri(true, URI, Dict, Folded_URI) :-
-    compress_dict_uri(URI, Dict, Folded_URI).
-compress_dict_uri(false, URI, _Dict, URI).
+compress_dict_uri(URI, Dict, Folded_URI, Options) :-
+    (   option(compress_ids(true),Options)
+    ->  compress_dict_uri(URI, Dict, Folded_URI)
+    ;   URI = Folded_URI).
 
-compress_system_uri(true,IRI,Prefixes,IRI_Atom) :-
-    compress_system_uri(IRI,Prefixes,IRI_Atom).
-compress_system_uri(false,IRI,_Prefixes,IRI).
+compress_system_uri(IRI,Prefixes,IRI_Atom,Options) :-
+    (   option(compress_ids(true),Options)
+    ->  compress_system_uri(IRI,Prefixes,IRI_Atom)
+    ;   IRI = IRI_Atom
+    ).
 
 compress_system_uri(IRI,Prefixes,IRI_Atom) :-
     put_dict(_{'@base' : 'http://terminusdb.com/schema/sys#'}, Prefixes, Schema_Prefixes),
@@ -1911,9 +1914,11 @@ compress_system_uri(IRI,Prefixes,IRI_Atom) :-
 compress_system_uri(IRI,_Prefixes,IRI_Atom) :-
     atom_string(IRI_Atom, IRI).
 
-compress_schema_uri(true,IRI,Prefixes,IRI_Atom) :-
-    compress_schema_uri(IRI,Prefixes,IRI_Atom).
-compress_schema_uri(false,IRI,_Prefixes,IRI).
+compress_schema_uri(IRI,Prefixes,IRI_Atom,Options) :-
+    (   option(compress_ids(true), Options)
+    ->  compress_schema_uri(IRI,Prefixes,IRI_Atom)
+    ;   IRI = IRI_Atom
+    ).
 
 compress_schema_uri(IRI,Prefixes,IRI_Comp) :-
     (   get_dict('@schema',Prefixes,Schema),
@@ -1999,6 +2004,7 @@ get_document(DB, Compress_Ids, Unfold, Id, Document) :-
     get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document).
 
 get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
+    Options = [compress_ids(Compress_Ids)],
     database_instance(DB,Instance),
 
     prefix_expand(Id,Prefixes,Id_Ex),
@@ -2011,46 +2017,50 @@ get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
 
             once(class_predicate_type(DB,Class,P,Type)),
             type_id_predicate_iri_value(Type,Id_Ex,P,O,get_document,DB,Prefixes,Compress_Ids,Unfold,Value),
-            compress_schema_uri(Compress_Ids, P, Prefixes, Prop)
+            compress_schema_uri(P, Prefixes, Prop, Options)
         ),
         Data),
     !,
-    compress_dict_uri(Compress_Ids, Id_Ex, Prefixes, Id_comp),
-    compress_schema_uri(Compress_Ids, Class, Prefixes, Class_comp),
+    compress_dict_uri(Id_Ex, Prefixes, Id_comp, Options),
+    compress_schema_uri(Class, Prefixes, Class_comp, Options),
     json_dict_create(Document,['@id'-Id_comp,
                                '@type'-Class_comp
                                |Data]).
 
+key_descriptor_json(Descriptor, Prefixes, Result) :-
+    key_descriptor_json(Descriptor, Prefixes, Result, [compress_ids(true)]).
+
+% Note: Should strictly expand the lexical/hash/valuehash type under option: compress_ids(false)
 key_descriptor_json(lexical(_, Fields), Prefixes, json{ '@type' : "Lexical",
-                                                        '@fields' : Fields_Compressed }) :-
+                                                        '@fields' : Fields_Compressed }, Options) :-
     maplist(
-        {Prefixes}/[Field,Compressed]>>compress_schema_uri(Field, Prefixes, Compressed),
+        {Prefixes,Options}/[Field,Compressed]>>compress_schema_uri(Field, Prefixes, Compressed, Options),
         Fields,
         Fields_Compressed
     ).
 key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
-                                                     '@fields' : Fields_Compressed }) :-
+                                                     '@fields' : Fields_Compressed },Options) :-
     maplist(
-        {Prefixes}/[Field,Compressed]>>compress_schema_uri(Field, Prefixes, Compressed),
+        {Prefixes,Options}/[Field,Compressed]>>compress_schema_uri(Field, Prefixes, Compressed, Options),
         Fields,
         Fields_Compressed
     ).
-key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" }).
-key_descriptor_json(random(_), _, json{ '@type' : "Random" }).
+key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" },_).
+key_descriptor_json(random(_), _, json{ '@type' : "Random" },_).
 
 documentation_descriptor_json(Descriptor, Prefixes, Result) :-
-    documentation_descriptor_json(Descriptor,Prefixes,true,Result).
+    documentation_descriptor_json(Descriptor,Prefixes, Result, [compress_ids(true)]).
 
 documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements),
-                              Prefixes, Compress_Ids,
-                              Result) :-
+                              Prefixes,
+                              Result, Options) :-
     (   Comment_Option = some(Comment)
     ->  Template = json{ '@comment' : Comment}
     ;   Template = json{}
     ),
     (   Elements = json{}
     ->  Result = Template
-    ;   (   Compress_Ids = true
+    ;   (   option(compress_ids(true), Options)
         ->  dict_pairs(Elements, _, Pairs),
             maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
                         enum_value(Type,Val,Enum),
@@ -2065,15 +2075,14 @@ documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements)
     ),
     Result \= json{}.
 documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes,
-                              Compress_Ids,
-                              Result) :-
+                              Result, Options) :-
     (   Comment_Option = some(Comment)
     ->  Template = json{ '@comment' : Comment}
     ;   Template = json{}
     ),
     (   Elements = json{}
     ->  Result = Template
-    ;   (   Compress_Ids = true
+    ;   (   option(compress_ids(true), Options)
         ->  dict_pairs(Elements, _, Pairs),
             maplist({Prefixes}/[Prop-X,Small-X]>>(
                         compress_schema_uri(Prop, Prefixes, Small)
@@ -2088,10 +2097,10 @@ documentation_descriptor_json(property_documentation(Comment_Option, Elements), 
     Result \= json{}.
 
 oneof_descriptor_json(Descriptor, Prefixes, JSON) :-
-    oneof_descriptor_json(Descriptor, Prefixes, true, JSON).
+    oneof_descriptor_json(Descriptor, Prefixes, JSON, [compress_ids(true)]).
 
-oneof_descriptor_json(tagged_union(_, Map), Prefixes, Compress_Ids, JSON) :-
-    (   Compress_Ids = true
+oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON, Options) :-
+    (   option(compress_ids(true), Options)
     ->  dict_pairs(Map, _, Pairs),
         maplist({Prefixes}/[Prop-Val,Small-Small_Val]>>(
                     compress_schema_uri(Prop, Prefixes, Small),
@@ -2104,34 +2113,34 @@ oneof_descriptor_json(tagged_union(_, Map), Prefixes, Compress_Ids, JSON) :-
     ).
 
 type_descriptor_json(Type, Prefix, JSON) :-
-    type_descriptor_json(Type, Prefix, true, JSON).
+    type_descriptor_json(Type, Prefix, JSON, [compress_ids(true)]).
 
-type_descriptor_json(unit, _Prefix, Compress_Ids, Unit) :-
-    (   Compress_Ids = true
+type_descriptor_json(unit, _Prefix, Unit, Options) :-
+    (   option(compress_ids(true), Options)
     ->  Unit = "Unit"
     ;   global_prefix_expand(sys:'Unit', Unit)
     ).
-type_descriptor_json(class(C), Prefixes, Compress_Uri, Class_Comp) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(base_class(C), Prefixes, Compress_Uri, Class_Comp) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(optional(C), Prefixes, Compress_Uri, json{ '@type' : "Optional",
-                                                                '@class' : Class_Comp }) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(set(C), Prefixes, Compress_Uri, json{ '@type' : "Set",
-                                                           '@class' : Class_Comp }) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(array(C,D), Prefixes, Compress_Uri, json{ '@type' : "Array",
-                                                               '@dimensions' : D,
-                                                               '@class' : Class_Comp }) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(list(C), Prefixes, Compress_Uri, json{ '@type' : "List",
-                                                            '@class' : Class_Comp }) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(tagged_union(C,_), Prefixes, Compress_Uri, Class_Comp) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
-type_descriptor_json(enum(C,_),Prefixes, Compress_Uri, Class_Comp) :-
-    compress_schema_uri(Compress_Uri, C, Prefixes, Class_Comp).
+type_descriptor_json(class(C), Prefixes, Class_Comp, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(base_class(C), Prefixes, Class_Comp, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(optional(C), Prefixes, json{ '@type' : "Optional",
+                                                  '@class' : Class_Comp }, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(set(C), Prefixes, json{ '@type' : "Set",
+                                             '@class' : Class_Comp }, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(array(C,D), Prefixes, json{ '@type' : "Array",
+                                                 '@dimensions' : D,
+                                                 '@class' : Class_Comp }, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(list(C), Prefixes, json{ '@type' : "List",
+                                              '@class' : Class_Comp }, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(enum(C,_),Prefixes, Class_Comp, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
 
 schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
@@ -2647,92 +2656,98 @@ run_replace_document(Desc, Commit, Document, Id) :-
 type_descriptor_sub_frame(Type,DB,Prefix,Frame) :-
     type_descriptor_sub_frame(Type,DB,Prefix,true,Frame).
 
-type_descriptor_sub_frame(unit, _DB, _Prefix, Compress_Ids, Unit) :-
-    (   Compress_Ids
+type_descriptor_sub_frame(unit, _DB, _Prefix, Unit, Options) :-
+    (   option(compress_ids(true), Options)
     ->  Unit = "Unit"
     ;   global_prefix_expand(sys:"Unit", Unit)
     ).
-type_descriptor_sub_frame(class(C), DB, Prefixes, Compress_Ids, Frame) :-
-    (   is_abstract(DB, C)
+type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
+    (   is_abstract(DB, C),
+        option(expand_abstract(true), Options)
     ->  findall(F,
                 (   concrete_subclass(DB,C,Class),
                     type_descriptor(DB, Class, Desc),
-                    type_descriptor_sub_frame(Desc,DB,Prefixes,F)
+                    type_descriptor_sub_frame(Desc,DB,Prefixes,F,Options)
                 ),
                 Frame)
     ;   is_subdocument(DB,C)
-    ->  compress_schema_uri(Compress_Ids,C, Prefixes, Class_Comp),
+    ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
         Frame = json{ '@class' : Class_Comp,
                       '@subdocument' : []}
-    ;   compress_schema_uri(Compress_Ids,C, Prefixes, Frame)
+    ;   compress_schema_uri(C, Prefixes, Frame, Options)
     ).
-type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Compress_Ids, Class_Comp) :-
-    compress_schema_uri(Compress_Ids,C, Prefixes, Class_Comp).
-type_descriptor_sub_frame(optional(C), DB, Prefixes, Compress_Ids, json{ '@type' : Optional,
-                                                                         '@class' : Frame }) :-
-    (   Compress_Ids = true
+type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Class_Comp, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_sub_frame(optional(C), DB, Prefixes, json{ '@type' : Optional,
+                                                           '@class' : Frame }, Options) :-
+    (   option(compress_ids(true), Options)
     ->  Optional = 'Optional'
     ;   global_prefix_expand(sys:'Optional', Optional)),
     type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(set(C), DB, Prefixes, Compress_Ids, json{ '@type' : Set,
-                                                                    '@class' : Frame }) :-
-    (   Compress_Ids = true
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
+type_descriptor_sub_frame(set(C), DB, Prefixes, json{ '@type' : Set,
+                                                      '@class' : Frame }, Options) :-
+    (   option(compress_ids(true), Options)
     ->  Set = 'Set'
     ;   global_prefix_expand(sys:'Set', Set)),
     type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(array(C,Dim), DB, Prefixes, Compress_Ids, json{ '@type' : Array,
-                                                                          '@dimensions' : Dim,
-                                                                          '@class' : Frame }) :-
-    (   Compress_Ids = true
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
+type_descriptor_sub_frame(array(C,Dim), DB, Prefixes, json{ '@type' : Array,
+                                                            '@dimensions' : Dim,
+                                                            '@class' : Frame }, Options) :-
+    (   option(compress_ids(true), Options)
     ->  Array = 'Array'
     ;   global_prefix_expand(sys:'Array', Array)),
     type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(list(C), DB, Prefixes, Compress_Ids, json{ '@type' : List,
-                                                                     '@class' : Frame }) :-
-    (   Compress_Ids = true
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
+type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : List,
+                                                       '@class' : Frame }, Options) :-
+    (   option(compress_ids(true), Options)
     ->  List = 'List'
     ;   global_prefix_expand(sys:'List', List)),
     type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Compress_Ids, Frame).
-type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, Compress_Ids, json{ '@type' : Enum,
-                                                                           '@id' : Class_Comp,
-                                                                           '@values' : Enum_List}) :-
-    (   Compress_Ids = true
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
+type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : Enum,
+                                                             '@id' : Class_Comp,
+                                                             '@values' : Enum_List}, Options) :-
+    (   option(compress_ids(true), Options)
     ->  Enum = 'Enum'
     ;   global_prefix_expand(sys:'Enum', Enum)),
-    compress_schema_uri(Compress_Ids, C, Prefixes, Class_Comp),
-    (   Compress_Ids = true
+    compress_schema_uri(C, Prefixes, Class_Comp, Options),
+    (   option(compress_ids(true), Options)
     ->  maplist({C}/[V,Enum]>>(
                     enum_value(C,Enum,V)
                 ), List, Enum_List)
     ;   List = Enum_List
     ).
 
-all_class_frames(Transaction, Frames) :-
+all_class_frames(Askable, Frames) :-
+    all_class_frames(Askable, Frames, [compress_ids(true)]).
+
+all_class_frames(Transaction, Frames, Options) :-
     (   is_transaction(Transaction)
     ;   is_validation_object(Transaction)
     ),
     !,
+    database_prefixes(Transaction, Prefixes),
     findall(
-        Class-Frame,
+        Class_Comp-Frame,
         (   is_simple_class(Transaction, Class),
-            class_frame(Transaction, Class, Frame)),
+            compress_schema_uri(Class, Prefixes, Class_Comp, Options),
+            class_frame(Transaction, Class, Frame, Options)),
         Data),
     database_context_object(Transaction, Context),
     dict_pairs(Frames, json, ['@context'-Context|Data]).
-all_class_frames(Query_Context, Frames) :-
+all_class_frames(Query_Context, Frames, Options) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    all_class_frames(TO, Frames).
+    all_class_frames(TO, Frames, Options).
 
-class_frame(Transaction, Class, Frame) :-
-    class_frame(Transaction, Class, true, Frame).
+class_frame(Askable, Class, Frame) :-
+    class_frame(Askable, Class, Frame, [compress_ids(true)]).
 
-class_frame(Transaction, Class, Compress_Ids, Frame) :-
+class_frame(Transaction, Class, Frame, Options) :-
     (   is_transaction(Transaction)
     ;   is_validation_object(Transaction)
     ),
@@ -2744,8 +2759,8 @@ class_frame(Transaction, Class, Compress_Ids, Frame) :-
     findall(
         Predicate_Comp-Subframe,
         (   class_predicate_conjunctive_type(Transaction, Class_Ex, Predicate, Type_Desc),
-            type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Compress_Ids, Subframe),
-            compress_schema_uri(Compress_Ids,Predicate, Prefixes, Predicate_Comp)
+            type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Subframe, Options),
+            compress_schema_uri(Predicate, Prefixes, Predicate_Comp, Options)
         ),
         Pairs),
     % Subdocument
@@ -2764,14 +2779,14 @@ class_frame(Transaction, Class, Compress_Ids, Frame) :-
     % oneOf
     (   findall(JSON,
                 (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
-                    oneof_descriptor_json(OneOf_Desc,Prefixes,Compress_Ids,JSON)),
+                    oneof_descriptor_json(OneOf_Desc,Prefixes,JSON,Options)),
                 OneOf_JSONs),
         OneOf_JSONs \= []
     ->  Pairs5 = ['@oneOf'-OneOf_JSONs|Pairs4]
     ;   Pairs5 = Pairs4),
     % documentation
     (   documentation_descriptor(Transaction, Class_Ex, Documentation_Desc),
-	    documentation_descriptor_json(Documentation_Desc,Prefixes,Compress_Ids,Documentation_Json)
+	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json, Options)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
     % enum
@@ -2779,17 +2794,17 @@ class_frame(Transaction, Class, Compress_Ids, Frame) :-
     (   is_enum(Transaction,Class_Ex)
     ->  database_schema(Transaction, Schema),
         schema_type_descriptor(Schema, Class, enum(Class,List)),
-        (   Compress_Ids = true
+        (   option(compress_ids(true), Options)
         ->  maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
                     List, Enum_List)
         ;   List = Enum_List
         ),
-        (   Compress_Ids = true
+        (   option(compress_ids(true), Options)
         ->  Enum = 'Enum'
         ;   global_prefix_expand(sys:'Enum', Enum)
         ),
         Pairs7 = ['@type'-Enum,'@values'-Enum_List|Pairs6]
-    ;   (   Compress_Ids = true
+    ;   (   option(compress_ids(true), Options)
         ->  C = 'Class'
         ;   global_prefix_expand(sys:'Class', C)
         ),
@@ -2801,16 +2816,16 @@ class_frame(Transaction, Class, Compress_Ids, Frame) :-
         error(duplicate_key(Predicate),_),
         throw(error(violation_of_diamond_property(Class,Predicate),_))
     ).
-class_frame(Query_Context, Class, Compress_Ids, Frame) :-
+class_frame(Query_Context, Class, Frame, Options) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    class_frame(TO, Class, Compress_Ids, Frame).
-class_frame(Desc, Class, Compress_Ids, Frame) :-
+    class_frame(TO, Class, Frame, Options).
+class_frame(Desc, Class, Frame, Options) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc, Trans),
-    class_frame(Trans, Class, Compress_Ids, Frame).
+    class_frame(Trans, Class, Frame, Options).
 
 class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
     prefix_expand_schema(Class, Prefixes, Class_Ex),
@@ -7040,7 +7055,7 @@ test(double_choice_frame_uncompressed,
          )
      ]) :-
 
-    class_frame(Desc,'DoubleChoice',false,Frame),
+    class_frame(Desc,'DoubleChoice',Frame,[compress_ids(false)]),
     Frame = json{'@oneOf':[tagged_union{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
                                         'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
                            tagged_union{'http://s/c':'http://www.w3.org/2001/XMLSchema#string',
