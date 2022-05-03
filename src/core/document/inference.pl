@@ -497,7 +497,7 @@ infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated,captu
             ),
             Results),
     exclude([_-witness(_)-_]>>true, Results, Successes),
-    (   Successes = [Type-success(Annotated0)-captures(In,_-DepT,Out)]
+    (   Successes = [Type-success(Annotated0)-captures(In,DepH-DepT,Out)]
     ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
         Annotated = success(Annotated1)
     ;   Successes = []
@@ -1073,5 +1073,66 @@ test(array_of_obj_failure,
                       reason:json{'@type':no_unique_type_for_document,
                                   document:json{rock:"big"}}}).
 
+test(obj_captures,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+    Document =
+    json{ forename: "Jerry",
+          surname: "Lewis"},
+    database_prefixes(Database,Prefixes),
+    empty_assoc(In),
+    infer_type(Database,Prefixes,Document,_Type,_Result,captures(In,H-T,Out)),
+    H == T,
+    In == Out.
+
+test(obj_captures_has_capture,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+    Document =
+    json{ '@capture' : "Jer-Bear",
+          forename: "Jerry",
+          surname: "Lewis"},
+    database_prefixes(Database,Prefixes),
+    empty_assoc(In),
+    infer_type(Database,Prefixes,Document,_Type,success(Result),captures(In,H-T,Out)),
+    T = [],
+    H = [],
+    assoc_to_list(Out,["Jer-Bear"-Jer]),
+    get_dict('@id', Result, Jer1),
+    Jer == Jer1.
+
+test(array_of_obj_captures,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+    Document =
+    json{
+        array : [
+            [ json{ forename: "Jerry",
+                    surname: "Lewis"},
+              json{ forename: "Jerry",
+                    surname: "Lewis"}
+            ]
+        ]
+    },
+    database_prefixes(Database,Prefixes),
+    empty_assoc(In),
+    infer_type(Database,Prefixes,Document,_Type,_Result,captures(In,H-T,Out)),
+    In == Out,
+    H == T.
 
 :- end_tests(infer).
