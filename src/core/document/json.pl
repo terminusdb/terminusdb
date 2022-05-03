@@ -4634,6 +4634,7 @@ test(set_elaborate,
         },
 
     json_triples(DB, JSON, Triples),
+
     Triples =
     [ t('http://i/BookClub/Marxist%20book%20club',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
@@ -6189,7 +6190,8 @@ test(elaborate_null,
 
     Class = _{ '@type': "Class",
                '@id': "Doc",
-               s : "xsd:string"
+               s : _{ '@type' : "Optional",
+                      '@class' : "xsd:string"}
              },
 
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),

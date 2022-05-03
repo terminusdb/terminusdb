@@ -70,6 +70,16 @@ check_enum(Enum_Value,Type,_,Annotated) =>
                               enum : Type,
                               value : Enum_Value}).
 
+get_dict_not_null(Key,Dict,Value) :-
+    get_dict(Key,Dict,Value),
+    \+ Value = null.
+
+drop_key(Key,Dict,New) :-
+    (   del_dict(Key,Dict, _, New)
+    ->  true
+    ;   Dict = New
+    ).
+
 check_frame(Frame,_Database,_Prefixes,Enum_Value,Type,Annotated,Captures),
 is_dict(Frame),
 _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
@@ -170,7 +180,7 @@ Type = 'http://terminusdb.com/schema/sys#Unit' =>
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Captures),
 atom(Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),
-    (   get_dict(Key,Dictionary,Value)
+    (   get_dict_not_null(Key,Dictionary,Value)
     ->  (   check_value_type(Database, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
         ->  (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
@@ -194,7 +204,7 @@ check_type_pair(Key,Range,_Database,_Prefixes,success(Dictionary),Annotated,Capt
 _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
    '@values' : Enums} :< Range =>
     no_captures(Captures),
-    (   get_dict(Key,Dictionary,Value)
+    (   get_dict_not_null(Key,Dictionary,Value)
     ->  check_enum(Value,Enum,Enums,Annotated_Value),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
@@ -210,7 +220,7 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
-    (   get_dict(Key,Dictionary,Value)
+    (   get_dict_not_null(Key,Dictionary,Value)
     ->  check_value_type(Database, Prefixes, Value, Type, Annotated,Captures)
     ;   no_captures(Captures),
         Annotated = witness(json{ '@type' : missing_property,
@@ -219,7 +229,7 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>
     % Note: witness here should really have more context given.
-    (   get_dict(Key,Dictionary,Values)
+    (   get_dict_not_null(Key,Dictionary,Values)
     ->  (   is_list(Values)
         ->  Captures = captures(In,DepH-DepT,Out),
             mapm(
@@ -257,11 +267,12 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
             )
         )
     ;   no_captures(Captures),
-        success(Dictionary) = Annotated
+        drop_key(Key,Dictionary,New),
+        success(New) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< Range =>
-    (   get_dict(Key, Dictionary, Value)
+    (   get_dict_not_null(Key, Dictionary, Value)
     ->  check_simple_or_compound_type(Database, Prefixes, Value, Class, Annotated_Value,Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
@@ -271,12 +282,13 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< 
             Annotated = witness(Witness)
         )
     ;   no_captures(Captures),
-        success(Dictionary) = Annotated
+        drop_key(Key,Dictionary,New),
+        success(New) = Annotated
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Array', '@class' : Type,
    '@dimensions' : N } :< Range =>
-    (   get_dict(Key,Dictionary,Values)
+    (   get_dict_not_null(Key,Dictionary,Values)
     ->  check_n_dim_array(Values, N, Database, Prefixes, Type, Result_List, Captures),
         (   Result_List = witness(_)
         ->  Annotated = Result_List
@@ -303,7 +315,7 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Array', '@class' : Type,
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#List',
    '@class' : Type} :< Range =>
-    (   get_dict(Key,Dictionary,Values)
+    (   get_dict_not_null(Key,Dictionary,Values)
     ->  Captures = captures(In,DepH-DepT,Out),
         mapm(
             {Database,Prefixes,Type}/
@@ -367,6 +379,10 @@ check_n_dim_array(Values, N, Database, Prefixes, Type, Expanded, Captures) :-
 is_witness(witness(_)).
 
 check_n_dim_array_([], _, _Database, _Prefixes, _Type, [], captures(In,T-T,In)).
+check_n_dim_array_([null|Values], 1, Database, Prefixes, Type, [null|Expanded],
+                   captures(In,H-T,Out)) :-
+    !,
+    check_n_dim_array_(Values, 1, Database, Prefixes, Type, Expanded, captures(In,H-T,Out)).
 check_n_dim_array_([Value|Values], 1, Database, Prefixes, Type, [E|Expanded],
                    captures(In,H-T,Out)) :-
     !,
@@ -376,6 +392,11 @@ check_n_dim_array_([Value|Values], 1, Database, Prefixes, Type, [E|Expanded],
     ;   Exp = success(E)
     ),
     check_n_dim_array_(Values, 1, Database, Prefixes, Type, Expanded, captures(Mid,MT-T,Out)).
+check_n_dim_array_([null|Values], N, Database, Prefixes, Type, [null|Expanded],
+                   captures(In,H-T,Out)) :-
+    !,
+    check_n_dim_array_(Values, N, Database, Prefixes, Type, Expanded,
+                       captures(In,H-T,Out)).
 check_n_dim_array_([Value|Values], N, Database, Prefixes, Type, [Exp|Expanded],
                    captures(In,H-T,Out)) :-
     M is N - 1,
