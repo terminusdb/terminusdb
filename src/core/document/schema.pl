@@ -942,22 +942,24 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Comment_Opt
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),
     !,
-    findall(P-C,
+    findall(P-Desc,
             (
                 distinct(P,(
                              xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
+                             \+ is_built_in(P),
+                             schema_type_descriptor(Schema, C, Desc)
                          ))
             ),
             Data),
     dict_create(Map,tagged_union,Data).
 schema_oneof_descriptor(Schema, Type, tagged_union(Type, Map)) :-
     xrdf(Schema, Type, sys:oneOf, Class),
-    findall(P-C,
+    findall(P-Desc,
             (
                 distinct(P,(
                              xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
+                             \+ is_built_in(P),
+                             schema_type_descriptor(Schema, C, Desc)
                          ))
             ),
             Data),

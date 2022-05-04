@@ -2163,6 +2163,16 @@ test(split, [
                 _{'@type':'xsd:string','@value':"split"}]}
                  :< Res.
 
+test(datavalue_frame, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    random(0,10000,Random),
+    format(atom(Label), "woql_~q", [Random]),
+    test_woql_label_descriptor(Label, Descriptor),
+    open_descriptor(Descriptor, DB),
+    class_frame(DB, 'DataValue', Result),
+    writeq(Result).
 
 test(join, [
          setup((setup_temp_store(State),

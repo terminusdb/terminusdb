@@ -2101,24 +2101,21 @@ oneof_descriptor_json(Descriptor, Prefixes, JSON) :-
     oneof_descriptor_json(Descriptor, Prefixes, JSON, [compress_ids(true)]).
 
 oneof_descriptor_json(tagged_union(_, Map), Prefixes, JSON, Options) :-
-    (   option(compress_ids(true), Options)
-    ->  dict_pairs(Map, _, Pairs),
-        maplist({Prefixes}/[Prop-Val,Small-Small_Val]>>(
-                    compress_schema_uri(Prop, Prefixes, Small),
-                    compress_schema_uri(Val, Prefixes, Small_Val)
-                ),
-                Pairs,
-                JSON_Pairs),
-        dict_pairs(JSON,json,JSON_Pairs)
-    ;   JSON = Map
-    ).
+    dict_pairs(Map, _, Pairs),
+    maplist({Options,Prefixes}/[Prop-Val,Small-Small_Val]>>(
+                compress_schema_uri(Prop, Prefixes, Small, Options),
+                type_descriptor_json(Val, Prefixes, Small_Val, Options)
+            ),
+            Pairs,
+            JSON_Pairs),
+    dict_pairs(JSON,json,JSON_Pairs).
 
 type_descriptor_json(Type, Prefix, JSON) :-
     type_descriptor_json(Type, Prefix, JSON, [compress_ids(true)]).
 
 type_descriptor_json(unit, _Prefix, Unit, Options) :-
     (   option(compress_ids(true), Options)
-    ->  Unit = "Unit"
+    ->  Unit = 'sys:Unit'
     ;   global_prefix_expand(sys:'Unit', Unit)
     ).
 type_descriptor_json(class(C), Prefixes, Class_Comp, Options) :-
@@ -2659,8 +2656,8 @@ type_descriptor_sub_frame(Type,DB,Prefix,Frame) :-
 
 type_descriptor_sub_frame(unit, _DB, _Prefix, Unit, Options) :-
     (   option(compress_ids(true), Options)
-    ->  Unit = "Unit"
-    ;   global_prefix_expand(sys:"Unit", Unit)
+    ->  Unit = 'sys:Unit'
+    ;   global_prefix_expand(sys:'Unit', Unit)
     ).
 type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
     (   is_abstract(DB, C),
@@ -3767,7 +3764,7 @@ test(schema_key_elaboration1, []) :-
           'https://s/scope':
           json{'@id':'https://s/Resource',
                '@type':"@id"}
-    }.
+        }.
 
 test(schema_lexical_key_elaboration, []) :-
     Doc = json{ '@id' : "Person",
@@ -3929,7 +3926,7 @@ test(idgen_lexical_optional,
                                           '@fields': ["field"]},
                                 field: _{'@type': "Optional",
                                          '@class': "xsd:string"}})
-                          ),
+                         ),
 
     with_test_transaction(Desc,
                           C2,
@@ -3963,7 +3960,7 @@ test(idgen_lexical_set,
                                           '@fields': ["field"]},
                                 field: _{'@type': "Set",
                                          '@class': "xsd:string"}})
-                          ),
+                         ),
 
     with_test_transaction(Desc,
                           C2,
@@ -4015,7 +4012,7 @@ test(idgen_lexical_list,
                                           '@fields': ["field"]},
                                 field: _{'@type': "List",
                                          '@class': "xsd:string"}})
-                          ),
+                         ),
 
     with_test_transaction(Desc,
                           C2,
@@ -4062,7 +4059,7 @@ test(idgen_lexical_array,
                                           '@fields': ["field"]},
                                 field: _{'@type': "Array",
                                          '@class': "xsd:string"}})
-                          ),
+                         ),
 
     with_test_transaction(Desc,
                           C2,
@@ -4114,7 +4111,7 @@ test(idgen_find_collision,
                                           '@fields': ["field"]},
                                 field: _{'@type': "Array",
                                          '@class': "xsd:string"}})
-                          ),
+                         ),
 
     with_test_transaction(Desc,
                           C2,
@@ -4495,7 +4492,7 @@ test(list_elaborate,
           staff_number:"12",
           tasks:[ 'Task/9cd6a4bf2f165cd4e5d9cd23a8490c200241490699e8846ace30b9990bc6151c',
                   'Task/153a66ced94d3aed26fb4c23e9302e2235bbb70d0cf3cf127bdd7bee3baf9cc0'
-	        ]
+	            ]
         }.
 
 test(array_elaborate,
@@ -4955,12 +4952,12 @@ test(binary_tree_elaborate,
                                                  right: json{'@type':'BinaryTree',
                                                              leaf : []}}},
                            right: json{'@type':'BinaryTree',
-                                      node: json{'@type':'Node',
-                                                 value: 2,
-                                                 left: json{'@type':'BinaryTree',
-                                                            leaf : []},
-                                                 right: json{'@type':'BinaryTree',
-                                                             leaf : []}}}}},
+                                       node: json{'@type':'Node',
+                                                  value: 2,
+                                                  left: json{'@type':'BinaryTree',
+                                                             leaf : []},
+                                                  right: json{'@type':'BinaryTree',
+                                                              leaf : []}}}}},
 
     open_descriptor(Desc, DB),
     json_elaborate(DB,JSON,Elaborated),
@@ -5003,11 +5000,11 @@ test(binary_tree_elaborate,
                                                                                                     '@value':2
                                                                                                   }
                                                                            }
-						     },
-			        'http://s/value':json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
-						       '@value':1
-						     }
-			      }
+						                             },
+			                    'http://s/value':json{ '@type':'http://www.w3.org/2001/XMLSchema#integer',
+						                               '@value':1
+						                             }
+			                  }
         },
 
     run_insert_document(Desc, commit_object{ author : "me", message : "boo"}, JSON, Id),
@@ -5411,7 +5408,7 @@ test(extract_schema_binary_tree,
                 '@id':'BinaryTree',
                 '@key':json{'@type':"ValueHash"},
                 '@type':'TaggedUnion',
-                leaf:"Unit",
+                leaf:'sys:Unit',
                 node:'Node'}.
 
 test(insert_schema_object,
@@ -5817,8 +5814,8 @@ test(bad_documentation,
        '@documentation' :
        _{ '@comment' : "Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica.",
           '@properties' :
-              _{ genus : "The genus of the Cucurtiba is always Cucurtiba",
-                 shape: "Round, Silly, or very silly!" }
+          _{ genus : "The genus of the Cucurtiba is always Cucurtiba",
+             shape: "Round, Silly, or very silly!" }
         },
        genus : "xsd:string"
      },
@@ -5893,7 +5890,7 @@ test(subdocument_hash_key,
           non_squash:json{ '@id':'Has_Non_Squash/29c888f481e22801650eeafe95cfd4fc51d46a6b51fcd470f213dfa675deb8d9/non_squash/Not_A_Squash/7d9b9f4bfd817be17dc408732ceba768bd84c35f349932ff7fa1a716a94afbc9',
                            '@type':'Not_A_Squash',
                            genus:"Malus Mill"
-		         }
+		                 }
         }.
 
 test(subdocument_lexical_key,
@@ -6179,11 +6176,11 @@ test(alter_documentation,
     Doc1 = _{ '@type': "Class",
               '@id': "Doc001",
               '@key': _{
-                  '@type': "Random"
-              },
+                          '@type': "Random"
+                      },
               '@documentation': _{
-                  '@comment': "comment 01"
-              }
+                                    '@comment': "comment 01"
+                                }
             },
 
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
@@ -6196,11 +6193,11 @@ test(alter_documentation,
     Doc2 = _{ '@type': "Class",
               '@id': "Doc001",
               '@key': _{
-                  '@type': "Random"
-              },
+                          '@type': "Random"
+                      },
               '@documentation': _{
-                  '@comment': "comment 02"
-              }
+                                    '@comment': "comment 02"
+                                }
             },
 
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
@@ -6321,20 +6318,20 @@ test(round_trip_float,
                           insert_schema_document(
                               C1,
                               Geo_Schema)
-                          ),
+                         ),
 
     with_test_transaction(Desc,
                           C2,
                           insert_document(
-                                  C2,
-                                  Geo,
-                                  Uri)),
+                              C2,
+                              Geo,
+                              Uri)),
     get_document(Desc, Uri, Doc),
 
     Doc = json{'@id':'GeoCoordinate/41.2008+0.5679',
                '@type':'GeoCoordinate',
                latitude:41.2008,
-               longitude:0.5679}.
+                           longitude:0.5679}.
 
 :- use_module(core(query)).
 test(status_update,
@@ -6397,9 +6394,9 @@ test(status_update,
     with_test_transaction(Desc,
                           C2,
                           insert_document(
-                                  C2,
-                                  Doc,
-                                  Uri)),
+                              C2,
+                              Doc,
+                              Uri)),
 
     with_test_transaction(
         Desc,
@@ -6427,7 +6424,7 @@ test(status_update2,
      ]) :-
 
 
-     Schema_Atom = '[
+    Schema_Atom = '[
       { "@type" :"Class",
         "@id" : "APIKey" },
       {
@@ -6454,7 +6451,7 @@ test(status_update2,
             "@type": "Optional"
         },
         "user_id": "xsd:string"
-    },
+      },
     {
         "@abstract": [],
         "@id": "Entity",
@@ -6499,18 +6496,18 @@ test(status_update2,
         "creation_date":"xsd:dateTime"
     }]',
 
-     atom_json_dict(Schema_Atom, Docs, []),
+    atom_json_dict(Schema_Atom, Docs, []),
 
-     with_test_transaction(
-         Desc,
-         C1,
-         forall(member(Doc, Docs),
-                insert_schema_document(
-                    C1,
-                    Doc))
-     ),
+    with_test_transaction(
+        Desc,
+        C1,
+        forall(member(Doc, Docs),
+               insert_schema_document(
+                   C1,
+                   Doc))
+    ),
 
-     User_Atom = '{
+    User_Atom = '{
         "@type": "User",
         "company": "orgTest",
         "email": "collaborator@gmail.com",
@@ -6520,18 +6517,18 @@ test(status_update2,
         "status": "active",
         "user_id": "auth0|615462f8ab33f4006a6bee0c"
     }',
-     atom_json_dict(User_Atom, User, []),
+    atom_json_dict(User_Atom, User, []),
 
-     with_test_transaction(
-         Desc,
-         C2,
-         insert_document(
-             C2,
-             User,
-             _User_Uri)
-     ),
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(
+            C2,
+            User,
+            _User_Uri)
+    ),
 
-     Invitation_Atom = '{
+    Invitation_Atom = '{
         "@id": "Invitation",
         "@inherits": "Entity",
         "@key": {
@@ -6555,25 +6552,25 @@ test(status_update2,
         },
         "creation_date":"xsd:dateTime"
     }',
-     atom_json_dict(Invitation_Atom, Invitation, []),
+    atom_json_dict(Invitation_Atom, Invitation, []),
 
-     with_test_transaction(
-         Desc,
-         C3,
-         delete_schema_document(C3, "Invitation")
-     ),
-     % print_all_triples(Desc, schema),
-     with_test_transaction(
-         Desc,
-         C4,
-         insert_schema_document(C4, Invitation)
-     ),
+    with_test_transaction(
+        Desc,
+        C3,
+        delete_schema_document(C3, "Invitation")
+    ),
+    % print_all_triples(Desc, schema),
+    with_test_transaction(
+        Desc,
+        C4,
+        insert_schema_document(C4, Invitation)
+    ),
 
-     with_test_transaction(
-         Desc,
-         C5,
-         replace_schema_document(C5, Invitation)
-     ).
+    with_test_transaction(
+        Desc,
+        C5,
+        replace_schema_document(C5, Invitation)
+    ).
 
 test(property_documentation_mismatch,
      [
@@ -6616,12 +6613,12 @@ test(property_documentation_mismatch,
     atom_json_dict(Schema_Atom, Doc, []),
 
     with_test_transaction(
-         Desc,
-         C1,
-         insert_schema_document(
-                    C1,
-                    Doc)
-     ).
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            Doc)
+    ).
 
 test(empty_test_for_optional,
      [
@@ -6706,6 +6703,7 @@ test(extract_one_of,
 
     open_descriptor(Desc, DB),
     get_schema_document(DB, 'Choice2', JSON),
+
     JSON = json{'@id':'Choice2',
                 '@oneOf':json{a:'xsd:string',
                               b:'xsd:integer'},
@@ -6721,9 +6719,9 @@ test(two_oneof_an_error,
          error(
              schema_check_failure(
                  [ json{ '@type':choice_has_too_many_answers,
-				         choice:tagged_union{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
-							                  'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
-						                    },
+				         choice:json{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+							          'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
+						            },
 				         document:json{ '@type':'http://s/Choice2',
 						                'http://s/a':"asdf",
 						                'http://s/b':1
@@ -6757,9 +6755,9 @@ test(no_oneof_an_error,
              schema_check_failure(
                  [json{ '@type':no_choice_is_cardinality_one,
 				        choice:
-                        tagged_union{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
-							          'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
-						            },
+                        json{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+							  'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
+						    },
 				        document:json{'@type':'http://s/Choice2'}
 				      }
 			     ]),
@@ -6802,9 +6800,9 @@ test(inheritence_of_tagged_union_fails,
          ),
          error(schema_check_failure(
                    [json{ '@type':choice_has_too_many_answers,
-				          choice:tagged_union{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
-							                   'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
-						                     },
+				          choice:json{ 'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+							           'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'
+						             },
 				          document:json{ '@type':'http://s/InheritsChoice',
 						                 'http://s/a':"asdf",
 						                 'http://s/b':1,
@@ -6894,8 +6892,8 @@ test(inherits_two_oneofs_error,
              schema_check_failure(
                  [json{'@type':choice_has_too_many_answers,
                        choice:
-                       tagged_union{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
-                                    'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
+                       json{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+                            'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
                        document:
                        json{'@type':'http://s/InheritsChoices',
                             'http://s/a':"beep",
@@ -6946,10 +6944,10 @@ test(double_choice_error,
          error(schema_check_failure(
                    [json{'@type':choice_has_too_many_answers,
                          choice:
-                         tagged_union{'http://s/a':
-                                      'http://www.w3.org/2001/XMLSchema#string',
-                                      'http://s/b':
-                                      'http://www.w3.org/2001/XMLSchema#integer'},
+                         json{'http://s/a':
+                              'http://www.w3.org/2001/XMLSchema#string',
+                              'http://s/b':
+                              'http://www.w3.org/2001/XMLSchema#integer'},
                          document:json{'@type':'http://s/DoubleChoice',
                                        'http://s/a':"beep",
                                        'http://s/b':1,
@@ -7057,10 +7055,10 @@ test(double_choice_frame_uncompressed,
      ]) :-
 
     class_frame(Desc,'DoubleChoice',Frame,[compress_ids(false)]),
-    Frame = json{'@oneOf':[tagged_union{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
-                                        'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
-                           tagged_union{'http://s/c':'http://www.w3.org/2001/XMLSchema#string',
-                                        'http://s/d':'http://www.w3.org/2001/XMLSchema#integer'}],
+    Frame = json{'@oneOf':[json{'http://s/a':'http://www.w3.org/2001/XMLSchema#string',
+                                'http://s/b':'http://www.w3.org/2001/XMLSchema#integer'},
+                           json{'http://s/c':'http://www.w3.org/2001/XMLSchema#string',
+                                'http://s/d':'http://www.w3.org/2001/XMLSchema#integer'}],
                  '@type':'http://terminusdb.com/schema/sys#Class'}.
 
 test(mixed_frame,
@@ -7093,6 +7091,7 @@ test(oneof_unit,
      ]) :-
 
     class_frame(Desc,'EnumChoice',Frame),
+
     Frame = json{'@oneOf':[json{a:'sys:Unit',b:'sys:Unit',c:'sys:Unit',d:'sys:Unit'}],
                  '@type':'Class'}.
 
@@ -7185,9 +7184,9 @@ test(context_missing_base_prefix,
          error(
              schema_check_failure(
                  [witness{
-                     '@type': context_missing_system_prefix,
-                     prefix_name: 'http://terminusdb.com/schema/sys#base'
-                 }]))
+                      '@type': context_missing_system_prefix,
+                      prefix_name: 'http://terminusdb.com/schema/sys#base'
+                  }]))
      ]) :-
     write_schema_string('{"@type": "@context", "@schema": "http://s/"}', Desc).
 
@@ -7198,9 +7197,9 @@ test(context_missing_schema_prefix,
          error(
              schema_check_failure(
                  [witness{
-                     '@type': context_missing_system_prefix,
-                     prefix_name: 'http://terminusdb.com/schema/sys#schema'
-                 }]))
+                      '@type': context_missing_system_prefix,
+                      prefix_name: 'http://terminusdb.com/schema/sys#schema'
+                  }]))
      ]) :-
     write_schema_string('{"@type": "@context", "@base": "http://b/"}', Desc).
 
@@ -7211,10 +7210,10 @@ test(context_base_prefix_not_uri,
          error(
              schema_check_failure(
                  [witness{
-                     '@type': context_system_prefix_is_not_a_uri,
-                     prefix_name: 'http://terminusdb.com/schema/sys#base',
-                     prefix_value: "b/"
-                 }]))
+                      '@type': context_system_prefix_is_not_a_uri,
+                      prefix_name: 'http://terminusdb.com/schema/sys#base',
+                      prefix_value: "b/"
+                  }]))
      ]) :-
     write_schema_string('{"@type": "@context", "@base": "b/", "@schema": "http://s/"}', Desc).
 
@@ -7225,10 +7224,10 @@ test(context_schema_prefix_not_uri,
          error(
              schema_check_failure(
                  [witness{
-                     '@type': context_system_prefix_is_not_a_uri,
-                     prefix_name: 'http://terminusdb.com/schema/sys#schema',
-                     prefix_value: "s/"
-                 }]))
+                      '@type': context_system_prefix_is_not_a_uri,
+                      prefix_name: 'http://terminusdb.com/schema/sys#schema',
+                      prefix_value: "s/"
+                  }]))
      ]) :-
     write_schema_string('{"@type": "@context", "@base": "http://b/", "@schema": "s/"}', Desc).
 
@@ -7905,7 +7904,7 @@ test(subsumption_insert,
                               parent:json{ '@id':'NodeValue/9f77cd3ff5da0240e21bacceec8c31f137cb92a15426d6b21e7c55ae26cf8390',
                                            '@type':'NodeValue',
                                            variable:"Parent"
-		                         }
+		                                 }
                             }}.
 
 test(substring_insert, [
@@ -7962,11 +7961,11 @@ test(substring_insert, [
                                            data:json{'@type':'xsd:string','@value':"Test"}
                                          },
                               substring:json{ '@id':'DataValue/c53baa036cc4e3af24ed85c0e339c592262c6ebccea830850dba0be4bbfd0b66',
-		                              '@type':'DataValue',
-		                              variable:"Substring"
-		                            }
+		                                      '@type':'DataValue',
+		                                      variable:"Substring"
+		                                    }
                             }
-                 }.
+                }.
 
 test(named_parametric_query, [
          setup(
@@ -8027,12 +8026,12 @@ test(named_parametric_query, [
                                                 variable:"URI"
                                               },
                                   type:json{ '@id':'NodeValue/0b576982430d0e608a643d6e118c198ef9407c964c1d3353d07964e909cd8bd2',
-					     '@type':'NodeValue',
-					     node:"User"
-				           }
-			        }
-		          ]
-		    }
+					                         '@type':'NodeValue',
+					                         node:"User"
+				                           }
+			                    }
+		                  ]
+		            }
         }.
 
 :- end_tests(woql_document).
@@ -8183,13 +8182,13 @@ test(plus_doc_extract, [
          name: "3+(2+1)",
          expression:
          json{'@type' : "Plus",
-             left : json{'@type' : "Value",
-                         number : 3},
-             right : json{'@type' : "Plus",
-                          left : json{'@type' : "Value",
-                                      number : 2},
-                          right : json{'@type' : "Value",
-                                       number : 1}}
+              left : json{'@type' : "Value",
+                          number : 3},
+              right : json{'@type' : "Plus",
+                           left : json{'@type' : "Value",
+                                       number : 2},
+                           right : json{'@type' : "Value",
+                                        number : 1}}
              }
         },
 
@@ -8216,9 +8215,9 @@ test(plus_doc_extract, [
                                        right:json{ '@id':'Value/9341cb64549b5460321d002663fd0a2f7bfe62a804d22c8a65b4f00f46723c3f',
                                                    '@type':'Value',
                                                    number:1
-					         }
-				     }
-		         },
+					                             }
+				                     }
+		                 },
           name:"3+(2+1)"
         }.
 
@@ -8238,13 +8237,13 @@ test(plus_doc_delete, [
          name: "3+(2+1)",
          expression:
          json{'@type' : "Plus2",
-             left : json{'@type' : "Value2",
-                         number : 3},
-             right : json{'@type' : "Plus2",
-                          left : json{'@type' : "Value2",
-                                      number : 2},
-                          right : json{'@type' : "Value2",
-                                       number : 1}}
+              left : json{'@type' : "Value2",
+                          number : 3},
+              right : json{'@type' : "Plus2",
+                           left : json{'@type' : "Value2",
+                                       number : 2},
+                           right : json{'@type' : "Value2",
+                                        number : 1}}
              }
         },
 
@@ -8504,7 +8503,7 @@ test(all_class_frames, [
 										         '@properties':json{ age:"Age of the person.",
 													                 name:"Name of the person."
 												                   }
-										                        },
+										       },
 							               '@key':json{'@type':"Random"},
 							               '@type':'Class',
 							               age:'xsd:integer',
@@ -9044,7 +9043,7 @@ test(js_type_not_found,
                 status: "active",
                 registration_date: "2009-07-01T10:11:12Z",
                 user_id: "hikita"
-            },
+              },
     Organization = _{ '@type':"Organization",
                       child: [],
                       collaborators:[ "User/hikita" ],
@@ -9107,7 +9106,7 @@ test(subdocument_update,
                 status: "active",
                 registration_date: "2009-07-01T10:11:12Z",
                 user_id: "hikita"
-            },
+              },
     Document = _{'@id':"Organization/somewhere",
                  '@type':"Organization",
                  invitations:[
@@ -9505,9 +9504,9 @@ test(foreign_type,
              start_date : "2012-05-03",
              title : "Senior Engineer" },
     Jane = _{ '@type' : "Employee",
-             name : "jane",
-             start_date : "1995-05-03",
-             title : "Senior Senior Engineer" },
+              name : "jane",
+              start_date : "1995-05-03",
+              title : "Senior Senior Engineer" },
 
     create_context(HR_Desc, commit_info{author: "me", message: "something"}, HR_Doc_Context),
     with_transaction(
@@ -9549,12 +9548,12 @@ test(foreign_type,
                        '@type':'PayRecord',
                        employee:'Employee/jane+1995-05-03',
                        pay:32.85,
-                       pay_period:"P1M"},
+                              pay_period:"P1M"},
                   json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe%2B2012-05-03',
                        '@type':'PayRecord',
                        employee:'Employee/joe+2012-05-03',
                        pay:12.3,
-                       pay_period:"P1M"}]}.
+                              pay_period:"P1M"}]}.
 
 :- end_tests(foreign_types).
 
@@ -9633,8 +9632,8 @@ cross_reference_array_schema('
 
 test(cross_reference_required,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_required_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_required_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9674,8 +9673,8 @@ test(cross_reference_required,
 
 test(cross_reference_optional,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_optional_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_optional_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9715,8 +9714,8 @@ test(cross_reference_optional,
 
 test(cross_reference_set_singleton,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_set_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_set_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9758,8 +9757,8 @@ test(cross_reference_set_singleton,
 
 test(cross_reference_set_multi,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_set_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_set_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9822,8 +9821,8 @@ test(cross_reference_set_multi,
 
 test(cross_reference_list_multi,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_list_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_list_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9886,8 +9885,8 @@ test(cross_reference_list_multi,
 
 test(cross_reference_array_multi,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_array_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_array_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9950,8 +9949,8 @@ test(cross_reference_array_multi,
 
 test(self_reference_required,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_required_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_required_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -9976,8 +9975,8 @@ test(self_reference_required,
 
 test(deep_reference,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_set_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_set_schema,Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
@@ -10035,8 +10034,8 @@ test(deep_reference,
 
 test(double_capture,
      [setup((setup_temp_store(State),
-              test_document_label_descriptor(Desc),
-              write_schema(cross_reference_set_schema,Desc)
+             test_document_label_descriptor(Desc),
+             write_schema(cross_reference_set_schema,Desc)
             )),
       cleanup(teardown_temp_store(State)),
       error(capture_already_bound("Capture"))
@@ -10108,15 +10107,15 @@ test(just_a_table,
       cleanup(teardown_temp_store(State))
      ]) :-
 
-     with_test_transaction(Desc,
-                           C1,
-                           insert_schema_document(
-                               C1,
-                               _{ '@type': "Class",
-                                  '@id': "MultiPoint",
-                                  coordinates : _{ '@type' : "Table",
-                                                   '@class' : "xsd:decimal"}}
-                           )).
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{ '@type': "Class",
+                                 '@id': "MultiPoint",
+                                 coordinates : _{ '@type' : "Table",
+                                                  '@class' : "xsd:decimal"}}
+                          )).
 
 test(geojson_point,
      [setup((setup_temp_store(State),
@@ -10197,7 +10196,7 @@ test(spreadsheet,
                                                  },
                                                 _{ '@type' : "Cell",
                                                    value : "B"
-                                                }
+                                                 }
 
                                             ]
                                         ]}

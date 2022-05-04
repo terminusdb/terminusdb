@@ -537,7 +537,9 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,D
 infer_type_or_check(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated,Captures),
 get_dict('@type', Dictionary, Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),
-    (   (   class_subsumed(Database, Type_Ex, Super)
+    (   (   is_base_type(Type_Ex),
+            basetype_subsumption_of(Type_Ex,Super)
+        ;   class_subsumed(Database, Type_Ex, Super)
         ;   Super = 'http://terminusdb.com/schema/sys#Top'
         )
     ->  put_dict('@type', Dictionary, Type_Ex, New_Dictionary),
@@ -583,7 +585,7 @@ infer_type(Database, Dictionary, Type, Annotated) :-
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     infer_type(Database, Prefixes, Dictionary, Type, Annotated).
 
-:- begin_tests(infer).
+:- begin_tests(infer,[concurrent(true)]).
 :- use_module(core(util/test_utils)).
 
 multi('
@@ -864,16 +866,15 @@ test(planet_choice,
         gas : "light"
     },
     infer_type(Database,Document2,_,Result2),
+
     Result2 =
     witness(
         json{'@type':no_unique_type_for_document,
              document:json{gas:"light",rocks:"big"},
              reason:
              json{'@type':choice_has_too_many_answers,
-                  choice:
-                  tagged_union{
-                      'terminusdb:///schema#gas':'terminusdb:///schema#Gas',
-                      'terminusdb:///schema#rocks':'terminusdb:///schema#Rocks'},
+                  choice:json{'terminusdb:///schema#gas':'terminusdb:///schema#Gas',
+                              'terminusdb:///schema#rocks':'terminusdb:///schema#Rocks'},
                   document:json{'terminusdb:///schema#gas':"light",
                                 'terminusdb:///schema#rocks':"big"}}}),
 
