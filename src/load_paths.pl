@@ -106,7 +106,13 @@ add_enterprise_path :-
     atom_concat(Dir, '/../../terminusdb-enterprise/prolog', Enterprise),
     asserta(user:file_search_path(enterprise, Enterprise)).
 
+add_enterprise_test_path :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir, '/../../terminusdb-enterprise/test', Enterprise),
+    asserta(user:file_search_path(enterprise_test, Enterprise)).
+
 :- if(getenv("TERMINUSDB_ENTERPRISE", true)).
 :- add_enterprise_path.
+:- add_enterprise_test_path.
 :- set_prolog_flag(terminusdb_enterprise, true).
 :- endif.
