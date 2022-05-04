@@ -2126,6 +2126,10 @@ type_descriptor_json(unit, _Prefix, Unit, Options) :-
     ).
 type_descriptor_json(class(C), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(foreign(C), Prefixes, json{ '@type' : Foreign,
+                                                 '@class' : Class_Comp }, Options) :-
+    expand_system_uri(sys:'Foreign', Foreign, Options),
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(base_class(C), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(optional(C), Prefixes, json{ '@type' : Optional,
@@ -2148,6 +2152,13 @@ type_descriptor_json(list(C), Prefixes, json{ '@type' : List,
 type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(enum(C,_),Prefixes, Class_Comp, Options) :-
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(cardinality(C,Min,Max), Prefixes, json{ '@type' : Card,
+                                                             '@class' : Class_Comp,
+                                                             '@min' : Min,
+                                                             '@max' : Max
+                                                           }, Options) :-
+    expand_system_uri(sys:'Cardinality', Card, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 
 schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
@@ -2686,41 +2697,44 @@ type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
     ).
 type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_sub_frame(foreign(C), _DB, Prefixes, json{ '@type' : Foreign,
+                                                           '@class' : Class_Comp },
+                          Options) :-
+    expand_system_uri(sys:'Foreign', Foreign, Options),
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_sub_frame(optional(C), DB, Prefixes, json{ '@type' : Optional,
                                                            '@class' : Frame }, Options) :-
-    (   option(compress_ids(true), Options)
-    ->  Optional = 'Optional'
-    ;   global_prefix_expand(sys:'Optional', Optional)),
+    expand_system_uri(sys:'Optional', Optional, Options),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
 type_descriptor_sub_frame(set(C), DB, Prefixes, json{ '@type' : Set,
                                                       '@class' : Frame }, Options) :-
-    (   option(compress_ids(true), Options)
-    ->  Set = 'Set'
-    ;   global_prefix_expand(sys:'Set', Set)),
+    expand_system_uri(sys:'Set', Set, Options),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
 type_descriptor_sub_frame(array(C,Dim), DB, Prefixes, json{ '@type' : Array,
                                                             '@dimensions' : Dim,
                                                             '@class' : Frame }, Options) :-
-    (   option(compress_ids(true), Options)
-    ->  Array = 'Array'
-    ;   global_prefix_expand(sys:'Array', Array)),
+    expand_system_uri(sys:'Array', Array, Options),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
 type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : List,
                                                        '@class' : Frame }, Options) :-
-    (   option(compress_ids(true), Options)
-    ->  List = 'List'
-    ;   global_prefix_expand(sys:'List', List)),
+    expand_system_uri(sys:'List', List, Options),
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
+type_descriptor_sub_frame(cardinality(C,Min,Max), DB, Prefixes, json{ '@type' : Card,
+                                                                      '@class' : Frame,
+                                                                      '@min' : Min,
+                                                                      '@max' : Max
+                                                                    }, Options) :-
+    expand_system_uri(sys:'Cardinality', Card, Options),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
 type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : Enum,
                                                              '@id' : Class_Comp,
                                                              '@values' : Enum_List}, Options) :-
-    (   option(compress_ids(true), Options)
-    ->  Enum = 'Enum'
-    ;   global_prefix_expand(sys:'Enum', Enum)),
+    expand_system_uri(sys:'Enum', Enum, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options),
     (   option(compress_ids(true), Options)
     ->  maplist({C}/[V,Enum]>>(
@@ -2730,7 +2744,7 @@ type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : Enum,
     ).
 
 all_class_frames(Askable, Frames) :-
-    all_class_frames(Askable, Frames, [compress_ids(true)]).
+    all_class_frames(Askable, Frames, [compress_ids(true),expand_abstract(true)]).
 
 all_class_frames(Transaction, Frames, Options) :-
     (   is_transaction(Transaction)
@@ -2753,7 +2767,7 @@ all_class_frames(Query_Context, Frames, Options) :-
     all_class_frames(TO, Frames, Options).
 
 class_frame(Askable, Class, Frame) :-
-    class_frame(Askable, Class, Frame, [compress_ids(true)]).
+    class_frame(Askable, Class, Frame, [compress_ids(true),expand_abstract(true)]).
 
 class_frame(Transaction, Class, Frame, Options) :-
     (   is_transaction(Transaction)
@@ -2807,15 +2821,9 @@ class_frame(Transaction, Class, Frame, Options) :-
                     List, Enum_List)
         ;   List = Enum_List
         ),
-        (   option(compress_ids(true), Options)
-        ->  Enum = 'Enum'
-        ;   global_prefix_expand(sys:'Enum', Enum)
-        ),
+        expand_system_uri(sys:'Enum', Enum, Options),
         Pairs7 = ['@type'-Enum,'@values'-Enum_List|Pairs6]
-    ;   (   option(compress_ids(true), Options)
-        ->  C = 'Class'
-        ;   global_prefix_expand(sys:'Class', C)
-        ),
+    ;   expand_system_uri(sys:'Class', C, Options),
         Pairs7 = ['@type'-C|Pairs6]
     ),
     sort(Pairs7, Sorted_Pairs),
@@ -7391,7 +7399,7 @@ test(extract_bottom,
                 '@inherits':['Left','Right'],
                 '@type':'Class',
                 top_face:json{'@class':'Top',
-                              '@type':"Array",
+                              '@type':'Array',
                               '@dimensions':1}}.
 
 % NOTE: We need to check diamond properties at schema creation time
@@ -8344,6 +8352,7 @@ test(arithmetic_frame, [
      ]) :-
 
     class_frame(Desc, 'Plus2', JSON),
+
     JSON = json{'@type':'Class',
                 '@key':json{'@type':"Random"},
                 '@subdocument':[],
@@ -8468,7 +8477,7 @@ test(all_class_frames, [
 						         '@schema':"http://s/",
 						         '@type':'Context'
 						       },
-				   'http://s/Address':json{ '@documentation':
+				   'Address':json{ '@documentation':
                                             json{ '@comment':"This is address"
 										        },
 							                '@key':json{'@type':"Random"},
@@ -8478,13 +8487,13 @@ test(all_class_frames, [
 							                postal_code:'xsd:string',
 							                street:'xsd:string'
 							              },
-				   'http://s/Coordinate':json{ '@key':json{ '@type':"Random"
+				   'Coordinate':json{ '@key':json{ '@type':"Random"
 									                      },
 								               '@type':'Class',
 								               x:'xsd:decimal',
 								               y:'xsd:decimal'
 							                 },
-				   'http://s/Country':json{ '@key':json{ '@type':"ValueHash"
+				   'Country':json{ '@key':json{ '@type':"ValueHash"
 									                   },
 							                '@type':'Class',
 							                name:'xsd:string',
@@ -8492,7 +8501,7 @@ test(all_class_frames, [
 									                        '@type':'List'
 									                      }
 							              },
-				   'http://s/Employee':json{ '@key':json{ '@type':"Random"
+				   'Employee':json{ '@key':json{ '@type':"Random"
 									                    },
 							                 '@type':'Class',
 							                 address_of:json{ '@class':'Address',
@@ -8508,7 +8517,7 @@ test(all_class_frames, [
 							                 managed_by:'Employee',
 							                 name:'xsd:string'
 							               },
-				   'http://s/Person':json{ '@documentation':
+				   'Person':json{ '@documentation':
                                            json{ '@comment':"This is a person",
 										         '@properties':json{ age:"Age of the person.",
 													                 name:"Name of the person."
@@ -8522,7 +8531,7 @@ test(all_class_frames, [
 									                     },
 							               name:'xsd:string'
 							             },
-				   'http://s/Team':json{ '@type':'Enum',
+				   'Team':json{ '@type':'Enum',
 							             '@values':['IT','Marketing']
 							           }
 				 }.
@@ -8555,7 +8564,19 @@ test(insert_employee, [
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([witness{'@type':instance_not_cardinality_one,class:'http://s/Coordinate',instance:'http://i/Country/4a6a92ac42b5f80ead905e97fdd652e75cecef022d5715d630591e6fa299e16c',predicate:'http://s/perimeter'}]))
+         error(
+             schema_check_failure(
+                 [json{'http://s/address_of':
+                       json{'http://s/country':
+                            json{'@type':mandatory_key_does_not_exist_in_document,
+                                 document:
+                                 json{'@type':'http://s/Country',
+                                      'http://s/name':
+                                      json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                           '@value':"United Kingdom"}},
+                                 key:'http://s/perimeter'}}}]),
+             _)
+
      ]) :-
 
     D1 = _{'@type': "Country",
@@ -9066,13 +9087,13 @@ test(js_type_not_found,
                       organization_name:"withsubscription",
                       owned_by: "User/bonzai",
                       status: "invite_sent",
-                      stripe_subscription:[ _{ '@type' : "StripeSubscription",
+                      stripe_subscription: _{ '@type' : "StripeSubscription",
                                                billing_email:"somewkjf",
                                                status: "active",
                                                stripe_id:"KItty",
                                                stripe_quantity:"32",
                                                stripe_user:"User/hikita",
-                                               subscription_id:"932438238429384ASBJDA" } ],
+                                               subscription_id:"932438238429384ASBJDA" },
                       creation_date:"2011-01-01T01:00:37Z" },
     create_context(Desc, commit{author: "me", message: "something"}, Context),
     with_transaction(
@@ -9126,13 +9147,13 @@ test(subdocument_update,
                        note:"whjgasdj",
                        status:"pending"}
                  ],
-                 stripe_subscription:[ _{ '@type' : "StripeSubscription",
+                 stripe_subscription: _{ '@type' : "StripeSubscription",
                                           billing_email:"somewkjf",
                                           status: "active",
                                           stripe_id:"KItty",
                                           stripe_quantity:"32",
                                           stripe_user:"User/bonzai",
-                                          subscription_id:"932438238429384ASBJDA" } ],
+                                          subscription_id:"932438238429384ASBJDA" } ,
                  owned_by: 'User/bonzai',
                  creation_date: "2021-05-01T12:10:10Z",
                  organization_name:"somewhere",
@@ -9158,13 +9179,13 @@ test(subdocument_update,
                         note:"whjgasdj",
                         status:"pending"}
                   ],
-                  stripe_subscription:[ _{ '@type' : "StripeSubscription",
+                  stripe_subscription: _{ '@type' : "StripeSubscription",
                                            billing_email:"somewkjf",
                                            status: "active",
                                            stripe_id:"KItty",
                                            stripe_quantity:"32",
                                            stripe_user:"User/bonzai",
-                                           subscription_id:"932438238429384ASBJDA" } ],
+                                           subscription_id:"932438238429384ASBJDA" },
                   owned_by: 'User/bonzai',
                   creation_date: "2021-05-01T12:10:10Z",
                   organization_name:"somewhere",
@@ -10237,14 +10258,11 @@ test(wrong_dim_error,
              write_schema(geojson_point_schema,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(wrong_array_dimensions([[json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                          '@value':100.0},
-                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                          '@value':0.0}],
-                                    [json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                          '@value':101.0},
-                                     json{'@type':'http://www.w3.org/2001/XMLSchema#decimal',
-                                          '@value':1.0}]],1), _)
+      error(schema_check_failure(
+                [json{'@type':invalid_array_dimensions,
+                      array:[[100.0,0.0],[101.0,1.0]],
+                      dimensions:1}]),
+            _)
      ]) :-
     with_test_transaction(Desc,
                           C1,
@@ -10307,7 +10325,12 @@ test(class_with_unit_property_but_nonnil_data,
              write_schema(schema_class_with_unit_property,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(not_a_unit_type(42))
+      error(schema_check_failure(
+                [json{'@type':not_a_sys_unit,
+                      document:json{'@type':'terminusdb:///schema#Foo',
+                                    'terminusdb:///schema#field':42},
+                      key:'terminusdb:///schema#field'}]),
+            _)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10324,11 +10347,9 @@ test(class_with_unit_property_missing_field,
              write_schema(schema_class_with_unit_property,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(schema_check_failure([witness{
-                                      '@type':instance_not_cardinality_one,
-                                      class:'http://terminusdb.com/schema/sys#Unit',
-                                      instance:_,
-                                      predicate:'terminusdb:///schema#field'}]),_)
+      error(schema_check_failure([json{'@type':not_a_sys_unit,
+                                       document:json{'@type':'terminusdb:///schema#Foo'},
+                                       key:'terminusdb:///schema#field'}]),_)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10385,7 +10406,12 @@ test(class_with_oneof_unit_property_but_nonnil_data,
              write_schema(schema_class_with_oneof_unit_property,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(not_a_unit_type(42))
+      error(schema_check_failure(
+                [json{'@type':not_a_sys_unit,
+                      document:json{'@type':'terminusdb:///schema#Foo',
+                                    'terminusdb:///schema#a':42},
+                      key:'terminusdb:///schema#a'}]),
+            _)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10402,12 +10428,12 @@ test(class_with_oneof_unit_property_missing_field,
              write_schema(schema_class_with_oneof_unit_property,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(schema_check_failure([witness{
-                                      '@type':no_choice_is_cardinality_one,
-                                      choices:['terminusdb:///schema#a',
-                                               'terminusdb:///schema#b'],
-                                      class:'terminusdb:///schema#Foo',
-                                      instance:_}]),_)
+      error(schema_check_failure(
+                [json{'@type':no_choice_is_cardinality_one,
+                      choice:json{'terminusdb:///schema#a':'http://terminusdb.com/schema/sys#Unit',
+                                  'terminusdb:///schema#b':'http://terminusdb.com/schema/sys#Unit'},
+                      document:json{'@type':'terminusdb:///schema#Foo'}}]),
+            _)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10464,7 +10490,11 @@ test(taggedunion_with_unit_property_but_nonnil_data,
              write_schema(schema_taggedunion_with_unit_property,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(not_a_unit_type(42))
+      error(schema_check_failure(
+                [json{'@type':not_a_sys_unit,
+                      document:json{'@type':'terminusdb:///schema#Foo',
+                                    'terminusdb:///schema#a':42},
+                      key:'terminusdb:///schema#a'}]),_)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10481,12 +10511,13 @@ test(taggedunion_with_unit_property_missing_field,
              write_schema(schema_taggedunion_with_unit_property,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(schema_check_failure([witness{
-                                      '@type':no_choice_is_cardinality_one,
-                                      choices:['terminusdb:///schema#a',
-                                               'terminusdb:///schema#b'],
-                                      class:'terminusdb:///schema#Foo',
-                                      instance:_}]),_)
+      error(schema_check_failure(
+                [json{'@type':no_choice_is_cardinality_one,
+                      choice:
+                      json{'terminusdb:///schema#a':'http://terminusdb.com/schema/sys#Unit',
+                           'terminusdb:///schema#b':'http://terminusdb.com/schema/sys#Unit'},
+                      document:json{'@type':'terminusdb:///schema#Foo'}}]),
+            _)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10561,14 +10592,12 @@ test(fail_card,
       cleanup(teardown_temp_store(State)),
       error(
           schema_check_failure(
-              [
-                  witness{'@type':instance_has_wrong_cardinality,
-                          cardinality:2,
-                          class:'http://www.w3.org/2001/XMLSchema#integer',
-                          instance:_,
-                          object_list:[23,42],
-                          predicate:'terminusdb:///schema#a'}
-              ]),
+              [json{'@type':key_has_wrong_cardinality,
+                    actual:2,
+                    document:json{'@type':'terminusdb:///schema#Card',
+                                  'terminusdb:///schema#a':[42,23]},
+                    key:'terminusdb:///schema#a',
+                    max:1,min:1}]),
           _)
      ]) :-
 
@@ -10602,13 +10631,11 @@ test(fail_card_min_under,
              write_schema(schema_cardinality,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(
-          schema_check_failure([witness{'@type':instance_has_wrong_cardinality,
-                                        cardinality:0,
-                                        class:'http://www.w3.org/2001/XMLSchema#integer',
-                                        instance:_,
-                                        object_list:[],predicate:'terminusdb:///schema#a'}]),
-          _)
+      error(schema_check_failure(
+                [json{'@type':mandatory_key_does_not_exist_in_document,
+                      document:json{'@type':'terminusdb:///schema#Min'},
+                      key:'terminusdb:///schema#a'}]),
+            _)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10655,14 +10682,15 @@ test(fail_card_max_over,
              write_schema(schema_cardinality,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(
-          schema_check_failure([witness{'@type':instance_has_wrong_cardinality,
-                                        cardinality:2,
-                                        class:'http://www.w3.org/2001/XMLSchema#integer',
-                                        instance:_,
-                                        object_list:[42,43],
-                                        predicate:'terminusdb:///schema#a'}]),
-          _)
+      error(schema_check_failure([json{'@type':key_has_wrong_cardinality,
+                                       actual:2,
+                                       document:
+                                       json{'@type':'terminusdb:///schema#Max',
+                                            'terminusdb:///schema#a':[42,43]},
+                                       key:'terminusdb:///schema#a',
+                                       max:1,
+                                       min:0}]),
+           _)
      ]) :-
 
     with_test_transaction(Desc,

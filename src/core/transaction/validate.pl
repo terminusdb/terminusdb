@@ -710,8 +710,13 @@ test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(unexpected_array_value(["Dublin","Dubhlinn"],'http://www.w3.org/2001/XMLSchema#string'),_)])
-:-
+      error(
+          schema_check_failure(
+              witness{'@type':unexpected_list,
+                      type:'http://www.w3.org/2001/XMLSchema#string',
+                      value:["Dublin","Dubhlinn"]}),
+          _)
+     ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
@@ -736,8 +741,16 @@ test(cardinality_min_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(unexpected_array_value(["Duke","Doug"],'http://www.w3.org/2001/XMLSchema#string'),_)])
-:-
+
+      error(schema_check_failure(
+                [json{'@type':mandatory_key_does_not_exist_in_document,
+                      document:json{'@id':'http://example.com/data/world/Person/Duke',
+                                    '@type':'http://example.com/schema/worldOntology#Person',
+                                    'http://example.com/schema/worldOntology#name':
+                                    ["Duke","Doug"]},
+                      key:'http://example.com/schema/worldOntology#address'}]),
+            _)
+     ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
