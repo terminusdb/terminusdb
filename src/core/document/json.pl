@@ -1546,6 +1546,8 @@ json_triple_(JSON,Context,Triple) :-
     ->  fail
     ;   Key = '@capture'
     ->  fail
+    ;   Key = '@ref'
+    ->  fail
     ;   Key = '@type', % this is a leaf
         Value = "@id"
     ->  fail
