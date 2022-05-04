@@ -368,6 +368,10 @@ is_dict(Type),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Enum', '@id' : Result} :< Type =>
     Presentation = Result.
 presentation_type(Type, Presentation),
+is_dict(Type),
+_{ '@subdocument' : [], '@class' : Class} :< Type =>
+    presentation_type(Class, Presentation).
+presentation_type(Type, Presentation),
 atom(Type) =>
     Presentation = Type.
 
@@ -431,8 +435,10 @@ atom(Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),
     check_value_type(Database,Prefixes,Value,Type_Ex,Annotated,Captures).
 check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
-is_dict(Type) =>
-    get_dict('@id',Type,Type_Id),
+_{ '@subdocument' : _, '@class' : Class} :< Type =>
+    check_simple_or_compound_type(Database,Prefixes,Value,Class,Annotated,Captures).
+check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
+_{ '@id' : Type_Id } :< Type =>
     check_frame(Type,Database,Prefixes,Value,Type_Id,Annotated,Captures).
 
 check_value_type(_Database,_Prefixes,Value,_Type,Annotated,captures(Capture_In,Dep-DepT,Capture_Out)),

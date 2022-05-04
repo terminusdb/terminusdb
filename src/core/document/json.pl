@@ -1907,6 +1907,12 @@ compress_system_uri(IRI,Prefixes,IRI_Atom,Options) :-
     ;   IRI = IRI_Atom
     ).
 
+expand_system_uri(Prefix:IRI,IRI_Atom,Options) =>
+    (   option(compress_ids(true),Options)
+    ->  IRI_Atom = IRI
+    ;   global_prefix_expand(Prefix:IRI,IRI_Atom)
+    ).
+
 compress_system_uri(IRI,Prefixes,IRI_Atom) :-
     put_dict(_{'@base' : 'http://terminusdb.com/schema/sys#'}, Prefixes, Schema_Prefixes),
     compress_dict_uri(IRI,Schema_Prefixes,IRI_Comp),
@@ -2122,18 +2128,22 @@ type_descriptor_json(class(C), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(base_class(C), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_json(optional(C), Prefixes, json{ '@type' : "Optional",
+type_descriptor_json(optional(C), Prefixes, json{ '@type' : Optional,
                                                   '@class' : Class_Comp }, Options) :-
+    expand_system_uri(sys:'Optional', Optional, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_json(set(C), Prefixes, json{ '@type' : "Set",
+type_descriptor_json(set(C), Prefixes, json{ '@type' : Set,
                                              '@class' : Class_Comp }, Options) :-
+    expand_system_uri(sys:'Set', Set, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_json(array(C,D), Prefixes, json{ '@type' : "Array",
+type_descriptor_json(array(C,D), Prefixes, json{ '@type' : Array,
                                                  '@dimensions' : D,
                                                  '@class' : Class_Comp }, Options) :-
+    expand_system_uri(sys:'Array', Array, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_json(list(C), Prefixes, json{ '@type' : "List",
+type_descriptor_json(list(C), Prefixes, json{ '@type' : List,
                                               '@class' : Class_Comp }, Options) :-
+    expand_system_uri(sys:'List', List, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
@@ -5343,7 +5353,7 @@ test(extract_schema_person,
                             '@type':"Lexical"},
                 '@type':'Class',
                 birthdate:'xsd:date',
-                friends:json{'@class':'Person','@type':"Set"},
+                friends:json{'@class':'Person','@type':'Set'},
                 name:'xsd:string'}.
 
 test(extract_schema_employee,
@@ -5366,10 +5376,10 @@ test(extract_schema_employee,
                 '@key':json{'@fields':[name,birthdate],
                             '@type':"Hash"},
                 '@type':'Class',
-                boss:json{'@class':'Employee','@type':"Optional"},
+                boss:json{'@class':'Employee','@type':'Optional'},
                 staff_number:'xsd:string',
                 tasks:json{'@class':'Task',
-                           '@type':"List"}}.
+                           '@type':'List'}}.
 
 test(extract_schema_colour,
      [
