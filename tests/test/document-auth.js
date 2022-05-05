@@ -602,10 +602,8 @@ describe('document', function () {
       const r = await document.insert(agent, docPath, { instance })
         .then(document.verifyInsertFailure)
 
-      expect(r.body['api:error']['@type']).to.equal('api:UnrecognizedProperty')
-      expect(r.body['api:error']['api:document']).to.deep.equal(instance)
-      expect(r.body['api:error']['api:property']).to.equal('unknownProperty')
-      expect(r.body['api:error']['api:type']).to.equal(schema['@id'])
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('unknown_property_for_type')
     })
 
     describe('tests cardinality in schema', function () {

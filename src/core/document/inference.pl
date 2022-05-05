@@ -54,9 +54,9 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     \+ is_abstract(Database, Type),
     class_frame(Database, Type, Frame, [expand_abstract(false),
                                         compress_ids(false)]),
-    (   shape_mismatch(Database,Candidate,Dictionary,Properties)
+    (   shape_mismatch(Database,Type,Value,Properties)
     ->  no_captures(Captures),
-        missing_property_witness(Dictionary,Properties,Type,Annotated)
+        missing_property_witness(Value,Properties,Type,Annotated)
     ;   check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures)
     ).
 
@@ -602,11 +602,13 @@ matches_shape(Database,Candidate,Dictionary) :-
     schema_matches_shape(Schema,Candidate,Dictionary).
 
 shape_mismatch(Database,Candidate,Dictionary,Properties) :-
-    dict_keys(Dictionary,Props),
+    database_schema(Database,Schema),
+    dict_keys(Dictionary,Keys),
+    exclude(has_at,Keys,Props),
     exclude({Schema,Candidate}/[Prop]>>
             schema_class_has_property(Schema,Candidate,Prop),
             Props, Properties),
-    \+ Properies = [].
+    \+ Properties = [].
 
 candidate_subsumed(Database,'http://terminusdb.com/schema/sys#Top', Candidate, Dictionary) =>
     matches_shape(Database, Candidate, Dictionary),
