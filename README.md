@@ -21,13 +21,13 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 
 ## Installation Guide
 
-Install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap)
+Install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
 
-Install from [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code)
+Install from [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
 
-Install the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍
+Install the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍.
 
-Install the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐
+Install the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐.
 
 ## TerminusDB CLI
 
@@ -54,7 +54,6 @@ More on the [CLI here](https://github.com/GavinMendelGleason/blog/blob/main/entr
 
 Come visit us [Discord](https://discord.gg/yTJKAma)
 or our [forum](https://discuss.terminusdb.com). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
-<img align="right" src="https://assets.terminusdb.com/images/TerminusDB%20color%20mascot.png" width="256px"/>
 
 ## Documentation
 
