@@ -65,11 +65,11 @@ describe('document', function () {
     it('fails replace for document not found', async function () {
       const instance = { '@id': util.randomString() }
       const r = await document
-          .replace(agent, docPath, { instance })
-          .then(document.verifyReplaceFailure)
+        .replace(agent, docPath, { instance })
+        .then(document.verifyReplaceFailure)
 
       expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-      expect(r.body['api:error']['api:witnesses'][0]['document']['@id'])
+      expect(r.body['api:error']['api:witnesses'][0].document['@id'])
         .to.equal(instance['@id'])
     })
 
@@ -293,8 +293,8 @@ describe('document', function () {
             },
           })
           .then(document.verifyInsertFailure)
-        expect(r.body['api:error']['api:witnesses']
-               [0]['terminusdb:///schema#ref']['@type']['no_unique_type_for_document'])
+        expect(r.body['api:error']['api:witnesses'][0]['terminusdb:///schema#ref']['@type']
+          .no_unique_type_for_document)
       }
       {
         const r = await document
@@ -306,8 +306,8 @@ describe('document', function () {
             },
           })
           .then(document.verifyReplaceFailure)
-        expect(r.body['api:error']['api:witnesses']
-               [0]['terminusdb:///schema#ref']['@type']['no_unique_type_for_document'])
+        expect(r.body['api:error']['api:witnesses'][0]['terminusdb:///schema#ref']['@type']
+          .no_unique_type_for_document)
       }
     })
 
@@ -327,8 +327,8 @@ describe('document', function () {
         .then(document.verifyInsertFailure)
       expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
       expect(r.body['api:error']['api:witnesses']['@type']).to.equal('unexpected_list')
-      expect(r.body['api:error']['api:witnesses']['value']).to.deep.equal(badValue)
-      expect(r.body['api:error']['api:witnesses']['type']).to.equal(expectedType)
+      expect(r.body['api:error']['api:witnesses'].value).to.deep.equal(badValue)
+      expect(r.body['api:error']['api:witnesses'].type).to.equal(expectedType)
     })
 
     it('fails for unexpected boolean values (#515)', async function () {
@@ -373,7 +373,7 @@ describe('document', function () {
         .then(document.verifyInsertFailure)
 
       expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-      expect(r.body['api:error']['api:witnesses'][0]['dimensions']).to.equal(1)
+      expect(r.body['api:error']['api:witnesses'][0].dimensions).to.equal(1)
     })
 
     it('does not stringify boolean literals (#723)', async function () {

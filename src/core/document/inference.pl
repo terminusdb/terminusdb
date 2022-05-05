@@ -654,16 +654,24 @@ get_dict('@type', Dictionary, Type) =>
     (   (   is_base_type(Type_Ex),
             basetype_subsumption_of(Type_Ex,Super)
         ;   class_subsumed(Database, Type_Ex, Super)
-        ;   Super = 'http://terminusdb.com/schema/sys#Top'
+        ;   Super = 'http://terminusdb.com/schema/sys#Top',
+            is_simple_class(Database, Type_Ex)
         )
     ->  put_dict('@type', Dictionary, Type_Ex, New_Dictionary),
         expand_dictionary_keys(New_Dictionary,Prefixes,Dictionary_Expanded),
         check_type(Database,Prefixes,Dictionary_Expanded,Type_Ex,Annotated,Captures),
         Inferred_Type = Type_Ex
-    ;   Annotated = witness(json{ '@type' : ascribed_type_not_subsumed,
-                                  'document' : Dictionary,
-                                  'ascribed_type' : Type_Ex,
-                                  'required_type' : Super})
+    ;   no_captures(Captures),
+        (   (   is_simple_class(Database, Type_Ex)
+            ;   is_base_type(Type_Ex))
+        ->      Annotated = witness(json{ '@type' : ascribed_type_not_subsumed,
+                                          'document' : Dictionary,
+                                          'ascribed_type' : Type_Ex,
+                                          'required_type' : Super})
+        ;   Annotated = witness(json{ '@type' : ascribed_type_does_not_exist,
+                                      'document' : Dictionary,
+                                      'ascribed_type' : Type_Ex})
+        )
     ).
 infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated,captures(In,DepH-DepT,Out)) =>
     expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
