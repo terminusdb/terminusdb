@@ -19,6 +19,7 @@
 :- use_module(library(lists)).
 :- use_module(library(pcre)).
 :- use_module(library(url)).
+:- use_module(library(filesex)).
 
 /** <module> File Utils
  *
