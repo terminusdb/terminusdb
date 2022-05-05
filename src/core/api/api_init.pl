@@ -120,9 +120,6 @@ initialize_database(Key,Force) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path, Force).
 
-storage_version_path(DB_Path,Path) :-
-    atomic_list_concat([DB_Path,'/STORAGE_VERSION'],Path).
-
 /*
  * initialize_database_with_path(Key,DB_Path,Force) is det+error.
  *
@@ -303,5 +300,37 @@ test("TERMINUSDB_INSECURE_USER_HEADER=TerminusDB-5",
        true(Header_Key = terminusdb_5)
      ]) :-
     insecure_user_header_key(Header_Key).
+
+test("TERMINUSDB_SERVER_DB_PATH is not set", [true(DB_Path = Expected_Path)]) :-
+    config:default_database_path(DB_Path),
+    working_directory(CWD, CWD),
+    directory_file_path(CWD, "storage/db", Expected_Path).
+
+test("TERMINUSDB_SERVER_DB_PATH is empty",
+     [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', '')),
+       cleanup(unsetenv('TERMINUSDB_SERVER_DB_PATH')),
+       true(DB_Path = Expected_Path)
+     ]) :-
+    config:default_database_path(DB_Path),
+    working_directory(CWD, CWD),
+    directory_file_path(CWD, "storage/db", Expected_Path).
+
+test("TERMINUSDB_SERVER_DB_PATH=../relative/path",
+     [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', "../relative/path")),
+       cleanup(unsetenv('TERMINUSDB_SERVER_DB_PATH')),
+       true(DB_Path = Expected_Path)
+     ]) :-
+    config:default_database_path(DB_Path),
+    working_directory(CWD, CWD),
+    directory_file_path(CWD, "..", Rel_Parent_Dir),
+    absolute_file_name(Rel_Parent_Dir, Parent_Dir),
+    directory_file_path(Parent_Dir, "relative/path", Expected_Path).
+
+test("TERMINUSDB_SERVER_DB_PATH=/absolute/path",
+     [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', "/absolute/path")),
+       cleanup(unsetenv('TERMINUSDB_SERVER_DB_PATH')),
+       true(DB_Path = '/absolute/path')
+     ]) :-
+    config:default_database_path(DB_Path).
 
 :- end_tests(env_vars).

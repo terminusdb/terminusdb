@@ -46,10 +46,11 @@
 
 :- use_module(core(util)).
 
+:- use_module(config(terminus_config), [db_path/1]).
+
 :- use_module(library(pcre)).
 :- use_module(library(lists)).
 :- use_module(library(shell)).
-
 
 /**
  * database_version(-Version) is det.
@@ -65,7 +66,7 @@ database_version('1.0.0').
  */
 get_db_version(Version) :-
     db_path(DB_Path),
-    interpolate([DB_Path,'STORAGE_VERSION'],Version_File),
+    storage_version_path(DB_Path, Version_File),
     (   exists_file(Version_File)
     ->  setup_call_cleanup(
             open(Version_File,read,Stream),
@@ -83,7 +84,7 @@ get_db_version(Version) :-
  */
 set_db_version(Version) :-
     db_path(DB_Path),
-    interpolate([DB_Path,'STORAGE_VERSION'],Version_File),
+    storage_version_path(DB_Path, Version_File),
     setup_call_cleanup(
         open(Version_File,update, Stream),
         write(Stream,Version),

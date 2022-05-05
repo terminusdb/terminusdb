@@ -810,10 +810,11 @@ getenv_number(Name, Value) :-
 /*
  * getenv_default(+Env_Key, +Default, -Value)
  *
- * Get the env variable or the default value if it isn't set
+ * Get the env variable or the default value if it is unset or empty
  */
 getenv_default(Env_Key, Default, Value) :-
-    (   getenv(Env_Key, Value)
+    (   getenv(Env_Key, Value),
+        Value \= ''
     ->  true
     ;   Value = Default).
 
