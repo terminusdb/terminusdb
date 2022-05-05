@@ -54,7 +54,8 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     \+ is_abstract(Database, Type),
     class_frame(Database, Type, Frame, [expand_abstract(false),
                                         compress_ids(false)]),
-    (   shape_mismatch(Database,Type,Value,Properties)
+    (   is_dict(Value),
+        shape_mismatch(Database,Type,Value,Properties)
     ->  no_captures(Captures),
         missing_property_witness(Value,Properties,Type,Annotated)
     ;   check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures)
