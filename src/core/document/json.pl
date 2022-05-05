@@ -7197,7 +7197,7 @@ test(unknown_property,
                  create_db_with_empty_schema("admin", "foo"),
                  resolve_absolute_string_descriptor("admin/foo", Desc)
              )),
-         cleanup(teardown_temp_store(State))
+         cleanup(teardown_temp_store(State)),
          error(
              schema_check_failure(
                  [json{'@type':unknown_property_for_type,
