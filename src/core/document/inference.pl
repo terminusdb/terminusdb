@@ -54,7 +54,17 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     \+ is_abstract(Database, Type),
     class_frame(Database, Type, Frame, [expand_abstract(false),
                                         compress_ids(false)]),
-    check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures).
+    (   shape_mismatch(Database,Candidate,Dictionary,Properties)
+    ->  no_captures(Captures),
+        missing_property_witness(Dictionary,Properties,Type,Annotated)
+    ;   check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures)
+    ).
+
+missing_property_witness(Dictionary,Properties,Type,witness(Result)) :-
+    Result = json{ '@type' : unknown_property_for_type,
+                   property : Properties,
+                   document : Dictionary,
+                   type : Type }.
 
 no_captures(captures(C,T-T,C)).
 
@@ -591,6 +601,13 @@ matches_shape(Database,Candidate,Dictionary) :-
     database_schema(Database,Schema),
     schema_matches_shape(Schema,Candidate,Dictionary).
 
+shape_mismatch(Database,Candidate,Dictionary,Properties) :-
+    dict_keys(Dictionary,Props),
+    exclude({Schema,Candidate}/[Prop]>>
+            schema_class_has_property(Schema,Candidate,Prop),
+            Props, Properties),
+    \+ Properies = [].
+
 candidate_subsumed(Database,'http://terminusdb.com/schema/sys#Top', Candidate, Dictionary) =>
     matches_shape(Database, Candidate, Dictionary),
     is_simple_class(Database, Candidate),
@@ -620,6 +637,14 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,D
         In = Out
     ).
 
+infer_type_or_check(_Database, Prefixes, _Super, Dictionary, _Inferred_Type, Annotated, Captures),
+get_dict('@type', Dictionary, "@id"),
+get_dict('@id', Dictionary, Id),
+text(Id) =>
+    no_captures(Captures),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    Annotated = success(json{ '@type' : "@id",
+                              '@id' : Id_Ex }).
 infer_type_or_check(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated,Captures),
 get_dict('@type', Dictionary, Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),

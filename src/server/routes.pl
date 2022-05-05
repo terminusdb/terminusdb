@@ -2975,11 +2975,11 @@ write_cors_headers(Request) :-
 
 cors_reply_json(Request, JSON) :-
     write_cors_headers(Request),
-    reply_json(JSON, [json_object(dict)]).
+    reply_json(JSON, [json_object(dict),serialize_unknown(true)]).
 
 cors_reply_json(Request, JSON, Options) :-
     write_cors_headers(Request),
-    reply_json(JSON, [json_object(dict)|Options]).
+    reply_json(JSON, [json_object(dict),serialize_unknown(true)|Options]).
 
 /**
  * cors_json_stream_write_headers_(+Request, +Data_Version, +As_List) is det.

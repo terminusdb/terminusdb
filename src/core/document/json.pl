@@ -7189,6 +7189,35 @@ test(enum_documentation,
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
+test(unknown_property,
+     [
+         setup(
+             (
+                 setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(
+                              C1,
+                              _{ '@type': "Class",
+                                 '@id': "Test" }
+                          )),
+
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(
+                              C2,
+                              _{ '@type': "Test",
+                                 unknownProperty: 'abc'
+                               },
+                              _ID
+                          )).
+
 test(context_missing,
      [
          setup((setup_temp_store(State), test_document_label_descriptor(Desc))),
