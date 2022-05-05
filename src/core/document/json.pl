@@ -7198,6 +7198,14 @@ test(unknown_property,
                  resolve_absolute_string_descriptor("admin/foo", Desc)
              )),
          cleanup(teardown_temp_store(State))
+         error(
+             schema_check_failure(
+                 [json{'@type':unknown_property_for_type,
+                       document:json{'@type':'http://somewhere.for.now/schema#Test',
+                                     'http://somewhere.for.now/schema#unknownProperty':abc},
+                       property:['http://somewhere.for.now/schema#unknownProperty'],
+                       type:'http://somewhere.for.now/schema#Test'}]),
+               _)
      ]) :-
 
     with_test_transaction(Desc,
