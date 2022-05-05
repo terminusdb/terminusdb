@@ -1,5 +1,6 @@
 :- module(file_utils,[
               terminus_path/1,
+              storage_version_path/2,
               touch/1,
               ensure_directory/1,
               sanitise_file_name/2,
@@ -54,6 +55,14 @@ terminus_path(Path) :-
     once(
         file_search_path(terminus_home,Path)
     ).
+
+/**
+ * storage_version_path(-Path) is det.
+ *
+ * Path to storage version file.
+ */
+storage_version_path(DB_Path, Path) :-
+    directory_file_path(DB_Path, 'STORAGE_VERSION', Path).
 
 /**
  * terminus_schema_path(Path) is det.
