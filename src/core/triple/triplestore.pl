@@ -27,13 +27,10 @@
 :- use_module(literals).
 :- use_module(constants).
 
-%:- reexport(core(util/syntax)).
 :- use_module(core(util)).
-
 :- use_module(core(transaction)).
 
-% feeling very circular :(
-%:- use_module(core(transaction)).
+:- use_module(config(terminus_config), [db_path/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(debug)).
