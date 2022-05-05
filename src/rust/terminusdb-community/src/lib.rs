@@ -1,6 +1,8 @@
 use lcs;
 use swipl::prelude::*;
 
+use terminus_store_prolog;
+
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
     /// module. This should go away as soon as some real predicates
@@ -37,4 +39,5 @@ predicates! {
 
 pub fn install() {
     register_list_diff();
+    terminus_store_prolog::install(Some("terminus_store"));
 }

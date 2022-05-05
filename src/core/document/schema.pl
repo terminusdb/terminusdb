@@ -45,7 +45,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(triple/literals)).
-:- use_module(core(query), [has_at/1, compress_dict_uri/3]).
+:- use_module(core(query)).
 
 :- use_module(library(lists)).
 :- use_module(library(solution_sequences)).
