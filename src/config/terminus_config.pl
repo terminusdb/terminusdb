@@ -6,12 +6,10 @@
               server_port/1,
               worker_amount/1,
               max_transaction_retries/1,
-              default_database_path/1,
+              db_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
-              registry_path/1,
               pack_dir/1,
-              tmp_path/1,
               server_worker_options/1,
               http_options/1,
               ignore_ref_and_repo_schema/0,
@@ -71,8 +69,19 @@ max_transaction_retries(Value) :-
     ;   worker_amount(Num_Workers),
         Value is Num_Workers * 2).
 
-default_database_path(Value) :-
-    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
+% This is defined only for testing. Use db_path/1 since it is tabled.
+default_database_path(Path) :-
+    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value),
+    absolute_file_name(Value, Path).
+
+/**
+ * db_path(-Path) is det.
+ *
+ * Database storage path.
+ */
+:- table db_path/1 as shared.
+db_path(Path) :-
+    default_database_path(Path).
 
 jwt_enabled_env_var :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
@@ -98,15 +107,6 @@ jwt_jwks_endpoint(Endpoint) :-
 
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
-
-registry_path(Value) :-
-    once(expand_file_search_path(plugins('registry.pl'), Path)),
-    getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
-
-tmp_path(Value) :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/tmp',TmpPathRelative),
-    getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
 :- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-

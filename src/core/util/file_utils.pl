@@ -1,6 +1,5 @@
 :- module(file_utils,[
               terminus_path/1,
-              db_path/1,
               touch/1,
               ensure_directory/1,
               sanitise_file_name/2,
@@ -12,7 +11,6 @@
           ]).
 
 :- use_module(utils).
-:- use_module(config(terminus_config), [default_database_path/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -55,19 +53,6 @@
 terminus_path(Path) :-
     once(
         file_search_path(terminus_home,Path)
-    ).
-
-/**
- * db_path(-Path) is det.
- *
- */
-db_path(Path) :-
-    default_database_path(PathWithoutSlash),
-    (   re_matchsub('\\./(.*)', PathWithoutSlash, Dict, []),
-        get_dict(1,Dict,Sub)
-    ->  working_directory(CWD, CWD),
-        atomic_list_concat([CWD, Sub, '/'], Path)
-    ;   atomic_list_concat([PathWithoutSlash, '/'], Path)
     ).
 
 /**

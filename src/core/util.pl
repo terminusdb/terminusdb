@@ -6,7 +6,6 @@
 
               % file_utils.pl
               terminus_path/1,
-              db_path/1,
               touch/1,
               ensure_directory/1,
               sanitise_file_name/2,
