@@ -8,7 +8,8 @@
               validate_validation_objects/3,
               read_write_obj_to_graph_validation_obj/4,
               validation_object_changed/1,
-              validation_object_has_layer/1
+              validation_object_has_layer/1,
+              set_read_write_object_triple_update/1
           ]).
 
 /** <module> Validation
@@ -57,9 +58,11 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
 read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, [Read_Write_Obj=Graph_Validation_Obj|Map]) :-
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
+                                     triple_update: Triple_Update,
                                      write: Layer_Builder },
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: New_Layer,
+                                                 triple_update: Triple_Update,
                                                  changed: Changed },
 
     (   var(Layer_Builder)
@@ -79,9 +82,11 @@ graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map
 graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, [Graph_Validation_Obj=Read_Write_Obj|Map]) :-
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: Layer,
+                                                 triple_update: Triple_Update,
                                                  changed: _Changed },
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
+                                     triple_update: Triple_Update,
                                      write: _Layer_Builder }.
 
 transaction_object_to_validation_object(Transaction_Object, Validation_Object, Map, New_Map) :-
@@ -366,11 +371,17 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
         attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri)
     ;   true).
 
+validation_triple_udpate(Validation_Object) :-
+    Validation_Object.triple_update = true.
+
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
 
 validation_object_has_layer(Validation_Object) :-
     ground(Validation_Object.read).
+
+set_read_write_object_triple_update(Read_Write_Object) :-
+    nb_set_dict(triple_update, Read_Write_Object, true).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, system_descriptor]).
 

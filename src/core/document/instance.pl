@@ -2,6 +2,7 @@
               refute_instance/2,
               refute_instance_schema/2,
               refute_existing_object_keys/3,
+              refute_referential_integrity/2,
               is_instance/3,
               is_instance2/3,
               instance_of/3
@@ -696,6 +697,123 @@ refute_instance_schema(Validation_Object, Witness) :-
     distinct(S_Id,
              terminus_store:id_triple(Layer, S_Id, _, _)),
     refute_subject(Validation_Object,S_Id,Witness).
+
+/*
+
+Referential integrity only checking
+===================================
+
+↓ = subdocument link
+⇓ = Document link
+abc = Document id
+a.n = Subdocument id (of a)
+
+Deletion:
+=========
+
+If document 'b' is deleted in the following diagram, we must check to
+see that a.1 has no cardinality constraint failures.
+
+In general check ∀y. -(x,p,y) ∧ doc(y) ∧ domain(p)=T ⇒ Card(x,p,T)
+
+            a
+          ↙
+         a.1
+         ⇓
+         b
+       ↙  ↘
+      b.1   b.2
+      ⇓     ⇓
+      c     d
+
+Insertion
+=========
+
+Supposing I insert documents 'a' and 'b'. I need to check that 'c and
+'d' have the appropriate ascribed type.
+
+In general check ∀o. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+
+            a
+          ↙
+         a.1
+         ⇓
+         b
+       ↙  ↘
+      b.1   b.2
+      ⇓      ⇓
+      c      d
+
+
+*/
+
+is_document(Validation_Object, I) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    triple(Instance, I, Rdf_Type, node(C)),
+    is_simple_class(Validation_Object, C),
+    \+ is_subdocument(Validation_Object, C).
+
+% Generator for:  +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+referential_range_candidate(Validation_Object,O,P,Type) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, RDF_Type),
+    % Shared dictionary for predicates would be handy here!
+    distinct(O-P-Type,
+             (   triple_addition(Instance, S, P, node(O)),
+                 is_document(Validation_Object, O),
+                 triple(Instance, S, RDF_Type, node(C)),
+                 class_predicate_type(Validation_Object, C, P, Type)
+             )).
+
+% Generator for: -(s,p,o) ∧ doc(o) ∧ domain(p)=T
+referential_cardinality_candidate(Validation_Object,S,P,T) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    distinct(S-P-T,
+             (   triple_removal(Instance, S, P, node(O)),
+                 % o is a document
+                 is_document(Validation_Object, O),
+                 % Get domain of p
+                 triple(Instance, S, Rdf_Type, node(T))
+             )).
+
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_cardinality_candidate(Validation_Object, S, P, T),
+    instance_layer(Validation_Object, Instance),
+    terminus_store:subject_id(Instance,S,S_Id),
+    terminus_store:predicate_id(Instance,P,P_Id),
+    refute_cardinality(Validation_Object,S_Id,P_Id,T,Witness).
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_range_candidate(Validation_Object, O, P, T),
+    refute_range(Validation_Object, O, P, T, Witness).
+
+refute_range(Validation_Object, O, P, T, Witness) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    triple(Instance, O, Rdf_Type, node(CS)),
+    atom_string(C,CS),
+    do_or_die(extract_base_type(T,Super),
+              error(unexpected_document_type_encountered(O,P,T,C))),
+    (   \+ class_subsumed(Validation_Object, C, Super)
+    ->  extract_base_type(T, Base),
+        Witness = witness{ '@type': referential_integrity_violation,
+                           instance: O,
+                           actual_class: C,
+                           required_class: Base,
+                           predicate: P
+                         }
+    ).
+
+extract_base_type(T,C) :-
+    extract_base_type_(T,CS),
+    atom_string(C,CS).
+
+extract_base_type_(class(C),C).
+extract_base_type_(optional(C),C).
+extract_base_type_(set(C),C).
+extract_base_type_(cardinality(C),C).
+extract_base_type_(optional(C),C).
 
 %%%%%%%%%%%%%%%%%%%%%%
 %%  BASETYPES ONLY  %%

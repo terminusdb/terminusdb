@@ -1139,8 +1139,9 @@ compile_wf(delete(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(delete(X,P,Y),(
                freeze(Guard,
-                      delete(Read_Write_Object,XE,PE,YE,_)
-                     )
+                      (   set_read_write_object_triple_update(Read_Write_Object),
+                          delete(Read_Write_Object,XE,PE,YE,_)
+                      ))
            ))
 -->
     resolve(X,XE),
@@ -1169,10 +1170,11 @@ compile_wf(insert(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(insert(X,P,Y),(
                freeze(Guard,
-                      ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
-                                  [ground,ground,ground],
-                                  [XE,PE,YE],
-                                  [X,P,Y]))
+                      (   set_read_write_object_triple_update(Read_Write_Object),
+                          ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
+                                      [ground,ground,ground],
+                                      [XE,PE,YE],
+                                      [X,P,Y])))
            )
           )
 -->

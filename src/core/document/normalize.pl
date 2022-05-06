@@ -41,6 +41,7 @@ normalize_document(Transaction, Document, Normalized) :-
     Instance = read_write_obj{
                    descriptor: labelled_graph{ label: instance,
                                                type: instance },
+                   triple_update: false,
                    read: _Layer,
                    write: Write
                },
@@ -56,6 +57,7 @@ normalize_document(Transaction, Document, Normalized) :-
     New_Instance = read_write_obj{
                        descriptor: labelled_graph{ label: instance,
                                                    type: instance },
+                       triple_update: false,
                        read: New_Instance_Layer,
                        write: _Write
                    },

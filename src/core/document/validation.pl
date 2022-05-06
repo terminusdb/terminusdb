@@ -10,6 +10,10 @@
 :- use_module(schema).
 
 :- use_module(library(lists)).
+
+validation_triple_update(Object) :-
+    get_dict(triple_update, Object, true).
+
 /*
  * needs_schema_validation(Validation_Object) is det.
  *
@@ -55,6 +59,21 @@ needs_local_instance_validation(Validation_Object) :-
     \+ is_schemaless(Validation_Object).
 
 /*
+ * needs_referential_integrity_validation(Validation_Object) is det.
+ *
+ * Checks to see if we only need to check integrity of links
+ *
+ */
+needs_referential_integrity_validation(Validation_Object) :-
+    validation_object{
+        schema_objects : Schema_Objects,
+        instance_objects : Instance_Objects
+    } :< Validation_Object,
+    Schema_Objects \= [],
+    \+ exists(validation_triple_update, Instance_Objects),
+    \+ is_schemaless(Validation_Object).
+
+/*
  * refute(+Validation:validation_obj, -Witness) is nondet.
  *
  * We are for the moment going to do validation on all objects
@@ -84,6 +103,10 @@ refute(Validation_Object, Witness) :-
 refute(Validation_Object, Witness) :-
     needs_schema_instance_validation(Validation_Object),
     refute_instance_schema(Validation_Object, Witness),
+    !.
+refute(Validation_Object, Witness) :-
+    needs_referential_integrity_validation(Validation_Object),
+    refute_referential_integrity(Validation_Object,Witness),
     !.
 refute(Validation_Object, Witness) :-
     needs_local_instance_validation(Validation_Object),
