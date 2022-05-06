@@ -1,10 +1,14 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
-add_terminus_home_path :-
+root_path(Path) :-
     prolog_load_context(file, File),
-    file_directory_name(File, Dir),
-    asserta(user:file_search_path(terminus_home, Dir)).
+    relative_file_name(Path, File, '../').
+
+add_terminus_home_path :-
+    root_path(RootDir),
+    atom_concat(RootDir, 'src', SrcDir),
+    asserta(user:file_search_path(terminus_home, SrcDir)).
 
 :- add_terminus_home_path.
 
@@ -102,13 +106,13 @@ add_rust_path :-
 :- add_rust_path.
 
 add_enterprise_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir, '/../../terminusdb-enterprise/prolog', Enterprise),
+    root_path(Dir),
+    atom_concat(Dir, 'terminusdb-enterprise/prolog', Enterprise),
     asserta(user:file_search_path(enterprise, Enterprise)).
 
 add_enterprise_test_path :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir, '/../../terminusdb-enterprise/test', Enterprise),
+    root_path(Dir),
+    atom_concat(Dir, 'terminusdb-enterprise/test', Enterprise),
     asserta(user:file_search_path(enterprise_test, Enterprise)).
 
 :- if(getenv("TERMINUSDB_ENTERPRISE", true)).

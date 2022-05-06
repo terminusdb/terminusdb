@@ -20,7 +20,7 @@ else
 endif
 
 RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
-ENTERPRISE_RUST_LIBRARY_FILE:=../terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
+ENTERPRISE_RUST_LIBRARY_FILE:=terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
 RUST_TARGET:=src/rust/$(RUST_LIB_TARGET_NAME)
 
 ################################################################################
@@ -30,10 +30,10 @@ RUST_TARGET:=src/rust/$(RUST_LIB_TARGET_NAME)
 community: $(TARGET)
 
 .PHONY: enterprise
-enterprise: PROLOG_FILES += $(shell find ../terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
-enterprise: RUST_FILES += ../terminusdb-enterprise/rust/Cargo.toml ..//terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/src/ -type f -name '*.rs')
+enterprise: PROLOG_FILES += $(shell find terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+enterprise: RUST_FILES += ./terminusdb-enterprise/rust/Cargo.toml ./terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/ -type f -name '*.rs')
 enterprise: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
-enterprise: RUST_SOURCE_DIR := ../terminusdb-enterprise/rust
+enterprise: RUST_SOURCE_DIR := terminusdb-enterprise/rust
 enterprise: ENTERPRISE := true
 enterprise: $(TARGET)
 
@@ -50,9 +50,9 @@ install-deps:
 module: $(RUST_TARGET)
 
 .PHONY: enterprise-module
-enterprise-module: RUST_FILES += ../terminusdb-enterprise/rust/Cargo.toml ..//terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/src/ -type f -name '*.rs')
+enterprise-module: RUST_FILES += terminusdb-enterprise/rust/Cargo.toml terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/ -type f -name '*.rs')
 enterprise-module: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
-enterprise-module: RUST_SOURCE_DIR := ../terminusdb-enterprise/rust
+enterprise-module: RUST_SOURCE_DIR := terminusdb-enterprise/rust
 enterprise-module: $(RUST_TARGET)
 
 # Build a debug version of the binary.
@@ -77,7 +77,7 @@ clean: shallow-clean
 
 .PHONY: enterprise-clean
 enterprise-clean: shallow-clean
-	cd ../terminusdb-enterprise/rust && cargo clean
+	cd terminusdb-enterprise/rust && cargo clean
 
 .PHONY: module-clean
 module-clean:
@@ -101,9 +101,9 @@ docs-clean:
 $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
-	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
-	  grep -v 'qsave(strip_failed' | \
-	  (! grep -e ERROR -e Warning)
+	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl
+#	  grep -v 'qsave(strip_failed' | \
+#	  (! grep -e ERROR -e Warning)
 
 $(RUST_TARGET): $(RUST_FILES)
 	cd $(RUST_SOURCE_DIR) && cargo build --release
