@@ -52,7 +52,7 @@ More on the [CLI here](https://github.com/GavinMendelGleason/blog/blob/main/entr
 
 ## Community
 
-Come visit us [Discord](https://discord.gg/yTJKAma)
+Come visit us on [Discord](https://discord.gg/yTJKAma)
 or our [forum](https://discuss.terminusdb.com). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
 
 ## Documentation
