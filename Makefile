@@ -102,8 +102,8 @@ $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
 	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl
-#	  grep -v 'qsave(strip_failed' | \
-#	  (! grep -e ERROR -e Warning)
+	  grep -v 'qsave(strip_failed' | \
+	  (! grep -e ERROR -e Warning)
 
 $(RUST_TARGET): $(RUST_FILES)
 	cd $(RUST_SOURCE_DIR) && cargo build --release
