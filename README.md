@@ -18,7 +18,7 @@ The building blocks of the model are:
 
 TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). TerminusDB is available as a standalone server, or you can [use online](https://dashboard.terminusdb.com/).
 
-WOQL is a powerful and sophisticated query language which allows you to concisely express complex patterns over arbitrary data structures. What makes it so expressive and easy to use is the radical simplicity of the core underlying concepts.
+WOQL is a powerful query language which allows you to concisely express complex patterns over arbitrary data structures. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.com/blog/the-power-of-web-object-query-language/).
 
 
 ## Installation Guide
