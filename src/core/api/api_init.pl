@@ -120,9 +120,6 @@ initialize_database(Key,Force) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path, Force).
 
-storage_version_path(DB_Path,Path) :-
-    atomic_list_concat([DB_Path,'/STORAGE_VERSION'],Path).
-
 /*
  * initialize_database_with_path(Key,DB_Path,Force) is det+error.
  *
