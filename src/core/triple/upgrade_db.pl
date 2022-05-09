@@ -52,6 +52,8 @@
 :- use_module(library(lists)).
 :- use_module(library(shell)).
 
+:- multifile upgrade_step/2.
+
 /**
  * database_version(-Version) is det.
  *

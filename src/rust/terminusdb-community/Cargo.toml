@@ -9,3 +9,4 @@ publish = false
 [dependencies]
 swipl = "0.3.6"
 lcs = "0.2.0"
+terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
