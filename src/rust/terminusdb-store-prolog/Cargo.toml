@@ -1,0 +1,19 @@
+[package]
+name = "terminusdb-store-prolog"
+version = "0.2.0"
+authors = ["Matthijs van Otterdijk <matthijs@terminusdb.com>", "Robin de Rooij <robin@terminusdb.com>", "Gavin Mendel-Gleason <gavin@terminusdb.com>"]
+edition = "2018"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+swipl = "0.3.6"
+#swipl = {path = "../../swipl-rs/swipl"}
+terminus-store = "=0.19.6"
+csv = "1.1"
+sha-1 = "0.9.1"
+hex = "0.4.2"
+encoding_rs = "0.8.24"
+chardetng = "0.1.9"
+urlencoding = "1.1.1"

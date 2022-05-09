@@ -1,2 +1,2 @@
 [workspace]
-members = ["terminusdb-community", "terminusdb-dylib"]
+members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib"]

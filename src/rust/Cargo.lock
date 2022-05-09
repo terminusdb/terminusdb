@@ -568,25 +568,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52da4364ffb0e4fe33a9841a98a3f3014fb964045ce4f7a45a398243c8d6b0c9"
+checksum = "713d550d9b44d89174e066b7a6217ae06234c10cb47819a88290d2b353c31799"
 dependencies = [
  "libc",
  "log",
- "miow",
- "ntapi",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "winapi",
-]
-
-[[package]]
-name = "miow"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
-dependencies = [
- "winapi",
+ "windows-sys",
 ]
 
 [[package]]
@@ -597,15 +586,6 @@ checksum = "a8903e5a29a317527874d0402f867152a3d21c908bb0b933e416c65e301d4c36"
 dependencies = [
  "memchr",
  "minimal-lexical",
-]
-
-[[package]]
-name = "ntapi"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
-dependencies = [
- "winapi",
 ]
 
 [[package]]
@@ -694,9 +674,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.37"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec757218438d5fda206afc041538b2f6d889286160d649a86a24d37e1235afd1"
+checksum = "9027b48e9d4c9175fa2218adf3557f91c1137021739951d4932f5f8268ac48aa"
 dependencies = [
  "unicode-xid",
 ]
@@ -862,12 +842,12 @@ checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "socket2"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66d72b759436ae32898a2af0a14218dbf55efde3feeb170eb623637db85ee1e0"
+checksum = "ca642ba17f8b2995138b1d7711829c92e98c0a25ea019de790f4f09279c4e296"
 dependencies = [
  "libc",
- "winapi",
+ "windows-sys",
 ]
 
 [[package]]
@@ -968,14 +948,30 @@ dependencies = [
  "rayon",
  "tar",
  "thiserror",
- "tokio 1.18.1",
+ "tokio 1.18.2",
  "tokio-util",
 ]
 
 [[package]]
-name = "terminus-store-prolog"
+name = "terminusdb-community"
+version = "0.1.0"
+dependencies = [
+ "lcs",
+ "swipl",
+ "terminusdb-store-prolog",
+]
+
+[[package]]
+name = "terminusdb-dylib"
+version = "0.1.0"
+dependencies = [
+ "terminusdb-community",
+ "terminusdb-store-prolog",
+]
+
+[[package]]
+name = "terminusdb-store-prolog"
 version = "0.2.0"
-source = "git+https://github.com/terminusdb/terminus_store_prolog.git?tag=v0.19.8#2b7f3dab0049756f1497c0fbc36b29d64b1e2b5a"
 dependencies = [
  "chardetng",
  "csv",
@@ -985,22 +981,6 @@ dependencies = [
  "swipl",
  "terminus-store",
  "urlencoding",
-]
-
-[[package]]
-name = "terminusdb-community"
-version = "0.1.0"
-dependencies = [
- "lcs",
- "swipl",
- "terminus-store-prolog",
-]
-
-[[package]]
-name = "terminusdb-dylib"
-version = "0.1.0"
-dependencies = [
- "terminusdb-community",
 ]
 
 [[package]]
@@ -1045,9 +1025,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.18.1"
+version = "1.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce653fb475565de9f6fb0614b28bca8df2c430c0cf84bcd9c843f15de5414cc"
+checksum = "4903bf0427cf68dddd5aa6a93220756f8be0c34fcfa9f5e6191e103e15a31395"
 dependencies = [
  "bytes 1.1.0",
  "libc",
@@ -1085,7 +1065,7 @@ dependencies = [
  "futures-sink",
  "log",
  "pin-project-lite 0.2.9",
- "tokio 1.18.1",
+ "tokio 1.18.2",
 ]
 
 [[package]]
