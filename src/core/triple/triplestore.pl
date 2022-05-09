@@ -28,6 +28,8 @@
 :- use_module(constants).
 
 :- use_module(core(util)).
+:- use_module(core(query)).
+
 :- use_module(core(transaction)).
 
 :- use_module(config(terminus_config), [db_path/1]).

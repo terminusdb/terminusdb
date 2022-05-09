@@ -179,4 +179,4 @@ jobs:
           docker run \
             -v $(pwd)/pl_lint.pl:/app/pl_lint.pl \
             terminusdb/terminusdb-server:local \
-            swipl -f src/load_paths.pl /app/pl_lint.pl
+            swipl -f src/load_paths.pl src/core/query/expansions.pl /app/pl_lint.pl

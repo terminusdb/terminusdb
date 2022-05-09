@@ -1,6 +1,8 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
+:- set_prolog_flag(terminusdb_monolithic_module, true).
+
 add_terminus_home_path :-
     prolog_load_context(file, File),
     file_directory_name(File, Dir),
@@ -57,7 +59,8 @@ add_config_path :-
     asserta(user:file_search_path(config, Config)).
 
 :- add_config_path.
-:- use_module(config(terminus_config)).
+pack_dir(Value) :-
+    getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
 
 add_pack_path :-
     (   pack_dir(PackDir)
