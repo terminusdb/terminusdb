@@ -70,10 +70,25 @@ More information in the [docs](https://terminusdb.com/docs/index/terminusdb/inst
 You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
 
 
-
 ## TerminusDB CLI
 
-The simplest way to see how the TerminusDB CLI can be used is to clone
+A simple example creating a person with friends can be created as follows:
+
+```shell
+./terminusdb doc insert --graph_type=schema admin/example1 <<EOF
+{ "@id" : "Person",
+  "@type" : "Class",
+  "name" : "xsd:string",
+  "occupation" : "xsd:string",
+  "friends" : { "@type" : "Set",
+                "@class" : "Person" }}
+EOF
+./terminusdb doc insert admin/example --message='adding Gavin' <<EOF 
+{ "@type" : "Person","name" : "Gavin", "occupation" : "Coder"}
+EOF
+```
+
+You can attach this to a database on TerminusX in order to distribute it by setting your remote. First you will need to create
 a resource from [TerminusX](https://dashboard.terminusdb.com/). This is analogous to creating a repository on GitHub.
 
 Log into TerminusX, create a new data product, and make sure
@@ -82,13 +97,15 @@ product. Then copy the URL to clone from the data product info page.
 
 If you make a data product called `example` in the team
 `Terminators`. We could then issue the following command using the
-TerminusDB CLI.
+TerminusDB CLI. You should get an API token from your profile page and replace `'XYZ'` with this token.
 
 ```shell
-./terminusdb clone 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
+./terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
+./terminusdb fetch admin/example1 --token='XYZ'
+./terminusdb push admin/example1 --token='XYZ'
 ```
 
-Once completed, you'll have a local copy of this database.
+Once completed, you'll have a remote copy of this database.
 
 More on the [CLI here](https://github.com/GavinMendelGleason/blog/blob/main/entries/terminusdb_cli.md)
 
