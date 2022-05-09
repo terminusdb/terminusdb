@@ -102,12 +102,12 @@ refute(Validation_Object, Witness) :-
     !.
 refute(Validation_Object, Witness) :-
     needs_schema_instance_validation(Validation_Object),
-    refute_instance_schema(Validation_Object, Witness),
-    !.
+    !,
+    refute_instance_schema(Validation_Object, Witness).
 refute(Validation_Object, Witness) :-
     needs_referential_integrity_validation(Validation_Object),
-    refute_referential_integrity(Validation_Object,Witness),
-    !.
+    !,
+    refute_referential_integrity(Validation_Object,Witness).
 refute(Validation_Object, Witness) :-
     needs_local_instance_validation(Validation_Object),
     refute_instance(Validation_Object,Witness).
