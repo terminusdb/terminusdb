@@ -6,8 +6,11 @@
 />
 
 ***
+[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) ![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)
 
-TerminusDB is a distributed database with a collaboration model. It is designed to be like git, but for data. If you are reading this, **give this repo a star**. 
+## TerminusDB is a distributed database with a collaboration model. 
+
+It is designed to be like git, but for data. If you are reading this, **give this repo a star**. 
 
 The building blocks of the model are:
 
@@ -15,21 +18,58 @@ The building blocks of the model are:
   - Diff: differences between commits can be interpreted as patches between states
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
 
-
 TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). TerminusDB is available as a standalone server, or you can [use online](https://dashboard.terminusdb.com/).
-
-WOQL is a powerful query language which allows you to concisely express complex patterns over arbitrary data structures. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.com/blog/the-power-of-web-object-query-language/).
 
 
 ## Installation Guide
 
-Install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+Install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap):
 
-Install from [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
+### Get this repo, cd to it
 
-Install the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍.
+```
+git clone https://github.com/terminusdb/terminusdb-bootstrap
+cd terminusdb-bootstrap
+```
 
-Install the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐.
+### Run the container by using the script (the first time)
+
+```
+./terminusdb-container run
+
+Unable to find image 'terminusdb/terminusdb-server:latest' locally
+latest: Pulling from terminusdb/terminusdb-server
+8f91359f1fff: Pulling fs layer
+939634dec138: Pulling fs layer
+f30474226dd6: Pulling fs layer
+32a63113e3ae: Pulling fs layer
+ae35de9092ce: Pulling fs layer
+023c02983955: Pulling fs layer
+d9fa4a1acf93: Pulling fs layer
+[ ... ]
+```
+
+### To stop, attach, etc, see usage
+```
+./terminusdb-container 
+
+USAGE:
+  terminusdb-container [COMMAND]
+
+  help        show usage
+  run         run container
+  stop        stop container
+  attach      attach to prolog shell
+  exec        execute a command inside the container
+  rm          remove volumes
+```
+
+More information in the [docs](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository. 
+
+
+You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
+
+
 
 ## TerminusDB CLI
 
@@ -59,11 +99,15 @@ or our [forum](https://discuss.terminusdb.com). On Twitter, we're [@TerminusDB](
 
 ## Documentation
 
-Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/terminusdb/) website. 
+Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website. 
   
 We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs). 
 
 White paper on our [delta-encoding approach](https://github.com/terminusdb/terminusdb/blob/dev/docs/whitepaper/terminusdb.pdf) to data mangement. 
+
+Check the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍. Or the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐.
+
+WOQL is a powerful query language which allows you to concisely express complex patterns over arbitrary data structures. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.com/blog/the-power-of-web-object-query-language/).
 
 ## Changes in this Version
 
