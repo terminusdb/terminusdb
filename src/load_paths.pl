@@ -1,6 +1,8 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
+:- use_module(library(filesex)).
+
 root_path(Path) :-
     prolog_load_context(file, File),
     relative_file_name(Path, File, '../').
