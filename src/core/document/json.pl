@@ -6170,7 +6170,7 @@ test(delete_list_element,
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
     with_transaction(
         Context,
-        insert_document(Context, Document, Id_),
+        insert_document(Context, Document, _Id),
         _
     ),
 
