@@ -6149,7 +6149,7 @@ test(delete_list_element,
          error(schema_check_failure(
                    [
                        _{'@type':deleted_object_still_referenced,
-                         object:'http://i/Task/task3',
+                         object:"http://i/Task/task3",
                          predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',subject:_}]),
                _)
      ]) :-
@@ -6170,7 +6170,7 @@ test(delete_list_element,
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
     with_transaction(
         Context,
-        insert_document(Context, Document, _Id),
+        insert_document(Context, Document, Id_),
         _
     ),
 

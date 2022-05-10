@@ -713,7 +713,7 @@ Deletion:
 =========
 
 If document 'b' is deleted in the following diagram, we must check to
-see that a.1 has no cardinality constraint failures.
+see that a.1 has no remaining references
 
 In general check ∀y. -(x,p,y) ∧ doc(y) ∧ domain(p)=T ⇒ Card(x,p,T)
 
@@ -751,11 +751,36 @@ In general check ∀o. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
 is_document(Validation_Object, I) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
-    triple(Instance, I, Rdf_Type, node(C)),
+    triple(Instance, I, Rdf_Type, node(CS)),
+    atom_string(C, CS),
     is_simple_class(Validation_Object, C),
     \+ is_subdocument(Validation_Object, C).
 
-% Generator for:  +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+was_document(Validation_Object, I) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    triple_removal(Instance, I, Rdf_Type, node(CS)),
+    atom_string(C, CS),
+    is_simple_class(Validation_Object, C),
+    \+ is_subdocument(Validation_Object, C).
+
+was_list(Validation_Object, I) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_type(Rdf_Type),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    global_prefix_expand(rdf:'List', Rdf_List),
+    atom_string(Rdf_List, C),
+    triple_removal(Instance, I, Rdf_Type, node(C)).
+
+was_in_list(Validation_Object, L, O) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_first(Rdf_First),
+    rdf_type(Rdf_Type),
+    triple_removal(Instance, O, Rdf_Type, node(_)),
+    was_document(Validation_Object, O),
+    triple(Instance, L, Rdf_First, node(O)).
+
+% Generator for: ∃ o,p,T. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
 referential_range_candidate(Validation_Object,O,P,Type) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, RDF_Type),
@@ -767,24 +792,47 @@ referential_range_candidate(Validation_Object,O,P,Type) :-
                  class_predicate_type(Validation_Object, C, P, Type)
              )).
 
-% Generator for: -(s,p,o) ∧ doc(o) ∧ domain(p)=T
-referential_cardinality_candidate(Validation_Object,S,P,T) :-
+instance_domain(Validation_Object, S, Descriptor) :-
+    rdf_list(Rdf_List),
+    rdf_type(Rdf_Type),
     instance_layer(Validation_Object, Instance),
-    global_prefix_expand(rdf:type, Rdf_Type),
+    instance_layer(Validation_Object, Schema),
+    triple(Instance, S, Rdf_Type, node(T)),
+    (   atom_string(Rdf_List, T)
+    ->  Descriptor = Rdf_List
+    ;   schema_type_descriptor(Schema,T,Descriptor)
+    ).
+
+rdf_type(Rdf_Type) :-
+    global_prefix_expand(rdf:type, Rdf_Type).
+
+rdf_first(Rdf_First) :-
+    global_prefix_expand(rdf:first, Rdf_First).
+
+rdf_list(Rdf_List) :-
+    global_prefix_expand(rdf:'List', Rdf_List).
+
+% Generator for: ∃ s,p,o. -o:S ∧ (s,p,o)
+dangling_reference_candidate(Validation_Object,S,P,O) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_type(Rdf_Type),
+    !,
     distinct(S-P-T,
-             (   triple_removal(Instance, S, P, node(O)),
-                 % o is a document
-                 is_document(Validation_Object, O),
+             (   triple_removal(Instance, O, Rdf_Type, node(_)),
                  % Get domain of p
-                 triple(Instance, S, Rdf_Type, node(T))
+                 triple(Instance, S, P, O),
+                 instance_domain(Validation_Object, O, T)
+             ;   % check if we were dropped from a list
+                 was_in_list(Validation_Object, S, O),
+                 rdf_first(P)
              )).
 
 refute_referential_integrity(Validation_Object,Witness) :-
-    referential_cardinality_candidate(Validation_Object, S, P, T),
-    instance_layer(Validation_Object, Instance),
-    terminus_store:subject_id(Instance,S,S_Id),
-    terminus_store:predicate_id(Instance,P,P_Id),
-    refute_cardinality(Validation_Object,S_Id,P_Id,T,Witness).
+    dangling_reference_candidate(Validation_Object, S, P, O),
+    Witness = witness{'@type':deleted_object_still_referenced,
+                      object:O,
+                      predicate:P,
+                      subject:S}.
 refute_referential_integrity(Validation_Object,Witness) :-
     referential_range_candidate(Validation_Object, O, P, T),
     refute_range(Validation_Object, O, P, T, Witness).
