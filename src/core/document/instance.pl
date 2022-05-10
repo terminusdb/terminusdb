@@ -715,7 +715,10 @@ Deletion:
 If document 'b' is deleted in the following diagram, we must check to
 see that a.1 has no remaining references
 
-In general check ∀y. -(x,p,y) ∧ doc(y) ∧ domain(p)=T ⇒ Card(x,p,T)
+In general check:
+
+* ∀y. -(s,p,o) ∧ doc(o) ∧ domain(p)=T ⇒ Card(x,p,T)
+* ∀o. -o:S ∧ ¬ (s,p,o)
 
             a
           ↙
@@ -759,7 +762,7 @@ is_document(Validation_Object, I) :-
 was_document(Validation_Object, I) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
-    triple_removal(Instance, I, Rdf_Type, node(CS)),
+    terminus_store:triple_removal(Instance, I, Rdf_Type, node(CS)),
     atom_string(C, CS),
     is_simple_class(Validation_Object, C),
     \+ is_subdocument(Validation_Object, C).
@@ -783,12 +786,12 @@ was_in_list(Validation_Object, L, O) :-
 % Generator for: ∃ o,p,T. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
 referential_range_candidate(Validation_Object,O,P,Type) :-
     instance_layer(Validation_Object, Instance),
-    global_prefix_expand(rdf:type, RDF_Type),
+    global_prefix_expand(rdf:type, Rdf_Type),
     % Shared dictionary for predicates would be handy here!
     distinct(O-P-Type,
              (   triple_addition(Instance, S, P, node(O)),
                  is_document(Validation_Object, O),
-                 triple(Instance, S, RDF_Type, node(C)),
+                 triple(Instance, S, Rdf_Type, node(C)),
                  class_predicate_type(Validation_Object, C, P, Type)
              )).
 
@@ -816,17 +819,38 @@ rdf_list(Rdf_List) :-
 dangling_reference_candidate(Validation_Object,S,P,O) :-
     instance_layer(Validation_Object, Instance),
     rdf_type(Rdf_Type),
+    %test_utils:print_all_triples(Validation_Object, []),
     !,
-    distinct(S-P-T,
+    distinct(S-P-O,
              (   triple_removal(Instance, O, Rdf_Type, node(_)),
-                 % Get domain of p
-                 triple(Instance, S, P, O),
-                 instance_domain(Validation_Object, O, T)
+                 triple(Instance, S, P, O)
              ;   % check if we were dropped from a list
                  was_in_list(Validation_Object, S, O),
                  rdf_first(P)
              )).
 
+my_triple(Instance, S, P, O) :-
+    triple(Instance, S, P, O).
+
+% Generator for: ∃ o,p,T. -(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+referential_cardinality_candidate(Validation_Object,S,P,C) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_type(Rdf_Type),
+    % Shared dictionary for predicates would be handy here!
+    distinct(S-P-C,
+             (   triple_removal(Instance, S, P, node(O)),
+                 \+ atom_string(Rdf_Type,P),
+                 was_document(Validation_Object, O),
+                 my_triple(Instance, S, Rdf_Type, node(C)) %,
+                 % class_predicate_type(Validation_Object, C, P, T)
+             )).
+
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_cardinality_candidate(Validation_Object, S, P, T),
+    instance_layer(Validation_Object, Instance),
+    terminus_store:subject_id(Instance,S,S_Id),
+    terminus_store:predicate_id(Instance,P,P_Id),
+    refute_cardinality(Validation_Object,S_Id,P_Id,T,Witness).
 refute_referential_integrity(Validation_Object,Witness) :-
     dangling_reference_candidate(Validation_Object, S, P, O),
     Witness = witness{'@type':deleted_object_still_referenced,

@@ -6133,6 +6133,17 @@ schema2_0('
   "task_list" : { "@type" : "Array",
                   "@class" : "Task" }}
 
+{ "@id" : "Thing1",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "thing2" : "Thing2",
+  "name" : "xsd:string" }
+
+{ "@id" : "Thing2",
+  "@type" : "Class",
+  "@key" : { "@type" : "Random" },
+  "name" : "xsd:string" }
+
 ').
 
 test(delete_list_element,
@@ -6178,6 +6189,54 @@ test(delete_list_element,
     with_transaction(
         Context2,
         delete_document(Context2, 'Task/task3'),
+        _
+    ).
+
+test(delete_referenced_object,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc),
+                 write_schema(schema2_0,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':instance_not_cardinality_one,
+                            class:'http://s/Thing2',
+                            instance:_,
+                            predicate:'http://s/thing2'
+                           }]),
+               _)
+     ]) :-
+
+    Document0 =
+    _{ '@type' : "Thing1",
+       name : "Joe",
+       thing2 : _{ '@ref' :  "Jim" }
+     },
+
+    Document1 =
+    _{ '@type' : "Thing2",
+       '@capture' : "Jim",
+       name : "Jim"
+     },
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
+    empty_assoc(Captures_In),
+    with_transaction(
+        Context,
+        (   insert_document(Context, Document0, Captures_In, _Id1, _, Captures_Out1),
+            insert_document(Context, Document1, Captures_Out1, Id2, _, _)
+        ),
+        _
+    ),
+    create_context(Desc, _{ author : "me", message : "Jaws Part 2" }, Context2),
+    with_transaction(
+        Context2,
+        delete_document(Context2, Id2),
         _
     ).
 
