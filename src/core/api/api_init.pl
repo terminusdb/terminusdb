@@ -39,7 +39,7 @@ initialize_flags :-
     ;   Git_Hash = null
     ),
     set_prolog_flag(terminusdb_git_hash, Git_Hash),
-    (   pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
+    (   terminus_store_version(TerminusDB_Store_Version)
     ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
     ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
         halt(1)

@@ -3,6 +3,8 @@
 
 :- use_module(library(filesex)).
 
+:- set_prolog_flag(terminusdb_monolithic_module, true).
+
 root_path(Path) :-
     prolog_load_context(file, File),
     relative_file_name(Path, File, '../').
@@ -63,7 +65,8 @@ add_config_path :-
     asserta(user:file_search_path(config, Config)).
 
 :- add_config_path.
-:- use_module(config(terminus_config)).
+pack_dir(Value) :-
+    getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
 
 add_pack_path :-
     (   pack_dir(PackDir)

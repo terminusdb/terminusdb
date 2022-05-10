@@ -7,6 +7,8 @@
 :- [load_paths].
 :- reexport(core(util/syntax)).
 :- use_foreign_library(foreign(librust)).
+
+:- use_module(config(terminus_config)).
 :- if(is_enterprise).
 :- use_module(enterprise(init_enterprise)).
 :- endif.

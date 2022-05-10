@@ -9,7 +9,8 @@
               db_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
-              pack_dir/1,
+              registry_path/1,
+              tmp_path/1,
               server_worker_options/1,
               http_options/1,
               ignore_ref_and_repo_schema/0,
@@ -105,8 +106,14 @@ jwt_jwks_endpoint(Endpoint) :-
     ->  false
     ;   Endpoint = Value).
 
-pack_dir(Value) :-
-    getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
+registry_path(Value) :-
+    once(expand_file_search_path(plugins('registry.pl'), Path)),
+    getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
+
+tmp_path(Value) :-
+    user:file_search_path(terminus_home, Dir),
+    atom_concat(Dir,'/tmp',TmpPathRelative),
+    getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
 :- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-

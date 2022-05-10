@@ -57,7 +57,8 @@
 This file deliberately has no dependencies - please do not introduce them.
 
 **************************************************************************/
-:- reexport(core(util/syntax)).
+:- use_module(syntax).
+:- reexport(syntax).
 :- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
