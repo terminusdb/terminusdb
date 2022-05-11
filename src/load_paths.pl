@@ -9,7 +9,7 @@
 % The top-level directory of the repository.
 top_level_directory(Path) :-
     prolog_load_context(file, File),
-    relative_file_name(Path, File, '../').
+    relative_file_name(Path, File, '..').
 
 add_terminus_home_path :-
     top_level_directory(TopDir),
