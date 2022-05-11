@@ -2771,6 +2771,7 @@ all_class_frames(Query_Context, Frames, Options) :-
 class_frame(Askable, Class, Frame) :-
     class_frame(Askable, Class, Frame, [compress_ids(true),expand_abstract(true)]).
 
+:- table class_frame/4 as private.
 class_frame(Transaction, Class, Frame, Options) :-
     (   is_transaction(Transaction)
     ;   is_validation_object(Transaction)

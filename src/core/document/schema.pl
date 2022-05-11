@@ -446,7 +446,8 @@ is_direct_subdocument(Schema, C) :-
 is_subdocument(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_subdocument(Schema, C).
-:- table schema_is_subdocument/2.
+
+:- table schema_is_subdocument/2 as private.
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
