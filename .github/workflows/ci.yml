@@ -67,8 +67,12 @@ jobs:
 
   check:
     name: Check
+    runs-on: ubuntu-latest
     needs: build
-    uses: ./.github/workflows/check.yml
+    steps:
+      - uses: ./.github/workflows/check.yml
+        with:
+          test_repository: ${{ github.repository }}
 
   benchmark:
     name: Benchmark
