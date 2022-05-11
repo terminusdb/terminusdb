@@ -947,10 +947,16 @@ run_command(push,[Path],Opts) :-
 
     create_authorization(Opts,Authorization),
 
+    format(current_output, "Pushing to: ~s~n", [Remote_Name]),
     api_report_errors(
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
-    format(current_output, "~n~s pushed: ~q~n", [Path, Result]).
+    (   Result = same(Commit_Id)
+    ->  format(current_output, "Did not push. Both are on commit: ~s~n", [Commit_Id])
+    ;   Result = new(Commit_Id)
+    ->  format(current_output, "Pushed the latest commit: ~s~n", [Commit_Id])
+    ;   throw(error(unexpected_result(push, Result), _))
+    ).
 run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -980,50 +986,53 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
 
     create_authorization(Opts,Authorization),
 
+    format(current_output, "Cloning: origin~n", []),
     api_report_errors(
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
               authorized_fetch(Authorization), _Meta_Data)),
-    format(current_output, "~nCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
+    format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-
-    api_report_errors(
-        pull,
-        do_or_die(
-            (   resolve_absolute_string_descriptor(Path,Descriptor),
-                _{ branch_name : Branch} :< Descriptor
-            ),
-            error(not_a_valid_local_branch(Descriptor), _))
-    ),
-
     option(remote(Remote_Name_Atom), Opts),
-
     atom_string(Remote_Name_Atom,Remote_Name),
     option(remote_branch(Remote_Branch), Opts),
-    (   var(Remote_Branch)
-    ->  Branch = Remote_Branch
-    ;   true),
 
     create_authorization(Opts,Authorization),
 
+    format(current_output, "Pulling from: ~s~n", [Remote_Name]),
     api_report_errors(
         pull,
         pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
              authorized_fetch(Authorization), Result)),
-    format(current_output, "~N~s pulled: ~q~n", [Path, Result]).
+    do_or_die(
+        status{ 'api:pull_status': Pull_Status,
+                'api:fetch_status': Head_Updated } :< Result,
+        error(unexpected_result(pull, Result), _)),
+    (   Pull_Status = "api:pull_unchanged"
+    ->  format(current_output, "Pull unchanged.", [])
+    ;   Pull_Status = "api:pull_fast_forwarded"
+    ->  format(current_output, "Fast-forward pull.", [])
+    ;   format(current_output, "Pull status: ~w.", [Pull_Status])
+    ),
+    (   Head_Updated = true
+    ->  format(current_output, " Branch head updated.", [])
+    ;   Head_Updated = false
+    ->  format(current_output, " Branch head not updated.", [])
+    ;   format(current_output, " Branch head update status: ~w.", [Head_Updated])
+    ).
 run_command(fetch,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
     api_report_errors(
-        pull,
+        fetch,
         do_or_die(
             (   resolve_absolute_string_descriptor(Path,Descriptor),
                 _{ branch_name : _} :< Descriptor
             ),
-            error(not_a_valid_local_branch(Descriptor), _))
+            error(invalid_absolute_path(Path),_))
     ),
 
     option(remote(Remote_Name_Atom), Opts),
@@ -1191,7 +1200,7 @@ run_command(db,create,[DB_Path],Opts) :-
     api_report_errors(
         create_db,
         create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Merged)),
-    format(current_output,"Database ~s/~s created~n",[Organization,DB]).
+    format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(db,delete,[DB_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1206,7 +1215,7 @@ run_command(db,delete,[DB_Path],Opts) :-
     api_report_errors(
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
-    format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
+    format(current_output, "Database deleted: ~s/~s~n", [Organization, DB]).
 run_command(doc,insert,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1241,16 +1250,16 @@ run_command(doc,delete, [Path], Opts) :-
         delete_documents,
         (   Nuke = true
         ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message, no_data_version, _),
-            format("All Documents Deleted~n", [])
+            format("Documents nuked~n", [])
         ;   ground(Id)
         ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id, no_data_version, _),
-            format("Document Deleted~n", [])
+            format("Document deleted: ~s~n", [Id])
         ;   (   var(Data)
             ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message))
             ;   open_string(Data, Stream),
                 api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, no_data_version, _)
             ),
-            format("Documents Deleted~n", [])
+            format("Documents deleted~n", [Graph_Type])
         )
     ).
 run_command(doc,replace, [Path], Opts) :-
