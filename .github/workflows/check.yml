@@ -86,6 +86,8 @@ jobs:
           node-version: '16'
 
       - uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.test_repository }}
 
       - name: Run tests
         working-directory: tests
@@ -120,6 +122,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.test_repository }}
 
       - name: Run tests
         working-directory: tests
