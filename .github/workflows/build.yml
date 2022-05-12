@@ -16,10 +16,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Pull existing dev image
-        run: docker pull terminusdb/terminusdb-server:dev
-
-
       - name: Build and export
         uses: docker/build-push-action@v3
         with:
