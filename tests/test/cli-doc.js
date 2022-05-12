@@ -15,13 +15,13 @@ describe('cli-doc', function () {
     dbSpec = `admin/${util.randomString()}`
     {
       const r = await exec(`./terminusdb.sh db create ${dbSpec}`)
-      expect(r.stdout).to.match(new RegExp(`^Database ${dbSpec} created`))
+      expect(r.stdout).to.match(new RegExp(`^Database created: ${dbSpec}`))
     }
   })
 
   after(async function () {
     const r = await exec(`./terminusdb.sh db delete ${dbSpec}`)
-    expect(r.stdout).to.match(new RegExp(`^Database ${dbSpec} deleted`))
+    expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
     delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
@@ -40,7 +40,7 @@ describe('cli-doc', function () {
     }
     {
       const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --graph_type=schema --id=${schema['@id']}`)
-      expect(r.stdout).to.match(/^Document Deleted/)
+      expect(r.stdout).to.match(new RegExp(`^Document deleted: ${schema['@id']}`))
     }
   })
 
@@ -61,7 +61,7 @@ describe('cli-doc', function () {
     }
     {
       const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --graph_type=instance --id=${instance['@id']}`)
-      expect(r.stdout).to.match(/^Document Deleted/)
+      expect(r.stdout).to.match(new RegExp(`^Document deleted: ${instance['@id']}`))
     }
   })
 })

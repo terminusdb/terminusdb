@@ -134,6 +134,7 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
 class_subsumed(Validation_Object,Class,Subsumed) :-
     database_schema(Validation_Object,Schema),
     schema_class_subsumed(Schema,Class,Subsumed).
+
 schema_class_subsumed(_Schema,Class,Class).
 schema_class_subsumed(Schema,Class,Subsumed) :-
     schema_class_super(Schema,Class,Subsumed).
@@ -445,7 +446,8 @@ is_direct_subdocument(Schema, C) :-
 is_subdocument(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_subdocument(Schema, C).
-:- table schema_is_subdocument/2.
+
+:- table schema_is_subdocument/2 as private.
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
@@ -941,22 +943,24 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Comment_Opt
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),
     !,
-    findall(P-C,
+    findall(P-Desc,
             (
                 distinct(P,(
                              xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
+                             \+ is_built_in(P),
+                             schema_type_descriptor(Schema, C, Desc)
                          ))
             ),
             Data),
     dict_create(Map,tagged_union,Data).
 schema_oneof_descriptor(Schema, Type, tagged_union(Type, Map)) :-
     xrdf(Schema, Type, sys:oneOf, Class),
-    findall(P-C,
+    findall(P-Desc,
             (
                 distinct(P,(
                              xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
+                             \+ is_built_in(P),
+                             schema_type_descriptor(Schema, C, Desc)
                          ))
             ),
             Data),

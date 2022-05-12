@@ -1139,8 +1139,9 @@ compile_wf(delete(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(delete(X,P,Y),(
                freeze(Guard,
-                      delete(Read_Write_Object,XE,PE,YE,_)
-                     )
+                      (   set_read_write_object_triple_update(Read_Write_Object),
+                          delete(Read_Write_Object,XE,PE,YE,_)
+                      ))
            ))
 -->
     resolve(X,XE),
@@ -1169,10 +1170,11 @@ compile_wf(insert(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(insert(X,P,Y),(
                freeze(Guard,
-                      ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
-                                  [ground,ground,ground],
-                                  [XE,PE,YE],
-                                  [X,P,Y]))
+                      (   set_read_write_object_triple_update(Read_Write_Object),
+                          ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
+                                      [ground,ground,ground],
+                                      [XE,PE,YE],
+                                      [X,P,Y])))
            )
           )
 -->
@@ -1970,9 +1972,11 @@ test(subsumption, [setup(setup_temp_store(State)),
 
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
+
     % Tag the dicts so we can sort them
-    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-    Orderable = [json{'Parent':'Organization'}].
+    term_variables(JSON.bindings, Vars),
+    maplist([json]>>true,Vars),
+    JSON.bindings = [json{'Parent':'Organization'}].
 
 test(substring, [
          setup((setup_temp_store(State),
@@ -2161,6 +2165,26 @@ test(split, [
                 _{'@type':'xsd:string','@value':"split"}]}
                  :< Res.
 
+test(datavalue_frame, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    random(0,10000,Random),
+    format(atom(Label), "woql_~q", [Random]),
+    test_woql_label_descriptor(Label, Descriptor),
+    open_descriptor(Descriptor, DB),
+    class_frame(DB, 'DataValue', Result),
+    Result = json{'@documentation':
+                  json{'@comment':"A variable or node.",
+                       '@properties':json{data:"An xsd data type value.",
+                                          list:"A list of datavalues",
+                                          variable:"A variable."}},
+                  '@key':json{'@type':"ValueHash"},
+                  '@oneOf':[json{data:'xsd:anySimpleType',
+                                 list:json{'@class':'DataValue',
+                                           '@type':'List'},
+                                 variable:'xsd:string'}],
+                  '@subdocument':[],'@type':'Class'}.
 
 test(join, [
          setup((setup_temp_store(State),

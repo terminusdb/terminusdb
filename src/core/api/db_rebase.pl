@@ -183,9 +183,9 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
         commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
         commit_type(Our_Repo_Context, Our_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit')
-    ->  (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_History, Their_Branch_History),
+    ->  (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Optional_Common_Commit_Id, Our_Branch_History, Their_Branch_History),
             benchmark(after_ancestor_lookup)
-        ->  Optional_Common_Commit_Id = some(Common_Commit_Id)
+        ->  true
         % We have no common history
         ;   Optional_Common_Commit_Id = none,
             commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),

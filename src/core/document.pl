@@ -55,6 +55,7 @@
               % schema.pl
               class_subsumed/3,
               class_frame/3,
+              class_frame/4,
               all_class_frames/2,
               is_schemaless/1,
 
@@ -84,3 +85,4 @@
 :- use_module('document/diff').
 :- use_module('document/normalize').
 :- use_module('document/apply').
+:- use_module('document/inference').

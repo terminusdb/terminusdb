@@ -74,19 +74,20 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
     remote_pack_url(URL,Pack_URL),
 
-    http_post(Pack_URL,
-              json(Document),
-              Payload,
-              [request_header('Authorization'=Authorization),
-               json_object(dict),
-               status_code(Status)
-              ]),
+    catch(
+        http_post(
+            Pack_URL, json(Document), Payload,
+            [request_header('Authorization'=Authorization), json_object(dict), status_code(Status)]),
+        error(Err, _),
+        throw(error(http_open_error(Err), _))
+    ),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)
     ;   Status = 204
     ->  Payload_Option = none
-    ;   throw(error(remote_connection_error(Payload),_))).
+    ;   throw(error(remote_connection_failure(Status, Payload), _))
+    ).
 
 :- begin_tests(fetch_api).
 :- use_module(core(util/test_utils)).

@@ -2,6 +2,7 @@
               refute_instance/2,
               refute_instance_schema/2,
               refute_existing_object_keys/3,
+              refute_referential_integrity/2,
               is_instance/3,
               is_instance2/3,
               instance_of/3
@@ -697,6 +698,191 @@ refute_instance_schema(Validation_Object, Witness) :-
     distinct(S_Id,
              terminus_store:id_triple(Layer, S_Id, _, _)),
     refute_subject(Validation_Object,S_Id,Witness).
+
+/*
+
+Referential integrity only checking
+===================================
+
+↓ = subdocument link
+⇓ = Document link
+abc = Document id
+a.n = Subdocument id (of a)
+
+Deletion:
+=========
+
+If document 'b' is deleted in the following diagram, we must check to
+see that a.1 has no remaining references
+
+In general check:
+
+* ∀y. -(s,p,o) ∧ doc(o) ∧ domain(p)=T ⇒ Card(x,p,T)
+* ∀o. -o:S ∧ ¬ (s,p,o)
+
+            a
+          ↙
+         a.1
+         ⇓
+         b
+       ↙  ↘
+      b.1   b.2
+      ⇓     ⇓
+      c     d
+
+Insertion
+=========
+
+Supposing I insert documents 'a' and 'b'. I need to check that 'c and
+'d' have the appropriate ascribed type.
+
+In general check ∀o. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+
+            a
+          ↙
+         a.1
+         ⇓
+         b
+       ↙  ↘
+      b.1   b.2
+      ⇓      ⇓
+      c      d
+
+
+*/
+
+is_document(Validation_Object, I) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    triple(Instance, I, Rdf_Type, node(CS)),
+    atom_string(C, CS),
+    is_simple_class(Validation_Object, C),
+    \+ is_subdocument(Validation_Object, C).
+
+was_document(Validation_Object, I) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    terminus_store:triple_removal(Instance, I, Rdf_Type, node(CS)),
+    atom_string(C, CS),
+    is_simple_class(Validation_Object, C),
+    \+ is_subdocument(Validation_Object, C).
+
+was_list(Validation_Object, I) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_type(Rdf_Type),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    global_prefix_expand(rdf:'List', Rdf_List),
+    atom_string(Rdf_List, C),
+    triple_removal(Instance, I, Rdf_Type, node(C)).
+
+was_in_list(Validation_Object, L, O) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_first(Rdf_First),
+    rdf_type(Rdf_Type),
+    triple_removal(Instance, O, Rdf_Type, node(_)),
+    was_document(Validation_Object, O),
+    triple(Instance, L, Rdf_First, node(O)).
+
+% Generator for: ∃ o,p,T. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+referential_range_candidate(Validation_Object,O,P,Type) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    % Shared dictionary for predicates would be handy here!
+    distinct(O-P-Type,
+             (   triple_addition(Instance, S, P, node(O)),
+                 is_document(Validation_Object, O),
+                 triple(Instance, S, Rdf_Type, node(C)),
+                 class_predicate_type(Validation_Object, C, P, Type)
+             )).
+
+instance_domain(Validation_Object, S, Descriptor) :-
+    rdf_list(Rdf_List),
+    rdf_type(Rdf_Type),
+    instance_layer(Validation_Object, Instance),
+    instance_layer(Validation_Object, Schema),
+    triple(Instance, S, Rdf_Type, node(T)),
+    (   atom_string(Rdf_List, T)
+    ->  Descriptor = Rdf_List
+    ;   schema_type_descriptor(Schema,T,Descriptor)
+    ).
+
+rdf_type(Rdf_Type) :-
+    global_prefix_expand(rdf:type, Rdf_Type).
+
+rdf_first(Rdf_First) :-
+    global_prefix_expand(rdf:first, Rdf_First).
+
+rdf_list(Rdf_List) :-
+    global_prefix_expand(rdf:'List', Rdf_List).
+
+% Generator for: ∃ s,p,o. -o:S ∧ (s,p,o)
+dangling_reference_candidate(Validation_Object,S,P,O) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_type(Rdf_Type),
+    %test_utils:print_all_triples(Validation_Object, []),
+    !,
+    distinct(S-P-O,
+             (   triple_removal(Instance, O, Rdf_Type, node(_)),
+                 triple(Instance, S, P, O)
+             ;   % check if we were dropped from a list
+                 was_in_list(Validation_Object, S, O),
+                 rdf_first(P)
+             )).
+
+% Generator for: ∃ o,p,T. -(s,p,o) ∧ doc(o) ∧ s:T
+referential_cardinality_candidate(Validation_Object,S,P,C) :-
+    instance_layer(Validation_Object, Instance),
+    rdf_type(Rdf_Type),
+    % Shared dictionary for predicates would be handy here!
+    distinct(S-P-C,
+             (   triple_removal(Instance, S, P, node(O)),
+                 \+ atom_string(Rdf_Type,P),
+                 was_document(Validation_Object, O),
+                 triple(Instance, S, Rdf_Type, node(C))
+             )).
+
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_cardinality_candidate(Validation_Object, S, P, T),
+    instance_layer(Validation_Object, Instance),
+    terminus_store:subject_id(Instance,S,S_Id),
+    terminus_store:predicate_id(Instance,P,P_Id),
+    refute_cardinality(Validation_Object,S_Id,P_Id,T,Witness).
+refute_referential_integrity(Validation_Object,Witness) :-
+    dangling_reference_candidate(Validation_Object, S, P, O),
+    Witness = witness{'@type':deleted_object_still_referenced,
+                      object:O,
+                      predicate:P,
+                      subject:S}.
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_range_candidate(Validation_Object, O, P, T),
+    refute_range(Validation_Object, O, P, T, Witness).
+
+refute_range(Validation_Object, O, P, T, Witness) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    triple(Instance, O, Rdf_Type, node(CS)),
+    atom_string(C,CS),
+    do_or_die(extract_base_type(T,Super),
+              error(unexpected_document_type_encountered(O,P,T,C))),
+    (   \+ class_subsumed(Validation_Object, C, Super)
+    ->  extract_base_type(T, Base),
+        Witness = witness{ '@type': referential_integrity_violation,
+                           instance: O,
+                           actual_class: C,
+                           required_class: Base,
+                           predicate: P
+                         }
+    ).
+
+extract_base_type(T,C) :-
+    extract_base_type_(T,CS),
+    atom_string(C,CS).
+
+extract_base_type_(class(C),C).
+extract_base_type_(optional(C),C).
+extract_base_type_(set(C),C).
+extract_base_type_(cardinality(C),C).
+extract_base_type_(optional(C),C).
 
 %%%%%%%%%%%%%%%%%%%%%%
 %%  BASETYPES ONLY  %%

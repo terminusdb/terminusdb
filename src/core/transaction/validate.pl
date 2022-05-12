@@ -8,7 +8,8 @@
               validate_validation_objects/3,
               read_write_obj_to_graph_validation_obj/4,
               validation_object_changed/1,
-              validation_object_has_layer/1
+              validation_object_has_layer/1,
+              set_read_write_object_triple_update/1
           ]).
 
 /** <module> Validation
@@ -57,9 +58,11 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
 read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, [Read_Write_Obj=Graph_Validation_Obj|Map]) :-
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
+                                     triple_update: Triple_Update,
                                      write: Layer_Builder },
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: New_Layer,
+                                                 triple_update: Triple_Update,
                                                  changed: Changed },
 
     (   var(Layer_Builder)
@@ -79,9 +82,11 @@ graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map
 graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, [Graph_Validation_Obj=Read_Write_Obj|Map]) :-
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: Layer,
+                                                 triple_update: Triple_Update,
                                                  changed: _Changed },
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
+                                     triple_update: Triple_Update,
                                      write: _Layer_Builder }.
 
 transaction_object_to_validation_object(Transaction_Object, Validation_Object, Map, New_Map) :-
@@ -301,37 +306,38 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                                              Branch_Name,
                                              Instance_Object,
                                              Schema_Object)
-        ;   insert_commit_object_on_branch(Parent_Transaction,
-                                           Validation_Object.commit_info,
+        ;   insert_rwo_layer(Parent_Transaction,
+                             Schema_Object,
+                             Schema_Layer_Uri),
+            insert_rwo_layer(Parent_Transaction,
+                             Instance_Object,
+                             Instance_Layer_Uri),
+            insert_commit_object_on_branch(Parent_Transaction,
+                                           Schema_Layer_Uri,
+                                           Instance_Layer_Uri,
+                                           (Validation_Object.commit_info),
                                            Branch_Name,
                                            _Commit_Id,
-                                           Commit_Uri),
-            attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, Instance_Object))
-
+                                           _Commit_Uri))
     ;   true).
 
-attach_schema_instance_to_commit(Parent_Transaction, Commit_Uri, Schema_Object, Instance_Object) :-
-    % instance graph may not exist, so check for that
-    (   var(Instance_Object.read)
+insert_rwo_layer(Transaction, RWO, Layer_Uri) :-
+    (   var(RWO.read)
     ->  true
-    ;   layer_to_id(Instance_Object.read, Instance_Layer_Id),
-        insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri),
-        attach_layer_to_commit(Parent_Transaction, Commit_Uri, instance, Instance_Layer_Uri)),
-
-    layer_to_id(Schema_Object.read, Schema_Layer_Id),
-    insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
-    attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri).
+    ;   layer_to_id(RWO.read, Layer_Id),
+        insert_layer_object(Transaction, Layer_Id, Layer_Uri)).
 
 replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Instance_Object, Schema_Object) :-
     % delete_document(Parent_Transaction, Commit_Uri),
-    insert_base_commit_object(Parent_Transaction, Commit_Info, _, New_Commit_Uri),
     Schema_Layer = (Schema_Object.read),
     (   parent(Schema_Layer, _)
     ->  squash(Schema_Layer, Final_Schema_Layer),
         Final_Schema_Object = (Schema_Object.put(read, Final_Schema_Layer))
     ;   Final_Schema_Object = Schema_Object),
 
-    attach_schema_instance_to_commit(Parent_Transaction, New_Commit_Uri, Final_Schema_Object, Instance_Object),
+    insert_rwo_layer(Parent_Transaction, Final_Schema_Object, Schema_Layer_Uri),
+    insert_rwo_layer(Parent_Transaction, Instance_Object, Instance_Layer_Uri),
+    insert_base_commit_object(Parent_Transaction, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, _, New_Commit_Uri),
 
     branch_name_uri(Parent_Transaction, Branch_Name, Branch_Uri),
     reset_branch_head(Parent_Transaction, Branch_Uri, New_Commit_Uri).
@@ -349,21 +355,20 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
     commit_id_uri(Parent_Transaction, Commit_Id, Commit_Uri),
 
     (   exists(validation_object_changed, [Instance_Object, Schema_Object])
-    ->  insert_child_commit_object(Parent_Transaction,
-                                   Commit_Uri,
-                                   (Commit_Validation_Object.commit_info),
-                                   New_Commit_Id,
-                                   New_Commit_Uri),
-
-        (   var(Instance_Object.read)
+    ->  (   var(Instance_Object.read)
         ->  true
         ;   layer_to_id(Instance_Object.read, Instance_Layer_Id),
-            insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri),
-            attach_layer_to_commit(Parent_Transaction, Commit_Uri, instance, Instance_Layer_Uri)),
+            insert_layer_object(Parent_Transaction, Instance_Layer_Id, Instance_Layer_Uri)),
 
         layer_to_id(Schema_Object.read, Schema_Layer_Id),
         insert_layer_object(Parent_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
-        attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri)
+        insert_child_commit_object(Parent_Transaction,
+                                   Commit_Uri,
+                                   Schema_Layer_Uri,
+                                   Instance_Layer_Uri,
+                                   (Commit_Validation_Object.commit_info),
+                                   New_Commit_Id,
+                                   New_Commit_Uri)
     ;   true).
 
 validation_object_changed(Validation_Object) :-
@@ -371,6 +376,9 @@ validation_object_changed(Validation_Object) :-
 
 validation_object_has_layer(Validation_Object) :-
     ground(Validation_Object.read).
+
+set_read_write_object_triple_update(Read_Write_Object) :-
+    nb_set_dict(triple_update, Read_Write_Object, true).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, system_descriptor]).
 
@@ -710,8 +718,13 @@ test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(unexpected_array_value(["Dublin","Dubhlinn"],'http://www.w3.org/2001/XMLSchema#string'),_)])
-:-
+      error(
+          schema_check_failure(
+              witness{'@type':unexpected_list,
+                      type:'http://www.w3.org/2001/XMLSchema#string',
+                      value:["Dublin","Dubhlinn"]}),
+          _)
+     ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
@@ -736,8 +749,16 @@ test(cardinality_min_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(unexpected_array_value(["Duke","Doug"],'http://www.w3.org/2001/XMLSchema#string'),_)])
-:-
+
+      error(schema_check_failure(
+                [json{'@type':field_has_wrong_cardinality,
+                      actual:1,
+                      document:json{'@type':'http://example.com/schema/worldOntology#Twins','http://example.com/schema/worldOntology#twins':["Person/Duke"]},
+                      field:'http://example.com/schema/worldOntology#twins',
+                      max:2,
+                      min:2}]),
+            _)
+     ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
@@ -747,30 +768,19 @@ test(cardinality_min_error,
     % Check to see that we get the restriction on personal name via the
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
-    Object = _{'@type': "Person",
-               '@id' : "Person/Duke",
-               'name': ["Duke",
-                        "Doug"]
+    Duke = _{ '@type' : "Person",
+              address : "Here",
+              name : "Duke"},
+    Twins = _{ '@type': "Twins",
+               'twins': ["Person/Duke"]
               },
 
     with_transaction(
         Master_Context2,
-        insert_document(Master_Context2,Object,ID),
-        _),
-
-    writeq(ID),
-
-    once((member(Witness0, Witnesses),
-          Witness0.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness0.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#name',
-          '2' = Witness0.'vio:cardinality'.'@value'
-         )),
-    once((member(Witness1, Witnesses),
-          Witness1.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness1.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#address',
-          '0' = Witness1.'vio:cardinality'.'@value'
-         )).
-
+        (   insert_document(Master_Context2,Duke,_),
+            insert_document(Master_Context2,Twins,_)
+        ),
+        _).
 
 :- end_tests(instance_validation).
 
