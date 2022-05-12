@@ -19,14 +19,20 @@ jobs:
       - name: Pull existing dev image
         run: docker pull terminusdb/terminusdb-server:dev
 
-      - name: Build Docker image
-        run: |
-          docker build . \
-            --file Dockerfile \
-            --tag terminusdb/terminusdb-server:local \
-            --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
-          docker save terminusdb/terminusdb-server:local \
-            | gzip > terminusdb-server-docker-image.tar.gz
+
+      - name: Build and export
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          tags: terminusdb/terminusdb-server:local
+          outputs: type=docker,dest=terminusdb-server-docker-image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args:
+            - TERMINUSDB_GIT_HASH=${{ github.sha }}
+
+      - name: Compress image
+        run: gzip terminusdb-server-docker-image.tar
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v2
