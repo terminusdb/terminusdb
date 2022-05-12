@@ -947,14 +947,14 @@ run_command(push,[Path],Opts) :-
 
     create_authorization(Opts,Authorization),
 
-    format(current_output, "Pushing to: ~s~n", [Remote_Name]),
+    format(current_output, "Pushing to remote '~s'~n", [Remote_Name]),
     api_report_errors(
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
     (   Result = same(Commit_Id)
-    ->  format(current_output, "Did not push. Both are on commit: ~s~n", [Commit_Id])
+    ->  format(current_output, "Remote already up to date (head is ~s)~n", [Commit_Id])
     ;   Result = new(Commit_Id)
-    ->  format(current_output, "Pushed the latest commit: ~s~n", [Commit_Id])
+    ->  format(current_output, "Remote updated (head is ~s)~n", [Commit_Id])
     ;   throw(error(unexpected_result(push, Result), _))
     ).
 run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
@@ -986,7 +986,7 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
 
     create_authorization(Opts,Authorization),
 
-    format(current_output, "Cloning: origin~n", []),
+    format(current_output, "Cloning the remote 'origin'~n", []),
     api_report_errors(
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
@@ -1001,26 +1001,28 @@ run_command(pull,[Path],Opts) :-
 
     create_authorization(Opts,Authorization),
 
-    format(current_output, "Pulling from: ~s~n", [Remote_Name]),
+    format(current_output, "Pulling from remote '~s'~n", [Remote_Name]),
     api_report_errors(
         pull,
         pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
              authorized_fetch(Authorization), Result)),
     do_or_die(
         status{ 'api:pull_status': Pull_Status,
-                'api:fetch_status': Head_Updated } :< Result,
+                'api:fetch_status': Fetch_Status } :< Result,
         error(unexpected_result(pull, Result), _)),
-    (   Pull_Status = "api:pull_unchanged"
-    ->  format(current_output, "Pull unchanged.", [])
-    ;   Pull_Status = "api:pull_fast_forwarded"
-    ->  format(current_output, "Fast-forward pull.", [])
-    ;   format(current_output, "Pull status: ~w.", [Pull_Status])
+    (   Fetch_Status = true
+    ->  format(current_output, "Remote commits fetched~n", [])
+    ;   Fetch_Status = false
+    ->  format(current_output, "Remote up to date~n", [])
+    ;   format(current_output, "Remote fetch status: ~w~n", [Fetch_Status])
     ),
-    (   Head_Updated = true
-    ->  format(current_output, " Branch head updated.", [])
-    ;   Head_Updated = false
-    ->  format(current_output, " Branch head not updated.", [])
-    ;   format(current_output, " Branch head update status: ~w.", [Head_Updated])
+    (   Pull_Status = "api:pull_unchanged"
+    ->  format(current_output, "Local branch up to date~n", [])
+    ;   Pull_Status = "api:pull_fast_forwarded"
+    ->  format(current_output, "Local branch updated (fast-forward)~n", [])
+    ;   Pull_Status = "api:pull_ahead"
+    ->  format(current_output, "Local branch up to date (unpushed commits)~n", [])
+    ;   format(current_output, "Local branch status: ~w~n", [Pull_Status])
     ).
 run_command(fetch,[Path],Opts) :-
     super_user_authority(Auth),

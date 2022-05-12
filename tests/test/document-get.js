@@ -510,7 +510,7 @@ describe('document-get', function () {
       before(async function () {
         this.timeout(20000) // Cloning this database is slow on macOS.
         const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-        expect(r.stdout).to.match(/^Cloning: origin/)
+        expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
         expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
       })
 

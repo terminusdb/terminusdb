@@ -34,7 +34,7 @@ describe('cli-clone-push-pull', function () {
         })
         .catch((r) => {
           expect(r.code).to.not.equal(0)
-          expect(r.stdout).to.match(/^Cloning: origin/)
+          expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
           expect(r.stderr).to.match(/^Error: HTTP request failed with socket error/)
         })
     }
@@ -49,7 +49,7 @@ describe('cli-clone-push-pull', function () {
     await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
     { // Clone to a local database.
       const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-      expect(r.stdout).to.match(/^Cloning: origin/)
+      expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     // Delete the remote database.
@@ -61,7 +61,7 @@ describe('cli-clone-push-pull', function () {
       })
       .catch((r) => {
         expect(r.code).to.not.equal(0)
-        expect(r.stdout).to.match(/^Pushing to: origin/)
+        expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
         expect(r.stderr).to.match(new RegExp(`^Error: Remote connection failed: Unknown database: ${dbSpec}`))
       })
     { // Delete the local database.
@@ -80,7 +80,7 @@ describe('cli-clone-push-pull', function () {
     await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
     { // Clone to a local database.
       const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-      expect(r.stdout).to.match(/^Cloning: origin/)
+      expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     // Insert doc in remote database.
@@ -94,7 +94,7 @@ describe('cli-clone-push-pull', function () {
       })
       .catch((r) => {
         expect(r.code).to.not.equal(0)
-        expect(r.stdout).to.match(/^Pushing to: origin/)
+        expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
         expect(r.stderr).to.match(/^Error: Remote connection failed: Remote history has diverged/)
       })
     { // Delete the local database.
@@ -114,18 +114,18 @@ describe('cli-clone-push-pull', function () {
     await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
     { // Clone to a local database.
       const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-      expect(r.stdout).to.match(/^Cloning: origin/)
+      expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     { // Push once.
       const r = await exec(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
-      expect(r.stdout).to.match(/^Pushing to: origin/)
-      expect(r.stdout).to.match(/Pushed the latest commit: /)
+      expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
+      expect(r.stdout).to.match(/Remote updated \(head is .*\)/)
     }
     { // Push again.
       const r = await exec(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
-      expect(r.stdout).to.match(/^Pushing to: origin/)
-      expect(r.stdout).to.match(/Did not push. Both are on commit: /)
+      expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
+      expect(r.stdout).to.match(/Remote already up to date \(head is .*\)/)
     }
     { // Delete the local database.
       const r = await exec(`./terminusdb.sh db delete ${dbSpec}`)
@@ -158,7 +158,7 @@ describe('cli-clone-push-pull', function () {
         })
         .catch((r) => {
           expect(r.code).to.not.equal(0)
-          expect(r.stdout).to.match(/^Cloning: origin/)
+          expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
           expect(r.stderr).to.match(/^Error: Remote authentication failed: Incorrect authentication information/)
         })
     })
@@ -166,7 +166,7 @@ describe('cli-clone-push-pull', function () {
     describe('clone', function () {
       before(async function () {
         const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-        expect(r.stdout).to.match(/^Cloning: origin/)
+        expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
         expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
       })
 
@@ -182,7 +182,7 @@ describe('cli-clone-push-pull', function () {
           })
           .catch((r) => {
             expect(r.code).to.not.equal(0)
-            expect(r.stdout).to.match(/^Pushing to: origin/)
+            expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
             expect(r.stderr).to.match(new RegExp(`^Error: HTTP request authentication failed for URL: ${agent.baseUrl}/api/files`))
           })
       })
@@ -192,13 +192,15 @@ describe('cli-clone-push-pull', function () {
         const cmd = `./terminusdb.sh pull --user=${agent.user} --password=${agent.password} ${branchSpec}`
         {
           const r = await exec(cmd)
-          expect(r.stdout).to.match(/^Pulling from: origin/)
-          expect(r.stdout).to.match(/Pull unchanged. Branch head not updated./)
+          expect(r.stdout).to.match(/^Pulling from remote 'origin'/)
+          expect(r.stdout).to.match(/Remote up to date/)
+          expect(r.stdout).to.match(/Local branch up to date/)
         }
         {
           const r = await exec(cmd)
-          expect(r.stdout).to.match(/^Pulling from: origin/)
-          expect(r.stdout).to.match(/Pull unchanged. Branch head not updated./)
+          expect(r.stdout).to.match(/^Pulling from remote 'origin'/)
+          expect(r.stdout).to.match(/Remote up to date/)
+          expect(r.stdout).to.match(/Local branch up to date/)
         }
       })
 
@@ -213,7 +215,7 @@ describe('cli-clone-push-pull', function () {
                 break
               case 'clone':
                 cmd = `./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`
-                expectedStdout = 'Cloning: origin\n'
+                expectedStdout = 'Cloning the remote \'origin\'\n'
                 break
               default:
                 throw new Error(`Unknown cmd: ${cmd}`)
@@ -256,7 +258,7 @@ describe('cli-clone-push-pull', function () {
         })
         .catch((r) => {
           expect(r.code).to.not.equal(0)
-          expect(r.stdout).to.match(/^Pushing to: origin/)
+          expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
           expect(r.stderr).to.match(/^Error: Unknown remote repository: origin/)
         })
     })
@@ -269,7 +271,7 @@ describe('cli-clone-push-pull', function () {
         })
         .catch((r) => {
           expect(r.code).to.not.equal(0)
-          expect(r.stdout).to.match(/^Pulling from: origin/)
+          expect(r.stdout).to.match(/^Pulling from remote 'origin'/)
           expect(r.stderr).to.match(new RegExp(`^Error: Unknown local branch: ${branchSpec}`))
         })
     })
