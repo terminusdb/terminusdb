@@ -45,7 +45,7 @@ function isUndefinedOrNull (val) {
 }
 
 function randomString () {
-  return crypto.randomBytes(3).toString('hex')
+  return crypto.randomBytes(16).toString('hex')
 }
 
 function typeString (val) {
