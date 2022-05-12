@@ -32,6 +32,7 @@ create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)
     Schema_Descriptor = (Prototype_Descriptor.put(type, schema)),
     Schema_RWO = read_write_obj{
                      descriptor: Schema_Descriptor,
+                     triple_update: false,
                      read: _,
                      write: Builder},
 

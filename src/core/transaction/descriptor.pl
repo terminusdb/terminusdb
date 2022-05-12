@@ -111,7 +111,8 @@
  * all of these cases. However, *write* transactions have to be done differently on each of
  * these by case, though triple writes can be done identically.
  *
- * read_write_obj ---> read_write_obj{ descriptor : graph_descriptor, read : Layer, write: Var_Or_Layer_Builder}
+ * read_write_obj ---> read_write_obj{ descriptor : graph_descriptor, read : Layer,
+ *                                     triple_update: Bool, write: Var_Or_Layer_Builder}
  *
  * transaction_object ---> transaction_object{ descriptor : collection_descriptor,
  *                                 <parent : transaction_object>, % except for database/terminus descriptors
@@ -193,6 +194,7 @@ is_validation_object(VO) :-
 
 graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
                                                                 descriptor: Descriptor,
+                                                                triple_update: false,
                                                                 read: Layer,
                                                                 write: _Layer_Builder
                                                             }).

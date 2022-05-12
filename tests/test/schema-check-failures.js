@@ -116,10 +116,7 @@ describe('schema-check-failures', function () {
       expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
       expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
       expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('forbidden_oneof_property_present')
-      expect(r.body['api:error']['api:witnesses'][0].class).to.equal('terminusdb:///schema#' + schema['@id'])
-      expect(r.body['api:error']['api:witnesses'][0].instance).to.equal('terminusdb:///data/' + instance['@id'])
-      expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#string')
+      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('choice_has_too_many_answers')
     }
   })
 })

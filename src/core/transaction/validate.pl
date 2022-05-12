@@ -8,7 +8,8 @@
               validate_validation_objects/3,
               read_write_obj_to_graph_validation_obj/4,
               validation_object_changed/1,
-              validation_object_has_layer/1
+              validation_object_has_layer/1,
+              set_read_write_object_triple_update/1
           ]).
 
 /** <module> Validation
@@ -57,9 +58,11 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
 read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map, [Read_Write_Obj=Graph_Validation_Obj|Map]) :-
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
+                                     triple_update: Triple_Update,
                                      write: Layer_Builder },
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: New_Layer,
+                                                 triple_update: Triple_Update,
                                                  changed: Changed },
 
     (   var(Layer_Builder)
@@ -79,9 +82,11 @@ graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map
 graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, [Graph_Validation_Obj=Read_Write_Obj|Map]) :-
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
                                                  read: Layer,
+                                                 triple_update: Triple_Update,
                                                  changed: _Changed },
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
+                                     triple_update: Triple_Update,
                                      write: _Layer_Builder }.
 
 transaction_object_to_validation_object(Transaction_Object, Validation_Object, Map, New_Map) :-
@@ -371,6 +376,9 @@ validation_object_changed(Validation_Object) :-
 
 validation_object_has_layer(Validation_Object) :-
     ground(Validation_Object.read).
+
+set_read_write_object_triple_update(Read_Write_Object) :-
+    nb_set_dict(triple_update, Read_Write_Object, true).
 
 descriptor_type_order_list([commit_descriptor, branch_descriptor, repository_descriptor, database_descriptor, label_descriptor, system_descriptor]).
 
@@ -710,8 +718,13 @@ test(cardinality_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(unexpected_array_value(["Dublin","Dubhlinn"],'http://www.w3.org/2001/XMLSchema#string'),_)])
-:-
+      error(
+          schema_check_failure(
+              witness{'@type':unexpected_list,
+                      type:'http://www.w3.org/2001/XMLSchema#string',
+                      value:["Dublin","Dubhlinn"]}),
+          _)
+     ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
@@ -736,8 +749,16 @@ test(cardinality_min_error,
      [setup((setup_temp_store(State),
              create_db_with_test_schema('admin','test'))),
       cleanup(teardown_temp_store(State)),
-      error(unexpected_array_value(["Duke","Doug"],'http://www.w3.org/2001/XMLSchema#string'),_)])
-:-
+
+      error(schema_check_failure(
+                [json{'@type':field_has_wrong_cardinality,
+                      actual:1,
+                      document:json{'@type':'http://example.com/schema/worldOntology#Twins','http://example.com/schema/worldOntology#twins':["Person/Duke"]},
+                      field:'http://example.com/schema/worldOntology#twins',
+                      max:2,
+                      min:2}]),
+            _)
+     ]) :-
 
     resolve_absolute_string_descriptor("admin/test", Master_Descriptor),
 
@@ -747,30 +768,19 @@ test(cardinality_min_error,
     % Check to see that we get the restriction on personal name via the
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
-    Object = _{'@type': "Person",
-               '@id' : "Person/Duke",
-               'name': ["Duke",
-                        "Doug"]
+    Duke = _{ '@type' : "Person",
+              address : "Here",
+              name : "Duke"},
+    Twins = _{ '@type': "Twins",
+               'twins': ["Person/Duke"]
               },
 
     with_transaction(
         Master_Context2,
-        insert_document(Master_Context2,Object,ID),
-        _),
-
-    writeq(ID),
-
-    once((member(Witness0, Witnesses),
-          Witness0.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness0.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#name',
-          '2' = Witness0.'vio:cardinality'.'@value'
-         )),
-    once((member(Witness1, Witnesses),
-          Witness1.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness1.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#address',
-          '0' = Witness1.'vio:cardinality'.'@value'
-         )).
-
+        (   insert_document(Master_Context2,Duke,_),
+            insert_document(Master_Context2,Twins,_)
+        ),
+        _).
 
 :- end_tests(instance_validation).
 

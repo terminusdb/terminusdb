@@ -2647,7 +2647,7 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
                                 json{'@type' : "api:ApplyError",
                                      'api:witnesses' : Witnesses,
                                      'api:status' : 'api:conflict'},
-                                [status(409)]))
+                                [status(409),serialize_unknown(true)]))
         )
     ).
 
@@ -2824,12 +2824,12 @@ customise_exception(E) :-
 api_error_http_reply(API, Error, Request) :-
     api_error_jsonld(API,Error,JSON),
     json_http_code(JSON,Status),
-    cors_reply_json(Request,JSON,[status(Status)]).
+    cors_reply_json(Request,JSON,[status(Status),serialize_unknown(true)]).
 
 api_error_http_reply(API, Error, Type, Request) :-
     api_error_jsonld(API,Error,Type,JSON),
     json_http_code(JSON,Status),
-    cors_reply_json(Request,JSON,[status(Status)]).
+    cors_reply_json(Request,JSON,[status(Status),serialize_unknown(true)]).
 
 :- meta_predicate api_report_errors(?,?,0).
 api_report_errors(API,Request,Goal) :-

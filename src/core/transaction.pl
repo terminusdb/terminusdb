@@ -39,6 +39,7 @@
               validate_validation_objects/3,
               validation_object_changed/1,
               validation_object_has_layer/1,
+              set_read_write_object_triple_update/1,
 
               % layer_entity.pl
               has_layer/2,
