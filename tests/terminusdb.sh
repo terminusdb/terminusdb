@@ -29,7 +29,8 @@ if [[ $use_docker -eq 0 ]]; then
     docker run \
       --rm \
       --user $user \
-      --volume $PWD:/app/terminusdb/tests \
+      --network host \
+      --volume "$PWD:/app/terminusdb/tests" \
       --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
       --workdir /app/terminusdb/tests \
       "$TERMINUSDB_DOCKER_IMAGE_TAG" \

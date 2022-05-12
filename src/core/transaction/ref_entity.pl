@@ -975,16 +975,46 @@ test(apply_nonexisting_removal,
 
 :- end_tests(commit_application).
 
-most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Final_Commit_Id, Commit1_Path, Commit2_Path) :-
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    commit_is_initial(Repo1_Context, Commit1_Id),
+    commit_is_initial(Repo2_Context, Commit2_Id),
+    !,
+    Common_Commit_Id_Option = none,
+    % Commit1_Id is an initial commit.
+    Commit1_Path = [],
+    % Commit2_Id is an initial commit.
+    Commit2_Path = [].
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    commit_is_initial(Repo1_Context, Commit1_Id),
+    !,
+    Common_Commit_Id_Option = none,
+    % Commit1_Id is an initial commit.
+    Commit1_Path = [],
+    % Commit2_Id is not an initial commit.
+    commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
+    commit_uri_to_history_commit_ids(Repo2_Context, Commit2_Uri, Commit2_Path).
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    commit_is_initial(Repo2_Context, Commit2_Id),
+    !,
+    Common_Commit_Id_Option = none,
+    % Commit1_Id is not an initial commit.
+    commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
+    commit_uri_to_history_commit_ids(Repo1_Context, Commit1_Uri, Commit1_Path),
+    % Commit2_Id is an initial commit.
+    Commit2_Path = [].
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    % Commit1_Id and Commit2_Id are not initial commits.
     commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
     commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
 
+    % Backtrack until we find the first common commit.
     % Note: this isn't great time complexity
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Common_Commit1_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Common_Commit2_Id^^xsd:string, Commit2_Edge_Path_Reversed)),
+    Common_Commit1_Id = Common_Commit2_Id,
+    !,
 
-    Final_Commit_Id = Final_Commit_Id_2,
-    !, % we're only interested in one solution!
+    Common_Commit_Id_Option = some(Common_Commit1_Id),
 
     reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
     reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
@@ -1060,8 +1090,8 @@ test(common_ancestor_after_branch_and_some_commits,
     branch_head_commit(Repo_Context, "second", Head2_Commit_Uri),
     commit_id_uri(Repo_Context, Head2_Commit_Id, Head2_Commit_Uri),
 
-    most_recent_common_ancestor(Repo_Context, Repo_Context, Head1_Commit_Id, Head2_Commit_Id, Common_Commit_Id, Branch1_Path, Branch2_Path),
-
+    most_recent_common_ancestor(Repo_Context, Repo_Context, Head1_Commit_Id, Head2_Commit_Id, Common_Commit_Id_Option, Branch1_Path, Branch2_Path),
+    Common_Commit_Id_Option = some(Common_Commit_Id),
     Repo_Descriptor = Descriptor.repository_descriptor,
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit b", _),
 
