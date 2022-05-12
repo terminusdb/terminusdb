@@ -69,6 +69,8 @@ jobs:
     name: Check
     needs: build
     uses: ./.github/workflows/check.yml
+    with:
+      test_repository: ${{ github.repository }}
 
   benchmark:
     name: Benchmark
