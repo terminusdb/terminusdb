@@ -47,32 +47,18 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
     %print_all_triples(Repository_Descriptor),
     %lookup_old_commit_uri_here....
     descriptor_commit_id_uri(Repository_Descriptor, Descriptor,
-                             Old_Commit_Id, Old_Commit_Uri),
+                             Old_Commit_Id, _Old_Commit_Uri),
 
     with_transaction(
         Context,
-        (   insert_base_commit_object(Context, Commit_Info, Commit_Id, Commit_Uri),
-            forall(
-                layer_uri_for_commit(Repository_Descriptor, Old_Commit_Uri, Type, _Layer_Uri),
-                (
-                    Graph_Descriptor = branch_graph{
-                                           organization_name: Organization_Name,
-                                           database_name : Database_Name,
-                                           repository_name : Repository_Name,
-                                           branch_name : Branch_Name,
-                                           type : Type },
-                    graph_descriptor_transaction_objects_read_write_object(
-                        Graph_Descriptor, [Transaction], RWO),
-                    get_dict(read,RWO,Layer),
-                    (   ground(Layer)
-                    ->  squash(Layer,New_Layer),
-                        layer_to_id(New_Layer,Layer_Id),
-                        insert_layer_object(Context, Layer_Id, New_Layer_Uri),
-                        attach_layer_to_commit(Context, Commit_Uri, Type, New_Layer_Uri)
-                    ;   true
-                    )
-                )
-            )
+        (
+            squash_commit_layer(Transaction, Organization_Name, Database_Name, Repository_Name, Branch_Name, schema, Schema_Layer_Id),
+            insert_layer_object(Context, Schema_Layer_Id, Schema_Layer_Uri),
+
+            ignore((squash_commit_layer(Transaction, Organization_Name, Database_Name, Repository_Name, Branch_Name, instance, Instance_Layer_Id),
+                    insert_layer_object(Context, Instance_Layer_Id, Instance_Layer_Uri))),
+
+            insert_base_commit_object(Context, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, Commit_Id, _Commit_Uri)
         ),
         _
     ),
@@ -85,6 +71,23 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
                                 ["commit",Old_Commit_Id],
                                 Old_Commit_Descriptor),
     resolve_absolute_string_descriptor(Old_Commit_Path,Old_Commit_Descriptor).
+
+squash_commit_layer(Transaction, Organization_Name, Database_Name, Repository_Name, Branch_Name, Type, Layer_Id) :-
+    Graph_Descriptor = branch_graph{
+                           organization_name: Organization_Name,
+                           database_name : Database_Name,
+                           repository_name : Repository_Name,
+                           branch_name : Branch_Name,
+                           type : Type },
+    graph_descriptor_transaction_objects_read_write_object(
+        Graph_Descriptor, [Transaction], RWO),
+    get_dict(read,RWO,Layer),
+    (   ground(Layer)
+    ->  squash(Layer,New_Layer),
+        layer_to_id(New_Layer,Layer_Id)
+    ;   fail
+    ).
+
 
 :- begin_tests(squash).
 :- use_module(core(util/test_utils)).
