@@ -506,14 +506,16 @@ test(key_missing, [
             JSON
         )
     ),
+
     JSON = _{'@type':'api:InsertDocumentErrorResponse',
-             'api:error':
-             _{'@type':'api:RequiredKeyFieldMissing',
-               'api:document':json{'@type':"Thing"},
-               'api:field':'http://somewhere.for.now/schema#field'},
-             'api:message':"The required field 'http://somewhere.for.now/schema#field' is missing from the submitted document",
-             'api:status':"api:failure"
-            }.
+             'api:error':_{'@type':'api:SchemaCheckFailure',
+                           'api:witnesses':[
+                               json{'@type':required_field_does_not_exist_in_document,
+                                    document:
+                                    json{'@type':'http://somewhere.for.now/schema#Thing'},
+                                    field:'http://somewhere.for.now/schema#field'}]},
+             'api:message':"Schema check failure",
+             'api:status':"api:failure"}.
 
 :- end_tests(document_error_reporting).
 :- begin_tests(document_id_capture, []).

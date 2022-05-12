@@ -198,22 +198,8 @@ describe('diff-id', function () {
             b: 3,
           },
         })
-      expect(r2.body).to.deep.equal(
-        {
-          '@type': 'api:DiffErrorResponse',
-          'api:error': {
-            '@type': 'api:UnrecognizedProperty',
-            'api:document': {
-              '@id': docId,
-              '@type': id,
-              b: 3,
-            },
-            'api:property': 'b',
-            'api:type': id,
-          },
-          'api:message': `Submitted document contained unrecognized property b for type "${id}"`,
-          'api:status': 'api:failure',
-        })
+      expect(r2.body['@type']).to.equal('api:DiffErrorResponse')
+      expect(r2.body['api:error']['api:witnesses'][0]['@type']).to.equal('unknown_property_for_type')
       expect(r2.status).to.equal(400)
     })
 

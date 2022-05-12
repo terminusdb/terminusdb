@@ -17,3 +17,9 @@
   "address" : "xsd:string",
   "birthday" : { "@type" : "Optional",
                  "@class" : "xsd:dateTime" }}
+
+{ "@id" : "Twins",
+  "@type" : "Class",
+  "twins" : { "@type" : "Cardinality",
+              "@class" : "Person",
+              "@cardinality" : 2 }}
