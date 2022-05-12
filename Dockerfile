@@ -1,4 +1,4 @@
-FROM terminusdb/swipl:v8.4.2
+FROM terminusdb/swipl:v8.4.2 as pack_installer
 ENV TUS_VERSION v0.0.8
 WORKDIR /app/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
@@ -8,7 +8,7 @@ RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config
         && swipl -g "pack_install('file:///app/pack/jwt_io', [interactive(false)])" \
         && swipl -g "pack_install('file:///app/pack/tus', [interactive(false)])"
 
-FROM terminusdb/swipl:v8.4.2
+FROM terminusdb/swipl:v8.4.2 AS rust_builder
 WORKDIR /app/rust
 COPY ./src/rust /app/rust
 RUN BUILD_DEPS="git build-essential curl clang" && apt-get update \
@@ -21,8 +21,8 @@ RUN cargo build --release
 FROM terminusdb/swipl:v8.4.2
 WORKDIR /app/terminusdb
 COPY ./ /app/terminusdb
-COPY --from=0 /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
-COPY --from=1 /app/rust/target/release/libterminusdb_dylib.so /app/terminusdb/src/rust/librust.so
+COPY --from=pack_installer /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
+COPY --from=rust_builder /app/rust/target/release/libterminusdb_dylib.so /app/terminusdb/src/rust/librust.so
 ARG MAKE_ARGS=""
 ARG TERMINUSDB_GIT_HASH=null
 ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
