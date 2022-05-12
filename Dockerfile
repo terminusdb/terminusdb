@@ -29,5 +29,6 @@ ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 RUN apt-get update && apt-get install -y --no-install-recommends libjwt0 make openssl \
-    && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && make $MAKE_ARGS -d
+    && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && touch src/rust/librust.so \
+    && make $MAKE_ARGS
 CMD ["/app/terminusdb/distribution/init_docker.sh"]
