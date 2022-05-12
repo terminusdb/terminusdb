@@ -12,6 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Pull existing dev image
+        run: docker pull terminusdb/terminusdb-server:dev
+
       - name: Build Docker image
         run: |
           docker build . \
