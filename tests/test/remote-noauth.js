@@ -11,8 +11,8 @@ describe('remote-noauth', function () {
   it('fails on unknown descriptor', async function () {
     const descriptor = 'desc-' + util.randomString()
     const r = await agent.get(`/api/remote/${descriptor}`).then(remote.verifyFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:BadAbsoluteDescriptor')
-    expect(r.body['api:error']['api:absolute_descriptor']).to.equal(descriptor)
+    expect(r.body['api:error']['@type']).to.equal('api:BadDescriptorPath')
+    expect(r.body['api:error']['api:descriptor']).to.equal(descriptor)
   })
 
   it('fails on unknown database', async function () {

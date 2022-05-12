@@ -20,9 +20,15 @@ pull(System_DB, Local_Auth, Our_Branch_Path, Remote_Name, Remote_Branch_Name, Fe
     check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/schema_write_access', Local_Auth),
     check_descriptor_auth(System_DB, Our_Branch_Descriptor, '@schema':'Action/instance_write_access', Local_Auth),
 
-    do_or_die((branch_descriptor{} :< Our_Branch_Descriptor,
-               open_descriptor(Our_Branch_Descriptor, _)),
-              error(not_a_valid_local_branch(Our_Branch_Descriptor),_)),
+    do_or_die(
+        (   branch_descriptor{ branch_name : Our_Branch_Name } :< Our_Branch_Descriptor,
+            open_descriptor(Our_Branch_Descriptor, _)),
+        error(unknown_local_branch(Our_Branch_Path),_)),
+
+    (   var(Remote_Branch_Name)
+    ->  Remote_Branch_Name = Our_Branch_Name
+    ;   true
+    ),
 
     Our_Repository_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repository_Descriptor = (Our_Repository_Descriptor.put(_{ repository_name : Remote_Name })),

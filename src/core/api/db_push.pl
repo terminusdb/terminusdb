@@ -54,7 +54,7 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
 
     do_or_die(
         repository_type(Database_Descriptor, Remote_Name, Type),
-        error(no_repository_with_name(Database_Descriptor,Remote_Name),_)),
+        error(unknown_remote_repository(Remote_Name),_)),
 
     do_or_die(
         Type = remote,
@@ -128,15 +128,7 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
     (   Payload_Option = none % Last_Head_Id = Current_Head_Id
     ->  Result = same(Last_Head_Id)
     ;   Payload_Option = some(Payload),
-        catch(call(Push_Predicate, Remote_URL, Payload),
-              E,
-              (   E = error(Inner_E,_),
-                  (   Inner_E = history_diverged
-                  ;   Inner_E = remote_unknown
-                  ;   Inner_E = authorization_failure(_)
-                  ;   Inner_E = communication_failure(_))
-              ->  throw(error(remote_unpack_failed(Inner_E),_))
-              ;   throw(error(remote_unpack_unexpected_failure(E),_)))),
+        call(Push_Predicate, Remote_URL, Payload),
         Database_Transaction_Object = (Remote_Transaction_Object.parent),
         [Read_Obj] = (Remote_Transaction_Object.instance_objects),
         Layer = (Read_Obj.read),
@@ -168,8 +160,13 @@ authorized_push(Authorization, Remote_URL, Payload) :-
             tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization)]),
             Using_TUS = true,
 
+            % We use a random string as a file extension, because
+            % tmp_file_stream/3 can produce the same file name (without the
+            % extension) over multiple Docker runs.
+            random_string(Ext),
+
             setup_call_cleanup(
-                tmp_file_stream(Tmp_File, Stream, [encoding(octet)]),
+                tmp_file_stream(Tmp_File, Stream, [encoding(octet), extension(Ext)]),
                 format(Stream, "~s", Payload),
                 close(Stream)
             ),
@@ -177,10 +174,13 @@ authorized_push(Authorization, Remote_URL, Payload) :-
             tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
             Data = json(_{resource_uri : Resource_URL})
         ),
-        error(existence_error(url,_),_),
-        % TUS failed, fall back to old style
-        (   Data = bytes('application/octets',Payload),
+        error(Err, _),
+        (   (   Err = existence_error(url, _)
+            ;   Err = file_already_exists(_))
+        ->  % TUS failed, fall back to old style
+            Data = bytes('application/octets', Payload),
             Using_TUS = false
+        ;   throw(error(http_open_error(Err), _))
         )
     ),
 
@@ -194,7 +194,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                      status_code(Status_Code)
                     ]),
           E,
-          throw(error(communication_failure(E),_))),
+          throw(error(http_open_error(E),_))),
 
     (   200 = Status_Code
     ->  (   Using_TUS = true
@@ -202,17 +202,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                        % assume extension to avoid pointless pre-flight
                        [request_header('Authorization'=Authorization)])
         ;   true)
-    ;   400 = Status_Code,
-        _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Result
-    ->  (   _{'@type' : "api:NotALinearHistory"} :< Error
-        ->  throw(error(history_diverged,_))
-        ;   _{'@type' : "api:UnpackDestinationDatabaseNotFound"} :< Error
-        ->  throw(error(remote_unknown,_))
-        ;   throw(error(unknown_status_code(Status_Code, Result),_))
-        )
-    ;   403 = Status_Code
-    ->  throw(error(remote_authorization_failure(Result),_))
-    ;   throw(error(unknown_status_code,_))
+    ;   throw(error(remote_connection_failure(Status_Code, Result), _))
     ).
 
 :- begin_tests(push, [concurrent(true)]).
@@ -501,7 +491,7 @@ test(push_without_repository,
      [setup((setup_temp_store(State),
              create_db_without_schema(admin,foo))),
       cleanup(teardown_temp_store(State)),
-      error(no_repository_with_name(_,_))
+      error(unknown_remote_repository(_))
      ])
 :-
     Destination_Path = "admin/foo/local/branch/work",
@@ -637,87 +627,5 @@ test(push_prefixes,
     Prefixes = _{'@base' : "http://somewhere.for.now/document/",
                  '@schema': "http://somewhere.for.now/schema#",
                  '@type': 'Context'}.
-
-erroring_push_predicate(Error, _Remote_Url, _Payload) :-
-    throw(Error).
-
-generic_setup_for_error_conditions(Branch_Descriptor, Auth) :-
-    resolve_absolute_string_descriptor("admin/foo/local/_commits", Repository_Descriptor),
-
-    resolve_relative_descriptor(Repository_Descriptor, ["branch", "main"], Branch_Descriptor),
-
-    create_context(Branch_Descriptor, commit_info{author:"test", message:"test"}, Branch_Context),
-    with_transaction(Branch_Context,
-                     ask(Branch_Context,
-                         insert(a,b,c)),
-                     _),
-
-    Database_Descriptor = (Branch_Descriptor.repository_descriptor.database_descriptor),
-
-    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
-
-    create_context(Database_Descriptor, Database_Context),
-    with_transaction(Database_Context,
-                     insert_remote_repository(Database_Context, "remote", "http://fakeytown.mock",_),
-                     _),
-    create_ref_layer(Remote_Repository_Descriptor),
-
-    super_user_authority(Auth).
-
-
-test(remote_diverged,
-     [setup((setup_temp_store(State),
-             create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(history_diverged),_))
-     ])
-:-
-    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
-    resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(history_diverged,_)), _Result).
-
-test(remote_does_not_exist,
-     [setup((setup_temp_store(State),
-             create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(remote_unknown),_))
-     ])
-:-
-    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
-    resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(remote_unknown,_)), _Result).
-
-test(remote_authorization_failed,
-     [setup((setup_temp_store(State),
-             create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(authorization_failure(_)),_))
-     ])
-:-
-    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
-    resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(authorization_failure(some_context_idunno),_)), _Result).
-
-test(remote_communication_failed,
-     [setup((setup_temp_store(State),
-             create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_failed(communication_failure(_)),_))
-     ])
-:-
-    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
-    resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(communication_failure(some_context_idunno),_)), _Result).
-
-test(remote_gave_unknown_error,
-     [setup((setup_temp_store(State),
-             create_db_without_schema(admin,foo))),
-      cleanup(teardown_temp_store(State)),
-      throws(error(remote_unpack_unexpected_failure(error(phase_of_the_moon_is_wrong(full),_)),_))
-     ])
-:-
-    generic_setup_for_error_conditions(Branch_Descriptor, Auth),
-    resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
-    push(system_descriptor{}, Auth, Branch, "remote", "main", [], erroring_push_predicate(error(phase_of_the_moon_is_wrong(full),_)), _Result).
 
 :- end_tests(push).
