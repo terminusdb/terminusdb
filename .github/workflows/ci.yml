@@ -150,8 +150,7 @@ jobs:
     needs: push_docker
     if: |
       github.repository == 'terminusdb/terminusdb' &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
+      github.event_name == 'push'
 
     steps:
       - name: Run
