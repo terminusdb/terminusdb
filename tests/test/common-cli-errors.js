@@ -15,6 +15,27 @@ describe('common-cli-errors', function () {
     delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
 
+  describe('fails for bad descriptor path', function () {
+    const commands = [
+      'fetch --user=admin --password=root',
+      'pull --user=admin --password=root',
+      'push --user=admin --password=root',
+    ]
+    for (const command of commands) {
+      it(command, async function () {
+        const branch = util.randomString()
+        await exec(`./terminusdb.sh ${command} ${branch}`)
+          .then((r) => {
+            expect.fail(JSON.stringify(r))
+          })
+          .catch((r) => {
+            expect(r.code).to.not.equal(0)
+            expect(r.stderr).to.match(new RegExp('^Error: Bad descriptor path: ' + branch))
+          })
+      })
+    }
+  })
+
   describe('fails for unknown database', function () {
     const commands = [
       'pull --user=admin --password=root',
@@ -27,14 +48,14 @@ describe('common-cli-errors', function () {
     for (const command of commands) {
       it(command, async function () {
         const dbSpec = util.randomString() + '/' + util.randomString()
-        const r = await exec(`./terminusdb.sh ${command} ${dbSpec}`)
-          .catch((result) => {
-            expect(result.code).to.not.equal(0)
-            expect(result.stdout).to.equal('')
-            expect(result.stderr).to.match(new RegExp('^Error: Unknown database: ' + dbSpec))
-            return true
+        await exec(`./terminusdb.sh ${command} ${dbSpec}`)
+          .then((r) => {
+            expect.fail(JSON.stringify(r))
           })
-        expect(r).to.be.true
+          .catch((r) => {
+            expect(r.code).to.not.equal(0)
+            expect(r.stderr).to.match(new RegExp('^Error: Unknown database: ' + dbSpec))
+          })
       })
     }
   })

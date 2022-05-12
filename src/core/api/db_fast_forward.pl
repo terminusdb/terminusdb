@@ -22,10 +22,10 @@ fast_forward_branch(Our_Branch_Descriptor, Their_Branch_Descriptor, Applied_Comm
                          ->  (   branch_head_commit(Their_Repo_Context, Their_Branch_Descriptor.branch_name, Their_Commit_Uri),
                                  commit_id_uri(Their_Repo_Context, Their_Commit_Id, Their_Commit_Uri),
                                  commit_type(Their_Repo_Context, Their_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit'),
-                                 most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id, Our_Branch_Path, Their_Branch_Path)
+                                 most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Common_Commit_Id_Option, Our_Branch_Path, Their_Branch_Path)
                              ->  (   Our_Branch_Path = []
                                  ->  true
-                                 ;   throw(error(divergent_history(Common_Commit_Id, Our_Branch_Path, Their_Branch_Path), _))),
+                                 ;   throw(error(divergent_history(Common_Commit_Id_Option, Our_Branch_Path, Their_Branch_Path), _))),
                                  Their_Branch_Path = Applied_Commit_Ids,
                                  (   Their_Branch_Path = []
                                  ->  Next = nothing

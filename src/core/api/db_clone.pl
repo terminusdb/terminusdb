@@ -25,6 +25,8 @@ clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicat
 
 clone_cleanup_required(remote_pack_failed(_)).
 clone_cleanup_required(remote_pack_unpexected_failure(_)).
+clone_cleanup_required(error(http_open_error(_), _)).
+clone_cleanup_required(error(remote_connection_failure(_, _), _)).
 
 :- meta_predicate clone_(+,+,+,+,+,+,+,+,3,-).
 clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote_URL,Fetch_Predicate,Meta_Data) :-
