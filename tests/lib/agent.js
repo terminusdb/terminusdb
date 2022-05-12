@@ -52,6 +52,7 @@ class Agent {
 
   defaults () {
     return {
+      baseUrl: this.baseUrl,
       orgName: this.orgName,
       dbName: this.dbName,
       user: this.user,

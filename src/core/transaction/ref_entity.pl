@@ -13,17 +13,17 @@
               layer_uri_for_commit/4,
               insert_branch_object/3,
               delete_branch_object/2,
-              insert_base_commit_object/3,
-              insert_base_commit_object/4,
               insert_base_commit_object/5,
-              insert_child_commit_object/4,
-              insert_child_commit_object/5,
+              insert_base_commit_object/6,
+              insert_base_commit_object/7,
               insert_child_commit_object/6,
-              insert_commit_object_on_branch/4,
-              insert_commit_object_on_branch/5,
+              insert_child_commit_object/7,
+              insert_child_commit_object/8,
               insert_commit_object_on_branch/6,
-              insert_initial_commit_object_on_branch/4,
-              insert_initial_commit_object_on_branch/5,
+              insert_commit_object_on_branch/7,
+              insert_commit_object_on_branch/8,
+              insert_initial_commit_object_on_branch/6,
+              insert_initial_commit_object_on_branch/7,
               unlink_commit_object_from_branch/2,
               link_commit_object_to_branch/3,
               reset_branch_head/3,
@@ -39,8 +39,7 @@
               invalidate_commit/2,
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
-              commit_uri_to_history_commit_uris/3,
-              attach_layer_to_commit/4
+              commit_uri_to_history_commit_uris/3
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -137,12 +136,12 @@ insert_branch_object(Context, Branch_Name, Branch_Uri) :-
 delete_branch_object(Context, Branch_Uri) :-
     delete_document(Context, Branch_Uri).
 
-insert_base_commit_object(Context, Commit_Id, Commit_Uri) :-
-    insert_base_commit_object(Context, Context.commit_info, Commit_Id, Commit_Uri).
-insert_base_commit_object(Context, Commit_Info, Commit_Id, Commit_Uri) :-
+insert_base_commit_object(Context, Commit_Id, Schema_Layer, Instance_Layer, Commit_Uri) :-
+    insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Context.commit_info, Commit_Id, Commit_Uri).
+insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Commit_Id, Commit_Uri) :-
     get_time(Now),
-    insert_base_commit_object(Context, Commit_Info, Now, Commit_Id, Commit_Uri).
-insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
+    insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Now, Commit_Id, Commit_Uri).
+insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
     (   var(Commit_Id)
     ->  random_string(Commit_Id)
     ;   true),
@@ -158,54 +157,61 @@ insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri
     ->  true
     ;   Commit_Type = 'ValidCommit'),
 
+    Commit_Document0 =
+    _{ '@type' : Commit_Type,
+       'identifier' : Commit_Id,
+       'author' : Author,
+       'message' : Message,
+       'timestamp' : Timestamp,
+       'schema': Schema_Layer
+     },
+    (   ground(Instance_Layer)
+    ->  put_dict(instance, Commit_Document0, Instance_Layer, Commit_Document)
+    ;   Commit_Document = Commit_Document0),
+
     insert_document(
         Context,
-        _{ '@type' : Commit_Type,
-           'identifier' : Commit_Id,
-           'author' : Author,
-           'message' : Message,
-           'timestamp' : Timestamp
-         },
+        Commit_Document,
         Commit_Uri).
 
-insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Id, Commit_Uri) :-
-    insert_child_commit_object(Context, Parent_Commit_Uri, Context.commit_info, Commit_Id, Commit_Uri).
+insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Id, Commit_Uri) :-
+    insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Context.commit_info, Commit_Id, Commit_Uri).
 
-insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Commit_Id, Commit_Uri) :-
+insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Commit_Id, Commit_Uri) :-
     get_time(Now),
-    insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Now, Commit_Id, Commit_Uri).
+    insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Now, Commit_Id, Commit_Uri).
 
-insert_child_commit_object(Context, Parent_Commit_Uri, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
-    insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri),
+insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
+    insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri),
     once(ask(Context,
              insert(Commit_Uri, parent, Parent_Commit_Uri))).
 
-insert_commit_object_on_branch(Context, Branch_Name, Commit_Id, Commit_Uri) :-
-    insert_commit_object_on_branch(Context, Context.commit_info, Branch_Name, Commit_Id, Commit_Uri).
+insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Branch_Name, Commit_Id, Commit_Uri) :-
+    insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Context.commit_info, Branch_Name, Commit_Id, Commit_Uri).
 
-insert_commit_object_on_branch(Context, Commit_Info, Branch_Name, Commit_Id, Commit_Uri) :-
+insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Branch_Name, Commit_Id, Commit_Uri) :-
     get_time(Now),
-    insert_commit_object_on_branch(Context, Commit_Info, Now, Branch_Name, Commit_Id, Commit_Uri).
-insert_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Name, Commit_Id, Commit_Uri) :-
+    insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Now, Branch_Name, Commit_Id, Commit_Uri).
+insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Branch_Name, Commit_Id, Commit_Uri) :-
     branch_name_uri(Context, Branch_Name, Branch_Uri),
 
     (   branch_head_commit(Context, Branch_Name, Old_Commit_Uri)
     % if branch already points at something, delete that reference
     ->  once(ask(Context,
                  delete(Branch_Uri, head, Old_Commit_Uri))),
-        insert_child_commit_object(Context, Old_Commit_Uri, Commit_Info, Timestamp, Commit_Id, Commit_Uri)
+        insert_child_commit_object(Context, Old_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri)
     % if branch does not yet point at something, insert a base commit pointing at no parent
-    ;   insert_base_commit_object(Context, Commit_Info, Timestamp, Commit_Id, Commit_Uri)),
+    ;   insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri)),
 
     % in both cases, we need to insert the new reference to the commit
     link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
 
-insert_initial_commit_object_on_branch(Context, Commit_Info, Branch_Uri, Commit_Uri) :-
+insert_initial_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Branch_Uri, Commit_Uri) :-
     get_time(Now),
-    insert_initial_commit_object_on_branch(Context, Commit_Info, Now, Branch_Uri, Commit_Uri).
-insert_initial_commit_object_on_branch(Context, Commit_Info, Timestamp, Branch_Uri, Commit_Uri) :-
+    insert_initial_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Now, Branch_Uri, Commit_Uri).
+insert_initial_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Branch_Uri, Commit_Uri) :-
     Initial_Commit_Info = (Commit_Info.put(commit_type, 'InitialCommit')),
-    insert_base_commit_object(Context, Initial_Commit_Info, Timestamp, _, Commit_Uri),
+    insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Initial_Commit_Info, Timestamp, _, Commit_Uri),
     link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
 
 unlink_commit_object_from_branch(Context, Branch_Uri) :-
@@ -221,11 +227,6 @@ link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri) :-
 reset_branch_head(Context, Branch_Uri, Commit_Uri) :-
     ignore(unlink_commit_object_from_branch(Context,Branch_Uri)),
     link_commit_object_to_branch(Context,Branch_Uri, Commit_Uri).
-
-% Note: We should probably refactor to add this to copy graph / copy new graph
-attach_layer_to_commit(Context, Commit_Uri, Graph_Type, Layer_Uri) :-
-    once(ask(Context,
-             (   insert(Commit_Uri, Graph_Type, Layer_Uri)))).
 
 graph_idgen(Context, Commit_Id, Graph_Type, Graph_Uri) :-
     once(
@@ -311,16 +312,18 @@ test(base_commit_insert,
 
     with_transaction(
         Context,
-        (   insert_base_commit_object(Context,
+        (
+            insert_layer_object(Context,
+                                "a3a29522ec767aa1a1cf321122f833726c102749",
+                                Schema_Layer_Uri),
+            insert_base_commit_object(Context,
+                                      Schema_Layer_Uri,
+                                      _,
                                       commit_info{author:"author",
                                                   message:"message"},
                                       1234.567,
                                            Commit_Id,
-                                           Commit_Uri),
-            insert_layer_object(Context,
-                                "a3a29522ec767aa1a1cf321122f833726c102749",
-                                Layer_Uri),
-            attach_layer_to_commit(Context, Commit_Uri, schema, Layer_Uri)
+                                           _Commit_Uri)
         ),
         _),
 
@@ -340,25 +343,28 @@ test(child_commit_insert,
     ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context),
 
     with_transaction(Context,
-                     (   insert_base_commit_object(Context,
+                     (
+                         insert_layer_object(Context,
+                                             "a3a29522ec767aa1a1cf321122f833726c102749",
+                                             Schema_Layer_Uri),
+                         insert_base_commit_object(Context,
+                                                   Schema_Layer_Uri,
+                                                   _,
                                                    commit_info{author:"author",
                                                                message:"message"},
                                                    1234.567,
                                                    _Parent_Commit_Id,
                                                    Parent_Commit_Uri),
-                         insert_layer_object(Context,
-                                             "a3a29522ec767aa1a1cf321122f833726c102749",
-                                             Layer_Uri),
-                         attach_layer_to_commit(Context, Parent_Commit_Uri, schema, Layer_Uri),
 
                          insert_child_commit_object(Context,
                                                     Parent_Commit_Uri,
+                                                    Schema_Layer_Uri,
+                                                    _,
                                                     commit_info{author:"author2",
                                                                 message:"message2"},
                                                     2345.678,
                                                     Commit_Id,
-                                                    Commit_Uri),
-                         attach_layer_to_commit(Context, Commit_Uri, schema, Layer_Uri)
+                                                    _Commit_Uri)
                      ),
                      _),
 
@@ -387,14 +393,16 @@ test(commit_on_branch_insert,
     ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context2),
     with_transaction(
         Context2,
-        (   insert_commit_object_on_branch(Context2,
-                                           "foo",
-                                           Commit_Id,
-                                           Commit_Uri),
+        (
             insert_layer_object(Context2,
                                 "a3a29522ec767aa1a1cf321122f833726c102749",
-                                Layer_Uri),
-            attach_layer_to_commit(Context2, Commit_Uri, schema, Layer_Uri)
+                                Schema_Layer_Uri),
+            insert_commit_object_on_branch(Context2,
+                                           Schema_Layer_Uri,
+                                           _,
+                                           "foo",
+                                           Commit_Id,
+                                           Commit_Uri)
         ),
         _),
 
@@ -411,14 +419,16 @@ test(commit_on_branch_insert,
 
     with_transaction(
         Context3,
-        (   insert_commit_object_on_branch(Context3,
-                                           "foo",
-                                           Commit2_Id,
-                                           Commit2_Uri),
+        (
             insert_layer_object(Context3,
                                 "f3dfc8d0d103b0be9428938174326e6256ad1beb",
-                                Layer2_Uri),
-            attach_layer_to_commit(Context3, Commit2_Uri, schema, Layer2_Uri)
+                                Schema_Layer2_Uri),
+            insert_commit_object_on_branch(Context3,
+                                           Schema_Layer2_Uri,
+                                           _,
+                                           "foo",
+                                           Commit2_Id,
+                                           Commit2_Uri)
         ),
         _),
 
@@ -443,21 +453,21 @@ test(insert_commit_object_with_layer,
     ref_schema_context_from_label_descriptor("testlabel",Descriptor, Context),
 
     with_transaction(Context,
-                     (   insert_base_commit_object(Context,
+                     (
+                         insert_layer_object(Context,
+                                             "f3dfc8d0d103b0be9428938174326e6256ad1beb",
+                                             Instance_Layer_Uri),
+                         insert_layer_object(Context,
+                                             "a3a29522ec767aa1a1cf321122f833726c102749",
+                                             Schema_Layer_Uri),
+                         insert_base_commit_object(Context,
+                                                   Schema_Layer_Uri,
+                                                   Instance_Layer_Uri,
                                                    commit_info{author:"author",
                                                                message:"message"},
                                                    1234.567,
                                                    _Commit_Id,
-                                                   Commit_Uri),
-                         insert_layer_object(Context,
-                                             "f3dfc8d0d103b0be9428938174326e6256ad1beb",
-                                             Layer1_Uri),
-                         attach_layer_to_commit(Context, Commit_Uri, instance, Layer1_Uri),
-
-                         insert_layer_object(Context,
-                                             "a3a29522ec767aa1a1cf321122f833726c102749",
-                                             Layer2_Uri),
-                         attach_layer_to_commit(Context, Commit_Uri, schema, Layer2_Uri)
+                                                   Commit_Uri)
                      ),
                      _),
 
@@ -494,15 +504,13 @@ test(copy_base_commit,
     Layer2_Id = "461ccac7287ac5712cf98445b385ee44bf64e474",
     with_transaction(Context1_1,
                      (
-                         insert_base_commit_object(Context1_1, commit_info{author: "author", message: "message"}, 'commit_id', Commit_Uri),
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         attach_layer_to_commit(Context1_1, Commit_Uri, instance, Layer1_Uri),
-                         attach_layer_to_commit(Context1_1, Commit_Uri, schema, Layer2_Uri)
+                         insert_base_commit_object(Context1_1, Layer2_Uri, Layer1_Uri, commit_info{author: "author", message: "message"}, 'commit_id', Commit_Uri)
                      ),
                      _),
 
@@ -548,25 +556,22 @@ test(copy_child_commit_with_no_shared_ancestors,
     with_transaction(Context1_1,
                      (
                          % first commit
-                         insert_base_commit_object(Context1_1, commit_info{author: "author", message: "commit 1"}, 'commit1_id', Commit1_Uri),
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
-                         attach_layer_to_commit(Context1_1, Commit1_Uri, schema, Layer1_Uri),
+                         insert_base_commit_object(Context1_1, Layer1_Uri, _, commit_info{author: "author", message: "commit 1"}, 'commit1_id', Commit1_Uri),
 
                          % second commit
-                         insert_child_commit_object(Context1_1, Commit1_Uri, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         attach_layer_to_commit(Context1_1, Commit2_Uri, schema, Layer2_Uri),
+                         insert_child_commit_object(Context1_1, Commit1_Uri, Layer2_Uri, _, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
 
                          % third commit
-                         insert_child_commit_object(Context1_1, Commit2_Uri, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri),
                          insert_layer_object(Context1_1,
                                              Layer3_Id,
                                              Layer3_Uri),
-                         attach_layer_to_commit(Context1_1, Commit3_Uri, schema, Layer3_Uri)
+                         insert_child_commit_object(Context1_1, Commit2_Uri, Layer3_Uri, _, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri)
                      ),
                      _),
 
@@ -604,25 +609,22 @@ test(copy_child_commit_with_some_shared_ancestors,
     with_transaction(Context1_1,
                      (
                          % first commit
-                         insert_base_commit_object(Context1_1, commit_info{author: "author", message: "commit 1"}, 'commit1_id', Commit1_Uri),
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
-                         attach_layer_to_commit(Context1_1, Commit1_Uri, schema, Layer1_Uri),
+                         insert_base_commit_object(Context1_1, Layer1_Uri, _, commit_info{author: "author", message: "commit 1"}, 'commit1_id', Commit1_Uri),
 
                          % second commit
-                         insert_child_commit_object(Context1_1, Commit1_Uri, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         attach_layer_to_commit(Context1_1, Commit2_Uri, schema, Layer2_Uri),
+                         insert_child_commit_object(Context1_1, Commit1_Uri, Layer2_Uri, _, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
 
                          % third commit
-                         insert_child_commit_object(Context1_1, Commit2_Uri, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri),
                          insert_layer_object(Context1_1,
                                              Layer3_Id,
                                              Layer3_Uri),
-                         attach_layer_to_commit(Context1_1, Commit3_Uri, schema, Layer3_Uri)
+                         insert_child_commit_object(Context1_1, Commit2_Uri, Layer3_Uri, _, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri)
                      ),
                      _),
 
@@ -668,25 +670,22 @@ test(copy_child_commit_that_already_exists,
     with_transaction(Context1_1,
                      (
                          % first commit
-                         insert_base_commit_object(Context1_1, commit_info{author: "author", message: "commit 1"}, 'commit1_id', Commit1_Uri),
                          insert_layer_object(Context1_1,
                                              Layer1_Id,
                                              Layer1_Uri),
-                         attach_layer_to_commit(Context1_1, Commit1_Uri, schema, Layer1_Uri),
+                         insert_base_commit_object(Context1_1, Layer1_Uri, _, commit_info{author: "author", message: "commit 1"}, 'commit1_id', Commit1_Uri),
 
                          % second commit
-                         insert_child_commit_object(Context1_1, Commit1_Uri, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
                          insert_layer_object(Context1_1,
                                              Layer2_Id,
                                              Layer2_Uri),
-                         attach_layer_to_commit(Context1_1, Commit2_Uri, schema, Layer2_Uri),
+                         insert_child_commit_object(Context1_1, Commit1_Uri, Layer2_Uri, _, commit_info{author: "author", message: "commmit 2"}, 'commit2_id', Commit2_Uri),
 
                          % third commit
-                         insert_child_commit_object(Context1_1, Commit2_Uri, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri),
                          insert_layer_object(Context1_1,
                                              Layer3_Id,
                                              Layer3_Uri),
-                         attach_layer_to_commit(Context1_1, Commit3_Uri, schema, Layer3_Uri)
+                         insert_child_commit_object(Context1_1, Commit2_Uri, Layer3_Uri, _, commit_info{author: "author", message: "commit 3"}, 'commit3_id', Commit3_Uri)
                      ),
                      _),
 
@@ -745,28 +744,29 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
     apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
-
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
     commit_id_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
     Commit_Info = commit_info{author: Author, message: Message},
 
+    ignore(
+        apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_Uri,instance, Instance_Layer_Uri)
+    ),
+
+    apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_Uri,schema, Schema_Layer_Uri),
+
     % create new commit
     insert_child_commit_object(
         Us_Repo_Context,
         Us_Commit_Uri,
+        Schema_Layer_Uri,
+        Instance_Layer_Uri,
         Commit_Info,
         Timestamp,
         New_Commit_Id,
-        New_Commit_Uri),
+        New_Commit_Uri).
 
-    ignore(
-        apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Uri,Them_Commit_Uri,instance)
-    ),
-
-    apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Uri,Them_Commit_Uri,schema).
-
-apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Uri,Them_Commit_Uri,Type) :-
+apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_Uri,Type, New_Layer_Uri) :-
 
     layer_uri_for_commit(Them_Repo_Askable, Them_Commit_Uri, Type, Them_Layer_Uri),
     layer_id_uri(Them_Repo_Askable, Them_Layer_Id, Them_Layer_Uri),
@@ -786,8 +786,7 @@ apply_layer_change(Us_Repo_Context,Them_Repo_Askable,New_Commit_Uri,Us_Commit_Ur
     nb_commit(Builder,New_Layer),
     store_id_layer(Store, New_Layer_Id, New_Layer),
 
-    insert_layer_object(Us_Repo_Context, New_Layer_Id, New_Layer_Uri),
-    attach_layer_to_commit(Us_Repo_Context, New_Commit_Uri, Type, New_Layer_Uri).
+    insert_layer_object(Us_Repo_Context, New_Layer_Id, New_Layer_Uri).
 
 :- begin_tests(commit_application).
 :- use_module(core(util/test_utils)).
@@ -976,16 +975,46 @@ test(apply_nonexisting_removal,
 
 :- end_tests(commit_application).
 
-most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Final_Commit_Id, Commit1_Path, Commit2_Path) :-
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    commit_is_initial(Repo1_Context, Commit1_Id),
+    commit_is_initial(Repo2_Context, Commit2_Id),
+    !,
+    Common_Commit_Id_Option = none,
+    % Commit1_Id is an initial commit.
+    Commit1_Path = [],
+    % Commit2_Id is an initial commit.
+    Commit2_Path = [].
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    commit_is_initial(Repo1_Context, Commit1_Id),
+    !,
+    Common_Commit_Id_Option = none,
+    % Commit1_Id is an initial commit.
+    Commit1_Path = [],
+    % Commit2_Id is not an initial commit.
+    commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
+    commit_uri_to_history_commit_ids(Repo2_Context, Commit2_Uri, Commit2_Path).
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    commit_is_initial(Repo2_Context, Commit2_Id),
+    !,
+    Common_Commit_Id_Option = none,
+    % Commit1_Id is not an initial commit.
+    commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
+    commit_uri_to_history_commit_ids(Repo1_Context, Commit1_Uri, Commit1_Path),
+    % Commit2_Id is an initial commit.
+    Commit2_Path = [].
+most_recent_common_ancestor(Repo1_Context, Repo2_Context, Commit1_Id, Commit2_Id, Common_Commit_Id_Option, Commit1_Path, Commit2_Path) :-
+    % Commit1_Id and Commit2_Id are not initial commits.
     commit_id_uri(Repo1_Context, Commit1_Id, Commit1_Uri),
     commit_id_uri(Repo2_Context, Commit2_Id, Commit2_Uri),
 
+    % Backtrack until we find the first common commit.
     % Note: this isn't great time complexity
-    ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
-    ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Final_Commit_Id_2^^xsd:string, Commit2_Edge_Path_Reversed)),
+    ask(Repo1_Context, path(Commit1_Uri, (star(p(parent)), p(identifier)), Common_Commit1_Id^^xsd:string, Commit1_Edge_Path_Reversed)),
+    ask(Repo2_Context, path(Commit2_Uri, (star(p(parent)), p(identifier)), Common_Commit2_Id^^xsd:string, Commit2_Edge_Path_Reversed)),
+    Common_Commit1_Id = Common_Commit2_Id,
+    !,
 
-    Final_Commit_Id = Final_Commit_Id_2,
-    !, % we're only interested in one solution!
+    Common_Commit_Id_Option = some(Common_Commit1_Id),
 
     reverse(Commit1_Edge_Path_Reversed, [_|Commit1_Edge_Path]),
     reverse(Commit2_Edge_Path_Reversed, [_|Commit2_Edge_Path]),
@@ -1061,8 +1090,8 @@ test(common_ancestor_after_branch_and_some_commits,
     branch_head_commit(Repo_Context, "second", Head2_Commit_Uri),
     commit_id_uri(Repo_Context, Head2_Commit_Id, Head2_Commit_Uri),
 
-    most_recent_common_ancestor(Repo_Context, Repo_Context, Head1_Commit_Id, Head2_Commit_Id, Common_Commit_Id, Branch1_Path, Branch2_Path),
-
+    most_recent_common_ancestor(Repo_Context, Repo_Context, Head1_Commit_Id, Head2_Commit_Id, Common_Commit_Id_Option, Branch1_Path, Branch2_Path),
+    Common_Commit_Id_Option = some(Common_Commit_Id),
     Repo_Descriptor = Descriptor.repository_descriptor,
     commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _, "commit b", _),
 
