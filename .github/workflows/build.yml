@@ -28,8 +28,7 @@ jobs:
           outputs: type=docker,dest=terminusdb-server-docker-image.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args:
-            - TERMINUSDB_GIT_HASH=${{ github.sha }}
+          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Compress image
         run: gzip terminusdb-server-docker-image.tar
