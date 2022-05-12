@@ -64,7 +64,7 @@ needs_local_instance_validation(Validation_Object) :-
  * Checks to see if we only need to check integrity of links
  *
  */
-needs_referential_integrity_validation(Validation_Object) :-
+only_needs_referential_integrity_validation(Validation_Object) :-
     validation_object{
         schema_objects : Schema_Objects,
         instance_objects : Instance_Objects
@@ -105,7 +105,7 @@ refute(Validation_Object, Witness) :-
     !,
     refute_instance_schema(Validation_Object, Witness).
 refute(Validation_Object, Witness) :-
-    needs_referential_integrity_validation(Validation_Object),
+    only_needs_referential_integrity_validation(Validation_Object),
     !,
     refute_referential_integrity(Validation_Object,Witness).
 refute(Validation_Object, Witness) :-

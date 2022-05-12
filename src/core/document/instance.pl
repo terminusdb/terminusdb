@@ -829,10 +829,7 @@ dangling_reference_candidate(Validation_Object,S,P,O) :-
                  rdf_first(P)
              )).
 
-my_triple(Instance, S, P, O) :-
-    triple(Instance, S, P, O).
-
-% Generator for: ∃ o,p,T. -(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+% Generator for: ∃ o,p,T. -(s,p,o) ∧ doc(o) ∧ s:T
 referential_cardinality_candidate(Validation_Object,S,P,C) :-
     instance_layer(Validation_Object, Instance),
     rdf_type(Rdf_Type),
@@ -841,8 +838,7 @@ referential_cardinality_candidate(Validation_Object,S,P,C) :-
              (   triple_removal(Instance, S, P, node(O)),
                  \+ atom_string(Rdf_Type,P),
                  was_document(Validation_Object, O),
-                 my_triple(Instance, S, Rdf_Type, node(C)) %,
-                 % class_predicate_type(Validation_Object, C, P, T)
+                 triple(Instance, S, Rdf_Type, node(C))
              )).
 
 refute_referential_integrity(Validation_Object,Witness) :-

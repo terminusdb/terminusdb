@@ -510,10 +510,10 @@ test(key_missing, [
     JSON = _{'@type':'api:InsertDocumentErrorResponse',
              'api:error':_{'@type':'api:SchemaCheckFailure',
                            'api:witnesses':[
-                               json{'@type':mandatory_key_does_not_exist_in_document,
+                               json{'@type':required_field_does_not_exist_in_document,
                                     document:
                                     json{'@type':'http://somewhere.for.now/schema#Thing'},
-                                    key:'http://somewhere.for.now/schema#field'}]},
+                                    field:'http://somewhere.for.now/schema#field'}]},
              'api:message':"Schema check failure",
              'api:status':"api:failure"}.
 

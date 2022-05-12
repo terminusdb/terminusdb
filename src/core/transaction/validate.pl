@@ -371,9 +371,6 @@ commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], 
         attach_layer_to_commit(Parent_Transaction, Commit_Uri, schema, Schema_Layer_Uri)
     ;   true).
 
-validation_triple_udpate(Validation_Object) :-
-    Validation_Object.triple_update = true.
-
 validation_object_changed(Validation_Object) :-
     Validation_Object.changed = true.
 
@@ -754,12 +751,12 @@ test(cardinality_min_error,
       cleanup(teardown_temp_store(State)),
 
       error(schema_check_failure(
-                [json{'@type':mandatory_key_does_not_exist_in_document,
-                      document:json{'@id':'http://example.com/data/world/Person/Duke',
-                                    '@type':'http://example.com/schema/worldOntology#Person',
-                                    'http://example.com/schema/worldOntology#name':
-                                    ["Duke","Doug"]},
-                      key:'http://example.com/schema/worldOntology#address'}]),
+                [json{'@type':field_has_wrong_cardinality,
+                      actual:1,
+                      document:json{'@type':'http://example.com/schema/worldOntology#Twins','http://example.com/schema/worldOntology#twins':["Person/Duke"]},
+                      field:'http://example.com/schema/worldOntology#twins',
+                      max:2,
+                      min:2}]),
             _)
      ]) :-
 
@@ -771,30 +768,19 @@ test(cardinality_min_error,
     % Check to see that we get the restriction on personal name via the
     % property subsumption hierarch *AND* the class subsumption hierarchy
 
-    Object = _{'@type': "Person",
-               '@id' : "Person/Duke",
-               'name': ["Duke",
-                        "Doug"]
+    Duke = _{ '@type' : "Person",
+              address : "Here",
+              name : "Duke"},
+    Twins = _{ '@type': "Twins",
+               'twins': ["Person/Duke"]
               },
 
     with_transaction(
         Master_Context2,
-        insert_document(Master_Context2,Object,ID),
-        _),
-
-    writeq(ID),
-
-    once((member(Witness0, Witnesses),
-          Witness0.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness0.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#name',
-          '2' = Witness0.'vio:cardinality'.'@value'
-         )),
-    once((member(Witness1, Witnesses),
-          Witness1.'@type' = 'vio:InstanceCardinalityRestrictionViolation',
-          Witness1.'vio:predicate'.'@value' = 'http://example.com/schema/worldOntology#address',
-          '0' = Witness1.'vio:cardinality'.'@value'
-         )).
-
+        (   insert_document(Master_Context2,Duke,_),
+            insert_document(Master_Context2,Twins,_)
+        ),
+        _).
 
 :- end_tests(instance_validation).
 

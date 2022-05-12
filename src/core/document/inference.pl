@@ -199,7 +199,7 @@ Type = 'http://terminusdb.com/schema/sys#Unit' =>
     ->  Annotated = success(Dictionary)
     ;   no_captures(Captures),
         Annotated = witness(json{ '@type' : not_a_sys_unit,
-                                  key : Key,
+                                  field : Key,
                                   document : Dictionary })
     ).
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Captures),
@@ -221,9 +221,9 @@ atom(Type) =>
                                       type : Type_Ex })
         )
     ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
+        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                   document : Dictionary,
-                                  key : Key })
+                                  field : Key })
     ).
 check_type_pair(Key,Range,_Database,_Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
@@ -238,9 +238,9 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
         ->  dict_pairs(Witness, json, [Key-Witness_Value]),
             Annotated = witness(Witness)
         )
-    ;   Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
+    ;   Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                   document : Dictionary,
-                                  key : Key })
+                                  field : Key })
     ).
 check_type_pair(Key,Range,_Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Foreign',
@@ -260,7 +260,7 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Foreign',
             Annotated = witness(Dict)
         )
     ;   put_dict(Key, json{}, Error, Dict),
-        Error = json{ '@type' : mandatory_foreign_type_missing},
+        Error = json{ '@type' : required_foreign_type_missing},
         Annotated = witness(Dict)
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
@@ -275,8 +275,9 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
             Annotated = witness(Witness)
         )
     ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : missing_property,
-                                  '@property' : Key})
+        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                  document : Dictionary,
+                                  field : Key })
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
@@ -308,12 +309,12 @@ _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
                     success(Annotated_Dict) = Annotated
                 )
             ;   no_captures(Captures),
-                Annotated = witness(json{ '@type' : key_has_wrong_cardinality,
+                Annotated = witness(json{ '@type' : field_has_wrong_cardinality,
                                           min: Min,
                                           max: Max,
                                           actual: N,
                                           document : Dictionary,
-                                          key : Key })
+                                          field : Key })
             )
         ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result,Captures),
             (   Result = witness(Witness_Value)
@@ -334,9 +335,9 @@ _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
         drop_key(Key,Dictionary,New),
         success(New) = Annotated
     ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
+        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                   document : Dictionary,
-                                  key : Key })
+                                  field : Key })
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>
@@ -449,9 +450,9 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#List',
             Annotated = success(Annotated_Dictionary)
         )
     ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : mandatory_key_does_not_exist_in_document,
+        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                   document : Dictionary,
-                                  key : Key })
+                                  field : Key })
     ).
 
 presentation_type(Type, Presentation),

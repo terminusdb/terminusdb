@@ -5261,7 +5261,7 @@ test(partial_document_elaborate_list_without_required,
          ),
          error(
              schema_check_failure(
-                 [json{'@type':mandatory_key_does_not_exist_in_document,
+                 [json{'@type':required_field_does_not_exist_in_document,
                        document:
                        json{'@id':'http://i/BookClub/Murder%20Mysteries',
                             '@type':'http://s/BookClub',
@@ -5278,7 +5278,7 @@ test(partial_document_elaborate_list_without_required,
                                           'http://s/name':
                                           json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                                '@value':"In Cold Blood"}}]}},
-                       key:'http://s/name'}]),_)
+                       field:'http://s/name'}]),_)
      ]) :-
 
     JSON = json{'@id' : 'BookClub/Murder%20Mysteries',
@@ -5327,12 +5327,12 @@ test(optional_missing,
          ),
          error(
              schema_check_failure(
-                 [json{'@type':mandatory_key_does_not_exist_in_document,
+                 [json{'@type':required_field_does_not_exist_in_document,
                        document:json{'@type':'http://s/Event',
                                      'http://s/action':
                                      json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                           '@value':"test"}},
-                       key:'http://s/timestamp'}]),
+                       field:'http://s/timestamp'}]),
              _)
      ]) :-
 
@@ -6054,11 +6054,11 @@ test(document_with_no_required_field,
          ),
          error(
              schema_check_failure(
-                 [json{'@type':mandatory_key_does_not_exist_in_document,
+                 [json{'@type':required_field_does_not_exist_in_document,
                        document:
                        json{'@id':'http://i/Moo/doug',
                             '@type':'http://s/Moo'},
-                       key:'http://s/name'}]),
+                       field:'http://s/name'}]),
              _)
      ]) :-
 
@@ -8667,13 +8667,13 @@ test(insert_employee, [
              schema_check_failure(
                  [json{'http://s/address_of':
                        json{'http://s/country':
-                            json{'@type':mandatory_key_does_not_exist_in_document,
+                            json{'@type':required_field_does_not_exist_in_document,
                                  document:
                                  json{'@type':'http://s/Country',
                                       'http://s/name':
                                       json{'@type':'http://www.w3.org/2001/XMLSchema#string',
                                            '@value':"United Kingdom"}},
-                                 key:'http://s/perimeter'}}}]),
+                                 field:'http://s/perimeter'}}}]),
              _)
 
      ]) :-
@@ -10428,7 +10428,7 @@ test(class_with_unit_property_but_nonnil_data,
                 [json{'@type':not_a_sys_unit,
                       document:json{'@type':'terminusdb:///schema#Foo',
                                     'terminusdb:///schema#field':42},
-                      key:'terminusdb:///schema#field'}]),
+                      field:'terminusdb:///schema#field'}]),
             _)
      ]) :-
 
@@ -10448,7 +10448,7 @@ test(class_with_unit_property_missing_field,
       cleanup(teardown_temp_store(State)),
       error(schema_check_failure([json{'@type':not_a_sys_unit,
                                        document:json{'@type':'terminusdb:///schema#Foo'},
-                                       key:'terminusdb:///schema#field'}]),_)
+                                       field:'terminusdb:///schema#field'}]),_)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10509,7 +10509,7 @@ test(class_with_oneof_unit_property_but_nonnil_data,
                 [json{'@type':not_a_sys_unit,
                       document:json{'@type':'terminusdb:///schema#Foo',
                                     'terminusdb:///schema#a':42},
-                      key:'terminusdb:///schema#a'}]),
+                      field:'terminusdb:///schema#a'}]),
             _)
      ]) :-
 
@@ -10593,7 +10593,7 @@ test(taggedunion_with_unit_property_but_nonnil_data,
                 [json{'@type':not_a_sys_unit,
                       document:json{'@type':'terminusdb:///schema#Foo',
                                     'terminusdb:///schema#a':42},
-                      key:'terminusdb:///schema#a'}]),_)
+                      field:'terminusdb:///schema#a'}]),_)
      ]) :-
 
     with_test_transaction(Desc,
@@ -10691,11 +10691,11 @@ test(fail_card,
       cleanup(teardown_temp_store(State)),
       error(
           schema_check_failure(
-              [json{'@type':key_has_wrong_cardinality,
+              [json{'@type':field_has_wrong_cardinality,
                     actual:2,
                     document:json{'@type':'terminusdb:///schema#Card',
                                   'terminusdb:///schema#a':[42,23]},
-                    key:'terminusdb:///schema#a',
+                    field:'terminusdb:///schema#a',
                     max:1,min:1}]),
           _)
      ]) :-
@@ -10731,9 +10731,9 @@ test(fail_card_min_under,
             )),
       cleanup(teardown_temp_store(State)),
       error(schema_check_failure(
-                [json{'@type':mandatory_key_does_not_exist_in_document,
+                [json{'@type':required_field_does_not_exist_in_document,
                       document:json{'@type':'terminusdb:///schema#Min'},
-                      key:'terminusdb:///schema#a'}]),
+                      field:'terminusdb:///schema#a'}]),
             _)
      ]) :-
 
@@ -10781,12 +10781,12 @@ test(fail_card_max_over,
              write_schema(schema_cardinality,Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(schema_check_failure([json{'@type':key_has_wrong_cardinality,
+      error(schema_check_failure([json{'@type':field_has_wrong_cardinality,
                                        actual:2,
                                        document:
                                        json{'@type':'terminusdb:///schema#Max',
                                             'terminusdb:///schema#a':[42,43]},
-                                       key:'terminusdb:///schema#a',
+                                       field:'terminusdb:///schema#a',
                                        max:1,
                                        min:0}]),
            _)

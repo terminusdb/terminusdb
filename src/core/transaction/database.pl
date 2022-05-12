@@ -90,10 +90,8 @@ multi_transaction(Query_Context) :-
 
 
 read_write_obj_already_committed(RW_Obj) :-
-    RW_Obj = read_write_obj{ descriptor: _Descriptor,
-                             read: _Layer,
-                             triple_update: _Triple_Update,
-                             write: Layer_Builder },
+    read_write_obj{ descriptor: _Descriptor,
+                    write: Layer_Builder } :< RW_Obj,
     nonvar(Layer_Builder),
     builder_committed(Layer_Builder).
 
