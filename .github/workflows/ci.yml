@@ -71,7 +71,7 @@ jobs:
     uses: ./.github/workflows/check.yml
     with:
       test_repository: ${{ github.repository }}
-      test_ref: ${{ github.ref }}
+      test_ref: ${{ github.sha }}
 
   benchmark:
     name: Benchmark
