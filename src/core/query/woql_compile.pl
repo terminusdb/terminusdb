@@ -306,6 +306,12 @@ resolve(X,XEx) -->
 resolve(ID:Suf,U) -->
     !,
     resolve_prefix(ID,Suf,U).
+resolve(v(v(Var_Name)),_Var) -->
+    {
+        % This happens when the input string has "v(X)" instead of "v('X')".
+        format(atom(Output), "~w", [v(Var_Name)]),
+        throw(error(woql_syntax_error(bad_variable_name(Output)), _))
+    }.
 resolve(v(Var_Name),Var) -->
     !,
     lookup_or_extend(Var_Name,Var).
@@ -5062,6 +5068,18 @@ test(operator_clash, [
                  deletes:0,
                  inserts:2,
                  transaction_retry_count:_}.
+
+test(bad_variable_name, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(woql_syntax_error(bad_variable_name('v(X)')))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    AST = (v(v('X')) = a),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
 :- end_tests(woql).
 
