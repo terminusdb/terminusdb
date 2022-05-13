@@ -147,10 +147,12 @@ jobs:
   trigger_enterprise_build:
     name: Trigger enterprise build
     runs-on: ubuntu-latest
-      #    needs: push_docker
+    needs: push_docker
     if: |
       github.repository == 'terminusdb/terminusdb' &&
-      github.event_name == 'push'
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+
 
     steps:
       - name: Run
