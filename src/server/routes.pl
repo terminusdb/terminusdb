@@ -634,7 +634,7 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
 
             read_data_version_header(Request, Requested_Data_Version),
 
-            woql_query_json(System_DB, Auth, Path_Option, json_query(Query), Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, Response),
+            woql_query_json(System_DB, Auth, Path_Option, json_query(Query), Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, _Context, Response),
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),

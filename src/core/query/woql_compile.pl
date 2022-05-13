@@ -4697,6 +4697,7 @@ test(less_than, [
                     false,
                     no_data_version,
                     _,
+                    _,
                     JSON),
     [_] = (JSON.bindings).
 
@@ -4749,6 +4750,7 @@ test(using_resource_works, [
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     _JSON).
 
