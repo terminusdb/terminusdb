@@ -206,9 +206,7 @@ lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
 
 lookup_or_extend(Var_Name, _Prolog_Var) -->
     {
-        (   \+ atom(Var_Name)
-        ;   \+ read_term_from_atom(Var_Name, Term, [variable_names([Var_Name=Term])])
-        ),
+        \+ atom(Var_Name),
         !,
         format(atom(Output), "~w", [Var_Name]),
         throw(error(woql_syntax_error(bad_variable_name(Output)), _))
