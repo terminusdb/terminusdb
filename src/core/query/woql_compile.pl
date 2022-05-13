@@ -204,6 +204,15 @@ lookup(Var_Name,Prolog_Var,[Record|_B0]) :-
 lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
     lookup(Var_Name,Prolog_Var,B0).
 
+lookup_or_extend(Var_Name, _Prolog_Var) -->
+    {
+        (   \+ atom(Var_Name)
+        ;   \+ read_term_from_atom(Var_Name, Term, [variable_names([Var_Name=Term])])
+        ),
+        !,
+        format(atom(Output), "~w", [Var_Name]),
+        throw(error(woql_syntax_error(bad_variable_name(Output)), _))
+    }.
 lookup_or_extend(Var_Name, Prolog_Var) -->
     update(bindings,B0,B1),
     {
@@ -306,12 +315,6 @@ resolve(X,XEx) -->
 resolve(ID:Suf,U) -->
     !,
     resolve_prefix(ID,Suf,U).
-resolve(v(v(Var_Name)),_Var) -->
-    {
-        % This happens when the input string has "v(X)" instead of "v('X')".
-        format(atom(Output), "~w", [v(Var_Name)]),
-        throw(error(woql_syntax_error(bad_variable_name(Output)), _))
-    }.
 resolve(v(Var_Name),Var) -->
     !,
     lookup_or_extend(Var_Name,Var).
