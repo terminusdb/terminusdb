@@ -204,6 +204,13 @@ lookup(Var_Name,Prolog_Var,[Record|_B0]) :-
 lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
     lookup(Var_Name,Prolog_Var,B0).
 
+lookup_or_extend(Var_Name, _Prolog_Var) -->
+    {
+        \+ atom(Var_Name),
+        !,
+        format(atom(Output), "~w", [Var_Name]),
+        throw(error(woql_syntax_error(bad_variable_name(Output)), _))
+    }.
 lookup_or_extend(Var_Name, Prolog_Var) -->
     update(bindings,B0,B1),
     {
@@ -5062,6 +5069,18 @@ test(operator_clash, [
                  deletes:0,
                  inserts:2,
                  transaction_retry_count:_}.
+
+test(bad_variable_name, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(woql_syntax_error(bad_variable_name('v(X)')))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    AST = (v(v('X')) = a),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
 :- end_tests(woql).
 
