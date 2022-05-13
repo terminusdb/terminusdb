@@ -6,6 +6,9 @@ on:
       test_repository:
         required: true
         type: string
+      test_ref:
+        required: true
+        type: string
 
 env:
   NODE_VERSION: '16'
@@ -88,6 +91,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
 
       - name: Run tests
         working-directory: tests
@@ -124,6 +128,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
 
       - name: Run tests
         working-directory: tests
@@ -159,6 +164,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
 
       - name: Run tests
         working-directory: tests
