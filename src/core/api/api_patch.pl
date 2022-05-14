@@ -1,5 +1,5 @@
 :- module(api_patch, [
-              api_patch/5,
+              api_patch/6,
               api_diff/6,
               api_diff_id/8,
               api_diff_id_document/8,
@@ -17,16 +17,16 @@
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 
-api_patch(_System_DB, _Auth, Patch, Before, After) :-
+api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
     % no auth yet.
-    simple_patch(Patch,Before,After,[match_final_state(true)]).
+    simple_patch(Patch,Before,After,Options).
 
-api_diff(_System_DB, _Auth, Before, After, Keep, Diff) :-
+api_diff(_System_DB, _Auth, Before, After, Diff, Options) :-
     % no auth yet.
     do_or_die((ground(Before),
                ground(After)),
               error(unground_patch, _)),
-    simple_diff(Before,After,Keep,Diff).
+    simple_diff(Before,After,Diff,Options).
 
 coerce_to_commit(Commit_Or_Version, Commit_Id) :-
     (   read_data_version(Commit_Or_Version, data_version(Type, Commit_Id))
@@ -50,14 +50,14 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
 
     get_document(Transaction, Doc_Id, Document).
 
-api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Keep, Diff) :-
+api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
 
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
-        ->  simple_diff(Before,After,Keep,Diff)
+        ->  simple_diff(Before,After,Diff,Options)
         ;   Diff = json{ '@op' : 'Delete',
                          '@delete' : Before }
         )
@@ -67,14 +67,14 @@ api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Keep, 
         ;   fail)
     ).
 
-api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_Id, Keep, Diff) :-
+api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Before_Version, Before_Commit_Id),
 
     document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _),
 
     normalize_document(Transaction, After_Document, Normal_Document),
-    simple_diff(Before,Normal_Document,Keep,Diff).
+    simple_diff(Before,Normal_Document,Diff,Options).
 
 changed_id(Transaction,Containing) :-
     ask(Transaction,
@@ -114,11 +114,11 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                  changed_id(Transaction, Changed)
              )).
 
-document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Keep, Diff) :-
+document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
     commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
-        ->  simple_diff(Before,After,Keep,Diff)
+        ->  simple_diff(Before,After,Diff,Options)
         ;   Diff = json{ '@op' : 'Delete',
                          '@delete' : Before }
         )
@@ -129,7 +129,7 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
     ),
     \+ patch_cost(Diff, 0).
 
-api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Keep, Diffs) :-
+api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Diffs, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
@@ -138,8 +138,8 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Kee
             document_diffs_from_commits(Branch_Descriptor,
                                         Before_Commit_Id,
                                         After_Commit_Id,
-                                        Keep,
-                                        Diff),
+                                        Diff,
+                                        Options),
             Diffs
            ).
 

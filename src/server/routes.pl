@@ -2533,7 +2533,7 @@ patch_handler(post, Request, System_DB, Auth) :-
     api_report_errors(
         patch,
         Request,
-        (   api_patch(System_DB, Auth, Patch, Before, Result),
+        (   api_patch(System_DB, Auth, Patch, Before, Result, Document),
             (   Result = success(After)
             ->  cors_reply_json(Request, After)
             ;   Result = conflict(Conflict)
@@ -2577,24 +2577,26 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
               ),
               error(bad_api_document(Document, [before, after]), _)),
 
+    % We could probably just feed the document in,
+    % the default is dubious.
     (   _{ keep : Keep } :< Document
-    ->  true
-    ;   Keep = _{ '@id' : true, '_id' : true }
+    ->  Options = _{ keep : Keep }
+    ;   Options = _{ keep : _{ '@id' : true, '_id' : true }}
     ),
 
     api_report_errors(
         diff,
         Request,
         (   (   Operation = document
-            ->  api_diff(System_DB, Auth, Before, After, Keep, Patch)
+            ->  api_diff(System_DB, Auth, Before, After, Patch, Options)
             ;   Operation = versioned_document
             ->  api_diff_id(System_DB, Auth, Path, Before_Version,
-                            After_Version, Doc_ID, Keep, Patch)
+                            After_Version, Doc_ID, Patch, Options)
             ;   Operation = all_documents
-            ->  api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Keep, Patch)
+            ->  api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Patch, Options)
             ;   api_diff_id_document(System_DB, Auth, Path,
                                      Before_Version, After_Document,
-                                     Doc_ID, Keep, Patch)
+                                     Doc_ID, Patch, Options)
             ),
             cors_reply_json(Request, Patch)
         )
