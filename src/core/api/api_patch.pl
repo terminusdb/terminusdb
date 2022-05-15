@@ -148,16 +148,16 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
     coerce_to_commit(Before_Version, Before_Commit_Id),
     coerce_to_commit(After_Version, After_Commit_Id),
     create_context(Branch_Descriptor, Commit_Info, Context),
-
+    merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
     with_transaction(
         Context,
         (   findall(Witness,
                     (   document_diffs_from_commits(Branch_Descriptor,
                                                     Before_Commit_Id,
                                                     After_Commit_Id,
-                                                    _{'@id':true, '@type':true},
-                                                    Diff),
-                        apply_diff(Context,Diff,Witness,Options),
+                                                    Diff,
+                                                    Merged_Options),
+                        apply_diff(Context,Diff,Witness,Merged_Options),
                         \+ Witness = null
                     ),
                     Witnesses),
