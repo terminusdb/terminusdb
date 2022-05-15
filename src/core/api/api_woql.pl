@@ -22,14 +22,14 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Wit
                                authorization : Auth,
                                all_witnesses : All_Witnesses,
                                commit_info : Commit_Info}))
-    ;   throw(error(unknown_path_option(Path_Option), _))
+    ;   throw(error(unexpected_path_option(Path_Option), _))
     ),
 
     (   Query = json_query(JSON_Query)
     ->  json_woql(JSON_Query, AST)
     ;   Query = atom_query(Atom_Query)
     ->  atom_woql(Atom_Query, AST)
-    ;   throw(error(unknown_query_type(Query), _))
+    ;   throw(error(unexpected_query_type(Query), _))
     ),
     run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, JSON).
 
