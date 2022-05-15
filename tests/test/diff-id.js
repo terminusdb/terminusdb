@@ -101,13 +101,19 @@ describe('diff-id', function () {
       const id = util.randomString()
       await document
         .insert(agent, docPath, {
-          schema: { '@type': 'Class', '@id': id, list: { '@type' : 'List',
-                                                         '@class' : 'xsd:string' }},
+          schema: {
+            '@type': 'Class',
+            '@id': id,
+            list: {
+              '@type': 'List',
+              '@class': 'xsd:string',
+            },
+          },
         })
         .then(document.verifyInsertSuccess)
       const r1 = await document
         .insert(agent, docPath, {
-          instance: { '@type': id, list: ['pickles and eggs','pickles and eggs'] },
+          instance: { '@type': id, list: ['pickles and eggs', 'pickles and eggs'] },
         })
         .then(document.verifyInsertSuccess)
 
@@ -120,16 +126,16 @@ describe('diff-id', function () {
           before_data_version: dv1,
           document_id: docId,
           after: { '@type': id, '@id': docId, list: ['pickles and eggs'] },
-          copy_value : true
+          copy_value: true,
         })
       expect(r2.body).to.deep.equal({
         '@id': docId,
         list: {
           '@after': [],
-          '@before': [ 'pickles and eggs' ],
+          '@before': ['pickles and eggs'],
           '@op': 'SwapList',
-          '@rest': { '@op': 'KeepList', '@value': [] }
-        }
+          '@rest': { '@op': 'KeepList', '@value': [] },
+        },
       })
       expect(r2.status).to.equal(200)
     })
