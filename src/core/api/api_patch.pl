@@ -16,6 +16,7 @@
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
+:- use_module(library(option)).
 
 api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
     % no auth yet.
