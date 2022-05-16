@@ -97,6 +97,49 @@ describe('diff-id', function () {
       expect(r2.status).to.equal(200)
     })
 
+    it('diff with explicit copy', async function () {
+      const id = util.randomString()
+      await document
+        .insert(agent, docPath, {
+          schema: {
+            '@type': 'Class',
+            '@id': id,
+            list: {
+              '@type': 'List',
+              '@class': 'xsd:string',
+            },
+          },
+        })
+        .then(document.verifyInsertSuccess)
+      const r1 = await document
+        .insert(agent, docPath, {
+          instance: { '@type': id, list: ['pickles and eggs', 'pickles and eggs'] },
+        })
+        .then(document.verifyInsertSuccess)
+
+      const dv1 = r1.header['terminusdb-data-version']
+      const docId = r1.body[0].split('terminusdb:///data/')[1]
+      const { path } = endpoint.versionDiff(agent.defaults())
+
+      const r2 = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          document_id: docId,
+          after: { '@type': id, '@id': docId, list: ['pickles and eggs'] },
+          copy_value: true,
+        })
+      expect(r2.body).to.deep.equal({
+        '@id': docId,
+        list: {
+          '@after': [],
+          '@before': ['pickles and eggs'],
+          '@op': 'SwapList',
+          '@rest': { '@op': 'KeepList', '@value': [] },
+        },
+      })
+      expect(r2.status).to.equal(200)
+    })
+
     it('diff db document against submitted document normalizing ids and type', async function () {
       const id = util.randomString()
       await document
