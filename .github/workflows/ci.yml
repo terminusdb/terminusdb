@@ -86,7 +86,7 @@ jobs:
       - name: Generate man page
         run: |
           sudo apt-get install ronn
-          HELP="$$(docker run terminusdb/terminusdb-server:local help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
+          HELP="$(docker run --rm terminusdb/terminusdb-server:local help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
           ronn --roff docs/terminusdb.1.ronn
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v4
