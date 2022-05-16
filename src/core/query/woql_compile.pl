@@ -5318,7 +5318,6 @@ test(duration_hour) :-
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
-%:- use_module(library(terminus_store)).
 
 test(json_unbound_capture, [
          setup((setup_temp_store(State),
