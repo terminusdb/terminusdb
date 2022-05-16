@@ -65,7 +65,7 @@
               api_filled_frame/5,
 
               % api_woql.pl
-              woql_query_json/10,
+              woql_query_json/11,
 
               % api_squash.pl
               api_squash/6,
