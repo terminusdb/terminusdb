@@ -18,11 +18,20 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
+:- use_module(library(option)).
 
-:- multifile table_diff/7.
+:- multifile table_diff/8.
 
-simple_diff(Before,After,Keep,Diff) :-
-    simple_diff(Before,After,Keep,_,Diff).
+%% simple_diff(+Before,+After,-Diff,+Options) is det.
+%
+% Options include:
+%
+% keep(Dictionary)   a dictionary representing those fields which must be copied in the diff.
+% copy_value(Bool)   Do we want to include the value in a copy or leave it implicit
+
+simple_diff(Before,After,Diff,Options) :-
+    option(keep(Keep), Options),
+    simple_diff(Before,After,Keep,_,Diff,Options).
 
 best_cost(best(Cost,_),Cost).
 best_diff(best(_,Diff),Diff).
@@ -33,9 +42,9 @@ cost_bounded(State,Cost) :-
     best_cost(State,Best_Cost),
     Cost < Best_Cost.
 
-simple_diff(Before,After,Keep,Cost,Diff) :-
+simple_diff(Before,After,Keep,Cost,Diff,Options) :-
     start_state(State),
-    (   simple_diff(Before,After,Keep,New_Diff,State,0,New_Cost),
+    (   simple_diff(Before,After,Keep,New_Diff,State,0,New_Cost,Options),
         nb_setarg(1,State,New_Cost),
         nb_setarg(2,State,New_Diff),
         %format(user_error,'~nNew_Cost: ~q', [New_Cost]),
@@ -45,7 +54,7 @@ simple_diff(Before,After,Keep,Cost,Diff) :-
     ).
 
 % semidet
-simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
+simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     is_dict(Before),
     !,
     is_dict(After), % fail if not a dict
@@ -57,26 +66,26 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     Cost_Lower_Bound < Best_Cost,
     %
     union(Before_Keys,After_Keys,Keys),
-    simple_key_diff(Keys,Before,After,Keep,Diff_Pairs,State,Cost,New_Cost),
+    simple_key_diff(Keys,Before,After,Keep,Diff_Pairs,State,Cost,New_Cost,Options),
     dict_create(Diff,json,Diff_Pairs).
-simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
+simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     (   is_table(Before)
     ;   is_table(After)),
-    table_diff(Before,After,Keep,Diff,State,Cost,New_Cost),
+    table_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options),
     !.
-simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost) :-
+simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     % null?
     is_list(Before),
     !,
     is_list(After),
-    simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost).
-simple_diff(Before,After,_,_,_,_,_) :-
+    simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options).
+simple_diff(Before,After,_,_,_,_,_,_) :-
     % Copy is implicit
     string_normalise(Before, Value),
     string_normalise(After, Value),
     !,
     fail.
-simple_diff(Before,After,_Keep,Diff,_State,Cost,New_Cost) :-
+simple_diff(Before,After,_Keep,Diff,_State,Cost,New_Cost,_Options) :-
     Diff = json{ '@op' : "SwapValue",
                  '@before' : Before,
                  '@after' : After },
@@ -88,8 +97,8 @@ string_normalise(Value, Norm) :-
     ;   Value = Norm
     ).
 
-simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost).
-simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost) :-
+simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost,_Options).
+simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,Keep,true),
     !,
     do_or_die(
@@ -99,8 +108,8 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cos
             string_normalise(After_Value, Value)
         ),
         error(explicitly_copied_key_has_changed(Key),_)),
-    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost).
-simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost) :-
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
+simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Options) :-
     get_dict(Key,Before,Sub_Before),
     get_dict(Key,After,Sub_After),
     !,
@@ -110,7 +119,7 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost) :-
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
-    (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1)
+    (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,Options)
     *-> (   \+ Sub_Diff = json{'@op':"KeepList"}
         ->  New_Keys = [Key-Sub_Diff|Rest]
         ;   New_Keys = Rest
@@ -118,8 +127,8 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost) :-
     ;   New_Keys = Rest,
         Cost = Cost1
     ),
-    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost).
-simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost) :-
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost,Options).
+simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,Before,Sub_Before),
     % has it in the before but not the after.
     !,
@@ -129,8 +138,8 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_
     best_cost(State,Best_Cost),
     Cost1 is Cost + 1,
     Cost1 < Best_Cost,
-    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost).
-simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost) :-
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost,Options).
+simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,After,Sub_After),
     % has it in the before but not the after.
     !,
@@ -140,21 +149,21 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_
     best_cost(State,Best_Cost),
     Cost1 is Cost + 1,
     Cost1 < Best_Cost,
-    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost).
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost,Options).
 
 split(Index,List,Left,Right) :-
     length(Left, Index),
     append(Left,Right,List).
 
-simple_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out) :-
-    lcs_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out).
-simple_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out) :-
-    deep_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out).
+simple_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out, Options) :-
+    lcs_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out, Options).
+simple_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out, Options) :-
+    deep_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out, Options).
 
-deep_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out) :-
+deep_list_diff(Before, After, Keep, Diff, State, Cost_In, Cost_Out, Options) :-
     first_solution([Diff,Cost_Out],
                    [
-                       deep_list_diff_(Before,After,Keep,Diff,State,Cost_In,Cost_Out),
+                       deep_list_diff_(Before,After,Keep,Diff,State,Cost_In,Cost_Out,Options),
                        deep_list_timeout(Diff,Cost_Out)
                    ],
                    []).
@@ -165,12 +174,16 @@ deep_list_timeout(json{},inf) :-
     deep_list_timeout(Time),
     sleep(Time).
 
-deep_list_diff_base(Same,Same,_Keep,Diff,State,Cost,New_Cost) :-
-    Diff = json{ '@op' : "KeepList" },
+deep_list_diff_base(Same,Same,_Keep,Diff,State,Cost,New_Cost,Options) :-
+    Diff_Template = json{ '@op' : "KeepList" },
     !,
+    (   option(copy_value(true), Options)
+    ->  put_dict(json{ '@value' : Same }, Diff_Template, Diff)
+    ;   Diff = Diff_Template
+    ),
     New_Cost is Cost + 1,
     cost_bounded(State,New_Cost).
-deep_list_diff_base([],After,_Keep,Diff,State,Cost,New_Cost) :-
+deep_list_diff_base([],After,_Keep,Diff,State,Cost,New_Cost,_Options) :-
     !,
     Diff = json{ '@op' : "SwapList",
                  '@before' : [],
@@ -178,7 +191,7 @@ deep_list_diff_base([],After,_Keep,Diff,State,Cost,New_Cost) :-
     json_size(After,Size),
     New_Cost is Cost + Size + 1,
     cost_bounded(State,New_Cost).
-deep_list_diff_base(Before,[],_Keep,Diff,State,Cost,New_Cost) :-
+deep_list_diff_base(Before,[],_Keep,Diff,State,Cost,New_Cost,_Options) :-
     !,
     Diff = json{ '@op' : "SwapList",
                  '@before' : Before,
@@ -186,10 +199,11 @@ deep_list_diff_base(Before,[],_Keep,Diff,State,Cost,New_Cost) :-
     json_size(Before,Size),
     New_Cost is Cost + Size + 1,
     cost_bounded(State,New_Cost).
-deep_list_diff_base(Before,After,Keep,Diff,State,Cost,New_Cost) :-
+deep_list_diff_base(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     length(Before, Length),
     length(After, Length),
-    mapm({State,Keep}/[B,A,D]>>simple_diff(B,A,Keep,D,State),
+    mapm({State,Keep,Options}/
+         [B,A,D,Cost,New_Cost]>>simple_diff(B,A,Keep,D,State,Cost,New_Cost,Options),
          Before,
          After,
          Diff,
@@ -198,8 +212,8 @@ deep_list_diff_base(Before,After,Keep,Diff,State,Cost,New_Cost) :-
         ),
     cost_bounded(State,New_Cost).
 
-deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
-    deep_list_diff_base(Before,After,Keep,Simple_Diff,State,Cost,New_Cost),
+deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
+    deep_list_diff_base(Before,After,Keep,Simple_Diff,State,Cost,New_Cost,Options),
     !,
     (   is_list(Simple_Diff)
     ->  Simple_Diff = Diff
@@ -207,7 +221,7 @@ deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     ->  put_dict(json{'@rest' : json{'@op' : "KeepList"}}, Simple_Diff, Diff)
     ;   Simple_Diff = Diff
     ).
-deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
+deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     length(Before,N),
     %between(0,N,I),
     down_from(N,0,I),
@@ -231,17 +245,21 @@ deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost) :-
     ->  Cost_Lower_Bound is Cost + 1,
         cost_bounded(State,Cost_Lower_Bound),
         Cost1 is Cost + 1,
-        deep_list_diff_(Before_Suffix,After_Suffix,Keep,Patch,State,Cost1,New_Cost),
-        Diff = json{ '@op' : "CopyList",
-                     '@to' : I,
-                     '@rest' : Patch }
+        deep_list_diff_(Before_Suffix,After_Suffix,Keep,Patch,State,Cost1,New_Cost,Options),
+        Diff_Template = json{ '@op' : "CopyList",
+                              '@to' : I,
+                              '@rest' : Patch },
+        (   option(copy_value(true), Options)
+        ->  put_dict(json{ '@value' : Before_Prefix }, Diff_Template, Diff)
+        ;   Diff = Diff_Template
+        )
     ;   Cost1 is Cost + 1,
         Cost_Lower_Bound is Cost1 + 1,
         cost_bounded(State,Cost_Lower_Bound),
-        deep_list_diff_base(Before_Prefix,After_Prefix,Keep,Prefix_Patch,State,Cost1,Cost2),
+        deep_list_diff_base(Before_Prefix,After_Prefix,Keep,Prefix_Patch,State,Cost1,Cost2,Options),
         Cost3 is Cost2 + 1,
         cost_bounded(State,Cost3),
-        deep_list_diff_(Before_Suffix,After_Suffix,Keep,Suffix_Patch,State,Cost3,New_Cost),
+        deep_list_diff_(Before_Suffix,After_Suffix,Keep,Suffix_Patch,State,Cost3,New_Cost,Options),
         (   is_list(Prefix_Patch)
         ->  Diff = json{ '@op' : "PatchList",
                          '@patch' : Prefix_Patch,
@@ -256,69 +274,90 @@ hash_terms([T|Rest], [H|HashRest]) :-
     variant_sha1(T,H),
     hash_terms(Rest,HashRest).
 
-create_patch([], [], [], inserted, Memory, Patch) :-
+create_patch([], [], [], inserted, Memory, Patch,Options) :-
     reverse(Memory,List),
     Patch = json{ '@op' : "SwapList",
                   '@before' : [],
                   '@after' : List,
-                  '@rest' : json{ '@op' : "KeepList" }}.
-create_patch([], [], [], deleted, Memory, Patch) :-
+                  '@rest' : Keep},
+    (   option(copy_value(true), Options)
+    ->  Keep = json{ '@op' : "KeepList", '@value' : []}
+    ;   Keep = json{ '@op' : "KeepList" }
+    ).
+create_patch([], [], [], deleted, Memory, Patch,Options) :-
     reverse(Memory,List),
     Patch = json{ '@op' : "SwapList",
                   '@before' : List,
                   '@after' : [],
-                  '@rest' : json{ '@op' : "KeepList" }}.
-create_patch([], [], [], unchanged, _, json{ '@op' : "KeepList" }).
-create_patch([unchanged|Operations],[Head|List1],[Head|List2],unchanged, Memory, Patch) :-
+                  '@rest' : Keep },
+    (   option(copy_value(true), Options)
+    ->  Keep = json{ '@op' : "KeepList", '@value' : []}
+    ;   Keep = json{ '@op' : "KeepList" }
+    ).
+create_patch([], [], [], unchanged, _, Keep, Options) :-
+    (   option(copy_value(true), Options)
+    ->  Keep = json{ '@op' : "KeepList", '@value' : []}
+    ;   Keep = json{ '@op' : "KeepList" }
+    ).
+create_patch([unchanged|Operations],[Head|List1],[Head|List2],unchanged, Memory, Patch, Options) :-
     !,
-    create_patch(Operations,List1,List2,unchanged,[Head|Memory],Patch).
-create_patch([inserted|Operations],List1,[Head|List2],inserted,Memory,Patch) :-
+    create_patch(Operations,List1,List2,unchanged,[Head|Memory],Patch,Options).
+create_patch([inserted|Operations],List1,[Head|List2],inserted,Memory,Patch,Options) :-
     !,
-    create_patch(Operations,List1,List2,inserted,[Head|Memory],Patch).
-create_patch([deleted|Operations],[Head|List1],List2,deleted,Memory,Patch) :-
+    create_patch(Operations,List1,List2,inserted,[Head|Memory],Patch,Options).
+create_patch([deleted|Operations],[Head|List1],List2,deleted,Memory,Patch,Options) :-
     !,
-    create_patch(Operations,List1,List2,deleted,[Head|Memory],Patch).
-create_patch([unchanged|Operations],[Head|List1],[Head|List2],Last_Op,Memory,Patch) :-
-    new_operation_patch(Last_Op,Memory,Patch,Rest_Patch),
-    create_patch(Operations,List1,List2,unchanged,[Head],Rest_Patch).
-create_patch([inserted|Operations],List1,[Head|List2],Last_Op,Memory,Patch) :-
-    new_operation_patch(Last_Op,Memory,Patch,Rest_Patch),
-    create_patch(Operations,List1,List2,inserted,[Head],Rest_Patch).
-create_patch([deleted|Operations],[Head|List1],List2,Last_Op,Memory,Patch) :-
-    new_operation_patch(Last_Op,Memory,Patch,Rest_Patch),
-    create_patch(Operations,List1,List2,deleted,[Head],Rest_Patch).
+    create_patch(Operations,List1,List2,deleted,[Head|Memory],Patch,Options).
+create_patch([unchanged|Operations],[Head|List1],[Head|List2],Last_Op,Memory,Patch,Options) :-
+    new_operation_patch(Last_Op,Memory,Patch,Rest_Patch,Options),
+    create_patch(Operations,List1,List2,unchanged,[Head],Rest_Patch,Options).
+create_patch([inserted|Operations],List1,[Head|List2],Last_Op,Memory,Patch,Options) :-
+    new_operation_patch(Last_Op,Memory,Patch,Rest_Patch,Options),
+    create_patch(Operations,List1,List2,inserted,[Head],Rest_Patch,Options).
+create_patch([deleted|Operations],[Head|List1],List2,Last_Op,Memory,Patch,Options) :-
+    new_operation_patch(Last_Op,Memory,Patch,Rest_Patch,Options),
+    create_patch(Operations,List1,List2,deleted,[Head],Rest_Patch,Options).
 
-new_operation_patch(inserted,Memory,Patch,Next) :-
+new_operation_patch(inserted,Memory,Patch,Next,_Options) :-
     reverse(Memory,List),
     Patch = json{ '@op' : "SwapList",
                   '@before' : [],
                   '@after' : List,
                   '@rest' : Next }.
-new_operation_patch(deleted,Memory,Patch,Next) :-
+new_operation_patch(deleted,Memory,Patch,Next,_Options) :-
     reverse(Memory,List),
     Patch = json{ '@op' : "SwapList",
                   '@before' : List,
                   '@after' : [],
                   '@rest' : Next }.
-new_operation_patch(unchanged,Memory,Patch,Next) :-
+new_operation_patch(unchanged,Memory,Patch,Next,Options) :-
     length(Memory, N),
-    Patch = json{ '@op' : "CopyList",
-                  '@to' : N,
-                  '@rest' : Next }.
+    Patch_Template = json{ '@op' : "CopyList",
+                           '@to' : N,
+                           '@rest' : Next },
+    (   option(copy_value(true), Options)
+    ->  put_dict(json{ '@value' : Memory }, Patch_Template, Patch)
+    ;   Patch = Patch_Template
+    ).
 
-create_patch([], [], [], json{ '@op' : "KeepList" }).
-create_patch([unchanged|Operations],[Head|List1],[Head|List2],Patch) :-
-    create_patch(Operations,List1,List2,unchanged,[Head],Patch).
-create_patch([inserted|Operations],List1,[Head|List2],Patch) :-
-    create_patch(Operations,List1,List2,inserted,[Head],Patch).
-create_patch([deleted|Operations],[Head|List1],List2,Patch) :-
-    create_patch(Operations,List1,List2,deleted,[Head],Patch).
+create_patch([], [], [], Patch, Options) :-
+    Patch_Template = json{ '@op' : "KeepList" },
+    (   option(copy_value(true), Options)
+    ->  put_dict(json{ '@value' : [] }, Patch_Template, Patch)
+    ;   Patch = Patch_Template
+    ).
+create_patch([unchanged|Operations],[Head|List1],[Head|List2],Patch,Options) :-
+    create_patch(Operations,List1,List2,unchanged,[Head],Patch,Options).
+create_patch([inserted|Operations],List1,[Head|List2],Patch,Options) :-
+    create_patch(Operations,List1,List2,inserted,[Head],Patch,Options).
+create_patch([deleted|Operations],[Head|List1],List2,Patch,Options) :-
+    create_patch(Operations,List1,List2,deleted,[Head],Patch,Options).
 
-lcs_list_diff(Before,After,_Keep,Patch,State,Cost,New_Cost) :-
+lcs_list_diff(Before,After,_Keep,Patch,State,Cost,New_Cost,Options) :-
     hash_terms(Before,Before_Hash),
     hash_terms(After,After_Hash),
     '$lcs':list_diff(Before_Hash,After_Hash,Changed),
-    create_patch(Changed,Before,After,Patch),
+    create_patch(Changed,Before,After,Patch,Options),
     patch_cost(Patch,Patch_Cost),
     New_Cost is Cost + Patch_Cost,
     cost_bounded(State,New_Cost).
@@ -469,7 +508,7 @@ test(simple_diff, []) :-
                  '@type':"Person",
                  name:"Ludo"
                 },
-    simple_diff(Before,After,json{},Patch),
+    simple_diff(Before,After,Patch,[keep(json{})]),
     Patch = json{name:json{'@after':"Ludo",
                            '@before':"Ludwig",
                            '@op':"SwapValue"}
@@ -485,7 +524,7 @@ test(simple_diff_id, []) :-
                  '@type':"Person",
                  name:"Ludo"
                 },
-    simple_diff(Before,After,json{'@id' : true},Patch),
+    simple_diff(Before,After,Patch,[keep(json{'@id' : true})]),
     Patch = json{'@id':"Person/Ludwig",
                  name:json{'@after':"Ludo",
                            '@before':"Ludwig",
@@ -514,7 +553,7 @@ test(simple_diff_deep_value, []) :-
                                  city : "Vienna",
                                  country : "Austria"}
                 },
-    simple_diff(Before,After,json{address : json{ city: true }},Patch),
+    simple_diff(Before,After,Patch,[keep(json{address : json{ city: true }})]),
     Patch = json{ name:json{'@after':"Ludo",
                             '@before':"Ludwig",
                             '@op':"SwapValue"},
@@ -534,7 +573,7 @@ test(simple_diff_error, [
                  '@type':"Person",
                  name:"Ludo"
                 },
-    simple_diff(Before,After,json{'@id' : true},Patch),
+    simple_diff(Before,After,Patch,[keep(json{'@id' : true})]),
     Patch = json{'@id':"Person/Ludwig",
                  name:json{'@after':"Ludo",
                            '@before':"Ludwig",
@@ -544,7 +583,7 @@ test(simple_diff_error, [
 test(introduce_drop, []) :-
     Before = json{asdf:"fdsa"},
     After = json{name:"Ludo"},
-    simple_diff(Before,After,json{},Patch),
+    simple_diff(Before,After,Patch,[keep(json{})]),
     Patch = json{asdf:json{'@after':null,
                            '@before':"fdsa",
                            '@op':"SwapValue"},
@@ -555,7 +594,7 @@ test(introduce_drop, []) :-
 test(introduce_deep, []) :-
     Before = json{},
     After = json{name:json{asdf:"Ludo"}},
-    simple_diff(Before,After,json{},Patch),
+    simple_diff(Before,After,Patch,[keep(json{})]),
     Patch = json{name:json{'@after':json{asdf:"Ludo"},
                            '@before':null,
                            '@op':"SwapValue"}}.
@@ -563,7 +602,7 @@ test(introduce_deep, []) :-
 test(simple_list_diff, []) :-
     List1 = [1],
     List2 = [1,2],
-    simple_diff(List1,List2,json{},Diff),
+    simple_diff(List1,List2,Diff,[keep(json{})]),
     Diff = json{'@op':"CopyList",
                 '@to':1,
                 '@rest':json{'@op':"SwapList",
@@ -575,7 +614,7 @@ test(simple_list_diff, []) :-
 test(simple_list_diff_middle, []) :-
     List1 = [1,2,3],
     List2 = [1,3],
-    simple_diff(List1,List2,json{},Diff),
+    simple_diff(List1,List2,Diff,[keep(json{})]),
     % This does not seem ideal...
     Diff = json{'@op':"CopyList",
                 '@rest':json{'@after':[],
@@ -615,7 +654,7 @@ test(deep_list_diff_append, []) :-
                           country:"Austria"}],
                  name:"Ludwig"},
 
-    simple_diff(Before,After,json{},Patch),
+    simple_diff(Before,After,Patch,[keep(json{})]),
 
     Patch = json{addresses:
                  json{'@op':"CopyList",
@@ -653,7 +692,7 @@ test(deep_list_diff, [blocked('should start working with better list heuristic')
                  ]
                 },
 
-    simple_diff(Before,After,json{},Patch),
+    simple_diff(Before,After,Patch,[keep(json{})]),
     Patch = json{addresses:[
                      json{address1:json{'@after':"Mölker Bastei 8",
                                         '@before':"Mölker Bastei 7",
@@ -668,7 +707,7 @@ test(list_middle, []) :-
     After = json{ asdf : "ooo",
                   bar : "bazz",
                   list : [1,2,3,4,5,6] },
-    simple_diff(Before,After,json{},Patch),
+    simple_diff(Before,After,Patch,[keep(json{})]),
     Patch = json{asdf:json{'@after':"ooo",
                            '@before':"fdsa",
                            '@op':"SwapValue"},
@@ -681,12 +720,33 @@ test(list_middle, []) :-
                                         '@rest':json{'@op':"KeepList"}},
                            '@to':3}}.
 
+
+test(list_middle_copy_value, []) :-
+
+    Before = json{ asdf : "fdsa",
+                   bar : "baz",
+                   list : [1,2,3,5,6] },
+    After = json{ asdf : "ooo",
+                  bar : "bazz",
+                  list : [1,2,3,4,5,6] },
+    simple_diff(Before,After,Patch,[keep(json{}),copy_value(true)]),
+    Patch =
+    json{asdf:json{'@after':"ooo",'@before':"fdsa",'@op':"SwapValue"},
+         bar:json{'@after':"bazz",'@before':"baz",'@op':"SwapValue"},
+         list:json{'@op':"CopyList",
+                   '@rest':json{'@after':[4],
+                                '@before':[],
+                                '@op':"SwapList",
+                                '@rest':json{'@op':"KeepList",'@value':[]}},
+                   '@to':3,
+                   '@value':[3,2,1]}}.
+
 :- use_module(core('document/patch')).
 
 test(deep_list_patch, []) :-
     Before = json{ asdf: json{ bar: [json{ baz: 'quux' }] } },
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
-    simple_diff(Before,After,json{},Diff),
+    simple_diff(Before,After,Diff,[keep(json{})]),
     simple_patch(Diff,Before,success(After),[]).
 
 :- end_tests(simple_diff).
