@@ -82,17 +82,7 @@ jobs:
     name: Update man page
     runs-on: ubuntu-latest
     needs: build
-    steps:
-      - name: Generate man page
-        run: |
-          sudo apt-get install ronn
-          HELP="$(docker run --rm terminusdb/terminusdb-server:local help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
-          ronn --roff docs/terminusdb.1.ronn
-      - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: Update man page
-          file_pattern: docs/terminusdb.1.*
+    uses: ./.github/workflows/docs.yml
 
   # This is required for status checks.
   all_checks_pass_with_build:

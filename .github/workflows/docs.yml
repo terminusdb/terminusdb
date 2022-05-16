@@ -1,0 +1,29 @@
+name: Docs
+
+on:
+  workflow_call:
+
+jobs:
+
+  man_page:
+    name: Update man page
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Generate man page
+        run: |
+          sudo apt-get install ronn
+          docker load < terminusdb-server-docker-image.tar.gz
+          HELP="$(docker run --rm terminusdb/terminusdb-server:local help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
+          ronn --roff docs/terminusdb.1.ronn
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update man page
+          file_pattern: docs/terminusdb.1.*
