@@ -82,6 +82,8 @@ jobs:
     name: Update man page
     needs: build
     uses: ./.github/workflows/docs.yml
+    with:
+      ref: ${{ github.sha }}
 
   # This is required for status checks.
   all_checks_pass_with_build:

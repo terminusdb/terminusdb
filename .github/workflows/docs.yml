@@ -2,6 +2,10 @@ name: Docs
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
 
 jobs:
 
@@ -14,6 +18,10 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: terminusdb-server-docker-image
+
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Generate man page
         run: |
