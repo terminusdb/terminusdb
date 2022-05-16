@@ -80,7 +80,6 @@ jobs:
 
   docs:
     name: Update man page
-    runs-on: ubuntu-latest
     needs: build
     uses: ./.github/workflows/docs.yml
 
