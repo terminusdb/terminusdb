@@ -1069,7 +1069,7 @@ find_resources(true,_, _, _, [], []).
 
 assert_pre_flight_access(Context, _AST) :-
     is_super_user(Context.authorization, Context.prefixes),
-%   This probably makes all super user checks redundant.
+    % This probably makes all super user checks redundant.
     !.
 assert_pre_flight_access(Context, AST) :-
     do_or_die(

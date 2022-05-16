@@ -730,7 +730,6 @@ resolve_filter(Filter_String,Filter) :-
     ->  Filter = type_filter{ types : [instance,schema] }
     ;   Filter = type_name_filter{ type : Type }).
 
-
 resolve_absolute_or_relative_string_descriptor(Desc_In,String,Desc_Out) :-
     once((   resolve_relative_string_descriptor(Desc_In,String,Desc_Out)
          ;   resolve_absolute_string_descriptor(String,Desc_Out))).
