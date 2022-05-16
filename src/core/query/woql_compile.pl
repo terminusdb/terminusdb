@@ -1079,7 +1079,7 @@ assert_pre_flight_access(Context, AST) :-
                        (Context.write_graph),
                        Read,
                        Write),
-        error(find_resource_pre_flight_failure_for(AST))),
+        error(find_resource_pre_flight_failure_for(AST),_)),
     sort(Read,Read_Sorted),
     sort(Write,Write_Sorted),
     forall(member(resource(Collection,Type),Read_Sorted),
@@ -5319,7 +5319,7 @@ test(duration_hour) :-
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
-test(json_unbound_capture, [
+test(preflight_permissions, [
          setup((setup_temp_store(State),
                 super_user_authority(Admin),
                 add_user("u",some('password'),Auth),
