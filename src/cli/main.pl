@@ -1228,14 +1228,16 @@ run_command(doc,insert,[Path], Opts) :-
 
     api_report_errors(
         insert_documents,
-        (   (   var(Data)
-            ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
-            ;   open_string(Data, Stream),
-                doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
-            ),
-            length(Ids, Number_Inserted),
-            format("Document(s) inserted: ~d~n", [Number_Inserted])
+        (   var(Data)
+        ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
+        ;   open_string(Data, Stream),
+            doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
         )
+    ),
+    length(Ids, Number_Inserted),
+    (   Number_Inserted = 1
+    ->  format(current_output, "Document inserted~n", [])
+    ;   format(current_output, "Documents inserted: ~d~n", [Number_Inserted])
     ).
 run_command(doc,delete, [Path], Opts) :-
     super_user_authority(Auth),
