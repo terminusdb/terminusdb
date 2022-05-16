@@ -20,7 +20,7 @@ jobs:
           sudo apt-get install --no-install-recommends ronn
           ronn --version
           docker load < terminusdb-server-docker-image.tar.gz
-          HELP="$(docker run --rm terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
+          HELP="$(docker run --rm --volume $(pwd)/docs:/app/terminusdb/docs terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
           ronn --roff docs/terminusdb.1.ronn
 
       - name: Commit changes
