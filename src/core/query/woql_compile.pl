@@ -988,7 +988,7 @@ find_resources(when(P,Q), Collection, DRG, DWG, Read, Write) :-
     append(Read_P, Read_Q, Read),
     append(Write_P, Write_Q, Write).
 find_resources(using(Collection_String,P), Collection, DRG, _DWG, Read, Write) :-
-    resolve_relative_string_descriptor(Collection, Collection_String, Descriptor),
+    resolve_absolute_or_relative_string_descriptor(Collection, Collection_String, Descriptor),
     % NOTE: Don't we need the collection descriptor default filter?
     collection_descriptor_default_write_graph(Descriptor, DWG),
     find_resources(P, Collection, DRG, DWG, Read, Write).
@@ -1072,12 +1072,14 @@ assert_pre_flight_access(Context, _AST) :-
     % This probably makes all super user checks redundant.
     !.
 assert_pre_flight_access(Context, AST) :-
-    find_resources(AST,
-                   (Context.default_collection),
-                   (Context.filter),
-                   (Context.write_graph),
-                   Read,
-                   Write),
+    do_or_die(
+        find_resources(AST,
+                       (Context.default_collection),
+                       (Context.filter),
+                       (Context.write_graph),
+                       Read,
+                       Write),
+        error(find_resource_pre_flight_failure_for(AST),_)),
     sort(Read,Read_Sorted),
     sort(Write,Write_Sorted),
     forall(member(resource(Collection,Type),Read_Sorted),
@@ -5311,3 +5313,41 @@ test(duration_hour) :-
     test_lit(duration(-1,0,0,0,1,0,0)^^xsd:duration, "\"-PT1H\"^^'http://www.w3.org/2001/XMLSchema#duration'").
 
 :- end_tests(store_load_data).
+
+:- begin_tests(preflight).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+
+test(preflight_permissions, [
+         setup((setup_temp_store(State),
+                super_user_authority(Admin),
+                add_user("u",some('password'),Auth),
+                add_user_organization_transaction(
+                    system_descriptor{},
+                    Admin,
+                    "u",
+                    "o"),
+                create_db_without_schema("o", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(
+             unresolvable_absolute_descriptor(
+                 repository_descriptor{
+                     database_descriptor:
+                     database_descriptor{
+                         database_name:"test",
+                         organization_name:"z"},
+                     repository_name:"local"}),
+             _)
+     ]) :-
+
+    resolve_absolute_string_descriptor('o/test', Desc),
+    create_context(Desc, Context0),
+    put_dict(_{authorization:Auth}, Context0, Context),
+    once(ask(Context, using('o/test/local/_commits', t(_, _, _)))),
+    once(ask(Context, using('_commits', t(_, _, _)))),
+    once(ask(Context, using('z/test/local/_commits', t(_, _, _)))).
+
+:- end_tests(preflight).
