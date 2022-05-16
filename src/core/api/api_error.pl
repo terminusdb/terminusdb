@@ -466,6 +466,13 @@ api_error_jsonld_(frame,error(casting_error(Val,Type),_), JSON) :-
                               'api:type' : Type},
              'api:message' : Msg
             }.
+api_error_jsonld_(woql,error(find_resource_pre_flight_failure_for(AST), _), JSON) :-
+    format(string(Msg), "Unable to find and process a resource from the AST ~q", [AST]),
+    JSON = _{'@type' : "api:WoqlErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:FindResourceFailure" }
+            }.
 api_error_jsonld_(woql,error(not_a_valid_descriptor(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The source path ~q is not a valid descriptor for branching", [Path]),

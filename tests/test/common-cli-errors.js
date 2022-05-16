@@ -17,20 +17,21 @@ describe('common-cli-errors', function () {
 
   describe('fails for bad descriptor path', function () {
     const commands = [
-      'fetch --user=admin --password=root',
-      'pull --user=admin --password=root',
-      'push --user=admin --password=root',
+      ['fetch', '--user=admin --password=root'],
+      ['pull', '--user=admin --password=root'],
+      ['push', '--user=admin --password=root'],
+      ['query', undefined, 'a=a'],
     ]
-    for (const command of commands) {
+    for (const [command, beforePath, afterPath] of commands) {
       it(command, async function () {
-        const branch = util.randomString()
-        await exec(`./terminusdb.sh ${command} ${branch}`)
+        const path = util.randomString()
+        await exec(`./terminusdb.sh ${command} ${util.isDefined(beforePath) ? beforePath + ' ' : ''}${path}${util.isDefined(afterPath) ? ' ' + afterPath : ''}`)
           .then((r) => {
             expect.fail(JSON.stringify(r))
           })
           .catch((r) => {
             expect(r.code).to.not.equal(0)
-            expect(r.stderr).to.match(new RegExp('^Error: Bad descriptor path: ' + branch))
+            expect(r.stderr).to.match(new RegExp('^Error: Bad descriptor path: ' + path))
           })
       })
     }

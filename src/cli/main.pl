@@ -914,16 +914,17 @@ run_command(optimize,Databases,_Opts) :-
                (   api_optimize(system_descriptor{}, Auth, Path),
                    format(current_output, "~N~s optimized~n", [Path])
                ))).
-run_command(query,[Database,Query],Opts) :-
-    resolve_absolute_string_descriptor(Database,Descriptor),
+run_command(query,[Path,Query],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
     option(author(Author), Opts),
     option(message(Message), Opts),
-    create_context(Descriptor,commit_info{ author : Author,
-                                           message : Message}, Context),
+    Commit_Info = commit_info{author : Author, message : Message},
+
     api_report_errors(
         woql,
-        (   read_query_term_from_atom(Query,AST),
-            query_response:run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+        (   woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Commit_Info, [], _All_Witnesses, no_data_version, _New_Data_Version, Context, Response),
             get_dict(prefixes, Context, Context_Prefixes),
             default_prefixes(Defaults),
             put_dict(Defaults, Context_Prefixes, Final_Prefixes),
@@ -1227,14 +1228,16 @@ run_command(doc,insert,[Path], Opts) :-
 
     api_report_errors(
         insert_documents,
-        (   (   var(Data)
-            ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
-            ;   open_string(Data, Stream),
-                doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
-            ),
-            length(Ids, Number_Inserted),
-            format("Document(s) inserted: ~d~n", [Number_Inserted])
+        (   var(Data)
+        ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
+        ;   open_string(Data, Stream),
+            doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
         )
+    ),
+    length(Ids, Number_Inserted),
+    (   Number_Inserted = 1
+    ->  format(current_output, "Document inserted~n", [])
+    ;   format(current_output, "Documents inserted: ~d~n", [Number_Inserted])
     ).
 run_command(doc,delete, [Path], Opts) :-
     super_user_authority(Auth),
@@ -1585,14 +1588,5 @@ format_help_markdown_opt(Opt) :-
 
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
-
-bind_vars([],_).
-bind_vars([Name=Var|Tail],AST) :-
-    Var = v(Name),
-    bind_vars(Tail,AST).
-
-read_query_term_from_atom(Query, AST) :-
-    read_term_from_atom(Query, AST, [variable_names(Names)]),
-    bind_vars(Names,AST).
 
 fetch_payload(Payload, _, none, some(Payload)).

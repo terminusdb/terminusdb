@@ -204,6 +204,13 @@ lookup(Var_Name,Prolog_Var,[Record|_B0]) :-
 lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
     lookup(Var_Name,Prolog_Var,B0).
 
+lookup_or_extend(Var_Name, _Prolog_Var) -->
+    {
+        \+ atom(Var_Name),
+        !,
+        format(atom(Output), "~w", [Var_Name]),
+        throw(error(woql_syntax_error(bad_variable_name(Output)), _))
+    }.
 lookup_or_extend(Var_Name, Prolog_Var) -->
     update(bindings,B0,B1),
     {
@@ -981,7 +988,7 @@ find_resources(when(P,Q), Collection, DRG, DWG, Read, Write) :-
     append(Read_P, Read_Q, Read),
     append(Write_P, Write_Q, Write).
 find_resources(using(Collection_String,P), Collection, DRG, _DWG, Read, Write) :-
-    resolve_relative_string_descriptor(Collection, Collection_String, Descriptor),
+    resolve_absolute_or_relative_string_descriptor(Collection, Collection_String, Descriptor),
     % NOTE: Don't we need the collection descriptor default filter?
     collection_descriptor_default_write_graph(Descriptor, DWG),
     find_resources(P, Collection, DRG, DWG, Read, Write).
@@ -1065,12 +1072,14 @@ assert_pre_flight_access(Context, _AST) :-
     % This probably makes all super user checks redundant.
     !.
 assert_pre_flight_access(Context, AST) :-
-    find_resources(AST,
-                   (Context.default_collection),
-                   (Context.filter),
-                   (Context.write_graph),
-                   Read,
-                   Write),
+    do_or_die(
+        find_resources(AST,
+                       (Context.default_collection),
+                       (Context.filter),
+                       (Context.write_graph),
+                       Read,
+                       Write),
+        error(find_resource_pre_flight_failure_for(AST),_)),
     sort(Read,Read_Sorted),
     sort(Write,Write_Sorted),
     forall(member(resource(Collection,Type),Read_Sorted),
@@ -4684,11 +4693,12 @@ test(less_than, [
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
-                    Query,
+                    json_query(Query),
                     Commit_Info,
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     JSON),
     [_] = (JSON.bindings).
@@ -4737,11 +4747,12 @@ test(using_resource_works, [
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
-                    Query,
+                    json_query(Query),
                     Commit_Info,
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     _JSON).
 
@@ -5063,6 +5074,18 @@ test(operator_clash, [
                  inserts:2,
                  transaction_retry_count:_}.
 
+test(bad_variable_name, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(woql_syntax_error(bad_variable_name('v(X)')))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    AST = (v(v('X')) = a),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
@@ -5290,3 +5313,41 @@ test(duration_hour) :-
     test_lit(duration(-1,0,0,0,1,0,0)^^xsd:duration, "\"-PT1H\"^^'http://www.w3.org/2001/XMLSchema#duration'").
 
 :- end_tests(store_load_data).
+
+:- begin_tests(preflight).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+
+test(preflight_permissions, [
+         setup((setup_temp_store(State),
+                super_user_authority(Admin),
+                add_user("u",some('password'),Auth),
+                add_user_organization_transaction(
+                    system_descriptor{},
+                    Admin,
+                    "u",
+                    "o"),
+                create_db_without_schema("o", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(
+             unresolvable_absolute_descriptor(
+                 repository_descriptor{
+                     database_descriptor:
+                     database_descriptor{
+                         database_name:"test",
+                         organization_name:"z"},
+                     repository_name:"local"}),
+             _)
+     ]) :-
+
+    resolve_absolute_string_descriptor('o/test', Desc),
+    create_context(Desc, Context0),
+    put_dict(_{authorization:Auth}, Context0, Context),
+    once(ask(Context, using('o/test/local/_commits', t(_, _, _)))),
+    once(ask(Context, using('_commits', t(_, _, _)))),
+    once(ask(Context, using('z/test/local/_commits', t(_, _, _)))).
+
+:- end_tests(preflight).

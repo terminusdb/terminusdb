@@ -30,7 +30,7 @@ describe('cli-doc', function () {
     const schema = { '@type': 'Class', '@id': util.randomString() }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
-      expect(r.stdout).to.match(/^Document\(s\) inserted: 1/)
+      expect(r.stdout).to.match(/^Document inserted/)
     }
     {
       const r = await exec(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
@@ -48,12 +48,12 @@ describe('cli-doc', function () {
     const schema = { '@type': 'Class', '@id': util.randomString(), x: 'xsd:integer' }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
-      expect(r.stdout).to.match(/^Document\(s\) inserted: 1/)
+      expect(r.stdout).to.match(/^Document inserted/)
     }
     const instance = { '@type': schema['@id'], '@id': `${schema['@id']}/0`, x: -88 }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=instance --data='${JSON.stringify(instance)}'`)
-      expect(r.stdout).to.match(/^Document\(s\) inserted: 1/)
+      expect(r.stdout).to.match(/^Document inserted/)
     }
     {
       const r = await exec(`./terminusdb.sh doc get ${dbSpec} --graph_type=instance`)
