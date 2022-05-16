@@ -4691,11 +4691,12 @@ test(less_than, [
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
-                    Query,
+                    json_query(Query),
                     Commit_Info,
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     JSON),
     [_] = (JSON.bindings).
@@ -4744,11 +4745,12 @@ test(using_resource_works, [
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
-                    Query,
+                    json_query(Query),
                     Commit_Info,
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     _JSON).
 
