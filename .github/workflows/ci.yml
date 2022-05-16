@@ -83,7 +83,7 @@ jobs:
     needs: build
     steps:
       - name: Generate man page
-      - run: |
+        run: |
           apt-get install ronn
           HELP="$$(docker run terminusdb/terminusdb-server:local help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
           ronn --roff docs/terminusdb.1.ronn
