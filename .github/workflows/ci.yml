@@ -5,6 +5,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  LAST_RELEASED_VERSION: 10.0.24
+  CURRENT_REPO_VERSION: 10.0.25
+
 jobs:
 
   is_duplicate_run:
@@ -51,11 +55,37 @@ jobs:
             change_other_than_docs_alone:
               - '!(**.md|docs/**|LICENSE)'
 
-  build:
-    name: Build
+  versions:
+    name: Versions
+    runs-on: ubuntu-latest
     needs:
       - is_duplicate_run
       - is_build_required
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Run Cog to update versions in files
+        run: |
+          pip install cogapp
+          cog -v
+          cog -r \
+            -D LAST_RELEASED_VERSION=$LAST_RELEASED_VERSION \
+            -D CURRENT_REPO_VERSION=$CURRENT_REPO_VERSION \
+            docs/release-steps.md \
+            src/config/terminus_config.pl
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update versions
+          file_pattern: >-
+            docs/release-steps.md
+            src/config/terminus_config.pl
+
+  build:
+    name: Build
+    needs: versions
     # Build if we need to push a Docker image or there is no duplicate run in
     # progress and a build is required due to changed files.
     if: |
@@ -77,6 +107,33 @@ jobs:
     name: Benchmark
     needs: build
     uses: ./.github/workflows/benchmark.yml
+
+  docs:
+    name: Update docs
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Generate man page
+        run: |
+          sudo apt-get install --no-install-recommends ronn
+          ronn --version
+          docker load < terminusdb-server-docker-image.tar.gz
+          HELP="$(docker run --rm --volume $(pwd)/docs:/app/terminusdb/docs terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
+          ronn --roff docs/terminusdb.1.ronn
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update man page
+          file_pattern: docs/terminusdb.1.*
 
   # This is required for status checks.
   all_checks_pass_with_build:

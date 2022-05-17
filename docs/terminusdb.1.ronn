@@ -109,6 +109,9 @@ Push a branch.
   * `-x`, `--prefixes`=[value]:
   send prefixes for database
 
+  * `-t`, `--token`=[value]:
+  machine access token
+
   * `-u`, `--user`=[value]:
   the user on the remote
 
@@ -123,6 +126,9 @@ Clone a database (into DB_SPEC).
 
   * `-h`, `--help`=[value]:
   print help for the `clone` command
+
+  * `-t`, `--token`=[value]:
+  machine access token
 
   * `-u`, `--user`=[value]:
   the user on the remote
@@ -157,6 +163,9 @@ Pull a branch from a database.
   * `-r`, `--remote`=[value]:
   the name of the remote to use
 
+  * `-t`, `--token`=[value]:
+  machine access token
+
   * `-u`, `--user`=[value]:
   the user on the remote
 
@@ -174,6 +183,9 @@ fetch data from a remote.
 
   * `-r`, `--remote`=[value]:
   the name of the remote to use
+
+  * `-t`, `--token`=[value]:
+  machine access token
 
   * `-u`, `--user`=[value]:
   the user on the remote
@@ -222,6 +234,43 @@ Unbundle a bundle file.
 
   * `-h`, `--help`=[value]:
   print help for the `unbundle` command
+
+### diff
+
+`terminusdb diff [Path] OPTIONS`
+
+Create a diff between two JSONs, a JSON and a commit (path required),
+or two commits (path required).
+
+  * `-h`, `--help`=[value]:
+  print help for the `diff` command
+
+  * `-b`, `--before`=[value]:
+  JSON document which is the *before*
+
+  * `-a`, `--after`=[value]:
+  JSON document which is the *after*
+
+  * `-k`, `--keep`=[value]:
+  Skeleton of the document to retain as context
+
+  * `-d`, `--docid`=[value]:
+  document id to use for comparisons
+
+  * `-p`, `--before_commit`, `--before-commit`=[value]:
+  Commit of the *before* document(s)
+
+  * `-s`, `--after_commit`, `--after-commit`=[value]:
+  Commit of the *after* document(s)
+
+### log
+
+`terminusdb log DB_SPEC`
+
+Get the log for a branch given by DB_SPEC.
+
+  * `-h`, `--help`=[value]:
+  print help for the `log` command
 
 ### branch create
 
@@ -291,6 +340,120 @@ Delete a database.
 
   * `-f`, `--force`=[value]:
   force the deletion of the database (unsafe)
+
+### doc insert
+
+`terminusdb doc insert DATABASE_SPEC OPTIONS`
+
+Insert documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc insert` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-g`, `--graph_type`, `--graph-type`=[value]:
+  graph type (instance or schema)
+
+  * `-d`, `--data`=[value]:
+  document data
+
+  * `-f`, `--full_replace`, `--full-replace`=[value]:
+  delete all previous documents and substitute these
+
+### doc delete
+
+`terminusdb doc delete DATABASE_SPEC OPTIONS`
+
+Delete documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc delete` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-g`, `--graph_type`, `--graph-type`=[value]:
+  graph type (instance or schema)
+
+  * `-i`, `--id`=[value]:
+  document id to delete
+
+  * `-d`, `--data`=[value]:
+  document data
+
+  * `-n`, `--nuke`=[value]:
+  nuke all documents
+
+### doc replace
+
+`terminusdb doc replace DATABASE_SPEC OPTIONS`
+
+Replace documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc replace` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-g`, `--graph_type`, `--graph-type`=[value]:
+  graph type (instance or schema)
+
+  * `-d`, `--data`=[value]:
+  document data
+
+  * `-c`, `--create`=[value]:
+  create document if it does not exist
+
+### doc get
+
+`terminusdb doc get DATABASE_SPEC OPTIONS`
+
+Query documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc get` sub command
+
+  * `-g`, `--graph_type`=[value]:
+  graph type (instance or schema)
+
+  * `-s`, `--skip`=[value]:
+  number of documents to skip
+
+  * `-c`, `--count`=[value]:
+  number of documents to return
+
+  * `-m`, `--minimized`=[value]:
+  return minimized prefixes
+
+  * `-l`, `--as_list`, `--as-list`=[value]:
+  return results as a JSON list (as opposed to JSON-lines)
+
+  * `-u`, `--unfold`=[value]:
+  include subdocuments, or only subdocument ids
+
+  * `-i`, `--id`=[value]:
+  id of document to retrieve
+
+  * `-t`, `--type`=[value]:
+  type of document to retrieve
+
+  * `-z`, `--compress_ids`, `--compress-ids`=[value]:
+  return compressed / minimized ids using default prefixes
+
+  * `-q`, `--query`=[value]:
+  document query search template
 
 ### store init
 

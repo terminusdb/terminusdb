@@ -38,7 +38,9 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
+/* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
 terminusdb_version('10.0.25').
+/* [[[end]]] */
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
