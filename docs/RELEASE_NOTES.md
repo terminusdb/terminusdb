@@ -1,3 +1,33 @@
+# TerminusDB Server v10.0.25 Beta Release Notes
+
+## Bug fixes
++ Fix cost calculations to make a more accurate diff
++ Add missing error-checking on database creation
++ Halt on closed user output in the CLI
++ Handle empty environment variables in the CLI
++ Fix WOQL using so resolution works on absolute descriptors
++ Improve robustness of CLI commands:
+  - clone
+  - push
+  - pull
+  - query
+
+## Enhancements
++ Replace elaboration with type inference in the document interface
++ Add squash commit to apply the diff between two commits to a branch
++ Add explicit copy to diff
++ New CLI commands:
+  - diff
+  - log
+  - doc delete
+  - doc replace
++ New CLI command flags:
+  - doc insert: --full-replace
+  - doc get: many new flags
+
+## Other
++ Integrate `terminus_store_prolog` directly into TerminusDB
+
 # TerminusDB Server v10.0.24 Beta Release Notes
 ## Bug fixes
 + full_replace on schemas ignored newly submitted prefixes
