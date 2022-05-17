@@ -764,7 +764,6 @@ test(deep_list_patch, []) :-
     Before = json{ asdf: json{ bar: [json{ baz: 'quux' }] } },
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
     simple_diff(Before,After,Diff,[keep(json{})]),
-    writeq(Diff),
     simple_patch(Diff,Before,success(After),[]).
 
 :- end_tests(simple_diff).
