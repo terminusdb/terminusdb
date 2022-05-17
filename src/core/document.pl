@@ -73,7 +73,11 @@
               normalize_document/3,
 
               % apply.pl
-              apply_diff/4
+              apply_diff/4,
+
+              % json_rdf.pl
+              json_object_triple/3,
+              json_object_triple/4
           ]).
 
 :- use_module('document/validation').
@@ -86,3 +90,4 @@
 :- use_module('document/normalize').
 :- use_module('document/apply').
 :- use_module('document/inference').
+:- use_module('document/json_rdf').
