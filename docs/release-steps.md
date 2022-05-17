@@ -65,23 +65,19 @@ The current repository version is: <!--
    ```
    <!-- [[[end]]] -->
 
-5. Create a new release for: <!--
+5. Create a new GitHub release for the tag: <!--
    [[[cog cog.out(current_repo_version_link) ]]] -->
    [`v10.0.25`](https://github.com/terminusdb/terminusdb/releases/tag/v10.0.25)
    <!-- [[[end]]] -->
 
-6. Review the PR for unexpected commits.
-   1. Approve.
-   2. Merge.
-
-7. (_PR_) Update the versions in [`version.yml`](../.github/workflows/version.yml):
+6. (_PR_) Update the versions in [`version.yml`](../.github/workflows/version.yml):
    1. Change the value for `LAST_RELEASED_VERSION` to: <!--
       [[[cog cog.out(current_repo_version) ]]] -->
       `v10.0.25`
       <!-- [[[end]]] -->
    2. Change the value for `CURRENT_REPO_VERSION` to the next planned version.
 
-8. Review the PR for correct version.
+7. Review the PR for correct version.
    1. Wait for CI to pass.
    2. Approve.
    3. Merge.
