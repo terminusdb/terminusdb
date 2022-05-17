@@ -120,7 +120,8 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
     (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,Options)
-    *-> (   \+ Sub_Diff = json{'@op':"KeepList"}
+    *-> (   \+ (is_dict(Sub_Diff),
+                get_dict('@op', Sub_Diff, "KeepList"))
         ->  New_Keys = [Key-Sub_Diff|Rest]
         ;   New_Keys = Rest
         )
@@ -218,7 +219,10 @@ deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     (   is_list(Simple_Diff)
     ->  Simple_Diff = Diff
     ;   json{ '@op' : "SwapList" } :< Simple_Diff
-    ->  put_dict(json{'@rest' : json{'@op' : "KeepList"}}, Simple_Diff, Diff)
+    ->  (   option(copy_value(true), Options)
+        ->  put_dict(json{'@rest' : json{'@op' : "KeepList", '@value' : []}}, Simple_Diff, Diff)
+        ;   put_dict(json{'@rest' : json{'@op' : "KeepList"}}, Simple_Diff, Diff)
+        )
     ;   Simple_Diff = Diff
     ).
 deep_list_diff_(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
@@ -740,6 +744,19 @@ test(list_middle_copy_value, []) :-
                                 '@rest':json{'@op':"KeepList",'@value':[]}},
                    '@to':3,
                    '@value':[3,2,1]}}.
+
+test(deep_list_copy_value, []) :-
+    Before = [0,1,2],
+    After = [0,1,2,3],
+    simple_diff(Before,After,Patch,[keep(json{}),copy_value(true)]),
+    Patch = json{'@op':"CopyList",
+                 '@rest':json{'@after':[3],
+                              '@before':[],
+                              '@op':"SwapList",
+                              '@rest':json{'@op':"KeepList",
+                                           '@value':[]}},
+                 '@to':3,
+                 '@value':[0,1,2]}.
 
 :- use_module(core('document/patch')).
 
