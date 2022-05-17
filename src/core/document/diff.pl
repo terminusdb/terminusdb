@@ -120,7 +120,8 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
     (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,Options)
-    *-> (   \+ json{'@op':"KeepList"} :< Sub_Diff
+    *-> (   \+ (is_dict(Sub_Diff),
+                get_dict('@op', Sub_Diff, "KeepList"))
         ->  New_Keys = [Key-Sub_Diff|Rest]
         ;   New_Keys = Rest
         )
@@ -754,7 +755,8 @@ test(deep_list_copy_value, []) :-
                               '@op':"SwapList",
                               '@rest':json{'@op':"KeepList",
                                            '@value':[]}},
-                 '@to':3,'@value':[0,1,2]}.
+                 '@to':3,
+                 '@value':[0,1,2]}.
 
 :- use_module(core('document/patch')).
 
@@ -762,6 +764,7 @@ test(deep_list_patch, []) :-
     Before = json{ asdf: json{ bar: [json{ baz: 'quux' }] } },
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
     simple_diff(Before,After,Diff,[keep(json{})]),
+    writeq(Diff),
     simple_patch(Diff,Before,success(After),[]).
 
 :- end_tests(simple_diff).
