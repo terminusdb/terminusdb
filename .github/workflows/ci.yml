@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 10.0.24
-  CURRENT_REPO_VERSION: 10.0.25
+  LAST_RELEASED_VERSION: 10.0.25
+  CURRENT_REPO_VERSION: 10.0.26
 
 jobs:
 
@@ -61,6 +61,13 @@ jobs:
     needs:
       - is_duplicate_run
       - is_build_required
+    # Build if we need to push a Docker image or there is no duplicate run in
+    # progress and a build is required due to changed files.
+    if: |
+      needs.is_build_required.outputs.push_docker_required == 'true' || (
+        needs.is_duplicate_run.outputs.duplicate_run == 'false' &&
+        needs.is_build_required.outputs.build_required == 'true'
+      )
 
     steps:
       - uses: actions/checkout@v2
@@ -86,13 +93,6 @@ jobs:
   build:
     name: Build
     needs: versions
-    # Build if we need to push a Docker image or there is no duplicate run in
-    # progress and a build is required due to changed files.
-    if: |
-      needs.is_build_required.outputs.push_docker_required == 'true' || (
-        needs.is_duplicate_run.outputs.duplicate_run == 'false' &&
-        needs.is_build_required.outputs.build_required == 'true'
-      )
     uses: ./.github/workflows/build.yml
 
   check:
