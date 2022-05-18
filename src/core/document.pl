@@ -32,7 +32,7 @@
               delete_document/2,
               insert_document/3,
               insert_document/7,
-              insert_document_unsafe/6,
+              insert_document_unsafe/7,
               replace_document/2,
               replace_document/3,
               replace_document/5,
