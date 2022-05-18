@@ -185,7 +185,14 @@ jobs:
         with:
           name: terminusdb-server-docker-image
 
+        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
+      - name: Download lint
+        run: curl -L "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$SWIPL_LINTER_VERSION/pl_lint.pl" > pl_lint.pl
+
       - name: Run lint
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
-          docker run terminusdb/terminusdb-server:local make lint
+          docker run \
+            -v $(pwd)/pl_lint.pl:/app/pl_lint.pl \
+            terminusdb/terminusdb-server:local \
+            swipl -f src/load_paths.pl src/core/query/expansions.pl /app/pl_lint.pl
