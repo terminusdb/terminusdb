@@ -977,7 +977,7 @@ test(replace_nonexisting_subdocument_as_document, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               create(false)],
+               create(true)],
     api_replace_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(replace_existing_subdocument_as_document, [
