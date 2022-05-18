@@ -32,6 +32,7 @@
 :- use_module(library(option)).
 :- use_module(library(plunit), [run_tests/0, run_tests/1]).
 :- use_module(library(settings)).
+:- use_module(library(terminus_store), [terminus_store_version/1]).
 
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
@@ -879,7 +880,7 @@ run_([Command|_Rest]) :-
 run_(['--version'|_]) :-
     terminusdb_version(TerminusDB_Version),
     current_prolog_flag(terminusdb_git_hash, Git_Hash),
-    current_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version),
+    terminus_store_version(TerminusDB_Store_Version),
     format(user_output, "TerminusDB v~s (~s)~n", [TerminusDB_Version, Git_Hash]),
     format(user_output, "terminusdb-store v~s~n", [TerminusDB_Store_Version]).
 run_(_) :-
