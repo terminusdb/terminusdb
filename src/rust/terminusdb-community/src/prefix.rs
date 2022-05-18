@@ -231,7 +231,11 @@ impl PrefixContracter {
         }
 
         if let Some(p) = prefix {
-            let remainder = std::str::from_utf8(&slice[p.expansion().as_bytes().len()..]).unwrap();
+            // Unsafe justification: The slice originates as an utf8
+            // string. The eliminated prefix is a complete utf8
+            // sequence. Therefore, the remainder must be a complete
+            // utf8 sequence too.
+            let remainder = unsafe { std::str::from_utf8_unchecked(&slice[p.expansion().as_bytes().len()..]) };
 
             Some((p.contraction(), remainder))
         }
