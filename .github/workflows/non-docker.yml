@@ -39,9 +39,6 @@ jobs:
       - name: Install tus
         run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
 
-      - name: Install terminus_store_prolog
-        run: swipl -g "pack_install(terminus_store_prolog, [interactive(false), upgrade(true)])"
-
       - run: make
 
       - run: make test
