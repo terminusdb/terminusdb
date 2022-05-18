@@ -203,7 +203,7 @@ impl PrefixContracter {
         Self{trees: intermediate }
     }
 
-    pub fn contract(&self, s: &str) -> Option<(PrefixContraction, String)> {
+    pub fn contract<'a>(&self, s: &'a str) -> Option<(PrefixContraction, &'a str)> {
         let mut cur: &[PrefixContracterTree] = &self.trees;
         let slice = s.as_bytes();
         let mut offset = 0;
@@ -233,7 +233,7 @@ impl PrefixContracter {
         if let Some(p) = prefix {
             let remainder = std::str::from_utf8(&slice[p.expansion().as_bytes().len()..]).unwrap();
 
-            Some((p.contraction(), remainder.to_string()))
+            Some((p.contraction(), remainder))
         }
         else {
             None
@@ -244,7 +244,7 @@ impl PrefixContracter {
         match self.contract(s) {
             None => Cow::Borrowed(s),
             Some((PrefixContraction::Base, rest)) => Cow::Owned(format!("@base:{}", rest)),
-            Some((PrefixContraction::Schema, rest)) => Cow::Owned(rest),
+            Some((PrefixContraction::Schema, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest))
         }
     }
@@ -252,7 +252,7 @@ impl PrefixContracter {
     pub fn instance_contract<'a>(&self, s: &'a str) -> Cow<'a, str> {
         match self.contract(s) {
             None => Cow::Borrowed(s),
-            Some((PrefixContraction::Base, rest)) => Cow::Owned(rest),
+            Some((PrefixContraction::Base, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Schema, rest)) => Cow::Owned(format!("@schema:{}", rest)),
             Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest))
         }
@@ -366,19 +366,19 @@ mod tests {
 
         let c = PrefixContracter::new(x);
 
-        assert_eq!(Some((PrefixContraction::Base, "moo".to_string())),
+        assert_eq!(Some((PrefixContraction::Base, "moo")),
                    c.contract("http://foo/bar/documents/moo"));
 
-        assert_eq!(Some((PrefixContraction::Schema, "SomeType".to_string())),
+        assert_eq!(Some((PrefixContraction::Schema, "SomeType")),
                    c.contract("http://foo/bar#SomeType"));
 
-        assert_eq!(Some((PrefixContraction::Other("x"), "moo".to_string())),
+        assert_eq!(Some((PrefixContraction::Other("x"), "moo")),
                    c.contract("http://foo/bar/other/moo"));
 
-        assert_eq!(Some((PrefixContraction::Other("d"), "bar".to_string())),
+        assert_eq!(Some((PrefixContraction::Other("d"), "bar")),
                    c.contract("abc://def/bar"));
 
-        assert_eq!(Some((PrefixContraction::Other("b"), "baz".to_string())),
+        assert_eq!(Some((PrefixContraction::Other("b"), "baz")),
                    c.contract("http://foooo/x/y/baz"));
 
         assert_eq!(None,
