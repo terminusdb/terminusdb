@@ -77,7 +77,9 @@
 
               % json_rdf.pl
               json_object_triple/3,
-              json_object_triple/4
+              json_object_triple/4,
+              assign_json_object_id/2,
+              get_json_object/3
           ]).
 
 :- use_module('document/validation').

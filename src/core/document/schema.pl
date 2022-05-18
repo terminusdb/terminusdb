@@ -109,7 +109,9 @@ is_system_class(Class) :-
             sys:'Class',
             sys:'TaggedUnion',
             sys:'Enum',
-            sys:'Unit'
+            sys:'Unit',
+            sys:'JSON',
+            sys:'JSONDocument'
         ], List),
     memberchk(Class,List).
 

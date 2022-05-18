@@ -88,6 +88,7 @@
 :- use_module(core(util/tables)).
 
 :- use_module(core(document/inference)).
+:- use_module(core(document/json_rdf)).
 
 encode_id_fragment(Elt, Encoded) :-
     ground(Elt),
@@ -647,6 +648,10 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
 
 update_id_field(Elaborated,Context,Result) :-
     (   get_dict('@value', Elaborated, _) % no id on values
+    ->  Elaborated = Result
+    ;   get_dict('@type', Elaborated, Type),
+        memberchk(Type, ['http://terminusdb.com/schema/sys#JSONDocument',
+                         'http://terminusdb.com/schema/sys#JSON'])
     ->  Elaborated = Result
     ;   (   get_dict('@id', Elaborated, Id)
         ->  prefix_expand(Id, Context, Id_Ex)
@@ -1524,6 +1529,13 @@ json_triples(DB,JSON,Triples) :-
             json_triple_(Elaborated,Context,Triple),
             Triples).
 
+json_triple_(JSON,_,Triple) :-
+    is_dict(JSON),
+    get_dict('@type', JSON, 'http://terminusdb.com/schema/sys#JSONDocument'),
+    !,
+    del_dict('@type',JSON, _, Pure),
+    assign_json_object_id(Pure, Id),
+    json_object_triple(JSON, Id, Triple).
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
     get_dict('@value', JSON, _),
@@ -1559,7 +1571,7 @@ json_triple_(JSON,Context,Triple) :-
         Triple = t(ID,RDF_Type,Value)
     ;   Key = '@inherits'
     ->  global_prefix_expand(sys:inherits, SYS_Inherits),
-        (    get_dict('@value',Value,Class)
+        (   get_dict('@value',Value,Class)
         ->  (   is_dict(Class)
             ->  get_dict('@id', Class, Inherited),
                 Triple = t(ID,SYS_Inherits,Inherited)
@@ -1578,6 +1590,10 @@ json_triple_(JSON,Context,Triple) :-
         ->  (   json_triple_(Value, Context, Triple)
             ;   Triple = t(ID,Key,Value_ID)
             )
+        ;   global_prefix_expand(sys:'JSON', Sys_JSON),
+            get_dict('@type', Value, Sys_JSON)
+        ->  del_dict('@type', Value, _, Pure),
+            json_object_triple(ID,Key,Pure,Triple)
         ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
             list_id_key_context_triple(List,ID,Key,Context,Triple)
@@ -1885,17 +1901,21 @@ type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,Recursion,DB,Prefixes,Compr
 type_id_predicate_iri_value(optional(C),Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V).
-type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,_,Prefixes,_Compress,_Unfold,V) :-
+type_id_predicate_iri_value(base_class(C),_,_,Elt,_,DB,Prefixes,_Compress,_Unfold,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
-    (   C = T % The type is not just subsumed but identical - no ambiguity.
-    ->  value_type_json_type(X,T,V,_)
-    ;   value_type_json_type(X,T,D,T2),
-        % NOTE: We're always compressing, even if Compress_Ids is false
-        % The reason here is that this is a datatype property, not a node of our own.
-        % We may want to revisit this logic though.
-        compress_dict_uri(T2,Prefixes,T2C),
-        V = json{ '@type' : T2C, '@value' : D}
+    (   C = 'http://terminusdb.com/schema/sys#JSON'
+    ->  get_json_object(DB, Elt, V)
+    ;   Elt = X^^T,
+        (   C = T % The type is not just subsumed but identical - no ambiguity.
+        ->  value_type_json_type(X,T,V,_)
+        ;   value_type_json_type(X,T,D,T2),
+            % NOTE: We're always compressing, even if Compress_Ids is false
+            % The reason here is that this is a datatype property, not a node of our own.
+            % We may want to revisit this logic though.
+            compress_dict_uri(T2,Prefixes,T2C),
+            V = json{ '@type' : T2C, '@value' : D}
+        )
     ).
 
 compress_dict_uri(URI, Dict, Folded_URI, Options) :-
@@ -2599,7 +2619,7 @@ insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
 
-insert_document_unsafe(Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
+insert_document_unsafe(Transaction, Context, Document, JSON, Captures_In, Id, Captures_Out) :-
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -7549,8 +7569,7 @@ test(diamond_bad,
                           predicate:thing}]),_)
      ]) :-
 
-    write_schema(schema5,Desc),
-    print_all_documents(Desc, schema).
+    write_schema(schema5,Desc).
 
 test(incompatible_key_change,
      [
@@ -10849,3 +10868,101 @@ test(big,
     ).
 
 :- end_tests(big).
+
+:- begin_tests(json_datatype).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+json_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "HasSomeMetaData",
+  "name" : "xsd:string",
+  "json" : "sys:JSON"
+}
+').
+
+test(json_triples,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : "HasSomeMetaData",
+        '@id' : 'HasSomeMetaData/i_exist',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    open_descriptor(Desc, DB),
+    json_triples(DB, Document, Triples),
+    Triples =
+    [ t('terminusdb:///data/HasSomeMetaData/i_exist',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'terminusdb:///schema#HasSomeMetaData'),
+      t('terminusdb:///data/HasSomeMetaData/i_exist',
+        'terminusdb:///schema#json',
+        'terminusdb:///json/JSON/9057c8954b32149b1ab6461efb26be91dcf80b93'),
+      t('terminusdb:///json/JSON/9057c8954b32149b1ab6461efb26be91dcf80b93',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSON'),
+      t('terminusdb:///json/JSON/9057c8954b32149b1ab6461efb26be91dcf80b93',
+        'http://terminusdb.com/schema/json#some',
+        'terminusdb:///json/JSON/bae7a36946dceeef0888c3bd67e558b3b956b80d'),
+      t('terminusdb:///json/JSON/bae7a36946dceeef0888c3bd67e558b3b956b80d',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSON'),
+      t('terminusdb:///json/JSON/bae7a36946dceeef0888c3bd67e558b3b956b80d',
+        'http://terminusdb.com/schema/json#random',
+        "stuff"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('terminusdb:///json/JSON/bae7a36946dceeef0888c3bd67e558b3b956b80d',
+        'http://terminusdb.com/schema/json#that',
+        2.0^^'http://www.w3.org/2001/XMLSchema#decimal'),
+      t('terminusdb:///data/HasSomeMetaData/i_exist',
+        'terminusdb:///schema#name',
+        "testing"^^'http://www.w3.org/2001/XMLSchema#string') ].
+
+
+test(json_subobject,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : "HasSomeMetaData",
+        '@id' : 'HasSomeMetaData/reproducible',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON = json{ '@id':'HasSomeMetaData/reproducible',
+                 '@type':'HasSomeMetaData',
+                 json:json{some:json{random:"stuff", that:2.0}},
+                 name:"testing"
+               }.
+
+
+:- end_tests(json_datatype).

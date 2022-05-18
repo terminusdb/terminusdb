@@ -1,6 +1,8 @@
 :- module('document/json_rdf', [
               json_object_triple/3,
-              json_object_triple/4
+              json_object_triple/4,
+              assign_json_object_id/2,
+              get_json_object/3
           ]).
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -15,7 +17,7 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
-/** <module> Global Prefixes
+/** <module> JSON RDF
  **/
 json_data_prefix('terminusdb:///json/').
 
@@ -44,7 +46,7 @@ is_dict(Object) =>
     json_data_prefix(Data),
     atomic_list_concat([Data,'JSON/',Hash], Id),
     global_prefix_expand(rdf:type, RDF_Type),
-    global_prefix_expand(json:'JSON', JSON),
+    global_prefix_expand(sys:'JSON', JSON),
     % Generate triples from fields
     (   Triple = t(Parent_Id, Parent_Prop, Id)
     ;   Triple = t(Id, RDF_Type, JSON)
@@ -92,7 +94,7 @@ json_object_triple(Object,Id,Triple),
 is_dict(Object) =>
     % We need stable hashs - so bind all vars.
     global_prefix_expand(rdf:type, RDF_Type),
-    global_prefix_expand(json:'JSONDocument', JSON),
+    global_prefix_expand(sys:'JSONDocument', JSON),
     % Generate triples from fields
     (   Triple = t(Id, RDF_Type, JSON)
     ;   get_dict(Key,Object,Value),
@@ -100,6 +102,12 @@ is_dict(Object) =>
         global_prefix_expand(json:Encoded_Key, Prop),
         json_object_triple(Id,Prop,Value,Triple)
     ).
+
+compress_json_field(Key, Prop) :-
+    re_matchsub('^http://terminusdb.com/schema/json#(.*)',
+                Key, Sub, []),
+    get_dict(1, Sub, Encoded_Key),
+    uri_encoded(segment, Prop, Encoded_Key).
 
 get_json_object(Desc, Id, JSON) :-
     is_descriptor(Desc),
@@ -131,21 +139,20 @@ get_json_object_(Transaction, Id, [Head|Tail]) :-
     get_json_object_(Transaction, Rest, Tail).
 get_json_object_(Transaction, Id, Document) :-
     database_instance(Transaction, Instance),
-    (   xrdf(Instance, Id, rdf:type, json:'JSONDocument')
-    ;   xrdf(Instance, Id, rdf:type, json:'JSON')),
+    (   xrdf(Instance, Id, rdf:type, sys:'JSONDocument')
+    ;   xrdf(Instance, Id, rdf:type, sys:'JSON')),
     !,
     findall(Prop-Value,
             (   xrdf(Instance, Id, Key, Val_or_Uri),
-                (   Val_or_Uri = _^^'http://www.w3.org/2001/XMLSchema#token'
-                ->  Value = null
+                (   Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
+                ->  fail % ignore type field
+                ;   Val_or_Uri = _^^'http://www.w3.org/2001/XMLSchema#token'
+                ->  Value = null % add null for token
                 ;   Val_or_Uri = Value^^_
-                ->  true
-                ;   get_json_object_(Transaction, Val_or_Uri, Value)
+                ->  true % strip value
+                ;   get_json_object_(Transaction, Val_or_Uri, Value) % subdocument or list
                 ),
-                re_matchsub('^http://terminusdb.com/schema/json#(.*)',
-                            Key, Sub, []),
-                get_dict(1, Sub, Encoded_Key),
-                uri_encoded(segment, Prop, Encoded_Key)
+                compress_json_field(Key,Prop)
             ),
             Pairs),
     dict_pairs(Document, json, Pairs).
@@ -181,18 +188,18 @@ test(generate_data_triples,[]) :-
     Triples =
     [ t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/json#JSONDocument'),
+		'http://terminusdb.com/schema/sys#JSONDocument'),
 	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#name',
+		'http://terminusdb.com/schema/sys#name',
 		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#age',
+		'http://terminusdb.com/schema/sys#age',
 		45^^'http://www.w3.org/2001/XMLSchema#decimal'),
 	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#hobby',
+		'http://terminusdb.com/schema/sys#hobby',
 		null^^'http://www.w3.org/2001/XMLSchema#token'),
 	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#sex',
+		'http://terminusdb.com/schema/sys#sex',
 		true^^'http://www.w3.org/2001/XMLSchema#boolean')
 	].
 
@@ -214,27 +221,27 @@ test(generate_subdocument_triples,[]) :-
     Triples =
     [ t('terminusdb:///json/JSONDocument/5492d856e43ffe25196a86ad9027791380cc4d2d',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/json#JSONDocument'),
+		'http://terminusdb.com/schema/sys#JSONDocument'),
 	  t('terminusdb:///json/JSONDocument/5492d856e43ffe25196a86ad9027791380cc4d2d',
-		'http://terminusdb.com/schema/json#name',
+		'http://terminusdb.com/schema/sys#name',
 		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t('terminusdb:///json/JSONDocument/5492d856e43ffe25196a86ad9027791380cc4d2d',
-		'http://terminusdb.com/schema/json#friend',
+		'http://terminusdb.com/schema/sys#friend',
 		'terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36'),
 	  t('terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/json#JSON'),
+		'http://terminusdb.com/schema/sys#JSON'),
 	  t('terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#name',
+		'http://terminusdb.com/schema/sys#name',
 		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t('terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#age',
+		'http://terminusdb.com/schema/sys#age',
 		45^^'http://www.w3.org/2001/XMLSchema#decimal'),
 	  t('terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#hobby',
+		'http://terminusdb.com/schema/sys#hobby',
 		null^^'http://www.w3.org/2001/XMLSchema#token'),
 	  t('terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#sex',
+		'http://terminusdb.com/schema/sys#sex',
 		true^^'http://www.w3.org/2001/XMLSchema#boolean')
 	].
 
@@ -251,12 +258,12 @@ test(generate_list_triples,[]) :-
     Triples =
     [ t('terminusdb:///json/JSONDocument/3f8090f584ef91ecf987325540b3ef189cc3835c',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/json#JSONDocument'),
+		'http://terminusdb.com/schema/sys#JSONDocument'),
 	  t('terminusdb:///json/JSONDocument/3f8090f584ef91ecf987325540b3ef189cc3835c',
-		'http://terminusdb.com/schema/json#name',
+		'http://terminusdb.com/schema/sys#name',
 		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t('terminusdb:///json/JSONDocument/3f8090f584ef91ecf987325540b3ef189cc3835c',
-		'http://terminusdb.com/schema/json#friends',
+		'http://terminusdb.com/schema/sys#friends',
 		'terminusdb:///json/Cons/5f8ccf7fade4412b027d456b81eae97b6c9b79d2'),
 	  t('terminusdb:///json/Cons/5f8ccf7fade4412b027d456b81eae97b6c9b79d2',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
@@ -266,9 +273,9 @@ test(generate_list_triples,[]) :-
 		'terminusdb:///json/JSON/90bfb26e463835fd207b23b1d9774391c540257c'),
 	  t('terminusdb:///json/JSON/90bfb26e463835fd207b23b1d9774391c540257c',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/json#JSON'),
+		'http://terminusdb.com/schema/sys#JSON'),
 	  t('terminusdb:///json/JSON/90bfb26e463835fd207b23b1d9774391c540257c',
-		'http://terminusdb.com/schema/json#name',
+		'http://terminusdb.com/schema/sys#name',
 		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t('terminusdb:///json/Cons/5f8ccf7fade4412b027d456b81eae97b6c9b79d2',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
@@ -281,9 +288,9 @@ test(generate_list_triples,[]) :-
 		'terminusdb:///json/JSON/70d8e985ade1df14a4a51b960ff2e1f0858bf2c8'),
 	  t('terminusdb:///json/JSON/70d8e985ade1df14a4a51b960ff2e1f0858bf2c8',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/json#JSON'),
+		'http://terminusdb.com/schema/sys#JSON'),
 	  t('terminusdb:///json/JSON/70d8e985ade1df14a4a51b960ff2e1f0858bf2c8',
-		'http://terminusdb.com/schema/json#name',
+		'http://terminusdb.com/schema/sys#name',
 		"Tim"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t('terminusdb:///json/Cons/8aa912f4be20fd8d26af0787261e45ed53e956e9',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',

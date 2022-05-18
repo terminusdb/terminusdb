@@ -649,6 +649,14 @@ text(Id) =>
     prefix_expand(Id, Prefixes, Id_Ex),
     Annotated = success(json{ '@type' : "@id",
                               '@id' : Id_Ex }).
+infer_type_or_check(_Database, _Prefixes, Super, Dictionary, _Inferred_Type, Annotated, Captures),
+memberchk(Super, ['http://terminusdb.com/schema/sys#JSON',
+                  'http://terminusdb.com/schema/sys#JSONDocument']) =>
+    no_captures(Captures),
+    put_dict(json{ '@type' : Super },
+             Dictionary,
+             Result),
+    Annotated = success(Result).
 infer_type_or_check(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated,Captures),
 get_dict('@type', Dictionary, Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),

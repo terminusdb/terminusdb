@@ -128,6 +128,8 @@ base_type('http://terminusdb.com/schema/xdd#json').
 base_type('http://terminusdb.com/schema/xdd#url').
 base_type('http://terminusdb.com/schema/xdd#email').
 base_type('http://terminusdb.com/schema/xdd#html').
+base_type('http://terminusdb.com/schema/sys#JSONDocument').
+base_type('http://terminusdb.com/schema/sys#JSON').
 
 /**
  * base_type_parent(+ChildXSDURI:uri,+ParentXSDURI:uri) is det.
