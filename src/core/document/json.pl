@@ -2594,7 +2594,10 @@ insert_document(Transaction, Document, JSON, ID) :-
     insert_document(Transaction, Document, JSON, Captures_In, ID, _Dependencies, _Captures_Out).
 
 % This should presumably do something
-verify_json_id(_).
+verify_json_id(Prefixes,Id) :-
+    get_dict('@base', Prefixes, Base),
+    atomic_list_concat(['^',Base,'JSON/.*'],Re),
+    re_match(Re,Id).
 
 insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
     is_transaction(Transaction),
@@ -2603,8 +2606,8 @@ insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
     ->  database_prefixes(Transaction, Prefixes),
         prefix_expand(Id_Short,Prefixes,Id),
         do_or_die(
-            verify_json_id(Id),
-            error(not_a_valid_json_id(Id))),
+            verify_json_id(Prefixes,Id),
+            error(not_a_valid_json_object_id(Id),_)),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
@@ -2646,7 +2649,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Capt
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  prefix_expand(Id_Short,Prefixes,Id),
         do_or_die(
-            verify_json_id(Id),
+            verify_json_id(Prefixes,Id),
             error(not_a_valid_json_id(Id))),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
@@ -2694,18 +2697,27 @@ replace_document(Transaction, Document, Create, JSON, Id) :-
     empty_assoc(Captures),
     replace_document(Transaction, Document, Create, JSON, Captures, Id, _Dependencies, _Captures_Out).
 
+is_json_hash(Id) :-
+    re_match('^terminusdb:///json/JSONDocument/.*', Id).
+
 replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures) :-
     is_transaction(Transaction),
     !,
-    catch(delete_json_object(Transaction, false, Id),
+    database_prefixes(Transaction, Prefixes),
+    do_or_die(
+        (   del_dict('@id', Document, Id, JSON)
+        ->  prefix_expand(Id, Prefixes, Id_Ex),
+            (   is_json_hash(Id_Ex)
+            ->  assign_json_object_id(JSON, Id_Ex)
+            ;   true)
+        ),
+        error(can_not_replace_at_hashed_id(Document), _)),
+    catch(delete_json_object(Transaction, false, Id_Ex),
           error(document_not_found(_), _),
           do_or_die(
               Create = true,
               error(document_not_found(Id, Document), _))),
-    (   del_dict('@id', Document, _, JSON)
-    ->  true
-    ;   Document = JSON),
-    insert_json_object(Transaction, JSON, Id).
+    insert_json_object(Transaction, JSON, Id_Ex).
 replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
@@ -2968,6 +2980,11 @@ insert_context_document(Query_Context, Document) :-
     query_default_collection(Query_Context, TO),
     insert_context_document(TO, Document).
 
+valid_schema_name(Prefixes,Name) :-
+    atom_string(Id,Name),
+    prefix_expand_schema('JSON',Prefixes,JSON_Id),
+    \+ Id = JSON_Id.
+
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
@@ -2976,10 +2993,12 @@ insert_schema_document(Transaction, Document) :-
         get_dict('@id', Document, Id),
         error(missing_field('@id', Document), _)),
     check_json_string('@id', Id),
+    database_prefixes(Transaction, Prefixes),
     database_schema(Transaction, Schema),
-
-    database_prefixes(Transaction, Context),
-    prefix_expand_schema(Id,Context,Id_Ex),
+    prefix_expand_schema(Id,Prefixes,Id_Ex),
+    do_or_die(
+        valid_schema_name(Prefixes,Id_Ex),
+        error(can_not_insert_class_with_reserve_name(Id), _)),
     do_or_die(
         \+ xrdf(Schema, Id_Ex, _, _),
         error(can_not_insert_existing_object_with_id(Id), _)),
@@ -11109,7 +11128,6 @@ test(replace_document,
     json{json:json{some:json{random:"stuff",that:false}},
          name:"testing"}.
 
-
 test(insert_num_list,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
@@ -11132,5 +11150,115 @@ test(insert_num_list,
 
     get_document(Desc,Id,JSON),
     JSON = json{numlist:[1,2,3]}.
+
+test(replace_hash_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          can_not_replace_at_hashed_id(
+              json{'@id':'terminusdb:///json/JSONDocument/85ca9ba2d6d60096b07927f9235cb02776c12128',json:json{some:json{random:"stuff",that:false}},
+                   name:"testing"}),
+          _)
+     ]) :-
+
+    Document =
+    json{
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+
+    Document2 =
+    json{
+        '@id' : Id,
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : false
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        replace_document(C2,Document2,false,true,_)
+    ).
+
+test(replace_named_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          not_a_valid_json_object_id('terminusdb:///data/named'),
+          _)
+     ]) :-
+
+    Document =
+    json{
+        '@id' : named,
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,_)
+    ),
+
+    Document2 =
+    json{
+        '@id' : named,
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : false
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        replace_document(C2,Document2,false,true,_)
+    ),
+
+    get_document(Desc,named,JSON),
+
+    JSON =
+    json{json:json{some:json{random:"stuff",that:false}},
+         name:"testing"}.
+
+
+test(can_not_insert_json_class,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(can_not_insert_class_with_reserve_name('JSON'),_)
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1,json{ '@id' : 'JSON'})
+    ).
+
 
 :- end_tests(json_datatype).
