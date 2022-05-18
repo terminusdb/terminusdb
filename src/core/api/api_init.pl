@@ -23,7 +23,6 @@
 :- use_module(library(plunit)).
 :- use_module(library(filesex)).
 :- use_module(library(crypto)).
-:- use_module(library(prolog_pack), [pack_property/2]).
 :- use_module(library(git), [git_hash/2]).
 
 /**

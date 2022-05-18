@@ -4,7 +4,7 @@
 :- use_module(core(triple)).
 :- use_module(config(terminus_config), [terminusdb_version/1]).
 
-:- use_module(library(prolog_pack), [pack_property/2]).
+:- use_module(library(terminus_store), [terminus_store_version/1]).
 
 info(_System_DB, Auth, Info) :-
 
