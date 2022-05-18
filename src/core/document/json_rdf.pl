@@ -134,6 +134,10 @@ get_json_object(Transaction, Id, JSON) :-
     !,
     get_json_object_(Transaction, Id, JSON).
 
+marshall_value(_^^'http://www.w3.org/2001/XMLSchema#token', null) :-
+    !.
+marshall_value(Value^^_, Value).
+
 get_json_object_(_Transaction, Id, []) :-
     global_prefix_expand(rdf:nil, Id),
     !.
@@ -142,7 +146,10 @@ get_json_object_(Transaction, Id, [Head|Tail]) :-
     xrdf(Instance, Id, rdf:type, rdf:'List'),
     !,
     xrdf(Instance, Id, rdf:first, First),
-    get_json_object_(Transaction, First, Head),
+    (   marshall_value(First,Head)
+    ->  true
+    ;   get_json_object_(Transaction, First, Head)
+    ),
     xrdf(Instance, Id, rdf:rest, Rest),
     get_json_object_(Transaction, Rest, Tail).
 get_json_object_(Transaction, Id, Document) :-
@@ -154,10 +161,8 @@ get_json_object_(Transaction, Id, Document) :-
             (   xrdf(Instance, Id, Key, Val_or_Uri),
                 (   Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
                 ->  fail % ignore type field
-                ;   Val_or_Uri = _^^'http://www.w3.org/2001/XMLSchema#token'
-                ->  Value = null % add null for token
-                ;   Val_or_Uri = Value^^_
-                ->  true % strip value
+                ;   marshall_value(Val_or_Uri,Value)
+                ->  true % strip type from value
                 ;   get_json_object_(Transaction, Val_or_Uri, Value) % subdocument or list
                 ),
                 compress_json_field(Key,Prop)

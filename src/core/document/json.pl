@@ -6284,8 +6284,8 @@ test(delete_referenced_object,
     empty_assoc(Captures_In),
     with_transaction(
         Context,
-        (   insert_document(Context, Document0, Captures_In, _Id1, _, Captures_Out1),
-            insert_document(Context, Document1, Captures_Out1, Id2, _, _)
+        (   insert_document(Context, Document0, false, Captures_In, _Id1, _, Captures_Out1),
+            insert_document(Context, Document1, false, Captures_Out1, Id2, _, _)
         ),
         _
     ),
@@ -11100,5 +11100,28 @@ test(replace_document,
     json{json:json{some:json{random:"stuff",that:false}},
          name:"testing"}.
 
+
+test(insert_num_list,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSON/my_json',
+        numlist : [1,2,3]
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+
+    get_document(Desc,Id,JSON),
+    JSON = json{numlist:[1,2,3]}.
 
 :- end_tests(json_datatype).

@@ -742,6 +742,20 @@ describe('document', function () {
           })
           .then(document.verifyInsertFailure)
       })
+
+      it('can insert and retrieve JSON doc', async function () {
+        const r1 = await document
+          .insert(agent, docPath, {
+            instance: { a: [42, 23, 12] },
+            json: true,
+          })
+          .then(document.verifyInsertSuccess)
+        const id0 = r1.body[0]
+        const r2 = await document
+          .get(agent, docPath, { query: { id: id0, as_list: true } })
+          .then(document.verifyGetSuccess)
+        expect(r2.body).to.deep.equal([{ a: [42, 23, 12] }])
+      })
     })
   })
 })
