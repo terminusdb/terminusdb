@@ -1234,7 +1234,7 @@ run_command(doc,insert,[Path], Opts) :-
         (   var(Data)
         ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Ids, Opts))
         ;   open_string(Data, Stream),
-            doc_insert_stream(System_DB, Auth, Path, Ids, Stream, Opts)
+            doc_insert_stream(System_DB, Auth, Path, Ids, Opts, Stream)
         )
     ),
     length(Ids, Number_Inserted),
