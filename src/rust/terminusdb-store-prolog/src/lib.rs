@@ -1,8 +1,9 @@
-mod builder;
+pub mod builder;
+pub mod layer;
+pub mod named_graph;
+pub mod store;
+
 mod csv;
-mod layer;
-mod named_graph;
-mod store;
 
 pub use terminus_store;
 

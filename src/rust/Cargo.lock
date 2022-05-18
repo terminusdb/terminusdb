@@ -478,6 +478,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
+name = "itertools"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -600,9 +609,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
+checksum = "7b10983b38c53aebdf33f542c6275b0f58a238129d00c4ae0e6fb59738d783ca"
 
 [[package]]
 name = "opaque-debug"
@@ -755,9 +764,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.5.5"
+version = "1.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a11647b6b25ff05a515cb92c365cec08801e83423a235b51e231e1808747286"
+checksum = "d83f127d94bdbcda4c8cc2e50f6f84f4b611f69c902699ca385a39c3a75f9ff1"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -772,9 +781,9 @@ checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
 
 [[package]]
 name = "regex-syntax"
-version = "0.6.25"
+version = "0.6.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
+checksum = "49b3de9ec5dc0a3417da371aab17d729997c15010e7fd24ff707773a33bddb64"
 
 [[package]]
 name = "rustc-hash"
@@ -859,8 +868,6 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 [[package]]
 name = "swipl"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d809dc40a4fbfd6a84cadee59ab31f296ac8a767598a5104f37886497d74289"
 dependencies = [
  "lazy_static",
  "swipl-fli",
@@ -871,8 +878,6 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97401209985d55fc7513fc9ba5f73e0de3886f42620e6d0d9e945c636dcd4102"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -881,8 +886,6 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3c24ee13ef4f59cce23ccaff3006a861c7f8b02984c2a7821e7f1ced54b6c1a"
 dependencies = [
  "regex",
 ]
@@ -890,8 +893,6 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ad1822c58d627deb6a9aa4b9d13f56a0864fb0020e31873e76adae9781c2a64"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -956,6 +957,7 @@ dependencies = [
 name = "terminusdb-community"
 version = "0.1.0"
 dependencies = [
+ "itertools",
  "lcs",
  "swipl",
  "terminusdb-store-prolog",
