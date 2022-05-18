@@ -36,7 +36,7 @@
               replace_document/2,
               replace_document/3,
               replace_document/4,
-              replace_document/7,
+              replace_document/8,
               nuke_documents/1,
               insert_schema_document/2,
               insert_schema_document_unsafe/3,
