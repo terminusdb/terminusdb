@@ -21,6 +21,7 @@
 :- use_module(core(document)).
 :- use_module(core(account)).
 
+:- use_module(library(option)).
 :- use_module(library(assoc)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
