@@ -2,11 +2,18 @@
               json_object_triple/3,
               json_object_triple/4
           ]).
+:- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
 :- use_module(library(pcre)).
+:- use_module(library(uri)).
+:- use_module(library(plunit)).
+% higher order
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(apply_macros)).
 
 /** <module> Global Prefixes
  **/
@@ -293,6 +300,7 @@ test(round_trip_complex,[
     json{
         name : "Susan",
         friends : [json{name : "Gavin",
+                        height: 1.67,
                         year: 2012},
                    json{name : "Tim",
                         instrument: null}]
@@ -311,7 +319,7 @@ test(round_trip_complex,[
     get_json_object(Descriptor, Id, Document),
 
     Document =
-    json{ friends:[ json{name:"Gavin",year:2012},
+    json{ friends:[ json{name:"Gavin",height:1.67,year:2012},
 				    json{instrument:null,name:"Tim"}
 				  ],
 		  name:"Susan"
