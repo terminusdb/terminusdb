@@ -1,5 +1,5 @@
 FROM terminusdb/swipl:v8.4.2 as pack_installer
-ENV TUS_VERSION v0.0.9
+ENV TUS_VERSION v0.0.10
 WORKDIR /app/pack
 RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
         && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
