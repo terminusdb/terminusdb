@@ -17,11 +17,11 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
-              insert_document/6,
+              insert_document/7,
               insert_document_unsafe/6,
               replace_document/2,
               replace_document/3,
-              replace_document/4,
+              replace_document/5,
               replace_document/7,
               nuke_documents/1,
               insert_schema_document/2,
@@ -2035,26 +2035,27 @@ get_document(DB, Compress_Ids, Unfold, Id, Document) :-
 get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
     Options = [compress_ids(Compress_Ids)],
     database_instance(DB,Instance),
-
     prefix_expand(Id,Prefixes,Id_Ex),
-
     xrdf(Instance, Id_Ex, rdf:type, Class),
-    findall(
-        Prop-Value,
-        (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
-            \+ is_built_in(P),
+    (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
+    ->  get_json_object(DB, Id_Ex, Document)
+    ;   findall(
+            Prop-Value,
+            (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
+                \+ is_built_in(P),
 
-            once(class_predicate_type(DB,Class,P,Type)),
-            type_id_predicate_iri_value(Type,Id_Ex,P,O,get_document,DB,Prefixes,Compress_Ids,Unfold,Value),
-            compress_schema_uri(P, Prefixes, Prop, Options)
-        ),
-        Data),
-    !,
-    compress_dict_uri(Id_Ex, Prefixes, Id_comp, Options),
-    compress_schema_uri(Class, Prefixes, Class_comp, Options),
-    json_dict_create(Document,['@id'-Id_comp,
-                               '@type'-Class_comp
-                               |Data]).
+                once(class_predicate_type(DB,Class,P,Type)),
+                type_id_predicate_iri_value(Type,Id_Ex,P,O,get_document,DB,Prefixes,Compress_Ids,Unfold,Value),
+                compress_schema_uri(P, Prefixes, Prop, Options)
+            ),
+            Data),
+        !,
+        compress_dict_uri(Id_Ex, Prefixes, Id_comp, Options),
+        compress_schema_uri(Class, Prefixes, Class_comp, Options),
+        json_dict_create(Document,['@id'-Id_comp,
+                                   '@type'-Class_comp
+                                   |Data])
+    ).
 
 key_descriptor_json(Descriptor, Prefixes, Result) :-
     key_descriptor_json(Descriptor, Prefixes, Result, [compress_ids(true)]).
@@ -2515,19 +2516,22 @@ delete_subdocument(DB, Prefixes, V) :-
 delete_document(DB, Prefixes, Unlink, Id) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
-    (   xrdf(Instance, Id_Ex, rdf:type, _)
+    (   xrdf(Instance, Id_Ex, rdf:type, Type)
     ->  true
     ;   throw(error(document_not_found(Id), _))
     ),
-    forall(
-        xquad(Instance, G, Id_Ex, P, V),
-        (   delete(G, Id_Ex, P, V, _),
-            delete_subdocument(DB,Prefixes,V)
-        )
-    ),
-    (   Unlink = true
-    ->  unlink_object(Instance, Id_Ex)
-    ;   true).
+    (   Type = 'http://terminusdb.com/schema/sys#JSONDocument'
+    ->  delete_json_object(DB, Prefixes, Unlink, Id)
+    ;   forall(
+            xquad(Instance, G, Id_Ex, P, V),
+            (   delete(G, Id_Ex, P, V, _),
+                delete_subdocument(DB,Prefixes,V)
+            )
+        ),
+        (   Unlink = true
+        ->  unlink_object(Instance, Id_Ex)
+        ;   true)
+    ).
 
 delete_document(DB, Unlink, Id) :-
     is_transaction(DB),
@@ -2583,9 +2587,28 @@ check_existing_document_status(Transaction, Document, Status) :-
     ).
 
 insert_document(Transaction, Document, ID) :-
+    insert_document(Transaction, Document, false, ID).
+
+insert_document(Transaction, Document, JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Captures_In, ID, _Dependencies, _Captures_Out).
-insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_Out) :-
+    insert_document(Transaction, Document, JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+
+% This should presumably do something
+verify_json_id(_).
+
+insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
+    is_transaction(Transaction),
+    !,
+    (   del_dict('@id', Document, Id_Short, JSON)
+    ->  database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id_Short,Prefixes,Id),
+        do_or_die(
+            verify_json_id(Id),
+            error(not_a_valid_json_id(Id))),
+        insert_json_object(Transaction, JSON, Id)
+    ;   insert_json_object(Transaction, Document, Id)
+    ).
+insert_document(Transaction, Document, false, Captures_In, ID, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
@@ -2613,13 +2636,13 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
              ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
              )
          )).
-insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures_Out) :-
+insert_document(Query_Context, Document, JSON, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
+    insert_document(TO, Document, JSON, Captures_In, ID, Dependencies, Captures_Out).
 
-insert_document_unsafe(Transaction, Context, Document, JSON, Captures_In, Id, Captures_Out) :-
+insert_document_unsafe(Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -2653,16 +2676,28 @@ run_insert_document(Desc, Commit, Document, ID) :-
         _).
 
 replace_document(DB, Document) :-
-    replace_document(DB, Document, false, _).
+    replace_document(DB, Document, false, false, _).
 
 replace_document(DB, Document, Id) :-
-    replace_document(DB, Document, false, Id).
+    replace_document(DB, Document, false, false, Id).
 
-replace_document(Transaction, Document, Create, Id) :-
+replace_document(Transaction, Document, Create, JSON, Id) :-
     empty_assoc(Captures),
-    replace_document(Transaction, Document, Create, Captures, Id, _Dependencies, _Captures_Out).
+    replace_document(Transaction, Document, Create, JSON, Captures, Id, _Dependencies, _Captures_Out).
 
-replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures) :-
+    is_transaction(Transaction),
+    !,
+    catch(delete_json_object(Transaction, false, Id),
+          error(document_not_found(_), _),
+          do_or_die(
+              Create = true,
+              error(document_not_found(Id, Document), _))),
+    (   del_dict('@id', Document, _, JSON)
+    ->  true
+    ;   Document = JSON),
+    insert_json_object(Transaction, JSON, Id).
+replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
@@ -2680,17 +2715,17 @@ replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, C
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
-replace_document(Query_Context, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Query_Context, Document, Create, JSON, Captures_In, Id, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, Captures_In, Id, Dependencies, Captures_Out).
+    replace_document(TO, Document, Create, JSON, Captures_In, Id, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        replace_document(Context, Document, false, Id),
+        replace_document(Context, Document, false, false, Id),
         _).
 
 % Frames
@@ -6659,7 +6694,7 @@ test(status_update2,
         C3,
         delete_schema_document(C3, "Invitation")
     ),
-    % print_all_triples(Desc, schema),
+
     with_test_transaction(
         Desc,
         C4,
@@ -10869,7 +10904,7 @@ test(big,
 
 :- end_tests(big).
 
-:- begin_tests(json_datatype).
+:- begin_tests(json_datatype, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 
@@ -10963,6 +10998,107 @@ test(json_subobject,
                  json:json{some:json{random:"stuff", that:2.0}},
                  name:"testing"
                }.
+
+test(top_level_json_with_id,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSON/my_json',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON =
+    json{json:json{some:json{random:"stuff",that:2.0}},
+         name:"testing"}.
+
+test(top_level_json_without_id,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON =
+    json{json:json{some:json{random:"stuff",that:2.0}},
+         name:"testing"}.
+
+test(replace_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSON/my_json',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+
+    Document2 =
+    json{
+        '@id' : 'JSON/my_json',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : false
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        replace_document(C2,Document2,false,true,_)
+    ),
+
+    get_document(Desc,Id,JSON),
+
+    JSON =
+    json{json:json{some:json{random:"stuff",that:false}},
+         name:"testing"}.
 
 
 :- end_tests(json_datatype).

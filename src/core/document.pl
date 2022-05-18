@@ -31,7 +31,7 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
-              insert_document/6,
+              insert_document/7,
               insert_document_unsafe/6,
               replace_document/2,
               replace_document/3,
