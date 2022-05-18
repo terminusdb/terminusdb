@@ -390,7 +390,9 @@ insert_some_cities(System, Path) :-
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)
+              ],
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(delete_objects_with_stream,
@@ -399,10 +401,17 @@ test(delete_objects_with_stream,
       cleanup(teardown_temp_store(State))
      ]) :-
     open_descriptor(system_descriptor{}, System),
+
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"City/Dublin" "City/Pretoria"', Stream),
-    api_delete_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, no_data_version, _New_Data_Version),
+    Options = [
+        graph_type(instance),
+        author("author"),
+        message("message")
+    ],
+
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -422,7 +431,12 @@ test(delete_objects_with_string,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('["City/Dublin", "City/Pretoria"]', Stream),
-    api_delete_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, no_data_version, _New_Data_Version),
+    Options = [
+        graph_type(instance),
+        author("author"),
+        message("message")
+    ],
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -442,7 +456,12 @@ test(delete_objects_with_mixed_string_stream,
     insert_some_cities(System, 'admin/foo'),
 
     open_string('"City/Dublin"\n["City/Pretoria"]', Stream),
-    api_delete_documents(System, 'User/admin', 'admin/foo', instance, "author", "message", Stream, no_data_version, _New_Data_Version),
+    Options = [
+        graph_type(instance),
+        author("author"),
+        message("message")
+    ],
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -474,7 +493,8 @@ insert_some_cities(System, Path) :-
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(replace_objects_with_stream,
@@ -606,7 +626,8 @@ test(basic_capture, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     open_descriptor(Desc, T),
@@ -651,7 +672,8 @@ test(capture_missing, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(double_capture, [
@@ -695,7 +717,8 @@ test(double_capture, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(basic_capture_list, [
@@ -737,7 +760,8 @@ test(basic_capture_list, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     open_descriptor(Desc, T),
@@ -783,7 +807,8 @@ test(basic_capture_replace, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _Ids_1, Options),
 
     open_string('
@@ -798,11 +823,11 @@ test(basic_capture_replace, [
   "friends" : {"@ref" : "C_Bert"}
 }',
                 Stream_2),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               create(false)],
-    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options),
+    Options1 = [graph_type(instance),
+                author("author"),
+                message("message"),
+                create(false)],
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options1),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -848,7 +873,8 @@ test(basic_capture_list_replace, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _Ids_1, Options),
 
     open_string('
@@ -863,11 +889,11 @@ test(basic_capture_list_replace, [
   "friends" : {"@ref" : "C_Bert"}
 }]',
                 Stream_2),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               create(false)],
-    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options),
+    Options1 = [graph_type(instance),
+                author("author"),
+                message("message"),
+                create(false)],
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version, _New_Data_Version_2, _Ids_2, Options1),
 
     open_descriptor(Desc, T),
     get_document(T, 'Person/Bert', Bert),
@@ -916,7 +942,8 @@ test(insert_subdocument_as_document, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(replace_nonexisting_subdocument_as_document, [
@@ -1001,7 +1028,8 @@ test(replace_existing_subdocument_as_document, [
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               full_replace(false)],
+               full_replace(false),
+               json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, [Outer_Id], Options),
 
     get_document(Desc, Outer_Id, Outer_Document),
@@ -1050,7 +1078,8 @@ test(full_replace_schema, [
     Options = [graph_type(schema),
                author("test"),
                message("test"),
-               full_replace(true)],
+               full_replace(true),
+               json(false)],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
@@ -1070,7 +1099,8 @@ test(full_replace_instance, [
     Options = [graph_type(instance),
                author("test"),
                message("test"),
-               full_replace(true)],
+               full_replace(true),
+               json(false)],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, [Id], Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
