@@ -291,6 +291,9 @@ api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
 
 api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Version, Options) :-
+    option(graph_type(Graph_Type),Options),
+    option(author(Author),Options),
+    option(message(Message),Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
