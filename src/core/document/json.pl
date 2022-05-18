@@ -2642,7 +2642,16 @@ insert_document(Query_Context, Document, JSON, Captures_In, ID, Dependencies, Ca
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, JSON, Captures_In, ID, Dependencies, Captures_Out).
 
-insert_document_unsafe(Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
+insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Captures) :-
+    (   del_dict('@id', Document, Id_Short, JSON)
+    ->  prefix_expand(Id_Short,Prefixes,Id),
+        do_or_die(
+            verify_json_id(Id),
+            error(not_a_valid_json_id(Id))),
+        insert_json_object(Transaction, JSON, Id)
+    ;   insert_json_object(Transaction, Document, Id)
+    ).
+insert_document_unsafe(Transaction, Context, Document, false, Captures_In, Id, Captures_Out) :-
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
