@@ -44,7 +44,7 @@ all: community docs
 # Install all pack dependencies.
 .PHONY: install-deps
 install-deps:
-	$(SWIPL) -g 'Options=[interactive(false), upgrade(true), test(false)], pack_install(terminus_store_prolog, Options), pack_install(tus, Options), halt'
+	$(SWIPL) -g 'Options=[interactive(false), upgrade(true), test(false)], pack_install(tus, Options), halt'
 
 .PHONY: module
 module: $(RUST_TARGET)

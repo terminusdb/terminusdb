@@ -144,14 +144,11 @@ brew install swi-prolog
 
 ### 2. Install library dependencies
 
-> :left_speech_bubble: TerminusDB requires two libraries to be installed as
-> [packs][] with SWI-Prolog. These are [`tus`][tus] (resumable file uploads over
-> HTTP) and [`terminus_store_prolog`][terminus_store_prolog] (Prolog binding to
-> `terminusdb-store`).
+> :left_speech_bubble: TerminusDB requires one library to be installed as a
+> SWI-Prolog [pack][]: [`tus`][tus] for resumable file uploads over HTTP.
 
-[packs]: https://www.swi-prolog.org/pack/list
+[pack]: https://www.swi-prolog.org/pack/list
 [tus]: https://github.com/terminusdb/tus
-[terminus_store_prolog]: https://github.com/terminusdb/terminus_store_prolog
 
 > :memo: All of the following commands assume your current working directory is
 > the top-level directory of this repository.

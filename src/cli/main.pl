@@ -873,7 +873,7 @@ run_([Command|_Rest]) :-
 run_(['--version'|_]) :-
     terminusdb_version(TerminusDB_Version),
     current_prolog_flag(terminusdb_git_hash, Git_Hash),
-    current_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version),
+    terminus_store_version(TerminusDB_Store_Version),
     format(user_output, "TerminusDB v~s (~s)~n", [TerminusDB_Version, Git_Hash]),
     format(user_output, "terminusdb-store v~s~n", [TerminusDB_Store_Version]).
 run_(_) :-
