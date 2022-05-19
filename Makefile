@@ -54,7 +54,10 @@ docker:
 # Install all pack dependencies.
 .PHONY: install-deps
 install-deps:
-	$(SWIPL) -g 'Options=[interactive(false), upgrade(true), test(false)], pack_install(tus, Options), halt'
+	$(SWIPL) \
+	  --on-error=halt \
+	  --on-warning=halt \
+	  -g 'Options=[interactive(false), upgrade(true), test(false)], pack_install(tus, Options), halt'
 
 # Download and run the lint tool.
 .PHONY: lint
@@ -78,7 +81,11 @@ debug: $(RUST_TARGET)
 # Run the unit tests in swipl.
 .PHONY: test
 test: $(RUST_TARGET)
-	$(SWIPL) -t 'run_tests, halt.' -f src/interactive.pl
+	$(SWIPL) \
+	  --on-error=halt \
+	  --on-warning=halt \
+	  -t 'run_tests, halt' \
+	  -f src/interactive.pl
 
 # Quick command for interactive
 .PHONY: i
@@ -114,11 +121,13 @@ docs-clean:
 ################################################################################
 
 $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
-	# Build the target and fail for errors and warnings. Ignore warnings
-	# having "qsave(strip_failed(..." that occur on macOS.
-	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
-	  grep -v 'qsave(strip_failed' | \
-	  (! grep -e ERROR -e Warning)
+	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) \
+	  --on-error=halt \
+	  --on-warning=halt \
+	  --quiet \
+	  -O \
+	  -t 'main, halt' \
+	  -f src/bootstrap.pl
 
 $(RUST_TARGET): $(RUST_FILES)
 	cd $(RUST_SOURCE_DIR) && cargo build --release
