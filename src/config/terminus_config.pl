@@ -63,7 +63,8 @@ server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
 
 worker_amount(Value) :-
-    getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
+    current_prolog_flag(cpu_count,Integer),
+    getenv_default_number('TERMINUSDB_SERVER_WORKERS', Integer, Value).
 
 :- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-
