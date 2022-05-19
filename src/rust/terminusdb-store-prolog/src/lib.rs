@@ -4,6 +4,8 @@ mod layer;
 mod named_graph;
 mod store;
 
+pub use terminus_store;
+
 pub fn install(module: Option<&str>) {
     csv::register_csv_iri_in_module(module);
     csv::register_csv_builder_in_module(module);
