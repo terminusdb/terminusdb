@@ -933,8 +933,7 @@ dependencies = [
 [[package]]
 name = "terminus-store"
 version = "0.19.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "088b651d11c0c36cbd8e941f1086e003d600c52b94221cba772558dd2128875c"
+source = "git+https://github.com/terminusdb/terminusdb-store.git?branch=nolock-feature#20ed24331b39277c072984fd81c6c2f0af46a1a6"
 dependencies = [
  "async-trait",
  "byteorder",
@@ -958,6 +957,7 @@ version = "0.1.0"
 dependencies = [
  "lcs",
  "swipl",
+ "terminus-store",
  "terminusdb-store-prolog",
 ]
 
