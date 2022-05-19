@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 swipl = "0.3.6"
 #swipl = {path = "../../swipl-rs/swipl"}
-terminus-store = {git = "https://github.com/terminusdb/terminusdb-store.git", branch="nolock-feature", features=["noreadlock"]}
+terminus-store = {version="=0.19.7", features=["noreadlock"]}
 csv = "1.1"
 sha-1 = "0.9.1"
 hex = "0.4.2"

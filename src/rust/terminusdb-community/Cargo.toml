@@ -9,5 +9,4 @@ publish = false
 [dependencies]
 swipl = "0.3.6"
 lcs = "0.2.0"
-terminus-store = {git = "https://github.com/terminusdb/terminusdb-store.git", branch="nolock-feature", features=["noreadlock"]}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
