@@ -213,6 +213,14 @@ impl PrefixContracter {
                 break;
             }
 
+            // TODO There is a chance that using compare instead of
+            // equals may result in faster code. After all, the prefix
+            // tree is sorted, so if we can stop looking once we
+            // encounter parts ordered after our search slice. But
+            // whether or not this actually is faster depends on
+            // implementation details of string comparison vs string
+            // ordering, and this will require measuring to figure out
+            // which one is best.
             for c in cur {
                 if c.part.len() <= slice.len() - offset && c.part == slice[offset..offset+c.part.len()] {
                     if let Some(p) = &c.prefix {
@@ -235,7 +243,7 @@ impl PrefixContracter {
             // string. The eliminated prefix is a complete utf8
             // sequence. Therefore, the remainder must be a complete
             // utf8 sequence too.
-            let remainder = unsafe { std::str::from_utf8_unchecked(&slice[p.expansion().as_bytes().len()..]) };
+            let remainder = unsafe { std::str::from_utf8_unchecked(&slice[p.expansion().len()..]) };
 
             Some((p.contraction(), remainder))
         }
@@ -262,7 +270,6 @@ impl PrefixContracter {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

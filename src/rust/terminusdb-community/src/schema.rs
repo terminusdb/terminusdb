@@ -5,6 +5,7 @@ use swipl::prelude::*;
 use std::collections::{HashMap,HashSet};
 
 use super::types::*;
+use super::prefix::*;
 use itertools;
 
 const SYS_CLASS: &str = "http://terminusdb.com/schema/sys#Class";
@@ -12,6 +13,12 @@ const SYS_TAGGED_UNION: &str = "http://terminusdb.com/schema/sys#TaggedUnion";
 const SYS_SUBDOCUMENT: &str = "http://terminusdb.com/schema/sys#subdocument";
 const SYS_INHERITS: &str = "http://terminusdb.com/schema/sys#inherits";
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const TDB_CONTEXT: &str = "terminusdb://context";
+const SYS_BASE: &str = "http://terminusdb.com/schema/sys#base";
+const SYS_SCHEMA: &str = "http://terminusdb.com/schema/sys#schema";
+const SYS_PREFIX_PAIR: &str = "http://terminusdb.com/schema/sys#prefix_pair";
+const SYS_PREFIX: &str = "http://terminusdb.com/schema/sys#prefix";
+const SYS_URL: &str = "http://terminusdb.com/schema/sys#url";
 
 fn get_direct_subdocument_ids_from_schema<L:Layer>(layer: &L) -> impl Iterator<Item=u64> {
     if let Some(subdocument_id) = layer.predicate_id(SYS_SUBDOCUMENT) {
@@ -135,6 +142,60 @@ pub fn translate_object_id<L1:Layer,L2:Layer>(layer1: &L1, layer2: &L2, id: u64)
 pub fn schema_to_instance_types<'a, L1:'a+Layer, L2:'a+Layer, I:'a+IntoIterator<Item=u64>>(schema_layer: &'a L1, instance_layer: &'a L2, type_iter: I) -> impl Iterator<Item=u64>+'a {
     type_iter.into_iter()
         .filter_map(move |t| translate_subject_id(schema_layer, instance_layer, t))
+}
+
+pub fn prefix_contracter_from_schema_layer<L:Layer>(schema: &L) -> PrefixContracter {
+    let context_id = schema.subject_id(TDB_CONTEXT);
+    let base_id = schema.predicate_id(SYS_BASE);
+    let schema_id = schema.predicate_id(SYS_SCHEMA);
+    let prefix_pair_id = schema.predicate_id(SYS_PREFIX_PAIR);
+    let prefix_id = schema.predicate_id(SYS_PREFIX);
+    let url_id = schema.predicate_id(SYS_URL);
+
+    let mut prefixes: Vec<Prefix> = Vec::new();
+
+    if let (Some(context_id),
+            Some(base_id),
+            Some(schema_id)) = (context_id, base_id, schema_id) {
+        let base_expansion_id = schema.triples_sp(context_id, base_id).next().unwrap().object;
+        let schema_expansion_id = schema.triples_sp(context_id, schema_id).next().unwrap().object;
+
+        if let ObjectType::Value(base_expansion) = schema.id_object(base_expansion_id).unwrap() {
+            prefixes.push(Prefix::base(&base_expansion));
+        }
+        else {
+            panic!("unpexected node type for base");
+        }
+        if let ObjectType::Value(schema_expansion) = schema.id_object(schema_expansion_id).unwrap() {
+            prefixes.push(Prefix::schema(&schema_expansion));
+        }
+        else {
+            panic!("unpexected node type for schema");
+        }
+
+        if let Some(prefix_pair_id) = prefix_pair_id {
+            // these next 2 will exist if any prefix is found
+            let prefix_id = prefix_id.unwrap();
+            let url_id = url_id.unwrap();
+
+            for t in schema.triples_sp(context_id, prefix_pair_id) {
+                let contraction_id = schema.triples_sp(t.object, prefix_id).next().unwrap().object;
+                let expansion_id = schema.triples_sp(t.object, url_id).next().unwrap().object;
+
+                if let (ObjectType::Value(contraction),
+                        ObjectType::Value(expansion)) = (schema.id_object(contraction_id).unwrap(),
+                                                         schema.id_object(expansion_id).unwrap()) {
+                    prefixes.push(Prefix::Other(contraction, expansion));
+                }
+            }
+        }
+
+        PrefixContracter::new(prefixes)
+    }
+    else {
+        // TODO proper error
+        panic!("invalid schema");
+    }
 }
 
 predicates! {
