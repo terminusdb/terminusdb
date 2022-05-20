@@ -1974,6 +1974,9 @@ get_document_uri(DB, Include_Subdocuments, Uri) :-
     ->  true
     ;   \+ is_subdocument(DB, Class)),
     instance_of(DB, Uri, Class).
+get_document_uri(DB, _Include_Subdocuments, Uri) :-
+    Class = 'http://terminusdb.com/schema/sys#JSONDocument',
+    instance_of(DB, Uri, Class).
 
 get_document_uri_by_type(Query_Context, Type, Uri) :-
     is_query_context(Query_Context),
