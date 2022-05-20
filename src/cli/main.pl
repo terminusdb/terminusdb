@@ -1431,7 +1431,7 @@ doc_delete_stream(System_DB, Auth, Path, Opts, Stream) :-
     api_delete_documents(System_DB, Auth, Path, Stream,
                          no_data_version, _, Opts).
 
-doc_insert_memory_file(System_DB, Auth, Path, Ids, Mem_File, Options) :-
+doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
     % Read the memory file to insert documents.
