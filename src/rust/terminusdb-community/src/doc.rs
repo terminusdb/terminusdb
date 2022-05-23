@@ -47,9 +47,9 @@ impl<L:Layer> GetDocumentContext<L> {
     }
 
     fn get_field(&self, object: u64) -> Result<Value, (Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>)> {
-        if self.layer.id_object_is_node(object).unwrap() && !self.terminators.contains(&object) {
+        if self.layer.id_object_is_node(object).unwrap() {
             // this might not be a terminator, but we won't know until trying to get a doc stub
-            match self.get_doc_stub(object) {
+            match self.get_doc_stub(object, true) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
                 Ok(x) => Err(x),
                 // it turns out it is a terminator after all, so we just use the id as a direct value
@@ -96,7 +96,7 @@ impl<L:Layer> GetDocumentContext<L> {
         }
     }
 
-    fn get_doc_stub(&self, id: u64) -> Result<(Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>), String> {
+    fn get_doc_stub(&self, id: u64, terminate: bool) -> Result<(Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>), String> {
         let id_name = self.layer.id_subject(id).unwrap();
         let id_name_contracted = self.prefixes.instance_contract(&id_name).to_string();
 
@@ -110,14 +110,21 @@ impl<L:Layer> GetDocumentContext<L> {
             Err(id_name_contracted)
         }
         else {
-            let mut result = Map::new();
-            result.insert("@id".to_string(), Value::String(id_name_contracted));
+            let mut type_name_contracted: Option<String> = None;
             if let Some(rdf_type_id) = self.rdf_type_id {
                 if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
+                    if terminate && self.terminators.contains(&t.object) {
+                        return Err(id_name_contracted);
+                    }
                     let type_name = self.layer.id_object_node(t.object).unwrap();
-                    let type_name_contracted = self.prefixes.schema_contract(&type_name).to_string();
-                    result.insert("@type".to_string(), Value::String(type_name_contracted));
+                    type_name_contracted = Some(self.prefixes.schema_contract(&type_name).to_string());
                 }
+            }
+
+            let mut result = Map::new();
+            result.insert("@id".to_string(), Value::String(id_name_contracted));
+            if let Some(tn) = type_name_contracted {
+                result.insert("@type".to_string(), Value::String(tn));
             }
 
             Ok((result, fields))
@@ -127,7 +134,7 @@ impl<L:Layer> GetDocumentContext<L> {
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
         let mut stack = Vec::new();
 
-        let (stub, fields) = self.get_doc_stub(id).unwrap();
+        let (stub, fields) = self.get_doc_stub(id, false).unwrap();
         stack.push((stub, fields));
 
         loop {
