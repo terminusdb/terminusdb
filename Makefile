@@ -5,8 +5,6 @@ TARGET=terminusdb
 ENTERPRISE=false
 
 RUST_SOURCE_DIR := src/rust
-RUST_FILES = ""
-PROLOG_FILES = ""
 
 ifeq ($(shell uname), Darwin)
 	RUST_LIB_NAME := libterminusdb_dylib.dylib
@@ -143,16 +141,14 @@ docs-clean:
 
 ################################################################################
 
-$(TARGET): PROLOG_FILES += $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
-$(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
+$(TARGET): $(RUST_TARGET) $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \)) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
 	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
-$(RUST_TARGET): RUST_FILES += src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs')
-$(RUST_TARGET): $(RUST_FILES)
+$(RUST_TARGET): src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs') $(RUST_FILES)
 	cd $(RUST_SOURCE_DIR) && cargo build --release
 	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
 
