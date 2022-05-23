@@ -11,4 +11,4 @@ lcs = "0.2.0"
 swipl = {path = "../../../../swipl-rs/swipl"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
 itertools = "0.10.3"
-serde_json = "1"
+serde_json = {version="1", features=["preserve_order"]}
