@@ -24,7 +24,7 @@ JWT_VERSION=v0.0.5
 SWIPL_LINT_VERSION=v0.8
 SWIPL_LINT_PATH=./tmp/pl_lint-$(SWIPL_LINT_VERSION).pl
 
-PACK_INSTALL_OPTIONS=[interactive(false), link(true), git(true)]
+PACK_INSTALL_OPTIONS=[interactive(false), git(true)]
 
 ################################################################################
 
