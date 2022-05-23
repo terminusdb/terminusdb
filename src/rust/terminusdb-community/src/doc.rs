@@ -156,7 +156,7 @@ impl<L:Layer> GetDocumentContext<L> {
                     let t = parent_fields.next().unwrap();
                     let p_name = self.layer.id_predicate(t.predicate).unwrap();
                     let p_name_contracted = self.prefixes.schema_contract(&p_name).to_string();
-                    parent.insert(p_name_contracted, Value::Object(cur));
+                    self.add_field(parent, &p_name_contracted, Value::Object(cur));
                 }
                 else {
                     // we're done, this was the root, time to return!
