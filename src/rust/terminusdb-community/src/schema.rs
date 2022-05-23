@@ -1,13 +1,14 @@
-use terminus_store::layer::*;
-use terminusdb_store_prolog::layer::*;
-use swipl::prelude::*;
+use crate::terminus_store::layer::*;
+use crate::swipl::prelude::*;
 use itertools;
 
 use std::collections::{HashMap,HashSet};
 
-use super::types::*;
 use super::prefix::*;
+use super::types::*;
 use super::consts::*;
+
+use terminusdb_store_prolog::layer::WrappedLayer;
 
 fn get_direct_subdocument_ids_from_schema<L:Layer>(layer: &L) -> impl Iterator<Item=u64> {
     if let Some(subdocument_id) = layer.predicate_id(SYS_SUBDOCUMENT) {
@@ -133,6 +134,12 @@ pub fn schema_to_instance_types<'a, L1:'a+Layer, L2:'a+Layer, I:'a+IntoIterator<
         .filter_map(move |t| translate_subject_id(schema_layer, instance_layer, t))
 }
 
+fn triple_str_to_string(input: &str) -> &str {
+    // this is incredibly lazy and assumes no escaping is done in the target string. This is true for schema prefixes though.
+    let end = input.len() - "\"^^'http://www.w3.org/2001/XMLSchema#string'".len();
+    &input[1..end]
+}
+
 pub fn prefix_contracter_from_schema_layer<L:Layer>(schema: &L) -> PrefixContracter {
     let context_id = schema.subject_id(TDB_CONTEXT);
     let base_id = schema.predicate_id(SYS_BASE);
@@ -150,16 +157,18 @@ pub fn prefix_contracter_from_schema_layer<L:Layer>(schema: &L) -> PrefixContrac
         let schema_expansion_id = schema.triples_sp(context_id, schema_id).next().unwrap().object;
 
         if let ObjectType::Value(base_expansion) = schema.id_object(base_expansion_id).unwrap() {
-            prefixes.push(Prefix::base(&base_expansion));
+            let base_expansion_sub = triple_str_to_string(&base_expansion);
+            prefixes.push(Prefix::base(base_expansion_sub));
         }
         else {
-            panic!("unpexected node type for base");
+            panic!("unexpected node type for base");
         }
         if let ObjectType::Value(schema_expansion) = schema.id_object(schema_expansion_id).unwrap() {
-            prefixes.push(Prefix::schema(&schema_expansion));
+            let schema_expansion_sub = triple_str_to_string(&schema_expansion);
+            prefixes.push(Prefix::schema(schema_expansion_sub));
         }
         else {
-            panic!("unpexected node type for schema");
+            panic!("unexpected node type for schema");
         }
 
         if let Some(prefix_pair_id) = prefix_pair_id {
@@ -174,7 +183,9 @@ pub fn prefix_contracter_from_schema_layer<L:Layer>(schema: &L) -> PrefixContrac
                 if let (ObjectType::Value(contraction),
                         ObjectType::Value(expansion)) = (schema.id_object(contraction_id).unwrap(),
                                                          schema.id_object(expansion_id).unwrap()) {
-                    prefixes.push(Prefix::Other(contraction, expansion));
+                    let contraction_sub = triple_str_to_string(&contraction);
+                    let expansion_sub = triple_str_to_string(&expansion);
+                    prefixes.push(Prefix::other(contraction_sub, expansion_sub));
                 }
             }
         }

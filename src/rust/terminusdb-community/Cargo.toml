@@ -7,8 +7,8 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-swipl = {path = "../../../../swipl-rs/swipl"}
 lcs = "0.2.0"
+swipl = {path = "../../../../swipl-rs/swipl"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
 itertools = "0.10.3"
 serde_json = "1"

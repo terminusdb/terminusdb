@@ -5,6 +5,8 @@ mod prefix;
 mod doc;
 
 use lcs;
+pub use swipl;
+pub use terminusdb_store_prolog::terminus_store;
 use swipl::prelude::*;
 
 use terminusdb_store_prolog::layer::*;
@@ -57,4 +59,5 @@ pub fn install() {
     register_list_diff();
     register_transaction_instance_layer();
     schema::register();
+    doc::register();
 }

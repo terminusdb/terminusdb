@@ -1,9 +1,9 @@
-use swipl::prelude::*;
+use crate::swipl::prelude::*;
 use terminusdb_store_prolog::layer::*;
 use terminusdb_store_prolog::builder::*;
-use terminus_store::store::sync::*;
+use crate::terminus_store::store::sync::*;
 
-use swipl::atom;
+use crate::swipl::atom;
 
 pub fn transaction_instance_layer<C: QueryableContextType>(context: &Context<C>, transaction_term: &Term) -> PrologResult<Option<SyncStoreLayer>> {
     let instance_atom = atom!("instance_objects");
