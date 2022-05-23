@@ -44,6 +44,80 @@ fn get_subdocument_ids_from_schema<L:Layer>(layer: &L) -> HashSet<u64> {
     result
 }
 
+struct RdfListIterator<'a, L: Layer> {
+    layer: &'a L,
+    cur: u64,
+    rdf_first_id: Option<u64>,
+    rdf_rest_id: Option<u64>,
+    rdf_nil_id: Option<u64>
+}
+
+impl<'a, L:Layer> Iterator for RdfListIterator<'a, L> {
+    type Item = u64;
+    fn next(&mut self) -> Option<u64> {
+        if Some(self.cur) == self.rdf_nil_id {
+            None
+        }
+        else {
+            let rdf_first_id = self.rdf_first_id.expect("expected cons cell to have a first but id not found");
+            let rdf_rest_id = self.rdf_rest_id.expect("expected cons cell to have a first but id not found");
+            let first_id = self.layer.triples_sp(self.cur, rdf_first_id).next().expect("expected cons cell to have a first");
+            let rest_id = self.layer.triples_sp(self.cur, rdf_rest_id).next().expect("expected cons cell to have a rest");
+
+            self.cur = rest_id.object;
+            Some(first_id.object)
+        }
+    }
+}
+
+fn get_list_ids<'a, L:Layer>(layer: &'a L, list: u64) -> impl Iterator<Item = u64>+'a {
+    let rdf_first_id = layer.predicate_id(RDF_FIRST);
+    let rdf_rest_id = layer.predicate_id(RDF_REST);
+    let rdf_nil_id = layer.object_node_id(RDF_NIL);
+
+    RdfListIterator {
+        rdf_first_id,
+        rdf_rest_id,
+        rdf_nil_id,
+        layer,
+        cur: list
+    }
+}
+
+pub fn get_enum_ids_from_schema<L:Layer>(layer: &L) -> HashSet<u64> {
+    let mut result = HashSet::new();
+    let sys_enum_id = layer.object_node_id(SYS_ENUM);
+    let rdf_type_id = layer.predicate_id(RDF_TYPE);
+    let rdf_first_id = layer.predicate_id(RDF_FIRST);
+    let rdf_rest_id = layer.predicate_id(RDF_REST);
+    let rdf_nil_id = layer.object_node_id(RDF_NIL);
+
+    if sys_enum_id.is_none() || rdf_type_id.is_none() {
+        return result;
+    }
+    let sys_enum_id = sys_enum_id.unwrap();
+    let rdf_type_id = rdf_type_id.unwrap();
+
+    for t in layer.triples_o(sys_enum_id) {
+        if t.predicate == rdf_type_id {
+            // we found an enum type!
+            // it is going to have a value field pointing at a list of possible enum values
+            let sys_value_id = layer.predicate_id(SYS_VALUE).unwrap();
+            let value_list_id = layer.triples_sp(t.subject, sys_value_id).next().unwrap().object;
+
+            result.extend(RdfListIterator {
+                rdf_first_id,
+                rdf_rest_id,
+                rdf_nil_id,
+                layer,
+                cur: value_list_id
+            });
+        }
+    }
+
+    result
+}
+
 fn get_inheritance_graph<L:Layer>(layer: &L) -> HashMap<u64, HashSet<u64>> {
     if let Some(inherits_id) = layer.predicate_id(SYS_INHERITS) {
         let mut result = HashMap::new();

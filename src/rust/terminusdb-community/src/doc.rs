@@ -1,11 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::sync::Arc;
 use std::iter::Peekable;
 
 use crate::terminus_store::*;
 use crate::terminus_store::store::sync::*;
+
 use serde_json::{Map, Value};
 use serde_json::map;
+use urlencoding;
 
 use super::prefix::PrefixContracter;
 use super::schema::*;
@@ -18,6 +20,7 @@ pub struct GetDocumentContext<L:Layer> {
     layer: L,
     prefixes: PrefixContracter,
     terminators: HashSet<u64>,
+    enums: HashMap<u64, String>,
     rdf_type_id: Option<u64>
 }
 
@@ -25,6 +28,20 @@ impl<L:Layer> GetDocumentContext<L> {
     pub fn new<SL:Layer>(schema: &SL, instance: L) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
         let terminators: HashSet<u64> = schema_to_instance_types(schema, &instance, schema_type_ids).collect();
+
+        let schema_enum_ids = get_enum_ids_from_schema(schema);
+        let mut enums = HashMap::new();
+        for schema_enum_id in schema_enum_ids {
+            let enum_expanded = schema.id_object_node(schema_enum_id).unwrap();
+            if let Some(instance_enum_id) = instance.object_node_id(&enum_expanded) {
+                // an enum node is its type concatenated with a / followed by an uri encoded string corresponding to its value
+                let pos = enum_expanded.rfind('/').unwrap();
+                let encoded = &enum_expanded[pos+1..];
+
+                let decoded = urlencoding::decode(encoded).unwrap().to_string();
+                enums.insert(instance_enum_id, decoded);
+            }
+        }
 
         let prefixes = prefix_contracter_from_schema_layer(schema);
 
@@ -34,6 +51,7 @@ impl<L:Layer> GetDocumentContext<L> {
             layer: instance,
             prefixes,
             terminators,
+            enums,
             rdf_type_id
         }
     }
@@ -48,7 +66,10 @@ impl<L:Layer> GetDocumentContext<L> {
     }
 
     fn get_field(&self, object: u64) -> Result<Value, (Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>)> {
-        if self.layer.id_object_is_node(object).unwrap() {
+        if let Some(val) = self.enums.get(&object) {
+            Ok(Value::String(val.clone()))
+        }
+        else if self.layer.id_object_is_node(object).unwrap() {
             // this might not be a terminator, but we won't know until trying to get a doc stub
             match self.get_doc_stub(object, true) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
