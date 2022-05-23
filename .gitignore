@@ -2,6 +2,7 @@
 *~
 \#*\#
 .\#*
+.packs
 config.pl
 *.index.v1-1
 prefix.db

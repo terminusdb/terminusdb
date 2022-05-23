@@ -5,8 +5,8 @@ TARGET=terminusdb
 ENTERPRISE=false
 
 RUST_SOURCE_DIR := src/rust
-RUST_FILES = src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs')
-PROLOG_FILES = $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+RUST_FILES = ""
+PROLOG_FILES = ""
 
 ifeq ($(shell uname), Darwin)
 	RUST_LIB_NAME := libterminusdb_dylib.dylib
@@ -20,8 +20,13 @@ RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
 ENTERPRISE_RUST_LIBRARY_FILE:=terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
 RUST_TARGET:=src/rust/$(RUST_LIB_TARGET_NAME)
 
+TUS_VERSION=v0.0.10
+JWT_VERSION=v0.0.5
+
 SWIPL_LINT_VERSION=v0.8
 SWIPL_LINT_PATH=./tmp/pl_lint-$(SWIPL_LINT_VERSION).pl
+
+PACK_INSTALL_OPTIONS=[interactive(false), link(true), git(true)]
 
 ################################################################################
 
@@ -51,10 +56,35 @@ docker:
 	  --tag terminusdb/terminusdb-server:local \
 	  --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
 
-# Install all pack dependencies.
+# Install minimal pack dependencies.
 .PHONY: install-deps
-install-deps:
-	$(SWIPL) -g 'Options=[interactive(false), upgrade(true), test(false)], pack_install(tus, Options), halt'
+install-deps: install-tus
+
+# Install the tus pack.
+.PHONY: install-tus
+install-tus: REPO_URL=https://github.com/terminusdb/tus.git
+install-tus: PACK_NAME=tus
+install-tus: BRANCH=$(TUS_VERSION)
+install-tus: install-pack
+
+# Install the jwt_io pack.
+.PHONY: install-jwt
+install-jwt: REPO_URL=https://github.com/terminusdb-labs/jwt_io.git
+install-jwt: PACK_NAME=jwt_io
+install-jwt: BRANCH=$(JWT_VERSION)
+install-jwt: install-pack
+
+# Install a given pack from a given git repository.
+.PHONY: install-pack
+install-pack:
+	mkdir -p .packs/$(PACK_NAME)
+	git clone --depth 1 $(REPO_URL) .packs/$(PACK_NAME) 2> /dev/null || git -C .packs/$(PACK_NAME) pull --quiet
+	(cd .packs/$(PACK_NAME); git checkout --quiet $(BRANCH))
+	$(SWIPL) \
+	  -g "pack_remove($(PACK_NAME))" \
+	  -g "pack_install('file://$(CURDIR)/.packs/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
+	  -g "pack_info($(PACK_NAME))" \
+	  -g halt
 
 # Download and run the lint tool.
 .PHONY: lint
@@ -113,6 +143,7 @@ docs-clean:
 
 ################################################################################
 
+$(TARGET): PROLOG_FILES += $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
@@ -120,6 +151,7 @@ $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
+$(RUST_TARGET): RUST_FILES += src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs')
 $(RUST_TARGET): $(RUST_FILES)
 	cd $(RUST_SOURCE_DIR) && cargo build --release
 	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
