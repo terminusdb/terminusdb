@@ -18,6 +18,8 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+# Update the crates.io index git repo to cache it before building.
+RUN cargo install lazy_static 2> /dev/null || true
 WORKDIR /app/rust
 COPY ./src/rust .
 RUN cargo build --release
