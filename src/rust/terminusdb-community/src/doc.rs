@@ -10,6 +10,7 @@ use serde_json::map;
 use super::prefix::PrefixContracter;
 use super::schema::*;
 use super::consts::*;
+use super::value::*;
 
 use swipl::prelude::*;
 
@@ -64,8 +65,7 @@ impl<L:Layer> GetDocumentContext<L> {
                     Ok(Value::String(n_contracted))
                 },
                 ObjectType::Value(v) => {
-                    // TODO obviously we gotta actually parse this value
-                    Ok(Value::String(v))
+                    Ok(value_string_to_json(&v))
                 },
             }
         }

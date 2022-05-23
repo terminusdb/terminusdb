@@ -990,6 +990,7 @@ name = "terminusdb-community"
 version = "0.1.0"
 dependencies = [
  "itertools",
+ "lazy_static",
  "lcs",
  "serde_json",
  "swipl",

@@ -3,6 +3,7 @@ mod types;
 mod schema;
 mod prefix;
 mod doc;
+mod value;
 
 use lcs;
 pub use swipl;
