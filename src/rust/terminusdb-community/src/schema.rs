@@ -1,24 +1,13 @@
 use terminus_store::layer::*;
 use terminusdb_store_prolog::layer::*;
 use swipl::prelude::*;
+use itertools;
 
 use std::collections::{HashMap,HashSet};
 
 use super::types::*;
 use super::prefix::*;
-use itertools;
-
-const SYS_CLASS: &str = "http://terminusdb.com/schema/sys#Class";
-const SYS_TAGGED_UNION: &str = "http://terminusdb.com/schema/sys#TaggedUnion";
-const SYS_SUBDOCUMENT: &str = "http://terminusdb.com/schema/sys#subdocument";
-const SYS_INHERITS: &str = "http://terminusdb.com/schema/sys#inherits";
-const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-const TDB_CONTEXT: &str = "terminusdb://context";
-const SYS_BASE: &str = "http://terminusdb.com/schema/sys#base";
-const SYS_SCHEMA: &str = "http://terminusdb.com/schema/sys#schema";
-const SYS_PREFIX_PAIR: &str = "http://terminusdb.com/schema/sys#prefix_pair";
-const SYS_PREFIX: &str = "http://terminusdb.com/schema/sys#prefix";
-const SYS_URL: &str = "http://terminusdb.com/schema/sys#url";
+use super::consts::*;
 
 fn get_direct_subdocument_ids_from_schema<L:Layer>(layer: &L) -> impl Iterator<Item=u64> {
     if let Some(subdocument_id) = layer.predicate_id(SYS_SUBDOCUMENT) {
