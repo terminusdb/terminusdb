@@ -1239,8 +1239,8 @@ run_command(doc,insert,[Path], Opts) :-
     ),
     length(Ids, Number_Inserted),
     (   Number_Inserted = 1
-    ->  format(current_output, "Document inserted~n", [])
-    ;   format(current_output, "Documents inserted: ~d~n", [Number_Inserted])
+    ->  format(current_output, "Document inserted ~q~n", Ids)
+    ;   format(current_output, "Documents inserted: ~q~n", [Ids])
     ).
 run_command(doc,delete, [Path], Opts) :-
     super_user_authority(Auth),
