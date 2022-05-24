@@ -7,6 +7,7 @@ pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 pub const RDF_FIRST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
 pub const RDF_REST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
 pub const RDF_NIL: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
+pub const RDF_LIST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#List";
 pub const TDB_CONTEXT: &str = "terminusdb://context";
 pub const SYS_BASE: &str = "http://terminusdb.com/schema/sys#base";
 pub const SYS_SCHEMA: &str = "http://terminusdb.com/schema/sys#schema";

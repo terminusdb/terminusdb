@@ -21,7 +21,11 @@ pub struct GetDocumentContext<L:Layer> {
     prefixes: PrefixContracter,
     terminators: HashSet<u64>,
     enums: HashMap<u64, String>,
-    rdf_type_id: Option<u64>
+    rdf_type_id: Option<u64>,
+    rdf_first_id: Option<u64>,
+    rdf_rest_id: Option<u64>,
+    rdf_nil_id: Option<u64>,
+    rdf_list_id: Option<u64>,
 }
 
 impl<L:Layer> GetDocumentContext<L> {
@@ -46,13 +50,21 @@ impl<L:Layer> GetDocumentContext<L> {
         let prefixes = prefix_contracter_from_schema_layer(schema);
 
         let rdf_type_id = instance.predicate_id(RDF_TYPE);
+        let rdf_first_id = instance.predicate_id(RDF_FIRST);
+        let rdf_rest_id = instance.predicate_id(RDF_REST);
+        let rdf_nil_id = instance.object_node_id(RDF_NIL);
+        let rdf_list_id = instance.object_node_id(RDF_LIST);
 
         GetDocumentContext {
             layer: instance,
             prefixes,
             terminators,
             enums,
-            rdf_type_id
+            rdf_type_id,
+            rdf_first_id,
+            rdf_rest_id,
+            rdf_nil_id,
+            rdf_list_id
         }
     }
 
@@ -65,17 +77,25 @@ impl<L:Layer> GetDocumentContext<L> {
         }
     }
 
-    fn get_field(&self, object: u64) -> Result<Value, StackEntry> {
+    fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         }
+        else if Some(object) == self.rdf_nil_id {
+            Ok(Value::Array(vec![]))
+        }
         else if self.layer.id_object_is_node(object).unwrap() {
-            // this might not be a terminator, but we won't know until trying to get a doc stub
-            match self.get_doc_stub(object, true) {
-                // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
-                Ok((stub,fields)) => Err(StackEntry::Document(stub, fields)),
-                // it turns out it is a terminator after all, so we just use the id as a direct value
-                Err(s) => Ok(Value::String(s))
+            // this might not be a terminator, but we won't know until trying to get a list or doc stub
+            if let Some(list_iter) = self.get_list_iter(object) {
+                Err(StackEntry::List(Vec::new(), list_iter))
+            }
+            else {
+                match self.get_doc_stub(object, true) {
+                    // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
+                    Ok((stub,fields)) => Err(StackEntry::Document(stub, fields)),
+                    // it turns out it is a terminator after all, so we just use the id as a direct value
+                    Err(s) => Ok(Value::String(s))
+                }
             }
         }
         else {
@@ -115,6 +135,23 @@ impl<L:Layer> GetDocumentContext<L> {
                 }
             }
         }
+    }
+
+    fn get_list_iter(&self, id: u64) -> Option<Peekable<RdfListIterator<L>>> {
+        if let Some(rdf_type_id) = self.rdf_type_id {
+            if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
+                if Some(t.object) == self.rdf_list_id {
+                    return Some(RdfListIterator {
+                        layer: &self.layer,
+                        cur: id,
+                        rdf_first_id: self.rdf_first_id,
+                        rdf_rest_id: self.rdf_rest_id,
+                        rdf_nil_id: self.rdf_nil_id
+                    }.peekable());
+                }
+            }
+        }
+        None
     }
 
     fn get_doc_stub(&self, id: u64, terminate: bool) -> Result<(Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>), String> {
@@ -189,12 +226,12 @@ impl<L:Layer> GetDocumentContext<L> {
     }
 }
 
-enum StackEntry {
+enum StackEntry<'a, L:Layer> {
     Document(Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>),
-    List(Vec<Value>, Peekable<OwnedRdfListIterator<SyncStoreLayer>>),
+    List(Vec<Value>, Peekable<RdfListIterator<'a, L>>),
 }
 
-impl StackEntry {
+impl<'a, L:Layer> StackEntry<'a, L> {
     fn peek(&mut self) -> Option<u64> {
         match self {
             Self::Document(_, it) => it.peek().map(|t|t.object),
@@ -209,11 +246,11 @@ impl StackEntry {
         }
     }
 
-    fn integrate<L:Layer>(&mut self, context: &GetDocumentContext<L>, child: StackEntry) {
+    fn integrate(&mut self, context: &GetDocumentContext<L>, child: StackEntry<'a, L>) {
         self.integrate_value(context, child.into_value());
     }
 
-    fn integrate_value<L:Layer>(&mut self, context: &GetDocumentContext<L>, value: Value) {
+    fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value) {
         match self {
             Self::Document(doc, fields) => {
                 // we previously peeked a field and decided we needed to recurse deeper.

@@ -45,40 +45,14 @@ fn get_subdocument_ids_from_schema<L:Layer>(layer: &L) -> HashSet<u64> {
 }
 
 pub struct RdfListIterator<'a, L: Layer> {
-    layer: &'a L,
-    cur: u64,
-    rdf_first_id: Option<u64>,
-    rdf_rest_id: Option<u64>,
-    rdf_nil_id: Option<u64>
+    pub layer: &'a L,
+    pub cur: u64,
+    pub rdf_first_id: Option<u64>,
+    pub rdf_rest_id: Option<u64>,
+    pub rdf_nil_id: Option<u64>
 }
 
 impl<'a, L:Layer> Iterator for RdfListIterator<'a, L> {
-    type Item = u64;
-    fn next(&mut self) -> Option<u64> {
-        if Some(self.cur) == self.rdf_nil_id {
-            None
-        }
-        else {
-            let rdf_first_id = self.rdf_first_id.expect("expected cons cell to have a first but id not found");
-            let rdf_rest_id = self.rdf_rest_id.expect("expected cons cell to have a first but id not found");
-            let first_id = self.layer.triples_sp(self.cur, rdf_first_id).next().expect("expected cons cell to have a first");
-            let rest_id = self.layer.triples_sp(self.cur, rdf_rest_id).next().expect("expected cons cell to have a rest");
-
-            self.cur = rest_id.object;
-            Some(first_id.object)
-        }
-    }
-}
-
-pub struct OwnedRdfListIterator<L: Layer> {
-    layer: L,
-    cur: u64,
-    rdf_first_id: Option<u64>,
-    rdf_rest_id: Option<u64>,
-    rdf_nil_id: Option<u64>
-}
-
-impl<L:Layer> Iterator for OwnedRdfListIterator<L> {
     type Item = u64;
     fn next(&mut self) -> Option<u64> {
         if Some(self.cur) == self.rdf_nil_id {
