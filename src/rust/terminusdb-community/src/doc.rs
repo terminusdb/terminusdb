@@ -173,22 +173,23 @@ impl<L: Layer> GetDocumentContext<L> {
         ) as Box<dyn Iterator<Item = IdTriple> + Send>)
             .peekable();
 
-        if fields.peek().is_none() {
+        let mut type_name_contracted: Option<String> = None;
+        if let Some(rdf_type_id) = self.rdf_type_id {
+            if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
+                if terminate && self.terminators.contains(&t.object) {
+                    return Err(id_name_contracted);
+                }
+                let type_name = self.layer.id_object_node(t.object).unwrap();
+                type_name_contracted =
+                    Some(self.prefixes.schema_contract(&type_name).to_string());
+            }
+        }
+
+        if type_name_contracted.is_none() && fields.peek().is_none() {
             // we're actually dealing with a raw id here
             Err(id_name_contracted)
-        } else {
-            let mut type_name_contracted: Option<String> = None;
-            if let Some(rdf_type_id) = self.rdf_type_id {
-                if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
-                    if terminate && self.terminators.contains(&t.object) {
-                        return Err(id_name_contracted);
-                    }
-                    let type_name = self.layer.id_object_node(t.object).unwrap();
-                    type_name_contracted =
-                        Some(self.prefixes.schema_contract(&type_name).to_string());
-                }
-            }
-
+        }
+        else {
             let mut result = Map::new();
             result.insert("@id".to_string(), Value::String(id_name_contracted));
             if let Some(tn) = type_name_contracted {
