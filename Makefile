@@ -2,9 +2,6 @@ SWIPL=LANG=C.UTF-8 $(SWIPL_DIR)swipl
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
 TARGET=terminusdb
-ENTERPRISE=false
-
-RUST_SOURCE_DIR := src/rust
 
 ifeq ($(shell uname), Darwin)
 	RUST_LIB_NAME := libterminusdb_dylib.dylib
@@ -14,12 +11,18 @@ else
 	RUST_LIB_TARGET_NAME := librust.so
 endif
 
-RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
-ENTERPRISE_RUST_LIBRARY_FILE:=terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
-RUST_TARGET:=src/rust/$(RUST_LIB_TARGET_NAME)
+ifeq "$(ENTERPRISE)" "true"
+	RUST_LIBRARY_FILE := terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
+	RUST_SOURCE_DIR := terminusdb-enterprise/rust
+else
+	RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
+	RUST_SOURCE_DIR := src/rust
+endif
 
-TUS_VERSION=v0.0.10
-JWT_VERSION=v0.0.5
+RUST_TARGET := src/rust/$(RUST_LIB_TARGET_NAME)
+
+TUS_VERSION := v0.0.10
+JWT_VERSION := v0.0.5
 
 SWIPL_LINT_VERSION=v0.8
 SWIPL_LINT_PATH=./tmp/pl_lint-$(SWIPL_LINT_VERSION).pl
@@ -28,22 +31,13 @@ PACK_INSTALL_OPTIONS=[interactive(false), git(true)]
 
 ################################################################################
 
-# Build the 'community' binary (default).
-.PHONY: community
-community: $(TARGET)
+# Build the binary (default).
+.PHONY: default
+default: $(TARGET)
 
-# Build the 'enterprise' binary.
-.PHONY: enterprise
-enterprise: PROLOG_FILES += $(shell find terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
-enterprise: RUST_FILES += ./terminusdb-enterprise/rust/Cargo.toml ./terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/ -type f -name '*.rs')
-enterprise: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
-enterprise: RUST_SOURCE_DIR := terminusdb-enterprise/rust
-enterprise: ENTERPRISE := true
-enterprise: $(TARGET)
-
-# Build the 'community' binary and the documentation.
+# Build the binary and the documentation.
 .PHONY: all
-all: community docs
+all: default docs
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
@@ -92,12 +86,6 @@ lint: $(SWIPL_LINT_PATH)
 .PHONY: module
 module: $(RUST_TARGET)
 
-.PHONY: enterprise-module
-enterprise-module: RUST_FILES += terminusdb-enterprise/rust/Cargo.toml terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/ -type f -name '*.rs')
-enterprise-module: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
-enterprise-module: RUST_SOURCE_DIR := terminusdb-enterprise/rust
-enterprise-module: $(RUST_TARGET)
-
 # Build a debug version of the binary.
 .PHONY: debug
 debug: $(RUST_TARGET)
@@ -117,10 +105,7 @@ i: $(RUST_TARGET)
 .PHONY: clean
 clean: shallow-clean
 	cd src/rust && cargo clean
-
-.PHONY: enterprise-clean
-enterprise-clean: shallow-clean
-	cd terminusdb-enterprise/rust && cargo clean
+	cd terminusdb-enterprise/rust 2> /dev/null && cargo clean || true
 
 .PHONY: module-clean
 module-clean:
@@ -141,14 +126,21 @@ docs-clean:
 
 ################################################################################
 
-$(TARGET): $(RUST_TARGET) $(shell find ./ -not -path './rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \)) $(PROLOG_FILES)
+$(TARGET): $(RUST_TARGET)
+$(TARGET): $(shell find src \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+ifeq "$(ENTERPRISE)" "true"
+$(TARGET): $(shell find terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+endif
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
 	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
-$(RUST_TARGET): src/rust/Cargo.toml src/rust/Cargo.lock $(shell find src/rust/terminusdb-community/src/ -type f -name '*.rs') $(RUST_FILES)
+$(RUST_TARGET): $(shell find src/rust -type f \( -name '*.rs' -o -name 'Cargo.*' \))
+ifeq "$(ENTERPRISE)" "true"
+$(RUST_TARGET): $(shell find terminusdb-enterprise/rust -type f \( -name '*.rs' -o -name 'Cargo.*' \))
+endif
 	cd $(RUST_SOURCE_DIR) && cargo build --release
 	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
 
