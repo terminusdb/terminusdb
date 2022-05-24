@@ -1533,8 +1533,7 @@ json_triple_(JSON,_,Triple) :-
     is_dict(JSON),
     get_dict('@type', JSON, 'http://terminusdb.com/schema/sys#JSONDocument'),
     !,
-    del_dict('@type',JSON, _, Pure),
-    assign_json_object_id(Pure, Id),
+    assign_json_document_id(Id),
     json_object_triple(JSON, Id, Triple).
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
@@ -2599,7 +2598,7 @@ insert_document(Transaction, Document, JSON, ID) :-
 % This should presumably do something
 verify_json_id(Prefixes,Id) :-
     get_dict('@base', Prefixes, Base),
-    atomic_list_concat(['^',Base,'JSON/.*'],Re),
+    atomic_list_concat(['^',Base,'JSONDocument/.*'],Re),
     re_match(Re,Id).
 
 insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
@@ -2701,7 +2700,7 @@ replace_document(Transaction, Document, Create, JSON, Id) :-
     replace_document(Transaction, Document, Create, JSON, Captures, Id, _Dependencies, _Captures_Out).
 
 is_json_hash(Id) :-
-    re_match('^terminusdb:///json/JSONDocument/.*', Id).
+    re_match('^terminusdb:///json/JSON/.*', Id).
 
 replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures) :-
     is_transaction(Transaction),
@@ -11040,7 +11039,7 @@ test(top_level_json_with_id,
 
     Document =
     json{
-        '@id' : 'JSON/my_json',
+        '@id' : 'JSONDocument/my_json',
         name : "testing",
         json : json{ some :
                      json{ random : "stuff",
@@ -11095,7 +11094,7 @@ test(replace_document,
 
     Document =
     json{
-        '@id' : 'JSON/my_json',
+        '@id' : 'JSONDocument/my_json',
         name : "testing",
         json : json{ some :
                      json{ random : "stuff",
@@ -11111,7 +11110,7 @@ test(replace_document,
 
     Document2 =
     json{
-        '@id' : 'JSON/my_json',
+        '@id' : 'JSONDocument/my_json',
         name : "testing",
         json : json{ some :
                      json{ random : "stuff",
@@ -11141,7 +11140,7 @@ test(insert_num_list,
 
     Document =
     json{
-        '@id' : 'JSON/my_json',
+        '@id' : 'JSONDocument/my_json',
         numlist : [1,2,3]
     },
 
@@ -11159,12 +11158,7 @@ test(replace_hash_document,
              test_document_label_descriptor(Desc),
              write_schema(json_schema,Desc)
             )),
-      cleanup(teardown_temp_store(State)),
-      error(
-          can_not_replace_at_hashed_id(
-              json{'@id':'terminusdb:///json/JSONDocument/85ca9ba2d6d60096b07927f9235cb02776c12128',json:json{some:json{random:"stuff",that:false}},
-                   name:"testing"}),
-          _)
+      cleanup(teardown_temp_store(State))
      ]) :-
 
     Document =

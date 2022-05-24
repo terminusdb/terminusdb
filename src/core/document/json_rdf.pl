@@ -1,6 +1,7 @@
 :- module('document/json_rdf', [
               json_object_triple/3,
               json_object_triple/4,
+              assign_json_document_id/1,
               assign_json_object_id/2,
               get_json_object/3,
               insert_json_object/3,
@@ -50,9 +51,7 @@ X = null =>
 
 json_object_triple(Parent_Id, Parent_Prop, Object, Triple),
 is_dict(Object) =>
-    variant_sha1(Object, Hash),
-    json_data_prefix(Data),
-    atomic_list_concat([Data,'JSON/',Hash], Id),
+    assign_json_object_id(Object,Id),
     global_prefix_expand(rdf:type, RDF_Type),
     global_prefix_expand(sys:'JSON', JSON),
     % Generate triples from fields
@@ -87,11 +86,16 @@ json_object_triple(Parent_Id, Parent_Prop, Object, Triple) =>
     json_type_rdf_type(Object, Value),
     Triple = t(Parent_Id, Parent_Prop, Value).
 
+
 assign_json_object_id(Object, Id) :-
-    bind_vars(Object),
     variant_sha1(Object, Hash),
     json_data_prefix(Data),
-    atomic_list_concat([Data,'JSONDocument/',Hash], Id).
+    atomic_list_concat([Data,'JSON/',Hash], Id).
+
+assign_json_document_id(Id) :-
+    json_data_prefix(Data),
+    atomic_list_concat([Data,'JSONDocument/'], Base),
+    idgen_random(Base, Id).
 
 bind_vars(Object) :-
     term_variables(Object, Vars),
@@ -178,7 +182,7 @@ insert_json_object(Query_Context, JSON, Id) :-
 insert_json_object(Transaction, JSON, Id) :-
     database_instance(Transaction, [Instance]),
     (   var(Id)
-    ->  assign_json_object_id(JSON, Id)
+    ->  assign_json_document_id(Id)
     ;   true),
     % insert
     forall(
@@ -190,7 +194,7 @@ has_no_other_link(DB, Id, V) :-
     database_instance(DB, I),
     forall(
         xrdf(I, Some, _, V),
-        Id = Some
+        atom_string(Id,Some)
     ).
 
 delete_json_subobject(DB, Id, V) :-
@@ -247,26 +251,26 @@ test(generate_data_triples,[]) :-
                hobby: null,
                sex : true
            },
-    assign_json_object_id(JSON, Id),
+    assign_json_document_id(Id),
     findall(
         Triple,
         json_object_triple(JSON, Id, Triple),
         Triples),
 
     Triples =
-    [ t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
+    [ t(Id,
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#JSONDocument'),
-	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
+	  t(Id,
 		'http://terminusdb.com/schema/json#name',
 		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
+	  t(Id,
 		'http://terminusdb.com/schema/json#age',
 		45^^'http://www.w3.org/2001/XMLSchema#decimal'),
-	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
+	  t(Id,
 		'http://terminusdb.com/schema/json#hobby',
 		null^^'http://www.w3.org/2001/XMLSchema#token'),
-	  t('terminusdb:///json/JSONDocument/037676793775f3250a1c2109c440387eb2583a36',
+	  t(Id,
 		'http://terminusdb.com/schema/json#sex',
 		true^^'http://www.w3.org/2001/XMLSchema#boolean')
 	].
@@ -281,19 +285,19 @@ test(generate_subdocument_triples,[]) :-
                             sex : true
                         }
            },
-    assign_json_object_id(JSON, Id),
+    assign_json_document_id(Id),
     findall(
         Triple,
         json_object_triple(JSON, Id, Triple),
         Triples),
     Triples =
-    [ t('terminusdb:///json/JSONDocument/5492d856e43ffe25196a86ad9027791380cc4d2d',
+    [ t(Id,
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#JSONDocument'),
-	  t('terminusdb:///json/JSONDocument/5492d856e43ffe25196a86ad9027791380cc4d2d',
+	  t(Id,
 		'http://terminusdb.com/schema/json#name',
 		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/JSONDocument/5492d856e43ffe25196a86ad9027791380cc4d2d',
+	  t(Id,
 		'http://terminusdb.com/schema/json#friend',
 		'terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36'),
 	  t('terminusdb:///json/JSON/037676793775f3250a1c2109c440387eb2583a36',
@@ -318,19 +322,19 @@ test(generate_list_triples,[]) :-
                name : "Susan",
                friends : [json{name : "Gavin"},json{name : "Tim"}]
            },
-    assign_json_object_id(JSON, Id),
+    assign_json_document_id(Id),
     findall(
         Triple,
         json_object_triple(JSON, Id, Triple),
         Triples),
     Triples =
-    [ t('terminusdb:///json/JSONDocument/3f8090f584ef91ecf987325540b3ef189cc3835c',
+    [ t(Id,
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#JSONDocument'),
-	  t('terminusdb:///json/JSONDocument/3f8090f584ef91ecf987325540b3ef189cc3835c',
+	  t(Id,
 		'http://terminusdb.com/schema/json#name',
 		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/JSONDocument/3f8090f584ef91ecf987325540b3ef189cc3835c',
+	  t(Id,
 		'http://terminusdb.com/schema/json#friends',
 		'terminusdb:///json/Cons/5f8ccf7fade4412b027d456b81eae97b6c9b79d2'),
 	  t('terminusdb:///json/Cons/5f8ccf7fade4412b027d456b81eae97b6c9b79d2',
