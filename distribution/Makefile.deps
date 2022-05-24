@@ -26,13 +26,13 @@ install-jwt: install-pack
 
 .PHONY: install-pack
 install-pack:
-	mkdir -p .packs/$(PACK_NAME)
-	git clone --depth 1 $(REPO_URL) .packs/$(PACK_NAME) 2> /dev/null || git -C .packs/$(PACK_NAME) pull --quiet
-	(cd .packs/$(PACK_NAME); git checkout --quiet $(BRANCH))
+	mkdir -p .deps/$(PACK_NAME)
+	git clone --depth 1 $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
+	(cd .deps/$(PACK_NAME); git checkout --quiet $(BRANCH))
 	$(SWIPL) \
 	  --on-error=halt \
 	  --on-warning=halt \
 	  -g "pack_remove($(PACK_NAME))" \
-	  -g "pack_install('file://$(CURDIR)/.packs/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
+	  -g "pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
 	  -g "pack_info($(PACK_NAME))" \
 	  -g halt

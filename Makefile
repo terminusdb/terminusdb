@@ -40,6 +40,11 @@ install-tus:
 install-jwt:
 	@$(MAKE) -f distribution/Makefile.deps $@
 
+# Download the lint tool.
+.PHONY: download-lint
+download-lint:
+	@$(MAKE) -f distribution/Makefile.prolog $@
+
 # Download and run the lint tool.
 .PHONY: lint
 lint:

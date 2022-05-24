@@ -1,7 +1,7 @@
 DIST ?= community
 
 SWIPL_LINT_VERSION := v0.8
-SWIPL_LINT_PATH = ./tmp/pl_lint-$(SWIPL_LINT_VERSION).pl
+SWIPL_LINT_PATH = .deps/pl_lint-$(SWIPL_LINT_VERSION).pl
 
 COMMUNITY_SRC_DIR := src
 ENTERPRISE_SRC_DIR := terminusdb-enterprise/prolog
@@ -50,6 +50,9 @@ test: $(RUST_TARGET)
 	  --on-warning=halt \
 	  -t 'run_tests, halt' \
 	  -f src/interactive.pl
+
+.PHONY: download-lint
+download-lint: $(SWIPL_LINT_PATH)
 
 .PHONY: lint
 lint: $(SWIPL_LINT_PATH)
