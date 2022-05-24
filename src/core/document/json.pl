@@ -2984,7 +2984,7 @@ insert_context_document(Query_Context, Document) :-
 
 valid_schema_name(Prefixes,Name) :-
     atom_string(Id,Name),
-    prefix_expand_schema('JSON',Prefixes,JSON_Id),
+    prefix_expand_schema('JSONDocument',Prefixes,JSON_Id),
     \+ Id = JSON_Id.
 
 insert_schema_document(Transaction, Document) :-
