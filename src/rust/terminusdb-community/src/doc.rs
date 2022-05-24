@@ -195,6 +195,50 @@ impl<L:Layer> GetDocumentContext<L> {
     }
 }
 
+enum StackEntry {
+    Document(Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>),
+    List(Vec<Value>, Peekable<OwnedRdfListIterator<SyncStoreLayer>>),
+}
+
+impl StackEntry {
+    fn peek(&mut self) -> Option<u64> {
+        match self {
+            Self::Document(_, it) => it.peek().map(|t|t.object),
+            Self::List(_, it) => it.peek().map(|x|*x)
+        }
+    }
+
+    fn into_value(self) -> Value {
+        match self {
+            Self::Document(doc, _) => Value::Object(doc),
+            Self::List(vec, _) =>  Value::Array(vec)
+        }
+    }
+
+    fn integrate<L:Layer>(&mut self, context: &GetDocumentContext<L>, child: StackEntry) {
+        self.integrate_value(context, child.into_value());
+    }
+
+    fn integrate_value<L:Layer>(&mut self, context: &GetDocumentContext<L>, value: Value) {
+        match self {
+            Self::Document(doc, fields) => {
+                // we previously peeked a field and decided we needed to recurse deeper.
+                // this is the time to pop it.
+                let t = fields.next().unwrap();
+                let p_name = context.layer.id_predicate(t.predicate).unwrap();
+                let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
+                context.add_field(doc, &p_name_contracted, value);
+            },
+            Self::List(vec, entries) => {
+                // We previously peeked a list entry and decided we needed to recurse deeper.
+                // this is the time to pop it.
+                let _elt = entries.next().unwrap();
+                vec.push(value);
+            }
+        }
+    }
+}
+
 wrapped_arc_blob!("GetDocumentContext", GetDocumentContextBlob, GetDocumentContext<SyncStoreLayer>, defaults);
 
 use super::types::*;
