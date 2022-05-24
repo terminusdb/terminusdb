@@ -1,0 +1,31 @@
+name: Create PR on Docs repo for CLI docs updates
+on:
+  push:
+    paths:
+    - 'docs/terminusdb.1.ronn'
+    branches:
+      - main
+
+jobs:
+  pull-request:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Set BRANCH_NAME
+      run: echo "BRANCH_NAME=CLI-Reference-Updates-$(date +%s)" >> $GITHUB_ENV
+    - name: Copy contents of terminusdb.1.ronn to cli.md
+      run: cp docs/terminusdb.1.ronn docs/cli.md
+    - name: Create pull request in terminusdb/terminusdb-docs
+      uses: paygoc6/action-pull-request-another-repo@v1.0.1
+      env:
+        API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+      with:
+        source_folder: 'docs/cli.md'
+        destination_repo: 'terminusdb/terminusdb-docs'
+        destination_folder: 'readme/terminusx-db/reference-guides'
+        destination_base_branch: 'main'
+        destination_head_branch: ${{ env.BRANCH_NAME }}
+        user_email: 'neel@terminusdb.com'
+        user_name: 'Neelterminusdb'
+        pull_request_reviewers: 'mark-terminusdb'
