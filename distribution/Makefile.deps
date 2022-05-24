@@ -9,8 +9,8 @@ PACK_INSTALL_OPTIONS := [interactive(false), git(true)]
 
 .PHONY: default
 default:
-	$(MAKE) install-tus
-	$(MAKE) install-jwt
+	@$(MAKE) install-tus
+	@$(MAKE) install-jwt
 
 .PHONY: install-tus
 install-tus: REPO_URL=https://github.com/terminusdb/tus.git

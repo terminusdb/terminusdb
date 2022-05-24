@@ -9,7 +9,7 @@ TARGET=terminusdb
 # Build the binary (default).
 .PHONY: default
 default:
-	$(MAKE) -f distribution/Makefile.prolog
+	@$(MAKE) -f distribution/Makefile.prolog
 
 # Build the binary and the documentation.
 .PHONY: all
@@ -33,37 +33,37 @@ install-deps: install-tus
 # Install the tus pack.
 .PHONY: install-tus
 install-tus:
-	$(MAKE) -f distribution/Makefile.deps $@
+	@$(MAKE) -f distribution/Makefile.deps $@
 
 # Install the jwt_io pack.
 .PHONY: install-jwt
 install-jwt:
-	$(MAKE) -f distribution/Makefile.deps $@
+	@$(MAKE) -f distribution/Makefile.deps $@
 
 # Download and run the lint tool.
 .PHONY: lint
 lint:
-	$(MAKE) -f distribution/Makefile.prolog $@
+	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Build the dylib.
 .PHONY: rust
 rust:
-	$(MAKE) -f distribution/Makefile.rust
+	@$(MAKE) -f distribution/Makefile.rust
 
 # Run the unit tests in swipl.
 .PHONY: test
 test:
-	$(MAKE) -f distribution/Makefile.prolog $@
+	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Quick command for interactive
 .PHONY: i
 i:
-	$(MAKE) -f distribution/Makefile.prolog $@
+	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Remove the binary.
 .PHONY: clean
 clean:
-	$(MAKE) -f distribution/Makefile.prolog $@
+	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Remove everything.
 .PHONY: realclean
@@ -72,12 +72,12 @@ realclean: clean realclean-rust
 # Remove the dylib.
 .PHONY: clean-rust
 clean-rust:
-	$(MAKE) -f distribution/Makefile.rust clean
+	@$(MAKE) -f distribution/Makefile.rust clean
 
 # Remove the dylib and all Rust build files.
 .PHONY: realclean-rust
 realclean-rust:
-	$(MAKE) -f distribution/Makefile.rust realclean
+	@$(MAKE) -f distribution/Makefile.rust realclean
 
 # Build the documentation.
 .PHONY: docs
