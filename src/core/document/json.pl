@@ -11248,7 +11248,7 @@ test(can_not_insert_json_class,
              resolve_absolute_string_descriptor("admin/testdb", Desc)
             )),
       cleanup(teardown_temp_store(State)),
-      error(can_not_insert_class_with_reserve_name('JSON'),_)
+      error(can_not_insert_class_with_reserve_name('JSONDocument'),_)
      ]) :-
 
     with_test_transaction(
