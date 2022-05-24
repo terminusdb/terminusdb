@@ -4,5 +4,5 @@
 docs
 storage
 src/rust/target
-src/rust/librust.so
+src/rust/librust.*
 terminusdb
