@@ -62,6 +62,17 @@ describe('document', function () {
       }
     })
 
+    it('fails replace for document not found', async function () {
+      const instance = { '@id': util.randomString() }
+      const r = await document
+        .replace(agent, docPath, { instance })
+        .then(document.verifyReplaceFailure)
+
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses'][0].document['@id'])
+        .to.equal(instance['@id'])
+    })
+
     describe('fails on bad schema @id (#647)', function () {
       const identifiers = [
         '',
@@ -76,7 +87,7 @@ describe('document', function () {
         it(JSON.stringify(id), async function () {
           const schema = { '@id': id, '@type': 'Class' }
           const r = await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertFailure)
           expect(r.body['api:error']['@type']).to.equal('api:BadFieldValue')
           expect(r.body['api:error']['api:field']).to.equal('@id')
@@ -97,7 +108,7 @@ describe('document', function () {
             schema['@id'] = util.randomString()
           }
           const r = await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertFailure)
           document.expectMissingField(r, missingField, schema)
         })
@@ -118,7 +129,7 @@ describe('document', function () {
         it(JSON.stringify(type), async function () {
           const schema = { '@id': util.randomString(), '@type': type }
           const r = await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertFailure)
           expect(r.body['api:error']['@type']).to.equal('api:BadFieldValue')
           expect(r.body['api:error']['api:field']).to.equal('@type')
@@ -143,13 +154,13 @@ describe('document', function () {
         it(id, async function () {
           const schema = { '@id': id, '@type': 'Class' }
           await document
-            .insert(agent, docPath, { schema: schema })
+            .insert(agent, docPath, { schema })
             .then(document.verifyInsertSuccess)
           const r = await document
-            .get(agent, docPath, { query: { graph_type: 'schema', id: id } })
+            .get(agent, docPath, { query: { graph_type: 'schema', id } })
             .then(document.verifyGetSuccess)
           await document
-            .del(agent, docPath, { query: { graph_type: 'schema', id: id } })
+            .del(agent, docPath, { query: { graph_type: 'schema', id } })
             .then(document.verifyDelSuccess)
           expect(r.body).to.deep.equal(schema)
         })
@@ -196,7 +207,7 @@ describe('document', function () {
       {
         schema['@id'] = util.randomString()
         const r = await document
-          .insert(agent, docPath, { schema: schema })
+          .insert(agent, docPath, { schema })
           .then(document.verifyInsertFailure)
         expect(r.body['api:error']['@type']).to.equal('api:SubdocumentKeyMissing')
         expect(r.body['api:error']['api:document']['@id']).to.equal(schema['@id'])
@@ -205,7 +216,7 @@ describe('document', function () {
         schema['@id'] = util.randomString()
         schema['@key'] = { useless_key: 'useless_value' }
         const r = await document
-          .insert(agent, docPath, { schema: schema })
+          .insert(agent, docPath, { schema })
           .then(document.verifyInsertFailure)
         expect(r.body['api:error']['@type']).to.equal('api:DocumentKeyTypeMissing')
         expect(r.body['api:error']['api:document']['@id']).to.equal(schema['@id'])
@@ -215,7 +226,7 @@ describe('document', function () {
         schema['@id'] = util.randomString()
         schema['@key'] = { '@type': 'Unknown' }
         const r = await document
-          .insert(agent, docPath, { schema: schema })
+          .insert(agent, docPath, { schema })
           .then(document.verifyInsertFailure)
         expect(r.body['api:error']['@type']).to.equal('api:DocumentKeyTypeUnknown')
         expect(r.body['api:error']['api:document']['@id']).to.equal(schema['@id'])
@@ -226,7 +237,7 @@ describe('document', function () {
     it('fails when @key value is not an object (#587)', async function () {
       const schema = { '@id': util.randomString(), '@type': 'Class', '@key': false }
       const r = await document
-        .insert(agent, docPath, { schema: schema })
+        .insert(agent, docPath, { schema })
         .then(document.verifyInsertFailure)
       expect(r.body['api:error']['@type']).to.equal('api:DocumentKeyNotObject')
       expect(r.body['api:error']['api:key_value']).to.equal(false)
@@ -282,7 +293,8 @@ describe('document', function () {
             },
           })
           .then(document.verifyInsertFailure)
-        document.expectMissingField(r, '@type', badValue)
+        expect(r.body['api:error']['api:witnesses'][0]['terminusdb:///schema#ref']['@type']
+          .no_unique_type_for_document)
       }
       {
         const r = await document
@@ -294,7 +306,8 @@ describe('document', function () {
             },
           })
           .then(document.verifyReplaceFailure)
-        document.expectMissingField(r, '@type', badValue)
+        expect(r.body['api:error']['api:witnesses'][0]['terminusdb:///schema#ref']['@type']
+          .no_unique_type_for_document)
       }
     })
 
@@ -312,9 +325,10 @@ describe('document', function () {
           instance: { '@type': type, s: badValue },
         })
         .then(document.verifyInsertFailure)
-      expect(r.body['api:error']['@type']).to.equal('api:UnexpectedArrayValue')
-      expect(r.body['api:error']['api:value']).to.deep.equal(badValue)
-      expect(r.body['api:error']['api:expected_type']).to.equal(expectedType)
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses']['@type']).to.equal('unexpected_list')
+      expect(r.body['api:error']['api:witnesses'].value).to.deep.equal(badValue)
+      expect(r.body['api:error']['api:witnesses'].type).to.equal(expectedType)
     })
 
     it('fails for unexpected boolean values (#515)', async function () {
@@ -357,8 +371,9 @@ describe('document', function () {
           instance: { '@type': type, s: [[1], [2]] },
         })
         .then(document.verifyInsertFailure)
-      expect(r.body['api:error']['@type']).to.equal('api:DocumentArrayWrongDimensions')
-      expect(r.body['api:error']['api:dimensions']).to.equal(1)
+
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses'][0].dimensions).to.equal(1)
     })
 
     it('does not stringify boolean literals (#723)', async function () {
@@ -372,7 +387,7 @@ describe('document', function () {
       }
       await document
         .insert(agent, docPath, {
-          schema: schema,
+          schema,
         })
         .then(document.verifyInsertSuccess)
       await document
@@ -381,7 +396,7 @@ describe('document', function () {
         })
         .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, docPath, { query: { id: id } })
+        .get(agent, docPath, { query: { id } })
         .then(document.verifyGetSuccess)
       expect(r.body['@id']).to.equal(id)
       expect(r.body['@type']).to.equal(type)
@@ -415,7 +430,7 @@ describe('document', function () {
         .then(document.verifyInsertSuccess)
       await document
         .replace(agent, docPath, { instance: doc1 })
-        .then(document.verifyInsertSuccess)
+        .then(document.verifyReplaceSuccess)
       const r = await document
         .get(agent, docPath, { body: { id: doc2['@id'] } })
         .then(document.verifyGetSuccess)
@@ -448,7 +463,7 @@ describe('document', function () {
           ],
           create: true,
         })
-        .then(document.verifyInsertSuccess)
+        .then(document.verifyReplaceSuccess)
       const r = await document
         .get(agent, docPath, { query: { type: type1 } })
         .then(document.verifyGetSuccess)
@@ -470,7 +485,7 @@ describe('document', function () {
       for (const keyType of keyTypes) {
         it(`fails when @fields is missing for ${keyType}`, async function () {
           schema['@key'] = { '@type': keyType }
-          const r = await document.insert(agent, docPath, { schema: schema })
+          const r = await document.insert(agent, docPath, { schema })
           document.verifyInsertFailure(r)
           expect(r.body['api:error']['@type']).to.equal('api:KeyMissingFields')
           expect(r.body['api:error']['api:key_type']).to.equal(keyType)
@@ -479,7 +494,7 @@ describe('document', function () {
 
         it(`fails when @fields value is not an array for ${keyType}`, async function () {
           schema['@key'] = { '@type': keyType, '@fields': { key: 'value' } }
-          const r = await document.insert(agent, docPath, { schema: schema })
+          const r = await document.insert(agent, docPath, { schema })
           document.verifyInsertFailure(r)
           expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsNotAnArray')
           expect(r.body['api:error']['api:fields']).to.deep.equal(schema['@key']['@fields'])
@@ -488,7 +503,7 @@ describe('document', function () {
 
         it(`fails when @fields value is empty array for ${keyType} (#727)`, async function () {
           schema['@key'] = { '@type': keyType, '@fields': [] }
-          const r = await document.insert(agent, docPath, { schema: schema })
+          const r = await document.insert(agent, docPath, { schema })
           document.verifyInsertFailure(r)
           expect(r.body['api:error']['@type']).to.equal('api:KeyFieldsIsEmpty')
           expect(r.body['api:error']['api:document']).to.deep.equal(schema)
@@ -496,49 +511,237 @@ describe('document', function () {
       }
     })
 
-    it('fails when adding non-optional field to schema (#780)', async function () {
-      // Insert an initial schema.
-      const schema = { '@id': util.randomString(), '@type': 'Class' }
+    it('succeeds when ignoring optional combined with oneof (#992)', async function () {
+      const Parent = util.randomString()
+      const Choice = util.randomString()
+      const Container = util.randomString()
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': Parent,
+          optional: { '@type': 'Optional', '@class': 'xsd:integer' },
+        },
+        {
+          '@type': 'TaggedUnion',
+          '@id': Choice,
+          '@key': { '@type': 'ValueHash' },
+          '@inherits': [Parent],
+          '@subdocument': [],
+          integer: 'xsd:integer',
+          boolean: 'xsd:boolean',
+        },
+        {
+          '@type': 'Class',
+          '@id': Container,
+          contains: { '@type': 'Set', '@class': Parent },
+        },
+      ]
       await document
-        .insert(agent, docPath, { schema: schema })
+        .insert(agent, docPath, { schema })
         .then(document.verifyInsertSuccess)
-      // Insert an initial instance.
-      const instance = { '@type': schema['@id'] }
+
+      const instance = {
+        '@type': Container,
+        contains: [
+          {
+            '@type': Choice,
+            integer: 12,
+          },
+        ],
+      }
       await document
-        .insert(agent, docPath, { instance: instance })
+        .insert(agent, docPath, { instance })
         .then(document.verifyInsertSuccess)
-      // Update the schema with a new field that is not Optional.
-      schema.name = 'xsd:string'
-      const r = await document
-        .replace(agent, docPath, { schema: schema })
-        .then(document.verifyReplaceFailure)
-      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-      expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('instance_not_cardinality_one')
-      expect(r.body['api:error']['api:witnesses'][0].class).to.equal('http://www.w3.org/2001/XMLSchema#string')
-      expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#name')
     })
 
-    it('accepts & returns subdocument schema with @documentation (#670)', async function () {
-      const schema =
-        {
-          '@id': util.randomString(),
-          '@type': 'Class',
-          '@subdocument': [],
-          '@key': { '@type': 'Random' },
-          '@documentation': {
-            '@comment': 'A random subdocument number?',
-            '@properties': { n: 'A number!' },
-          },
-          n: 'xsd:integer',
-        }
-      await document
-        .insert(agent, docPath, { schema: schema })
-        .then(document.verifyInsertSuccess)
+    it('passes insert schema with subdocument and @documentation (#670)', async function () {
+      const schema = {
+        '@id': util.randomString(),
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@documentation': {
+          '@comment': 'A random subdocument number?',
+          '@properties': { n: 'A number!' },
+        },
+        n: 'xsd:integer',
+      }
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
       const r = await document
         .get(agent, docPath, { query: { graph_type: 'schema', id: schema['@id'] } })
         .then(document.verifyGetSuccess)
       expect(r.body).to.deep.equal(schema)
+    })
+
+    it('passes insert schema with no @comment in @documentation (#1041)', async function () {
+      const schema = [
+        {
+          '@id': util.randomString(),
+          '@type': 'Class',
+          '@documentation': { '@properties': { n: 'A number!' } },
+          n: 'xsd:integer',
+        },
+        {
+          '@id': util.randomString(),
+          '@type': 'Enum',
+          '@documentation': { '@values': { i: 'An item?' } },
+          '@value': ['i'],
+        },
+      ]
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
+      const r = await document
+        .get(agent, docPath, { query: { graph_type: 'schema', id: schema['@id'], as_list: true } })
+        .then(document.verifyGetSuccess)
+      expect(r.body).to.deep.include.members(schema)
+    })
+
+    it('fails insert instance with unknown property (#1030)', async function () {
+      const schema = { '@id': util.randomString(), '@type': 'Class' }
+      await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
+      const instance = { '@type': schema['@id'], unknownProperty: 'abc' }
+      const r = await document.insert(agent, docPath, { instance })
+        .then(document.verifyInsertFailure)
+
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('unknown_property_for_type')
+    })
+
+    describe('tests cardinality in schema', function () {
+      let card
+      let min
+      let max
+      let minmax
+
+      before(async function () {
+        card = util.randomString()
+        min = util.randomString()
+        max = util.randomString()
+        minmax = util.randomString()
+
+        await document
+          .insert(agent, docPath, {
+            schema: [
+              {
+                '@type': 'Class',
+                '@id': card,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@cardinality': 1,
+                },
+              },
+              {
+                '@type': 'Class',
+                '@id': min,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@min_cardinality': 1,
+                },
+              },
+              {
+                '@type': 'Class',
+                '@id': max,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@max_cardinality': 2,
+                },
+              },
+              {
+                '@type': 'Class',
+                '@id': minmax,
+                a: {
+                  '@type': 'Cardinality',
+                  '@class': 'xsd:integer',
+                  '@min_cardinality': 1,
+                  '@max_cardinality': 2,
+                },
+              },
+            ],
+          })
+      })
+
+      it('responds with success for card', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': card, a: [42] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for card', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': card },
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with success for min', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': min, a: [42, 43] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for min', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': min },
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with success for max', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': max, a: [42, 43] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with success for nothing in max', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': max },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for max', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': max, a: [42, 23, 12] },
+            message: 'message',
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with success for minmax', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': minmax, a: [42, 43] },
+          })
+          .then(document.verifyInsertSuccess)
+      })
+
+      it('responds with failure for under minmax', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': minmax },
+          })
+          .then(document.verifyInsertFailure)
+      })
+
+      it('responds with failure for over minmax', async function () {
+        await document
+          .insert(agent, docPath, {
+            instance: { '@type': minmax, a: [42, 23, 12] },
+          })
+          .then(document.verifyInsertFailure)
+      })
     })
   })
 })

@@ -17,7 +17,8 @@
               user_accessible_database/3,
               check_descriptor_auth/4,
               is_super_user/1,
-              is_super_user/2
+              is_super_user/2,
+              resolve_descriptor_auth/6
           ]).
 
 /** <module> Capabilities
@@ -53,7 +54,8 @@ username_user_id(DB, Username, User_ID) :-
         (
             isa(User_ID,'User'),
             t(User_ID, name, Username^^xsd:string)
-        )
+        ),
+        [compress_prefixes(false)]
        ).
 
 
@@ -508,6 +510,33 @@ check_descriptor_auth_(commit_descriptor{ repository_descriptor : Repo,
 
 check_descriptor_auth(System_DB, Descriptor, Action, Auth) :-
     check_descriptor_auth_(Descriptor, Action, Auth, System_DB).
+
+document_auth_action_type(Descriptor_Type, Graph_Type_String, ReadWrite_String, Action) :-
+    atom_string(Graph_Type, Graph_Type_String),
+    atom_string(ReadWrite, ReadWrite_String),
+
+    document_auth_action_type_(Descriptor_Type, Graph_Type, ReadWrite, Action).
+
+document_auth_action_type_(system_descriptor, _, _, '@schema':'Action/manage_capabilities').
+document_auth_action_type_(database_descriptor, _, read, '@schema':'Action/meta_read_access').
+document_auth_action_type_(database_descriptor, instance, write, '@schema':'Action/meta_write_access').
+document_auth_action_type_(repository_descriptor, _, read, '@schema':'Action/commit_read_access').
+document_auth_action_type_(repository_descriptor, instance, write, '@schema':'Action/commit_write_access').
+document_auth_action_type_(branch_descriptor, instance, read, '@schema':'Action/instance_read_access').
+document_auth_action_type_(branch_descriptor, instance, write, '@schema':'Action/instance_write_access').
+document_auth_action_type_(branch_descriptor, schema, read, '@schema':'Action/schema_read_access').
+document_auth_action_type_(branch_descriptor, schema, write, '@schema':'Action/schema_write_access').
+document_auth_action_type_(commit_descriptor, instance, read, '@schema':'Action/instance_read_access').
+document_auth_action_type_(commit_descriptor, schema, read, '@schema':'Action/schema_read_access').
+
+resolve_descriptor_auth(ReadWrite, SystemDB, Auth, Path, Graph_Type, Descriptor) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_path(Path), _)),
+    Descriptor_Type{} :< Descriptor,
+    do_or_die(document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action),
+              error(document_access_impossible(Descriptor, Graph_Type, ReadWrite), _)),
+    check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
 
 
 :- begin_tests(capabilities).

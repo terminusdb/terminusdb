@@ -23,18 +23,21 @@
 :- use_module(library(plunit)).
 :- use_module(library(filesex)).
 :- use_module(library(crypto)).
-:- use_module(library(prolog_pack), [pack_property/2]).
+:- use_module(library(git), [git_hash/2]).
+
 /**
  * initialize_flags is det.
  *
  * Initialize flags shared by all main predicates.
  */
 initialize_flags :-
-    (   pack_property(terminus_store_prolog, version(TerminusDB_Store_Version))
-    ->  set_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version)
-    ;   format(user_error, "Error! pack_property could not find the terminus_store_prolog directory.~n", []),
-        halt(1)
-    ).
+    (   catch(git_hash(Git_Hash, []), _, false)
+    ->  true
+    ;   getenv('TERMINUSDB_GIT_HASH', Git_Hash)
+    ->  true
+    ;   Git_Hash = null
+    ),
+    set_prolog_flag(terminusdb_git_hash, Git_Hash).
 
 /**
  * create_graph_from_turtle(DB:database, Graph_ID:graph_identifier, Turtle:string) is det.
@@ -110,9 +113,6 @@ config_path(Path) :-
 initialize_database(Key,Force) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path, Force).
-
-storage_version_path(DB_Path,Path) :-
-    atomic_list_concat([DB_Path,'/STORAGE_VERSION'],Path).
 
 /*
  * initialize_database_with_path(Key,DB_Path,Force) is det+error.
@@ -294,5 +294,37 @@ test("TERMINUSDB_INSECURE_USER_HEADER=TerminusDB-5",
        true(Header_Key = terminusdb_5)
      ]) :-
     insecure_user_header_key(Header_Key).
+
+test("TERMINUSDB_SERVER_DB_PATH is not set", [true(DB_Path = Expected_Path)]) :-
+    config:default_database_path(DB_Path),
+    working_directory(CWD, CWD),
+    directory_file_path(CWD, "storage/db", Expected_Path).
+
+test("TERMINUSDB_SERVER_DB_PATH is empty",
+     [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', '')),
+       cleanup(unsetenv('TERMINUSDB_SERVER_DB_PATH')),
+       true(DB_Path = Expected_Path)
+     ]) :-
+    config:default_database_path(DB_Path),
+    working_directory(CWD, CWD),
+    directory_file_path(CWD, "storage/db", Expected_Path).
+
+test("TERMINUSDB_SERVER_DB_PATH=../relative/path",
+     [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', "../relative/path")),
+       cleanup(unsetenv('TERMINUSDB_SERVER_DB_PATH')),
+       true(DB_Path = Expected_Path)
+     ]) :-
+    config:default_database_path(DB_Path),
+    working_directory(CWD, CWD),
+    directory_file_path(CWD, "..", Rel_Parent_Dir),
+    absolute_file_name(Rel_Parent_Dir, Parent_Dir),
+    directory_file_path(Parent_Dir, "relative/path", Expected_Path).
+
+test("TERMINUSDB_SERVER_DB_PATH=/absolute/path",
+     [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', "/absolute/path")),
+       cleanup(unsetenv('TERMINUSDB_SERVER_DB_PATH')),
+       true(DB_Path = '/absolute/path')
+     ]) :-
+    config:default_database_path(DB_Path).
 
 :- end_tests(env_vars).

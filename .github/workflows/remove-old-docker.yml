@@ -8,6 +8,7 @@ on:
 jobs:
   remove_old_docker_images:
     runs-on: ubuntu-latest
+    if: github.repository == 'terminusdb/terminusdb'
 
     steps:
       - uses: actions/checkout@v2

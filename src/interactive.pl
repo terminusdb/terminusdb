@@ -7,6 +7,8 @@
 :- [load_paths].
 :- reexport(core(util/syntax)).
 :- use_foreign_library(foreign(librust)).
+:- use_module(config(terminus_config)).
+
 :- if(is_enterprise).
 :- use_module(enterprise(init_enterprise)).
 :- endif.
@@ -54,7 +56,7 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(library(plunit)).
 
-:- set_test_options([run(manual)]). % ,concurrent(true)]).
+:- set_test_options([run(manual),concurrent(true)]).
 
 :- use_module(cli(main)).
 :- use_module(library(debug)).

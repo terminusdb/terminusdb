@@ -7,6 +7,8 @@
 :- [load_paths].
 :- reexport(core(util/syntax)).
 :- use_foreign_library(foreign(librust)).
+
+:- use_module(config(terminus_config)).
 :- if(is_enterprise).
 :- use_module(enterprise(init_enterprise)).
 :- endif.
@@ -53,7 +55,7 @@ prolog:message(server_missing_config(BasePath)) -->
 :- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
 :- use_module(config(terminus_config)).
 
-:- set_test_options([run(manual)]).
+:- set_test_options([run(manual),concurrent(true)]).
 
 :- use_module(cli(main)).
 :- use_module(library(debug)).

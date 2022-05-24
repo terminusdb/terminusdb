@@ -50,6 +50,7 @@
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
 :- use_module(library(plunit)).
+:- use_module(library(when)).
 
 % We rename the imported `when` here, because `when` is also a term in the WOQL
 % AST, and our linter cannot distinguish the two.
@@ -203,6 +204,13 @@ lookup(Var_Name,Prolog_Var,[Record|_B0]) :-
 lookup(Var_Name,Prolog_Var,[_Record|B0]) :-
     lookup(Var_Name,Prolog_Var,B0).
 
+lookup_or_extend(Var_Name, _Prolog_Var) -->
+    {
+        \+ atom(Var_Name),
+        !,
+        format(atom(Output), "~w", [Var_Name]),
+        throw(error(woql_syntax_error(bad_variable_name(Output)), _))
+    }.
 lookup_or_extend(Var_Name, Prolog_Var) -->
     update(bindings,B0,B1),
     {
@@ -265,17 +273,27 @@ resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
     dict_keys(Dict,Keys),
     mapm({Dict}/[Key,Key-Value,CA,CB]>>(
              get_dict(Key,Dict,V),
-             resolve_dictionary_(V,Value,CA,CB)
+             (   Key = '@type'
+             ->  resolve_predicate(V,Value,CA,CB)
+             ;   resolve_dictionary_(V,Value,CA,CB)
+             )
          ), Keys, Pairs, C1, C2),
     dict_pairs(Dict_Resolved,json,Pairs).
-resolve_dictionary_(true, true, C, C) :-
-    !.
-resolve_dictionary_(false, false, C, C) :-
-    !.
-resolve_dictionary_(null, null, C, C) :-
-    !.
-resolve_dictionary_(Val, New_Val, C1, C2) :-
-    resolve(Val, New_Val, C1, C2).
+resolve_dictionary_(List, List_Resolved, C1, C2) :-
+    is_list(List),
+    !,
+    mapm([A,B,CA,CB]>>(
+             resolve_dictionary_(A,B,CA,CB)
+         ), List, List_Resolved, C1, C2).
+resolve_dictionary_(Val, Dict_Val, C1, C2) :-
+    resolve(Val, Res_Val, C1, C2),
+    when((   ground(Res_Val)
+         ;   ground(Dict_Val)),
+         (   %format(user_error,"We have converted: ~q",[Res_Val]),
+             (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+             ->  true
+             ;   Res_Val = Dict_Val)
+         )).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -970,7 +988,7 @@ find_resources(when(P,Q), Collection, DRG, DWG, Read, Write) :-
     append(Read_P, Read_Q, Read),
     append(Write_P, Write_Q, Write).
 find_resources(using(Collection_String,P), Collection, DRG, _DWG, Read, Write) :-
-    resolve_relative_string_descriptor(Collection, Collection_String, Descriptor),
+    resolve_absolute_or_relative_string_descriptor(Collection, Collection_String, Descriptor),
     % NOTE: Don't we need the collection descriptor default filter?
     collection_descriptor_default_write_graph(Descriptor, DWG),
     find_resources(P, Collection, DRG, DWG, Read, Write).
@@ -1054,12 +1072,14 @@ assert_pre_flight_access(Context, _AST) :-
     % This probably makes all super user checks redundant.
     !.
 assert_pre_flight_access(Context, AST) :-
-    find_resources(AST,
-                   (Context.default_collection),
-                   (Context.filter),
-                   (Context.write_graph),
-                   Read,
-                   Write),
+    do_or_die(
+        find_resources(AST,
+                       (Context.default_collection),
+                       (Context.filter),
+                       (Context.write_graph),
+                       Read,
+                       Write),
+        error(find_resource_pre_flight_failure_for(AST),_)),
     sort(Read,Read_Sorted),
     sort(Write,Write_Sorted),
     forall(member(resource(Collection,Type),Read_Sorted),
@@ -1128,8 +1148,9 @@ compile_wf(delete(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(delete(X,P,Y),(
                freeze(Guard,
-                      delete(Read_Write_Object,XE,PE,YE,_)
-                     )
+                      (   set_read_write_object_triple_update(Read_Write_Object),
+                          delete(Read_Write_Object,XE,PE,YE,_)
+                      ))
            ))
 -->
     resolve(X,XE),
@@ -1158,10 +1179,11 @@ compile_wf(insert(X,P,Y,G),Goal)
     update(write_graph, _, Old_Graph_Descriptor).
 compile_wf(insert(X,P,Y),(
                freeze(Guard,
-                      ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
-                                  [ground,ground,ground],
-                                  [XE,PE,YE],
-                                  [X,P,Y]))
+                      (   set_read_write_object_triple_update(Read_Write_Object),
+                          ensure_mode(insert(Read_Write_Object,XE,PE,YE,_),
+                                      [ground,ground,ground],
+                                      [XE,PE,YE],
+                                      [X,P,Y])))
            )
           )
 -->
@@ -1693,15 +1715,16 @@ file_spec_path_options(File_Spec,_Files,Path,Default,New_Options) :-
     ;   File_Spec = remote(URI),
         Options = []),
     merge_options(Options,Default,New_Options),
-    copy_remote(URI,URI,Path,New_Options).
+    copy_remote(URI, Path, New_Options).
 file_spec_path_options(File_Spec,Files,Path,Default,New_Options) :-
     (   File_Spec = post(Name,Options)
     ;   File_Spec = post(Name),
         Options = []),
     atom_string(Name_Atom,Name),
     merge_options(Options,Default,New_Options),
-    memberchk(Name_Atom=Path, Files).
-
+    do_or_die(
+        memberchk(Name_Atom=Path, Files),
+        error(missing_file(Name_Atom), _)).
 
 %%
 % marshall_args(M_Pred, Trans) is det.
@@ -1910,7 +1933,7 @@ filter_transaction(type_name_filter{ type : schema}, Transaction, New_Transactio
                           schema_objects : (Transaction.schema_objects)
                       }.
 
-:- begin_tests(woql).
+:- begin_tests(woql, [concurrent(true)]).
 
 % At some point this should be exhaustive. Currently we add as we find bugs.
 
@@ -1958,9 +1981,11 @@ test(subsumption, [setup(setup_temp_store(State)),
 
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
+
     % Tag the dicts so we can sort them
-    maplist([D,D]>>(json{} :< D), JSON.bindings, Orderable),
-    Orderable = [json{'Parent':'Organization'}].
+    term_variables(JSON.bindings, Vars),
+    maplist([json]>>true,Vars),
+    JSON.bindings = [json{'Parent':'Organization'}].
 
 test(substring, [
          setup((setup_temp_store(State),
@@ -2149,6 +2174,26 @@ test(split, [
                 _{'@type':'xsd:string','@value':"split"}]}
                  :< Res.
 
+test(datavalue_frame, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    random(0,10000,Random),
+    format(atom(Label), "woql_~q", [Random]),
+    test_woql_label_descriptor(Label, Descriptor),
+    open_descriptor(Descriptor, DB),
+    class_frame(DB, 'DataValue', Result),
+    Result = json{'@documentation':
+                  json{'@comment':"A variable or node.",
+                       '@properties':json{data:"An xsd data type value.",
+                                          list:"A list of datavalues",
+                                          variable:"A variable."}},
+                  '@key':json{'@type':"ValueHash"},
+                  '@oneOf':[json{data:'xsd:anySimpleType',
+                                 list:json{'@class':'DataValue',
+                                           '@type':'List'},
+                                 variable:'xsd:string'}],
+                  '@subdocument':[],'@type':'Class'}.
 
 test(join, [
          setup((setup_temp_store(State),
@@ -4648,11 +4693,12 @@ test(less_than, [
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
-                    Query,
+                    json_query(Query),
                     Commit_Info,
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     JSON),
     [_] = (JSON.bindings).
@@ -4701,11 +4747,12 @@ test(using_resource_works, [
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
-                    Query,
+                    json_query(Query),
                     Commit_Info,
                     [],
                     false,
                     no_data_version,
+                    _,
                     _,
                     _JSON).
 
@@ -4819,6 +4866,22 @@ test(test_matching, [
     create_context(Descriptor, Commit_Info, C1),
     run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
     (Response.bindings) = [ _{'X':2, 'Y':1} ].
+
+test(test_matching_bool_null, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+
+    AST = (_{ a : true, b : v('X')} = _{ a : v('Y'), b : null}),
+
+    create_context(Descriptor, Commit_Info, C1),
+    run_context_ast_jsonld_response(C1, AST, no_data_version, _, Response),
+    (Response.bindings) = [ _{'X':null, 'Y':true} ].
 
 test(json_dict_vars, [
          setup((setup_temp_store(State),
@@ -4987,9 +5050,45 @@ test(insert_document_forget_uri, [
       '@type':'City',
       name:"Dublin"} = Res2.'Doc'.
 
+
+test(operator_clash, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    AST = (v('Name') = "Bill"^^xsd:string,
+           insert_document(json{'@type':'City',
+                                name:v('Name')})),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Response),
+    Response = _{'@type':'api:WoqlResponse',
+                 'api:status':'api:success',
+                 'api:variable_names':['Name'],
+                 bindings:[_{'Name':json{'@type':'xsd:string',
+                                         '@value':"Bill"}}],
+                 deletes:0,
+                 inserts:2,
+                 transaction_retry_count:_}.
+
+test(bad_variable_name, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(woql_syntax_error(bad_variable_name('v(X)')))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    AST = (v(v('X')) = a),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
+
 :- end_tests(woql).
 
-:- begin_tests(store_load_data).
+:- begin_tests(store_load_data, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(query)).
@@ -5214,3 +5313,41 @@ test(duration_hour) :-
     test_lit(duration(-1,0,0,0,1,0,0)^^xsd:duration, "\"-PT1H\"^^'http://www.w3.org/2001/XMLSchema#duration'").
 
 :- end_tests(store_load_data).
+
+:- begin_tests(preflight).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+
+test(preflight_permissions, [
+         setup((setup_temp_store(State),
+                super_user_authority(Admin),
+                add_user("u",some('password'),Auth),
+                add_user_organization_transaction(
+                    system_descriptor{},
+                    Admin,
+                    "u",
+                    "o"),
+                create_db_without_schema("o", "test"))),
+         cleanup(teardown_temp_store(State)),
+         error(
+             unresolvable_absolute_descriptor(
+                 repository_descriptor{
+                     database_descriptor:
+                     database_descriptor{
+                         database_name:"test",
+                         organization_name:"z"},
+                     repository_name:"local"}),
+             _)
+     ]) :-
+
+    resolve_absolute_string_descriptor('o/test', Desc),
+    create_context(Desc, Context0),
+    put_dict(_{authorization:Auth}, Context0, Context),
+    once(ask(Context, using('o/test/local/_commits', t(_, _, _)))),
+    once(ask(Context, using('_commits', t(_, _, _)))),
+    once(ask(Context, using('z/test/local/_commits', t(_, _, _)))).
+
+:- end_tests(preflight).

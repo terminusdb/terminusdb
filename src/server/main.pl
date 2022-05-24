@@ -20,7 +20,8 @@
                                        server/1,
                                        server_port/1,
                                        worker_amount/1,
-                                       is_enterprise/0]).
+                                       is_enterprise/0,
+                                       terminusdb_version/1]).
 
 % Sockets
 :- use_module(library(socket)).
@@ -114,11 +115,12 @@ loading_page -->
 welcome_banner(Server,Argv) :-
     % Test utils currently reads this so watch out if you change it!
     get_time(Now),
+    terminusdb_version(Version),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
     format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
            [StrTime, Now, Argv]),
     (   is_enterprise
     ->  Enterprise = ' Enterprise'
     ;   Enterprise = ''),
-    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server!~n',[Enterprise]),
+    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server, version ~s!~n',[Enterprise, Version]),
     format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).

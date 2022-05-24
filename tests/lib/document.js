@@ -67,6 +67,7 @@ function insert (agent, path, params) {
   const bodyString = params.string('bodyString')
   const author = params.string('author', 'default_author')
   const message = params.string('message', 'default_message')
+  const fullReplace = params.boolean('fullReplace')
   const schema = params.object('schema')
   const instance = params.object('instance')
   params.assertEmpty()
@@ -77,10 +78,14 @@ function insert (agent, path, params) {
     request.query(queryString)
   } else {
     request.query({
-      graph_type: schema ? 'schema' : 'instance',
-      author: author,
-      message: message,
+      graph_type: util.isDefined(schema) ? 'schema' : 'instance',
+      author,
+      message,
     })
+  }
+
+  if (util.isDefined(fullReplace)) {
+    request.query({ full_replace: fullReplace })
   }
 
   if (util.isDefined(bodyString)) {
@@ -110,11 +115,11 @@ function replace (agent, path, params) {
   } else {
     request.query({
       graph_type: schema ? 'schema' : 'instance',
-      author: author,
-      message: message,
+      author,
+      message,
     })
     if (util.isDefined(create)) {
-      request.query({ create: create })
+      request.query({ create })
     }
   }
 
@@ -185,10 +190,17 @@ function verifyInsertSuccess (r) {
 
   // Verify the `@id` values are the ones expected.
   if (Array.isArray(r.request._data)) {
-    expect(r.body.length).to.equal(r.request._data.length)
+    let data = r.request._data
+
+    // Support fullReplace with @context as the first element.
+    if (data.length > 0 && data[0]['@type'] === '@context') {
+      data = data.slice(1)
+    }
+
+    expect(r.body.length).to.equal(data.length)
 
     for (let i = 0; i < r.body.length; i++) {
-      verifyId(r.request._data[i]['@id'], r.body[i])
+      verifyId(data[i]['@id'], r.body[i])
     }
   } else if (util.isObject(r.request._data)) {
     expect(r.body.length).to.equal(1)
@@ -204,6 +216,8 @@ function verifyInsertFailure (r) {
   return r
 }
 
+const verifyReplaceSuccess = verifyInsertSuccess
+
 function verifyReplaceFailure (r) {
   expect(r.status).to.equal(400)
   expect(r.body['api:status']).to.equal('api:failure')
@@ -211,8 +225,22 @@ function verifyReplaceFailure (r) {
   return r
 }
 
+function verifyReplaceNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:ReplaceDocumentErrorResponse')
+  return r
+}
+
 function verifyDelSuccess (r) {
   expect(r.status).to.equal(200)
+  return r
+}
+
+function verifyDelNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:DeleteDocumentErrorResponse')
   return r
 }
 
@@ -238,8 +266,11 @@ module.exports = {
   verifyGetFailure,
   verifyInsertSuccess,
   verifyInsertFailure,
+  verifyReplaceSuccess,
   verifyReplaceFailure,
+  verifyReplaceNotFound,
   verifyDelSuccess,
+  verifyDelNotFound,
   expectMissingField,
   expectMissingParameter,
 }

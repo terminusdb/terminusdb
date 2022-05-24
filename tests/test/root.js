@@ -9,8 +9,16 @@ describe('root', function () {
   })
 
   it('responds with HTML', async function () {
-    const r = await agent.get('/')
-    expect(r.status).to.equal(200)
-    expect(r.header['content-type']).to.equal('text/html')
+    const paths = [
+      '',
+      '/',
+      '/db/baseball/',
+      '/home/somewhere',
+    ]
+    paths.forEach(async function (path) {
+      const r = await agent.get(path)
+      expect(r.status).to.equal(200)
+      expect(r.header['content-type']).to.equal('text/html')
+    })
   })
 })

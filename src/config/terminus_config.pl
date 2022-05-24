@@ -6,11 +6,10 @@
               server_port/1,
               worker_amount/1,
               max_transaction_retries/1,
-              default_database_path/1,
+              db_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
               registry_path/1,
-              pack_dir/1,
               tmp_path/1,
               server_worker_options/1,
               http_options/1,
@@ -25,14 +24,23 @@
               insecure_user_header_key/1,
               check_all_env_vars/0,
               is_enterprise/0,
-              check_insecure_user_header_enabled/1
+              check_insecure_user_header_enabled/1,
+              clear_check_insecure_user_header_enabled/0,
+              clear_insecure_user_header_key/0,
+              pinned_databases/1
           ]).
 
 :- use_module(library(pcre)).
 
 :- use_module(core(util)).
+:- use_module(core(query)).
 
-terminusdb_version('10.0.17').
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+
+/* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
+terminusdb_version('10.0.26').
+/* [[[end]]] */
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.
@@ -55,7 +63,8 @@ server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
 
 worker_amount(Value) :-
-    getenv_default_number('TERMINUSDB_SERVER_WORKERS', 8, Value).
+    current_prolog_flag(cpu_count,Integer),
+    getenv_default_number('TERMINUSDB_SERVER_WORKERS', Integer, Value).
 
 :- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-
@@ -64,8 +73,19 @@ max_transaction_retries(Value) :-
     ;   worker_amount(Num_Workers),
         Value is Num_Workers * 2).
 
-default_database_path(Value) :-
-    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value).
+% This is defined only for testing. Use db_path/1 since it is tabled.
+default_database_path(Path) :-
+    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value),
+    absolute_file_name(Value, Path).
+
+/**
+ * db_path(-Path) is det.
+ *
+ * Database storage path.
+ */
+:- table db_path/1 as shared.
+db_path(Path) :-
+    default_database_path(Path).
 
 jwt_enabled_env_var :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
@@ -89,9 +109,6 @@ jwt_jwks_endpoint(Endpoint) :-
     ->  false
     ;   Endpoint = Value).
 
-pack_dir(Value) :-
-    getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
-
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
     getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
@@ -101,6 +118,7 @@ tmp_path(Value) :-
     atom_concat(Dir,'/tmp',TmpPathRelative),
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
 
+:- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-
     getenv('TERMINUSDB_FILE_STORAGE_PATH', Path).
 
@@ -239,3 +257,20 @@ check_all_env_vars :-
 
 is_enterprise :-
     current_prolog_flag(terminusdb_enterprise, true).
+
+parse_pinned_databases(Pinned_Env, Pinned) :-
+    merge_separator_split(Pinned_Env, ',', Pinned_Atoms),
+    maplist([Atom, Descriptor]>>(
+                do_or_die(resolve_absolute_string_descriptor(Atom, Descriptor),
+                          error(invalid_descriptor(Atom), _))
+            ),
+
+            Pinned_Atoms,
+            Pinned).
+
+:- table pinned_databases/1.
+pinned_databases(Pinned) :-
+    getenv('TERMINUSDB_PINNED_DATABASES', Pinned_Env),
+    !,
+    parse_pinned_databases(Pinned_Env, Pinned).
+pinned_databases([]).

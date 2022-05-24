@@ -1,7 +1,7 @@
 :- module(api, [
               % init.pl
               bootstrap_files/0,
-	      index_template/1,
+              index_template/1,
               initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2,
@@ -13,7 +13,7 @@
 
               % db_create.pl
               create_db/9,
-	      create_db_unfinalized/10,
+              create_db_unfinalized/10,
               create_schema/3,
               create_ref_layer/1,
 
@@ -65,7 +65,7 @@
               api_filled_frame/5,
 
               % api_woql.pl
-              woql_query_json/10,
+              woql_query_json/11,
 
               % api_squash.pl
               api_squash/6,
@@ -126,13 +126,22 @@
               api_replace_documents/11,
               api_nuke_documents/8,
               api_generate_document_ids/6,
+              api_read_document_selector/16,
 
               % api_user_organizations.pl
               user_organizations/3,
 
               % api_patch.pl
-              api_patch/5,
-              api_diff/6
+              api_patch/6,
+              api_diff/6,
+              api_diff_id/8,
+              api_diff_id_document/8,
+              api_diff_all_documents/7,
+              api_apply_squash_commit/7,
+
+              % api_log.pl
+              api_log/4,
+              format_log/2
           ]).
 
 :- use_module(api/api_init).
@@ -165,3 +174,4 @@
 :- use_module(api/api_document).
 :- use_module(api/api_user_organizations).
 :- use_module(api/api_patch).
+:- use_module(api/api_log).

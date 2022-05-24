@@ -1,3 +1,120 @@
+# TerminusDB Server v10.0.25 Beta Release Notes
+
+## Bug fixes
++ Fix cost calculations to make a more accurate diff
++ Add missing error-checking on database creation
++ Halt on closed user output in the CLI
++ Handle empty environment variables in the CLI
++ Fix WOQL using so resolution works on absolute descriptors
++ Improve robustness of CLI commands:
+  - clone
+  - push
+  - pull
+  - query
+
+## Enhancements
++ Replace elaboration with type inference in the document interface
++ Add squash commit to apply the diff between two commits to a branch
++ Add explicit copy to diff
++ New CLI commands:
+  - diff
+  - log
+  - doc delete
+  - doc replace
++ New CLI command flags:
+  - doc insert: --full-replace
+  - doc get: many new flags
+
+## Other
++ Integrate `terminus_store_prolog` directly into TerminusDB
+
+# TerminusDB Server v10.0.24 Beta Release Notes
+## Bug fixes
++ full_replace on schemas ignored newly submitted prefixes
++ For push operations, TUS will now submit proper Content-Length header
+
+## Enhancements
++ CLI tool now has a --version flag that reports the version
+
+# TerminusDB Server v10.0.23 Beta Release Notes
+## Bug fixes
++ Fix full_replace flag handling of duplicate IDs
++ Push can now overwrite a remote branch if this remote branch has no commits
++ Ensure that push, pull, fetch and clone all work with TerminusX
+
+## Enhancements
++ Refactor full_replace to reuse code path with normal insert
++ Support chunked document retrieval
++ Document interface no longer has a timeout
++ Update build instruction documentation
++ Improved integration tests to run CLI tests without deleting an existing store
+
+# TerminusDB Server v10.0.22 Beta Release Notes
+## Enhancement
++ Speed improvement to document interface
++ Add WOQL document templates to simplify inserting and updating documents via
+  WOQL
++ Add JSON diff between objects and commits
+
+## Other
++ Make unit tests run concurrently properly
+
+# TerminusDB Server v10.0.21 Beta Release Notes
+## Bug fixes
++ Fix to allow optional `@comment` in `@documentation`
+
+## Enhancement
++ Add `@context` to class frames
++ Add preliminary support for Content-Encoding compression to some endpoints
++ Minor speedup in document insertion
+
+# TerminusDB Server v10.0.20 Beta Release Notes
+## Bug fixes
++ Fix: Forward id capture was capturing unexpanded ID
+
+## Enhancement
++ Introducing cardinality type family
+
+## Other
++ Various CI fixes to run unit tests properly
+
+# TerminusDB Server v10.0.19 Beta Release Notes
+## Other
++ Use default user and password for tests
++ Use environment variable for CLI tests
+
+# TerminusDB Server v10.0.18 Beta Release Notes
+## Bug fixes
++ Fix QueryResource post and url
++ Fix operation id logging so nothing gets wrapped in quotes
++ Fix WOQL document updates with random key type
++ Type definitions with type families are now properly checked to ensure their contained type exists
++ More endpoints now properly report errors when the database does not exist
++ Unit type handling is now more robust
+
+## Enhancement
++ upgrade SWI-prolog to 8.4.2 in the docker container
++ Info endpoint reports the hash of the commit terminusdb was built with
++ On startup, TerminusDB now reports its version number
++ Common data layers are now pinned in memory
+
+## Other
++ Added benchmark tests
++ Added CLI tests
+
+# TerminusDB Server v10.0.17 Beta Release Notes
+## Bug fixes
++ Fix valuehash generation for multidimensional arrays
++ Fix patch cost calculations
++ Cardinality failure on inherited tagged union in combination with optional
+
+## Enhancement
++ Allow optional comment on db creation
+
+## Other
++ Removed message api endpoint
++ Moved various unit tests into the integration tests
+
 # TerminusDB Server v10.0.16 Beta Release Notes
 ## Enhancements
 + Patch and diff api endpoints

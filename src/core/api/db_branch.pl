@@ -32,6 +32,7 @@ create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)
     Schema_Descriptor = (Prototype_Descriptor.put(type, schema)),
     Schema_RWO = read_write_obj{
                      descriptor: Schema_Descriptor,
+                     triple_update: false,
                      read: _,
                      write: Builder},
 
@@ -63,12 +64,13 @@ create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)
         schema_objects: [Schema_Validation]
     } :< Branch_Validation,
     layer_to_id(Schema_Validation.read, Schema_Layer_Id),
+    insert_layer_object(Repository_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
     insert_initial_commit_object_on_branch(Repository_Transaction,
+                                           Schema_Layer_Uri,
+                                           _,
                                            Commit_Info,
                                            Branch_Uri,
-                                           Commit_Uri),
-    insert_layer_object(Repository_Transaction, Schema_Layer_Id, Schema_Layer_Uri),
-    attach_layer_to_commit(Repository_Transaction, Commit_Uri, schema, Schema_Layer_Uri).
+                                           _Commit_Uri).
 
 info_from_main(Repository_Context, Prefixes, Schema) :-
     query_context_transaction_objects(Repository_Context, [Repository_Transaction]),
@@ -270,7 +272,7 @@ branch_delete(System_DB, Auth, Path) :-
 
     branch_delete_(Descriptor).
 
-:- begin_tests(branch_api).
+:- begin_tests(branch_api, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
 :- use_module(core(triple)).

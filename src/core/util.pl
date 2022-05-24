@@ -6,7 +6,7 @@
 
               % file_utils.pl
               terminus_path/1,
-              db_path/1,
+              storage_version_path/2,
               touch/1,
               ensure_directory/1,
               sanitise_file_name/2,
@@ -62,7 +62,7 @@
               is_nonnegative_integer/1,
 
               % remote_file.pl
-              copy_remote/4,
+              copy_remote/3,
 
               % utils.pl
               down_from/3,
@@ -126,9 +126,12 @@
               convlist/4,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
-              json_read_dict_stream/2,
-              json_read_dict_list_stream/2,
-              json_stream_read_single_dict/2,
+              json_read_term/2,
+              json_read_term_stream/2,
+              json_read_list_stream/2,
+              json_read_list_stream_head/3,
+              json_init_tail_stream/2,
+              json_read_tail_stream/2,
               skip_generate_nsols/3,
               input_to_integer/2,
               duplicates/2,
@@ -138,6 +141,10 @@
               nb_thread_var/2,
               uri_encoded_string/3,
               text/1,
+              with_memory_file/1,
+              with_memory_file_stream/3,
+              with_memory_file_stream/4,
+              terminal_slash/2,
 
               % speculative_parse.pl
               %guess_date/2,
@@ -202,6 +209,8 @@
 
               % http_utils.pl
               basic_authorization/3,
+              bearer_authorization/2,
+              token_authorization/2,
 
               % json_log.pl
               json_log_error/1,
@@ -243,10 +252,16 @@
               % data_version.pl
               compare_data_versions/2,
               read_data_version_header/2,
+              read_data_version/2,
               write_data_version_header/1,
               transaction_data_version/2,
               validation_data_version/3,
-              meta_data_version/3
+              meta_data_version/3,
+
+              % json_stream.pl
+              json_stream_start/1,
+              json_stream_end/3,
+              json_stream_write_dict/5
           ]).
 
 % note: test_utils is intentionally omitted
@@ -262,3 +277,4 @@
 :- use_module(util/param).
 :- use_module(util/json_log).
 :- use_module(util/data_version).
+:- use_module(util/json_stream).

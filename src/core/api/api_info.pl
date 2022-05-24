@@ -4,7 +4,7 @@
 :- use_module(core(triple)).
 :- use_module(config(terminus_config), [terminusdb_version/1]).
 
-:- use_module(library(prolog_pack), [pack_property/2]).
+:- use_module(library(terminus_store), [terminus_store_version/1]).
 
 info(_System_DB, Auth, Info) :-
 
@@ -13,14 +13,16 @@ info(_System_DB, Auth, Info) :-
         error(access_not_authorized(Auth),_)),
 
     terminusdb_version(TerminusDB_Version),
-    current_prolog_flag(terminus_store_prolog_version, TerminusDB_Store_Version),
+    terminus_store_version(TerminusDB_Store_Version),
+    current_prolog_flag(terminusdb_git_hash, Git_Hash),
     get_db_version(Storage_Version),
 
     Info = _{
                authority: Auth,
                terminusdb :
                _{
-                   version : TerminusDB_Version
+                   version : TerminusDB_Version,
+                   git_hash : Git_Hash
                },
                terminusdb_store :
                _{

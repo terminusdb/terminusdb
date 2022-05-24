@@ -1,0 +1,53 @@
+[
+  {
+    "@type": "Class",
+    "@id": "Named",
+    "@abstract": [],
+    "name": "xsd:string"
+  },
+  {
+    "@id": "Muppet",
+    "@type": "Class",
+    "@inherits": [
+      "Named"
+    ],
+    "@key": {
+      "@type": "Lexical",
+      "@fields": [
+        "name"
+      ]
+    },
+    "handed": "Handed",
+    "role": {
+      "@type": "Optional",
+      "@class": "xsd:string"
+    },
+    "connections": {
+      "@type": "Set",
+      "@class": "Muppet"
+    },
+    "pets": {
+      "@type": "List",
+      "@class": "Pet"
+    }
+  },
+  {
+    "@id": "Pet",
+    "@type": "Class",
+    "@key": {
+      "@type": "Random"
+    },
+    "@subdocument": [],
+    "@inherits": [
+      "Named"
+    ]
+  },
+  {
+    "@type": "Enum",
+    "@id": "Handed",
+    "@value": [
+      "left",
+      "right"
+    ]
+  }
+]

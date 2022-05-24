@@ -90,9 +90,8 @@ multi_transaction(Query_Context) :-
 
 
 read_write_obj_already_committed(RW_Obj) :-
-    RW_Obj = read_write_obj{ descriptor: _Descriptor,
-                             read: _Layer,
-                             write: Layer_Builder },
+    read_write_obj{ descriptor: _Descriptor,
+                    write: Layer_Builder } :< RW_Obj,
     nonvar(Layer_Builder),
     builder_committed(Layer_Builder).
 
@@ -134,6 +133,7 @@ compute_backoff(Count, Time) :-
 reset_read_write_obj(Read_Write_Obj, Map, New_Map) :-
     nb_set_dict(read, Read_Write_Obj, _),
     nb_set_dict(write, Read_Write_Obj, _),
+    nb_set_dict(triple_update, Read_Write_Obj, false),
     Descriptor = (Read_Write_Obj.descriptor),
     (   get_dict(commit_type, Descriptor, _)
     ->  nb_set_dict(commit_type, Descriptor, _)

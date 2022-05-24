@@ -2,6 +2,7 @@
               safe_create_named_graph/3,
               safe_named_graph_exists/2,
               safe_open_named_graph/3,
+              safe_open_graph_head/3,
               safe_delete_named_graph/2,
               xrdf/4,
               xquad/5,
@@ -24,14 +25,14 @@
           ]).
 
 :- use_module(literals).
+:- use_module(constants).
 
-%:- reexport(core(util/syntax)).
 :- use_module(core(util)).
+:- use_module(core(query)).
 
 :- use_module(core(transaction)).
 
-% feeling very circular :(
-%:- use_module(core(transaction)).
+:- use_module(config(terminus_config), [db_path/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(debug)).
@@ -204,6 +205,30 @@ safe_named_graph_exists(Store, Graph_ID) :-
 safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+
+%pinned_graph_label(X) :-
+%    system_schema_name(X).
+pinned_graph_label(X) :-
+    repository_ontology(X).
+pinned_graph_label(X) :-
+    ref_ontology(X).
+pinned_graph_label(X) :-
+    woql_ontology(X).
+
+safe_open_graph_head(Store, Graph_ID, Layer_Obj) :-
+    pinned_graph_label(Graph_ID),
+    safe_open_graph_head_pinned(Store, Graph_ID, Layer_Obj),
+    !.
+safe_open_graph_head(Store, Graph_ID, Layer_Obj) :-
+    safe_open_graph_head_(Store, Graph_ID, Layer_Obj).
+
+safe_open_graph_head_(Store, Graph_ID, Layer_Obj) :-
+    safe_open_named_graph(Store, Graph_ID, Graph_Obj),
+    head(Graph_Obj, Layer_Obj).
+
+:- table safe_open_graph_head_pinned/3.
+safe_open_graph_head_pinned(Store, Graph_ID, Layer_Obj) :-
+    safe_open_graph_head_(Store, Graph_ID, Layer_Obj).
 
 /*
  * safe_delete_named_graph(+Store, +Graph_ID) is semidet.

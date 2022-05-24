@@ -1,6 +1,3 @@
-VERSION=4.2.3
-LICENSE=Apache-2.0
-MAINTAINER="TerminusDB Team <team@terminusdb.com>"
 SWIPL=LANG=C.UTF-8 $(SWIPL_DIR)swipl
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
@@ -20,40 +17,68 @@ else
 endif
 
 RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
-ENTERPRISE_RUST_LIBRARY_FILE:=../terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
+ENTERPRISE_RUST_LIBRARY_FILE:=terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
 RUST_TARGET:=src/rust/$(RUST_LIB_TARGET_NAME)
+
+SWIPL_LINT_VERSION=v0.8
+SWIPL_LINT_PATH=./tmp/pl_lint-$(SWIPL_LINT_VERSION).pl
 
 ################################################################################
 
-# Build the binary (default).
+# Build the 'community' binary (default).
 .PHONY: community
 community: $(TARGET)
 
+# Build the 'enterprise' binary.
 .PHONY: enterprise
-enterprise: PROLOG_FILES += $(shell find ../terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
-enterprise: RUST_FILES += ../terminusdb-enterprise/rust/Cargo.toml ..//terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/src/ -type f -name '*.rs')
+enterprise: PROLOG_FILES += $(shell find terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+enterprise: RUST_FILES += ./terminusdb-enterprise/rust/Cargo.toml ./terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/ -type f -name '*.rs')
 enterprise: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
-enterprise: RUST_SOURCE_DIR := ../terminusdb-enterprise/rust
+enterprise: RUST_SOURCE_DIR := terminusdb-enterprise/rust
 enterprise: ENTERPRISE := true
 enterprise: $(TARGET)
 
-# Build the binary and the documentation.
+# Build the 'community' binary and the documentation.
 .PHONY: all
 all: community docs
+
+# Build the Docker image for development and testing. To use the TerminusDB
+# container, see: https://github.com/terminusdb/terminusdb-bootstrap
+.PHONY: docker
+docker:
+	docker build . \
+	  --file Dockerfile \
+	  --tag terminusdb/terminusdb-server:local \
+	  --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
+
+# Install all pack dependencies.
+.PHONY: install-deps
+install-deps:
+	$(SWIPL) -g 'Options=[interactive(false), upgrade(true), test(false)], pack_install(tus, Options), halt'
+
+# Download and run the lint tool.
+.PHONY: lint
+lint: $(SWIPL_LINT_PATH)
+	$(SWIPL) -f src/load_paths.pl src/core/query/expansions.pl $(SWIPL_LINT_PATH)
 
 .PHONY: module
 module: $(RUST_TARGET)
 
 .PHONY: enterprise-module
-enterprise-module: RUST_FILES += ../terminusdb-enterprise/rust/Cargo.toml ..//terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/src/ -type f -name '*.rs')
+enterprise-module: RUST_FILES += terminusdb-enterprise/rust/Cargo.toml terminusdb-enterprise/rust/Cargo.lock $(shell find terminusdb-enterprise/rust/ -type f -name '*.rs')
 enterprise-module: RUST_LIBRARY_FILE := $(ENTERPRISE_RUST_LIBRARY_FILE)
-enterprise-module: RUST_SOURCE_DIR := ../terminusdb-enterprise/rust
+enterprise-module: RUST_SOURCE_DIR := terminusdb-enterprise/rust
 enterprise-module: $(RUST_TARGET)
 
 # Build a debug version of the binary.
 .PHONY: debug
 debug: $(RUST_TARGET)
 	echo "main, halt." | $(SWIPL) -f src/bootstrap.pl
+
+# Run the unit tests in swipl.
+.PHONY: test
+test: $(RUST_TARGET)
+	$(SWIPL) -t 'run_tests, halt.' -f src/interactive.pl
 
 # Quick command for interactive
 .PHONY: i
@@ -67,7 +92,7 @@ clean: shallow-clean
 
 .PHONY: enterprise-clean
 enterprise-clean: shallow-clean
-	cd ../terminusdb-enterprise/rust && cargo clean
+	cd terminusdb-enterprise/rust && cargo clean
 
 .PHONY: module-clean
 module-clean:
@@ -91,7 +116,7 @@ docs-clean:
 $(TARGET): $(RUST_TARGET) $(PROLOG_FILES)
 	# Build the target and fail for errors and warnings. Ignore warnings
 	# having "qsave(strip_failed(..." that occur on macOS.
-	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -O -q -f src/bootstrap.pl 2>&1 | \
+	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
 	  grep -v 'qsave(strip_failed' | \
 	  (! grep -e ERROR -e Warning)
 
@@ -106,3 +131,6 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 # Create a man page from using `ronn`.
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
+
+$(SWIPL_LINT_PATH):
+	curl -L --create-dirs -o $@ "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$(SWIPL_LINT_VERSION)/pl_lint.pl"

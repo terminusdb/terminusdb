@@ -6,8 +6,8 @@ const { Params } = require('./params.js')
 function add (agent, params) {
   params = new Params(params)
   const bodyString = params.string('bodyString')
-  const organizationName = params.string('organization_name', agent.defaults().orgName)
-  const userName = params.string('user_name', agent.defaults().userName)
+  const organizationName = params.string('organization_name', agent.orgName)
+  const user = params.string('user_name', agent.user)
   params.assertEmpty()
 
   const request = agent.post('/api/organization')
@@ -16,8 +16,8 @@ function add (agent, params) {
     request.type('json').send(bodyString)
   } else {
     assert(organizationName, 'Missing \'organization_name\' parameter.')
-    assert(userName, 'Missing \'user_name \' parameter.')
-    request.send({ organization_name: organizationName, user_name: userName })
+    assert(user, 'Missing \'user_name \' parameter.')
+    request.send({ organization_name: organizationName, user_name: user })
   }
 
   return request
@@ -69,11 +69,19 @@ function verifyDelFailure (r) {
   return r
 }
 
+function verifyDelNotFound (r) {
+  expect(r.status).to.equal(404)
+  expect(r.body['api:status']).to.equal('api:not_found')
+  expect(r.body['@type']).to.equal('api:DeleteOrganizationErrorResponse')
+  return r
+}
+
 module.exports = {
   add,
   del,
   verifyAddSuccess,
-  verifyDelSuccess,
   verifyAddFailure,
+  verifyDelSuccess,
   verifyDelFailure,
+  verifyDelNotFound,
 }

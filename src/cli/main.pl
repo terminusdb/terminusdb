@@ -18,7 +18,10 @@
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(library(optparse)).
-:- use_module(core(util), [do_or_die/2, basic_authorization/3, intersperse/3]).
+:- use_module(core(util),
+              [do_or_die/2, token_authorization/2,
+               basic_authorization/3, intersperse/3,
+               with_memory_file/1, with_memory_file_stream/3]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -29,8 +32,9 @@
 :- use_module(library(option)).
 :- use_module(library(plunit), [run_tests/0, run_tests/1]).
 :- use_module(library(settings)).
+:- use_module(library(terminus_store), [terminus_store_version/1]).
 
-:- use_module(config(terminus_config), [check_all_env_vars/0]).
+:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
@@ -43,7 +47,9 @@ cli_toplevel :-
             halt(0)
         ),
         Exception,
-        (   Exception = error(Error,context(prolog_stack(Stack),_)),
+        (   Exception = error(io_error(write,user_output),_)
+        ->  halt(0)
+        ;   Exception = error(Error,context(prolog_stack(Stack),_)),
             print_prolog_backtrace(user_error, Stack)
         ->  format(user_error, "~NError: ~q~n~n", [Error]),
             halt(1)
@@ -129,7 +135,7 @@ opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
            type(atom),
            longflags([message]),
            shortflags([m]),
-           default('cli load'),
+           default('cli query'),
            help('message to associate with the commit')],
           [opt(author),
            type(atom),
@@ -169,6 +175,12 @@ opt_spec(push,'terminusdb push DB_SPEC',
            longflags([prefixes]),
            default(false),
            help('send prefixes for database')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -189,6 +201,12 @@ opt_spec(clone,'terminusdb clone URI <DB_SPEC>',
            longflags([help]),
            default(false),
            help('print help for the `clone` command')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -245,6 +263,12 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([remote]),
            default(origin),
            help('the name of the remote to use')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -271,6 +295,12 @@ opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
            longflags([remote]),
            default(origin),
            help('the name of the remote to use')],
+          [opt(token),
+           type(atom),
+           shortflags([t]),
+           longflags([token]),
+           default('_'),
+           help('machine access token')],
           [opt(user),
            type(atom),
            shortflags([u]),
@@ -331,6 +361,60 @@ opt_spec(unbundle,'terminusdb unbundle DATABASE_SPEC FILE OPTIONS',
            default(false),
            help('print help for the `unbundle` command')]
          ]).
+opt_spec(diff,'terminusdb diff [Path] OPTIONS',
+         'Create a diff between two JSONs, a JSON and a commit (path required),
+or two commits (path required).',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `diff` command')],
+          [opt(before),
+           type(atom),
+           longflags([before]),
+           shortflags([b]),
+           default('_'),
+           help('JSON document which is the *before*')],
+          [opt(after),
+           type(atom),
+           longflags([after]),
+           shortflags([a]),
+           default('_'),
+           help('JSON document which is the *after*')],
+          [opt(keep),
+           type(atom),
+           longflags([keep]),
+           shortflags([k]),
+           default('{"@id" : true, "_id" : true}'),
+           help('Skeleton of the document to retain as context')],
+          [opt(docid),
+           type(atom),
+           longflags([docid]),
+           shortflags([d]),
+           default('_'),
+           help('document id to use for comparisons')],
+          [opt(before_commit),
+           type(atom),
+           longflags([before_commit,'before-commit']),
+           shortflags([p]),
+           default('_'),
+           help('Commit of the *before* document(s)')],
+          [opt(after_commit),
+           type(atom),
+           longflags([after_commit,'after-commit']),
+           shortflags([s]),
+           default('_'),
+           help('Commit of the *after* document(s)')]
+         ]).
+opt_spec(log,'terminusdb log DB_SPEC',
+         'Get the log for a branch given by DB_SPEC.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `log` command')]]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -431,6 +515,194 @@ opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
            shortflags([f]),
            default(false),
            help('force the deletion of the database (unsafe)')]]).
+opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
+         'Insert documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc insert` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document insert'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type,'graph-type']),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')],
+          [opt(full_replace),
+           type(boolean),
+           longflags([full_replace,'full-replace']),
+           shortflags([f]),
+           default(false),
+           help('delete all previous documents and substitute these')]]).
+opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
+         'Delete documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc delete` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document delete'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type,'graph-type']),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(id),
+           type(atom),
+           longflags([id]),
+           shortflags([i]),
+           default('_'),
+           help('document id to delete')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')],
+          [opt(nuke),
+           type(boolean),
+           longflags([nuke]),
+           shortflags([n]),
+           default(false),
+           help('nuke all documents')]]).
+opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
+         'Replace documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc replace` sub command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: document replace'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type,'graph-type']),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(data),
+           type(atom),
+           longflags([data]),
+           shortflags([d]),
+           default('_'),
+           help('document data')],
+          [opt(create),
+           type(atom),
+           longflags([create]),
+           shortflags([c]),
+           default(false),
+           help('create document if it does not exist')]]).
+opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
+         'Query documents.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `doc get` sub command')],
+          [opt(graph_type),
+           type(atom),
+           longflags([graph_type]),
+           shortflags([g]),
+           default(instance),
+           help('graph type (instance or schema)')],
+          [opt(skip),
+           type(atom),
+           longflags([skip]),
+           shortflags([s]),
+           default('0'),
+           help('number of documents to skip')],
+          [opt(count),
+           type(atom),
+           longflags([count]),
+           shortflags([c]),
+           default(unlimited),
+           help('number of documents to return')],
+          [opt(minimized),
+           type(boolean),
+           longflags([minimized]),
+           shortflags([m]),
+           default(true),
+           help('return minimized prefixes')],
+          [opt(as_list),
+           type(boolean),
+           longflags([as_list, 'as-list']),
+           shortflags([l]),
+           default(false),
+           help('return results as a JSON list (as opposed to JSON-lines)')],
+          [opt(unfold),
+           type(boolean),
+           longflags([unfold]),
+           shortflags([u]),
+           default(true),
+           help('include subdocuments, or only subdocument ids')],
+          [opt(id),
+           type(atom),
+           longflags([id]),
+           shortflags([i]),
+           default('_'),
+           help('id of document to retrieve')],
+          [opt(type),
+           type(atom),
+           longflags([type]),
+           shortflags([t]),
+           default('_'),
+           help('type of document to retrieve')],
+          [opt(compress_ids),
+           type(boolean),
+           longflags([compress_ids, 'compress-ids']),
+           shortflags([z]),
+           default(true),
+           help('return compressed / minimized ids using default prefixes')],
+          [opt(query),
+           type(atom),
+           longflags([query]),
+           shortflags([q]),
+           default('_'),
+           help('document query search template')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -577,7 +849,7 @@ run(Argv) :-
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
     (   (   Argv = [Cmd|_],
-            member(Cmd, [help, store, test])
+            member(Cmd, ['--version', help, store, test])
         ;   open_descriptor(system_descriptor{}, _))
     ->  run_(Argv)
     ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
@@ -599,6 +871,12 @@ run_([Command|_Rest]) :-
     setof(Subcommand, command_subcommand(Command,Subcommand), Subcommands),
     format(current_output, "terminusdb ~s [subcommand]~n~twhere subcommand is one of: ~q~n", [Command, Subcommands]),
     format(current_output, "type: terminusdb ~s [subcommand] --help for more details~n", [Command]).
+run_(['--version'|_]) :-
+    terminusdb_version(TerminusDB_Version),
+    current_prolog_flag(terminusdb_git_hash, Git_Hash),
+    terminus_store_version(TerminusDB_Store_Version),
+    format(user_output, "TerminusDB v~s (~s)~n", [TerminusDB_Version, Git_Hash]),
+    format(user_output, "terminusdb-store v~s~n", [TerminusDB_Store_Version]).
 run_(_) :-
     setof(Command, command(Command), Commands),
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
@@ -637,19 +915,18 @@ run_command(optimize,Databases,_Opts) :-
                (   api_optimize(system_descriptor{}, Auth, Path),
                    format(current_output, "~N~s optimized~n", [Path])
                ))).
-run_command(query,[Database,Query],Opts) :-
-    resolve_absolute_string_descriptor(Database,Descriptor),
+run_command(query,[Path,Query],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
     option(author(Author), Opts),
-    option(author(Message), Opts),
-    create_context(Descriptor,commit_info{ author : Author,
-                                           message : Message}, Context),
+    option(message(Message), Opts),
+    Commit_Info = commit_info{author : Author, message : Message},
+
     api_report_errors(
         woql,
-        (   woql_context(Prefixes),
-            context_extend_prefixes(Context,Prefixes,Context0),
-            read_query_term_from_atom(Query,AST),
-            query_response:run_context_ast_jsonld_response(Context0, AST, no_data_version, _, Response),
-            get_dict(prefixes, Context0, Context_Prefixes),
+        (   woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Commit_Info, [], _All_Witnesses, no_data_version, _New_Data_Version, Context, Response),
+            get_dict(prefixes, Context, Context_Prefixes),
             default_prefixes(Defaults),
             put_dict(Defaults, Context_Prefixes, Final_Prefixes),
             pretty_print_query_response(Response,Final_Prefixes,String),
@@ -668,24 +945,18 @@ run_command(push,[Path],Opts) :-
     ->  Branch = Remote_Branch
     ;   true),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
+    create_authorization(Opts,Authorization),
 
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
-
+    format(current_output, "Pushing to remote '~s'~n", [Remote_Name]),
     api_report_errors(
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
-    format(current_output, "~n~s pushed: ~q~n", [Path, Result]).
+    (   Result = same(Commit_Id)
+    ->  format(current_output, "Remote already up to date (head is ~s)~n", [Commit_Id])
+    ;   Result = new(Commit_Id)
+    ->  format(current_output, "Remote updated (head is ~s)~n", [Commit_Id])
+    ;   throw(error(unexpected_result(push, Result), _))
+    ).
 run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -712,74 +983,58 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     ;   true),
     option(comment(Comment), Opts),
     option(public(Public), Opts),
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
 
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
+    format(current_output, "Cloning the remote 'origin'~n", []),
     api_report_errors(
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
               authorized_fetch(Authorization), _Meta_Data)),
-    format(current_output, "~nCloned: ~q into ~s/~s~n", [Remote_URL, Organization, DB]).
+    format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-
-    api_report_errors(
-        pull,
-        do_or_die(
-            (   resolve_absolute_string_descriptor(Path,Descriptor),
-                _{ branch_name : Branch} :< Descriptor
-            ),
-            error(not_a_valid_local_branch(Descriptor), _))
-    ),
-
     option(remote(Remote_Name_Atom), Opts),
     atom_string(Remote_Name_Atom,Remote_Name),
     option(remote_branch(Remote_Branch), Opts),
-    (   var(Remote_Branch)
-    ->  Branch = Remote_Branch
-    ;   true),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
+    create_authorization(Opts,Authorization),
 
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
-
+    format(current_output, "Pulling from remote '~s'~n", [Remote_Name]),
     api_report_errors(
         pull,
         pull(System_DB, Auth, Path, Remote_Name, Remote_Branch,
              authorized_fetch(Authorization), Result)),
-    format(current_output, "~N~s pulled: ~q~n", [Path, Result]).
+    do_or_die(
+        status{ 'api:pull_status': Pull_Status,
+                'api:fetch_status': Fetch_Status } :< Result,
+        error(unexpected_result(pull, Result), _)),
+    (   Fetch_Status = true
+    ->  format(current_output, "Remote commits fetched~n", [])
+    ;   Fetch_Status = false
+    ->  format(current_output, "Remote up to date~n", [])
+    ;   format(current_output, "Remote fetch status: ~w~n", [Fetch_Status])
+    ),
+    (   Pull_Status = "api:pull_unchanged"
+    ->  format(current_output, "Local branch up to date~n", [])
+    ;   Pull_Status = "api:pull_fast_forwarded"
+    ->  format(current_output, "Local branch updated (fast-forward)~n", [])
+    ;   Pull_Status = "api:pull_ahead"
+    ->  format(current_output, "Local branch up to date (unpushed commits)~n", [])
+    ;   format(current_output, "Local branch status: ~w~n", [Pull_Status])
+    ).
 run_command(fetch,[Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
     api_report_errors(
-        pull,
+        fetch,
         do_or_die(
             (   resolve_absolute_string_descriptor(Path,Descriptor),
                 _{ branch_name : _} :< Descriptor
             ),
-            error(not_a_valid_local_branch(Descriptor), _))
+            error(invalid_absolute_path(Path),_))
     ),
 
     option(remote(Remote_Name_Atom), Opts),
@@ -787,19 +1042,7 @@ run_command(fetch,[Path],Opts) :-
     % FIXME NOTE: This is very awkward and brittle.
     atomic_list_concat([Path,'/',Remote_Name,'/_commits'], Remote_Path),
 
-    option(user(User), Opts),
-    (   var(User)
-    ->  prompt(_,'Username: '),
-        read_string(user_input, ['\n'], [], _, User)
-    ;   true),
-
-    option(password(Password), Opts),
-    (   var(Password)
-    ->  prompt(_,'Password: '),
-        read_string(user_input, ['\n'], [], _, Password)
-    ;   true),
-
-    basic_authorization(User,Password,Authorization),
+    create_authorization(Opts,Authorization),
 
     api_report_errors(
         fetch,
@@ -870,9 +1113,52 @@ run_command(unbundle,[Path, Filename], _Opts) :-
         (   E = error(existence_error(source_sink, File), _)
         ->  format(current_output, "~nFile ~s does not exist", [File])
         ;   throw(E))).
+run_command(diff, Args, Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(before(Before_Atom), Opts),
+    option(after(After_Atom), Opts),
+    option(keep(Keep_Atom), Opts),
+    option(docid(DocId), Opts),
+    option(before_commit(Before_Commit), Opts),
+    option(after_commit(After_Commit), Opts),
+
+    api_report_errors(
+        diff,
+        (   \+ var(Before_Atom), \+ var(After_Atom)
+        ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
+            atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff(System_DB, Auth, Before, After, Keep, Patch)
+        ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
+            [Path] = Args
+        ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_id(System_DB, Auth, Path, Before_Commit,
+                        After_Commit, DocId, Keep, Patch)
+        ;   \+ var(After_Commit), \+ var(Before_Commit),
+            [Path] = Args
+        ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_all_documents(System_DB, Auth, Path,
+                                   Before_Commit, After_Commit,
+                                   Keep, Patch)
+        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
+        ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            api_diff_id_document(System_DB, Auth, Path,
+                                 Before_Commit, After,
+                                 DocId, Keep, Patch)
+        )
+    ),
+    json_write_dict(user_output, Patch, [width(0)]),
+    nl.
+run_command(log,[Path], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_log(System_DB, Auth, Path, Log),
+    format_log(current_output,Log).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
-
 
 % Subcommands
 run_command(branch,create,[Path],Opts) :-
@@ -916,7 +1202,7 @@ run_command(db,create,[DB_Path],Opts) :-
     api_report_errors(
         create_db,
         create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Merged)),
-    format(current_output,"Database ~s/~s created~n",[Organization,DB]).
+    format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(db,delete,[DB_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -931,7 +1217,111 @@ run_command(db,delete,[DB_Path],Opts) :-
     api_report_errors(
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
-    format(current_output,"Database ~s/~s deleted~n",[Organization,DB]).
+    format(current_output, "Database deleted: ~s/~s~n", [Organization, DB]).
+run_command(doc,insert,[Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    option(data(Data), Opts),
+    option(full_replace(Full), Opts),
+
+    api_report_errors(
+        insert_documents,
+        (   var(Data)
+        ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
+        ;   open_string(Data, Stream),
+            doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
+        )
+    ),
+    length(Ids, Number_Inserted),
+    (   Number_Inserted = 1
+    ->  format(current_output, "Document inserted~n", [])
+    ;   format(current_output, "Documents inserted: ~d~n", [Number_Inserted])
+    ).
+run_command(doc,delete, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    option(id(Id), Opts),
+    option(nuke(Nuke), Opts),
+    option(data(Data), Opts),
+
+    api_report_errors(
+        delete_documents,
+        (   Nuke = true
+        ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message, no_data_version, _),
+            format("Documents nuked~n", [])
+        ;   ground(Id)
+        ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id, no_data_version, _),
+            format("Document deleted: ~s~n", [Id])
+        ;   (   var(Data)
+            ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message))
+            ;   open_string(Data, Stream),
+                api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, no_data_version, _)
+            ),
+            format("Documents deleted~n", [Graph_Type])
+        )
+    ).
+run_command(doc,replace, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(graph_type(Graph_Type), Opts),
+    option(create(Create), Opts),
+    option(data(Data), Opts),
+
+    api_report_errors(
+        replace_documents,
+        (   (   var(Data)
+            ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids))
+            ;   open_string(Data, Stream),
+                api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
+                                      Create, no_data_version, _, Ids)
+            ),
+            length(Ids, Number_Inserted),
+            format("Document(s) replaced: ~d~n", [Number_Inserted]),
+            json_write_dict(user_output, Ids, [width(0)]),
+            format(user_output, "~n", [])
+        )
+    ).
+run_command(doc,get, [Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(graph_type(Graph_Type), Opts),
+    option(skip(S), Opts),
+    option(count(N), Opts),
+    option(minimized(Minimized), Opts),
+    option(as_list(As_List), Opts),
+    option(unfold(Unfold), Opts),
+    option(id(Id), Opts),
+    option(type(Type), Opts),
+    option(compress_ids(Compress_Ids), Opts),
+    option(query(Query), Opts),
+
+    (   N = unlimited
+    ->  Count = unlimited
+    ;   atom_number(N,Count)
+    ),
+    atom_number(S,Skip),
+
+    (   Minimized = true
+    ->  JSON_Options = [width(0)]
+    ;   JSON_Options = []),
+
+    api_report_errors(
+        get_documents,
+        api_read_document_selector(
+            System_DB, Auth, Path, Graph_Type, Skip, Count,
+            As_List, Unfold, Id, Type, Compress_Ids, Query,
+            JSON_Options,
+            no_data_version, _Actual_Data_Version,
+            [L]>>(ignore((L=true,format('[')))))
+    ).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
@@ -1023,14 +1413,58 @@ run_command(triples,load,[Path,File],Opts) :-
                                                author : Author},
                      Format,TTL)),
     format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
-
-
-% turtle
-% user
-% document
-
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
+
+doc_replace_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids)).
+
+doc_replace_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids, Stream) :-
+    api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
+                          Create, no_data_version, _, Ids).
+
+doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message)).
+
+doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Stream) :-
+    api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
+                         no_data_version, _).
+
+doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids, Mem_File) :-
+    % Copy stdin to a memory file.
+    with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
+    % Read the memory file to insert documents.
+    with_memory_file_stream(Mem_File, read, doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids)).
+
+doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids, Stream) :-
+    api_insert_documents(
+        System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream,
+        no_data_version, _New_Data_Version, Ids).
+
+create_authorization(Opts,Authorization) :-
+    option(token(Token), Opts),
+    (   var(Token)
+    ->  option(user(User), Opts),
+        (   var(User)
+        ->  prompt(_,'Username: '),
+            read_string(user_input, ['\n'], [], _, User)
+        ;   true),
+
+        option(password(Password), Opts),
+        (   var(Password)
+        ->  prompt(_,'Password: '),
+            read_string(user_input, ['\n'], [], _, Password)
+        ;   true),
+
+        basic_authorization(User,Password,Authorization)
+    ;   token_authorization(Token,Authorization)
+    ).
 
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
@@ -1155,14 +1589,5 @@ format_help_markdown_opt(Opt) :-
 
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
-
-bind_vars([],_).
-bind_vars([Name=Var|Tail],AST) :-
-    Var = v(Name),
-    bind_vars(Tail,AST).
-
-read_query_term_from_atom(Query, AST) :-
-    read_term_from_atom(Query, AST, [variable_names(Names)]),
-    bind_vars(Names,AST).
 
 fetch_payload(Payload, _, none, some(Payload)).

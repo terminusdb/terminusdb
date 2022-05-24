@@ -12,6 +12,7 @@
 :- use_module(library(ssl)).
 :- use_module(library(http/http_client)).
 :- use_module(library(plunit)).
+:- use_module(library(lists)).
 
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
 remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
@@ -60,8 +61,11 @@ remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has
         _Meta_Data).
 
 remote_pack_url(URL, Pack_URL) :-
-    pattern_string_split('/', URL, [Protocol,Blank,Server|Rest]),
-    merge_separator_split(Pack_URL,'/',[Protocol,Blank,Server,"api","pack"|Rest]).
+    pattern_string_split('/', URL, Parts),
+    do_or_die(append(Pre, [Organization,Database], Parts),
+              error(db_url_malformatted(URL), _)),
+    append(Pre, ["api", "pack", Organization, Database], All_Parts),
+    merge_separator_split(Pack_URL,'/',All_Parts).
 
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
@@ -70,19 +74,20 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
 
     remote_pack_url(URL,Pack_URL),
 
-    http_post(Pack_URL,
-              json(Document),
-              Payload,
-              [request_header('Authorization'=Authorization),
-               json_object(dict),
-               status_code(Status)
-              ]),
+    catch(
+        http_post(
+            Pack_URL, json(Document), Payload,
+            [request_header('Authorization'=Authorization), json_object(dict), status_code(Status)]),
+        error(Err, _),
+        throw(error(http_open_error(Err), _))
+    ),
 
     (   Status = 200
     ->  Payload_Option = some(Payload)
     ;   Status = 204
     ->  Payload_Option = none
-    ;   throw(error(remote_connection_error(Payload),_))).
+    ;   throw(error(remote_connection_failure(Status, Payload), _))
+    ).
 
 :- begin_tests(fetch_api).
 :- use_module(core(util/test_utils)).

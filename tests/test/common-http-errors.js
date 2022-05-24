@@ -56,15 +56,16 @@ describe('common-http-errors', function () {
   })
 
   it('reports missing content type', async function () {
-    const requestPairs = [
-      ['post', '/api/db/' + util.randomString() + '/' + util.randomString()],
-      ['post', '/api/document/' + util.randomString() + '/' + util.randomString()],
-      ['put', '/api/document/' + util.randomString() + '/' + util.randomString()],
-      ['post', '/api/rebase/' + util.randomString()],
-      ['post', '/api/woql'],
+    const requests = [
+      agent.post('/api/db/' + util.randomString() + '/' + util.randomString()),
+      agent.post('/api/document/' + util.randomString() + '/' + util.randomString()),
+      agent.put('/api/document/' + util.randomString() + '/' + util.randomString()),
+      agent.post('/api/rebase/' + util.randomString()),
+      agent.post('/api/woql'),
+      agent.post('/api/woql').attach('x', Buffer.from('forcing multipart/form-data')),
     ]
-    for (const [method, path] of requestPairs) {
-      const r = await agent[method](path)
+    for (const request of requests) {
+      const r = await request
       expect(r.status).to.equal(400)
       expect(r.body['api:status']).to.equal('api:failure')
       expect(r.body['@type']).to.equal('api:MissingContentTypeErrorResponse')

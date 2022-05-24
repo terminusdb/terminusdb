@@ -38,27 +38,36 @@ api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
-api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type_In, Value), _), Type, JSON) :-
+api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    (   Expected_Type_In = atom
-    ->  Expected_Type = string
-    ;   Expected_Type = Expected_Type_In),
     (   Expected_Type = boolean
-    ->  Type_Msg = "to be 'true' or 'false'"
+    ->  Expected_Type_Displayed = "boolean (true, false)"
     ;   Expected_Type = graph
-    ->  Type_Msg = "to be 'schema' or 'instance'"
-    ;   Expected_Type = integer
-    ->  Type_Msg = "to be an integer"
+    ->  Expected_Type_Displayed = "graph (schema, instance)"
     ;   Expected_Type = nonnegative_integer
-    ->  Type_Msg = "to be a non-negative integer"
-    ;   format(string(Type_Msg), "to be a ~q", [Expected_Type])),
-    format(string(Msg), "Expected parameter '~s' ~s but found: ~q", [Param, Type_Msg, Value]),
+    ->  Expected_Type_Displayed = "non-negative integer"
+    ;   Expected_Type = atom
+    ->  Expected_Type_Displayed = "string"
+    ;   memberchk(Expected_Type, [non_empty_atom, non_empty_string])
+    ->  Expected_Type_Displayed = "non-empty string"
+    ;   Expected_Type_Displayed = Expected_Type
+    ),
+    format(string(Msg), "Expected parameter '~s' of type '~s` but found: ~q", [Param, Expected_Type_Displayed, Value]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadParameterType',
                               'api:parameter' : Param,
-                              'api:expected_type' : Expected_Type,
+                              'api:expected_type' : Expected_Type_Displayed,
                               'api:value' : Value },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(missing_file(File_Name), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Missing file: ~s", [File_Name]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MissingFile',
+                              'api:file_name' : File_Name },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
@@ -94,6 +103,25 @@ api_global_error_jsonld(error(type_not_found(Unknown_Type), _), Type, JSON) :-
                               'api:type' : Unknown_Type },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(unknown_organization(Organization), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Unknown organization name: ~s", [Organization]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:not_found',
+             'api:error' : _{ '@type' : 'api:UnknownOrganizationName',
+                              'api:organization_name' : Organization },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(unknown_database(Organization, Database), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:not_found',
+             'api:error' : _{'@type' : 'api:UnknownDatabase',
+                             'api:database_name' : Database,
+                             'api:organization_name' : Organization},
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(invalid_organization_name(Organization), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Invalid organization name: ~q", [Organization]),
@@ -112,17 +140,124 @@ api_global_error_jsonld(error(invalid_database_name(DB), _), Type, JSON) :-
                               'api:database_name' : DB },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(http_open_error(existence_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request could not fetch URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedFetch',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(domain_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request could not be made to URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedBadUrl',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(socket_error(_, Err_Msg)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request failed with socket error: ~w", [Err_Msg]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedSocketError',
+                              'api:message' : Err_Msg },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(permission_error(_, URL)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "HTTP request authentication failed for URL: ~w", [URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailedAuthenticationError',
+                              'api:url' : URL },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(http_open_error(Err), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Reason), "~w", [Err]),
+    format(string(Msg), "HTTP request failed for an unknown reason: ~w", [Reason]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:HttpRequestFailed',
+                              'api:reason' : Reason },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(remote_connection_failure(Status, Response), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    (   (Status = 401 ; Status = 403)
+    ->  Opening_Msg = "Remote authentication failed"
+    ;   Opening_Msg = "Remote connection failed"
+    ),
+
+    (   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response,
+        _{'@type' : "api:NotALinearHistory"} :< Error
+    ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
+    ;   get_dict('api:message', Response, Response_Msg)
+    ->  format(string(Msg), "~s: ~s", [Opening_Msg, Response_Msg])
+    ;   format(string(Msg), "~s for an unknown reason", [Opening_Msg])
+    ),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteConnectionFailure",
+                              'api:status' : Status,
+                              'api:response' : Response}
+            }.
+api_global_error_jsonld(error(document_not_found(Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document not found: ~q", [Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:DocumentNotFound',
+                              'api:document_id' : Id },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(document_not_found(Id, Document), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document not found: ~q", [Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:DocumentNotFound',
+                              'api:document_id' : Id,
+                              'api:document': Document },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted_Id, Generated_Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document was submitted with id ~q, but id ~q was generated", [Submitted_Id, Generated_Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SubmittedIdDoesNotMatchGeneratedId',
+                              'api:submitted_id': Submitted_Id,
+                              'api:generated_id': Generated_Id },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(invalid_absolute_path(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Bad descriptor path: ~w", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadDescriptorPath',
+                              'api:descriptor' : Path},
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(unknown_local_branch(Branch), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Unknown local branch: ~w", [Branch]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:fetch_status' : false,
+             'api:error' : _{ '@type' : "api:UknownLocalBranch",
+                              'api:branch' : Branch}
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
-api_error_jsonld_(check_db, error(unknown_database(Organization, Database), _), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:DbExistsErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Value), _), JSON) :-
     format(string(Msg), "Expected parameter '~s' to have '~q' but found: ~q", [Param, Expected_Value, Value]),
     JSON = _{'@type' : 'api:DbExistsErrorResponse',
@@ -133,13 +268,6 @@ api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Val
                               'api:value' : Value },
              'api:message' : Msg}.
 %% DB Create
-api_error_jsonld_(create_db,error(unknown_organization(Organization_Name),_),JSON) :-
-    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:DbCreateErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name},
-             'api:message' : Msg}.
 api_error_jsonld_(create_db,error(database_already_exists(Organization_Name, Database_Name),_), JSON) :-
     JSON = _{'@type' : 'api:DbCreateErrorResponse',
              'api:status' : 'api:failure',
@@ -168,21 +296,6 @@ api_error_jsonld_(create_db, error(invalid_uri_prefix(Prefix_Name, Prefix_Value)
                              'api:prefix_value' : Prefix_Value},
              'api:message' : Msg}.
 %% DB Delete
-api_error_jsonld_(delete_db,error(unknown_organization(Organization_Name),_), JSON) :-
-    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:DbDeleteErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name},
-             'api:message' : Msg}.
-api_error_jsonld_(delete_db,error(unknown_database(Organization, Database), _), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:DbDeleteErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_error_jsonld_(delete_db,error(database_not_finalized(Organization,Database), _),JSON) :-
     format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
     JSON = _{'@type' : 'api:DbDeleteErrorResponse',
@@ -325,14 +438,6 @@ api_error_jsonld_(frame,error(could_not_create_filled_class_frame(Instance),_), 
                               'api:instance_uri' : Instance_String},
              'api:message' : Msg
             }.
-api_error_jsonld_(frame,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:FrameErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(frame,error(unresolvable_collection(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),
@@ -351,8 +456,8 @@ api_error_jsonld_(frame,error(woql_syntax_error(badly_formed_ast(Term)),_), JSON
                               'api:error_term' : String},
              'api:message' : Msg
             }.
-api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~q", [Val]),
+api_error_jsonld_(frame,error(casting_error(Val,Type),_), JSON) :-
+    format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
     JSON = _{'@type' : 'api:FrameErrorResponse',
              'api:status' : 'api:failure',
@@ -361,13 +466,12 @@ api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
                               'api:type' : Type},
              'api:message' : Msg
             }.
-api_error_jsonld_(woql,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:WoqlErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
+api_error_jsonld_(woql,error(find_resource_pre_flight_failure_for(AST), _), JSON) :-
+    format(string(Msg), "Unable to find and process a resource from the AST ~q", [AST]),
+    JSON = _{'@type' : "api:WoqlErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:FindResourceFailure" }
             }.
 api_error_jsonld_(woql,error(not_a_valid_descriptor(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -442,7 +546,7 @@ api_error_jsonld_(woql,error(unresolvable_absolute_descriptor(Descriptor), _), J
                               'api:absolute_descriptor' : Path}
             }.
 api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
-    format(string(ValS), "~q", [Val]),
+    format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
     JSON = _{'@type' : 'api:WoqlErrorResponse',
              'api:status' : 'api:failure',
@@ -456,13 +560,6 @@ api_error_jsonld_(clone,error(no_remote_authorization,_),JSON) :-
     JSON = _{'@type' : 'api:CloneErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:AuthorizationError'},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(clone,error(remote_connection_error(Payload),_),JSON) :-
-    format(string(Msg), "There was a failure to clone from the remote: ~q", [Payload]),
-    JSON = _{'@type' : 'api:CloneErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:RemoteConnectionError'},
              'api:message' : Msg
             }.
 api_error_jsonld_(clone,error(database_already_exists(Organization_Name, Database_Name),_), JSON) :-
@@ -479,28 +576,11 @@ api_error_jsonld_(clone,error(database_in_inconsistent_state,_), JSON) :-
              'api:error' : _{'@type' : 'api:DatabaseInInconsistentState'},
              'api:message' : 'Database is in an inconsistent state. Partial creation has taken pla.e, but server could not finalize the database.'
             }.
-api_error_jsonld_(clone,error(unknown_organization(Organization_Name),_), JSON) :-
-    format(string(Msg), "Organization ~s does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:CloneErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name
-                            },
-             'api:message' : Msg
-            }.
 api_error_jsonld_(fetch,error(no_remote_authorization,_),JSON) :-
     format(string(Msg), "No remote authorization supplied", []),
     JSON = _{'@type' : 'api:FetchErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:AuthorizationError'},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(fetch,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:FetchErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
 api_error_jsonld_(fetch,error(unresolvable_collection(Descriptor),_), JSON) :-
@@ -598,14 +678,6 @@ api_error_jsonld_(rebase,error(rebase_commit_application_failed(fixup_error(Thei
                               'api:witness' : Fixup_Witnesses},
              'api:message' : Msg
             }.
-api_error_jsonld_(pack,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:PackErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(pack,error(unresolvable_collection(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
@@ -655,22 +727,6 @@ api_error_jsonld_(unpack,error(not_a_repository_descriptor(Descriptor),_), JSON)
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
-api_error_jsonld_(unpack,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:UnpackErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(push,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:PushErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(push,error(push_requires_branch(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following absolute resource descriptor string does not specify a branch: ~q", [Path]),
@@ -689,53 +745,13 @@ api_error_jsonld_(push,error(unresolvable_absolute_descriptor(Descriptor), _), J
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
-api_error_jsonld_(push,error(remote_authorization_failure(Reason), _), JSON) :-
-    (   get_dict('api:message', Reason, Inner_Msg)
-    ->  format(string(Msg), "Remote authorization failed for reason:", [Inner_Msg])
-    ;   format(string(Msg), "Remote authorization failed with malformed response", [])),
-    JSON = _{'@type' : "api:PushErrorResponse",
-             'api:status' : "api:failure",
-             'api:message' : Msg,
-             'api:error' : _{ '@type' : "api:RemoteAuthorizationFailure",
-                              'api:response' : Reason}
-            }.
-api_error_jsonld_(push,error(remote_unpack_failed(history_diverged),_), JSON) :-
-    format(string(Msg), "The unpacking of layers on the remote was not possible as the history was divergent", []),
+api_error_jsonld_(push,error(unknown_remote_repository(Remote_Repo),_), JSON) :-
+    format(string(Msg), "Unknown remote repository: ~w", [Remote_Repo]),
     JSON = _{'@type' : 'api:PushErrorResponse',
              'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : "api:HistoryDivergedError"},
+             'api:error' : _{ '@type' : "api:UnknownRemoteRepository",
+                              'api:remote_repository' : Remote_Repo},
              'api:message' : Msg
-            }.
-api_error_jsonld_(push,error(remote_unpack_failed(communication_failure(Reason)),_), JSON) :-
-    format(string(Msg), "The unpacking of layers failed on the remote due to a communication error: ~q", [Reason]),
-    JSON = _{'@type' : 'api:PushErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : "api:CommunicationFailure"},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(push,error(remote_unpack_failed(authorization_failure(Reason)),_), JSON) :-
-    format(string(Msg), "The unpacking of layers failed on the remote due to an authorization failure: ~q", [Reason]),
-    JSON = _{'@type' : 'api:PushErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : "api:AuthorizationFailure"},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(push,error(remote_unpack_failed(remote_unknown),_), JSON) :-
-    format(string(Msg), "The remote requested was not known", []),
-    JSON = _{'@type' : 'api:PushErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : "api:RemoteUnknown"},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(pull,error(not_a_valid_local_branch(Descriptor), _), JSON) :-
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    format(string(Msg), "The local branch described by the path ~q does not exist", [Path]),
-    JSON = _{'@type' : "api:PullErrorResponse",
-             'api:status' : "api:failure",
-             'api:message' : Msg,
-             'api:fetch_status' : false,
-             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
-                              'api:absolute_descriptor' : Path}
             }.
 api_error_jsonld_(pull,error(not_a_valid_remote_branch(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -835,23 +851,6 @@ api_error_jsonld_(branch,error(origin_cannot_be_branched(Origin_Descriptor), _),
              'api:error' : _{ '@type' : "api:NotBranchableError",
                               'api:absolute_descriptor' : Path}
             }.
-api_error_jsonld_(prefix,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:PrefixErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
-            }.
-api_error_jsonld_(prefix,error(unknown_database(Organization, Database),_), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:PrefixErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{ '@type' : 'api:UnknownDatabase',
-                              'api:database_name' : Database,
-                              'api:organization_name' : Organization},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(user_update,error(user_update_failed_without_error(Name,Document),_),JSON) :-
     atom_json_dict(Atom, Document,[]),
     format(string(Msg), "Update to user ~q failed without an error while updating with document ~q", [Name, Atom]),
@@ -907,13 +906,6 @@ api_error_jsonld_(update_organization,error(organization_update_requires_superus
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RequiresSuperuserAuthority"}
             }.
-api_error_jsonld_(delete_organization,error(unknown_organization(Organization_Name),_),JSON) :-
-    format(string(Msg), "Organization '~s' does not exist.", [Organization_Name]),
-    JSON = _{'@type' : 'api:DeleteOrganizationErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{'@type' : 'api:UnknownOrganization',
-                             'api:organization_name' : Organization_Name},
-             'api:message' : Msg}.
 api_error_jsonld_(delete_organization,error(delete_organization_requires_superuser,_), JSON) :-
     format(string(Msg), "Organization deletion requires super user authority", []),
     JSON = _{'@type' : "api:DeleteOrganizationErrorResponse",
@@ -929,14 +921,6 @@ api_error_jsonld_(update_role,error(no_manage_capability(Organization,Resource_N
              'api:error' : _{ '@type' : "api:NoManageCapability",
                               'api:organization_name' : Organization,
                               'api:resource_name' : Resource_Name}
-            }.
-api_error_jsonld_(squash,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:SquashErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
             }.
 api_error_jsonld_(squash,error(not_a_branch_descriptor(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -955,14 +939,6 @@ api_error_jsonld_(squash,error(unresolvable_absolute_descriptor(Descriptor),_), 
              'api:message' : Msg,
              'api:error' : _{ '@type' : 'api:UnresolvableAbsoluteDescriptor',
                               'api:absolute_descriptor' : Path}
-            }.
-api_error_jsonld_(reset,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:ResetErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
             }.
 api_error_jsonld_(reset,error(not_a_branch_descriptor(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -1004,14 +980,6 @@ api_error_jsonld_(reset,error(branch_does_not_exist(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
-api_error_jsonld_(optimize,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:OptimizeErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(optimize,error(not_a_valid_descriptor_for_optimization(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The path ~s is not an optimizable descriptor", [Path]),
@@ -1049,14 +1017,6 @@ api_error_jsonld_(info,error(access_not_authorized(Auth),_),JSON) :-
              'action' : 'info',
              'scope' : 'system'
             }.
-api_error_jsonld_(remote,error(invalid_absolute_path(Repo_Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Repo_Path]),
-    JSON = _{'@type' : 'api:RemoteErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Repo_Path},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(remote,error(unresolvable_descriptor(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The repository does not exist for ~q", [Path]),
@@ -1069,7 +1029,7 @@ api_error_jsonld_(remote,error(unresolvable_descriptor(Descriptor),_), JSON) :-
 api_error_jsonld_(remote,error(remote_does_not_exist(Name),_), JSON) :-
     format(string(Msg), "The remote does not exist for ~q", [Name]),
     JSON = _{'@type' : 'api:RemoteErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : 'api:not_found',
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RemoteDoesNotExist",
                               'api:remote_name' : Name}
@@ -1081,22 +1041,6 @@ api_error_jsonld_(remote,error(remote_exists(Name),_), JSON) :-
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RemoteExists",
                               'api:remote_name' : Name}
-            }.
-api_error_jsonld_(remote,error(unknown_database(Organization, Database), _), JSON) :-
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : 'api:RemoteErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
-api_error_jsonld_(rollup,error(invalid_absolute_path(Path),_), JSON) :-
-    format(string(Msg), "The following absolute resource descriptor string is invalid: ~q", [Path]),
-    JSON = _{'@type' : 'api:RollupErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:BadAbsoluteDescriptor',
-                              'api:absolute_descriptor' : Path},
-             'api:message' : Msg
             }.
 api_error_jsonld_(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -1124,16 +1068,33 @@ api_error_jsonld_(replace_documents, Error, JSON) :-
     api_document_error_jsonld(replace_documents, Error, JSON).
 api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
+api_error_jsonld_(diff, Error, JSON) :-
+    api_document_error_jsonld(diff, Error, JSON).
 
-error_type(check_db, 'api:DbExistsErrorResponse').
-error_type(create_db, 'api:DbCreateErrorResponse').
-error_type(delete_db, 'api:DbDeleteErrorResponse').
 error_type(add_organization, 'api:AddOrganizationErrorResponse').
-error_type(woql, 'api:WoqlErrorResponse').
+error_type(check_db, 'api:DbExistsErrorResponse').
+error_type(clone, 'api:CloneErrorResponse').
+error_type(create_db, 'api:DbCreateErrorResponse').
+error_type(csv, 'api:CsvErrorResponse').
+error_type(delete_db, 'api:DbDeleteErrorResponse').
+error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+error_type(delete_organization, 'api:DeleteOrganizationErrorResponse').
+error_type(fetch, 'api:FetchErrorResponse').
+error_type(frame, 'api:FrameErrorResponse').
 error_type(get_documents, 'api:GetDocumentErrorResponse').
 error_type(insert_documents, 'api:InsertDocumentErrorResponse').
+error_type(optimize, 'api:OptimizeErrorResponse').
+error_type(pack, 'api:PackErrorResponse').
+error_type(prefix, 'api:PrefixErrorResponse').
+error_type(pull, 'api:PullErrorResponse').
+error_type(push, 'api:PushErrorResponse').
+error_type(remote, 'api:RemoteErrorResponse').
 error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
-error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+error_type(reset, 'api:ResetErrorResponse').
+error_type(rollup, 'api:RollupErrorResponse').
+error_type(squash, 'api:SquashErrorResponse').
+error_type(unpack, 'api:UnpackErrorResponse').
+error_type(woql, 'api:WoqlErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1186,6 +1147,8 @@ document_error_type(get_documents, 'api:GetDocumentErrorResponse').
 document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
 document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
+document_error_type(diff, 'api:DiffErrorResponse').
+document_error_type(apply, 'api:ApplyErrorResponse').
 
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),
@@ -1205,15 +1168,6 @@ api_document_error_jsonld(Type, error(invalid_path(Path), _), JSON) :-
                               'api:resource_path' : Path },
              'api:message' : Msg
             }.
-api_document_error_jsonld(Type,error(unknown_database(Organization, Database), _), JSON) :-
-    document_error_type(Type, JSON_Type),
-    format(string(Msg), "Unknown database: ~s/~s", [Organization, Database]),
-    JSON = _{'@type' : JSON_Type,
-             'api:status' : 'api:not_found',
-             'api:error' : _{'@type' : 'api:UnknownDatabase',
-                             'api:database_name' : Database,
-                             'api:organization_name' : Organization},
-             'api:message' : Msg}.
 api_document_error_jsonld(Type,error(unresolvable_collection(Descriptor),_), JSON) :-
     document_error_type(Type, JSON_Type),
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -1375,14 +1329,6 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(document_not_found(Id),_), JSON) :-
-    format(string(Msg), "Document with id ~q not found", [Id]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
-             'api:status' : 'api:not_found',
-             'api:error' : _{ '@type' : 'api:DocumentNotFound',
-                              'api:document_id' : Id},
-             'api:message' : Msg
-            }.
 api_document_error_jsonld(get_documents,error(query_is_only_supported_for_instance_graphs,_), JSON) :-
     format(string(Msg), "Query documents are currently only supported for instance graphs", []),
     JSON = _{'@type' : 'api:GetDocumentErrorResponse',
@@ -1495,16 +1441,6 @@ api_document_error_jsonld(get_documents,error(query_error(not_a_dict(Query)),_),
              'api:error' : _{ '@type' : 'api:QueryNotADict'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(wrong_array_dimensions(Array,Dimensions,Document),_), JSON) :-
-    format(string(Msg), "Document insertion failed as array ~q had wrong dimension ~q", [Array,Dimensions]),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:DocumentArrayWrongDimensions',
-                              'api:array' : Array,
-                              'api:dimensions' : Dimensions,
-                              'api:document': Document},
-             'api:message' : Msg
-            }.
 api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
     format(string(Msg), "Document insertion failed unexpectedly", []),
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
@@ -1535,24 +1471,6 @@ api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _)
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(replace_documents, error(document_does_not_exist(Id, Document), _), JSON) :-
-    format(string(Msg), "Document submitted for replacement, but original is not found for ID ~q", [Id]),
-    JSON = _{'@type' : 'api:ReplaceDocumentErrorResponse',
-             'api:status' : "api:not_found",
-             'api:error' : _{ '@type' : 'api:OriginalDocumentNotFound',
-                              'api:document_id' : Id,
-                              'api:replacement_document': Document
-                            },
-             'api:message' : Msg
-            }.
-api_document_error_jsonld(delete_documents, error(document_does_not_exist(Id), _), JSON) :-
-    format(string(Msg), "Document with id ~q was not found", [Id]),
-    JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
-             'api:status' : "api:not_found",
-             'api:error' : _{ '@type' : 'api:DocumentNotFound',
-                              'api:document_id' : Id},
              'api:message' : Msg
             }.
 api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
@@ -1696,6 +1614,27 @@ api_document_error_jsonld(Type, error(capture_already_bound(Capture_Id, Document
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type,error(wrong_array_dimensions(Array,Dimensions,Document),_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Document insertion failed as array ~q had wrong dimension ~q", [Array,Dimensions]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:DocumentArrayWrongDimensions',
+                              'api:array' : Array,
+                              'api:dimensions' : Dimensions,
+                              'api:document': Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(not_a_unit_type(Value, Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Unit value given is not a unit type: ~q", [Value]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NotAUnitType',
+                              'api:value' : Value,
+                              'api:document': Document},
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
@@ -1731,7 +1670,7 @@ generic_exception_jsonld(bad_api_document(Document,Expected),JSON) :-
                              'api:document' : Document},
              'api:message' : Msg}.
 generic_exception_jsonld(missing_content_type(Expected), JSON) :-
-    format(string(Msg), "Missing 'Content-Type' header. Expected value: ~q", [Expected]),
+    format(string(Msg), "Missing 'Content-Type' header. Expected value: ~w", [Expected]),
     JSON = _{'@type' : 'api:MissingContentTypeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
@@ -1890,6 +1829,7 @@ status_http_code('api:unauthorized',401).
 status_http_code('api:forbidden',403).
 status_http_code('api:not_found',404).
 status_http_code('api:method_not_allowed',405).
+status_http_code('api:conflict',409).
 status_http_code('api:server_error',500).
 
 status_cli_code('api:success',0).

@@ -45,7 +45,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(triple/literals)).
-:- use_module(core(query), [has_at/1, compress_dict_uri/3]).
+:- use_module(core(query)).
 
 :- use_module(library(lists)).
 :- use_module(library(solution_sequences)).
@@ -74,9 +74,17 @@ is_enum(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_enum(Schema, Class).
 
+is_choice(Validation_Object, Class) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_choice(Schema, Class).
+
 :- table is_schema_enum/2 as private.
 is_schema_enum(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Enum').
+
+:- table is_schema_choice/2 as private.
+is_schema_choice(Schema, Class) :-
+    xrdf(Schema, Class, rdf:type, sys:'Choice').
 
 is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
@@ -126,6 +134,7 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
 class_subsumed(Validation_Object,Class,Subsumed) :-
     database_schema(Validation_Object,Schema),
     schema_class_subsumed(Schema,Class,Subsumed).
+
 schema_class_subsumed(_Schema,Class,Class).
 schema_class_subsumed(Schema,Class,Subsumed) :-
     schema_class_super(Schema,Class,Subsumed).
@@ -369,6 +378,7 @@ refute_schema(Validation_Object,Witness) :-
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
     ;   refute_class_meta(Validation_Object,Class,Witness)
+    ;   refute_class_oneof(Validation_Object,Class,Witness)
     ;   refute_diamond_property(Validation_Object,Prefixes,Class,Witness)).
 
 /* O(n^3)
@@ -436,7 +446,8 @@ is_direct_subdocument(Schema, C) :-
 is_subdocument(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_subdocument(Schema, C).
-:- table schema_is_subdocument/2.
+
+:- table schema_is_subdocument/2 as private.
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
@@ -598,9 +609,23 @@ refute_class_meta(Validation_Object,Class,Witness) :-
                        class: Class,
                        value: Result }.
 
+refute_class_oneof(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:oneOf, Choice),
+    (   is_schema_choice(Schema, Choice)
+    ->  refute_property_(Validation_Object, Choice, Witness)
+    ;   Witness = witness{ '@type': bad_choice_type,
+                           class: Class,
+                           choice: Choice }
+    ).
+
 refute_property(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, rdf:type, sys:'Class'),
+    refute_property_(Validation_Object, Class, Witness).
+
+refute_property_(Validation_Object, Class, Witness) :-
+    database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, P, Range),
     \+ is_built_in(P),
     (   is_type_family(Validation_Object, Range)
@@ -609,20 +634,13 @@ refute_property(Validation_Object,Class,Witness) :-
     ).
 
 refute_class_or_base_type(Validation_Object,Class,Witness) :-
-    refute_base_type(Class,_Witness1),
+    \+ is_base_type(Class),
+    \+ is_unit(Class),
     refute_class(Validation_Object,Class,_Witness2),
     Witness = witness{
                  '@type': not_a_class_or_base_type,
                   class: Class
               }.
-
-refute_base_type(Type,_Witness) :-
-    is_base_type(Type),
-    !,
-    fail.
-refute_base_type(Type,Witness) :-
-    Witness = witness{ '@type': not_a_base_type,
-                       type: Type }.
 
 is_array(Validation_Object,Type) :-
     database_schema(Validation_Object,Schema),
@@ -727,40 +745,52 @@ refute_type(Validation_Object,Type,Witness) :-
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Set'),
-    \+  xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : set_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : set_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:type, sys:'List'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : list_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : list_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Type, rdf:type, sys:'Table'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : table_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : table_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : optional_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : optional_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Array'),
-    \+ xrdf(Schema, Type, sys:class, _),
-    Witness = json{ '@type' : array_has_no_class,
-                    type : Type }.
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : array_has_no_class,
+                        type : Type }
+    ).
 refute_type(Validation_Object,Type,Witness) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
-    (   \+ xrdf(Schema, Type, sys:class, _)
-    ->  Witness = json{ '@type' : cardinality_has_no_class,
+    (   xrdf(Schema, Type, sys:class, Class)
+    ->  refute_class_or_base_type(Validation_Object, Class, Witness)
+    ;   Witness = json{ '@type' : cardinality_has_no_class,
                         type : Type }
-    ;   \+ xrdf(Schema, Type, sys:cardinality, _)
+    ;   \+ xrdf(Schema, Type, sys:min_cardinality, _),
+        \+ xrdf(Schema, Type, sys:max_cardinality, _)
     ->  Witness = json{ '@type' : cardinality_has_no_bound,
                         type : Type }
     ).
@@ -808,11 +838,18 @@ schema_type_descriptor(Schema, Type, array(Class,Dimensions)) :-
     (   xrdf(Schema, Type, sys:dimensions, Dimensions^^xsd:nonNegativeInteger)
     ->  true
     ;   Dimensions = 1).
-schema_type_descriptor(Schema, Type, card(Class,N)) :-
+schema_type_descriptor(Schema, Type, cardinality(Class,N,M)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
-    xrdf(Schema, Type, sys:cardinality, N^^xsd:nonNegativeInteger).
+    (   xrdf(Schema, Type, sys:min_cardinality, N^^xsd:nonNegativeInteger)
+    ->  true
+    ;   N = 0
+    ),
+    (   xrdf(Schema, Type, sys:max_cardinality, M^^xsd:nonNegativeInteger)
+    ->  true
+    ;   M = inf
+    ).
 schema_type_descriptor(Schema, Type, optional(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
@@ -878,19 +915,25 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_documentation_descriptor(Schema, Type, Descriptor).
 
-schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment, Elements)) :-
+schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment_Option, Elements)) :-
     xrdf(Schema, Type, sys:documentation, Obj),
     is_schema_enum(Schema,Type),
     !,
-    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
+    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+    ->  Comment_Option = some(Comment)
+    ;   Comment_Option = none
+    ),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:values, Enum),
                 xrdf(Schema, Enum, Key, Value^^xsd:string)),
             Pairs),
     dict_pairs(Elements,json,Pairs).
-schema_documentation_descriptor(Schema, Type, property_documentation(Comment, Elements)) :-
+schema_documentation_descriptor(Schema, Type, property_documentation(Comment_Option, Elements)) :-
     xrdf(Schema, Type, sys:documentation, Obj),
-    xrdf(Schema, Obj, sys:comment, Comment^^xsd:string),
+    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+    ->  Comment_Option = some(Comment)
+    ;   Comment_Option = none
+    ),
     findall(Key-Value,
             (   xrdf(Schema, Obj, sys:properties, Property),
                 xrdf(Schema, Property, Key, Value^^xsd:string)),
@@ -900,22 +943,24 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Comment, El
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),
     !,
-    findall(P-C,
+    findall(P-Desc,
             (
                 distinct(P,(
                              xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
+                             \+ is_built_in(P),
+                             schema_type_descriptor(Schema, C, Desc)
                          ))
             ),
             Data),
     dict_create(Map,tagged_union,Data).
 schema_oneof_descriptor(Schema, Type, tagged_union(Type, Map)) :-
     xrdf(Schema, Type, sys:oneOf, Class),
-    findall(P-C,
+    findall(P-Desc,
             (
                 distinct(P,(
                              xrdf(Schema, Class, P, C),
-                             \+ is_built_in(P)
+                             \+ is_built_in(P),
+                             schema_type_descriptor(Schema, C, Desc)
                          ))
             ),
             Data),

@@ -8,15 +8,17 @@ describe('woql-noauth', function () {
     agent = new Agent()
   })
 
-  it('fails when query parameter is missing', async function () {
+  it('fails with missing query', async function () {
     const { path } = endpoint.woqlResource(agent.defaults())
-    const body = {}
-    const r = await agent
-      .post(path)
-      .send(body)
-      .then(woql.verifyGetFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
-    expect(r.body['api:error']['api:parameter']).to.equal('query')
+    const requests = [
+      agent.post(path).send({}),
+      woql.multipart(agent, path, {}),
+    ]
+    for (const request of requests) {
+      const r = await request.then(woql.verifyGetFailure)
+      expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
+      expect(r.body['api:error']['api:parameter']).to.equal('query')
+    }
   })
 
   it('reports resource not found', async function () {

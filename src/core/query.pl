@@ -23,6 +23,7 @@
               global_prefix_expand_safe/2,
               literal_expand/2,
               default_prefixes/1,
+              prefix_list/2,
 
 
               % jsonld.pl
@@ -33,6 +34,7 @@
               compress/3,
               term_jsonld/2,
               term_jsonld/3,
+              value_jsonld/2,
 %              jsonld_triples/3,
               jsonld_id/2,
               get_key_document/4,
@@ -62,6 +64,7 @@
               resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
               resolve_absolute_string_descriptor_and_default_graph/3,
+              resolve_absolute_or_relative_string_descriptor/3,
               resolve_filter/2,
 
               % woql_compile.pl

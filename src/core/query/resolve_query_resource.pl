@@ -9,6 +9,7 @@
               resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
               resolve_absolute_string_descriptor_and_default_graph/3,
+              resolve_absolute_or_relative_string_descriptor/3,
               resolve_filter/2
           ]).
 
@@ -729,6 +730,10 @@ resolve_filter(Filter_String,Filter) :-
     ->  Filter = type_filter{ types : [instance,schema] }
     ;   Filter = type_name_filter{ type : Type }).
 
+resolve_absolute_or_relative_string_descriptor(Desc_In,String,Desc_Out) :-
+    once((   resolve_relative_string_descriptor(Desc_In,String,Desc_Out)
+         ;   resolve_absolute_string_descriptor(String,Desc_Out))).
+
 :- begin_tests(resolution).
 
 test(test_full_resolution, []) :-
@@ -878,5 +883,27 @@ test(test_commits_bare, []) :-
                 repository_name:"local",
                 type:instance
             }.
+
+test(resolve_absolute_or_relative_string_descriptor, []) :-
+    resolve_absolute_string_descriptor("admin/db", Desc1),
+    String1 = "admin/db/local/branch/dev",
+    resolve_absolute_or_relative_string_descriptor(Desc1,String1, Desc1_Out),
+    Desc1_Out =
+    branch_descriptor{branch_name:"dev",
+                      repository_descriptor:
+                      repository_descriptor{
+                          database_descriptor:
+                          database_descriptor{
+                              database_name:"db",
+                              organization_name:"admin"},
+                          repository_name:"local"}},
+    String2 = "_commits",
+    resolve_absolute_or_relative_string_descriptor(Desc1,String2, Desc2),
+    Desc2 = repository_descriptor{
+                database_descriptor:
+                database_descriptor{
+                    database_name:"db",
+                    organization_name:"admin"},
+                repository_name:"local"}.
 
 :- end_tests(resolution).

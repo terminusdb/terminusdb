@@ -19,8 +19,10 @@ module.exports = {
   },
   plugins: [
     'mocha',
+    'json-format',
   ],
   rules: {
+    camelcase: ['error', { properties: 'never', ignoreDestructuring: true }],
     'comma-dangle': ['error', 'always-multiline'],
     // This is for chai. See <https://stackoverflow.com/q/37558795>.
     'no-unused-expressions': 'off',
