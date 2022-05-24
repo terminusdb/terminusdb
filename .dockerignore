@@ -1,8 +1,15 @@
-.git
-# Prevent temporary emacs files from being included
 *~
+\#*\#
+.\#*
+.packs
+*.index*
+**/*.md
+**/.git*
+httpd.log
 docs
 storage
-src/rust/target
-src/rust/librust.*
+tmp
+**/target
+**/*.so
+**/*.dylib
 terminusdb

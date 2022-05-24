@@ -16,6 +16,5 @@ nohup.out
 plugins/registry.pl
 terminusdb
 **/target/
-src/rust/librust.so
-src/rust/librust.dylib
-terminusdb-enterprise
+**/*.so
+**/*.dylib
