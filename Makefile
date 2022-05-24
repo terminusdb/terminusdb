@@ -1,39 +1,15 @@
-SWIPL=LANG=C.UTF-8 $(SWIPL_DIR)swipl
+DIST ?= community
+
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
 TARGET=terminusdb
-
-ifeq ($(shell uname), Darwin)
-	RUST_LIB_NAME := libterminusdb_dylib.dylib
-	RUST_LIB_TARGET_NAME := librust.dylib
-else
-	RUST_LIB_NAME := libterminusdb_dylib.so
-	RUST_LIB_TARGET_NAME := librust.so
-endif
-
-ifeq "$(ENTERPRISE)" "true"
-	RUST_LIBRARY_FILE := terminusdb-enterprise/rust/target/release/$(RUST_LIB_NAME)
-	RUST_SOURCE_DIR := terminusdb-enterprise/rust
-else
-	RUST_LIBRARY_FILE:=src/rust/target/release/$(RUST_LIB_NAME)
-	RUST_SOURCE_DIR := src/rust
-endif
-
-RUST_TARGET := src/rust/$(RUST_LIB_TARGET_NAME)
-
-TUS_VERSION := v0.0.10
-JWT_VERSION := v0.0.5
-
-SWIPL_LINT_VERSION=v0.8
-SWIPL_LINT_PATH=./tmp/pl_lint-$(SWIPL_LINT_VERSION).pl
-
-PACK_INSTALL_OPTIONS=[interactive(false), git(true)]
 
 ################################################################################
 
 # Build the binary (default).
 .PHONY: default
-default: $(TARGET)
+default:
+	$(MAKE) -f distribution/Makefile.prolog
 
 # Build the binary and the documentation.
 .PHONY: all
@@ -42,11 +18,13 @@ all: default docs
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
 .PHONY: docker
+docker: export DOCKER_BUILDKIT=1
 docker:
 	docker build . \
 	  --file Dockerfile \
 	  --tag terminusdb/terminusdb-server:local \
-	  --build-arg TERMINUSDB_GIT_HASH="$(git rev-parse --verify HEAD)"
+	  --build-arg DIST="$(DIST)" \
+	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
 # Install minimal pack dependencies.
 .PHONY: install-deps
@@ -54,66 +32,52 @@ install-deps: install-tus
 
 # Install the tus pack.
 .PHONY: install-tus
-install-tus: REPO_URL=https://github.com/terminusdb/tus.git
-install-tus: PACK_NAME=tus
-install-tus: BRANCH=$(TUS_VERSION)
-install-tus: install-pack
+install-tus:
+	$(MAKE) -f distribution/Makefile.deps $@
 
 # Install the jwt_io pack.
 .PHONY: install-jwt
-install-jwt: REPO_URL=https://github.com/terminusdb-labs/jwt_io.git
-install-jwt: PACK_NAME=jwt_io
-install-jwt: BRANCH=$(JWT_VERSION)
-install-jwt: install-pack
-
-# Install a given pack from a given git repository.
-.PHONY: install-pack
-install-pack:
-	mkdir -p .packs/$(PACK_NAME)
-	git clone --depth 1 $(REPO_URL) .packs/$(PACK_NAME) 2> /dev/null || git -C .packs/$(PACK_NAME) pull --quiet
-	(cd .packs/$(PACK_NAME); git checkout --quiet $(BRANCH))
-	$(SWIPL) \
-	  -g "pack_remove($(PACK_NAME))" \
-	  -g "pack_install('file://$(CURDIR)/.packs/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
-	  -g "pack_info($(PACK_NAME))" \
-	  -g halt
+install-jwt:
+	$(MAKE) -f distribution/Makefile.deps $@
 
 # Download and run the lint tool.
 .PHONY: lint
-lint: $(SWIPL_LINT_PATH)
-	$(SWIPL) -f src/load_paths.pl src/core/query/expansions.pl $(SWIPL_LINT_PATH)
+lint:
+	$(MAKE) -f distribution/Makefile.prolog $@
 
-.PHONY: module
-module: $(RUST_TARGET)
-
-# Build a debug version of the binary.
-.PHONY: debug
-debug: $(RUST_TARGET)
-	echo "main, halt." | $(SWIPL) -f src/bootstrap.pl
+# Build the dylib.
+.PHONY: rust
+rust:
+	$(MAKE) -f distribution/Makefile.rust
 
 # Run the unit tests in swipl.
 .PHONY: test
-test: $(RUST_TARGET)
-	$(SWIPL) -t 'run_tests, halt.' -f src/interactive.pl
+test:
+	$(MAKE) -f distribution/Makefile.prolog $@
 
 # Quick command for interactive
 .PHONY: i
-i: $(RUST_TARGET)
-	$(SWIPL) -f src/interactive.pl
+i:
+	$(MAKE) -f distribution/Makefile.prolog $@
 
 # Remove the binary.
 .PHONY: clean
-clean: shallow-clean
-	cd src/rust && cargo clean
-	cd terminusdb-enterprise/rust 2> /dev/null && cargo clean || true
+clean:
+	$(MAKE) -f distribution/Makefile.prolog $@
 
-.PHONY: module-clean
-module-clean:
-	rm -f $(RUST_TARGET)
+# Remove everything.
+.PHONY: realclean
+realclean: clean realclean-rust
 
-.PHONY: shallow-clean
-shallow-clean: module-clean
-	rm -f $(TARGET)
+# Remove the dylib.
+.PHONY: clean-rust
+clean-rust:
+	$(MAKE) -f distribution/Makefile.rust clean
+
+# Remove the dylib and all Rust build files.
+.PHONY: realclean-rust
+realclean-rust:
+	$(MAKE) -f distribution/Makefile.rust realclean
 
 # Build the documentation.
 .PHONY: docs
@@ -126,24 +90,6 @@ docs-clean:
 
 ################################################################################
 
-$(TARGET): $(RUST_TARGET)
-$(TARGET): $(shell find src \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
-ifeq "$(ENTERPRISE)" "true"
-$(TARGET): $(shell find terminusdb-enterprise/prolog \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
-endif
-	# Build the target and fail for errors and warnings. Ignore warnings
-	# having "qsave(strip_failed(..." that occur on macOS.
-	TERMINUSDB_ENTERPRISE=$(ENTERPRISE) $(SWIPL) -t 'main,halt.' -q -O -f src/bootstrap.pl 2>&1 | \
-	  grep -v 'qsave(strip_failed' | \
-	  (! grep -e ERROR -e Warning)
-
-$(RUST_TARGET): $(shell find src/rust -type f \( -name '*.rs' -o -name 'Cargo.*' \))
-ifeq "$(ENTERPRISE)" "true"
-$(RUST_TARGET): $(shell find terminusdb-enterprise/rust -type f \( -name '*.rs' -o -name 'Cargo.*' \))
-endif
-	cd $(RUST_SOURCE_DIR) && cargo build --release
-	cp $(RUST_LIBRARY_FILE) $(RUST_TARGET)
-
 # Create input for `ronn` from a template and the `terminusdb` help text.
 $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 	HELP="$$(./$(TARGET) help -m)" envsubst < $< > $@
@@ -151,6 +97,3 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 # Create a man page from using `ronn`.
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
-
-$(SWIPL_LINT_PATH):
-	curl -L --create-dirs -o $@ "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$(SWIPL_LINT_VERSION)/pl_lint.pl"
