@@ -67,7 +67,7 @@ is_list(Object),
 Object = [Head|Tail] =>
     variant_sha1(Object, Hash),
     json_data_prefix(Data),
-    atomic_list_concat([Data,'Cons/',Hash], Id),
+    atomic_list_concat([Data,'Cons/SHA1/',Hash], Id),
     global_prefix_expand(rdf:type, RDF_Type),
     global_prefix_expand(rdf:first, RDF_First),
     global_prefix_expand(rdf:rest, RDF_Rest),
@@ -90,7 +90,7 @@ json_object_triple(Parent_Id, Parent_Prop, Object, Triple) =>
 assign_json_object_id(Object, Id) :-
     variant_sha1(Object, Hash),
     json_data_prefix(Data),
-    atomic_list_concat([Data,'JSON/',Hash], Id).
+    atomic_list_concat([Data,'JSON/SHA1/',Hash], Id).
 
 assign_json_document_id(Id) :-
     json_data_prefix(Data),
