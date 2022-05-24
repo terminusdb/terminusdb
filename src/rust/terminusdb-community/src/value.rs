@@ -18,7 +18,7 @@ fn value_string_to_slices(s: &str) -> (&str, &str) {
 }
 
 lazy_static! {
-    static ref NUMERIC_TYPES: HashSet<&'static str> = ["decimal", "double", "float", "byte", "short", "int", "long", "unsignedByte", "unsignedShort", "unsignedInt", "unsingedLong", "integer", "positiveInteger", "nonNegativeINteger", "negativeInteger", "nonPositiveInteger"].into_iter().collect();
+    static ref NUMERIC_TYPES: HashSet<&'static str> = ["decimal", "double", "float", "byte", "short", "int", "long", "unsignedByte", "unsignedShort", "unsignedInt", "unsignedLong", "integer", "positiveInteger", "nonNegativeInteger", "negativeInteger", "nonPositiveInteger"].into_iter().collect();
 }
 
 fn type_is_numeric(s: &str) -> bool {
