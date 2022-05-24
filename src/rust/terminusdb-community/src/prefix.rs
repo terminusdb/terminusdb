@@ -14,14 +14,14 @@ fn common_prefix<'a>(s1: &'a [u8], s2: &'a [u8]) -> &'a [u8] {
 pub enum PrefixContraction<'a> {
     Base,
     Schema,
-    Other(&'a str)
+    Other(&'a str),
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Prefix {
     Schema(String),
     Base(String),
-    Other(String, String)
+    Other(String, String),
 }
 
 impl Prefix {
@@ -39,7 +39,7 @@ impl Prefix {
         match self {
             Prefix::Schema(_) => PrefixContraction::Schema,
             Prefix::Base(_) => PrefixContraction::Base,
-            Prefix::Other(contraction, _) => PrefixContraction::Other(contraction)
+            Prefix::Other(contraction, _) => PrefixContraction::Other(contraction),
         }
     }
 
@@ -47,7 +47,7 @@ impl Prefix {
         match self {
             Prefix::Schema(e) => e,
             Prefix::Base(e) => e,
-            Prefix::Other(_, e) => e
+            Prefix::Other(_, e) => e,
         }
     }
 }
@@ -56,22 +56,22 @@ impl Prefix {
 struct PrefixContracterTree {
     prefix: Option<Prefix>,
     part: Vec<u8>,
-    children: Vec<PrefixContracterTree>
+    children: Vec<PrefixContracterTree>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct PrefixContracter {
-    trees: Vec<PrefixContracterTree>
+    trees: Vec<PrefixContracterTree>,
 }
 
 impl PrefixContracter {
-    pub fn new <I:IntoIterator<Item=Prefix>>(prefixes: I) -> PrefixContracter {
+    pub fn new<I: IntoIterator<Item = Prefix>>(prefixes: I) -> PrefixContracter {
         let mut items: Vec<_> = prefixes.into_iter().collect();
         if items.is_empty() {
             panic!("no prefixes??");
         }
 
-        items.sort_by(|p1,p2|p1.expansion().cmp(&p2.expansion()));
+        items.sort_by(|p1, p2| p1.expansion().cmp(&p2.expansion()));
         items.reverse();
 
         // TODO verify that we don't have duplicates
@@ -93,27 +93,27 @@ impl PrefixContracter {
                         let current = PrefixContracterTree {
                             part,
                             prefix: Some(prefix),
-                            children: Vec::new()
+                            children: Vec::new(),
                         };
                         offset += previous.part.len();
                         matched.extend_from_slice(current.part.as_slice());
                         stack.push(previous);
                         stack.push(current);
-                    }
-                    else {
+                    } else {
                         // This prefix deviates from previous.
                         // we must unwind until we reach a point where it can be made a continuation.
                         // This is either because we discover a point where it is an exact continuation, or we find a point where we can make a branch, or roll up to termination.
 
                         loop {
-                            if common.len() == offset+previous.part.len() {
+                            if common.len() == offset + previous.part.len() {
                                 // we found an exact continuation point. by pushing this back onto the stack we're good.
                                 stack.push(previous);
 
                                 matched = common;
                                 break;
-                            }
-                            else if common.len() > offset && common.len() < offset + previous.part.len() {
+                            } else if common.len() > offset
+                                && common.len() < offset + previous.part.len()
+                            {
                                 // we found a branch point. We set up a branch tree entry and push it onto the stack. next iteration of the outer loop will find it as something it is able to continue on.
                                 let part = common[offset..].to_vec();
                                 previous.part = previous.part[part.len()..].to_vec();
@@ -121,7 +121,7 @@ impl PrefixContracter {
                                 let current = PrefixContracterTree {
                                     part,
                                     prefix: None,
-                                    children: vec![previous]
+                                    children: vec![previous],
                                 };
 
                                 offset = common.len() - current.part.len();
@@ -130,8 +130,7 @@ impl PrefixContracter {
                                 stack.push(current);
 
                                 break;
-                            }
-                            else {
+                            } else {
                                 if let Some(mut parent) = stack.pop() {
                                     // we're rolling up things here. We know there will be no further extensions until we come in a part where we can branch.
                                     //if let Some(last) = stack.last() {
@@ -144,8 +143,7 @@ impl PrefixContracter {
 
                                     parent.children.push(previous);
                                     previous = parent;
-                                }
-                                else {
+                                } else {
                                     // we've terminated, there are no more parents, this is a result.
                                     intermediate.push(previous);
                                     break;
@@ -156,22 +154,20 @@ impl PrefixContracter {
                         // prefix will be re-popped on next iteration
                         items.push(prefix);
                     }
-                }
-                else {
+                } else {
                     // nothing on stack means we're starting a completely new segment. exciting.
                     let part = prefix.expansion().as_bytes().to_vec();
                     let current = PrefixContracterTree {
                         part,
                         prefix: Some(prefix),
-                        children: Vec::new()
+                        children: Vec::new(),
                     };
 
                     offset = 0;
                     matched = current.part.clone();
                     stack.push(current);
                 }
-            }
-            else {
+            } else {
                 break;
                 // nothing left on item, all that remains to be done is to roll up the stack (if any) into a final result.
             }
@@ -184,15 +180,13 @@ impl PrefixContracter {
                     // we're rolling up things here. We know there will be no further extensions until we come in a part where we can branch.
                     if let Some(last) = stack.last() {
                         offset -= last.part.len();
-                    }
-                    else {
+                    } else {
                         offset = 0;
                     }
 
                     parent.children.push(previous);
                     previous = parent;
-                }
-                else {
+                } else {
                     // we've terminated, there are no more parents, this is a result.
                     intermediate.push(previous);
                     break;
@@ -200,7 +194,9 @@ impl PrefixContracter {
             }
         }
 
-        Self{trees: intermediate }
+        Self {
+            trees: intermediate,
+        }
     }
 
     pub fn contract<'a>(&self, s: &'a str) -> Option<(PrefixContraction, &'a str)> {
@@ -222,7 +218,9 @@ impl PrefixContracter {
             // ordering, and this will require measuring to figure out
             // which one is best.
             for c in cur {
-                if c.part.len() <= slice.len() - offset && c.part == slice[offset..offset+c.part.len()] {
+                if c.part.len() <= slice.len() - offset
+                    && c.part == slice[offset..offset + c.part.len()]
+                {
                     if let Some(p) = &c.prefix {
                         // this is a possible match, though a more specific match may be found after.
                         prefix = Some(p);
@@ -246,8 +244,7 @@ impl PrefixContracter {
             let remainder = unsafe { std::str::from_utf8_unchecked(&slice[p.expansion().len()..]) };
 
             Some((p.contraction(), remainder))
-        }
-        else {
+        } else {
             None
         }
     }
@@ -257,7 +254,7 @@ impl PrefixContracter {
             None => Cow::Borrowed(s),
             Some((PrefixContraction::Base, rest)) => Cow::Owned(format!("@base:{}", rest)),
             Some((PrefixContraction::Schema, rest)) => Cow::Borrowed(rest),
-            Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest))
+            Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest)),
         }
     }
 
@@ -266,7 +263,7 @@ impl PrefixContracter {
             None => Cow::Borrowed(s),
             Some((PrefixContraction::Base, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Schema, rest)) => Cow::Owned(format!("@schema:{}", rest)),
-            Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest))
+            Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest)),
         }
     }
 }
@@ -288,13 +285,12 @@ mod tests {
         ];
 
         let result = PrefixContracter::new(x);
-        let expected = PrefixContracter{
-            trees:
-            vec![
+        let expected = PrefixContracter {
+            trees: vec![
                 PrefixContracterTree {
                     part: b"abc://def".to_vec(),
                     prefix: Some(Prefix::other("d", "abc://def")),
-                    children: vec![]
+                    children: vec![],
                 },
                 PrefixContracterTree {
                     part: b"http://".to_vec(),
@@ -311,7 +307,7 @@ mod tests {
                                         PrefixContracterTree {
                                             part: b"#".to_vec(),
                                             prefix: Some(Prefix::schema("http://foo/bar#")),
-                                            children: vec![]
+                                            children: vec![],
                                         },
                                         PrefixContracterTree {
                                             part: b"/".to_vec(),
@@ -319,44 +315,50 @@ mod tests {
                                             children: vec![
                                                 PrefixContracterTree {
                                                     part: b"documents/".to_vec(),
-                                                    prefix: Some(Prefix::base("http://foo/bar/documents/")),
-                                                    children: vec![]
+                                                    prefix: Some(Prefix::base(
+                                                        "http://foo/bar/documents/",
+                                                    )),
+                                                    children: vec![],
                                                 },
                                                 PrefixContracterTree {
                                                     part: b"other/".to_vec(),
-                                                    prefix: Some(Prefix::other("x", "http://foo/bar/other/")),
-                                                    children: vec![]
+                                                    prefix: Some(Prefix::other(
+                                                        "x",
+                                                        "http://foo/bar/other/",
+                                                    )),
+                                                    children: vec![],
                                                 },
                                                 PrefixContracterTree {
                                                     part: b"yetanother/".to_vec(),
-                                                    prefix: Some(Prefix::other("y", "http://foo/bar/yetanother/")),
-                                                    children: vec![]
+                                                    prefix: Some(Prefix::other(
+                                                        "y",
+                                                        "http://foo/bar/yetanother/",
+                                                    )),
+                                                    children: vec![],
                                                 },
-                                            ]
+                                            ],
                                         },
-                                    ]
+                                    ],
                                 },
                                 PrefixContracterTree {
                                     part: b"oo/x/".to_vec(),
                                     prefix: Some(Prefix::other("a", "http://foooo/x/")),
-                                    children: vec![
-                                        PrefixContracterTree {
-                                            part: b"y/".to_vec(),
-                                            prefix: Some(Prefix::other("b", "http://foooo/x/y/")),
-                                            children: vec![]
-                                        }
-                                    ]
-                                }
-                            ]
+                                    children: vec![PrefixContracterTree {
+                                        part: b"y/".to_vec(),
+                                        prefix: Some(Prefix::other("b", "http://foooo/x/y/")),
+                                        children: vec![],
+                                    }],
+                                },
+                            ],
                         },
                         PrefixContracterTree {
                             part: b"quux/moo".to_vec(),
                             prefix: Some(Prefix::other("c", "http://quux/moo")),
-                            children: vec![]
-                        }
-                    ]
+                            children: vec![],
+                        },
+                    ],
                 },
-            ]
+            ],
         };
 
         assert_eq!(expected, result);
@@ -377,23 +379,32 @@ mod tests {
 
         let c = PrefixContracter::new(x);
 
-        assert_eq!(Some((PrefixContraction::Base, "moo")),
-                   c.contract("http://foo/bar/documents/moo"));
+        assert_eq!(
+            Some((PrefixContraction::Base, "moo")),
+            c.contract("http://foo/bar/documents/moo")
+        );
 
-        assert_eq!(Some((PrefixContraction::Schema, "SomeType")),
-                   c.contract("http://foo/bar#SomeType"));
+        assert_eq!(
+            Some((PrefixContraction::Schema, "SomeType")),
+            c.contract("http://foo/bar#SomeType")
+        );
 
-        assert_eq!(Some((PrefixContraction::Other("x"), "moo")),
-                   c.contract("http://foo/bar/other/moo"));
+        assert_eq!(
+            Some((PrefixContraction::Other("x"), "moo")),
+            c.contract("http://foo/bar/other/moo")
+        );
 
-        assert_eq!(Some((PrefixContraction::Other("d"), "bar")),
-                   c.contract("abc://def/bar"));
+        assert_eq!(
+            Some((PrefixContraction::Other("d"), "bar")),
+            c.contract("abc://def/bar")
+        );
 
-        assert_eq!(Some((PrefixContraction::Other("b"), "baz")),
-                   c.contract("http://foooo/x/y/baz"));
+        assert_eq!(
+            Some((PrefixContraction::Other("b"), "baz")),
+            c.contract("http://foooo/x/y/baz")
+        );
 
-        assert_eq!(None,
-                   c.contract("http://fooo/bar/other/moo"));
+        assert_eq!(None, c.contract("http://fooo/bar/other/moo"));
     }
 
     #[test]
@@ -411,23 +422,23 @@ mod tests {
 
         let c = PrefixContracter::new(x);
 
-        assert_eq!("@base:moo",
-                   c.schema_contract("http://foo/bar/documents/moo"));
+        assert_eq!(
+            "@base:moo",
+            c.schema_contract("http://foo/bar/documents/moo")
+        );
 
-        assert_eq!("SomeType",
-                   c.schema_contract("http://foo/bar#SomeType"));
+        assert_eq!("SomeType", c.schema_contract("http://foo/bar#SomeType"));
 
-        assert_eq!("x:moo",
-                   c.schema_contract("http://foo/bar/other/moo"));
+        assert_eq!("x:moo", c.schema_contract("http://foo/bar/other/moo"));
 
-        assert_eq!("d:bar",
-                   c.schema_contract("abc://def/bar"));
+        assert_eq!("d:bar", c.schema_contract("abc://def/bar"));
 
-        assert_eq!("b:baz",
-                   c.schema_contract("http://foooo/x/y/baz"));
+        assert_eq!("b:baz", c.schema_contract("http://foooo/x/y/baz"));
 
-        assert_eq!("http://fooo/bar/other/moo",
-                   c.schema_contract("http://fooo/bar/other/moo"));
+        assert_eq!(
+            "http://fooo/bar/other/moo",
+            c.schema_contract("http://fooo/bar/other/moo")
+        );
     }
 
     #[test]
@@ -445,22 +456,22 @@ mod tests {
 
         let c = PrefixContracter::new(x);
 
-        assert_eq!("moo",
-                   c.instance_contract("http://foo/bar/documents/moo"));
+        assert_eq!("moo", c.instance_contract("http://foo/bar/documents/moo"));
 
-        assert_eq!("@schema:SomeType",
-                   c.instance_contract("http://foo/bar#SomeType"));
+        assert_eq!(
+            "@schema:SomeType",
+            c.instance_contract("http://foo/bar#SomeType")
+        );
 
-        assert_eq!("x:moo",
-                   c.instance_contract("http://foo/bar/other/moo"));
+        assert_eq!("x:moo", c.instance_contract("http://foo/bar/other/moo"));
 
-        assert_eq!("d:bar",
-                   c.instance_contract("abc://def/bar"));
+        assert_eq!("d:bar", c.instance_contract("abc://def/bar"));
 
-        assert_eq!("b:baz",
-                   c.instance_contract("http://foooo/x/y/baz"));
+        assert_eq!("b:baz", c.instance_contract("http://foooo/x/y/baz"));
 
-        assert_eq!("http://fooo/bar/other/moo",
-                   c.instance_contract("http://fooo/bar/other/moo"));
+        assert_eq!(
+            "http://fooo/bar/other/moo",
+            c.instance_contract("http://fooo/bar/other/moo")
+        );
     }
 }

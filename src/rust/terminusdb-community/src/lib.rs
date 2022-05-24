@@ -1,14 +1,14 @@
 mod consts;
-mod types;
-mod schema;
-mod prefix;
 mod doc;
+mod prefix;
+mod schema;
+mod types;
 mod value;
 
 use lcs;
 pub use swipl;
-pub use terminusdb_store_prolog::terminus_store;
 use swipl::prelude::*;
+pub use terminusdb_store_prolog::terminus_store;
 
 use terminusdb_store_prolog::layer::*;
 

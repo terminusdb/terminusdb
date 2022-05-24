@@ -5,8 +5,8 @@ pub mod store;
 
 mod csv;
 
-pub use terminus_store;
 pub use swipl;
+pub use terminus_store;
 
 pub fn install(module: Option<&str>) {
     csv::register_csv_iri_in_module(module);
