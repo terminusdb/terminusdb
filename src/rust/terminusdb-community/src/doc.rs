@@ -65,7 +65,7 @@ impl<L:Layer> GetDocumentContext<L> {
         }
     }
 
-    fn get_field(&self, object: u64) -> Result<Value, (Map<String, Value>, Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>)> {
+    fn get_field(&self, object: u64) -> Result<Value, StackEntry> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         }
@@ -73,7 +73,7 @@ impl<L:Layer> GetDocumentContext<L> {
             // this might not be a terminator, but we won't know until trying to get a doc stub
             match self.get_doc_stub(object, true) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
-                Ok(x) => Err(x),
+                Ok((stub,fields)) => Err(StackEntry::Document(stub, fields)),
                 // it turns out it is a terminator after all, so we just use the id as a direct value
                 Err(s) => Ok(Value::String(s))
             }
@@ -156,39 +156,33 @@ impl<L:Layer> GetDocumentContext<L> {
         let mut stack = Vec::new();
 
         let (stub, fields) = self.get_doc_stub(id, false).unwrap();
-        stack.push((stub, fields));
+        stack.push(StackEntry::Document(stub, fields));
 
         loop {
-            let (cur, fields) = stack.last_mut().unwrap();
-            if let Some(next_field) = fields.peek() {
-                match self.get_field(next_field.object) {
+            let cur = stack.last_mut().unwrap();
+            if let Some(next_obj) = cur.peek() {
+                match self.get_field(next_obj) {
                     Ok(val) => {
-                        // iterate past this field
-                        let next_field = fields.next().unwrap();
-                        let p_name = self.layer.id_predicate(next_field.predicate).unwrap();
-                        let p_name_contracted = self.prefixes.schema_contract(&p_name).to_string();
-                        self.add_field(cur, &p_name_contracted, val);
+                        cur.integrate_value(self, val);
                     },
-                    Err((next_stub, next_fields)) => {
-                        // it's a subdocument, we need to iterate deeper, so add it to the stack without iterating past the field.
-                        stack.push((next_stub, next_fields));
+                    Err(entry) => {
+                        // We need to iterate deeper, so add it to the stack without iterating past the field.
+                        stack.push(entry);
                     }
                 }
             }
             else {
                 // done!
-                let (cur, _) = stack.pop().unwrap();
-                if let Some((parent, parent_fields)) = stack.last_mut() {
-                    // we previously peeked a field and decided we needed to recurse deeper.
-                    // this is the time to pop it.
-                    let t = parent_fields.next().unwrap();
-                    let p_name = self.layer.id_predicate(t.predicate).unwrap();
-                    let p_name_contracted = self.prefixes.schema_contract(&p_name).to_string();
-                    self.add_field(parent, &p_name_contracted, Value::Object(cur));
+                let cur = stack.pop().unwrap();
+                if let Some(parent) = stack.last_mut() {
+                    parent.integrate(self, cur);
                 }
                 else {
                     // we're done, this was the root, time to return!
-                    return cur;
+                    match cur {
+                        StackEntry::Document(d, _) => return d,
+                        _ => panic!("unexpected stack top")
+                    }
                 }
             }
         }
