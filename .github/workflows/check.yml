@@ -194,5 +194,6 @@ jobs:
           docker load < terminusdb-server-docker-image.tar.gz
           docker run \
             -v $(pwd)/pl_lint.pl:/app/pl_lint.pl \
+            -v $(pwd):/app/terminusdb \
             terminusdb/terminusdb-server:local \
             swipl -f src/load_paths.pl src/core/query/expansions.pl /app/pl_lint.pl
