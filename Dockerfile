@@ -54,6 +54,7 @@ ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 COPY --from=pack_installer /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
 WORKDIR /app/terminusdb
+COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
 COPY src src/
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
