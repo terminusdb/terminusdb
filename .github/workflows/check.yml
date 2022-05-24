@@ -185,6 +185,11 @@ jobs:
         with:
           name: terminusdb-server-docker-image
 
+      - uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
         # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
       - name: Download lint
         run: curl -L "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$SWIPL_LINTER_VERSION/pl_lint.pl" > pl_lint.pl
