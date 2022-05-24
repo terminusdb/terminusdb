@@ -6,14 +6,10 @@ TARGET=terminusdb
 
 ################################################################################
 
-# Build the binary (default).
+# Build the binary.
 .PHONY: default
 default:
 	@$(MAKE) -f distribution/Makefile.prolog
-
-# Build the binary and the documentation.
-.PHONY: all
-all: default docs
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
@@ -87,11 +83,6 @@ realclean-rust:
 # Build the documentation.
 .PHONY: docs
 docs: $(ROFF_FILE)
-
-# Remove the documentation.
-.PHONY: docs-clean
-docs-clean:
-	rm -f $(RONN_FILE) $(ROFF_FILE)
 
 ################################################################################
 
