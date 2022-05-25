@@ -1417,8 +1417,7 @@ doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_replace_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_replace_documents(System_DB, Auth, Path, Stream,
-                          no_data_version, _, Ids, Opts).
+    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
 
 doc_delete_memory_file(System_DB, Auth, Path, Opts, Mem_File) :-
     % Copy stdin to a memory file.
