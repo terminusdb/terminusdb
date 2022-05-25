@@ -1275,8 +1275,7 @@ run_command(doc,replace, [Path], Opts) :-
         (   (   var(Data)
             ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts))
             ;   open_string(Data, Stream),
-                api_replace_documents(System_DB, Auth, Path, Stream,
-                                      no_data_version, _, Ids, Opts)
+                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
             ),
             length(Ids, Number_Inserted),
             format("Document(s) replaced: ~d~n", [Number_Inserted]),
