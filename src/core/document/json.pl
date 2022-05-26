@@ -2595,11 +2595,12 @@ insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
     insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
 
-% This should presumably do something
-verify_json_id(Prefixes,Id) :-
-    get_dict('@base', Prefixes, Base),
-    atomic_list_concat(['^',Base,'JSONDocument/.*'],Re),
-    re_match(Re,Id).
+valid_json_id_or_die(Prefixes,Id) :-
+    do_or_die(
+        (   get_dict('@base', Prefixes, Base),
+            atomic_list_concat(['^',Base,'JSONDocument/.*'],Re),
+            re_match(Re,Id)),
+        error(not_a_valid_json_object_id(Id),_)).
 
 insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
     is_transaction(Transaction),
@@ -2607,9 +2608,7 @@ insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  database_prefixes(Transaction, Prefixes),
         prefix_expand(Id_Short,Prefixes,Id),
-        do_or_die(
-            verify_json_id(Prefixes,Id),
-            error(not_a_valid_json_object_id(Id),_)),
+        valid_json_id_or_die(Prefixes,Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
@@ -2650,9 +2649,7 @@ insert_document(Query_Context, Document, JSON, Captures_In, ID, Dependencies, Ca
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  prefix_expand(Id_Short,Prefixes,Id),
-        do_or_die(
-            verify_json_id(Prefixes,Id),
-            error(not_a_valid_json_id(Id))),
+        valid_json_id_or_die(Prefixes,Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
