@@ -471,6 +471,21 @@ describe('document', function () {
       expect(r.body.name === type1 + '/1')
     })
 
+    it('it fails to insert json and schema', async function () {
+      const result = await document
+        .insert(agent, docPath, {
+          schema: [
+            {
+              '@type': 'Class',
+              '@id': 'JSONDocument'
+            },
+          ],
+        })
+        .then(document.verifyInsertFailure)
+      expect(result.body['api:error']['@type']).to.equal('api:DocumentInsertionReservedName')
+    })
+
+
     describe('key @fields', function () {
       const schema = { '@type': 'Class' }
       const keyTypes = [
@@ -747,7 +762,7 @@ describe('document', function () {
         const r1 = await document
           .insert(agent, docPath, {
             instance: { a: [42, 23, 12] },
-            json: true,
+            raw_json: true,
           })
           .then(document.verifyInsertSuccess)
         const id0 = r1.body[0]
@@ -755,6 +770,20 @@ describe('document', function () {
           .get(agent, docPath, { query: { id: id0, as_list: true } })
           .then(document.verifyGetSuccess)
         expect(r2.body).to.deep.equal([{ a: [42, 23, 12] }])
+      })
+
+      it('cannot insert invalid JSON id', async function () {
+        const r1 = await document
+              .insert(agent, docPath, {
+                instance: { '@id' : 'foo',
+                            a: [42, 23, 12] },
+                raw_json: true,
+              })
+        expect(r1.body['api:error']).to.deep.equal(
+          {
+            "@type": "api:DocumentInsertionInvalidJSONDocumentId",
+            "api:id": "terminusdb:///data/foo"
+          })
       })
     })
   })
