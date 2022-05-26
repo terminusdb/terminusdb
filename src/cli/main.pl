@@ -1238,9 +1238,11 @@ run_command(doc,insert,[Path], Opts) :-
         )
     ),
     length(Ids, Number_Inserted),
-    (   Number_Inserted = 1
-    ->  format(current_output, "Document inserted ~q~n", [Ids])
-    ;   format(current_output, "Documents inserted: ~q~n", [Ids])
+    Col_Width is floor(log10(Number_Inserted)) + 2,
+    format(current_output, "Documents inserted:~n", []),
+    forall(
+        nth1(Count, Ids, Id),
+        format(current_output, "~|~t~d~*+: ~w~n", [Count, Col_Width, Id])
     ).
 run_command(doc,delete, [Path], Opts) :-
     super_user_authority(Auth),
