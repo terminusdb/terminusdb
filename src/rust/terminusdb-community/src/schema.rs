@@ -129,6 +129,28 @@ pub fn get_enum_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
     result
 }
 
+pub fn get_set_pairs_from_schema<'a, L: Layer>(layer: &'a L) -> impl Iterator<Item=(u64, u64)>+'a {
+    let sys_set_id = layer.object_node_id(SYS_SET);
+    if sys_set_id.is_none() {
+        return itertools::Either::Left(std::iter::empty());
+    }
+    let sys_set_id = sys_set_id.unwrap();
+
+    let rdf_type_id = layer.predicate_id(RDF_TYPE);
+    if rdf_type_id.is_none() {
+        return itertools::Either::Left(std::iter::empty());
+    }
+    let rdf_type_id = rdf_type_id.unwrap();
+
+    itertools::Either::Right(
+        layer.triples_o(sys_set_id).filter(move |t|t.predicate == rdf_type_id)
+            .map(|t| {
+                let set_origin = layer.triples_o(t.subject).next().expect("Expected set to be connected");
+
+                (set_origin.subject, set_origin.predicate)
+            }))
+}
+
 fn get_inheritance_graph<L: Layer>(layer: &L) -> HashMap<u64, HashSet<u64>> {
     if let Some(inherits_id) = layer.predicate_id(SYS_INHERITS) {
         let mut result = HashMap::new();
@@ -213,7 +235,7 @@ pub fn translate_predicate_id<L1: Layer, L2: Layer>(
     id: u64,
 ) -> Option<u64> {
     let predicate = layer1.id_predicate(id).unwrap();
-    layer2.subject_id(&predicate)
+    layer2.predicate_id(&predicate)
 }
 
 pub fn translate_object_id<L1: Layer, L2: Layer>(layer1: &L1, layer2: &L2, id: u64) -> Option<u64> {

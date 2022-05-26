@@ -21,6 +21,7 @@ pub struct GetDocumentContext<L: Layer> {
     prefixes: PrefixContracter,
     terminators: HashSet<u64>,
     enums: HashMap<u64, String>,
+    set_pairs: HashSet<(u64, u64)>,
     rdf_type_id: Option<u64>,
     rdf_first_id: Option<u64>,
     rdf_rest_id: Option<u64>,
@@ -52,6 +53,16 @@ impl<L: Layer> GetDocumentContext<L> {
         }
 
         let prefixes = prefix_contracter_from_schema_layer(schema);
+
+        let schema_set_pairs = get_set_pairs_from_schema(schema);
+        let mut set_pairs = HashSet::new();
+        for (schema_type_id, schema_predicate_id) in schema_set_pairs {
+            if let Some(type_id) = translate_subject_id(schema, &instance, schema_type_id) {
+                if let Some(predicate_id) = translate_predicate_id(schema, &instance, schema_predicate_id) {
+                    set_pairs.insert((type_id, predicate_id));
+                }
+            }
+        }
 
         let rdf_type_id = instance.predicate_id(RDF_TYPE);
         let rdf_first_id = instance.predicate_id(RDF_FIRST);
@@ -85,6 +96,7 @@ impl<L: Layer> GetDocumentContext<L> {
             prefixes,
             terminators,
             enums,
+            set_pairs,
             rdf_type_id,
             rdf_first_id,
             rdf_rest_id,
@@ -116,7 +128,7 @@ impl<L: Layer> GetDocumentContext<L> {
             } else {
                 match self.get_doc_stub(object, true) {
                     // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
-                    Ok((doc, fields)) => Err(StackEntry::Document{doc, fields:Some(fields)}),
+                    Ok((doc, type_id, fields)) => Err(StackEntry::Document{doc, type_id, fields:Some(fields)}),
                     // it turns out it is a terminator after all, so we just use the id as a direct value
                     Err(s) => Ok(Value::String(s)),
                 }
@@ -133,11 +145,16 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    fn add_field(&self, obj: &mut Map<String, Value>, key: &str, value: Value) {
+    fn add_field(&self, obj: &mut Map<String, Value>, key: &str, value: Value, is_set: bool) {
         // add a field, but if the field is already there, make it a collection
         match obj.entry(key) {
             map::Entry::Vacant(e) => {
-                e.insert(value);
+                if is_set {
+                    e.insert(Value::Array(vec![value]));
+                }
+                else {
+                    e.insert(value);
+                }
             }
             map::Entry::Occupied(mut e) => {
                 let mut v = e.get_mut();
@@ -214,6 +231,7 @@ impl<L: Layer> GetDocumentContext<L> {
     ) -> Result<
         (
             Map<String, Value>,
+            Option<u64>,
             Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
         ),
         String,
@@ -229,12 +247,14 @@ impl<L: Layer> GetDocumentContext<L> {
         ) as Box<dyn Iterator<Item = IdTriple> + Send>)
             .peekable();
 
+        let mut type_id = None;
         let mut type_name_contracted: Option<String> = None;
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
                 if terminate && self.terminators.contains(&t.object) {
                     return Err(id_name_contracted);
                 }
+                type_id = Some(t.object);
                 let type_name = self.layer.id_object_node(t.object).unwrap();
                 type_name_contracted =
                     Some(self.prefixes.schema_contract(&type_name).to_string());
@@ -252,15 +272,15 @@ impl<L: Layer> GetDocumentContext<L> {
                 result.insert("@type".to_string(), Value::String(tn));
             }
 
-            Ok((result, fields))
+            Ok((result, type_id, fields))
         }
     }
 
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
         let mut stack = Vec::new();
 
-        let (doc, fields) = self.get_doc_stub(id, false).unwrap();
-        stack.push(StackEntry::Document{doc, fields: Some(fields)});
+        let (doc, type_id, fields) = self.get_doc_stub(id, false).unwrap();
+        stack.push(StackEntry::Document{doc, type_id, fields: Some(fields)});
 
         loop {
             let cur = stack.last_mut().unwrap();
@@ -302,6 +322,7 @@ impl<L: Layer> GetDocumentContext<L> {
 enum StackEntry<'a, L: Layer> {
     Document{
         doc: Map<String, Value>,
+        type_id: Option<u64>,
         fields: Option<Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>>,
     },
     List{
@@ -386,14 +407,14 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     fn integrate_array(&mut self, context: &GetDocumentContext<L>, array: ArrayStackEntry<'a, L>) {
         // self has to be an object, let's make sure of that.
         match self {
-            Self::Document{doc, fields} => {
+            Self::Document{doc, fields, ..} => {
                 *fields = Some(array.entries.it);
 
                 let value = collect_array(array.collect);
 
                 let p_name = context.layer.id_predicate(array.entries.predicate).unwrap();
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
-                context.add_field(doc, &p_name_contracted, value);
+                context.add_field(doc, &p_name_contracted, value, false);
             },
             _ => panic!("unexpected parent type of array")
         }
@@ -401,13 +422,14 @@ impl<'a, L: Layer> StackEntry<'a, L> {
 
     fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value) {
         match self {
-            Self::Document{doc, fields} => {
+            Self::Document{doc, fields, type_id} => {
                 // we previously peeked a field and decided we needed to recurse deeper.
                 // this is the time to pop it.
                 let t = fields.as_mut().unwrap().next().unwrap();
+                let is_set = type_id.map(|type_id| context.set_pairs.contains(&(type_id, t.predicate))).unwrap_or(false);
                 let p_name = context.layer.id_predicate(t.predicate).unwrap();
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
-                context.add_field(doc, &p_name_contracted, value);
+                context.add_field(doc, &p_name_contracted, value, is_set);
             }
             Self::List{collect, entries} => {
                 // We previously peeked a list entry and decided we needed to recurse deeper.
