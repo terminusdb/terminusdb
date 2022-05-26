@@ -26,6 +26,9 @@ pub struct GetDocumentContext<L: Layer> {
     rdf_rest_id: Option<u64>,
     rdf_nil_id: Option<u64>,
     rdf_list_id: Option<u64>,
+    sys_index_ids: Vec<u64>,
+    sys_array_id: Option<u64>,
+    sys_value_id: Option<u64>
 }
 
 impl<L: Layer> GetDocumentContext<L> {
@@ -56,6 +59,27 @@ impl<L: Layer> GetDocumentContext<L> {
         let rdf_nil_id = instance.object_node_id(RDF_NIL);
         let rdf_list_id = instance.object_node_id(RDF_LIST);
 
+        let mut sys_index_ids = Vec::new();
+        let mut index_str = SYS_INDEX.to_string();
+        let orig_len = index_str.len();
+        let mut ix = 1;
+
+        loop {
+            if let Some(index_id) = instance.predicate_id(&index_str) {
+                sys_index_ids.push(index_id);
+                ix += 1;
+                let ix_s = ix.to_string();
+                index_str.truncate(orig_len);
+                index_str.push_str(&ix_s);
+            }
+            else {
+                break;
+            }
+        }
+
+        let sys_array_id = instance.object_node_id(SYS_ARRAY);
+        let sys_value_id = instance.predicate_id(SYS_VALUE);
+
         GetDocumentContext {
             layer: instance,
             prefixes,
@@ -66,6 +90,9 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_rest_id,
             rdf_nil_id,
             rdf_list_id,
+            sys_index_ids,
+            sys_array_id,
+            sys_value_id
         }
     }
 
@@ -85,11 +112,11 @@ impl<L: Layer> GetDocumentContext<L> {
         } else if self.layer.id_object_is_node(object).unwrap() {
             // this might not be a terminator, but we won't know until trying to get a list or doc stub
             if let Some(list_iter) = self.get_list_iter(object) {
-                Err(StackEntry::List(Vec::new(), list_iter))
+                Err(StackEntry::List{collect: Vec::new(), entries: list_iter})
             } else {
                 match self.get_doc_stub(object, true) {
                     // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
-                    Ok((stub, fields)) => Err(StackEntry::Document(stub, fields)),
+                    Ok((doc, fields)) => Err(StackEntry::Document{doc, fields:Some(fields)}),
                     // it turns out it is a terminator after all, so we just use the id as a direct value
                     Err(s) => Ok(Value::String(s)),
                 }
@@ -151,6 +178,35 @@ impl<L: Layer> GetDocumentContext<L> {
         None
     }
 
+    fn get_array_iter(&self, id: u64, stack_entry: &mut StackEntry<L>) -> Option<ArrayIterator<L>> {
+        if let StackEntry::Document{fields,..} = stack_entry {
+            if let Some(rdf_type_id) = self.rdf_type_id {
+                if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
+                    if Some(t.object) == self.sys_array_id {
+                        let mut it = None;
+                        std::mem::swap(&mut it, fields);
+                        let mut it = it.unwrap();
+                        let t = it.peek().unwrap();
+                        let subject = t.subject;
+                        let predicate = t.predicate;
+                        return Some(
+                            ArrayIterator {
+                                layer: &self.layer,
+                                it,
+                                subject,
+                                predicate,
+                                last_index: None,
+                                sys_index_ids: &self.sys_index_ids,
+                                sys_value_id: self.sys_value_id
+                            });
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     fn get_doc_stub(
         &self,
         id: u64,
@@ -203,19 +259,27 @@ impl<L: Layer> GetDocumentContext<L> {
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
         let mut stack = Vec::new();
 
-        let (stub, fields) = self.get_doc_stub(id, false).unwrap();
-        stack.push(StackEntry::Document(stub, fields));
+        let (doc, fields) = self.get_doc_stub(id, false).unwrap();
+        stack.push(StackEntry::Document{doc, fields: Some(fields)});
 
         loop {
             let cur = stack.last_mut().unwrap();
             if let Some(next_obj) = cur.peek() {
-                match self.get_field(next_obj) {
-                    Ok(val) => {
-                        cur.integrate_value(self, val);
-                    }
-                    Err(entry) => {
-                        // We need to iterate deeper, so add it to the stack without iterating past the field.
-                        stack.push(entry);
+                if let Some(array_iter) = self.get_array_iter(next_obj, cur) {
+                    stack.push(StackEntry::Array(ArrayStackEntry {
+                        collect: Vec::new(),
+                        entries: array_iter
+                    }));
+                }
+                else {
+                    match self.get_field(next_obj) {
+                        Ok(val) => {
+                            cur.integrate_value(self, val);
+                        }
+                        Err(entry) => {
+                            // We need to iterate deeper, so add it to the stack without iterating past the field.
+                            stack.push(entry);
+                        }
                     }
                 }
             } else {
@@ -226,8 +290,8 @@ impl<L: Layer> GetDocumentContext<L> {
                 } else {
                     // we're done, this was the root, time to return!
                     match cur {
-                        StackEntry::Document(d, _) => return d,
-                        _ => panic!("unexpected stack top"),
+                        StackEntry::Document{doc, ..} => return doc,
+                        _ => panic!("unexpected element at stack top"),
                     }
                 }
             }
@@ -236,50 +300,173 @@ impl<L: Layer> GetDocumentContext<L> {
 }
 
 enum StackEntry<'a, L: Layer> {
-    Document(
-        Map<String, Value>,
-        Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
-    ),
-    List(Vec<Value>, Peekable<RdfListIterator<'a, L>>),
+    Document{
+        doc: Map<String, Value>,
+        fields: Option<Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>>,
+    },
+    List{
+        collect: Vec<Value>,
+        entries: Peekable<RdfListIterator<'a, L>>
+    },
+    Array(ArrayStackEntry<'a, L>)
+}
+
+struct ArrayStackEntry<'a, L:Layer> {
+    collect: Vec<(Vec<usize>, Value)>,
+    entries: ArrayIterator<'a, L>
+}
+
+struct ArrayIterator<'a, L:Layer> {
+    layer: &'a L,
+    it: Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
+    subject: u64,
+    predicate: u64,
+    last_index: Option<Vec<usize>>,
+    sys_index_ids: &'a [u64],
+    sys_value_id: Option<u64>
+}
+
+impl<'a, L:Layer> Iterator for ArrayIterator<'a, L> {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<u64> {
+        if let Some(t) = self.it.peek() {
+            if t.subject == self.subject && t.predicate == self.predicate {
+                let mut indexes = Vec::new();
+                for index_id in self.sys_index_ids {
+                    if let Some(index_triple) = self.layer.triples_sp(t.object, *index_id).next() {
+                        let index_value = self.layer.id_object_value(index_triple.object).unwrap();
+                        let index = value_string_to_usize(&index_value);
+                        indexes.push(index);
+                    }
+                    else {
+                        // no more indexes to come
+                        break;
+                    }
+                }
+                indexes.reverse();
+
+                let value_id = self.layer.triples_sp(t.object, *self.sys_value_id.as_ref().unwrap()).next().expect("expected value property on array element").object;
+
+                // now that we know for sure that we got everything and this is indeed an array cell, let's actually move the field iterator.
+                self.it.next().unwrap();
+                self.last_index = Some(indexes);
+                return Some(value_id);
+            }
+        }
+
+        None
+    }
 }
 
 impl<'a, L: Layer> StackEntry<'a, L> {
     fn peek(&mut self) -> Option<u64> {
         match self {
-            Self::Document(_, it) => it.peek().map(|t| t.object),
-            Self::List(_, it) => it.peek().map(|x| *x),
+            Self::Document{fields,..} => fields.as_mut().unwrap().peek().map(|t| t.object),
+            Self::List{entries, ..} => entries.peek().map(|x| *x),
+            Self::Array(a) => a.entries.next()
         }
     }
 
     fn into_value(self) -> Value {
         match self {
-            Self::Document(doc, _) => Value::Object(doc),
-            Self::List(vec, _) => Value::Array(vec),
+            Self::Document{doc, ..} => Value::Object(doc),
+            Self::List{collect, ..} => Value::Array(collect),
+            Self::Array{..} => panic!("cannot directly turn array into a value")
         }
     }
 
     fn integrate(&mut self, context: &GetDocumentContext<L>, child: StackEntry<'a, L>) {
-        self.integrate_value(context, child.into_value());
+        match child {
+            StackEntry::Array(a) => self.integrate_array(context, a),
+            _ => self.integrate_value(context, child.into_value())
+        }
+    }
+
+    fn integrate_array(&mut self, context: &GetDocumentContext<L>, array: ArrayStackEntry<'a, L>) {
+        // self has to be an object, let's make sure of that.
+        match self {
+            Self::Document{doc, fields} => {
+                *fields = Some(array.entries.it);
+
+                let value = collect_array(array.collect);
+
+                let p_name = context.layer.id_predicate(array.entries.predicate).unwrap();
+                let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
+                context.add_field(doc, &p_name_contracted, value);
+            },
+            _ => panic!("unexpected parent type of array")
+        }
     }
 
     fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value) {
         match self {
-            Self::Document(doc, fields) => {
+            Self::Document{doc, fields} => {
                 // we previously peeked a field and decided we needed to recurse deeper.
                 // this is the time to pop it.
-                let t = fields.next().unwrap();
+                let t = fields.as_mut().unwrap().next().unwrap();
                 let p_name = context.layer.id_predicate(t.predicate).unwrap();
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
                 context.add_field(doc, &p_name_contracted, value);
             }
-            Self::List(vec, entries) => {
+            Self::List{collect, entries} => {
                 // We previously peeked a list entry and decided we needed to recurse deeper.
                 // this is the time to pop it.
                 let _elt = entries.next().unwrap();
-                vec.push(value);
+                collect.push(value);
+            },
+            Self::Array(a) => {
+                let mut index = None;
+                std::mem::swap(&mut index, &mut a.entries.last_index);
+
+                a.collect.push((index.unwrap(), value));
             }
         }
     }
+}
+
+fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
+    elements.sort_by(|(i1, _), (i2, _)| i1.cmp(i2));
+
+    let dimensions = elements[0].0.len();
+    let mut collect: Vec<Vec<Value>> = Vec::with_capacity(dimensions);
+    collect.resize_with(dimensions, ||Vec::new());
+
+    for (index, value) in elements {
+        assert!(index.len() == dimensions, "array elemenet did not have expected amount of dimensions");
+
+        // match indexes
+        for d in 0..dimensions {
+            let expected = collect[d].len();
+            if expected < index[d] {
+                // any less significant dimension will need to be gathered up, provided anything was collected to begin with.
+                for n in (d+1..dimensions).rev() {
+                    if collect[n].len() != 0 {
+                        let mut x = Vec::new();
+                        std::mem::swap(&mut x, &mut collect[n]);
+                        collect[n-1].push(Value::Array(x));
+                    }
+                }
+
+                // Then, we need to add null values until we're at the expected index.
+                // Note that we might have just incremented by one due to the collect.
+                collect[d].resize(index[d], Value::Null);
+            }
+        }
+
+        // add the value
+        collect[dimensions-1].push(value);
+    }
+
+    // Finally, gather up everything
+    for d in (0..dimensions-1).rev() {
+        let x = collect.pop().unwrap();
+        if x.len() != 0 {
+            collect[d].push(Value::Array(x));
+        }
+    }
+
+    Value::Array(collect.pop().unwrap())
 }
 
 wrapped_arc_blob!(
@@ -352,4 +539,161 @@ pub fn register() {
     register_prefix_schema_contract();
     register_prefix_instance_contract();
     register_print_prefix_tree();
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_dim_array() {
+        let collected = vec![
+            (vec![0], Value::Bool(true)),
+            (vec![1], Value::Bool(false)),
+            (vec![2], Value::Bool(true)),
+        ];
+
+        let json = collect_array(collected);
+        assert_eq!(Value::Array(vec![
+            Value::Bool(true),
+            Value::Bool(false),
+            Value::Bool(true),
+        ]), json);
+    }
+
+    #[test]
+    fn single_dim_array_start_offset() {
+        let collected = vec![
+            (vec![3], Value::Bool(true)),
+            (vec![4], Value::Bool(false)),
+            (vec![5], Value::Bool(true)),
+        ];
+
+        let json = collect_array(collected);
+        assert_eq!(Value::Array(vec![
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Bool(true),
+            Value::Bool(false),
+            Value::Bool(true),
+        ]), json);
+    }
+
+    #[test]
+    fn single_dim_array_holes() {
+        let collected = vec![
+            (vec![0], Value::Bool(true)),
+            (vec![3], Value::Bool(false)),
+            (vec![5], Value::Bool(true)),
+        ];
+
+        let json = collect_array(collected);
+        assert_eq!(Value::Array(vec![
+            Value::Bool(true),
+            Value::Null,
+            Value::Null,
+            Value::Bool(false),
+            Value::Null,
+            Value::Bool(true),
+        ]), json);
+    }
+
+    #[test]
+    fn double_dim_array() {
+        let collected = vec![
+            (vec![0,0], Value::Bool(true)),
+            (vec![0,1], Value::Bool(false)),
+            (vec![0,2], Value::Bool(true)),
+            (vec![1,0], Value::Bool(false)),
+            (vec![1,1], Value::Bool(true)),
+            (vec![1,2], Value::Bool(false)),
+        ];
+
+        let json = collect_array(collected);
+        assert_eq!(Value::Array(vec![
+            Value::Array(vec![
+                Value::Bool(true),
+                Value::Bool(false),
+                Value::Bool(true),
+            ]),
+            Value::Array(vec![
+                Value::Bool(false),
+                Value::Bool(true),
+                Value::Bool(false)
+            ])
+        ]), json);
+    }
+
+    #[test]
+    fn double_dim_array_offset() {
+        let collected = vec![
+            (vec![2,3], Value::Bool(true)),
+            (vec![2,4], Value::Bool(false)),
+            (vec![2,5], Value::Bool(true)),
+            (vec![3,1], Value::Bool(false)),
+            (vec![3,2], Value::Bool(true)),
+            (vec![3,3], Value::Bool(false)),
+        ];
+
+        let json = collect_array(collected);
+        assert_eq!(Value::Array(vec![
+            Value::Null,
+            Value::Null,
+            Value::Array(vec![
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Bool(true),
+                Value::Bool(false),
+                Value::Bool(true),
+            ]),
+            Value::Array(vec![
+                Value::Null,
+                Value::Bool(false),
+                Value::Bool(true),
+                Value::Bool(false)
+            ])
+        ]), json);
+    }
+
+    #[test]
+    fn double_dim_array_holes() {
+        let collected = vec![
+            (vec![0,0], Value::Bool(true)),
+            (vec![0,3], Value::Bool(false)),
+            (vec![0,5], Value::Bool(true)),
+            (vec![3,0], Value::Bool(false)),
+            (vec![3,2], Value::Bool(true)),
+            (vec![3,4], Value::Bool(false)),
+            (vec![6,0], Value::Bool(true)),
+        ];
+
+        let json = collect_array(collected);
+        assert_eq!(Value::Array(vec![
+            Value::Array(vec![
+                Value::Bool(true),
+                Value::Null,
+                Value::Null,
+                Value::Bool(false),
+                Value::Null,
+                Value::Bool(true),
+            ]),
+            Value::Null,
+            Value::Null,
+            Value::Array(vec![
+                Value::Bool(false),
+                Value::Null,
+                Value::Bool(true),
+                Value::Null,
+                Value::Bool(false),
+            ]),
+            Value::Null,
+            Value::Null,
+            Value::Array(vec![
+                Value::Bool(true),
+            ]),
+        ]), json);
+    }
 }

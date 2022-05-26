@@ -57,3 +57,12 @@ pub fn value_string_to_json(s: &str) -> Value {
         Value::String(val[1..val.len() - 1].to_string())
     }
 }
+
+pub fn value_string_to_usize(s: &str) -> usize {
+    let (val, typ) = value_string_to_slices(s);
+    if !type_is_numeric(typ) {
+        panic!("not a numeric type: {}", typ);
+    }
+
+    usize::from_str(val).unwrap()
+}

@@ -14,4 +14,6 @@ pub const SYS_SCHEMA: &str = "http://terminusdb.com/schema/sys#schema";
 pub const SYS_PREFIX_PAIR: &str = "http://terminusdb.com/schema/sys#prefix_pair";
 pub const SYS_PREFIX: &str = "http://terminusdb.com/schema/sys#prefix";
 pub const SYS_URL: &str = "http://terminusdb.com/schema/sys#url";
+pub const SYS_INDEX: &str = "http://terminusdb.com/schema/sys#index";
 pub const SYS_VALUE: &str = "http://terminusdb.com/schema/sys#value";
+pub const SYS_ARRAY: &str = "http://terminusdb.com/schema/sys#Array";
