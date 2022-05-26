@@ -477,14 +477,13 @@ describe('document', function () {
           schema: [
             {
               '@type': 'Class',
-              '@id': 'JSONDocument'
+              '@id': 'JSONDocument',
             },
           ],
         })
         .then(document.verifyInsertFailure)
       expect(result.body['api:error']['@type']).to.equal('api:DocumentInsertionReservedName')
     })
-
 
     describe('key @fields', function () {
       const schema = { '@type': 'Class' }
@@ -774,15 +773,17 @@ describe('document', function () {
 
       it('cannot insert invalid JSON id', async function () {
         const r1 = await document
-              .insert(agent, docPath, {
-                instance: { '@id' : 'foo',
-                            a: [42, 23, 12] },
-                raw_json: true,
-              })
+          .insert(agent, docPath, {
+            instance: {
+              '@id': 'foo',
+              a: [42, 23, 12],
+            },
+            raw_json: true,
+          })
         expect(r1.body['api:error']).to.deep.equal(
           {
-            "@type": "api:DocumentInsertionInvalidJSONDocumentId",
-            "api:id": "terminusdb:///data/foo"
+            '@type': 'api:DocumentInsertionInvalidJSONDocumentId',
+            'api:id': 'terminusdb:///data/foo',
           })
       })
     })
