@@ -2591,9 +2591,9 @@ check_existing_document_status(Transaction, Document, Status) :-
 insert_document(Transaction, Document, ID) :-
     insert_document(Transaction, Document, false, ID).
 
-insert_document(Transaction, Document, JSON, ID) :-
+insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
 
 % This should presumably do something
 verify_json_id(Prefixes,Id) :-

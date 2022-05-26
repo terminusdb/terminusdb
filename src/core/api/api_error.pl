@@ -1449,6 +1449,21 @@ api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexp
                               'api:document': Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(insert_documents,error(raw_json_and_schema_disallowed,_), JSON) :-
+    format(string(Msg), "Document insertion of raw JSON documents is not possible for the schema graph", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:error' : _{ '@type' : 'api:DocumentInsertionRawJSONSchemaDisallowed'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents,error(can_not_insert_class_with_reserve_name(Id),_), JSON) :-
+    format(string(Msg), "Document for class can not be inserted due to use of reserved name", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:error' : _{ '@type' : 'api:DocumentInsertionReservedName',
+                              'api:id': Id},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
     format(string(Msg), "Query documents are currently only supported for instance graphs", []),
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
