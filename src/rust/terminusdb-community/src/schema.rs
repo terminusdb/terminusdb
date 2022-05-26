@@ -129,7 +129,9 @@ pub fn get_enum_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
     result
 }
 
-pub fn get_set_pairs_from_schema<'a, L: Layer>(layer: &'a L) -> impl Iterator<Item=(u64, u64)>+'a {
+pub fn get_set_pairs_from_schema<'a, L: Layer>(
+    layer: &'a L,
+) -> impl Iterator<Item = (u64, u64)> + 'a {
     let sys_set_id = layer.object_node_id(SYS_SET);
     if sys_set_id.is_none() {
         return itertools::Either::Left(std::iter::empty());
@@ -143,12 +145,18 @@ pub fn get_set_pairs_from_schema<'a, L: Layer>(layer: &'a L) -> impl Iterator<It
     let rdf_type_id = rdf_type_id.unwrap();
 
     itertools::Either::Right(
-        layer.triples_o(sys_set_id).filter(move |t|t.predicate == rdf_type_id)
+        layer
+            .triples_o(sys_set_id)
+            .filter(move |t| t.predicate == rdf_type_id)
             .map(|t| {
-                let set_origin = layer.triples_o(t.subject).next().expect("Expected set to be connected");
+                let set_origin = layer
+                    .triples_o(t.subject)
+                    .next()
+                    .expect("Expected set to be connected");
 
                 (set_origin.subject, set_origin.predicate)
-            }))
+            }),
+    )
 }
 
 fn get_inheritance_graph<L: Layer>(layer: &L) -> HashMap<u64, HashSet<u64>> {
