@@ -153,11 +153,20 @@ brew install swi-prolog
 > :memo: All of the following commands assume your current working directory is
 > the top-level directory of this repository.
 
-Install the library dependencies with:
+Install the minimal library dependencies with:
 
 ```sh
 make install-deps
 ```
+
+If you are using [JSON web tokens][jwt] (JWT), install the necessary dependency
+with:
+
+```sh
+make install-jwt
+```
+
+[jwt]: https://en.wikipedia.org/wiki/JSON_Web_Token
 
 For documentation on managing packs in general, see
 [`prolog_pack.pl`][prolog_pack].

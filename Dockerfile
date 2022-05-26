@@ -1,37 +1,77 @@
-FROM terminusdb/swipl:v8.4.2 as pack_installer
-ENV TUS_VERSION v0.0.10
-WORKDIR /app/pack
-RUN export BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config" \
-        && apt-get update && apt-get install $BUILD_DEPS -y --no-install-recommends \
-        && git clone --single-branch --branch v0.0.5 https://github.com/terminusdb-labs/jwt_io.git jwt_io \
-        && git clone --single-branch --branch $TUS_VERSION https://github.com/terminusdb/tus.git tus \
-        && swipl -g "pack_install('file:///app/pack/jwt_io', [interactive(false)])" \
-        && swipl -g "pack_install('file:///app/pack/tus', [interactive(false)])"
+# syntax=docker/dockerfile:1.3
 
-FROM terminusdb/swipl:v8.4.2 AS rust_builder
-WORKDIR /app/rust
-COPY ./src/rust /app/rust
-RUN BUILD_DEPS="git build-essential curl clang" && apt-get update \
-	&& apt-get install -y --no-install-recommends $BUILD_DEPS \
-        ca-certificates
+ARG DIST=community
+
+# Install the SWI-Prolog pack dependencies.
+FROM terminusdb/swipl:v8.4.2 AS pack_installer
+RUN set -eux; \
+    BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app/pack
+COPY distribution/Makefile.deps Makefile
+RUN make
+
+# Install Rust. Prepare to build the Rust code.
+FROM terminusdb/swipl:v8.4.2 AS rust_builder_base
+RUN set -eux; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
+    rm -rf /var/lib/apt/lists/*
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo build --release
+# Initialize the crates.io index git repo to cache it.
+RUN cargo install lazy_static 2> /dev/null || true
+WORKDIR /app/rust
+COPY distribution/Makefile.rust Makefile
+COPY src/rust src/rust/
 
-FROM terminusdb/swipl:v8.4.2
-WORKDIR /app/terminusdb
-COPY ./ /app/terminusdb
-COPY --from=pack_installer /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
-COPY --from=rust_builder /app/rust/target/release/libterminusdb_dylib.so /app/terminusdb/src/rust/librust.so
-ARG MAKE_ARGS=""
+# Build the community dylib.
+FROM rust_builder_base AS rust_builder_community
+RUN make DIST=community
+
+# Build the enterprise dylib.
+FROM rust_builder_base AS rust_builder_enterprise
+COPY terminusdb-enterprise/rust terminusdb-enterprise/rust/
+RUN make DIST=enterprise
+
+# Build the ${DIST} dylib.
+FROM rust_builder_${DIST} AS rust_builder
+
+# Copy the packs and dylib. Prepare to build the Prolog code.
+FROM terminusdb/swipl:v8.4.2 AS base
+RUN set -eux; \
+    RUNTIME_DEPS="libjwt0 make openssl"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
+    rm -rf /var/cache/apt/*; \
+    rm -rf /var/lib/apt/lists/*
 ARG TERMINUSDB_GIT_HASH=null
 ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libjwt0 make openssl && \
-    rm -rf /var/cache/apt/* && \
-    rm -rf /var/lib/apt/lists/* && \
-    touch src/rust/librust.so && \
-    make $MAKE_ARGS
+COPY --from=pack_installer /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
+WORKDIR /app/terminusdb
+COPY distribution/init_docker.sh distribution/
+COPY distribution/Makefile.prolog Makefile
+COPY src src/
+COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
+
+# Build the community executable.
+FROM base AS base_community
+RUN set -eux; \
+    touch src/rust/librust.so; \
+    make DIST=community
+
+# Build the enterprise executable.
+FROM base AS base_enterprise
+COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
+RUN set -eux; \
+    touch src/rust/librust.so; \
+    make DIST=enterprise
+
+# Build the ${DIST} executable. Set the default command.
+FROM base_${DIST}
 CMD ["/app/terminusdb/distribution/init_docker.sh"]

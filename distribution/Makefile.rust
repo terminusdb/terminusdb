@@ -1,0 +1,51 @@
+DIST ?= community
+PROFILE ?= release
+
+COMMUNITY_SRC_DIR := src/rust
+ENTERPRISE_SRC_DIR := terminusdb-enterprise/rust
+
+ifeq "$(wildcard $(COMMUNITY_SRC_DIR))" ""
+  $(error Error! Directory not found: $(CURDIR)/$(COMMUNITY_SRC_DIR))
+endif
+
+ifeq "$(DIST)" "enterprise"
+  ifeq "$(wildcard $(ENTERPRISE_SRC_DIR))" ""
+    $(error Error! Directory not found: $(CURDIR)/$(ENTERPRISE_SRC_DIR))
+  endif
+  BUILD_DIR := $(ENTERPRISE_SRC_DIR)
+else ifeq "$(DIST)" "community"
+  BUILD_DIR := $(COMMUNITY_SRC_DIR)
+else
+  $(error Error! Unknown $$DIST: $(DIST))
+endif
+
+ifeq "$(shell uname)" "Darwin"
+  DYLIB_EXT := dylib
+else
+  DYLIB_EXT := so
+endif
+
+TARGET := $(COMMUNITY_SRC_DIR)/librust.$(DYLIB_EXT)
+CARGO_BUILD_TARGET := $(BUILD_DIR)/target/$(PROFILE)/libterminusdb_dylib.$(DYLIB_EXT)
+
+################################################################################
+
+.PHONY: default
+default: $(TARGET)
+
+.PHONY: clean
+clean:
+	$(RM) $(TARGET)
+
+.PHONY: realclean
+realclean: clean
+	cd $(COMMUNITY_SRC_DIR) && cargo clean
+	cd $(ENTERPRISE_SRC_DIR) 2> /dev/null && cargo clean || true
+
+################################################################################
+
+$(TARGET): $(CARGO_BUILD_TARGET)
+	cp $< $@
+
+$(CARGO_BUILD_TARGET): $(shell find $(COMMUNITY_SRC_DIR) $(BUILD_DIR) -type f \( -name '*.rs' -o -name 'Cargo.*' \))
+	cd $(BUILD_DIR) && cargo build --profile $(PROFILE)
