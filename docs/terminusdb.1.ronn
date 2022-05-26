@@ -362,7 +362,7 @@ Insert documents.
   * `-d`, `--data`=[value]:
   document data
 
-  * `-j`, `--json`=[value]:
+  * `-j`, `--raw_json`, `--raw-json`=[value]:
   inserts as raw json
 
   * `-f`, `--full_replace`, `--full-replace`=[value]:
