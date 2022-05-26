@@ -1533,7 +1533,7 @@ json_triple_(JSON,_,Triple) :-
     is_dict(JSON),
     get_dict('@type', JSON, 'http://terminusdb.com/schema/sys#JSONDocument'),
     !,
-    assign_json_document_id(Id),
+    get_dict('@id', JSON, Id),
     json_object_triple(JSON, Id, Triple).
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
@@ -11187,7 +11187,8 @@ test(replace_hash_document,
         Desc,
         C2,
         replace_document(C2,Document2,false,true,_)
-    ).
+    ),
+    atom_concat('terminusdb:///data/JSONDocument/', _, Id).
 
 test(replace_named_document,
      [setup((setup_temp_store(State),
@@ -11214,30 +11215,7 @@ test(replace_named_document,
         Desc,
         C1,
         insert_document(C1,Document,true,_)
-    ),
-
-    Document2 =
-    json{
-        '@id' : named,
-        name : "testing",
-        json : json{ some :
-                     json{ random : "stuff",
-                           that : false
-                         }}
-    },
-
-    with_test_transaction(
-        Desc,
-        C2,
-        replace_document(C2,Document2,false,true,_)
-    ),
-
-    get_document(Desc,named,JSON),
-
-    JSON =
-    json{json:json{some:json{random:"stuff",that:false}},
-         name:"testing"}.
-
+    ).
 
 test(can_not_insert_json_class,
      [setup((setup_temp_store(State),

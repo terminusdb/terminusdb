@@ -1,7 +1,7 @@
 :- module('document/json_rdf', [
               json_object_triple/3,
               json_object_triple/4,
-              assign_json_document_id/1,
+              assign_json_document_id/2,
               assign_json_object_id/2,
               get_json_object/3,
               insert_json_object/3,
@@ -92,10 +92,10 @@ assign_json_object_id(Object, Id) :-
     json_data_prefix(Data),
     atomic_list_concat([Data,'JSON/SHA1/',Hash], Id).
 
-assign_json_document_id(Id) :-
-    json_data_prefix(Data),
-    atomic_list_concat([Data,'JSONDocument/'], Base),
-    idgen_random(Base, Id).
+assign_json_document_id(Prefixes,Id) :-
+    get_dict('@base', Prefixes, Base),
+    atomic_list_concat([Base,'JSONDocument/'],Obj_Base),
+    idgen_random(Obj_Base, Id).
 
 bind_vars(Object) :-
     term_variables(Object, Vars),
@@ -181,8 +181,9 @@ insert_json_object(Query_Context, JSON, Id) :-
     insert_json_object(TO, JSON, Id).
 insert_json_object(Transaction, JSON, Id) :-
     database_instance(Transaction, [Instance]),
+    database_prefixes(Transaction,Prefixes),
     (   var(Id)
-    ->  assign_json_document_id(Id)
+    ->  assign_json_document_id(Prefixes,Id)
     ;   true),
     % insert
     forall(
@@ -244,6 +245,11 @@ delete_json_object(Transaction, Prefixes, Unlink, Id) :-
 
 :- begin_tests(json_rdf, [concurrent(true)]).
 
+test(assign_json_document_id,[]) :-
+    Prefixes = _{ '@base' : 'foo/' },
+    assign_json_document_id(Prefixes,Id),
+    atom_concat('foo/JSONDocument', _, Id).
+
 test(generate_data_triples,[]) :-
     JSON = json{
                name : "Gavin",
@@ -251,7 +257,8 @@ test(generate_data_triples,[]) :-
                hobby: null,
                sex : true
            },
-    assign_json_document_id(Id),
+    Prefixes = _{ '@base' : 'foo' },
+    assign_json_document_id(Prefixes,Id),
     findall(
         Triple,
         json_object_triple(JSON, Id, Triple),
@@ -285,7 +292,8 @@ test(generate_subdocument_triples,[]) :-
                             sex : true
                         }
            },
-    assign_json_document_id(Id),
+    Prefixes = _{ '@base' : 'foo' },
+    assign_json_document_id(Prefixes,Id),
     findall(
         Triple,
         json_object_triple(JSON, Id, Triple),
@@ -322,7 +330,8 @@ test(generate_list_triples,[]) :-
                name : "Susan",
                friends : [json{name : "Gavin"},json{name : "Tim"}]
            },
-    assign_json_document_id(Id),
+    Prefixes = _{ '@base' : 'foo' },
+    assign_json_document_id(Prefixes,Id),
     findall(
         Triple,
         json_object_triple(JSON, Id, Triple),
