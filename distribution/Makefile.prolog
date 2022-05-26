@@ -75,7 +75,7 @@ $(TARGET): $(shell find $(SRC_DIRS) \( -name '*.pl' -o -name '*.ttl' -o -name '*
 	  -f src/bootstrap.pl
 
 $(RUST_TARGET):
-	@$(MAKE) $@
+	@$(MAKE) -f distribution/Makefile.rust $@
 
 $(SWIPL_LINT_PATH):
 	curl -L --create-dirs -o $@ "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$(SWIPL_LINT_VERSION)/pl_lint.pl"
