@@ -176,23 +176,24 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    env:
-      SWIPL_LINTER_VERSION: v0.8
 
     steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
           name: terminusdb-server-docker-image
 
-        # Can be found on: https://github.com/terminusdb-labs/swipl-lint/
-      - name: Download lint
-        run: curl -L "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$SWIPL_LINTER_VERSION/pl_lint.pl" > pl_lint.pl
+      - run: make download-lint
 
       - name: Run lint
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
           docker run \
-            -v $(pwd)/pl_lint.pl:/app/pl_lint.pl \
+            -v $(pwd):/app/terminusdb \
             terminusdb/terminusdb-server:local \
-            swipl -f src/load_paths.pl src/core/query/expansions.pl /app/pl_lint.pl
+            make lint
