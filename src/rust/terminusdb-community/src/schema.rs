@@ -201,11 +201,12 @@ pub fn get_type_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64
     let type_id = type_id_opt.unwrap();
     let class_id = layer.object_node_id(SYS_CLASS);
     let tagged_union_id = layer.object_node_id(SYS_TAGGED_UNION);
+    let foreign_id = layer.object_node_id(SYS_FOREIGN);
 
     itertools::Either::Right(
         layer
             .triples_p(type_id)
-            .filter(move |t| Some(t.object) == class_id || Some(t.object) == tagged_union_id)
+            .filter(move |t| Some(t.object) == class_id || Some(t.object) == tagged_union_id || Some(t.object) == foreign_id)
             .map(|t| t.subject),
     )
 }

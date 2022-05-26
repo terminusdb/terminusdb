@@ -1,5 +1,6 @@
 pub const SYS_CLASS: &str = "http://terminusdb.com/schema/sys#Class";
 pub const SYS_TAGGED_UNION: &str = "http://terminusdb.com/schema/sys#TaggedUnion";
+pub const SYS_FOREIGN: &str = "http://terminusdb.com/schema/sys#Foreign";
 pub const SYS_ENUM: &str = "http://terminusdb.com/schema/sys#Enum";
 pub const SYS_SET: &str = "http://terminusdb.com/schema/sys#Set";
 pub const SYS_SUBDOCUMENT: &str = "http://terminusdb.com/schema/sys#subdocument";
