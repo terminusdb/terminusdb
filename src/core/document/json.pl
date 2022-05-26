@@ -2640,11 +2640,11 @@ insert_document(Transaction, Document, false, Captures_In, ID, Dependencies, Cap
              ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
              )
          )).
-insert_document(Query_Context, Document, JSON, Captures_In, ID, Dependencies, Captures_Out) :-
+insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, JSON, Captures_In, ID, Dependencies, Captures_Out).
+    insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
@@ -2692,9 +2692,9 @@ replace_document(DB, Document) :-
 replace_document(DB, Document, Id) :-
     replace_document(DB, Document, false, false, Id).
 
-replace_document(Transaction, Document, Create, JSON, Id) :-
+replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
     empty_assoc(Captures),
-    replace_document(Transaction, Document, Create, JSON, Captures, Id, _Dependencies, _Captures_Out).
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Id, _Dependencies, _Captures_Out).
 
 is_json_hash(Id) :-
     re_match('^terminusdb:///json/JSON/.*', Id).
@@ -2735,11 +2735,11 @@ replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependen
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
-replace_document(Query_Context, Document, Create, JSON, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, JSON, Captures_In, Id, Dependencies, Captures_Out).
+    replace_document(TO, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),

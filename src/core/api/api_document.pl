@@ -152,17 +152,17 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _JSON, Transaction, Document, state(Captures), Id, Captures) :-
+api_insert_document_(schema, _Raw_JSON, Transaction, Document, state(Captures), Id, Captures) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, JSON, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
+api_insert_document_(instance, Raw_JSON, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, JSON, Captures_In, Id, _Dependencies, Captures_Out),
+        do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 api_insert_document_unsafe_(schema, _, Transaction, Context, Document, state(Captures), Id, Captures) :-
@@ -172,12 +172,12 @@ api_insert_document_unsafe_(schema, _, Transaction, Context, Document, state(Cap
     do_or_die(
         Id = (Document.get('@id')),
         error(document_has_no_id_somehow, _)).
-api_insert_document_unsafe_(instance, JSON, Transaction, Context, Document, state(Captures_In), Id, Captures_Out) :-
+api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Context, Document, state(Captures_In), Id, Captures_Out) :-
     do_or_die(
-        insert_document_unsafe(Transaction, Context, Document, JSON, Captures_In, Id, Captures_Out),
+        insert_document_unsafe(Transaction, Context, Document, Raw_JSON, Captures_In, Id, Captures_Out),
         error(document_insertion_failed_unexpectedly(Document), _)).
 
-insert_documents_(true, Graph_Type, JSON, Stream, Transaction, Captures_Var, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -191,21 +191,21 @@ insert_documents_(true, Graph_Type, JSON, Stream, Transaction, Captures_Var, Ids
         Id,
         (   json_read_tail_stream(Tail_Stream, Document),
             nb_thread_var(
-                {Graph_Type, JSON, Transaction, Context, Document, Id}/[State, Captures_Out]>>(
-                    api_insert_document_unsafe_(Graph_Type, JSON, Transaction, Context, Document, State, Id, Captures_Out)
+                {Graph_Type, Raw_JSON, Transaction, Context, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Context, Document, State, Id, Captures_Out)
                 ),
                 Captures_Var
             )
         ),
         Ids
     ).
-insert_documents_(false, Graph_Type, JSON, Stream, Transaction, Captures_Var, Ids) :-
+insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var, Ids) :-
     findall(
         Id,
         (   json_read_list_stream(Stream, Document),
             nb_thread_var(
-                {Graph_Type, JSON, Transaction, Document, Id}/[State, Captures_Out]>>(
-                    api_insert_document_(Graph_Type, JSON, Transaction, Document, State, Id, Captures_Out)
+                {Graph_Type, Raw_JSON, Transaction, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, State, Id, Captures_Out)
                 ),
                 Captures_Var
             )
@@ -345,7 +345,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option_or_die(create(Create),Options),
     option_or_die(author(Author),Options),
     option(message(Message),Options),
-    option(raw_json(JSON),Options,false),
+    option(raw_json(Raw_JSON),Options,false),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
@@ -356,12 +356,12 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          ensure_transaction_has_builder(Graph_Type, Transaction),
                          findall(Id,
                                  nb_thread_var(
-                                     {Graph_Type,JSON,Transaction,Stream,Id}/[State,Captures_Out]>>
+                                     {Graph_Type,Raw_JSON,Transaction,Stream,Id}/[State,Captures_Out]>>
                                      (   json_read_list_stream(Stream, Document),
                                          call_catch_document_mutation(
                                              Document,
                                              api_replace_document_(Graph_Type,
-                                                                   JSON,
+                                                                   Raw_JSON,
                                                                    Transaction,
                                                                    Document,
                                                                    Create,

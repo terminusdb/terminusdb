@@ -485,7 +485,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_message(Search, Message),
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, full_replace, boolean, false, Full_Replace),
-            param_value_search_optional(Search, raw_json, boolean, false, JSON),
+            param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -494,7 +494,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           author : Author,
                           message : Message,
                           full_replace : Full_Replace,
-                          raw_json : JSON
+                          raw_json : Raw_JSON
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -554,7 +554,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_message(Search, Message),
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, create, boolean, false, Create),
-            param_value_search_optional(Search, raw_json, boolean, false, JSON),
+            param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -562,7 +562,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 message : Message,
                 graph_type : Graph_Type,
                 create : Create,
-                raw_json : JSON
+                raw_json : Raw_JSON
             },
             api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
