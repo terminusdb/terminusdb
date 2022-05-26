@@ -105,6 +105,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(debug)).
 :- use_module(library(memfile)).
+:- use_module(library(option)).
 
 /*
  * The opposite of between/3
