@@ -1,0 +1,38 @@
+TUS_VERSION := v0.0.10
+JWT_VERSION := v0.0.5
+
+SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
+
+PACK_INSTALL_OPTIONS := [interactive(false), git(true)]
+
+################################################################################
+
+.PHONY: default
+default:
+	@$(MAKE) install-tus
+	@$(MAKE) install-jwt
+
+.PHONY: install-tus
+install-tus: REPO_URL=https://github.com/terminusdb/tus.git
+install-tus: PACK_NAME=tus
+install-tus: BRANCH=$(TUS_VERSION)
+install-tus: install-pack
+
+.PHONY: install-jwt
+install-jwt: REPO_URL=https://github.com/terminusdb-labs/jwt_io.git
+install-jwt: PACK_NAME=jwt_io
+install-jwt: BRANCH=$(JWT_VERSION)
+install-jwt: install-pack
+
+.PHONY: install-pack
+install-pack:
+	mkdir -p .deps/$(PACK_NAME)
+	git clone --depth 1 $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
+	(cd .deps/$(PACK_NAME); git checkout --quiet $(BRANCH))
+	$(SWIPL) \
+	  --on-error=halt \
+	  --on-warning=halt \
+	  -g "pack_remove($(PACK_NAME))" \
+	  -g "pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
+	  -g "pack_info($(PACK_NAME))" \
+	  -g halt
