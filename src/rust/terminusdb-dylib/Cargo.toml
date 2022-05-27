@@ -11,3 +11,6 @@ crate-type = ["cdylib"]
 [dependencies]
 terminusdb-community = {path="../terminusdb-community"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+
+[profile.release]
+debug = 1

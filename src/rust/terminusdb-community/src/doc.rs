@@ -33,6 +33,7 @@ pub struct GetDocumentContext<L: Layer> {
 }
 
 impl<L: Layer> GetDocumentContext<L> {
+    #[inline(never)]
     pub fn new<SL: Layer>(schema: &SL, instance: L) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
         let terminators: HashSet<u64> =
@@ -109,6 +110,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    #[inline(never)]
     pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
         if let Some(id) = self.layer.subject_id(iri) {
             Some(self.get_id_document(id))
@@ -117,6 +119,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    #[inline(never)]
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
@@ -153,6 +156,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    #[inline(never)]
     fn add_field(&self, obj: &mut Map<String, Value>, key: &str, value: Value, is_set: bool) {
         // add a field, but if the field is already there, make it a collection
         match obj.entry(key) {
@@ -182,6 +186,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    #[inline(never)]
     fn get_list_iter(&self, id: u64) -> Option<Peekable<RdfListIterator<L>>> {
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
@@ -202,6 +207,7 @@ impl<L: Layer> GetDocumentContext<L> {
         None
     }
 
+    #[inline(never)]
     fn get_array_iter(&self, id: u64, stack_entry: &mut StackEntry<L>) -> Option<ArrayIterator<L>> {
         if let StackEntry::Document { fields, .. } = stack_entry {
             if let Some(rdf_type_id) = self.rdf_type_id {
@@ -230,6 +236,7 @@ impl<L: Layer> GetDocumentContext<L> {
         None
     }
 
+    #[inline(never)]
     fn get_doc_stub(
         &self,
         id: u64,
@@ -280,6 +287,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    #[inline(never)]
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
         let mut stack = Vec::new();
 
@@ -392,6 +400,7 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
 }
 
 impl<'a, L: Layer> StackEntry<'a, L> {
+    #[inline(never)]
     fn peek(&mut self) -> Option<u64> {
         match self {
             Self::Document { fields, .. } => fields.as_mut().unwrap().peek().map(|t| t.object),
@@ -400,6 +409,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
+    #[inline(never)]
     fn into_value(self) -> Value {
         match self {
             Self::Document { doc, .. } => Value::Object(doc),
@@ -408,6 +418,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
+    #[inline(never)]
     fn integrate(&mut self, context: &GetDocumentContext<L>, child: StackEntry<'a, L>) {
         match child {
             StackEntry::Array(a) => self.integrate_array(context, a),
@@ -415,6 +426,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
+    #[inline(never)]
     fn integrate_array(&mut self, context: &GetDocumentContext<L>, array: ArrayStackEntry<'a, L>) {
         // self has to be an object, let's make sure of that.
         match self {
@@ -431,6 +443,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
+    #[inline(never)]
     fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value) {
         match self {
             Self::Document {
@@ -464,6 +477,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     }
 }
 
+#[inline(never)]
 fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
     elements.sort_by(|(i1, _), (i2, _)| i1.cmp(i2));
 
@@ -518,6 +532,16 @@ wrapped_arc_blob!(
     defaults
 );
 
+#[inline(never)]
+fn map_to_string(m: Map<String, Value>) -> String {
+    Value::Object(m).to_string()
+}
+
+#[inline(never)]
+fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
+    term.unify(s)
+}
+
 use super::types::*;
 predicates! {
     #[module("$moo")]
@@ -539,7 +563,7 @@ predicates! {
         let context: GetDocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
         if let Some(result) = context.get_document(&s) {
-            doc_json_string_term.unify(Value::Object(result).to_string())
+            unify_json_string(&doc_json_string_term, map_to_string(result))
         }
         else {
             fail()
