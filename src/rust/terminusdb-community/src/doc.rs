@@ -537,7 +537,8 @@ predicates! {
         }
 
         let context: GetDocumentContextBlob = get_context_term.get()?;
-        if let Some(result) = doc_name_term.get_str(|s| context.get_document(s.unwrap()))? {
+        let s: PrologText = doc_name_term.get()?;
+        if let Some(result) = context.get_document(&s) {
             doc_json_string_term.unify(Value::Object(result).to_string())
         }
         else {
