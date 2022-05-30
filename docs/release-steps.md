@@ -70,7 +70,7 @@ The current repository version is: <!--
    [`v10.0.26`](https://github.com/terminusdb/terminusdb/releases/tag/v10.0.26)
    <!-- [[[end]]] -->
 
-6. (_PR_) Update the versions in [`version.yml`](../.github/workflows/version.yml):
+6. (_PR_) Update the versions in [`ci.yml`](../.github/workflows/ci.yml):
    1. Change the value for `LAST_RELEASED_VERSION` to: <!--
       [[[cog cog.out(current_repo_version) ]]] -->
       `v10.0.26`
