@@ -103,6 +103,17 @@ api_global_error_jsonld(error(type_not_found(Unknown_Type), _), Type, JSON) :-
                               'api:type' : Unknown_Type },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(unrecognised_value_for_base_class(C,Elt), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "An unrecognised value was used for a base class: ~q ~q", [C,Elt]),
+    format(string(EltS), "~q", [Elt]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnrecognisedValueForBaseClass',
+                              'api:class' : C,
+                              'api:element' : EltS },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(unknown_organization(Organization), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Unknown organization name: ~s", [Organization]),
@@ -1326,6 +1337,15 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
              'api:error' : _{ '@type' : 'api:BadCast',
                               'api:value' : Value,
                               'api:type' : Destination_Type,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(can_not_replace_at_hashed_id(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "JSON documents with a hash value id can not be replaced as they are immutable.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:CanNotReplaceImmutable',
                               'api:document' : Document },
              'api:message' : Msg
             }.

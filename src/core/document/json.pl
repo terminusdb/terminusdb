@@ -1915,6 +1915,7 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,_,DB,Prefixes,_Compress,_Unfol
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
+    ->  throw(error(unrecognised_value_for_base_class(C,Elt), _))
     ).
 
 compress_dict_uri(URI, Dict, Folded_URI, Options) :-
