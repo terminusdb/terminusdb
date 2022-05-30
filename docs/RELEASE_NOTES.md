@@ -1,3 +1,17 @@
+# TerminusDB Server v10.1.0 Beta Release Notes
+
+## Enhancements
++ Change default query thread count to number of hardware threads
++ Opening a layer no longer uses a read lock. Locks are now only used for
+  writes.
++ Insert and query arbitrary JSON documents as either top-level documents or as
+  subdocuments.
+
+## Other
++ Improve the build process by reducing duplication between Makefile and
+  Dockerfile. Use DOCKER_BUILDKIT=1 to support building the enterprise
+  distribution and to speed up the build.
+
 # TerminusDB Server v10.0.25 Beta Release Notes
 
 ## Bug fixes
