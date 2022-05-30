@@ -65,7 +65,7 @@ clean:
 ################################################################################
 
 $(TARGET): $(RUST_TARGET)
-$(TARGET): $(shell find $(SRC_DIRS) \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+$(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 	$(SWIPL) \
 	  --on-error=halt \
 	  --on-warning=halt \
