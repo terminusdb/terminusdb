@@ -31,12 +31,12 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
-              insert_document/6,
-              insert_document_unsafe/6,
+              insert_document/7,
+              insert_document_unsafe/7,
               replace_document/2,
               replace_document/3,
-              replace_document/4,
-              replace_document/7,
+              replace_document/5,
+              replace_document/8,
               nuke_documents/1,
               insert_schema_document/2,
               insert_schema_document_unsafe/3,
@@ -73,7 +73,14 @@
               normalize_document/3,
 
               % apply.pl
-              apply_diff/4
+              apply_diff/4,
+
+              % json_rdf.pl
+              json_object_triple/3,
+              json_object_triple/4,
+              assign_json_document_id/2,
+              assign_json_object_id/2,
+              get_json_object/3
           ]).
 
 :- use_module('document/validation').
@@ -86,3 +93,4 @@
 :- use_module('document/normalize').
 :- use_module('document/apply').
 :- use_module('document/inference').
+:- use_module('document/json_rdf').

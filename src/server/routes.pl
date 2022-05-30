@@ -485,10 +485,18 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_message(Search, Message),
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, full_replace, boolean, false, Full_Replace),
+            param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
 
             read_data_version_header(Request, Requested_Data_Version),
 
-            api_insert_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream, Requested_Data_Version, New_Data_Version, Ids),
+            Options = options{
+                          graph_type : Graph_Type,
+                          author : Author,
+                          message : Message,
+                          full_replace : Full_Replace,
+                          raw_json : Raw_JSON
+                      },
+            api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
@@ -512,13 +520,18 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
 
             read_data_version_header(Request, Requested_Data_Version),
+            Options = options{
+                          author : Author,
+                          message : Message,
+                          graph_type : Graph_Type
+                      },
 
             (   Nuke = true
-            ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Requested_Data_Version, New_Data_Version)
+            ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Options)
             ;   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id, Requested_Data_Version, New_Data_Version)
+            ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Options)
             ;   http_read_json_semidet(stream(Stream), Request)
-            ->  api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Requested_Data_Version, New_Data_Version)
+            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Options)
             ;   throw(error(missing_targets, _))
             ),
 
@@ -541,10 +554,17 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_message(Search, Message),
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, create, boolean, false, Create),
+            param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
 
             read_data_version_header(Request, Requested_Data_Version),
-
-            api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, Create, Requested_Data_Version, New_Data_Version, Ids),
+            Options = options{
+                author : Author,
+                message : Message,
+                graph_type : Graph_Type,
+                create : Create,
+                raw_json : Raw_JSON
+            },
+            api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),

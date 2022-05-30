@@ -383,7 +383,7 @@ normalizedChar --> "&amp;" .
 normalizedChar --> "&lt;" .
 
 normalizedString --> normalizedChar, normalizedString .
-normazliedString --> "" .
+normalizedString --> "" .
 
 nmtokenChar --> alpha .
 nmtokenChar --> digit(_) .

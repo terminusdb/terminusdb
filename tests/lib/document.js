@@ -70,6 +70,7 @@ function insert (agent, path, params) {
   const fullReplace = params.boolean('fullReplace')
   const schema = params.object('schema')
   const instance = params.object('instance')
+  const rawJSON = params.boolean('raw_json')
   params.assertEmpty()
 
   const request = agent.post(path)
@@ -81,6 +82,7 @@ function insert (agent, path, params) {
       graph_type: util.isDefined(schema) ? 'schema' : 'instance',
       author,
       message,
+      raw_json: rawJSON,
     })
   }
 

@@ -50,6 +50,7 @@
               op(1100,xfy,<>),
               '<>'/2,
               do_or_die/2,
+              option_or_die/2,
               die_if/2,
               whole_arg/2,
               random_string/1,
@@ -104,6 +105,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(debug)).
 :- use_module(library(memfile)).
+:- use_module(library(option)).
 
 /*
  * The opposite of between/3
@@ -140,6 +142,18 @@ do_or_die(Goal, Error) :-
     (   call(Goal)
     ->  true
     ;   throw(Error)).
+
+/*
+ * option_or_die(?,+) is det
+ *
+ * Deterministic
+ */
+option_or_die(Option,Options) :-
+    (   option(Option,Options)
+    ->  true
+    ;   Option =.. [Name,_]
+    ->  throw(error(required_option_unspecified(Name), _))
+    ).
 
 /*
  * die_if(:Goal1,:Goal2) is det
