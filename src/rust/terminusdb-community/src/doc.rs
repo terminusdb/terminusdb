@@ -210,25 +210,23 @@ impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
     fn get_array_iter(&self, id: u64, stack_entry: &mut StackEntry<L>) -> Option<ArrayIterator<L>> {
         if let StackEntry::Document { fields, .. } = stack_entry {
-            if let Some(rdf_type_id) = self.rdf_type_id {
-                if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
-                    if Some(t.object) == self.sys_array_id {
-                        let mut it = None;
-                        std::mem::swap(&mut it, fields);
-                        let mut it = it.unwrap();
-                        let t = it.peek().unwrap();
-                        let subject = t.subject;
-                        let predicate = t.predicate;
-                        return Some(ArrayIterator {
-                            layer: &self.layer,
-                            it,
-                            subject,
-                            predicate,
-                            last_index: None,
-                            sys_index_ids: &self.sys_index_ids,
-                            sys_value_id: self.sys_value_id,
-                        });
-                    }
+            if let (Some(rdf_type_id), Some(sys_array_id)) = (self.rdf_type_id, self.sys_array_id) {
+                if self.layer.triple_exists(id, rdf_type_id, sys_array_id) {
+                    let mut it = None;
+                    std::mem::swap(&mut it, fields);
+                    let mut it = it.unwrap();
+                    let t = it.peek().unwrap();
+                    let subject = t.subject;
+                    let predicate = t.predicate;
+                    return Some(ArrayIterator {
+                        layer: &self.layer,
+                        it,
+                        subject,
+                        predicate,
+                        last_index: None,
+                        sys_index_ids: &self.sys_index_ids,
+                        sys_value_id: self.sys_value_id,
+                    });
                 }
             }
         }
