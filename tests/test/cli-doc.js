@@ -61,7 +61,6 @@ describe('cli-doc', function () {
     const instance = { '@type': schema['@id'], '@id': `${schema['@id']}/0`, x: -88 }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=instance --data='${JSON.stringify(instance)}'`)
-      console.error(r)
       expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: terminusdb:///data/${instance['@id']}`))
     }
     instance.x = -255
