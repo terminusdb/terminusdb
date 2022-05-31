@@ -207,7 +207,7 @@ test(delete_missing,
     Options1 = [graph_type(Graph_Type),
                 author(Author),
                 message(Message)],
-    api_delete_documents(SystemDB, Auth, Path, Stream2, Data_Version1, Data_Version2, Options1),
+    api_delete_documents(SystemDB, Auth, Path, Stream2, Data_Version1, Data_Version2, _Ids, Options1),
 
     Commit_Info = commit_info{ author : Author, message: Message },
     Options2 = [match_final_state(true)],

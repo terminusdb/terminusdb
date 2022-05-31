@@ -7,6 +7,7 @@ describe('cli-doc', function () {
   let dbSpec
 
   before(async function () {
+    this.timeout(30000)
     process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
     {
       const r = await exec('./terminusdb.sh store init --force')
@@ -26,11 +27,12 @@ describe('cli-doc', function () {
     delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
 
-  it('passes schema insert, get, delete', async function () {
-    const schema = { '@type': 'Class', '@id': util.randomString() }
+  it('passes schema insert, get, replace, delete', async function () {
+    this.timeout(30000)
+    const schema = { '@type': 'Class', '@id': util.randomString(), x: 'xsd:hexBinary' }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
-      expect(r.stdout).to.match(/^Documents inserted:/)
+      expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: ${schema['@id']}`))
     }
     {
       const r = await exec(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
@@ -38,22 +40,34 @@ describe('cli-doc', function () {
       expect(docs[0]).to.deep.equal(util.defaultContext)
       expect(docs[1]).to.deep.equal(schema)
     }
+    schema.y = { '@type': 'Optional', '@class': 'xsd:base64Binary' }
+    {
+      const r = await exec(`./terminusdb.sh doc replace ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
+      expect(r.stdout).to.match(new RegExp(`^Documents replaced:\n 1: ${schema['@id']}`))
+    }
     {
       const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --graph_type=schema --id=${schema['@id']}`)
-      expect(r.stdout).to.match(new RegExp(`^Document deleted: ${schema['@id']}`))
+      expect(r.stdout).to.match(new RegExp(`^Documents deleted:\n 1: ${schema['@id']}`))
     }
   })
 
-  it('passes instance insert, get, delete', async function () {
-    const schema = { '@type': 'Class', '@id': util.randomString(), x: 'xsd:integer' }
+  it('passes instance insert, get, replace, delete', async function () {
+    this.timeout(40000)
+    const schema = { '@type': 'Class', '@id': util.randomString(), x: 'xsd:negativeInteger' }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
-      expect(r.stdout).to.match(/^Documents inserted:/)
+      expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: ${schema['@id']}`))
     }
     const instance = { '@type': schema['@id'], '@id': `${schema['@id']}/0`, x: -88 }
     {
       const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=instance --data='${JSON.stringify(instance)}'`)
-      expect(r.stdout).to.match(/^Documents inserted:/)
+      console.error(r)
+      expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: terminusdb:///data/${instance['@id']}`))
+    }
+    instance.x = -255
+    {
+      const r = await exec(`./terminusdb.sh doc replace ${dbSpec} --graph_type=instance --data='${JSON.stringify(instance)}'`)
+      expect(r.stdout).to.match(new RegExp(`^Documents replaced:\n 1: terminusdb:///data/${instance['@id']}`))
     }
     {
       const r = await exec(`./terminusdb.sh doc get ${dbSpec} --graph_type=instance`)
@@ -61,7 +75,11 @@ describe('cli-doc', function () {
     }
     {
       const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --graph_type=instance --id=${instance['@id']}`)
-      expect(r.stdout).to.match(new RegExp(`^Document deleted: ${instance['@id']}`))
+      expect(r.stdout).to.match(new RegExp(`^Documents deleted:\n 1: ${schema['@id']}`))
+    }
+    {
+      const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --graph_type=schema --id=${schema['@id']}`)
+      expect(r.stdout).to.match(new RegExp(`^Documents deleted:\n 1: ${schema['@id']}`))
     }
   })
 })
