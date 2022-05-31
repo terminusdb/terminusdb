@@ -121,7 +121,7 @@
               api_get_documents_by_query/13,
               api_get_document_by_id/10,
               api_insert_documents/8,
-              api_delete_documents/7,
+              api_delete_documents/8,
               api_delete_document/7,
               api_replace_documents/8,
               api_nuke_documents/6,

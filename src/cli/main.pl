@@ -636,7 +636,7 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            default('_'),
            help('document data')],
           [opt(create),
-           type(atom),
+           type(boolean),
            longflags([create]),
            shortflags([c]),
            default(false),
@@ -1237,13 +1237,8 @@ run_command(doc,insert,[Path], Opts) :-
             doc_insert_stream(System_DB, Auth, Path, Ids, Opts, Stream)
         )
     ),
-    length(Ids, Number_Inserted),
-    Col_Width is floor(log10(Number_Inserted)) + 2,
     format(current_output, "Documents inserted:~n", []),
-    forall(
-        nth1(Count, Ids, Id),
-        format(current_output, "~|~t~d~*+: ~w~n", [Count, Col_Width, Id])
-    ).
+    format_doc_id_list(Ids).
 run_command(doc,delete, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1256,15 +1251,17 @@ run_command(doc,delete, [Path], Opts) :-
         (   Nuke = true
         ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, Opts),
             format("Documents nuked~n", [])
-        ;   ground(Id)
-        ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
-            format("Document deleted: ~s~n", [Id])
-        ;   (   var(Data)
-            ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Opts))
-            ;   open_string(Data, Stream),
-                api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Opts)
+        ;   (   ground(Id)
+            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
+                Ids = [Id]
+            ;   (   var(Data)
+                ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts))
+                ;   open_string(Data, Stream),
+                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                )
             ),
-            format("Documents deleted~n", [])
+            format(current_output, "Documents deleted:~n", []),
+            format_doc_id_list(Ids)
         )
     ).
 run_command(doc,replace, [Path], Opts) :-
@@ -1279,10 +1276,8 @@ run_command(doc,replace, [Path], Opts) :-
             ;   open_string(Data, Stream),
                 api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
             ),
-            length(Ids, Number_Inserted),
-            format("Document(s) replaced: ~d~n", [Number_Inserted]),
-            json_write_dict(user_output, Ids, [width(0)]),
-            format(user_output, "~n", [])
+            format(current_output, "Documents replaced:~n", []),
+            format_doc_id_list(Ids)
         )
     ).
 run_command(doc,get, [Path], Opts) :-
@@ -1421,14 +1416,14 @@ doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
 doc_replace_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
     api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
 
-doc_delete_memory_file(System_DB, Auth, Path, Opts, Mem_File) :-
+doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
     % Read the memory file to insert documents.
-    with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Opts)).
+    with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Ids, Opts)).
 
-doc_delete_stream(System_DB, Auth, Path, Opts, Stream) :-
-    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Opts).
+doc_delete_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
+    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
 
 doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
     % Copy stdin to a memory file.
@@ -1584,4 +1579,10 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
-fetch_payload(Payload, _, none, some(Payload)).
+format_doc_id_list(Ids) :-
+    length(Ids, Id_Count),
+    Column_Width is floor(log10(Id_Count)) + 2,
+    forall(
+        nth1(Count, Ids, Id),
+        format(current_output, "~|~t~d~*+: ~w~n", [Count, Column_Width, Id])
+    ).

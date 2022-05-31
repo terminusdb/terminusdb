@@ -531,7 +531,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             ;   ground(Id)
             ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Options)
             ;   http_read_json_semidet(stream(Stream), Request)
-            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, _Ids, Options)
             ;   throw(error(missing_targets, _))
             ),
 

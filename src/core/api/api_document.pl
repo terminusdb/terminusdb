@@ -5,7 +5,7 @@
               api_get_documents_by_query/13,
               api_get_document_by_id/10,
               api_insert_documents/8,
-              api_delete_documents/7,
+              api_delete_documents/8,
               api_delete_document/7,
               api_replace_documents/8,
               api_nuke_documents/6,
@@ -271,7 +271,10 @@ delete_documents_default_options(
         graph_type: instance
     }).
 
-api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Options_New) :-
+api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
+    die_if(
+        nonvar(Ids),
+        error(unexpected_argument_instantiation(api_delete_documents, Ids), _)),
     delete_documents_default_options(Default),
     merge_options(Options_New,Default,Options),
     option(graph_type(Graph_Type), Options),
@@ -283,10 +286,15 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         forall(
+                         findall(
+                             Id,
                              (   json_read_list_stream(Stream, ID_Unchecked),
-                                 param_check_json(non_empty_string, id, ID_Unchecked, ID)),
-                             api_delete_document_(Graph_Type, Transaction, ID))),
+                                 param_check_json(non_empty_string, id, ID_Unchecked, Id),
+                                 api_delete_document_(Graph_Type, Transaction, Id)
+                             ),
+                             Ids
+                         )
+                     ),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
@@ -444,7 +452,7 @@ test(delete_objects_with_stream,
         message("message")
     ],
 
-    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Options),
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -469,7 +477,7 @@ test(delete_objects_with_string,
         author("author"),
         message("message")
     ],
-    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Options),
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
@@ -493,7 +501,7 @@ test(delete_objects_with_mixed_string_stream,
         author("author"),
         message("message")
     ],
-    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Options),
+    api_delete_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     resolve_absolute_string_descriptor("admin/foo", Descriptor),
     create_context(Descriptor, Context),
