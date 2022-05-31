@@ -189,7 +189,7 @@ impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
     fn get_list_iter(&self, id: u64) -> Option<Peekable<RdfListIterator<L>>> {
         if let Some(rdf_type_id) = self.rdf_type_id {
-            if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
+            if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
                 if Some(t.object) == self.rdf_list_id {
                     return Some(
                         RdfListIterator {
@@ -261,7 +261,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut type_id = None;
         let mut type_name_contracted: Option<String> = None;
         if let Some(rdf_type_id) = self.rdf_type_id {
-            if let Some(t) = self.layer.triples_sp(id, rdf_type_id).next() {
+            if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
                 if terminate && self.terminators.contains(&t.object) {
                     return Err(id_name_contracted);
                 }
@@ -368,7 +368,7 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
             if t.subject == self.subject && t.predicate == self.predicate {
                 let mut indexes = Vec::new();
                 for index_id in self.sys_index_ids {
-                    if let Some(index_triple) = self.layer.triples_sp(t.object, *index_id).next() {
+                    if let Some(index_triple) = self.layer.single_triple_sp(t.object, *index_id) {
                         let index_value = self.layer.id_object_value(index_triple.object).unwrap();
                         let index = value_string_to_usize(&index_value);
                         indexes.push(index);
@@ -381,8 +381,7 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
 
                 let value_id = self
                     .layer
-                    .triples_sp(t.object, *self.sys_value_id.as_ref().unwrap())
-                    .next()
+                    .single_triple_sp(t.object, *self.sys_value_id.as_ref().unwrap())
                     .expect("expected value property on array element")
                     .object;
 
