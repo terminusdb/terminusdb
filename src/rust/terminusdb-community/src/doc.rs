@@ -20,7 +20,7 @@ use swipl::prelude::*;
 pub struct GetDocumentContext<L: Layer> {
     layer: L,
     prefixes: PrefixContracter,
-    terminators: HashSet<u64>,
+    document_types: HashSet<u64>,
     enums: HashMap<u64, String>,
     set_pairs: HashSet<(u64, u64)>,
     rdf_type_id: Option<u64>,
@@ -37,7 +37,7 @@ impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
     pub fn new<SL: Layer>(schema: &SL, instance: L) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
-        let terminators: HashSet<u64> =
+        let document_types: HashSet<u64> =
             schema_to_instance_types(schema, &instance, schema_type_ids).collect();
 
         let schema_enum_ids = get_enum_ids_from_schema(schema);
@@ -97,7 +97,7 @@ impl<L: Layer> GetDocumentContext<L> {
         GetDocumentContext {
             layer: instance,
             prefixes,
-            terminators,
+            document_types,
             enums,
             set_pairs,
             rdf_type_id,
@@ -239,7 +239,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut type_name_contracted: Option<String> = None;
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
-                if terminate && self.terminators.contains(&t.object) {
+                if terminate && self.document_types.contains(&t.object) {
                     return Err(Value::String(id_name_contracted));
                 }
                 type_id = Some(t.object);
@@ -589,6 +589,32 @@ predicates! {
     }
 
     #[module("$moo")]
+    semidet fn print_all_documents_json(context, stream_term, get_context_term) {
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
+        types.sort();
+
+        for typ in types {
+            for t in doc_context.layer.triples_o(typ) {
+                if Some(t.predicate) != doc_context.rdf_type_id {
+                    continue;
+                }
+
+                let map = doc_context.get_id_document(t.subject);
+                let s = map_to_string(map);
+
+                context.try_or_die(stream.write_all(s.as_bytes()))?;
+                context.try_or_die(stream.write_all(b"\n"))?;
+                context.try_or_die(stream.flush())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    #[module("$moo")]
     semidet fn print_prefix_tree(_context, get_context_term) {
         let get_context: GetDocumentContextBlob = get_context_term.get()?;
 
@@ -622,6 +648,7 @@ pub fn register() {
     register_get_document_context();
     register_get_document_json_string();
     register_print_document_json();
+    register_print_all_documents_json();
     register_prefix_schema_contract();
     register_prefix_instance_contract();
     register_print_prefix_tree();
