@@ -432,7 +432,7 @@ sfoldr(Pred,Generator,Zero,Result) :-
  * Replaces a string with its space trimmed equivalent
  */
 trim(String,Trimmed) :-
-    re_replace('^\\s*(.*?)\\s*$','\\1', String, Trimmed).
+    re_replace('^\\s*(.*?)\\s*$','$1', String, Trimmed).
 
 /*
  * get_dict_default(Key,Dict,Value,Default)
@@ -461,7 +461,7 @@ pattern_string_split(Pattern,String,List) :-
  * escape_pcre(String,Escaped) is det.
  */
 escape_pcre(String, Escaped) :-
-    re_replace('[-[\\]{}()*+?.,\\\\^$|#\\s]'/g, '\\\\0', String, Escaped).
+    re_replace('[-[\\]{}()*+?.,\\\\^$|#\\s]'/g, '\\$0', String, Escaped).
 
 /**
  * merge_separator_split(+Merge, +Separator,-Split) is det.
