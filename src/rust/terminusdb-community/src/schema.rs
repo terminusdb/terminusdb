@@ -62,13 +62,11 @@ impl<'a, L: Layer> Iterator for RdfListIterator<'a, L> {
                 .expect("expected cons cell to have a first but id not found");
             let first_id = self
                 .layer
-                .triples_sp(self.cur, rdf_first_id)
-                .next()
+                .single_triple_sp(self.cur, rdf_first_id)
                 .expect("expected cons cell to have a first");
             let rest_id = self
                 .layer
-                .triples_sp(self.cur, rdf_rest_id)
-                .next()
+                .single_triple_sp(self.cur, rdf_rest_id)
                 .expect("expected cons cell to have a rest");
 
             self.cur = rest_id.object;
@@ -111,8 +109,7 @@ pub fn get_enum_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
             // it is going to have a value field pointing at a list of possible enum values
             let sys_value_id = layer.predicate_id(SYS_VALUE).unwrap();
             let value_list_id = layer
-                .triples_sp(t.subject, sys_value_id)
-                .next()
+                .single_triple_sp(t.subject, sys_value_id)
                 .unwrap()
                 .object;
 
@@ -206,7 +203,11 @@ pub fn get_type_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64
     itertools::Either::Right(
         layer
             .triples_p(type_id)
-            .filter(move |t| Some(t.object) == class_id || Some(t.object) == tagged_union_id || Some(t.object) == foreign_id)
+            .filter(move |t| {
+                Some(t.object) == class_id
+                    || Some(t.object) == tagged_union_id
+                    || Some(t.object) == foreign_id
+            })
             .map(|t| t.subject),
     )
 }
@@ -287,14 +288,9 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
     let mut prefixes: Vec<Prefix> = Vec::new();
 
     if let (Some(context_id), Some(base_id), Some(schema_id)) = (context_id, base_id, schema_id) {
-        let base_expansion_id = schema
-            .triples_sp(context_id, base_id)
-            .next()
-            .unwrap()
-            .object;
+        let base_expansion_id = schema.single_triple_sp(context_id, base_id).unwrap().object;
         let schema_expansion_id = schema
-            .triples_sp(context_id, schema_id)
-            .next()
+            .single_triple_sp(context_id, schema_id)
             .unwrap()
             .object;
 
@@ -318,12 +314,8 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
             let url_id = url_id.unwrap();
 
             for t in schema.triples_sp(context_id, prefix_pair_id) {
-                let contraction_id = schema
-                    .triples_sp(t.object, prefix_id)
-                    .next()
-                    .unwrap()
-                    .object;
-                let expansion_id = schema.triples_sp(t.object, url_id).next().unwrap().object;
+                let contraction_id = schema.single_triple_sp(t.object, prefix_id).unwrap().object;
+                let expansion_id = schema.single_triple_sp(t.object, url_id).unwrap().object;
 
                 if let (ObjectType::Value(contraction), ObjectType::Value(expansion)) = (
                     schema.id_object(contraction_id).unwrap(),

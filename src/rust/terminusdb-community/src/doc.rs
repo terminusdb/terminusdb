@@ -125,33 +125,15 @@ impl<L: Layer> GetDocumentContext<L> {
             Ok(Value::String(val.clone()))
         } else if Some(object) == self.rdf_nil_id {
             Ok(Value::Array(vec![]))
-        } else if self.layer.id_object_is_node(object).unwrap() {
-            // this might not be a terminator, but we won't know until trying to get a list or doc stub
-            if let Some(list_iter) = self.get_list_iter(object) {
-                Err(StackEntry::List {
-                    collect: Vec::new(),
-                    entries: list_iter,
-                })
-            } else {
-                match self.get_doc_stub(object, true) {
-                    // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
-                    Ok((doc, type_id, fields)) => Err(StackEntry::Document {
-                        doc,
-                        type_id,
-                        fields: Some(fields),
-                    }),
-                    // it turns out it is a terminator after all, so we just use the id as a direct value
-                    Err(s) => Ok(Value::String(s)),
-                }
-            }
         } else {
-            // This is a terminator, so we're gonna directly get the field
-            match self.layer.id_object(object).unwrap() {
-                ObjectType::Node(n) => {
-                    let n_contracted = self.prefixes.instance_contract(&n).to_string();
-                    Ok(Value::String(n_contracted))
-                }
-                ObjectType::Value(v) => Ok(value_string_to_json(&v)),
+            match self.get_doc_stub(object, true) {
+                // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
+                Ok((doc, type_id, fields)) => Err(StackEntry::Document {
+                    doc,
+                    type_id,
+                    fields: Some(fields),
+                }),
+                Err(v) => Ok(v),
             }
         }
     }
@@ -187,51 +169,38 @@ impl<L: Layer> GetDocumentContext<L> {
     }
 
     #[inline(never)]
-    fn get_list_iter(&self, id: u64) -> Option<Peekable<RdfListIterator<L>>> {
-        if let Some(rdf_type_id) = self.rdf_type_id {
-            if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
-                if Some(t.object) == self.rdf_list_id {
-                    return Some(
-                        RdfListIterator {
-                            layer: &self.layer,
-                            cur: id,
-                            rdf_first_id: self.rdf_first_id,
-                            rdf_rest_id: self.rdf_rest_id,
-                            rdf_nil_id: self.rdf_nil_id,
-                        }
-                        .peekable(),
-                    );
-                }
-            }
+    fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<L>> {
+        RdfListIterator {
+            layer: &self.layer,
+            cur: id,
+            rdf_first_id: self.rdf_first_id,
+            rdf_rest_id: self.rdf_rest_id,
+            rdf_nil_id: self.rdf_nil_id,
         }
-        None
+        .peekable()
     }
 
     #[inline(never)]
-    fn get_array_iter(&self, id: u64, stack_entry: &mut StackEntry<L>) -> Option<ArrayIterator<L>> {
+    fn get_array_iter(&self, stack_entry: &mut StackEntry<L>) -> ArrayIterator<L> {
         if let StackEntry::Document { fields, .. } = stack_entry {
-            if let (Some(rdf_type_id), Some(sys_array_id)) = (self.rdf_type_id, self.sys_array_id) {
-                if self.layer.triple_exists(id, rdf_type_id, sys_array_id) {
-                    let mut it = None;
-                    std::mem::swap(&mut it, fields);
-                    let mut it = it.unwrap();
-                    let t = it.peek().unwrap();
-                    let subject = t.subject;
-                    let predicate = t.predicate;
-                    return Some(ArrayIterator {
-                        layer: &self.layer,
-                        it,
-                        subject,
-                        predicate,
-                        last_index: None,
-                        sys_index_ids: &self.sys_index_ids,
-                        sys_value_id: self.sys_value_id,
-                    });
-                }
-            }
+            let mut it = None;
+            std::mem::swap(&mut it, fields);
+            let mut it = it.unwrap();
+            let t = it.peek().unwrap();
+            let subject = t.subject;
+            let predicate = t.predicate;
+            return ArrayIterator {
+                layer: &self.layer,
+                it,
+                subject,
+                predicate,
+                last_index: None,
+                sys_index_ids: &self.sys_index_ids,
+                sys_value_id: self.sys_value_id,
+            };
+        } else {
+            panic!("array is not a field of a document");
         }
-
-        None
     }
 
     #[inline(never)]
@@ -245,9 +214,16 @@ impl<L: Layer> GetDocumentContext<L> {
             Option<u64>,
             Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
         ),
-        String,
+        Value,
     > {
-        let id_name = self.layer.id_subject(id).unwrap();
+        let id_name = self.layer.id_object(id).unwrap();
+        if let Some(v) = id_name.value_ref() {
+            // this is not actually a document but a value
+            return Err(value_string_to_json(v));
+        }
+
+        // we now id_name is properly a node
+        let id_name = id_name.node().unwrap();
         let id_name_contracted = self.prefixes.instance_contract(&id_name).to_string();
 
         let rdf_type_id = self.rdf_type_id;
@@ -263,7 +239,7 @@ impl<L: Layer> GetDocumentContext<L> {
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
                 if terminate && self.terminators.contains(&t.object) {
-                    return Err(id_name_contracted);
+                    return Err(Value::String(id_name_contracted));
                 }
                 type_id = Some(t.object);
                 let type_name = self.layer.id_object_node(t.object).unwrap();
@@ -273,7 +249,7 @@ impl<L: Layer> GetDocumentContext<L> {
 
         if type_name_contracted.is_none() && fields.peek().is_none() {
             // we're actually dealing with a raw id here
-            Err(id_name_contracted)
+            Err(Value::String(id_name_contracted))
         } else {
             let mut result = Map::new();
             result.insert("@id".to_string(), Value::String(id_name_contracted));
@@ -299,20 +275,37 @@ impl<L: Layer> GetDocumentContext<L> {
         loop {
             let cur = stack.last_mut().unwrap();
             if let Some(next_obj) = cur.peek() {
-                if let Some(array_iter) = self.get_array_iter(next_obj, cur) {
-                    stack.push(StackEntry::Array(ArrayStackEntry {
-                        collect: Vec::new(),
-                        entries: array_iter,
-                    }));
-                } else {
-                    match self.get_field(next_obj) {
-                        Ok(val) => {
-                            cur.integrate_value(self, val);
+                // let's first see if this object is one of the expected types
+                if cur.is_document() {
+                    if let Some(rdf_type_id) = self.rdf_type_id {
+                        if let Some(t) = self.layer.single_triple_sp(next_obj, rdf_type_id) {
+                            // todo should actually check that current stack item is a doc
+                            if Some(t.object) == self.sys_array_id {
+                                let array_iter = self.get_array_iter(cur);
+                                stack.push(StackEntry::Array(ArrayStackEntry {
+                                    collect: Vec::new(),
+                                    entries: array_iter,
+                                }));
+                                continue;
+                            } else if Some(t.object) == self.rdf_list_id {
+                                let list_iter = self.get_list_iter(next_obj);
+                                stack.push(StackEntry::List {
+                                    collect: Vec::new(),
+                                    entries: list_iter,
+                                });
+                                continue;
+                            }
                         }
-                        Err(entry) => {
-                            // We need to iterate deeper, so add it to the stack without iterating past the field.
-                            stack.push(entry);
-                        }
+                    }
+                }
+                // it's not one of the special types, treat it as an ordinary field.
+                match self.get_field(next_obj) {
+                    Ok(val) => {
+                        cur.integrate_value(self, val);
+                    }
+                    Err(entry) => {
+                        // We need to iterate deeper, so add it to the stack without iterating past the field.
+                        stack.push(entry);
                     }
                 }
             } else {
@@ -343,6 +336,16 @@ enum StackEntry<'a, L: Layer> {
         entries: Peekable<RdfListIterator<'a, L>>,
     },
     Array(ArrayStackEntry<'a, L>),
+}
+
+impl<'a, L: Layer> StackEntry<'a, L> {
+    fn is_document(&self) -> bool {
+        match self {
+            Self::Document { .. } => true,
+            Self::List { .. } => false,
+            Self::Array(_) => false,
+        }
+    }
 }
 
 struct ArrayStackEntry<'a, L: Layer> {
