@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::sync::Arc;
+use std::io::Write;
 
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::*;
@@ -571,6 +572,23 @@ predicates! {
     }
 
     #[module("$moo")]
+    semidet fn print_document_json(context, stream_term, get_context_term, doc_name_term) {
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+        if !doc_name_term.is_string() && !doc_name_term.is_atom() {
+            return fail();
+        }
+
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let s: PrologText = doc_name_term.get()?;
+        if let Some(result) = doc_context.get_document(&s) {
+            context.try_or_die(write!(stream, "{}\n", map_to_string(result)))
+        }
+        else {
+            fail()
+        }
+    }
+
+    #[module("$moo")]
     semidet fn print_prefix_tree(_context, get_context_term) {
         let get_context: GetDocumentContextBlob = get_context_term.get()?;
 
@@ -603,6 +621,7 @@ predicates! {
 pub fn register() {
     register_get_document_context();
     register_get_document_json_string();
+    register_print_document_json();
     register_prefix_schema_contract();
     register_prefix_instance_contract();
     register_print_prefix_tree();

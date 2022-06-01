@@ -120,8 +120,8 @@ api_get_document(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
               error(document_not_found(Id), _)).
 
 api_get_and_print_document(instance, Get_Context, _Transaction, json_stream(Initial_Goal, As_List, Stream_Started, _JSON_Options), _Compress_Ids, _Unfold, Id) :-
-    '$moo':get_document_json_string(Get_Context, Id, String),
-    json_stream_write_string(Initial_Goal, As_List, Stream_Started, String).
+    json_stream_write_start(Initial_Goal, As_List, Stream_Started),
+    '$moo':print_document_json(current_output, Get_Context, Id).
 api_get_and_print_document(schema, _Get_Context, Transaction, json_stream(Initial_Goal, As_List, Stream_Started, JSON_Options),_Prefixed, _Unfold, Id) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)),

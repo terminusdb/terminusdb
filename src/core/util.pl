@@ -262,7 +262,8 @@
               json_stream_start/1,
               json_stream_end/3,
               json_stream_write_dict/5,
-              json_stream_write_string/4
+              json_stream_write_string/4,
+              json_stream_write_start/3
           ]).
 
 % note: test_utils is intentionally omitted

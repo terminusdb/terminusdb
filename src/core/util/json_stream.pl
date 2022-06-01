@@ -2,7 +2,8 @@
               json_stream_start/1,
               json_stream_end/3,
               json_stream_write_dict/5,
-              json_stream_write_string/4
+              json_stream_write_string/4,
+              json_stream_write_start/3
           ]).
 
 :- use_module(library(http/json)).
@@ -48,6 +49,19 @@ json_stream_end(Initial_Goal, As_List, stream_started(Started)) :-
     ;   true).
 json_stream_end(_Initial_Goal, _As_List, Stream_Started) :-
     throw(error(unexpected_argument_instantiation(json_stream_end, Stream_Started), _)).
+
+json_stream_write_start(Initial_Goal, As_List, Stream_Started) :-
+    % Get the current value of Stream_Started before we possibly update it with
+    % nb_setarg.
+    Stream_Started = stream_started(Started),
+
+    % Write the headers in case they weren't written. Update Stream_Started, so
+    % that we don't write them again.
+    (   Started = true
+    ->  true
+    ;   nb_setarg(1, Stream_Started, true),
+        call(Initial_Goal, As_List)
+    ).
 
 /**
  * json_stream_write_dict(+Request, +As_List, +Data_Version, +Stream_Started, +JSON, +JSON_Options) is det.
