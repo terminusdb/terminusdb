@@ -625,7 +625,7 @@ predicates! {
         let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
         types.sort();
 
-        let (sender, receiver) = mpsc::sync_channel(10);
+        let (sender, receiver) = mpsc::channel();
 
         rayon::spawn(move || {
             types.into_iter().flat_map(|typ| doc_context.layer.triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
