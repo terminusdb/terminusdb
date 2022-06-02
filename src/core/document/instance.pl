@@ -24,6 +24,7 @@
 :- use_module(core(query)).
 :- use_module(library(terminus_store)).
 :- use_module(core(transaction)).
+:- use_module(json_rdf).
 
 :- use_module(schema).
 
@@ -33,7 +34,6 @@
 :- use_module(library(dicts)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(uri), [uri_components/2]).
-
 
 is_rdf_list_(_Instance, Type) :-
     global_prefix_expand(rdf:nil, Type),
@@ -491,6 +491,14 @@ refute_subject_type_change(Validation_Object,S_Id,Witness) :-
                     old_type : Old_Type,
                     new_type : New_Type}.
 
+refute_object_type(_Validation_Object,Class,_,_,_) :-
+    (   is_json_document_type(Class)
+    ;   is_json_subdocument_type(Class)
+    ),
+    % Extremely weak checking here - we could check the form of
+    % predicates, but this will be faster.
+    !,
+    fail.
 refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_array_type(Class),
     !,

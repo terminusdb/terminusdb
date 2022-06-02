@@ -1,4 +1,6 @@
 :- module('document/json_rdf', [
+              is_json_document_type/1,
+              is_json_subdocument_type/1,
               json_object_triple/3,
               json_object_triple/4,
               assign_json_document_id/2,
@@ -24,7 +26,11 @@
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 
+is_json_document_type(Type) :-
+    global_prefix_expand(sys:'JSONDocument', Type).
 
+is_json_subdocument_type(Type) :-
+    global_prefix_expand(sys:'JSON', Type).
 
 /** <module> JSON RDF
  **/
