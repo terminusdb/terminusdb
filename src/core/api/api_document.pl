@@ -75,7 +75,7 @@ api_get_and_print_documents(SystemDB, Auth, Path, Graph_Type, JSON_Stream, Compr
     (   Graph_Type = instance
     ->  JSON_Stream = json_stream(Initial_Goal, As_List, Stream_Started, _),
         json_stream_write_start(Initial_Goal, As_List, Stream_Started),
-        Goal = {Get_Context}/[_Document]>>('$moo':print_all_documents_json(current_output, Get_Context))
+        Goal = {Get_Context}/[_Document]>>('$moo':par_print_all_documents_json(current_output, Get_Context))
     ;   Goal = {Graph_Type, Transaction, Get_Context, Skip, Count, Compress_Ids, Unfold}/[_Document]>>(
         api_document:api_generate_document_ids(Graph_Type, Transaction, Unfold, Skip, Count, Id),
         api_document:api_get_and_print_document(Graph_Type, Get_Context, Transaction, JSON_Stream, Compress_Ids, Unfold, Id)

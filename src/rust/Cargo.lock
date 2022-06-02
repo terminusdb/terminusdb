@@ -994,6 +994,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "lcs",
+ "rayon",
  "serde_json",
  "swipl",
  "terminusdb-store-prolog",

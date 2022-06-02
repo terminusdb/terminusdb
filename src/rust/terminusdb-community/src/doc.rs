@@ -1,7 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use std::iter::Peekable;
-use std::sync::Arc;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::Write;
+use std::iter::Peekable;
+use std::sync::{mpsc, Arc};
 
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::*;
@@ -15,6 +16,7 @@ use super::prefix::PrefixContracter;
 use super::schema::*;
 use super::value::*;
 
+use rayon::prelude::*;
 use swipl::prelude::*;
 
 pub struct GetDocumentContext<L: Layer> {
@@ -615,6 +617,59 @@ predicates! {
     }
 
     #[module("$moo")]
+    semidet fn par_print_all_documents_json(context, stream_term, get_context_term) {
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        //let doc_context_arc = Arc::new(doc_context);
+        let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
+        types.sort();
+
+        let (sender, receiver) = mpsc::sync_channel(10);
+
+        rayon::spawn(move || {
+            types.into_iter().flat_map(|typ| doc_context.layer.triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
+                .enumerate()
+                .par_bridge()
+                .try_for_each_with(sender, |sender, (ix, t)| {
+                    let map = doc_context.get_id_document(t.subject);
+                    let s = map_to_string(map);
+                    sender.send((ix, s)) // failure will kill the task
+                });
+        });
+
+        let mut result = BinaryHeap::new();
+        let mut cur = 0;
+        while let Ok((ix,s)) = receiver.recv() {
+            //eprintln!("{:?}", ix);
+            if ix == cur {
+                context.try_or_die(stream.write_all(s.as_bytes()))?;
+                context.try_or_die(stream.write_all(b"\n"))?;
+                context.try_or_die(stream.flush())?;
+
+                cur += 1;
+                while result.peek().map(|HeapEntry {index,..}|index == &cur).unwrap_or(false) {
+                    let HeapEntry {index, value } = result.pop().unwrap();
+
+                    context.try_or_die(stream.write_all(value.as_bytes()))?;
+                    context.try_or_die(stream.write_all(b"\n"))?;
+                    context.try_or_die(stream.flush())?;
+
+                    cur += 1;
+                }
+            }
+            else {
+                result.push(HeapEntry { index: ix, value: s });
+            }
+        }
+
+        assert!(result.is_empty());
+
+        Ok(())
+    }
+
+
+    #[module("$moo")]
     semidet fn print_prefix_tree(_context, get_context_term) {
         let get_context: GetDocumentContextBlob = get_context_term.get()?;
 
@@ -644,11 +699,37 @@ predicates! {
     }
 }
 
+struct HeapEntry {
+    index: usize,
+    value: String,
+}
+
+impl PartialEq for HeapEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
+}
+
+impl Eq for HeapEntry {}
+
+impl PartialOrd for HeapEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.index.cmp(&other.index).reverse())
+    }
+}
+
+impl Ord for HeapEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.index.cmp(&other.index).reverse()
+    }
+}
+
 pub fn register() {
     register_get_document_context();
     register_get_document_json_string();
     register_print_document_json();
     register_print_all_documents_json();
+    register_par_print_all_documents_json();
     register_prefix_schema_contract();
     register_prefix_instance_contract();
     register_print_prefix_tree();
