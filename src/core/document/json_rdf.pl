@@ -272,21 +272,18 @@ test(generate_data_triples,[]) :-
 
     Triples =
     [ t(Id,
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/sys#JSONDocument'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#name',
-		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#age',
-		45^^'http://www.w3.org/2001/XMLSchema#decimal'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#hobby',
-		null^^'http://www.w3.org/2001/XMLSchema#token'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#sex',
-		true^^'http://www.w3.org/2001/XMLSchema#boolean')
-	].
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSONDocument'),
+      t(Id,
+        'http://terminusdb.com/schema/json#name',
+        "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t(Id,'http://terminusdb.com/schema/json#hobby',
+        null^^'http://www.w3.org/2001/XMLSchema#token'),
+      t(Id,'http://terminusdb.com/schema/json#sex',
+        true^^'http://www.w3.org/2001/XMLSchema#boolean'),
+      t(Id,'http://terminusdb.com/schema/json#age',
+        45^^'http://www.w3.org/2001/XMLSchema#decimal')
+    ].
 
 test(generate_subdocument_triples,[]) :-
     JSON = json{
@@ -313,22 +310,22 @@ test(generate_subdocument_triples,[]) :-
 		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
 	  t(Id,
 		'http://terminusdb.com/schema/json#friend',
-		'terminusdb:///json/JSON/SHA1/037676793775f3250a1c2109c440387eb2583a36'),
-	  t('terminusdb:///json/JSON/SHA1/037676793775f3250a1c2109c440387eb2583a36',
+		'terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e'),
+	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#JSON'),
-	  t('terminusdb:///json/JSON/SHA1/037676793775f3250a1c2109c440387eb2583a36',
+	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
 		'http://terminusdb.com/schema/json#name',
 		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/JSON/SHA1/037676793775f3250a1c2109c440387eb2583a36',
-		'http://terminusdb.com/schema/json#age',
-		45^^'http://www.w3.org/2001/XMLSchema#decimal'),
-	  t('terminusdb:///json/JSON/SHA1/037676793775f3250a1c2109c440387eb2583a36',
+	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
 		'http://terminusdb.com/schema/json#hobby',
 		null^^'http://www.w3.org/2001/XMLSchema#token'),
-	  t('terminusdb:///json/JSON/SHA1/037676793775f3250a1c2109c440387eb2583a36',
+	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
 		'http://terminusdb.com/schema/json#sex',
-		true^^'http://www.w3.org/2001/XMLSchema#boolean')
+		true^^'http://www.w3.org/2001/XMLSchema#boolean'),
+	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
+		'http://terminusdb.com/schema/json#age',
+		45^^'http://www.w3.org/2001/XMLSchema#decimal')
 	].
 
 test(generate_list_triples,[]) :-
