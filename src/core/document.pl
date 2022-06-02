@@ -76,6 +76,8 @@
               apply_diff/4,
 
               % json_rdf.pl
+              is_json_document_type/1,
+              is_json_subdocument_type/1,
               json_object_triple/3,
               json_object_triple/4,
               assign_json_document_id/2,

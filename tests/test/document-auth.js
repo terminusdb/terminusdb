@@ -768,7 +768,7 @@ describe('document', function () {
         const r2 = await document
           .get(agent, docPath, { query: { id: id0, as_list: true } })
           .then(document.verifyGetSuccess)
-        expect(r2.body).to.deep.equal([{ a: [42, 23, 12] }])
+        expect(r2.body).to.deep.equal([{ '@id': id0, a: [42, 23, 12] }])
       })
 
       it('cannot insert invalid JSON id', async function () {
