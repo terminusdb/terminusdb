@@ -1,4 +1,4 @@
-# TerminusDB Server v10.1.0 Beta Release Notes
+# TerminusDB Server v10.1.0 Release Notes
 
 ## Enhancements
 + Change default query thread count to number of hardware threads
@@ -12,7 +12,7 @@
   Dockerfile. Use DOCKER_BUILDKIT=1 to support building the enterprise
   distribution and to speed up the build.
 
-# TerminusDB Server v10.0.25 Beta Release Notes
+# TerminusDB Server v10.0.25 Release Notes
 
 ## Bug fixes
 + Fix cost calculations to make a more accurate diff
@@ -42,7 +42,7 @@
 ## Other
 + Integrate `terminus_store_prolog` directly into TerminusDB
 
-# TerminusDB Server v10.0.24 Beta Release Notes
+# TerminusDB Server v10.0.24 Release Notes
 ## Bug fixes
 + full_replace on schemas ignored newly submitted prefixes
 + For push operations, TUS will now submit proper Content-Length header
@@ -50,7 +50,7 @@
 ## Enhancements
 + CLI tool now has a --version flag that reports the version
 
-# TerminusDB Server v10.0.23 Beta Release Notes
+# TerminusDB Server v10.0.23 Release Notes
 ## Bug fixes
 + Fix full_replace flag handling of duplicate IDs
 + Push can now overwrite a remote branch if this remote branch has no commits
@@ -63,7 +63,7 @@
 + Update build instruction documentation
 + Improved integration tests to run CLI tests without deleting an existing store
 
-# TerminusDB Server v10.0.22 Beta Release Notes
+# TerminusDB Server v10.0.22 Release Notes
 ## Enhancement
 + Speed improvement to document interface
 + Add WOQL document templates to simplify inserting and updating documents via
@@ -73,7 +73,7 @@
 ## Other
 + Make unit tests run concurrently properly
 
-# TerminusDB Server v10.0.21 Beta Release Notes
+# TerminusDB Server v10.0.21 Release Notes
 ## Bug fixes
 + Fix to allow optional `@comment` in `@documentation`
 
@@ -82,7 +82,7 @@
 + Add preliminary support for Content-Encoding compression to some endpoints
 + Minor speedup in document insertion
 
-# TerminusDB Server v10.0.20 Beta Release Notes
+# TerminusDB Server v10.0.20 Release Notes
 ## Bug fixes
 + Fix: Forward id capture was capturing unexpanded ID
 
@@ -92,12 +92,12 @@
 ## Other
 + Various CI fixes to run unit tests properly
 
-# TerminusDB Server v10.0.19 Beta Release Notes
+# TerminusDB Server v10.0.19 Release Notes
 ## Other
 + Use default user and password for tests
 + Use environment variable for CLI tests
 
-# TerminusDB Server v10.0.18 Beta Release Notes
+# TerminusDB Server v10.0.18 Release Notes
 ## Bug fixes
 + Fix QueryResource post and url
 + Fix operation id logging so nothing gets wrapped in quotes
@@ -116,7 +116,7 @@
 + Added benchmark tests
 + Added CLI tests
 
-# TerminusDB Server v10.0.17 Beta Release Notes
+# TerminusDB Server v10.0.17 Release Notes
 ## Bug fixes
 + Fix valuehash generation for multidimensional arrays
 + Fix patch cost calculations
@@ -129,7 +129,7 @@
 + Removed message api endpoint
 + Moved various unit tests into the integration tests
 
-# TerminusDB Server v10.0.16 Beta Release Notes
+# TerminusDB Server v10.0.16 Release Notes
 ## Enhancements
 + Patch and diff api endpoints
 + Multi-dimensional arrays
@@ -139,18 +139,18 @@
 ## Bug fixes
 + Id capture did not work properly with transaction retries
 
-# TerminusDB Server v10.0.15 Beta Release Notes
+# TerminusDB Server v10.0.15 Release Notes
 ## Bug fixes
 + id capture did not work with document arrays
 + subdocuments could be submitted as root documents
 
-# TerminusDB Server v10.0.14 Beta Release Notes
+# TerminusDB Server v10.0.14 Release Notes
 ## New
 + id capture: during document insert and replace, it is now possible
   to capture an id and then refer to it in another document, allowing
   for easy document linking
 
-# TerminusDB Server v10.0.13 Beta Release Notes
+# TerminusDB Server v10.0.13 Release Notes
 ## Bug fixes
 + utf-8 handling is now the default for json input
 + enums could not be documented
@@ -169,13 +169,13 @@
   authentication mechanism.
 + Upgraded to the latest version of SWI-Prolog
 
-# TerminusDB Server v10.0.12 Beta Release Notes
+# TerminusDB Server v10.0.12 Release Notes
 ## Bug fixes
 + Query parameter is ignored.
 + Type parameter is ignored for queries.
 + Subsumption check between specified type and match document type is reversed.
 
-# TerminusDB Server v10.0.11 Beta Release Notes
+# TerminusDB Server v10.0.11 Release Notes
 ## New
 + `@oneOf` property in type definitions for disjoint properties as a
   generalization of tagged unions.
@@ -189,7 +189,7 @@
 + Speed improvements in schema checking.
 + Tagged unions can now be inherited.
 
-# TerminusDB Server v10.0.10 Beta Release Notes
+# TerminusDB Server v10.0.10 Release Notes
 
 ## Bug fixes
 + Improved handling of '@id' and '@type' for strange, non string
@@ -202,7 +202,7 @@
 + Insert or Update functionality added to the document interface.
   which allows updating or inserting.
 
-# TerminusDB Server v10.0.9 Beta Release Notes
+# TerminusDB Server v10.0.9 Release Notes
 ## Bug fixes
 + References to documents were dropped on document replacement
 + booleans handled incorrectly in document interface
@@ -211,7 +211,7 @@
 + Improvements to error reporting
 + Speed improvements to schema checking
 
-# TerminusDB Server v10.0.8 Beta Release Notes
+# TerminusDB Server v10.0.8 Release Notes
 ## New
 + Performance enhancements to document interface
 + Better transaction retry back-off parameters
@@ -224,7 +224,7 @@
 + Fixed WOQL IsA handling
 + Fixed behaviour of some WOQL update words
 
-# TerminusDB Server v10.0.7 Beta Release Notes
+# TerminusDB Server v10.0.7 Release Notes
 ## Bug fixes
 + Enum triples were not properly type-checked
 + Authorization issues with graph filters
@@ -238,11 +238,11 @@
 + Fix appimage build
 + Better error handling
 
-# TerminusDB Server v10.0.5 Beta Release Notes
+# TerminusDB Server v10.0.5 Release Notes
 ## Bug fixes
 + Update version number in info
 
-# TerminusDB Server v10.0.4 Beta Release Notes
+# TerminusDB Server v10.0.4 Release Notes
 ## New
 + New header `X-Operation-ID` for submitting an operation id which is included in json log records made during a request
 + All json log records made during a request now contain a requestId field
@@ -255,7 +255,7 @@
 + Banner message prints weekday locale-dependent in otherwise english message
 + Banner message prints server name incorrectly
 
-# TerminusDB Server v10.0.3 Beta Release Notes
+# TerminusDB Server v10.0.3 Release Notes
 ## New
 + Logging backend has been replaced with structured logging
 
@@ -264,7 +264,7 @@
 + Fallback route handler for unknown paths
 + Improved error reporting
 
-# TerminusDB Server v10.0.2 Beta Release Notes
+# TerminusDB Server v10.0.2 Release Notes
 
 ## New
 + Enable keys with collections or optional fields
@@ -273,14 +273,14 @@
 ## Bug fixes
 + Better managment of keys and key error reporting
 
-# TerminusDB Server v10.0.1 Beta Release Notes
+# TerminusDB Server v10.0.1 Release Notes
 
 ## Bug fixes
 
 + Numerous bug fixes
 + Error reporting improvements
 
-# TerminusDB Server v10.0.0 Beta Release Notes
+# TerminusDB Server v10.0.0 Release Notes
 
 ## New
 + JSON schema interface - build schemas using a simple JSON format.
