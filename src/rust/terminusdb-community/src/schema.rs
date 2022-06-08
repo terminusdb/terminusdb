@@ -126,6 +126,8 @@ pub fn get_enum_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
     result
 }
 
+// TODO this doesn't take into account subsumptions.
+// types that inherit should be included here
 pub fn get_set_pairs_from_schema<'a, L: Layer>(
     layer: &'a L,
 ) -> impl Iterator<Item = (u64, u64)> + 'a {
@@ -141,6 +143,7 @@ pub fn get_set_pairs_from_schema<'a, L: Layer>(
     }
     let rdf_type_id = rdf_type_id.unwrap();
 
+    let inheritance_graph = get_inheritance_graph(layer);
     itertools::Either::Right(
         layer
             .triples_o(sys_set_id)
@@ -151,7 +154,13 @@ pub fn get_set_pairs_from_schema<'a, L: Layer>(
                     .next()
                     .expect("Expected set to be connected");
 
-                (set_origin.subject, set_origin.predicate)
+                let mut subject = Some(set_origin.subject);
+                let predicate = set_origin.predicate;
+                let mut r = Vec::new();
+
+                while let Some(s) = subject {
+                    r.push((s, predicate));
+                    
             }),
     )
 }
