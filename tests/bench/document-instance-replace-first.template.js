@@ -1,7 +1,6 @@
-const { Agent, db, document, endpoint } = require('../lib')
+const { Agent, api, db, document } = require('../lib')
 
 const agent = new Agent().auth()
-const defaults = agent.defaults()
 
 module.exports = (schema, instance) => {
   let request
@@ -9,21 +8,20 @@ module.exports = (schema, instance) => {
   return {
     beforeEach: async () => {
       // Create the database.
-      await db.create(agent, endpoint.db(defaults).path).then(db.verifyCreateSuccess)
-      const path = endpoint.document(defaults).path
+      await db.create(agent)
       // Insert the schema.
-      await document.insert(agent, path, { schema }).then(document.verifyInsertSuccess)
+      await document.insert(agent, { schema })
       // Insert the instances.
-      await document.insert(agent, path, { instance }).then(document.verifyInsertSuccess)
+      await document.insert(agent, { instance })
       // Construct the request.
-      request = document.replace(agent, path, { instance })
+      request = document.replace(agent, { instance }).unverified()
     },
 
     afterEach: async () => {
       // Delete the database.
-      await db.del(agent, endpoint.db(defaults).path).then(db.verifyDeleteSuccess)
+      await db.delete(agent)
       // Verify the response.
-      document.verifyReplaceSuccess(response)
+      api.response.verify(api.response.doc.replaceSuccess)(response)
     },
 
     fn: async () => {

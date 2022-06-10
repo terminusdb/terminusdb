@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, endpoint } = require('../lib')
+const { Agent, api } = require('../lib')
 
 describe('frame', function () {
   let agent
@@ -9,7 +9,7 @@ describe('frame', function () {
   })
 
   it('passes frame for _system', async function () {
-    const { path } = endpoint.frameSystem()
+    const path = api.path.frameSystem()
     const r = await agent
       .post(path)
       .set('X-HTTP-Method-Override', 'GET')

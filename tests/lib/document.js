@@ -1,6 +1,6 @@
 const assert = require('assert')
-const { expect } = require('chai')
 
+const api = require('./api')
 const { Params } = require('./params.js')
 const util = require('./util.js')
 
@@ -18,8 +18,9 @@ function commonGetParams (params) {
   return result
 }
 
-function get (agent, path, params) {
+function get (agent, params) {
   params = new Params(params)
+  const path = params.string('path', api.path.document(agent, params))
   const queryString = params.string('queryString')
   const query = commonGetParams(new Params(params.object('query')))
   const bodyString = params.string('bodyString')
@@ -35,17 +36,50 @@ function get (agent, path, params) {
   }
 
   const request = agent.get(path)
+
   if (queryString) {
     request.query(queryString)
   } else if (Object.keys(query).length) {
     request.query(query)
   }
+
   if (bodyString) {
     request.type('json').send(bodyString)
   } else if (Object.keys(body).length) {
     request.send(body)
   }
-  return request
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.doc.getSuccess)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.doc.getFailure(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
+}
+
+function getFromCommit (agent, commitId, params) {
+  return get(agent, { path: api.path.documentCommit({ ...agent, commitId }, params), ...params })
+}
+
+function getFromCommits (agent, params) {
+  return get(agent, { path: api.path.documentCommits(agent, params), ...params })
+}
+
+function getFromMeta (agent, params) {
+  return get(agent, { path: api.path.documentMeta(agent, params), ...params })
+}
+
+function getFromSystem (agent, params) {
+  return get(agent, { path: api.path.documentSystem(agent, params), ...params })
 }
 
 function schemaOrInstance (schema, instance) {
@@ -61,8 +95,9 @@ function schemaOrInstance (schema, instance) {
   return result
 }
 
-function insert (agent, path, params) {
+function insert (agent, params) {
   params = new Params(params)
+  const path = params.string('path', api.path.document(agent, params))
   const queryString = params.string('queryString')
   const bodyString = params.string('bodyString')
   const author = params.string('author', 'default_author')
@@ -96,11 +131,34 @@ function insert (agent, path, params) {
     request.send(schemaOrInstance(schema, instance))
   }
 
-  return request
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.doc.insertSuccess)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.doc.insertFailure(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    serialize (fun) {
+      request.serialize(fun)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function replace (agent, path, params) {
+function insertIntoSystem (agent, params) {
+  return insert(agent, { path: api.path.documentSystem(agent, params), ...params })
+}
+
+function replace (agent, params) {
   params = new Params(params)
+  const path = params.string('path', api.path.document(agent, params))
   const queryString = params.string('queryString')
   const bodyString = params.string('bodyString')
   const author = params.string('author', 'default_author')
@@ -131,11 +189,33 @@ function replace (agent, path, params) {
     request.send(schemaOrInstance(schema, instance))
   }
 
-  return request
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.doc.replaceSuccess)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.doc.replaceFailure(error)))
+    },
+    notFound (doc) {
+      return request.then(api.response.verify(api.response.doc.replaceNotFound(doc)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    serialize (fun) {
+      request.serialize(fun)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function del (agent, path, params) {
+function delete_ (agent, params) {
   params = new Params(params)
+  const path = params.string('path', api.path.document(agent, params))
   const queryString = params.string('queryString')
   const queryParams = new Params(params.object('query'))
   const query = {}
@@ -149,130 +229,56 @@ function del (agent, path, params) {
   params.assertEmpty()
 
   const request = agent.delete(path)
+
   if (util.isDefined(queryString)) {
     request.query(queryString)
   } else {
     request.query(query)
   }
+
   if (util.isDefined(bodyString)) {
     request.type('json').send(bodyString)
   } else if (util.isDefined(body)) {
     request.send(body)
   }
-  return request
-}
 
-// Verify that, if a request includes an `@id`, that value is the suffix of the
-// value in the response.
-function verifyId (requestId, responseId) {
-  if (requestId) {
-    // The request ID may contain regular expression symbols, so we escape them
-    // according to:
-    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#escaping
-    requestId = requestId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'
-    expect(responseId).to.match(new RegExp(requestId))
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.doc.deleteSuccess)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.doc.deleteFailure(error)))
+    },
+    notFound (doc) {
+      return request.then(api.response.verify(api.response.doc.deleteNotFound(doc)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    serialize (fun) {
+      request.serialize(fun)
+      return this
+    },
+    unverified () {
+      return request
+    },
   }
 }
 
-function verifyGetSuccess (r) {
-  expect(r.status).to.equal(200)
-  return r
-}
-
-function verifyGetFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:GetDocumentErrorResponse')
-  return r
-}
-
-function verifyInsertSuccess (r) {
-  expect(r.status).to.equal(200)
-  expect(r.body).to.be.an('array')
-
-  // Verify the `@id` values are the ones expected.
-  if (Array.isArray(r.request._data)) {
-    let data = r.request._data
-
-    // Support fullReplace with @context as the first element.
-    if (data.length > 0 && data[0]['@type'] === '@context') {
-      data = data.slice(1)
-    }
-
-    expect(r.body.length).to.equal(data.length)
-
-    for (let i = 0; i < r.body.length; i++) {
-      verifyId(data[i]['@id'], r.body[i])
-    }
-  } else if (util.isObject(r.request._data)) {
-    expect(r.body.length).to.equal(1)
-    verifyId(r.request._data['@id'], r.body[0])
-  }
-  return r
-}
-
-function verifyInsertFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
-  return r
-}
-
-const verifyReplaceSuccess = verifyInsertSuccess
-
-function verifyReplaceFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:ReplaceDocumentErrorResponse')
-  return r
-}
-
-function verifyReplaceNotFound (r) {
-  expect(r.status).to.equal(404)
-  expect(r.body['api:status']).to.equal('api:not_found')
-  expect(r.body['@type']).to.equal('api:ReplaceDocumentErrorResponse')
-  return r
-}
-
-function verifyDelSuccess (r) {
-  expect(r.status).to.equal(200)
-  return r
-}
-
-function verifyDelNotFound (r) {
-  expect(r.status).to.equal(404)
-  expect(r.body['api:status']).to.equal('api:not_found')
-  expect(r.body['@type']).to.equal('api:DeleteDocumentErrorResponse')
-  return r
-}
-
-function expectMissingField (r, field, object) {
-  expect(r.body['api:error']['@type']).to.equal('api:MissingField')
-  expect(r.body['api:error']['api:field']).to.equal(field)
-  expect(r.body['api:error']['api:document']).to.deep.equal(object)
-  return r
-}
-
-function expectMissingParameter (r, param) {
-  expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
-  expect(r.body['api:error']['api:parameter']).to.equal(param)
-  return r
+function deleteFromSystem (agent, params) {
+  return delete_(agent, { path: api.path.documentSystem(agent, params), ...params })
 }
 
 module.exports = {
   get,
+  getFromCommit,
+  getFromCommits,
+  getFromMeta,
+  getFromSystem,
   insert,
+  insertIntoSystem,
   replace,
-  del,
-  verifyGetSuccess,
-  verifyGetFailure,
-  verifyInsertSuccess,
-  verifyInsertFailure,
-  verifyReplaceSuccess,
-  verifyReplaceFailure,
-  verifyReplaceNotFound,
-  verifyDelSuccess,
-  verifyDelNotFound,
-  expectMissingField,
-  expectMissingParameter,
+  delete: delete_,
+  deleteFromSystem,
 }

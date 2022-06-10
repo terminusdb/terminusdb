@@ -1,17 +1,17 @@
 const zlib = require('zlib')
 const { expect } = require('chai')
-const { Agent, db, document, endpoint, util } = require('../lib')
+const { Agent, db, document, util } = require('../lib')
 
 describe('compression', function () {
   let agent
 
   before(async function () {
     agent = new Agent().auth()
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path)
+    await db.create(agent)
   })
 
   after(async function () {
-    await db.del(agent, endpoint.db(agent.defaults()).path)
+    await db.delete(agent)
   })
 
   const encodings = [
@@ -23,15 +23,11 @@ describe('compression', function () {
     it(encoding, async function () {
       const schema = { '@id': util.randomString(), '@type': 'Class' }
       await document
-        .insert(agent, endpoint.document(agent.defaults()).path, { schema })
+        .insert(agent, { schema })
         .set('Content-Encoding', encoding)
         .serialize((data) => zlib[encoding + 'Sync'](JSON.stringify(data)))
-        .then(document.verifyInsertSuccess)
       const r = await document
-        .get(agent, endpoint.document(agent.defaults()).path, {
-          query: { graph_type: 'schema', id: schema['@id'] },
-        })
-        .then(document.verifyGetSuccess)
+        .get(agent, { query: { graph_type: 'schema', id: schema['@id'] } })
       expect(r.body).to.deep.equal(schema)
     })
   }

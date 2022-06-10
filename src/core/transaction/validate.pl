@@ -720,9 +720,9 @@ test(cardinality_error,
       cleanup(teardown_temp_store(State)),
       error(
           schema_check_failure(
-              witness{'@type':unexpected_list,
-                      type:'http://www.w3.org/2001/XMLSchema#string',
-                      value:["Dublin","Dubhlinn"]}),
+              [witness{'@type':unexpected_list,
+                       type:'http://www.w3.org/2001/XMLSchema#string',
+                       value:["Dublin","Dubhlinn"]}]),
           _)
      ]) :-
 

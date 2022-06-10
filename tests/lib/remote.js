@@ -1,28 +1,112 @@
-const { expect } = require('chai')
+const api = require('./api')
+const { Params } = require('./params.js')
 
-function verifySuccess (r) {
-  expect(r.status).to.equal(200)
-  expect(r.body['@type']).to.equal('api:RemoteResponse')
-  expect(r.body['api:status']).to.equal('api:success')
-  return r
+function get (agent, params) {
+  params = new Params(params)
+  const path = params.string('path', api.path.remote(agent, params))
+  params.assertEmpty()
+
+  const request = agent.get(path)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.remote.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.remote.failure(error)))
+    },
+    notFound (error) {
+      return request.then(api.response.verify(api.response.remote.notFound(error)))
+    },
+    query (q) {
+      request.query(q)
+      return this
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function verifyFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['@type']).to.equal('api:RemoteErrorResponse')
-  expect(r.body['api:status']).to.equal('api:failure')
-  return r
+function add (agent, query, params) {
+  params = new Params(params)
+  const path = params.string('path', api.path.remote(agent, params))
+  params.assertEmpty()
+
+  const request = agent.post(path).send(query)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.remote.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.remote.failure(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function verifyNotFound (r) {
-  expect(r.status).to.equal(404)
-  expect(r.body['@type']).to.equal('api:RemoteErrorResponse')
-  expect(r.body['api:status']).to.equal('api:not_found')
-  return r
+function update (agent, query, params) {
+  params = new Params(params)
+  const path = params.string('path', api.path.remote(agent, params))
+  params.assertEmpty()
+
+  const request = agent.put(path).send(query)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.remote.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.remote.failure(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
+}
+
+function delete_ (agent, query, params) {
+  params = new Params(params)
+  const path = params.string('path', api.path.remote(agent, params))
+  params.assertEmpty()
+
+  const request = agent.delete(path).send(query)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.remote.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.remote.failure(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
 module.exports = {
-  verifySuccess,
-  verifyFailure,
-  verifyNotFound,
+  get,
+  add,
+  update,
+  delete: delete_,
 }

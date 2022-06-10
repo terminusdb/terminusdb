@@ -1,47 +1,35 @@
 const { expect } = require('chai')
-const { Agent, db, endpoint, woql } = require('../lib')
+const { Agent, db, woql } = require('../lib')
 
 describe('woql-no-schema', function () {
   let agent
-  let dbPath
-  let woqlPath
 
   before(async function () {
     agent = new Agent().auth()
-    const defaults = agent.defaults()
-    dbPath = endpoint.db(defaults).path
-    woqlPath = endpoint.woqlResource(defaults).path
-    await db.createAfterDel(agent, dbPath, { schema: false })
+    await db.create(agent, { schema: false })
   })
 
   after(async function () {
-    await db.del(agent, dbPath)
+    await db.delete(agent)
   })
 
   it('passes AddTriple, Triple, DeleteTriple', async function () {
     const updateQuery = {
-      commit_info: { author: 'author', message: 'message' },
-      query: {
-        '@type': 'AddTriple',
-        subject: { '@type': 'NodeValue', node: 's' },
-        predicate: { '@type': 'NodeValue', node: 'p' },
-        object: { '@type': 'Value', node: 'o' },
-      },
+      '@type': 'AddTriple',
+      subject: { '@type': 'NodeValue', node: 's' },
+      predicate: { '@type': 'NodeValue', node: 'p' },
+      object: { '@type': 'Value', node: 'o' },
     }
     const readQuery = {
-      query: {
-        '@type': 'Triple',
-        subject: { '@type': 'NodeValue', variable: 'S' },
-        predicate: { '@type': 'NodeValue', variable: 'P' },
-        object: { '@type': 'Value', variable: 'O' },
-      },
+      '@type': 'Triple',
+      subject: { '@type': 'NodeValue', variable: 'S' },
+      predicate: { '@type': 'NodeValue', variable: 'P' },
+      object: { '@type': 'Value', variable: 'O' },
     }
 
     {
       // AddTriple
-      const r = await woql
-        .post(agent, woqlPath, updateQuery)
-        .then(woql.verifyGetSuccess)
+      const r = await woql.post(agent, updateQuery)
       expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
       expect(r.body.bindings[0]).to.deep.equal({})
       expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(0)
@@ -52,9 +40,7 @@ describe('woql-no-schema', function () {
 
     {
       // Triple
-      const r = await woql
-        .post(agent, woqlPath, readQuery)
-        .then(woql.verifyGetSuccess)
+      const r = await woql.post(agent, readQuery)
       expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
       expect(r.body.bindings[0]).to.deep.equal({ S: 's', P: '@schema:p', O: 'o' })
       expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(3)
@@ -64,13 +50,11 @@ describe('woql-no-schema', function () {
       expect(r.body.transaction_retry_count).to.equal(0)
     }
 
-    updateQuery.query['@type'] = 'DeleteTriple'
+    updateQuery['@type'] = 'DeleteTriple'
 
     {
       // DeleteTriple
-      const r = await woql
-        .post(agent, woqlPath, updateQuery)
-        .then(woql.verifyGetSuccess)
+      const r = await woql.post(agent, updateQuery)
       expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
       expect(r.body.bindings[0]).to.deep.equal({})
       expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(0)

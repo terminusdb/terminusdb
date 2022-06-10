@@ -1,22 +1,20 @@
-const { Agent, branch, db, endpoint, util } = require('../lib')
+const { Agent, branch, db, util } = require('../lib')
 
 describe('branch-no-schema', function () {
   let agent
 
   before(async function () {
     agent = new Agent().auth()
-    const { path } = endpoint.db(agent.defaults())
-    await db.createAfterDel(agent, path, { schema: false })
+    await db.create(agent, { schema: false })
   })
 
   after(async function () {
-    const { path } = endpoint.db(agent.defaults())
-    await db.del(agent, path)
+    await db.delete(agent)
   })
 
   it('passes create and delete', async function () {
-    const { path, origin } = endpoint.branchNew(agent.defaults(), util.randomString())
-    await agent.post(path).send({ origin }).then(branch.verifySuccess)
-    await agent.delete(path).then(branch.verifySuccess)
+    const branchName = util.randomString()
+    await branch.create(agent, branchName)
+    await branch.delete(agent, branchName)
   })
 })

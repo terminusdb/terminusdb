@@ -1,20 +1,58 @@
-const { expect } = require('chai')
+const api = require('./api')
+const { Params } = require('./params.js')
+const util = require('./util.js')
 
-function verifySuccess (r) {
-  expect(r.status).to.equal(200)
-  expect(r.body['api:status']).to.equal('api:success')
-  expect(r.body['@type']).to.equal('api:BranchResponse')
-  return r
+function create (agent, branchName, params) {
+  params = new Params(params)
+  const path = params.string('path', api.path.branchTarget({ ...agent, branchName }, params))
+  const origin = params.string('origin')
+  const prefixes = params.object('prefixes')
+  params.assertEmpty()
+
+  const body = { }
+  if (util.isDefined(origin)) {
+    body.origin = origin
+  }
+  if (util.isDefined(prefixes)) {
+    body.prefixes = prefixes
+  }
+
+  const request = agent.post(path).send(body)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.branch.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.branch.failure(error)))
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function verifyFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:BranchErrorResponse')
-  return r
+function delete_ (agent, branchName, params) {
+  params = new Params(params)
+  const path = params.string('path', api.path.branchTarget({ ...agent, branchName }, params))
+  params.assertEmpty()
+
+  const request = agent.delete(path)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.branch.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.branch.failure(error)))
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
 module.exports = {
-  verifyFailure,
-  verifySuccess,
+  create,
+  delete: delete_,
 }

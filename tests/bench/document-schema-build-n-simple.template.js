@@ -8,7 +8,7 @@ module.exports = (n) => {
   const schema = []
   for (let i = 0; i < n; i++) {
     // Clone the schema template.
-    const s = Object.assign({}, schemaTemplate)
+    const s = { ...schemaTemplate }
     // Give it a unique identifier.
     s['@id'] = util.randomString()
     schema.push(s)
