@@ -1,91 +1,49 @@
-const { expect } = require('chai')
-const { Agent, organization, util } = require('../lib')
+const { Agent, api, db, organization, util } = require('../lib')
 
 describe('organization', function () {
-  let agent
+  describe('fails add with missing parameter', function () {
+    let agent
 
-  before(async function () {
-    agent = new Agent().auth()
-  })
+    before(async function () {
+      agent = new Agent().auth()
+    })
 
-  describe('fails adding on missing parameters', function () {
     const options = [
       ['{"organization_name":"abd"}', 'user_name'],
       ['{"user_name":"adj"}', 'organization_name'],
     ]
     for (const [bodyString, missingParam] of options) {
       it(bodyString, async function () {
-        const r = await organization
+        await organization
           .add(agent, { bodyString })
-          .then(organization.verifyAddFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:MissingParameter')
-        expect(r.body['api:error']['api:parameter']).to.equal(missingParam)
+          .fails(api.error.missingParameter(missingParam))
       })
     }
   })
 
-  describe('with random organization name', function () {
-    let params
-    before(async function () {
-      params = {
-        organization_name: util.randomString(),
-      }
-    })
-    after(async function () {
-      // deleting organizations is unfortunately broken right now.
-      /*
-      await organization
-        .del(agent, params)
-        .then(organization.verifyDelSuccess)
-      */
-    })
-
-    it('succeeds adding organization', async function () {
-      await organization
-        .add(agent, params)
-        .then(organization.verifyAddSuccess)
-    })
+  it('passes add', async function () {
+    const agent = new Agent({ orgName: util.randomString() }).auth()
+    await organization.add(agent)
+    await organization.delete(agent)
   })
 
-  describe('with random organization name with pipe', function () {
-    let params
-    before(async function () {
-      params = {
-        organization_name: util.randomString() + '|pipe',
-      }
-    })
-    after(async function () {
-      // deleting organizations is unfortunately broken right now.
-      /*
-      await organization
-        .del(agent, params)
-        .then(organization.verifyDelSuccess)
-      */
-    })
-
-    it('succeeds adding organization', async function () {
-      await organization
-        .add(agent, params)
-        .then(organization.verifyAddSuccess)
-    })
+  it('passes add with pipe in name', async function () {
+    const agent = new Agent({ orgName: util.randomString() + '|pipe' }).auth()
+    await organization.add(agent)
+    await db.create(agent)
+    await db.delete(agent)
+    await organization.delete(agent)
   })
 
-  it('fails adding unknown user', async function () {
-    const args = {
-      organization_name: util.randomString(),
-      user_name: util.randomString(),
-    }
-    const r = await organization.add(agent, args).then(organization.verifyAddFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:UnknownUser')
-    expect(r.body['api:error']['api:user_name']).to.equal(args.user_name)
+  it('fails add with unknown user', async function () {
+    const agent = new Agent().auth()
+    const user = util.randomString()
+    await organization.add(agent, { user }).fails(api.error.unknownUser(user))
   })
 
-  it('fails deleting unknown organization', async function () {
+  it('fails delete with unknown organization', async function () {
     const orgName = util.randomString()
-    const r = await organization
-      .del(agent, { organization_name: orgName })
-      .then(organization.verifyDelNotFound)
-    expect(r.body['api:error']['@type']).to.equal('api:UnknownOrganizationName')
-    expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
+    const agent = new Agent({ orgName }).auth()
+    await organization.delete(agent).notFound(api.error.unknownOrganization(orgName))
   })
 })

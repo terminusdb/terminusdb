@@ -1,21 +1,19 @@
-const { Agent, db, endpoint, util } = require('../lib')
+const { Agent, api, db, util } = require('../lib')
 
 const agent = new Agent().auth()
-const { orgName } = agent.defaults()
 
-let dbName
 let request
 let response
 
 module.exports = {
   beforeEach: async () => {
-    dbName = util.randomString()
-    await db.create(agent, endpoint.db({ orgName, dbName }).path).then(db.verifyCreateSuccess)
-    request = db.del(agent, endpoint.db({ orgName, dbName }).path)
+    agent.dbName = util.randomString()
+    await db.create(agent)
+    request = db.delete(agent).unverified()
   },
 
   afterEach: async () => {
-    db.verifyDeleteSuccess(response)
+    api.response.verify(api.response.db.deleteSuccess)(response)
   },
 
   fn: async () => {

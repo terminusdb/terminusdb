@@ -1,63 +1,58 @@
 const { expect } = require('chai')
-const { Agent, db, endpoint, util, woql } = require('../lib')
+const { Agent, api, db, util, woql } = require('../lib')
 
 describe('woql-queryresource', function () {
   let agent
-  let path
 
   before(async function () {
     agent = new Agent().auth()
-    path = endpoint.woqlResource(agent.defaults()).path
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path)
+    await db.create(agent)
   })
 
   after(async function () {
-    await db.del(agent, endpoint.db(agent.defaults()).path)
+    await db.delete(agent)
   })
 
   function queryTemplate () {
     return {
-      query: {
-        '@type': 'Get',
-        columns: [
-          {
-            '@type': 'Column',
-            indicator: { '@type': 'Indicator', name: 'Name' },
-            variable: 'Name',
-          },
-        ],
-        resource: {
-          '@type': 'QueryResource',
-          source: { '@type': 'Source' },
-          format: 'csv',
+      '@type': 'Get',
+      columns: [
+        {
+          '@type': 'Column',
+          indicator: { '@type': 'Indicator', name: 'Name' },
+          variable: 'Name',
         },
+      ],
+      resource: {
+        '@type': 'QueryResource',
+        source: { '@type': 'Source' },
+        format: 'csv',
       },
     }
   }
 
   it('fails with bad url', async function () {
     const query = queryTemplate()
-    query.query.resource.source.url = util.randomString()
-    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedBadUrl')
-    expect(r.body['api:error']['api:url']).to.equal(query.query.resource.source.url)
+    query.resource.source.url = util.randomString()
+    await woql
+      .post(agent, query)
+      .fails(api.error.httpRequestFailedBadUrl(query.resource.source.url))
   })
 
   it('fails with file:/// url', async function () {
     const query = queryTemplate()
-    query.query.resource.source.url = 'file:///' + util.randomString()
-    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedSocketError')
-    expect(r.body['api:error']).to.have.property('api:message')
+    query.resource.source.url = 'file:///' + util.randomString()
+    await woql
+      .post(agent, query)
+      .fails(api.error.httpRequestFailedSocketError(query.resource.source.url))
   })
 
   it('passes with post', async function () {
     const query = queryTemplate()
-    query.query.resource.source.post = 'employees.csv'
+    query.resource.source.post = 'employees.csv'
     const r = await woql
-      .multipart(agent, path, query)
+      .multipart(agent, query)
       .attach('file', 'served/employees.csv')
-      .then(woql.verifyGetSuccess)
     expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
     expect(r.body['api:variable_names'][0]).to.equal('Name')
     expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
@@ -74,9 +69,9 @@ describe('woql-queryresource', function () {
 
   it('fails with post and missing file', async function () {
     const query = queryTemplate()
-    query.query.resource.source.post = 'employees.csv'
-    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:MissingFile')
-    expect(r.body['api:error']['api:file_name']).to.equal(query.query.resource.source.post)
+    query.resource.source.post = 'employees.csv'
+    await woql
+      .post(agent, query)
+      .fails(api.error.missingFile(query.resource.source.post))
   })
 })

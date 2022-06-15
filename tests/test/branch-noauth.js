@@ -1,5 +1,4 @@
-const { expect } = require('chai')
-const { Agent, branch } = require('../lib')
+const { Agent, api, branch } = require('../lib')
 
 describe('branch-noauth', function () {
   let agent
@@ -9,11 +8,10 @@ describe('branch-noauth', function () {
   })
 
   it('fails on unknown descriptor', async function () {
-    const r = await agent
-      .post('/api/branch/unknowndesc')
-      .send({})
-      .then(branch.verifyFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:BadTargetAbsoluteDescriptor')
-    expect(r.body['api:error']['api:absolute_descriptor']).to.equal('unknowndesc')
+    const desc = 'unknowndesc'
+    const path = `/api/branch/${desc}`
+    await branch
+      .create(agent, undefined, { path })
+      .fails(api.error.badTargetDescriptor(desc))
   })
 })

@@ -3,12 +3,10 @@ const exec = require('util').promisify(require('child_process').exec)
 const stream = require('stream')
 const JsonlParser = require('stream-json/jsonl/Parser')
 const { expect } = require('chai')
-const { Agent, db, document, endpoint, Params, util } = require('../lib')
+const { Agent, api, db, document, Params, util } = require('../lib')
 
 describe('document-get', function () {
   let agent
-  let dbPath
-  let docPath
 
   const schema = {
     '@id': 'Person',
@@ -38,22 +36,14 @@ describe('document-get', function () {
   before(async function () {
     agent = new Agent().auth()
 
-    const dbDefaults = endpoint.db(agent.defaults())
+    await db.create(agent)
 
-    dbPath = dbDefaults.path
-    await db.createAfterDel(agent, dbPath)
-
-    docPath = endpoint.document(dbDefaults).path
-    await document
-      .insert(agent, docPath, { schema })
-      .then(document.verifyInsertSuccess)
-    await document
-      .insert(agent, docPath, { instance: instances })
-      .then(document.verifyInsertSuccess)
+    await document.insert(agent, { schema })
+    await document.insert(agent, { instance: instances })
   })
 
   after(async function () {
-    await db.del(agent, dbPath)
+    await db.delete(agent)
   })
 
   function expectSchema (objects, params) {
@@ -99,7 +89,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document.get(agent, docPath, option).pipe(new JsonlParser())
+        const r = await document.get(agent, option).unverified().pipe(new JsonlParser())
         expectSchemaJsonl(r)
       })
     }
@@ -112,9 +102,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document
-          .get(agent, docPath, option)
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, option)
         expectSchema(r.body)
       })
     }
@@ -179,9 +167,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document
-          .get(agent, docPath, option)
-          .pipe(new JsonlParser())
+        const r = await document.get(agent, option).unverified().pipe(new JsonlParser())
         const objects = []
         r.on('data', (data) => {
           objects.push(data.value)
@@ -200,9 +186,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document
-          .get(agent, docPath, option)
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, option)
         expectInstances(r.body, instances)
       })
     }
@@ -227,16 +211,14 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const params = Object.assign({}, option.query, option.body)
+        const params = { ...option.query, ...option.body }
         if (option.query) {
           option.query.as_list = true
         }
         if (option.body) {
           option.body.as_list = true
         }
-        const r = await document
-          .get(agent, docPath, option)
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, option)
         expectInstances(r.body, instances, params)
       })
     }
@@ -267,9 +249,7 @@ describe('document-get', function () {
           // https://github.com/terminusdb/terminusdb/issues/801
           this.skip()
         }
-        const r = await document
-          .get(agent, docPath, option)
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, option)
         switch (graphType) {
           case 'schema':
             expectSchema(r.body, { prefixed: false })
@@ -317,13 +297,7 @@ describe('document-get', function () {
     ]
     for (const [option, paramName, paramType, value] of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document
-          .get(agent, docPath, option)
-          .then(document.verifyGetFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:BadParameterType')
-        expect(r.body['api:error']['api:parameter']).to.equal(paramName)
-        expect(r.body['api:error']['api:expected_type']).to.equal(paramType)
-        expect(r.body['api:error']['api:value']).to.deep.equal(value)
+        await document.get(agent, option).fails(api.error.badParameterType(paramName, paramType, value))
       })
     }
   })
@@ -335,9 +309,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document
-          .get(agent, docPath, option)
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, option)
         expectInstances(r.body, instances)
       })
     }
@@ -352,19 +324,16 @@ describe('document-get', function () {
     for (const [query, index] of queries) {
       it(JSON.stringify(query), async function () {
         Object.assign(query, { '@type': 'Person' })
-        const r = await document
-          .get(agent, docPath, { body: { query } })
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, { body: { query } })
         expectInstances([r.body], instances.slice(index, index + 1))
       })
     }
   })
 
   it('fails query on field without type or @type', async function () {
-    const r = await document
-      .get(agent, docPath, { body: { query: { name: 'Plato' } } })
-      .then(document.verifyGetFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:QueryMissingType')
+    await document
+      .get(agent, { body: { query: { name: 'Plato' } } })
+      .fails(api.error.queryMissingType)
   })
 
   describe('queries field of type Set', function () {
@@ -381,31 +350,25 @@ describe('document-get', function () {
     ]
 
     before(async function () {
-      await document
-        .insert(agent, docPath, { schema: localSchema })
-        .then(document.verifyInsertSuccess)
-      await document
-        .insert(agent, docPath, { instance: localInstances })
-        .then(document.verifyInsertSuccess)
+      await document.insert(agent, { schema: localSchema })
+      await document.insert(agent, { instance: localInstances })
     })
 
     after(async function () {
       const ids = localInstances
         .map((i) => i['@id'])
         .concat(localInstances.flatMap((i) => i.people || []).map((p) => personId(p)))
-      await document.del(agent, docPath, { body: ids }).then(document.verifyDelSuccess)
-      await document.del(agent, docPath, { query: { graph_type: 'schema', id: localSchema['@id'] } }).then(document.verifyDelSuccess)
+      await document.delete(agent, { body: ids })
+      await document.delete(agent, { query: { graph_type: 'schema', id: localSchema['@id'] } })
     })
 
     const q1 = { '@type': 'Group' }
 
     it(JSON.stringify(q1), async function () {
-      const r = await document
-        .get(agent, docPath, { body: { query: q1, as_list: true } })
-        .then(document.verifyGetSuccess)
+      const r = await document.get(agent, { body: { query: q1, as_list: true } })
       const myInstances = []
       for (const instance of localInstances) {
-        const copy = Object.assign({}, instance)
+        const copy = { ...instance }
         if (instance.people) {
           if (instance.people.length) {
             copy.people = instance.people.map((p) => personId(p))
@@ -421,9 +384,7 @@ describe('document-get', function () {
     const q2 = { '@type': 'Person', age: 71 }
 
     it(JSON.stringify(q2), async function () {
-      const r = await document
-        .get(agent, docPath, { body: { query: q2, as_list: true } })
-        .then(document.verifyGetSuccess)
+      const r = await document.get(agent, { body: { query: q2, as_list: true } })
       expectInstances(r.body, [socrates, gödel])
     })
   })
@@ -442,33 +403,25 @@ describe('document-get', function () {
     ]
 
     before(async function () {
-      await document
-        .insert(agent, docPath, { schema: localSchema })
-        .then(document.verifyInsertSuccess)
-      await document
-        .insert(agent, docPath, { instance: localInstances })
-        .then(document.verifyInsertSuccess)
+      await document.insert(agent, { schema: localSchema })
+      await document.insert(agent, { instance: localInstances })
     })
 
     after(async function () {
       const ids = localInstances
         .map((i) => i['@id'])
         .concat(localInstances.flatMap((i) => i.friend ? [i.friend] : []).map((p) => personId(p)))
-      await document.del(agent, docPath, { body: ids }).then(document.verifyDelSuccess)
-      await document
-        .del(agent, docPath, { query: { graph_type: 'schema', id: localSchema['@id'] } })
-        .then(document.verifyDelSuccess)
+      await document.delete(agent, { body: ids })
+      await document.delete(agent, { query: { graph_type: 'schema', id: localSchema['@id'] } })
     })
 
     const q1 = { '@type': 'Friendship' }
 
     it(JSON.stringify(q1), async function () {
-      const r = await document
-        .get(agent, docPath, { body: { query: q1, as_list: true } })
-        .then(document.verifyGetSuccess)
+      const r = await document.get(agent, { body: { query: q1, as_list: true } })
       const expectedInstances = []
       for (const instance of localInstances) {
-        const copy = Object.assign({}, instance)
+        const copy = { ...instance }
         if (instance.friend) {
           copy.friend = personId(instance.friend)
         }
@@ -480,11 +433,7 @@ describe('document-get', function () {
     const q2 = { '@type': 'Person', age: 71 }
 
     it(JSON.stringify(q2), async function () {
-      const r = await document
-        .get(agent, docPath, {
-          body: { query: q2, as_list: true },
-        })
-        .then(document.verifyGetSuccess)
+      const r = await document.get(agent, { body: { query: q2, as_list: true } })
       expectInstances(r.body, [socrates, gödel])
     })
   })

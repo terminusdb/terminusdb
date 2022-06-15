@@ -1,87 +1,80 @@
-const assert = require('assert')
-const { expect } = require('chai')
-
+const api = require('./api')
 const { Params } = require('./params.js')
 
 function add (agent, params) {
   params = new Params(params)
   const bodyString = params.string('bodyString')
-  const organizationName = params.string('organization_name', agent.orgName)
-  const user = params.string('user_name', agent.user)
+  const orgName = params.string('orgName', agent.orgName)
+  const user = params.string('user', agent.user)
   params.assertEmpty()
 
-  const request = agent.post('/api/organization')
+  const request = agent.post(api.path.organization())
 
   if (bodyString) {
     request.type('json').send(bodyString)
   } else {
-    assert(organizationName, 'Missing \'organization_name\' parameter.')
-    assert(user, 'Missing \'user_name \' parameter.')
-    request.send({ organization_name: organizationName, user_name: user })
+    request.send({ organization_name: orgName, user_name: user })
   }
 
-  return request
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.org.addSuccess)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.org.addFailure(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function del (agent, params) {
+function delete_ (agent, params) {
   params = new Params(params)
   const bodyString = params.string('bodyString')
-  const organizationName = params.string('organization_name')
+  const orgName = params.string('orgName', agent.orgName)
   params.assertEmpty()
 
-  const request = agent.delete('/api/organization')
+  const request = agent.delete(api.path.organization())
 
   if (bodyString) {
     request.type('json').send(bodyString)
   } else {
-    assert(organizationName, 'Missing \'organization_name\' parameter.')
-    request.send({ organization_name: organizationName })
+    request.send({ organization_name: orgName })
   }
 
-  return request
-}
-
-function verifyAddSuccess (r) {
-  expect(r.status).to.equal(200)
-  expect(r.body['api:status']).to.equal('api:success')
-  expect(r.body['@type']).to.equal('api:AddOrganizationResponse')
-  return r
-}
-
-function verifyDelSuccess (r) {
-  expect(r.status).to.equal(200)
-  expect(r.body['api:status']).to.equal('api:success')
-  expect(r.body['@type']).to.equal('api:AddOrganizationResponse')
-  return r
-}
-
-function verifyAddFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:AddOrganizationErrorResponse')
-  return r
-}
-
-function verifyDelFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:DeleteOrganizationErrorResponse')
-  return r
-}
-
-function verifyDelNotFound (r) {
-  expect(r.status).to.equal(404)
-  expect(r.body['api:status']).to.equal('api:not_found')
-  expect(r.body['@type']).to.equal('api:DeleteOrganizationErrorResponse')
-  return r
+  return {
+    then (resolve) {
+      resolve(
+        request
+          .then(api.response.verify(api.response.org.deleteSuccess))
+          // TODO: Remove catch when this is fixed.
+          .catch(() => {
+            console.error('FIXME: Deleting an organization is broken.')
+          }),
+      )
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.org.deleteFailure(error)))
+    },
+    notFound (error) {
+      return request.then(api.response.verify(api.response.org.deleteNotFound(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
 module.exports = {
   add,
-  del,
-  verifyAddSuccess,
-  verifyAddFailure,
-  verifyDelSuccess,
-  verifyDelFailure,
-  verifyDelNotFound,
+  delete: delete_,
 }

@@ -1,23 +1,16 @@
-const { expect } = require('chai')
-const { Agent, db, endpoint, util } = require('../lib')
+const { Agent, api, db, util } = require('../lib')
 
 let agent
 
 async function connect () {
-  const r = await agent.get('/api/')
-  expect(r.status).to.equal(401)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:ErrorResponse')
-  expect(r.body['api:error']['@type']).to.equal('api:IncorrectAuthenticationError')
+  await agent.get('/api/').then(api.response.verify(api.response.incorrectAuthentication))
 }
 
 async function create () {
-  const { path } = endpoint.db(agent.defaults())
-  const r = await db.create(agent, path)
-  expect(r.status).to.equal(401)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:ErrorResponse')
-  expect(r.body['api:error']['@type']).to.equal('api:IncorrectAuthenticationError')
+  await db
+    .create(agent)
+    .unverified()
+    .then(api.response.verify(api.response.incorrectAuthentication))
 }
 
 describe('auth', function () {

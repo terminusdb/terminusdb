@@ -1,11 +1,8 @@
 const { expect } = require('chai')
-const { Agent, db, document, endpoint } = require('../lib')
+const { Agent, db, document } = require('../lib')
 
 describe('document-get-hierarchy', function () {
   let agent
-  let dbPath
-  let docPath
-
   const shape = {
     '@id': 'Shape',
     '@type': 'Class',
@@ -44,40 +41,30 @@ describe('document-get-hierarchy', function () {
     { '@type': 'Circle', x: -9298, y: -0.10318410, radius: 1 },
   ]
 
-  let instances
+  let instance
 
   before(async function () {
     agent = new Agent().auth()
 
     schema = [shape, circle, square]
-    instances = shapes.concat(squares, circles)
+    instance = shapes.concat(squares, circles)
 
-    const dbDefaults = endpoint.db(agent.defaults())
+    await db.create(agent)
 
-    dbPath = dbDefaults.path
-    await db.createAfterDel(agent, dbPath)
-
-    docPath = endpoint.document(dbDefaults).path
-    await document
-      .insert(agent, docPath, { schema })
-      .then(document.verifyInsertSuccess)
-    await document
-      .insert(agent, docPath, { instance: instances })
-      .then(document.verifyInsertSuccess)
+    await document.insert(agent, { schema })
+    await document.insert(agent, { instance })
   })
 
   after(async function () {
-    await db.del(agent, dbPath)
+    await db.delete(agent)
   })
 
   it('succeeds query for superclass', async function () {
-    const r = await document
-      .get(agent, docPath, { body: { query: { '@type': 'Shape' }, as_list: true } })
-      .then(document.verifyGetSuccess)
+    const r = await document.get(agent, { body: { query: { '@type': 'Shape' }, as_list: true } })
     for (const object of r.body) {
       delete object['@id']
     }
-    expect(r.body).to.have.deep.members(instances)
+    expect(r.body).to.have.deep.members(instance)
   })
 
   describe('succeeds query for subclass', function () {
@@ -87,9 +74,7 @@ describe('document-get-hierarchy', function () {
     ]
     for (const [type, instances] of queries) {
       it(type, async function () {
-        const r = await document
-          .get(agent, docPath, { body: { query: { '@type': type }, as_list: true } })
-          .then(document.verifyGetSuccess)
+        const r = await document.get(agent, { body: { query: { '@type': type }, as_list: true } })
         for (const object of r.body) {
           delete object['@id']
         }
