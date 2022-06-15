@@ -1,60 +1,92 @@
-const { expect } = require('chai')
-
+const api = require('./api')
 const { Params } = require('./params.js')
+const util = require('./util.js')
 
-function post (agent, path, params) {
+function post (agent, query, params) {
   params = new Params(params)
-  const body = {}
-  body.query = params.object('query')
-  body.commit_info = params.object('commit_info')
+  const path = params.string('path', api.path.woqlResource(agent, params))
+  const bodyString = params.string('bodyString')
+  const author = params.string('author', 'default_author')
+  const message = params.string('message', 'default_message')
+  const commitInfo = params.object('commitInfo', { author, message })
   params.assertEmpty()
 
-  return agent
-    .post(path)
-    .send(body)
+  const request = agent.post(path)
+
+  if (util.isDefined(bodyString)) {
+    request.type('json').send(bodyString)
+  } else {
+    util.assertObject('query', query)
+    request.send({ commit_info: commitInfo, query })
+  }
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.woql.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.woql.failure(error)))
+    },
+    notFound (error) {
+      return request.then(api.response.verify(api.response.woql.notFound(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
-function multipart (agent, path, params) {
+function multipart (agent, query, params) {
   params = new Params(params)
-  const body = {}
-  body.query = params.object('query')
-  body.commit_info = params.object('commit_info')
+  const path = params.string('path', api.path.woqlResource(agent, params))
+  let bodyString = params.string('bodyString')
+  const author = params.string('author', 'default_author')
+  const message = params.string('message', 'default_message')
+  const commitInfo = params.object('commitInfo', { author, message })
   params.assertEmpty()
 
-  return agent
+  if (!util.isDefined(bodyString)) {
+    util.assertObject('query', query)
+    bodyString = JSON.stringify({ commit_info: commitInfo, query })
+  }
+
+  const request = agent
     .post(path)
     .attach(
       'payload',
-      Buffer.from(JSON.stringify(body)),
+      Buffer.from(bodyString),
       { filename: 'body.json', contentType: 'application/json' },
     )
-}
 
-function verifyGetSuccess (r) {
-  expect(r.status).to.equal(200)
-  expect(r.body['api:status']).to.equal('api:success')
-  expect(r.body['@type']).to.equal('api:WoqlResponse')
-  return r
-}
-
-function verifyGetFailure (r) {
-  expect(r.status).to.equal(400)
-  expect(r.body['api:status']).to.equal('api:failure')
-  expect(r.body['@type']).to.equal('api:WoqlErrorResponse')
-  return r
-}
-
-function verifyNotFound (r) {
-  expect(r.status).to.equal(404)
-  expect(r.body['api:status']).to.equal('api:not_found')
-  expect(r.body['@type']).to.equal('api:WoqlErrorResponse')
-  return r
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.woql.success)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.woql.failure(error)))
+    },
+    notFound (error) {
+      return request.then(api.response.verify(api.response.woql.notFound(error)))
+    },
+    set (header, value) {
+      request.set(header, value)
+      return this
+    },
+    attach (name, file, options) {
+      request.attach(name, file, options)
+      return this
+    },
+    unverified () {
+      return request
+    },
+  }
 }
 
 module.exports = {
   post,
   multipart,
-  verifyGetSuccess,
-  verifyGetFailure,
-  verifyNotFound,
 }

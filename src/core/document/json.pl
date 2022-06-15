@@ -17,12 +17,12 @@
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
-              insert_document/6,
-              insert_document_unsafe/6,
+              insert_document/7,
+              insert_document_unsafe/7,
               replace_document/2,
               replace_document/3,
-              replace_document/4,
-              replace_document/7,
+              replace_document/5,
+              replace_document/8,
               nuke_documents/1,
               insert_schema_document/2,
               insert_schema_document_unsafe/3,
@@ -50,7 +50,6 @@
               class_property_dictionary/3,
               class_property_dictionary/4,
               prefix_expand_schema/3,
-              prefix_expand/3,
               type_context/4,
               enum_value/3,
               update_id_field/3,
@@ -88,6 +87,7 @@
 :- use_module(core(util/tables)).
 
 :- use_module(core(document/inference)).
+:- use_module(core(document/json_rdf)).
 
 encode_id_fragment(Elt, Encoded) :-
     ground(Elt),
@@ -647,6 +647,10 @@ json_elaborate_(DB,JSON,Context,Captures_In,Result, Dependencies, Captures_Out) 
 
 update_id_field(Elaborated,Context,Result) :-
     (   get_dict('@value', Elaborated, _) % no id on values
+    ->  Elaborated = Result
+    ;   get_dict('@type', Elaborated, Type),
+        memberchk(Type, ['http://terminusdb.com/schema/sys#JSONDocument',
+                         'http://terminusdb.com/schema/sys#JSON'])
     ->  Elaborated = Result
     ;   (   get_dict('@id', Elaborated, Id)
         ->  prefix_expand(Id, Context, Id_Ex)
@@ -1524,6 +1528,12 @@ json_triples(DB,JSON,Triples) :-
             json_triple_(Elaborated,Context,Triple),
             Triples).
 
+json_triple_(JSON,_,Triple) :-
+    is_dict(JSON),
+    get_dict('@type', JSON, 'http://terminusdb.com/schema/sys#JSONDocument'),
+    !,
+    get_dict('@id', JSON, Id),
+    json_object_triple(JSON, Id, Triple).
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
     get_dict('@value', JSON, _),
@@ -1559,7 +1569,7 @@ json_triple_(JSON,Context,Triple) :-
         Triple = t(ID,RDF_Type,Value)
     ;   Key = '@inherits'
     ->  global_prefix_expand(sys:inherits, SYS_Inherits),
-        (    get_dict('@value',Value,Class)
+        (   get_dict('@value',Value,Class)
         ->  (   is_dict(Class)
             ->  get_dict('@id', Class, Inherited),
                 Triple = t(ID,SYS_Inherits,Inherited)
@@ -1578,6 +1588,10 @@ json_triple_(JSON,Context,Triple) :-
         ->  (   json_triple_(Value, Context, Triple)
             ;   Triple = t(ID,Key,Value_ID)
             )
+        ;   global_prefix_expand(sys:'JSON', Sys_JSON),
+            get_dict('@type', Value, Sys_JSON)
+        ->  del_dict('@type', Value, _, Pure),
+            json_object_triple(ID,Key,Pure,Triple)
         ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
             list_id_key_context_triple(List,ID,Key,Context,Triple)
@@ -1885,17 +1899,21 @@ type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,Recursion,DB,Prefixes,Compr
 type_id_predicate_iri_value(optional(C),Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V) :-
     type_descriptor(DB,C,Desc),
     type_id_predicate_iri_value(Desc,Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V).
-type_id_predicate_iri_value(base_class(C),_,_,X^^T,_,_,Prefixes,_Compress,_Unfold,V) :-
+type_id_predicate_iri_value(base_class(C),_,_,Elt,_,DB,Prefixes,_Compress,_Unfold,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
-    (   C = T % The type is not just subsumed but identical - no ambiguity.
-    ->  value_type_json_type(X,T,V,_)
-    ;   value_type_json_type(X,T,D,T2),
-        % NOTE: We're always compressing, even if Compress_Ids is false
-        % The reason here is that this is a datatype property, not a node of our own.
-        % We may want to revisit this logic though.
-        compress_dict_uri(T2,Prefixes,T2C),
-        V = json{ '@type' : T2C, '@value' : D}
+    (   C = 'http://terminusdb.com/schema/sys#JSON'
+    ->  get_json_object(DB, Elt, V)
+    ;   Elt = X^^T,
+        (   C = T % The type is not just subsumed but identical - no ambiguity.
+        ->  value_type_json_type(X,T,V,_)
+        ;   value_type_json_type(X,T,D,T2),
+            % NOTE: We're always compressing, even if Compress_Ids is false
+            % The reason here is that this is a datatype property, not a node of our own.
+            % We may want to revisit this logic though.
+            compress_dict_uri(T2,Prefixes,T2C),
+            V = json{ '@type' : T2C, '@value' : D}
+        )
     ).
 
 compress_dict_uri(URI, Dict, Folded_URI, Options) :-
@@ -1953,6 +1971,9 @@ get_document_uri(DB, Include_Subdocuments, Uri) :-
     (   Include_Subdocuments = true
     ->  true
     ;   \+ is_subdocument(DB, Class)),
+    instance_of(DB, Uri, Class).
+get_document_uri(DB, _Include_Subdocuments, Uri) :-
+    Class = 'http://terminusdb.com/schema/sys#JSONDocument',
     instance_of(DB, Uri, Class).
 
 get_document_uri_by_type(Query_Context, Type, Uri) :-
@@ -2015,26 +2036,28 @@ get_document(DB, Compress_Ids, Unfold, Id, Document) :-
 get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
     Options = [compress_ids(Compress_Ids)],
     database_instance(DB,Instance),
-
     prefix_expand(Id,Prefixes,Id_Ex),
-
     xrdf(Instance, Id_Ex, rdf:type, Class),
-    findall(
-        Prop-Value,
-        (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
-            \+ is_built_in(P),
+    (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
+    ->  get_json_object(DB, Id_Ex, JSON),
+        put_dict(_{'@id' : Id}, JSON, Document)
+    ;   findall(
+            Prop-Value,
+            (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
+                \+ is_built_in(P),
 
-            once(class_predicate_type(DB,Class,P,Type)),
-            type_id_predicate_iri_value(Type,Id_Ex,P,O,get_document,DB,Prefixes,Compress_Ids,Unfold,Value),
-            compress_schema_uri(P, Prefixes, Prop, Options)
-        ),
-        Data),
-    !,
-    compress_dict_uri(Id_Ex, Prefixes, Id_comp, Options),
-    compress_schema_uri(Class, Prefixes, Class_comp, Options),
-    json_dict_create(Document,['@id'-Id_comp,
-                               '@type'-Class_comp
-                               |Data]).
+                once(class_predicate_type(DB,Class,P,Type)),
+                type_id_predicate_iri_value(Type,Id_Ex,P,O,get_document,DB,Prefixes,Compress_Ids,Unfold,Value),
+                compress_schema_uri(P, Prefixes, Prop, Options)
+            ),
+            Data),
+        !,
+        compress_dict_uri(Id_Ex, Prefixes, Id_comp, Options),
+        compress_schema_uri(Class, Prefixes, Class_comp, Options),
+        json_dict_create(Document,['@id'-Id_comp,
+                                   '@type'-Class_comp
+                                   |Data])
+    ).
 
 key_descriptor_json(Descriptor, Prefixes, Result) :-
     key_descriptor_json(Descriptor, Prefixes, Result, [compress_ids(true)]).
@@ -2495,19 +2518,22 @@ delete_subdocument(DB, Prefixes, V) :-
 delete_document(DB, Prefixes, Unlink, Id) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
-    (   xrdf(Instance, Id_Ex, rdf:type, _)
+    (   xrdf(Instance, Id_Ex, rdf:type, Type)
     ->  true
     ;   throw(error(document_not_found(Id), _))
     ),
-    forall(
-        xquad(Instance, G, Id_Ex, P, V),
-        (   delete(G, Id_Ex, P, V, _),
-            delete_subdocument(DB,Prefixes,V)
-        )
-    ),
-    (   Unlink = true
-    ->  unlink_object(Instance, Id_Ex)
-    ;   true).
+    (   Type = 'http://terminusdb.com/schema/sys#JSONDocument'
+    ->  delete_json_object(DB, Prefixes, Unlink, Id)
+    ;   forall(
+            xquad(Instance, G, Id_Ex, P, V),
+            (   delete(G, Id_Ex, P, V, _),
+                delete_subdocument(DB,Prefixes,V)
+            )
+        ),
+        (   Unlink = true
+        ->  unlink_object(Instance, Id_Ex)
+        ;   true)
+    ).
 
 delete_document(DB, Unlink, Id) :-
     is_transaction(DB),
@@ -2563,9 +2589,30 @@ check_existing_document_status(Transaction, Document, Status) :-
     ).
 
 insert_document(Transaction, Document, ID) :-
+    insert_document(Transaction, Document, false, ID).
+
+insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Captures_In, ID, _Dependencies, _Captures_Out).
-insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_Out) :-
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+
+valid_json_id_or_die(Prefixes,Id) :-
+    do_or_die(
+        (   get_dict('@base', Prefixes, Base),
+            atomic_list_concat(['^',Base,'JSONDocument/.*'],Re),
+            re_match(Re,Id)),
+        error(not_a_valid_json_object_id(Id),_)).
+
+insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
+    is_transaction(Transaction),
+    !,
+    (   del_dict('@id', Document, Id_Short, JSON)
+    ->  database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id_Short,Prefixes,Id),
+        valid_json_id_or_die(Prefixes,Id),
+        insert_json_object(Transaction, JSON, Id)
+    ;   insert_json_object(Transaction, Document, Id)
+    ).
+insert_document(Transaction, Document, false, Captures_In, ID, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
@@ -2593,13 +2640,20 @@ insert_document(Transaction, Document, Captures_In, ID, Dependencies, Captures_O
              ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
              )
          )).
-insert_document(Query_Context, Document, Captures_In, ID, Dependencies, Captures_Out) :-
+insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Captures_In, ID, Dependencies, Captures_Out).
+    insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
 
-insert_document_unsafe(Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
+insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Captures) :-
+    (   del_dict('@id', Document, Id_Short, JSON)
+    ->  prefix_expand(Id_Short,Prefixes,Id),
+        valid_json_id_or_die(Prefixes,Id),
+        insert_json_object(Transaction, JSON, Id)
+    ;   insert_json_object(Transaction, Document, Id)
+    ).
+insert_document_unsafe(Transaction, Context, Document, false, Captures_In, Id, Captures_Out) :-
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -2633,16 +2687,37 @@ run_insert_document(Desc, Commit, Document, ID) :-
         _).
 
 replace_document(DB, Document) :-
-    replace_document(DB, Document, false, _).
+    replace_document(DB, Document, false, false, _).
 
 replace_document(DB, Document, Id) :-
-    replace_document(DB, Document, false, Id).
+    replace_document(DB, Document, false, false, Id).
 
-replace_document(Transaction, Document, Create, Id) :-
+replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
     empty_assoc(Captures),
-    replace_document(Transaction, Document, Create, Captures, Id, _Dependencies, _Captures_Out).
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Id, _Dependencies, _Captures_Out).
 
-replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
+is_json_hash(Id) :-
+    re_match('^terminusdb:///json/JSON/.*', Id).
+
+replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures) :-
+    is_transaction(Transaction),
+    !,
+    database_prefixes(Transaction, Prefixes),
+    do_or_die(
+        (   del_dict('@id', Document, Id, JSON)
+        ->  prefix_expand(Id, Prefixes, Id_Ex),
+            (   is_json_hash(Id_Ex)
+            ->  assign_json_object_id(JSON, Id_Ex)
+            ;   true)
+        ),
+        error(can_not_replace_at_hashed_id(Document), _)),
+    catch(delete_json_object(Transaction, false, Id_Ex),
+          error(document_not_found(_), _),
+          do_or_die(
+              Create = true,
+              error(document_not_found(Id, Document), _))),
+    insert_json_object(Transaction, JSON, Id_Ex).
+replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
@@ -2660,17 +2735,17 @@ replace_document(Transaction, Document, Create, Captures_In, Id, Dependencies, C
     ensure_transaction_has_builder(instance, Transaction),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
-replace_document(Query_Context, Document, Create, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, Captures_In, Id, Dependencies, Captures_Out).
+    replace_document(TO, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        replace_document(Context, Document, false, Id),
+        replace_document(Context, Document, false, false, Id),
         _).
 
 % Frames
@@ -2904,6 +2979,11 @@ insert_context_document(Query_Context, Document) :-
     query_default_collection(Query_Context, TO),
     insert_context_document(TO, Document).
 
+valid_schema_name(Prefixes,Name) :-
+    atom_string(Id,Name),
+    prefix_expand_schema('JSONDocument',Prefixes,JSON_Id),
+    \+ Id = JSON_Id.
+
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
@@ -2912,10 +2992,12 @@ insert_schema_document(Transaction, Document) :-
         get_dict('@id', Document, Id),
         error(missing_field('@id', Document), _)),
     check_json_string('@id', Id),
+    database_prefixes(Transaction, Prefixes),
     database_schema(Transaction, Schema),
-
-    database_prefixes(Transaction, Context),
-    prefix_expand_schema(Id,Context,Id_Ex),
+    prefix_expand_schema(Id,Prefixes,Id_Ex),
+    do_or_die(
+        valid_schema_name(Prefixes,Id_Ex),
+        error(can_not_insert_class_with_reserve_name(Id), _)),
     do_or_die(
         \+ xrdf(Schema, Id_Ex, _, _),
         error(can_not_insert_existing_object_with_id(Id), _)),
@@ -6229,8 +6311,8 @@ test(delete_referenced_object,
     empty_assoc(Captures_In),
     with_transaction(
         Context,
-        (   insert_document(Context, Document0, Captures_In, _Id1, _, Captures_Out1),
-            insert_document(Context, Document1, Captures_Out1, Id2, _, _)
+        (   insert_document(Context, Document0, false, Captures_In, _Id1, _, Captures_Out1),
+            insert_document(Context, Document1, false, Captures_Out1, Id2, _, _)
         ),
         _
     ),
@@ -6639,7 +6721,7 @@ test(status_update2,
         C3,
         delete_schema_document(C3, "Invitation")
     ),
-    % print_all_triples(Desc, schema),
+
     with_test_transaction(
         Desc,
         C4,
@@ -7549,8 +7631,7 @@ test(diamond_bad,
                           predicate:thing}]),_)
      ]) :-
 
-    write_schema(schema5,Desc),
-    print_all_documents(Desc, schema).
+    write_schema(schema5,Desc).
 
 test(incompatible_key_change,
      [
@@ -10849,3 +10930,348 @@ test(big,
     ).
 
 :- end_tests(big).
+
+:- begin_tests(json_datatype, [concurrent(true)]).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+
+json_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "HasSomeMetaData",
+  "name" : "xsd:string",
+  "json" : "sys:JSON"
+}
+').
+
+test(json_triples,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : "HasSomeMetaData",
+        '@id' : 'HasSomeMetaData/i_exist',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    open_descriptor(Desc, DB),
+    json_triples(DB, Document, Triples),
+    Triples =
+    [ t('terminusdb:///data/HasSomeMetaData/i_exist',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'terminusdb:///schema#HasSomeMetaData'),
+      t('terminusdb:///data/HasSomeMetaData/i_exist',
+        'terminusdb:///schema#json',
+        'terminusdb:///json/JSON/SHA1/9057c8954b32149b1ab6461efb26be91dcf80b93'),
+      t('terminusdb:///json/JSON/SHA1/9057c8954b32149b1ab6461efb26be91dcf80b93',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSON'),
+      t('terminusdb:///json/JSON/SHA1/9057c8954b32149b1ab6461efb26be91dcf80b93',
+        'http://terminusdb.com/schema/json#some',
+        'terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d'),
+      t('terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'http://terminusdb.com/schema/sys#JSON'),
+      t('terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d',
+        'http://terminusdb.com/schema/json#random',
+        "stuff"^^'http://www.w3.org/2001/XMLSchema#string'),
+      t('terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d',
+        'http://terminusdb.com/schema/json#that',
+        2.0^^'http://www.w3.org/2001/XMLSchema#decimal'),
+      t('terminusdb:///data/HasSomeMetaData/i_exist',
+        'terminusdb:///schema#name',
+        "testing"^^'http://www.w3.org/2001/XMLSchema#string') ].
+
+
+test(json_subobject,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : "HasSomeMetaData",
+        '@id' : 'HasSomeMetaData/reproducible',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,Id)
+    ),
+    get_document(Desc,Id,JSON),
+
+    JSON = json{ '@id':'HasSomeMetaData/reproducible',
+                 '@type':'HasSomeMetaData',
+                 json:json{some:json{random:"stuff", that:2.0}},
+                 name:"testing"
+               }.
+
+test(top_level_json_with_id,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSONDocument/my_json',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON =
+    json{'@id' : Id,
+         json:json{some:json{random:"stuff",that:2.0}},
+         name:"testing"}.
+
+test(top_level_json_without_id,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON =
+    json{'@id' : Id,
+         json:json{some:json{random:"stuff",that:2.0}},
+         name:"testing"}.
+
+test(replace_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSONDocument/my_json',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+
+    Document2 =
+    json{
+        '@id' : 'JSONDocument/my_json',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : false
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        replace_document(C2,Document2,false,true,_)
+    ),
+
+    get_document(Desc,Id,JSON),
+
+    JSON =
+    json{'@id':'terminusdb:///data/JSONDocument/my_json',
+         json:json{some:json{random:"stuff",that:false}},
+         name:"testing"}.
+
+test(insert_num_list,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSONDocument/my_json',
+        numlist : [1,2,3]
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+
+    get_document(Desc,Id,JSON),
+
+    JSON = json{'@id':'terminusdb:///data/JSONDocument/my_json',
+                numlist:[1,2,3]}.
+
+test(replace_hash_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+
+    Document2 =
+    json{
+        '@id' : Id,
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : false
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        replace_document(C2,Document2,false,true,_)
+    ),
+    atom_concat('terminusdb:///data/JSONDocument/', _, Id).
+
+test(replace_named_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          not_a_valid_json_object_id('terminusdb:///data/named'),
+          _)
+     ]) :-
+
+    Document =
+    json{
+        '@id' : named,
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,_)
+    ).
+
+test(can_not_insert_json_class,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(can_not_insert_class_with_reserve_name('JSONDocument'),_)
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1,json{ '@id' : 'JSONDocument'})
+    ).
+
+test(instance_schema_check,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSONDocument/named',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,_)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(
+            C2,
+            _{ '@type': "Class",
+               '@id': "Point",
+               coordinates : _{ '@type' : "Array",
+                                '@dimensions':2,
+                                '@class' : "xsd:decimal"}}
+        )).
+
+:- end_tests(json_datatype).

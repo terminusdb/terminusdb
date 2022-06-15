@@ -27,6 +27,12 @@
 
 :- use_module(library(qsave)).
 
+% Ignore warnings from `qsave.pl` that occur on macOS. When the next
+% SWI-Prolog is released, it should have the following PR, which would allow us
+% to remove this `user:message_hook`.
+% <https://github.com/SWI-Prolog/swipl/pull/22>
+user:message_hook(qsave(strip_failed(_)), warning, _).
+
 main :-
     initialize_flags,
     bootstrap_files,

@@ -113,6 +113,7 @@
               op(700,xfy,<>),
               '<>'/2,
               do_or_die/2,
+              option_or_die/2,
               die_if/2,
               whole_arg/2,
               random_string/1,

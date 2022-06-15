@@ -1,34 +1,33 @@
-const { expect } = require('chai')
-const { Agent, db, document, endpoint, util } = require('../lib')
+const { Agent, api, db, document, util } = require('../lib')
 
 describe('schema-check-failures', function () {
   let agent
 
   before(async function () {
     agent = new Agent().auth()
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path)
+    await db.create(agent)
   })
 
   after(async function () {
-    await db.del(agent, endpoint.db(agent.defaults()).path)
+    await db.delete(agent)
   })
 
   it('fails replace schema with new non-optional field (#780)', async function () {
     // Insert an initial schema.
     const schema = { '@id': util.randomString(), '@type': 'Class' }
-    const path = endpoint.document(agent.defaults()).path
-    await document.insert(agent, path, { schema }).then(document.verifyInsertSuccess)
+    await document.insert(agent, { schema })
     // Insert an initial instance.
-    const instance = { '@type': schema['@id'] }
-    await document.insert(agent, path, { instance }).then(document.verifyInsertSuccess)
+    const instance = { '@type': schema['@id'], '@id': `${schema['@id']}/0` }
+    await document.insert(agent, { instance })
     // Update the schema with a new field that is not Optional.
     schema.name = 'xsd:string'
-    const r = await document.replace(agent, path, { schema }).then(document.verifyReplaceFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-    expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-    expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('instance_not_cardinality_one')
-    expect(r.body['api:error']['api:witnesses'][0].class).to.equal('http://www.w3.org/2001/XMLSchema#string')
-    expect(r.body['api:error']['api:witnesses'][0].predicate).to.equal('terminusdb:///schema#name')
+    const witness = {
+      '@type': 'instance_not_cardinality_one',
+      class: 'http://www.w3.org/2001/XMLSchema#string',
+      instance: `terminusdb:///data/${instance['@id']}`,
+      predicate: 'terminusdb:///schema#name',
+    }
+    await document.replace(agent, { schema }).fails((api.error.schemaCheckFailure([witness])))
   })
 
   it('fails insert schema with unknown class in field', async function () {
@@ -37,12 +36,11 @@ describe('schema-check-failures', function () {
       '@type': 'Class',
       field: util.randomString(),
     }
-    const path = endpoint.document(agent.defaults()).path
-    const r = await document.insert(agent, path, { schema }).then(document.verifyInsertFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-    expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-    expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('not_a_class_or_base_type')
-    expect(r.body['api:error']['api:witnesses'][0].class).to.equal('terminusdb:///schema#' + schema.field)
+    const witness = {
+      '@type': 'not_a_class_or_base_type',
+      class: `terminusdb:///schema#${schema.field}`,
+    }
+    await document.insert(agent, { schema }).fails((api.error.schemaCheckFailure([witness])))
   })
 
   describe('fails insert schema for type family with unknown @class (#1019)', function () {
@@ -72,24 +70,22 @@ describe('schema-check-failures', function () {
     for (const type of types) {
       it(type, async function () {
         schema.field['@type'] = type
-        const path = endpoint.document(agent.defaults()).path
-        const r = await document.insert(agent, path, { schema }).then(document.verifyInsertFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-        expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-        expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('not_a_class_or_base_type')
-        expect(r.body['api:error']['api:witnesses'][0].class).to.equal('terminusdb:///schema#' + schema.field['@class'])
+        const witness = {
+          '@type': 'not_a_class_or_base_type',
+          class: `terminusdb:///schema#${schema.field['@class']}`,
+        }
+        await document.insert(agent, { schema }).fails((api.error.schemaCheckFailure([witness])))
       })
     }
   })
 
   it('fails insert instance with two @oneOf fields', async function () {
-    const path = endpoint.document(agent.defaults()).path
     const schema = {
       '@id': util.randomString(),
       '@type': 'Class',
       '@oneOf': { integer: 'xsd:integer', string: 'xsd:string' },
     }
-    await document.insert(agent, path, { schema }).then(document.verifyInsertSuccess)
+    await document.insert(agent, { schema })
     {
       const instance = [
         {
@@ -103,7 +99,7 @@ describe('schema-check-failures', function () {
           string: util.randomString(),
         },
       ]
-      await document.insert(agent, path, { instance }).then(document.verifyInsertSuccess)
+      await document.insert(agent, { instance })
     }
     {
       const instance = {
@@ -112,11 +108,20 @@ describe('schema-check-failures', function () {
         integer: -29,
         string: util.randomString(),
       }
-      const r = await document.insert(agent, path, { instance }).then(document.verifyInsertFailure)
-      expect(r.body['@type']).to.equal('api:InsertDocumentErrorResponse')
-      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
-      expect(r.body['api:error']['api:witnesses']).to.be.an('array').that.has.lengthOf(1)
-      expect(r.body['api:error']['api:witnesses'][0]['@type']).to.equal('choice_has_too_many_answers')
+      const witness = {
+        '@type': 'choice_has_too_many_answers',
+        choice: {
+          'terminusdb:///schema#integer': 'http://www.w3.org/2001/XMLSchema#integer',
+          'terminusdb:///schema#string': 'http://www.w3.org/2001/XMLSchema#string',
+        },
+        document: {
+          '@id': `terminusdb:///data/${instance['@id']}`,
+          '@type': `terminusdb:///schema#${schema['@id']}`,
+          'terminusdb:///schema#integer': instance.integer,
+          'terminusdb:///schema#string': instance.string,
+        },
+      }
+      await document.insert(agent, { instance }).fails((api.error.schemaCheckFailure([witness])))
     }
   })
 })

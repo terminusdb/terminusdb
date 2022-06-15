@@ -1,44 +1,40 @@
 const { expect } = require('chai')
-const { Agent, db, endpoint, woql } = require('../lib')
+const { Agent, api, db, woql } = require('../lib')
 
 describe('woql-queryresource', function () {
   let agent
-  let path
 
   before(async function () {
     agent = new Agent().auth()
-    path = endpoint.woqlResource(agent.defaults()).path
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path)
+    await db.create(agent)
   })
 
   after(async function () {
-    await db.del(agent, endpoint.db(agent.defaults()).path)
+    await db.delete(agent)
   })
 
   function queryTemplate () {
     return {
-      query: {
-        '@type': 'Get',
-        columns: [
-          {
-            '@type': 'Column',
-            indicator: { '@type': 'Indicator', name: 'Name' },
-            variable: 'Name',
-          },
-        ],
-        resource: {
-          '@type': 'QueryResource',
-          source: { '@type': 'Source' },
-          format: 'csv',
+      '@type': 'Get',
+      columns: [
+        {
+          '@type': 'Column',
+          indicator: { '@type': 'Indicator', name: 'Name' },
+          variable: 'Name',
         },
+      ],
+      resource: {
+        '@type': 'QueryResource',
+        source: { '@type': 'Source' },
+        format: 'csv',
       },
     }
   }
 
   it('passes with url', async function () {
     const query = queryTemplate()
-    query.query.resource.source.url = 'http://127.0.0.1:7474/employees.csv'
-    const r = await woql.post(agent, path, query).then(woql.verifyGetSuccess)
+    query.resource.source.url = 'http://127.0.0.1:7474/employees.csv'
+    const r = await woql.post(agent, query)
     expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
     expect(r.body['api:variable_names'][0]).to.equal('Name')
     expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
@@ -55,9 +51,9 @@ describe('woql-queryresource', function () {
 
   it('fails with url and missing file', async function () {
     const query = queryTemplate()
-    query.query.resource.source.url = 'http://127.0.0.1:7474/not_found.csv'
-    const r = await woql.post(agent, path, query).then(woql.verifyGetFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:HttpRequestFailedFetch')
-    expect(r.body['api:error']['api:url']).to.equal(query.query.resource.source.url)
+    query.resource.source.url = 'http://127.0.0.1:7474/not_found.csv'
+    await woql
+      .post(agent, query)
+      .fails(api.error.httpRequestFailedFetch(query.resource.source.url))
   })
 })

@@ -1,9 +1,9 @@
 exports.Agent = require('./agent.js').Agent
 exports.Params = require('./params.js').Params
+exports.api = require('./api')
 exports.branch = require('./branch.js')
 exports.db = require('./db.js')
 exports.document = require('./document.js')
-exports.endpoint = require('./endpoint.js')
 exports.info = require('./info.js')
 exports.organization = require('./organization.js')
 exports.remote = require('./remote.js')

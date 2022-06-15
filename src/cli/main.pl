@@ -547,6 +547,12 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            shortflags([d]),
            default('_'),
            help('document data')],
+          [opt(raw_json),
+           type(boolean),
+           longflags([raw_json,'raw-json']),
+           shortflags([j]),
+           default(false),
+           help('inserts as raw json')],
           [opt(full_replace),
            type(boolean),
            longflags([full_replace,'full-replace']),
@@ -630,7 +636,7 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            default('_'),
            help('document data')],
           [opt(create),
-           type(atom),
+           type(boolean),
            longflags([create]),
            shortflags([c]),
            default(false),
@@ -1221,31 +1227,21 @@ run_command(db,delete,[DB_Path],Opts) :-
 run_command(doc,insert,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    option(author(Author), Opts),
-    option(message(Message), Opts),
-    option(graph_type(Graph_Type), Opts),
     option(data(Data), Opts),
-    option(full_replace(Full), Opts),
 
     api_report_errors(
         insert_documents,
         (   var(Data)
-        ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids))
+        ->  with_memory_file(cli:doc_insert_memory_file(System_DB, Auth, Path, Ids, Opts))
         ;   open_string(Data, Stream),
-            doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full, Ids, Stream)
+            doc_insert_stream(System_DB, Auth, Path, Ids, Opts, Stream)
         )
     ),
-    length(Ids, Number_Inserted),
-    (   Number_Inserted = 1
-    ->  format(current_output, "Document inserted~n", [])
-    ;   format(current_output, "Documents inserted: ~d~n", [Number_Inserted])
-    ).
+    format(current_output, "Documents inserted:~n", []),
+    format_doc_id_list(Ids).
 run_command(doc,delete, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    option(author(Author), Opts),
-    option(message(Message), Opts),
-    option(graph_type(Graph_Type), Opts),
     option(id(Id), Opts),
     option(nuke(Nuke), Opts),
     option(data(Data), Opts),
@@ -1253,40 +1249,35 @@ run_command(doc,delete, [Path], Opts) :-
     api_report_errors(
         delete_documents,
         (   Nuke = true
-        ->  api_nuke_documents(System_DB, Auth, Path, Graph_Type, Author, Message, no_data_version, _),
+        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, Opts),
             format("Documents nuked~n", [])
-        ;   ground(Id)
-        ->  api_delete_document(System_DB, Auth, Path, Graph_Type, Author, Message, Id, no_data_version, _),
-            format("Document deleted: ~s~n", [Id])
-        ;   (   var(Data)
-            ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message))
-            ;   open_string(Data, Stream),
-                api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream, no_data_version, _)
+        ;   (   ground(Id)
+            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
+                Ids = [Id]
+            ;   (   var(Data)
+                ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts))
+                ;   open_string(Data, Stream),
+                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                )
             ),
-            format("Documents deleted~n", [Graph_Type])
+            format(current_output, "Documents deleted:~n", []),
+            format_doc_id_list(Ids)
         )
     ).
 run_command(doc,replace, [Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    option(author(Author), Opts),
-    option(message(Message), Opts),
-    option(graph_type(Graph_Type), Opts),
-    option(create(Create), Opts),
     option(data(Data), Opts),
 
     api_report_errors(
         replace_documents,
         (   (   var(Data)
-            ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids))
+            ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts))
             ;   open_string(Data, Stream),
-                api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
-                                      Create, no_data_version, _, Ids)
+                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
             ),
-            length(Ids, Number_Inserted),
-            format("Document(s) replaced: ~d~n", [Number_Inserted]),
-            json_write_dict(user_output, Ids, [width(0)]),
-            format(user_output, "~n", [])
+            format(current_output, "Documents replaced:~n", []),
+            format_doc_id_list(Ids)
         )
     ).
 run_command(doc,get, [Path], Opts) :-
@@ -1416,36 +1407,34 @@ run_command(triples,load,[Path,File],Opts) :-
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
 
-doc_replace_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids, Mem_File) :-
+doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
     % Read the memory file to insert documents.
-    with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids)).
+    with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Ids, Opts)).
 
-doc_replace_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Create, Ids, Stream) :-
-    api_replace_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
-                          Create, no_data_version, _, Ids).
+doc_replace_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
+    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
 
-doc_delete_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Mem_File) :-
+doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
     % Read the memory file to insert documents.
-    with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message)).
+    with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Ids, Opts)).
 
-doc_delete_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Stream) :-
-    api_delete_documents(System_DB, Auth, Path, Graph_Type, Author, Message, Stream,
-                         no_data_version, _).
+doc_delete_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
+    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
 
-doc_insert_memory_file(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids, Mem_File) :-
+doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
     % Copy stdin to a memory file.
     with_memory_file_stream(Mem_File, write, copy_stream_data(user_input)),
     % Read the memory file to insert documents.
-    with_memory_file_stream(Mem_File, read, doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids)).
+    with_memory_file_stream(Mem_File, read, doc_insert_stream(System_DB, Auth, Path, Ids, Options)).
 
-doc_insert_stream(System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Ids, Stream) :-
+doc_insert_stream(System_DB, Auth, Path, Ids, Options, Stream) :-
     api_insert_documents(
-        System_DB, Auth, Path, Graph_Type, Author, Message, Full_Replace, Stream,
-        no_data_version, _New_Data_Version, Ids).
+        System_DB, Auth, Path, Stream,
+        no_data_version, _New_Data_Version, Ids, Options).
 
 create_authorization(Opts,Authorization) :-
     option(token(Token), Opts),
@@ -1590,4 +1579,10 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
-fetch_payload(Payload, _, none, some(Payload)).
+format_doc_id_list(Ids) :-
+    length(Ids, Id_Count),
+    Column_Width is floor(log10(Id_Count)) + 2,
+    forall(
+        nth1(Count, Ids, Id),
+        format(current_output, "~|~t~d~*+: ~w~n", [Count, Column_Width, Id])
+    ).

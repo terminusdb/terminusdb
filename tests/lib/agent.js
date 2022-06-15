@@ -26,9 +26,11 @@ class Agent {
   }
 
   // Add authentication
-  auth () {
-    this.user = process.env.TERMINUSDB_USER || 'admin'
-    this.password = process.env.TERMINUSDB_PASSWORD || 'root'
+  auth (params) {
+    params = new Params(params)
+    this.user = params.string('user', process.env.TERMINUSDB_USER || 'admin')
+    this.password = params.string('password', process.env.TERMINUSDB_PASSWORD || 'root')
+    params.assertEmpty()
 
     const token = process.env.TERMINUSDB_ACCESS_TOKEN
     const insecureUserHeader = process.env.TERMINUSDB_INSECURE_USER_HEADER
@@ -48,16 +50,6 @@ class Agent {
     }
 
     return this
-  }
-
-  defaults () {
-    return {
-      baseUrl: this.baseUrl,
-      orgName: this.orgName,
-      dbName: this.dbName,
-      user: this.user,
-      password: this.password,
-    }
   }
 
   head (path) {
