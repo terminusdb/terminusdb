@@ -148,20 +148,26 @@ pub fn get_set_pairs_from_schema<'a, L: Layer>(
         layer
             .triples_o(sys_set_id)
             .filter(move |t| t.predicate == rdf_type_id)
-            .map(|t| {
+            .map(move |t| {
                 let set_origin = layer
                     .triples_o(t.subject)
                     .next()
                     .expect("Expected set to be connected");
 
-                let mut subject = Some(set_origin.subject);
+                let mut subjects: Vec<u64> = vec![set_origin.subject];
                 let predicate = set_origin.predicate;
                 let mut r = Vec::new();
 
-                while let Some(s) = subject {
+                while let Some(s) = subjects.pop() {
                     r.push((s, predicate));
-                    
-            }),
+                    if let Some(children) = inheritance_graph.get(&s) {
+                        subjects.extend(children.iter());
+                    }
+                }
+
+                r.into_iter()
+            })
+            .flatten(),
     )
 }
 
