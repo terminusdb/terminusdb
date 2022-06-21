@@ -2650,6 +2650,11 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
     ;   Match_Final_State = true
     ),
 
+    (   _{ keep: Keep } :< Document
+    ->  true
+    ;   Keep = json{'@id':true, '@type':true}
+    ),
+
     (   _{ type: Type } :< Document
     ->  atom_string(Type_Atom, Type)
     ;   Type_Atom = squash
@@ -2661,7 +2666,9 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
         catch(
             (   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
                                         Before_Commit, After_Commit,
-                                        [type(Type_Atom),match_final_state(Match_Final_State)]),
+                                        [type(Type_Atom),
+                                         match_final_state(Match_Final_State),
+                                         keep(Keep)]),
                 cors_reply_json(Request,
                                 json{'@type' : "api:ApplyResponse",
                                      'api:status' : "api:success"})),

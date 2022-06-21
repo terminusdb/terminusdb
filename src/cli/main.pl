@@ -413,6 +413,55 @@ or two commits (path required).',
            default('_'),
            help('Commit of the *after* document(s)')]
          ]).
+opt_spec(apply,'terminusdb apply [Path] OPTIONS',
+         'Apply a diff to path which is obtained from the differences between two commits',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `apply` command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: apply'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(keep),
+           type(atom),
+           longflags([keep]),
+           shortflags([k]),
+           default('{"@id" : true, "_id" : true}'),
+           help('Skeleton of the document to retain as context')],
+          [opt(type),
+           type(atom),
+           longflags([type]),
+           shortflags([t]),
+           default(squash),
+           help('Variety of commit to create on apply (currently only squash)')],
+          [opt(match_final_state),
+           type(boolean),
+           longflags([match-final-state,match_final_state]),
+           shortflags([f]),
+           default(true),
+           help('Allow conflicting patch to apply if patch would yield the same final state')],
+          [opt(before_commit),
+           type(atom),
+           longflags([before_commit,'before-commit']),
+           shortflags([p]),
+           help('Commit of the *before* document(s)')],
+          [opt(after_commit),
+           type(atom),
+           longflags([after_commit,'after-commit']),
+           shortflags([s]),
+           help('Commit of the *after* document(s)')]
+         ]).
 opt_spec(log,'terminusdb log DB_SPEC',
          'Get the log for a branch given by DB_SPEC.',
          [[opt(help),
@@ -1142,6 +1191,7 @@ run_command(diff, Args, Opts) :-
         (   \+ var(Before_Atom), \+ var(After_Atom)
         ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
             atom_json_dict(After_Atom, After, [default_tag(json)]),
+            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
             Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff(System_DB, Auth, Before, After, Patch, Options)
         ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
@@ -1169,6 +1219,35 @@ run_command(diff, Args, Opts) :-
     ),
     json_write_dict(user_output, Patch, [width(0)]),
     nl.
+run_command(apply,[Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(before_commit(Before_Commit), Opts),
+    option(after_commit(After_Commit), Opts),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(keep(Keep_Atom), Opts),
+    option(type(Type_Atom), Opts),
+    option(match_final_state(Match_Final_State), Opts),
+
+    api_report_errors(
+        diff,
+        catch(
+            (   atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+                api_apply_squash_commit(System_DB, Auth, Path, commit_info{
+                                                                   author: Author,
+                                                                   message: Message},
+                                        Before_Commit, After_Commit,
+                                        [type(Type_Atom),
+                                         keep(Keep),
+                                         match_final_state(Match_Final_State)]),
+                writeq("Successfully applied"),nl
+            ),
+            error(apply_squash_witnesses(Witnesses)),
+            json_write(current_output,Witnesses)
+        )
+    ).
 run_command(log,[Path], _Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1184,8 +1263,8 @@ run_command(branch,create,[Path],Opts) :-
 
     option(origin(Origin_Base), Opts),
     (   Origin_Base = false
-    ->  Origin_Option = none
-    ;   Origin_Option = some(Origin_Base)),
+    ->  Origin_Option = empty(_,_)
+    ;   Origin_Option = branch(Origin_Base)),
     api_report_errors(
         branch,
         branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
