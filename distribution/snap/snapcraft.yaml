@@ -1,0 +1,71 @@
+name: terminusdb
+title: TerminusDB
+version: v10.1.0
+license: Apache-2.0
+summary: Document graph database
+description: |
+  TerminusDB is a distributed database with a collaboration model.
+  It is designed to be like git, but for data. The building blocks of the model are:
+    Revision Control: commits for every update
+    Diff: differences between commits can be interpreted as patches between states
+    Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
+    TerminusDB allows you to link JSON documents in a knowledge graph through a document API: https://terminusdb.com/docs/#/reference/reference-document-interface
+source-code: https://github.com/terminusdb/terminusdb
+contact: team@terminusdb.com
+issues: https://github.com/terminusdb/terminusdb/issues
+icon: snap/local/terminusdb_icon.png
+confinement: strict
+base: core18
+grade: stable
+package-repositories:
+ - type: apt
+   ppa: swi-prolog/stable
+
+# The SWI Prolog packs are build in a subdir to make it easy for
+# the terminusdb build to use the "stage" directory as the pack
+# directory.
+parts:
+  tus:
+    plugin: dump
+    source: https://github.com/terminusdb/tus.git
+    source-tag: v0.0.5
+    override-build: |
+      mkdir tus
+      mv * tus/ || true
+      snapcraftctl build
+  terminusdb:
+    after:
+      - tus
+    plugin: make
+    build-packages:
+      - swi-prolog-nox
+      - curl
+      - clang
+    stage-packages:
+      - swi-prolog-nox
+    override-build: |
+      mkdir -p /snap/terminusdb/current/usr/lib
+      cp -r /usr/lib/swi-prolog /snap/terminusdb/current/usr/lib/
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+      export PATH=/root/.cargo/bin:$PATH
+      export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
+      export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
+      make
+      cp -r terminusdb distribution "$SNAPCRAFT_PART_INSTALL/"
+    build-environment:
+      - TERMINUSDB_SERVER_PACK_DIR: /root/stage
+      - LANG: C.UTF-8
+      - LC_ALL: C.UTF-8
+    source: ./terminusdb_source
+    source-type: local
+
+    artifacts:
+      - terminusdb
+      - init_snap.sh
+apps:
+  terminusdb:
+    command: init_snap.sh
+    environment:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    plugs: [home, network, network-bind, process-control]
