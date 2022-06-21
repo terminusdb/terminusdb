@@ -388,6 +388,12 @@ or two commits (path required).',
            shortflags([k]),
            default('{"@id" : true, "_id" : true}'),
            help('Skeleton of the document to retain as context')],
+          [opt(copy_value),
+           type(boolean),
+           longflags([copy-value,copy_value]),
+           shortflags([c]),
+           default(false),
+           help('Maintain explit copies of diffs in lists')],
           [opt(docid),
            type(atom),
            longflags([docid]),
@@ -1129,31 +1135,36 @@ run_command(diff, Args, Opts) :-
     option(docid(DocId), Opts),
     option(before_commit(Before_Commit), Opts),
     option(after_commit(After_Commit), Opts),
+    option(copy_value(Copy_Value), Opts),
 
     api_report_errors(
         diff,
         (   \+ var(Before_Atom), \+ var(After_Atom)
         ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
             atom_json_dict(After_Atom, After, [default_tag(json)]),
-            atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            api_diff(System_DB, Auth, Before, After, Keep, Patch)
+            Options = [keep(Keep),copy_value(Copy_Value)],
+            api_diff(System_DB, Auth, Before, After, Patch, Options)
         ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff_id(System_DB, Auth, Path, Before_Commit,
-                        After_Commit, DocId, Keep, Patch)
+                        After_Commit, DocId, Patch, Options)
         ;   \+ var(After_Commit), \+ var(Before_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff_all_documents(System_DB, Auth, Path,
                                    Before_Commit, After_Commit,
-                                   Keep, Patch)
-        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
+                                   Patch, Options)
+        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit),
+            [Path] = Args
         ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
             atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff_id_document(System_DB, Auth, Path,
                                  Before_Commit, After,
-                                 DocId, Keep, Patch)
+                                 DocId, Patch, Options)
         )
     ),
     json_write_dict(user_output, Patch, [width(0)]),
