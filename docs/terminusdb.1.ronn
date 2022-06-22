@@ -240,6 +240,374 @@ Unbundle a bundle file.
 
 ### diff
 
+`terminusdb diff [Path] OPTIONS`
+
+Create a diff between two JSONs, a JSON and a commit (path required),
+or two commits (path required).
+
+  * `-h`, `--help`=[value]:
+  print help for the `diff` command
+
+  * `-b`, `--before`=[value]:
+  JSON document which is the *before*
+
+  * `-a`, `--after`=[value]:
+  JSON document which is the *after*
+
+  * `-k`, `--keep`=[value]:
+  Skeleton of the document to retain as context
+
+  * `-c`, `--copy-value`, `--copy_value`=[value]:
+  Maintain explit copies of diffs in lists
+
+  * `-d`, `--docid`=[value]:
+  document id to use for comparisons
+
+  * `-p`, `--before_commit`, `--before-commit`=[value]:
+  Commit of the *before* document(s)
+
+  * `-s`, `--after_commit`, `--after-commit`=[value]:
+  Commit of the *after* document(s)
+
+### apply
+
+`terminusdb apply [Path] OPTIONS`
+
+Apply a diff to path which is obtained from the differences between two commits
+
+  * `-h`, `--help`=[value]:
+  print help for the `apply` command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-k`, `--keep`=[value]:
+  Skeleton of the document to retain as context
+
+  * `-t`, `--type`=[value]:
+  Variety of commit to create on apply (currently only squash)
+
+  * `-f`, `--match-final-state`, `--match_final_state`=[value]:
+  Allow conflicting patch to apply if patch would yield the same final state
+
+  * `-p`, `--before_commit`, `--before-commit`=[value]:
+  Commit of the *before* document(s)
+
+  * `-s`, `--after_commit`, `--after-commit`=[value]:
+  Commit of the *after* document(s)
+
+### log
+
+`terminusdb log DB_SPEC`
+
+Get the log for a branch given by DB_SPEC.
+
+  * `-h`, `--help`=[value]:
+  print help for the `log` command
+
+  * `-j`, `--json`=[value]:
+  return log as JSON
+
+### branch create
+
+`terminusdb branch create BRANCH_SPEC OPTIONS`
+
+Create a branch.
+
+  * `-h`, `--help`=[value]:
+  print help for the `branch create` sub command
+
+  * `-o`, `--origin`=[value]:
+  the origin branch to use
+
+### branch delete
+
+`terminusdb branch delete BRANCH_SPEC OPTIONS`
+
+Delete a branch.
+
+  * `-h`, `--help`=[value]:
+  print help for the `branch delete` sub command
+
+### db create
+
+`terminusdb db create DATABASE_SPEC OPTIONS`
+
+Create a database.
+
+  * `-h`, `--help`=[value]:
+  print help for the `db create` sub command
+
+  * `-o`, `--organization`=[value]:
+  organizational owner of the database
+
+  * `-l`, `--label`=[value]:
+  label to use for this database
+
+  * `-c`, `--comment`=[value]:
+  long description of this database
+
+  * `-p`, `--public`=[value]:
+  whether this database is to be public
+
+  * `-k`, `--schema`=[value]:
+  whether to use a schema
+
+  * `-d`, `--data-prefix`=[value]:
+  uri prefix to use for data
+
+  * `-s`, `--schema-prefix`=[value]:
+  uri prefix to use for schema
+
+  * `-x`, `--prefixes`=[value]:
+  additional defined prefixes in JSON
+
+### db delete
+
+`terminusdb db delete DATABASE_SPEC OPTIONS`
+
+Delete a database.
+
+  * `-h`, `--help`=[value]:
+  print help for the `db delete` sub command
+
+  * `-o`, `--organization`=[value]:
+  organizational owner of the database
+
+  * `-f`, `--force`=[value]:
+  force the deletion of the database (unsafe)
+
+### doc insert
+
+`terminusdb doc insert DATABASE_SPEC OPTIONS`
+
+Insert documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc insert` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-g`, `--graph_type`, `--graph-type`=[value]:
+  graph type (instance or schema)
+
+  * `-d`, `--data`=[value]:
+  document data
+
+  * `-j`, `--raw_json`, `--raw-json`=[value]:
+  inserts as raw json
+
+  * `-f`, `--full_replace`, `--full-replace`=[value]:
+  delete all previous documents and substitute these
+
+### doc delete
+
+`terminusdb doc delete DATABASE_SPEC OPTIONS`
+
+Delete documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc delete` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-g`, `--graph_type`, `--graph-type`=[value]:
+  graph type (instance or schema)
+
+  * `-i`, `--id`=[value]:
+  document id to delete
+
+  * `-d`, `--data`=[value]:
+  document data
+
+  * `-n`, `--nuke`=[value]:
+  nuke all documents
+
+### doc replace
+
+`terminusdb doc replace DATABASE_SPEC OPTIONS`
+
+Replace documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc replace` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-g`, `--graph_type`, `--graph-type`=[value]:
+  graph type (instance or schema)
+
+  * `-d`, `--data`=[value]:
+  document data
+
+  * `-c`, `--create`=[value]:
+  create document if it does not exist
+
+### doc get
+
+`terminusdb doc get DATABASE_SPEC OPTIONS`
+
+Query documents.
+
+  * `-h`, `--help`=[value]:
+  print help for the `doc get` sub command
+
+  * `-g`, `--graph_type`=[value]:
+  graph type (instance or schema)
+
+  * `-s`, `--skip`=[value]:
+  number of documents to skip
+
+  * `-c`, `--count`=[value]:
+  number of documents to return
+
+  * `-m`, `--minimized`=[value]:
+  return minimized prefixes
+
+  * `-l`, `--as_list`, `--as-list`=[value]:
+  return results as a JSON list (as opposed to JSON-lines)
+
+  * `-u`, `--unfold`=[value]:
+  include subdocuments, or only subdocument ids
+
+  * `-i`, `--id`=[value]:
+  id of document to retrieve
+
+  * `-t`, `--type`=[value]:
+  type of document to retrieve
+
+  * `-z`, `--compress_ids`, `--compress-ids`=[value]:
+  return compressed / minimized ids using default prefixes
+
+  * `-q`, `--query`=[value]:
+  document query search template
+
+### store init
+
+`terminusdb store init OPTIONS`
+
+Initialize a store for TerminusDB.
+
+  * `-h`, `--help`=[value]:
+  print help for the `store init` sub command
+
+  * `-k`, `--key`=[value]:
+  key to use for admin login
+
+  * `-f`, `--force`=[value]:
+  force the creation of a new store even when one already exists
+
+### triples dump
+
+`terminusdb triples dump GRAPH_SPEC`
+
+Dump an RDF string.
+
+  * `-h`, `--help`=[value]:
+  print help for the `triples dump` sub command
+
+  * `-f`, `--format`=[value]:
+  format of RDF (can be one of: [turtle])
+
+### triples update
+
+`terminusdb triples update GRAPH_SPEC FILE`
+
+Update from an RDF file (replaces current content).
+
+  * `-h`, `--help`=[value]:
+  print help for the `triples update` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-f`, `--format`=[value]:
+  format of RDF (can be one of: [turtle])
+
+### triples load
+
+`terminusdb triples load GRAPH_SPEC FILE`
+
+Load triples from RDF file (Appending new).
+
+  * `-h`, `--help`=[value]:
+  print help for the `triples load` sub command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-f`, `--format`=[value]:
+  format of RDF (can be one of: [turtle])
+
+### remote add
+
+`terminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS`
+
+Add a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote add` sub command
+
+### remote remove
+
+`terminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS`
+
+Remove a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote remove` sub command
+
+### remote set-url
+
+`terminusdb remote set-url DATABASE_SPEC REMOTE_NAME REMOTE_LOCATION OPTIONS`
+
+Set the URL of a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote set-url` sub command
+
+### remote get-url
+
+`terminusdb remote get-url DATABASE_SPEC REMOTE_NAME OPTIONS`
+
+Get the URL of a remote.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote get-url` sub command
+
+  * `-r`, `--remote`=[value]:
+  the name of the remote to use
+
+### remote list
+
+`terminusdb remote list DATABASE_SPEC OPTIONS`
+
+List remotes.
+
+  * `-h`, `--help`=[value]:
+  print help for the `remote list` sub command
+
 ## SYNTAX
 
 The designation of databases, repositories, the associated commit
