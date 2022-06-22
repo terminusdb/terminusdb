@@ -142,7 +142,14 @@ opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
            longflags([author]),
            shortflags([a]),
            default('admin'),
-           help('author to place on the commit')]]).
+           help('author to place on the commit')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('return results as a json object')]
+         ]).
 opt_spec(push,'terminusdb push DB_SPEC',
          'Push a branch.',
          [[opt(help),
@@ -447,7 +454,7 @@ opt_spec(apply,'terminusdb apply [Path] OPTIONS',
            help('Variety of commit to create on apply (currently only squash)')],
           [opt(match_final_state),
            type(boolean),
-           longflags([match-final-state,match_final_state]),
+           longflags(['match-final-state',match_final_state]),
            shortflags([f]),
            default(true),
            help('Allow conflicting patch to apply if patch would yield the same final state')],
@@ -469,7 +476,14 @@ opt_spec(log,'terminusdb log DB_SPEC',
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `log` command')]]).
+           help('print help for the `log` command')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('return log as JSON')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -982,16 +996,20 @@ run_command(query,[Path,Query],Opts) :-
 
     option(author(Author), Opts),
     option(message(Message), Opts),
+
     Commit_Info = commit_info{author : Author, message : Message},
 
     api_report_errors(
         woql,
         (   woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Commit_Info, [], _All_Witnesses, no_data_version, _New_Data_Version, Context, Response),
-            get_dict(prefixes, Context, Context_Prefixes),
-            default_prefixes(Defaults),
-            put_dict(Defaults, Context_Prefixes, Final_Prefixes),
-            pretty_print_query_response(Response,Final_Prefixes,String),
-            format(current_output,'~s',[String])
+            (   option(json(true), Opts)
+            ->  json_write_dict(user_error, Response, [])
+            ;   get_dict(prefixes, Context, Context_Prefixes),
+                default_prefixes(Defaults),
+                put_dict(Defaults, Context_Prefixes, Final_Prefixes),
+                pretty_print_query_response(Response,Final_Prefixes,String),
+                format(current_output,'~s',[String])
+            )
         )).
 run_command(push,[Path],Opts) :-
     super_user_authority(Auth),
@@ -1242,17 +1260,20 @@ run_command(apply,[Path], Opts) :-
                                         [type(Type_Atom),
                                          keep(Keep),
                                          match_final_state(Match_Final_State)]),
-                writeq("Successfully applied"),nl
+                format(current_output,"Successfully applied\n",[])
             ),
             error(apply_squash_witnesses(Witnesses)),
             json_write(current_output,Witnesses)
         )
     ).
-run_command(log,[Path], _Opts) :-
+run_command(log,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     api_log(System_DB, Auth, Path, Log),
-    format_log(current_output,Log).
+    (   option(json(true), Opts)
+    ->  json_write_dict(current_output, Log, [])
+    ;   format_log(current_output,Log)
+    ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
