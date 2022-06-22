@@ -75,6 +75,7 @@ You can also install TerminusDB from the [Source Code](https://terminusdb.com/do
 A simple example creating a person with friends can be created as follows:
 
 ```shell
+./terminusdb db create admin/example1
 ./terminusdb doc insert --graph_type=schema admin/example1 <<EOF
 { "@id" : "Person",
   "@type" : "Class",
@@ -83,7 +84,7 @@ A simple example creating a person with friends can be created as follows:
   "friends" : { "@type" : "Set",
                 "@class" : "Person" }}
 EOF
-./terminusdb doc insert admin/example --message='adding Gavin' <<EOF 
+./terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 { "@type" : "Person","name" : "Gavin", "occupation" : "Coder"}
 EOF
 ```

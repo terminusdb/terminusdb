@@ -9,17 +9,14 @@ const util = require('./util.js')
 class Params {
   // Wrap an object with `Params`.
   constructor (params) {
-    // Clone with Object.assign() so that we can later use assertEmpty() without
-    // actually changing the params passed in.
-    this.params = Object.assign({}, params || {})
+    // Clone so that we can assertEmpty() without affecting the original.
+    this.params = { ...params }
   }
 
   // Assert that there are no more parameters.
   assertEmpty () {
     const keys = Object.keys(this.params)
-    if (keys.length) {
-      throw new Error(`Unexpected parameters: ${keys}`)
-    }
+    assert(keys.length === 0, `Unexpected parameters: ${keys}`)
   }
 
   // Extract a boolean value.
@@ -31,9 +28,7 @@ class Params {
       return def
     }
 
-    if (!util.isBoolean(val)) {
-      throw new Error(`Unexpected type for parameter '${key}'. Expected boolean, got: ${val.constructor.name || typeof val}`)
-    }
+    util.assertBoolean(key, val)
 
     return val
   }
@@ -47,10 +42,15 @@ class Params {
       return def
     }
 
-    if (!util.isInteger(val)) {
-      throw new Error(`Unexpected type for parameter '${key}'. Expected integer, got: ${val.constructor.name || typeof val}`)
-    }
+    util.assertInteger(key, val)
 
+    return val
+  }
+
+  // Extract an integer value. Assert if not there.
+  integerRequired (key) {
+    const val = this.integer(key)
+    util.assertDefined(key, val)
     return val
   }
 
@@ -63,9 +63,7 @@ class Params {
       return def
     }
 
-    if (!util.isString(val)) {
-      throw new Error(`Unexpected type for parameter '${key}'. Expected string, got: ${util.typeString(val)}`)
-    }
+    util.assertString(key, val)
 
     return val
   }
@@ -73,7 +71,7 @@ class Params {
   // Extract a string value. Assert if not there.
   stringRequired (key) {
     const val = this.string(key)
-    assert(util.isDefined(val), `Missing required parameter: '${key}'`)
+    util.assertDefined(key, val)
     return val
   }
 
@@ -86,9 +84,8 @@ class Params {
       return def
     }
 
-    if (!(util.isString(val) || Array.isArray(val))) {
-      throw new Error(`Unexpected type for parameter '${key}'. Expected string or array, got: ${util.typeString(val)}`)
-    }
+    util.assertStringOrArray(key, val)
+
     if (Array.isArray(val)) {
       return val
     } else {
@@ -105,9 +102,7 @@ class Params {
       return def
     }
 
-    if (!util.isObject(val)) {
-      throw new Error(`Unexpected type for parameter '${key}'. Expected object, got: ${util.typeString(val)}`)
-    }
+    util.assertObject(key, val)
 
     return val
   }
@@ -121,9 +116,21 @@ class Params {
       return def
     }
 
-    if (!(Array.isArray(val) || util.isObject(val))) {
-      throw new Error(`Unexpected type for parameter '${key}'. Expected array or object, got: ${util.typeString(val)}`)
+    util.assertArrayOrObject(key, val)
+
+    return val
+  }
+
+  // Extract a function value.
+  fun (key, def) {
+    const val = this.params[key]
+    delete this.params[key]
+
+    if (util.isUndefinedOrNull(val)) {
+      return def
     }
+
+    util.assertFunction(key, val)
 
     return val
   }

@@ -1,16 +1,16 @@
 const { expect } = require('chai')
-const { Agent, db, document, endpoint, util } = require('../lib')
+const { Agent, api, db, document, util } = require('../lib')
 
 describe('document-full-replace', function () {
   let agent
 
   before(async function () {
     agent = new Agent().auth()
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path)
+    await db.create(agent)
   })
 
   after(async function () {
-    await db.del(agent, endpoint.db(agent.defaults()).path)
+    await db.delete(agent)
   })
 
   it('passes insert schema twice', async function () {
@@ -22,15 +22,13 @@ describe('document-full-replace', function () {
       ],
       fullReplace: true,
     }
-    const path = endpoint.document(agent.defaults()).path
-    await document.insert(agent, path, option).then(document.verifyInsertSuccess)
-    await document.insert(agent, path, option).then(document.verifyInsertSuccess)
+    await document.insert(agent, option)
+    await document.insert(agent, option)
   })
 
   it('passes insert instance twice', async function () {
     const schema = { '@type': 'Class', '@id': util.randomString() }
-    const path = endpoint.document(agent.defaults()).path
-    await document.insert(agent, path, { schema }).then(document.verifyInsertSuccess)
+    await document.insert(agent, { schema })
     const option = {
       instance: [
         { '@type': schema['@id'], '@id': `${schema['@id']}/${util.randomString()}` },
@@ -38,8 +36,8 @@ describe('document-full-replace', function () {
       ],
       fullReplace: true,
     }
-    await document.insert(agent, path, option).then(document.verifyInsertSuccess)
-    await document.insert(agent, path, option).then(document.verifyInsertSuccess)
+    await document.insert(agent, option)
+    await document.insert(agent, option)
   })
 
   describe('fails insert schema with duplicate @id (#1063)', function () {
@@ -56,10 +54,7 @@ describe('document-full-replace', function () {
         } else {
           option.schema = schema
         }
-        const r = await document.insert(agent, endpoint.document(agent.defaults()).path, option).then(document.verifyInsertFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:SameDocumentIdsMutatedInOneTransaction')
-        expect(r.body['api:error']['api:duplicate_ids']).to.be.an('array').that.has.lengthOf(1)
-        expect(r.body['api:error']['api:duplicate_ids'][0]).to.equal(id)
+        await document.insert(agent, option).fails(api.error.sameDocumentIdsMutatedInOneTransaction([id]))
       })
     }
   })
@@ -74,12 +69,10 @@ describe('document-full-replace', function () {
     for (const option of options) {
       it(JSON.stringify(option), async function () {
         option.bodyString = ''
-        const r = await document.insert(agent, endpoint.document(agent.defaults()).path, option)
         if (util.isDefined(option.schema) && option.fullReplace) {
-          document.verifyInsertFailure(r)
-          expect(r.body['api:error']['@type']).to.equal('api:NoContextFoundInSchema')
+          await document.insert(agent, option).fails(api.error.noContextFoundInSchema)
         } else {
-          document.verifyInsertSuccess(r)
+          await document.insert(agent, option)
         }
       })
     }
@@ -91,22 +84,17 @@ describe('document-full-replace', function () {
       util.defaultContext,
       { '@type': 'Class', '@id': id, x: 'xsd:integer' },
     ]
-    await document
-      .insert(agent, endpoint.document(agent.defaults()).path, { schema, fullReplace: true })
-      .then(document.verifyInsertSuccess)
-    const r = await document
-      .get(agent, endpoint.document(agent.defaults()).path, { query: { graph_type: 'schema', id } })
-      .then(document.verifyGetSuccess)
+    await document.insert(agent, { schema, fullReplace: true })
+    const r = await document.get(agent, { query: { graph_type: 'schema', id } })
     expect(r.body['@id']).to.equal(id)
   })
 
   it('fails insert schema with full_replace and no @context', async function () {
-    const r = await document
-      .insert(agent, endpoint.document(agent.defaults()).path, {
+    await document
+      .insert(agent, {
         schema: { '@type': 'Class', '@id': util.randomString() },
         fullReplace: true,
       })
-      .then(document.verifyInsertFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:NoContextFoundInSchema')
+      .fails(api.error.noContextFoundInSchema)
   })
 })

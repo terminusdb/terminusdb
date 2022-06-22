@@ -1,5 +1,4 @@
-const { expect } = require('chai')
-const { Agent, endpoint, remote, util } = require('../lib')
+const { Agent, api, remote, util } = require('../lib')
 
 describe('remote-noauth', function () {
   let agent
@@ -10,16 +9,14 @@ describe('remote-noauth', function () {
 
   it('fails on unknown descriptor', async function () {
     const descriptor = 'desc-' + util.randomString()
-    const r = await agent.get(`/api/remote/${descriptor}`).then(remote.verifyFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:BadDescriptorPath')
-    expect(r.body['api:error']['api:descriptor']).to.equal(descriptor)
+    await remote
+      .get(agent, { path: `/api/remote/${descriptor}` })
+      .fails(api.error.badDescriptorPath(descriptor))
   })
 
   it('fails on unknown database', async function () {
-    const { path, orgName, dbName } = endpoint.remote(agent.defaults())
-    const r = await agent.get(path).then(remote.verifyNotFound)
-    expect(r.body['api:error']['@type']).to.equal('api:UnknownDatabase')
-    expect(r.body['api:error']['api:organization_name']).to.equal(orgName)
-    expect(r.body['api:error']['api:database_name']).to.equal(dbName)
+    await remote
+      .get(agent)
+      .notFound(api.error.unknownDatabase(agent.orgName, agent.dbName))
   })
 })

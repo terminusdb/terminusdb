@@ -2,7 +2,7 @@ const fs = require('fs/promises')
 const exec = require('util').promisify(require('child_process').exec)
 const process = require('process')
 const { expect } = require('chai')
-const { Agent, db, document, endpoint, util } = require('../lib')
+const { Agent, db, document, util } = require('../lib')
 
 describe('cli-clone-push-pull', function () {
   before(async function () {
@@ -46,14 +46,14 @@ describe('cli-clone-push-pull', function () {
     const dbSpec = agent.orgName + '/' + agent.dbName
     const url = agent.baseUrl + '/' + dbSpec
     // Create the remote database.
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
+    await db.create(agent)
     { // Clone to a local database.
       const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     // Delete the remote database.
-    await db.del(agent, endpoint.db(agent.defaults()).path).then(db.verifyDeleteSuccess)
+    await db.delete(agent)
     // Attempt to push to the remote database.
     await exec(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
       .then((r) => {
@@ -75,18 +75,16 @@ describe('cli-clone-push-pull', function () {
     const agent = new Agent().auth()
     const dbSpec = agent.orgName + '/' + agent.dbName
     const url = agent.baseUrl + '/' + dbSpec
-    const docPath = endpoint.document(agent.defaults()).path
     // Create the remote database.
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
+    await db.create(agent)
     { // Clone to a local database.
       const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     // Insert doc in remote database.
-    const id = util.randomString()
-    const schema = { '@type': 'Class', '@id': id }
-    await document.insert(agent, docPath, { schema }).then(document.verifyInsertSuccess)
+    const schema = { '@type': 'Class', '@id': util.randomString() }
+    await document.insert(agent, { schema })
     // Attempt to push to the remote database.
     await exec(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
       .then((r) => {
@@ -102,7 +100,7 @@ describe('cli-clone-push-pull', function () {
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     }
     // Delete the remote database.
-    await db.del(agent, endpoint.db(agent.defaults()).path).then(db.verifyDeleteSuccess)
+    await db.delete(agent)
   })
 
   it('passes push twice', async function () {
@@ -111,7 +109,7 @@ describe('cli-clone-push-pull', function () {
     const dbSpec = agent.orgName + '/' + agent.dbName
     const url = agent.baseUrl + '/' + dbSpec
     // Create the remote database.
-    await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
+    await db.create(agent)
     { // Clone to a local database.
       const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
@@ -132,7 +130,7 @@ describe('cli-clone-push-pull', function () {
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     }
     // Delete the remote database.
-    await db.del(agent, endpoint.db(agent.defaults()).path).then(db.verifyDeleteSuccess)
+    await db.delete(agent)
   })
 
   describe('empty remote database', function () {
@@ -142,13 +140,13 @@ describe('cli-clone-push-pull', function () {
 
     before(async function () {
       agent = new Agent().auth()
-      await db.createAfterDel(agent, endpoint.db(agent.defaults()).path).then(db.verifyCreateSuccess)
+      await db.create(agent)
       dbSpec = agent.orgName + '/' + agent.dbName
       url = agent.baseUrl + '/' + dbSpec
     })
 
     after(async function () {
-      await db.del(agent, endpoint.db(agent.defaults()).path).then(db.verifyDeleteSuccess)
+      await db.delete(agent)
     })
 
     it('fails clone with auth error (#1127)', async function () {

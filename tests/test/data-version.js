@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document, endpoint, util, woql } = require('../lib')
+const { Agent, api, db, document, util, woql } = require('../lib')
 
 const randomType0 = util.randomString()
 const randomType1 = util.randomString()
@@ -31,30 +31,15 @@ describe('data-version', function () {
   })
 
   describe('db', function () {
-    let dbDefaults
-    let dbPath
-
     before(async function () {
-      dbDefaults = endpoint.db(agent.defaults())
-      dbPath = dbDefaults.path
-      await db.createAfterDel(agent, dbPath)
+      await db.create(agent)
     })
 
     after(async function () {
-      await db.del(agent, dbPath)
+      await db.delete(agent)
     })
 
     describe('/api/document/..., /api/document/.../_meta', function () {
-      let docPath
-      let metaPath
-      let commitsPath
-
-      before(async function () {
-        docPath = endpoint.document(dbDefaults).path
-        metaPath = endpoint.documentMeta(dbDefaults).path
-        commitsPath = endpoint.documentCommits(dbDefaults).path
-      })
-
       describe('has expected data version for insert', function () {
         const objects = [
           { schema: { '@id': randomType0, '@type': 'Class' } },
@@ -71,26 +56,26 @@ describe('data-version', function () {
             const getInstances = { query: { as_list: true } }
             const getSchemas = { query: { graph_type: 'schema', as_list: true } }
 
-            docs.push(await document.get(agent, docPath, getInstances).then(document.verifyGetSuccess))
-            metas.push(await document.get(agent, metaPath, getInstances).then(document.verifyGetSuccess))
-            commits.push(await document.get(agent, commitsPath, getInstances).then(document.verifyGetSuccess))
+            docs.push(await document.get(agent, getInstances))
+            metas.push(await document.getFromMeta(agent, getInstances))
+            commits.push(await document.getFromCommits(agent, getInstances))
 
-            docs.push(await document.insert(agent, docPath, object).then(document.verifyInsertSuccess))
+            docs.push(await document.insert(agent, object))
 
-            metas.push(await document.get(agent, metaPath, getInstances).then(document.verifyGetSuccess))
-            commits.push(await document.get(agent, commitsPath, getInstances).then(document.verifyGetSuccess))
+            metas.push(await document.getFromMeta(agent, getInstances))
+            commits.push(await document.getFromCommits(agent, getInstances))
 
-            docs.push(await document.get(agent, docPath, getSchemas).then(document.verifyGetSuccess))
-            metas.push(await document.get(agent, metaPath, getInstances).then(document.verifyGetSuccess))
-            commits.push(await document.get(agent, commitsPath, getInstances).then(document.verifyGetSuccess))
+            docs.push(await document.get(agent, getSchemas))
+            metas.push(await document.getFromMeta(agent, getInstances))
+            commits.push(await document.getFromCommits(agent, getInstances))
 
             const header = lastDataVersionHeader(docs)
             const headerMeta = lastDataVersionHeader(metas)
             const headerCommits = lastDataVersionHeader(commits)
 
-            docs.push(await document.get(agent, docPath, getInstances).set('TerminusDB-Data-Version', header).then(document.verifyGetSuccess))
-            metas.push(await document.get(agent, metaPath, getInstances).set('TerminusDB-Data-Version', headerMeta).then(document.verifyGetSuccess))
-            commits.push(await document.get(agent, commitsPath, getInstances).set('TerminusDB-Data-Version', headerCommits).then(document.verifyGetSuccess))
+            docs.push(await document.get(agent, getInstances).set('TerminusDB-Data-Version', header))
+            metas.push(await document.getFromMeta(agent, getInstances).set('TerminusDB-Data-Version', headerMeta))
+            commits.push(await document.getFromCommits(agent, getInstances).set('TerminusDB-Data-Version', headerCommits))
 
             expectHeaders('branch', docs)
             expectHeaders('meta', metas)
@@ -100,126 +85,94 @@ describe('data-version', function () {
       })
 
       it('fails on bad data version', async function () {
-        const r = await document
-          .get(agent, docPath)
-          .set('TerminusDB-Data-Version', '{}')
-          .then(document.verifyGetFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:BadDataVersion')
-        expect(r.body['api:error']['api:data_version']).to.equal('{}')
+        const x = '{}'
+        await document.get(agent)
+          .set('TerminusDB-Data-Version', x)
+          .fails(api.error.badDataVersion(x))
       })
     })
 
     it('/api/document/.../commit/...', async function () {
-      const commitsPath = endpoint.documentCommits(dbDefaults).path
-      const r1 = await document
-        .get(agent, commitsPath, { query: { as_list: true } })
-        .then(document.verifyGetSuccess)
+      const r1 = await document.getFromCommits(agent, { query: { as_list: true } })
       const initialCommit = r1.body.find((i) => i['@type'] === 'InitialCommit')
       if (util.isUndefinedOrNull(initialCommit)) {
         throw new Error(`Missing InitialCommit in response: ${r1.body}`)
       }
       const commitId = initialCommit.identifier
-      const commitParams = Object.assign({ commitId }, dbDefaults)
-      const commitPath = endpoint.documentCommit(commitParams).path
       const header = 'commit:' + commitId
       const r2 = await document
-        .get(agent, commitPath, { query: { as_list: true } })
+        .getFromCommit(agent, commitId, { query: { as_list: true } })
         .set('TerminusDB-Data-Version', header)
-        .then(document.verifyGetSuccess)
       expect(r2.header['terminusdb-data-version']).to.equal(header)
     })
 
     describe('/api/woql/...', function () {
-      let woqlPath
-      let docPath
       const simpleQuery = {
-        query: {
-          '@type': 'Equals',
-          left: { '@type': 'True' },
-          right: { '@type': 'True' },
-        },
+        '@type': 'Equals',
+        left: { '@type': 'True' },
+        right: { '@type': 'True' },
       }
 
-      before(async function () {
-        woqlPath = endpoint.woqlResource(dbDefaults).path
-        docPath = endpoint.document(dbDefaults).path
-      })
-
       it('fails on bad data version', async function () {
-        const r = await woql
-          .post(agent, woqlPath, simpleQuery)
-          .set('TerminusDB-Data-Version', 'abc')
-          .then(woql.verifyGetFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:BadDataVersion')
-        expect(r.body['api:error']['api:data_version']).to.equal('abc')
+        const x = 'abc'
+        await woql
+          .post(agent, simpleQuery)
+          .set('TerminusDB-Data-Version', x)
+          .fails(api.error.badDataVersion(x))
       })
 
       describe('handles data version headers', function () {
         let h0
 
         before(async function () {
-          await document
-            .insert(agent, docPath, { schema: { '@id': randomType2, '@type': 'Class' } })
-            .then(document.verifyInsertSuccess)
-          const r = await woql
-            .post(agent, woqlPath, simpleQuery)
-            .then(woql.verifyGetSuccess)
+          await document.insert(agent, { schema: { '@id': randomType2, '@type': 'Class' } })
+          const r = await woql.post(agent, simpleQuery)
           h0 = dataVersionHeader(r)
           expect(h0).to.match(/^branch:/)
         })
 
         it('correct', async function () {
-          await woql
-            .post(agent, woqlPath, simpleQuery)
-            .set('TerminusDB-Data-Version', h0)
-            .then(woql.verifyGetSuccess)
+          await woql.post(agent, simpleQuery).set('TerminusDB-Data-Version', h0)
         })
 
         it('wrong', async function () {
           const header = h0.substring(0, h0.length - 1)
-          const r = await woql
-            .post(agent, woqlPath, simpleQuery)
+          await woql
+            .post(agent, simpleQuery)
             .set('TerminusDB-Data-Version', header)
-            .then(woql.verifyGetFailure)
-          expect(r.body['api:error']['@type']).to.equal('api:DataVersionMismatch')
-          expect(r.body['api:error']['api:requested_data_version']).to.equal(header)
-          expect(r.body['api:error']['api:actual_data_version']).to.equal(h0)
+            .fails(api.error.dataVersionMismatch(header, h0))
         })
 
         it('InsertDocument', async function () {
           const insertDocumentQuery = {
-            query: {
-              '@type': 'InsertDocument',
-              identifier: { '@type': 'NodeValue', node: randomType2 + '/0' },
-              document: {
-                '@type': 'Value',
-                dictionary: {
-                  '@type': 'DictionaryTemplate',
-                  data: [
-                    {
-                      '@type': 'FieldValuePair',
-                      field: '@type',
-                      value: { '@type': 'Value', data: randomType2 },
-                    },
-                    {
-                      '@type': 'FieldValuePair',
-                      field: '@id',
-                      value: { '@type': 'Value', data: randomType2 + '/0' },
-                    },
-                  ],
-                },
+            '@type': 'InsertDocument',
+            identifier: { '@type': 'NodeValue', node: randomType2 + '/0' },
+            document: {
+              '@type': 'Value',
+              dictionary: {
+                '@type': 'DictionaryTemplate',
+                data: [
+                  {
+                    '@type': 'FieldValuePair',
+                    field: '@type',
+                    value: { '@type': 'Value', data: randomType2 },
+                  },
+                  {
+                    '@type': 'FieldValuePair',
+                    field: '@id',
+                    value: { '@type': 'Value', data: randomType2 + '/0' },
+                  },
+                ],
               },
             },
-            commit_info: { author: 'a', message: 'm' },
           }
 
           const r1 = await woql
-            .post(agent, woqlPath, insertDocumentQuery)
+            .post(agent, insertDocumentQuery)
             .set('TerminusDB-Data-Version', h0)
-            .then(woql.verifyGetSuccess)
           const h1 = dataVersionHeader(r1)
           const r2 = await woql
-            .post(agent, woqlPath, simpleQuery)
+            .post(agent, simpleQuery)
             .set('TerminusDB-Data-Version', h1)
           const h2 = dataVersionHeader(r2)
 
@@ -233,20 +186,15 @@ describe('data-version', function () {
   })
 
   describe('/api/document/_system', function () {
-    let path
-
     before(async function () {
-      path = endpoint.documentSystem().path
     })
 
     after(async function () {
       const r = await document
-        .del(agent, path, { query: { id: randomType1 + '/0' } })
-        .then(document.verifyDelSuccess)
+        .deleteFromSystem(agent, { query: { id: randomType1 + '/0' } })
       await document
-        .del(agent, path, { query: { graph_type: 'schema', id: randomType1 } })
+        .deleteFromSystem(agent, { query: { graph_type: 'schema', id: randomType1 } })
         .set('TerminusDB-Data-Version', dataVersionHeader(r))
-        .then(document.verifyDelSuccess)
     })
 
     describe('has expected data version for insert', function () {
@@ -261,11 +209,11 @@ describe('data-version', function () {
           const getInstances = { query: { as_list: true } }
           const getSchemas = { query: { graph_type: 'schema', as_list: true } }
 
-          rs.push(await document.get(agent, path, getInstances).then(document.verifyGetSuccess))
-          rs.push(await document.insert(agent, path, object).then(document.verifyInsertSuccess))
-          rs.push(await document.get(agent, path, getSchemas).then(document.verifyGetSuccess))
+          rs.push(await document.getFromSystem(agent, getInstances))
+          rs.push(await document.insertIntoSystem(agent, object))
+          rs.push(await document.getFromSystem(agent, getSchemas))
 
-          rs.push(await document.get(agent, path, getInstances).set('TerminusDB-Data-Version', lastDataVersionHeader(rs)).then(document.verifyGetSuccess))
+          rs.push(await document.getFromSystem(agent, getInstances).set('TerminusDB-Data-Version', lastDataVersionHeader(rs)))
 
           expectHeaders('system', rs)
         })

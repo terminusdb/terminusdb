@@ -50,7 +50,6 @@
               class_property_dictionary/3,
               class_property_dictionary/4,
               prefix_expand_schema/3,
-              prefix_expand/3,
               type_context/4,
               enum_value/3,
               update_id_field/3,
@@ -2040,7 +2039,8 @@ get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
-    ->  get_json_object(DB, Id_Ex, Document)
+    ->  get_json_object(DB, Id_Ex, JSON),
+        put_dict(_{'@id' : Id}, JSON, Document)
     ;   findall(
             Prop-Value,
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
@@ -11020,6 +11020,7 @@ test(json_subobject,
         insert_document(C1,Document,Id)
     ),
     get_document(Desc,Id,JSON),
+
     JSON = json{ '@id':'HasSomeMetaData/reproducible',
                  '@type':'HasSomeMetaData',
                  json:json{some:json{random:"stuff", that:2.0}},
@@ -11051,7 +11052,8 @@ test(top_level_json_with_id,
     ),
     get_document(Desc,Id,JSON),
     JSON =
-    json{json:json{some:json{random:"stuff",that:2.0}},
+    json{'@id' : Id,
+         json:json{some:json{random:"stuff",that:2.0}},
          name:"testing"}.
 
 test(top_level_json_without_id,
@@ -11078,7 +11080,8 @@ test(top_level_json_without_id,
     ),
     get_document(Desc,Id,JSON),
     JSON =
-    json{json:json{some:json{random:"stuff",that:2.0}},
+    json{'@id' : Id,
+         json:json{some:json{random:"stuff",that:2.0}},
          name:"testing"}.
 
 test(replace_document,
@@ -11124,7 +11127,8 @@ test(replace_document,
     get_document(Desc,Id,JSON),
 
     JSON =
-    json{json:json{some:json{random:"stuff",that:false}},
+    json{'@id':'terminusdb:///data/JSONDocument/my_json',
+         json:json{some:json{random:"stuff",that:false}},
          name:"testing"}.
 
 test(insert_num_list,
@@ -11148,7 +11152,9 @@ test(insert_num_list,
     ),
 
     get_document(Desc,Id,JSON),
-    JSON = json{numlist:[1,2,3]}.
+
+    JSON = json{'@id':'terminusdb:///data/JSONDocument/my_json',
+                numlist:[1,2,3]}.
 
 test(replace_hash_document,
      [setup((setup_temp_store(State),
@@ -11232,5 +11238,40 @@ test(can_not_insert_json_class,
         insert_schema_document(C1,json{ '@id' : 'JSONDocument'})
     ).
 
+test(instance_schema_check,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSONDocument/named',
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,_)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(
+            C2,
+            _{ '@type': "Class",
+               '@id': "Point",
+               coordinates : _{ '@type' : "Array",
+                                '@dimensions':2,
+                                '@class' : "xsd:decimal"}}
+        )).
 
 :- end_tests(json_datatype).

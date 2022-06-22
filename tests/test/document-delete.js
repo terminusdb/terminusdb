@@ -1,24 +1,15 @@
-const { expect } = require('chai')
-const { Agent, db, document, endpoint, util } = require('../lib')
+const { Agent, api, db, document, util } = require('../lib')
 
 describe('document-delete', function () {
   let agent
-  let dbPath
-  let docPath
 
   before(async function () {
     agent = new Agent().auth()
-
-    const dbDefaults = endpoint.db(agent.defaults())
-
-    dbPath = dbDefaults.path
-    await db.createAfterDel(agent, dbPath)
-
-    docPath = endpoint.document(dbDefaults).path
+    await db.create(agent)
   })
 
   after(async function () {
-    await db.del(agent, dbPath)
+    await db.delete(agent)
   })
 
   describe('fails for bad parameter type', function () {
@@ -41,30 +32,19 @@ describe('document-delete', function () {
     ]
     for (const [option, paramName, paramType, value] of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document
-          .del(agent, docPath, option)
-          .then(document.verifyDelFailure)
-        expect(r.body['api:error']['@type']).to.equal('api:BadParameterType')
-        expect(r.body['api:error']['api:parameter']).to.equal(paramName)
-        expect(r.body['api:error']['api:expected_type']).to.equal(paramType)
-        expect(r.body['api:error']['api:value']).to.deep.equal(value)
+        await document
+          .delete(agent, option)
+          .fails(api.error.badParameterType(paramName, paramType, value))
       })
     }
   })
 
   it('fails for missing targets', async function () {
-    const r = await document
-      .del(agent, docPath)
-      .then(document.verifyDelFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:MissingTargets')
+    await document.delete(agent).fails(api.error.missingTargets)
   })
 
   it('fails for document not found', async function () {
     const id = util.randomString()
-    const r = await document
-      .del(agent, docPath, { query: { id } })
-      .then(document.verifyDelNotFound)
-    expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
-    expect(r.body['api:error']).to.have.property('api:document_id').that.equals(id)
+    await document.delete(agent, { query: { id } }).notFound(id)
   })
 })

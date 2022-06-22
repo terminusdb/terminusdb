@@ -1,5 +1,4 @@
-const { expect } = require('chai')
-const { Agent, db, endpoint, triples, util } = require('../lib')
+const { Agent, api, db, triples, util } = require('../lib')
 
 describe('triples', function () {
   let agent
@@ -8,40 +7,38 @@ describe('triples', function () {
     agent = new Agent().auth()
   })
 
-  it('passes _system schema', async function () {
-    const { path } = endpoint.triplesSystem()
-    const r = await agent.get(path)
-    expect(r.status).to.equal(200)
+  it('passes get with _system schema', async function () {
+    await triples.getFromSystem(agent)
   })
 
-  it('fails with bad descriptor', async function () {
+  it('fails get with bad graph descriptor', async function () {
     const descriptor = util.randomString()
-    const { path } = endpoint.triples(descriptor)
-    const r = await agent.get(path).then(triples.verifyFailure)
-    expect(r.body['api:error']['@type']).to.equal('api:BadAbsoluteGraphDescriptor')
-    expect(r.body['api:error']['api:absolute_graph_descriptor']).to.equal(descriptor)
+    await triples
+      .get(agent, { descriptor })
+      .fails(api.error.badGraphDescriptor(descriptor))
   })
 
-  it('passes put twice', async function () {
-    const { path: dbPath } = endpoint.db(agent.defaults())
-    const { path: triplesPath } = endpoint.triplesBranch(agent.defaults())
+  it('passes insert twice', async function () {
     // Create a database
-    await db.create(agent, dbPath).then(db.verifyCreateSuccess)
-    const body = { commit_info: { author: 'a', message: 'm' } }
-    body.turtle = `
-      @prefix layer: <http://terminusdb.com/schema/layer#> .
-      @prefix owl: <http://www.w3.org/2002/07/owl#> .
-      layer:LayerIdRestriction a owl:Restriction.`
+    await db.create(agent)
     // Put the first triple
-    await agent.put(triplesPath).send(body).then(triples.verifyInsertSuccess)
-    body.turtle = `
-      @prefix layer: <http://terminusdb.com/schema/layer#> .
-      @prefix owl: <http://www.w3.org/2002/07/owl#> .
-      layer:LayerIdRestriction2 a owl:Restriction.`
+    {
+      const turtle = `
+        @prefix layer: <http://terminusdb.com/schema/layer#> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        layer:LayerIdRestriction a owl:Restriction.`
+      await triples.insertIntoBranch(agent, turtle)
+    }
     // Put the second triple
-    await agent.put(triplesPath).send(body).then(triples.verifyInsertSuccess)
+    {
+      const turtle = `
+        @prefix layer: <http://terminusdb.com/schema/layer#> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        layer:LayerIdRestriction2 a owl:Restriction.`
+      await triples.insertIntoBranch(agent, turtle)
+    }
     // Delete the database
-    await db.del(agent, dbPath).then(db.verifyDeleteSuccess)
+    await db.delete(agent)
   })
 
   // TODO: Create test for this, it responds with an application/json type now... which it isn't.
