@@ -61,8 +61,8 @@ describe('cli-doc', function () {
       }
     })
 
-    it('passes doc query', async function() {
-      const r = await exec(`./terminusdb.sh doc get _system -q '{ "@type" : "User", "name" : "admin"}'`)
+    it('passes doc query', async function () {
+      const r = await exec('./terminusdb.sh doc get _system -q \'{ "@type" : "User", "name" : "admin"}\'')
       const j = JSON.parse(r.stdout)
       expect(j['@id']).to.equal('User/admin')
     })
@@ -138,10 +138,11 @@ describe('cli-doc', function () {
       {
         const r1 = await exec(`./terminusdb.sh log ${dbSpec}/local/branch/test -j`)
         const log = JSON.parse(r1.stdout)
-        const latestCommit = log[0]['identifier']
-        const previousCommit = log[1]['identifier']
+        const latestCommit = log[0].identifier
+        const previousCommit = log[1].identifier
         const r2 = await exec(`./terminusdb.sh apply ${dbSpec} --before_commit=${previousCommit} --after_commit=${latestCommit}`)
-        expect(r2.stdout).to.match(new RegExp(`^Successfully applied`))
+        const regexp = /^Successfully applied/
+        expect(r2.stdout).to.match(regexp)
       }
       {
         const r = await exec(`./terminusdb.sh doc get ${dbSpec} -l --graph_type=instance`)
@@ -150,7 +151,8 @@ describe('cli-doc', function () {
       }
       {
         const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --nuke`)
-        expect(r.stdout).to.match(new RegExp(`^Documents nuked`))
+        const regexp = /^Documents nuked/
+        expect(r.stdout).to.match(regexp)
       }
     })
   })
