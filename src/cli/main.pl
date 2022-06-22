@@ -1382,7 +1382,12 @@ run_command(doc,get, [Path], Opts) :-
     option(id(Id), Opts),
     option(type(Type), Opts),
     option(compress_ids(Compress_Ids), Opts),
-    option(query(Query), Opts),
+    option(query(Query_Atom), Opts),
+
+    (   var(Query_Atom)
+    ->  Query = Query_Atom
+    ;   atom_json_dict(Query_Atom, Query, [default_tag(json)])
+    ),
 
     (   N = unlimited
     ->  Count = unlimited
