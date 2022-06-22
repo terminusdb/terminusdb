@@ -11274,4 +11274,181 @@ test(instance_schema_check,
                                 '@class' : "xsd:decimal"}}
         )).
 
+geojson_schema('[
+    { "@type" : "Enum",
+      "@id" : "FeatureCollection_Type",
+      "@value" : [ "FeatureCollection" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "FeatureCollection",
+      "@key" : { "@type" : "Random" },
+      "name" : { "@type" : "Optional",
+                 "@class" : "xsd:string" },
+      "type": "FeatureCollection_Type",
+      "crs" : { "@type" : "Optional",
+                "@class" : "name" },
+      "properties" : { "@type" : "Optional",
+                       "@class" : "sys:JSON" },
+      "features" : { "@type" : "Set",
+                     "@class": "Feature"}
+    },
+
+    { "@type" : "Enum",
+      "@id" : "Feature_Type",
+      "@value" : [ "Feature" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "Feature",
+      "type" : "Feature_Type",
+      "@key" : { "@type" : "Random" },
+      "id" : { "@type" : "Optional",
+               "@class" : "xsd:string" },
+      "title" : { "@type" : "Optional",
+                  "@class" : "xsd:string" },
+      "geometry" : "Geometry",
+      "properties" : { "@type" : "Optional",
+                       "@class" : "sys:JSON"},
+      "centerline" : { "@type" : "Optional",
+                       "@class" : "Geometry" }
+    },
+
+    { "@type" : "Class",
+      "@id" : "Geometry",
+      "@abstract" : []
+    },
+
+    { "@type" : "Enum",
+      "@id" : "Point_Type",
+      "@value" : [ "Point" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "Point",
+      "@inherits" : "Geometry",
+      "@key" : { "@type" : "Random" },
+      "type" : "Point_Type",
+      "coordinates" : { "@type" : "Array",
+                        "@dimensions" : 1,
+                        "@class" : "xsd:decimal" }
+    },
+
+    { "@type" : "Enum",
+      "@id" : "LineString_Type",
+      "@value" : [ "LineString" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "LineString",
+      "@inherits" : "Geometry",
+      "@key" : { "@type" : "Random" },
+      "type" : "LineString_Type",
+      "coordinates" : { "@type" : "Array",
+                        "@dimensions" : 2,
+                        "@class" : "xsd:decimal" }
+    },
+
+    { "@type" : "Enum",
+      "@id" : "Polygon_Type",
+      "@value" : [ "Polygon" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "Polygon",
+      "@key" : { "@type" : "Random" },
+      "@inherits" : "Geometry",
+      "type" : "Polygon_Type",
+      "coordinates" : { "@type" : "Array",
+                        "@dimensions" : 3,
+                        "@class" : "xsd:decimal" }
+    },
+
+    { "@type" : "Enum",
+      "@id" : "MultiPolygon_Type",
+      "@value" : [ "MultiPolygon" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "MultiPolygon",
+      "@key" : { "@type" : "Random" },
+      "@inherits" : "Geometry",
+      "type" : "MultiPolygon_Type",
+      "coordinates" : { "@type" : "Array",
+                        "@dimensions" : 3,
+                        "@class" : "xsd:decimal" }
+    },
+
+    { "@type" : "Enum",
+      "@id" : "GeometryCollection_Type",
+      "@value" : [ "GeometryCollection" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "GeometryCollection",
+      "@key" : { "@type" : "Random" },
+      "@inherits" : "Geometry",
+      "type" : "GeometryCollection_Type",
+      "geometries" : { "@type" : "Set",
+                       "@class" : "Geometry"}
+    },
+
+    { "@type" : "Enum",
+      "@id" : "Name_Type",
+      "@value" : [ "name" ]
+    },
+
+    { "@type" : "Class",
+      "@id" : "name",
+      "type": "Name_Type",
+      "properties": "sys:JSON"
+    }
+]').
+
+test(geojson_example,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+
+    geojson_schema(Schema_Atom),
+    atom_json_dict(Schema_Atom, Schema_Documents, []),
+
+    with_test_transaction(
+        Desc,
+        C1,
+        forall(member(Schema_Doc, Schema_Documents),
+               insert_schema_document(C1, Schema_Doc))
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2,
+                        _{ 'geometry':
+                           _{ 'coordinates':
+                              [[[-122.42407516836617,
+                                 37.782909438426415,
+                                 0.0]]],
+                              'type': "Polygon"
+                            },
+                           'properties':
+                           _{
+                               'BLKLOT': "VACSTWIL",
+                               'BLOCK_NUM': "VACST",
+                               'FROM_ST': null,
+                               'LOT_NUM': "WIL",
+                               'MAPBLKLOT': "VACSTWIL",
+                               'ODD_EVEN': null,
+                               'STREET': null,
+                               'ST_TYPE': null,
+                               'TO_ST': null
+                           },
+                           'type': "Feature"
+                         },
+                        false,
+                        _Id)
+    ).
+
 :- end_tests(json_datatype).

@@ -619,7 +619,7 @@ candidate_subsumed(Database,'http://terminusdb.com/schema/sys#Top', Candidate, D
     \+ is_abstract(Database, Candidate).
 candidate_subsumed(Database, Super, Candidate, Dictionary) =>
     matches_shape(Database, Candidate, Dictionary),
-    class_subsumed(Database, Super, Candidate).
+    class_subsumed(Database, Candidate, Super).
 
 infer_type(Database, Prefixes, Dictionary, Type, Annotated) :-
     empty_assoc(In),
