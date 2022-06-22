@@ -6,7 +6,6 @@ on:
     - cron:  '45 2 * * *'
   workflow_dispatch:
   workflow_call:
-  push:
 
 jobs:
   snap:
