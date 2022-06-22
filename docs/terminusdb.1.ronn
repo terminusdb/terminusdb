@@ -88,6 +88,9 @@ Query a database.
   * `-a`, `--author`=[value]:
   author to place on the commit
 
+  * `-j`, `--json`=[value]:
+  return results as a json object
+
 ### push
 
 `terminusdb push DB_SPEC`
