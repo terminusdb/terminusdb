@@ -77,7 +77,6 @@ json_hash(Val, Hash) :-
 
 json_document_triple(Dict, Id, Triple),
 is_dict(Dict) =>
-    format("Moo~n"),
     global_prefix_expand(sys:'JSONDocument', Sys_JSON_Document),
     global_prefix_expand(rdf:type, Rdf_Type),
 
