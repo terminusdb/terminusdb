@@ -1,3 +1,22 @@
+# TerminusDB Server v10.1.1 Release Notes
+
+## Enhancements
++ Added snap distribution
++ CLI query and log commands can now output as json
++ CLI apply command added for applying patches
++ Document ID list returned in various CLI commands made to print in a uniform way
+
+## Bug fixes
++ CLI branch command fixed
++ CLI doc command query switch fixed
++ CLI diff argument processing fix
++ Fix inference subsumption order
++ Resolved double dependency on tokio in store backend
++ Fix -c flag on CLI document replace
+
+## Other
++ Integration test suite refactored
+
 # TerminusDB Server v10.1.0 Release Notes
 
 ## Enhancements
