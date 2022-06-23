@@ -77,7 +77,13 @@ The current repository version is: <!--
       <!-- [[[end]]] -->
    2. Change the value for `CURRENT_REPO_VERSION` to the next planned version.
 
-7. Review the PR for correct version.
+7. (_PR_) Update the version in [`distribution/snap/snapcraft.yml`](../distribution/snap/snapcraft.yml).
+   1. Change the value for `version: ` to:
+      [[[cog cog.out(current_repo_version) ]]] -->
+      `v10.1.2`
+      <!-- [[[end]]] -->
+
+8. Review the PR for correct version.
    1. Wait for CI to pass.
    2. Approve.
    3. Merge.
