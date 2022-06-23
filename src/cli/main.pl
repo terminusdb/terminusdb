@@ -142,7 +142,14 @@ opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
            longflags([author]),
            shortflags([a]),
            default('admin'),
-           help('author to place on the commit')]]).
+           help('author to place on the commit')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('return results as a json object')]
+         ]).
 opt_spec(push,'terminusdb push DB_SPEC',
          'Push a branch.',
          [[opt(help),
@@ -388,6 +395,12 @@ or two commits (path required).',
            shortflags([k]),
            default('{"@id" : true, "_id" : true}'),
            help('Skeleton of the document to retain as context')],
+          [opt(copy_value),
+           type(boolean),
+           longflags(['copy-value',copy_value]),
+           shortflags([c]),
+           default(false),
+           help('Maintain explit copies of diffs in lists')],
           [opt(docid),
            type(atom),
            longflags([docid]),
@@ -407,6 +420,55 @@ or two commits (path required).',
            default('_'),
            help('Commit of the *after* document(s)')]
          ]).
+opt_spec(apply,'terminusdb apply [Path] OPTIONS',
+         'Apply a diff to path which is obtained from the differences between two commits',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `apply` command')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: apply'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(keep),
+           type(atom),
+           longflags([keep]),
+           shortflags([k]),
+           default('{"@id" : true, "_id" : true}'),
+           help('Skeleton of the document to retain as context')],
+          [opt(type),
+           type(atom),
+           longflags([type]),
+           shortflags([t]),
+           default(squash),
+           help('Variety of commit to create on apply (currently only squash)')],
+          [opt(match_final_state),
+           type(boolean),
+           longflags(['match-final-state',match_final_state]),
+           shortflags([f]),
+           default(true),
+           help('Allow conflicting patch to apply if patch would yield the same final state')],
+          [opt(before_commit),
+           type(atom),
+           longflags([before_commit,'before-commit']),
+           shortflags([p]),
+           help('Commit of the *before* document(s)')],
+          [opt(after_commit),
+           type(atom),
+           longflags([after_commit,'after-commit']),
+           shortflags([s]),
+           help('Commit of the *after* document(s)')]
+         ]).
 opt_spec(log,'terminusdb log DB_SPEC',
          'Get the log for a branch given by DB_SPEC.',
          [[opt(help),
@@ -414,7 +476,14 @@ opt_spec(log,'terminusdb log DB_SPEC',
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `log` command')]]).
+           help('print help for the `log` command')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('return log as JSON')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -927,16 +996,20 @@ run_command(query,[Path,Query],Opts) :-
 
     option(author(Author), Opts),
     option(message(Message), Opts),
+
     Commit_Info = commit_info{author : Author, message : Message},
 
     api_report_errors(
         woql,
         (   woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Commit_Info, [], _All_Witnesses, no_data_version, _New_Data_Version, Context, Response),
-            get_dict(prefixes, Context, Context_Prefixes),
-            default_prefixes(Defaults),
-            put_dict(Defaults, Context_Prefixes, Final_Prefixes),
-            pretty_print_query_response(Response,Final_Prefixes,String),
-            format(current_output,'~s',[String])
+            (   option(json(true), Opts)
+            ->  json_write_dict(user_error, Response, [])
+            ;   get_dict(prefixes, Context, Context_Prefixes),
+                default_prefixes(Defaults),
+                put_dict(Defaults, Context_Prefixes, Final_Prefixes),
+                pretty_print_query_response(Response,Final_Prefixes,String),
+                format(current_output,'~s',[String])
+            )
         )).
 run_command(push,[Path],Opts) :-
     super_user_authority(Auth),
@@ -1129,6 +1202,7 @@ run_command(diff, Args, Opts) :-
     option(docid(DocId), Opts),
     option(before_commit(Before_Commit), Opts),
     option(after_commit(After_Commit), Opts),
+    option(copy_value(Copy_Value), Opts),
 
     api_report_errors(
         diff,
@@ -1136,33 +1210,70 @@ run_command(diff, Args, Opts) :-
         ->  atom_json_dict(Before_Atom, Before, [default_tag(json)]),
             atom_json_dict(After_Atom, After, [default_tag(json)]),
             atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            api_diff(System_DB, Auth, Before, After, Keep, Patch)
+            Options = [keep(Keep),copy_value(Copy_Value)],
+            api_diff(System_DB, Auth, Before, After, Patch, Options)
         ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff_id(System_DB, Auth, Path, Before_Commit,
-                        After_Commit, DocId, Keep, Patch)
+                        After_Commit, DocId, Patch, Options)
         ;   \+ var(After_Commit), \+ var(Before_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff_all_documents(System_DB, Auth, Path,
                                    Before_Commit, After_Commit,
-                                   Keep, Patch)
-        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit)
+                                   Patch, Options)
+        ;   \+ var(DocId), \+ var(After_Atom), \+ var(Before_Commit),
+            [Path] = Args
         ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
             atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+            Options = [keep(Keep),copy_value(Copy_Value)],
             api_diff_id_document(System_DB, Auth, Path,
                                  Before_Commit, After,
-                                 DocId, Keep, Patch)
+                                 DocId, Patch, Options)
         )
     ),
     json_write_dict(user_output, Patch, [width(0)]),
     nl.
-run_command(log,[Path], _Opts) :-
+run_command(apply,[Path], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(before_commit(Before_Commit), Opts),
+    option(after_commit(After_Commit), Opts),
+    option(author(Author), Opts),
+    option(message(Message), Opts),
+    option(keep(Keep_Atom), Opts),
+    option(type(Type_Atom), Opts),
+    option(match_final_state(Match_Final_State), Opts),
+
+    api_report_errors(
+        diff,
+        catch(
+            (   atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
+                api_apply_squash_commit(System_DB, Auth, Path, commit_info{
+                                                                   author: Author,
+                                                                   message: Message},
+                                        Before_Commit, After_Commit,
+                                        [type(Type_Atom),
+                                         keep(Keep),
+                                         match_final_state(Match_Final_State)]),
+                format(current_output,"Successfully applied\n",[])
+            ),
+            error(apply_squash_witnesses(Witnesses)),
+            json_write(current_output,Witnesses)
+        )
+    ).
+run_command(log,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     api_log(System_DB, Auth, Path, Log),
-    format_log(current_output,Log).
+    (   option(json(true), Opts)
+    ->  json_write_dict(current_output, Log, [])
+    ;   format_log(current_output,Log)
+    ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
@@ -1173,8 +1284,8 @@ run_command(branch,create,[Path],Opts) :-
 
     option(origin(Origin_Base), Opts),
     (   Origin_Base = false
-    ->  Origin_Option = none
-    ;   Origin_Option = some(Origin_Base)),
+    ->  Origin_Option = empty(_,_)
+    ;   Origin_Option = branch(Origin_Base)),
     api_report_errors(
         branch,
         branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
@@ -1292,7 +1403,12 @@ run_command(doc,get, [Path], Opts) :-
     option(id(Id), Opts),
     option(type(Type), Opts),
     option(compress_ids(Compress_Ids), Opts),
-    option(query(Query), Opts),
+    option(query(Query_Atom), Opts),
+
+    (   var(Query_Atom)
+    ->  Query = Query_Atom
+    ;   atom_json_dict(Query_Atom, Query, [default_tag(json)])
+    ),
 
     (   N = unlimited
     ->  Count = unlimited
