@@ -1,6 +1,6 @@
 name: terminusdb
 title: TerminusDB
-version: v10.1.0
+version: v10.1.1
 license: Apache-2.0
 summary: Document graph database
 description: |
