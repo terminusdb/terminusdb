@@ -74,7 +74,8 @@ RUN set -eux; \
 
 # Build the ${DIST} executable. Set the default command.
 FROM base_${DIST}
-RUN adduser --system --group --no-create-home terminusdb && \
+RUN RUN groupadd -r -g 999 terminusdb && \
+    useradd -r -g terminusdb -u 999 terminusdb && \
     mkdir storage && \
     chown terminusdb:terminusdb storage
 USER terminusdb
