@@ -192,6 +192,7 @@ jobs:
 
       - name: Run lint
         run: |
+          make download-lint # Download the linter first
           docker load < terminusdb-server-docker-image.tar.gz
           docker run \
             -v $(pwd):/app/terminusdb \
