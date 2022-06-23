@@ -9,6 +9,7 @@
               delete_json_object/3,
               delete_json_object/4
           ]).
+
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
@@ -17,6 +18,8 @@
 :- use_module(core(document/instance)).
 :- use_module(core(document/schema)).
 
+:- use_module(library(crypto)).
+:- use_module(library(lists)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
 :- use_module(library(plunit)).
