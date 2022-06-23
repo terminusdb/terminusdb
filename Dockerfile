@@ -74,4 +74,8 @@ RUN set -eux; \
 
 # Build the ${DIST} executable. Set the default command.
 FROM base_${DIST}
+RUN adduser --system --group --no-create-home terminusdb && \
+    mkdir storage && \
+    chown terminusdb:terminusdb storage
+USER terminusdb
 CMD ["/app/terminusdb/distribution/init_docker.sh"]
