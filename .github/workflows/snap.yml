@@ -1,0 +1,36 @@
+# Build and run tests every night on non-Docker systems.
+name: Snap
+
+on:
+  schedule:
+    - cron:  '45 2 * * *'
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - run: rsync -r ./ distribution/terminusdb_source/
+
+      - uses: snapcore/action-build@v1
+        id: snapcraft
+        with:
+          path: distribution
+
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: terminusdb-snap
+          path: ${{ steps.snapcraft.outputs.snap }}
+
+      - run: sudo snap install ${{ steps.snapcraft.outputs.snap }} --dangerous
+
+      - run: |
+          terminusdb store init
+          terminusdb serve &
+          export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
+          cd tests && npm i && npm run test
