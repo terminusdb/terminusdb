@@ -3,6 +3,26 @@
 
 json_data_prefix('terminusdb:///json/').
 
+json_type_rdf_type(X,R),
+string(X) =>
+    global_prefix_expand(xsd:string, T),
+    R = X^^T.
+json_type_rdf_type(X,R),
+number(X) =>
+    global_prefix_expand(xsd:decimal, T),
+    R = X^^T.
+json_type_rdf_type(X,R),
+atom(X),
+memberchk(X,[true,false]) =>
+    global_prefix_expand(xsd:boolean, T),
+    R = X^^T.
+json_type_rdf_type(X,R),
+atom(X),
+X = null =>
+    global_prefix_expand(xsd:token, T),
+    R = X^^T.
+
+
 :- if(false).
 json_hash_init("").
 
@@ -98,7 +118,8 @@ json_subdocument_triple(Val, Triple_Or_Hash) =>
     format(string(Val_Quoted), "~q", [Val]),
     json_hash_expand(Context, Val_Quoted, _, Context2),
     json_hash_expand(Context2, ")", Hash, _),
-    Triple_Or_Hash = hash(Hash, Val).
+    json_type_rdf_type(Val, Rdf_Val),
+    Triple_Or_Hash = hash(Hash, Rdf_Val).
 
 json_list_triple(Nil, Hash, Hash2),
 Nil == [] =>
