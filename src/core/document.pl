@@ -78,10 +78,9 @@
               % json_rdf.pl
               is_json_document_type/1,
               is_json_subdocument_type/1,
-              json_object_triple/3,
-              json_object_triple/4,
+              json_document_triple/3,
+              json_subdocument_triple/4,
               assign_json_document_id/2,
-              assign_json_object_id/2,
               get_json_object/3
           ]).
 

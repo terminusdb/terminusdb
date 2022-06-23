@@ -1533,7 +1533,7 @@ json_triple_(JSON,_,Triple) :-
     get_dict('@type', JSON, 'http://terminusdb.com/schema/sys#JSONDocument'),
     !,
     get_dict('@id', JSON, Id),
-    json_object_triple(JSON, Id, Triple).
+    json_document_triple(JSON, Id, Triple).
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
     get_dict('@value', JSON, _),
@@ -1591,7 +1591,7 @@ json_triple_(JSON,Context,Triple) :-
         ;   global_prefix_expand(sys:'JSON', Sys_JSON),
             get_dict('@type', Value, Sys_JSON)
         ->  del_dict('@type', Value, _, Pure),
-            json_object_triple(ID,Key,Pure,Triple)
+            json_subdocument_triple(ID,Key,Pure,Triple)
         ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
             list_id_key_context_triple(List,ID,Key,Context,Triple)
@@ -2706,9 +2706,7 @@ replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures
     do_or_die(
         (   del_dict('@id', Document, Id, JSON)
         ->  prefix_expand(Id, Prefixes, Id_Ex),
-            (   is_json_hash(Id_Ex)
-            ->  assign_json_object_id(JSON, Id_Ex)
-            ;   true)
+            \+ is_json_hash(Id_Ex)
         ),
         error(can_not_replace_at_hashed_id(Document), _)),
     catch(delete_json_object(Transaction, false, Id_Ex),

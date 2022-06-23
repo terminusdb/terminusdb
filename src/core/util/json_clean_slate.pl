@@ -74,6 +74,13 @@ is_dict(Dict) =>
         ;   X = hash(_Inner_Hash, Link),
             Triple = t(Id, Expanded_Property, Link))).
 
+json_subdocument_triple(Dict, Id, Property, Triple) :-
+    json_subdocument_triple(Dict, Triple_Or_Hash),
+    (   Triple_Or_Hash = t(_,_,_)
+    ->  Triple = Triple_Or_Hash
+    ;   Triple_Or_Hash = hash(_, Node),
+        Triple = t(Id, Property, Node)).
+
 json_subdocument_triple(Dict, Triple_Or_Hash),
 is_dict(Dict) =>
     json_hash_init("Dict(", Init_Hash),
