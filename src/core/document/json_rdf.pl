@@ -18,7 +18,7 @@
 :- use_module(core(document/instance)).
 :- use_module(core(document/schema)).
 
-:- use_module(library(crypto)).
+:- use_module(library(crypto_hash)).
 :- use_module(library(lists)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
