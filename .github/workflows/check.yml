@@ -188,11 +188,10 @@ jobs:
         with:
           name: terminusdb-server-docker-image
 
-      - run: make download-lint
+      - run: make download-lint && chmod -R 777 .deps
 
       - name: Run lint
         run: |
-          make download-lint # Download the linter first
           docker load < terminusdb-server-docker-image.tar.gz
           docker run \
             -v $(pwd):/app/terminusdb \
