@@ -13,6 +13,7 @@
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
 :- use_module(core(api)).
+:- use_module(core(plugins)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
@@ -62,6 +63,7 @@ terminus_server(Argv,Wait) :-
     worker_amount(Workers),
     load_jwt_conditionally,
     HTTPOptions = [port(Port), workers(Workers)],
+    foreach(pre_server_startup_hook(Port),true),
     catch(http_server(http_dispatch, HTTPOptions),
           E,
           (
@@ -90,6 +92,7 @@ terminus_server(Argv,Wait) :-
     (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
         http_delete_handler(id(busy_loading)),
         welcome_banner(Server,Argv),
+        foreach(post_server_startup_hook(Port),true),
         (   Wait = true
         ->  http_current_worker(Port,ThreadID),
             thread_join(ThreadID, _Status)
