@@ -1533,7 +1533,7 @@ json_triple_(JSON,_,Triple) :-
     get_dict('@type', JSON, 'http://terminusdb.com/schema/sys#JSONDocument'),
     !,
     get_dict('@id', JSON, Id),
-    json_object_triple(JSON, Id, Triple).
+    json_document_triple(JSON, Id, Triple).
 json_triple_(JSON,_,_Triple) :-
     is_dict(JSON),
     get_dict('@value', JSON, _),
@@ -1591,7 +1591,7 @@ json_triple_(JSON,Context,Triple) :-
         ;   global_prefix_expand(sys:'JSON', Sys_JSON),
             get_dict('@type', Value, Sys_JSON)
         ->  del_dict('@type', Value, _, Pure),
-            json_object_triple(ID,Key,Pure,Triple)
+            json_subdocument_triple(ID,Key,Pure,Triple)
         ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
             list_id_key_context_triple(List,ID,Key,Context,Triple)
@@ -2706,9 +2706,7 @@ replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures
     do_or_die(
         (   del_dict('@id', Document, Id, JSON)
         ->  prefix_expand(Id, Prefixes, Id_Ex),
-            (   is_json_hash(Id_Ex)
-            ->  assign_json_object_id(JSON, Id_Ex)
-            ;   true)
+            \+ is_json_hash(Id_Ex)
         ),
         error(can_not_replace_at_hashed_id(Document), _)),
     catch(delete_json_object(Transaction, false, Id_Ex),
@@ -10970,30 +10968,30 @@ test(json_triples,
     json_triples(DB, Document, Triples),
     Triples =
     [ t('terminusdb:///data/HasSomeMetaData/i_exist',
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'terminusdb:///schema#HasSomeMetaData'),
-      t('terminusdb:///data/HasSomeMetaData/i_exist',
-        'terminusdb:///schema#json',
-        'terminusdb:///json/JSON/SHA1/9057c8954b32149b1ab6461efb26be91dcf80b93'),
-      t('terminusdb:///json/JSON/SHA1/9057c8954b32149b1ab6461efb26be91dcf80b93',
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'http://terminusdb.com/schema/sys#JSON'),
-      t('terminusdb:///json/JSON/SHA1/9057c8954b32149b1ab6461efb26be91dcf80b93',
-        'http://terminusdb.com/schema/json#some',
-        'terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d'),
-      t('terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d',
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'http://terminusdb.com/schema/sys#JSON'),
-      t('terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d',
-        'http://terminusdb.com/schema/json#random',
-        "stuff"^^'http://www.w3.org/2001/XMLSchema#string'),
-      t('terminusdb:///json/JSON/SHA1/bae7a36946dceeef0888c3bd67e558b3b956b80d',
-        'http://terminusdb.com/schema/json#that',
-        2.0^^'http://www.w3.org/2001/XMLSchema#decimal'),
-      t('terminusdb:///data/HasSomeMetaData/i_exist',
-        'terminusdb:///schema#name',
-        "testing"^^'http://www.w3.org/2001/XMLSchema#string') ].
-
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'terminusdb:///schema#HasSomeMetaData'),
+	  t('terminusdb:///json/JSON/SHA1/9c375c0d2cd0bd7949e387cc28dafbc1c5be8de3',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://terminusdb.com/schema/sys#JSON'),
+	  t('terminusdb:///json/JSON/SHA1/9c375c0d2cd0bd7949e387cc28dafbc1c5be8de3',
+		'http://terminusdb.com/schema/json#that',
+		2.0^^'http://www.w3.org/2001/XMLSchema#decimal'),
+	  t('terminusdb:///json/JSON/SHA1/9c375c0d2cd0bd7949e387cc28dafbc1c5be8de3',
+		'http://terminusdb.com/schema/json#random',
+		"stuff"^^'http://www.w3.org/2001/XMLSchema#string'),
+	  t('terminusdb:///json/JSON/SHA1/5f6f1ff2d0ceea4cc50351637eeaf3bc469f15df',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://terminusdb.com/schema/sys#JSON'),
+	  t('terminusdb:///json/JSON/SHA1/5f6f1ff2d0ceea4cc50351637eeaf3bc469f15df',
+		'http://terminusdb.com/schema/json#some',
+		'terminusdb:///json/JSON/SHA1/9c375c0d2cd0bd7949e387cc28dafbc1c5be8de3'),
+	  t('terminusdb:///data/HasSomeMetaData/i_exist',
+		'terminusdb:///schema#json',
+		'terminusdb:///json/JSON/SHA1/5f6f1ff2d0ceea4cc50351637eeaf3bc469f15df'),
+	  t('terminusdb:///data/HasSomeMetaData/i_exist',
+		'terminusdb:///schema#name',
+		"testing"^^'http://www.w3.org/2001/XMLSchema#string')
+	].
 
 test(json_subobject,
      [setup((setup_temp_store(State),
