@@ -80,7 +80,8 @@ jobs:
             -D LAST_RELEASED_VERSION=$LAST_RELEASED_VERSION \
             -D CURRENT_REPO_VERSION=$CURRENT_REPO_VERSION \
             docs/release-steps.md \
-            src/config/terminus_config.pl
+            src/config/terminus_config.pl \
+            distribution/snap/snapcraft.yaml
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v4
@@ -89,6 +90,7 @@ jobs:
           file_pattern: >-
             docs/release-steps.md
             src/config/terminus_config.pl
+            distribution/snap/snapcraft.yaml
 
   build:
     name: Build
@@ -218,6 +220,38 @@ jobs:
             -X POST \
             -H 'Accept: application/vnd.github.everest-preview+json' \
             -u rrooij:${{ secrets.PAT }} -d '{ "event_type": "Trigger from community", "client_payload": {"commit": "${{ github.sha }}" } }'
+
+  trigger_snap:
+    name: Trigger snap build
+    if: >-
+      github.repository == 'terminusdb/terminusdb' &&
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - is_build_required
+      - all_checks_pass_with_build
+    uses: ./.github/workflows/snap.yml
+
+  release_snap:
+    name: Release the build snap
+    needs: trigger_snap
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Snap image
+        uses: actions/download-artifact@v3
+        with:
+          name: terminusdb-snap
+          path: download_snap/
+      - name: Determine exact snap path
+        id: snap_path_step
+        run: echo "::set-output name=snap_path::$(find download_snap -name '*.snap')"
+      - uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_LOGIN }}
+        with:
+          snap: ${{ steps.snap_path_step.outputs.snap_path }}
+          release: stable
 
   trigger_docs_update:
     name: Trigger docs update
