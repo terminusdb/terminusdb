@@ -27,7 +27,8 @@
               check_insecure_user_header_enabled/1,
               clear_check_insecure_user_header_enabled/0,
               clear_insecure_user_header_key/0,
-              pinned_databases/1
+              pinned_databases/1,
+              plugin_path/1
           ]).
 
 :- use_module(library(pcre)).

@@ -4,6 +4,8 @@
               post_server_startup_hook/1,
               load_plugins/0
           ]).
+:- use_module(library(lists)).
+:- use_module(library(filesex)).
 :- use_module(config(terminus_config)).
 
 :- multifile post_commit_hook/2.
