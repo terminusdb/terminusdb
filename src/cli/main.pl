@@ -22,6 +22,7 @@
               [do_or_die/2, token_authorization/2,
                basic_authorization/3, intersperse/3,
                with_memory_file/1, with_memory_file_stream/3]).
+:- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -39,6 +40,8 @@
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
+
+    load_plugins,
     % Better error handling here...
     catch_with_backtrace(
         (   set_prolog_flag(verbose, true),

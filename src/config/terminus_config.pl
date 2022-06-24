@@ -87,6 +87,10 @@ default_database_path(Path) :-
 db_path(Path) :-
     default_database_path(Path).
 
+plugin_path(Path) :-
+    getenv_default('TERMINUSDB_PLUGINS_PATH', './storage/plugins', Value),
+    absolute_file_name(Value, Path).
+
 jwt_enabled_env_var :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
 

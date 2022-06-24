@@ -127,3 +127,7 @@ add_enterprise_test_path :-
 :- add_enterprise_test_path.
 :- set_prolog_flag(terminusdb_enterprise, true).
 :- endif.
+
+plugin_path(Path) :-
+    Value = './storage/plugins',
+    absolute_file_name(Value, Path).
