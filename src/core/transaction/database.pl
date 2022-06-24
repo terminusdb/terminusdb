@@ -276,7 +276,7 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
     put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data),
-    ignore(post_commit_hook(Validations, Meta_Data)).
+    ignore(foreach(post_commit_hook(Validations, Meta_Data), true)).
 
 /* Note: This should not exist */
 graph_inserts_deletes(Graph, I, D) :-
