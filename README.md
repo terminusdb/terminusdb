@@ -79,8 +79,8 @@ You can also install TerminusDB from the [Source Code](https://terminusdb.com/do
 A simple example creating a person with friends can be created as follows:
 
 ```shell
-./terminusdb db create admin/example1
-./terminusdb doc insert --graph_type=schema admin/example1 <<EOF
+terminusdb db create admin/example1
+terminusdb doc insert --graph_type=schema admin/example1 <<EOF
 { "@id" : "Person",
   "@type" : "Class",
   "name" : "xsd:string",
@@ -88,7 +88,7 @@ A simple example creating a person with friends can be created as follows:
   "friends" : { "@type" : "Set",
                 "@class" : "Person" }}
 EOF
-./terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
+terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 { "@type" : "Person","name" : "Gavin", "occupation" : "Coder"}
 EOF
 ```
@@ -105,9 +105,9 @@ If you make a data product called `example` in the team
 TerminusDB CLI. You should get an API token from your profile page and replace `'XYZ'` with this token.
 
 ```shell
-./terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
-./terminusdb fetch admin/example1 --token='XYZ'
-./terminusdb push admin/example1 --token='XYZ'
+terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
+terminusdb fetch admin/example1 --token='XYZ'
+terminusdb push admin/example1 --token='XYZ'
 ```
 
 Once completed, you'll have a remote copy of this database.
