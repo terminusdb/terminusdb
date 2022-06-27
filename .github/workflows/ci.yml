@@ -110,10 +110,19 @@ jobs:
     needs: build
     uses: ./.github/workflows/benchmark.yml
 
+
+  # This is required for status checks.
+  all_checks_pass_with_build:
+    name: All checks pass
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - run: echo "Celebrate! 🥳"
+
   docs:
     name: Update docs
     runs-on: ubuntu-latest
-    needs: build
+    needs: all_checks_pass_with_build
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v2
@@ -128,7 +137,8 @@ jobs:
           sudo apt-get install --no-install-recommends ronn
           ronn --version
           docker load < terminusdb-server-docker-image.tar.gz
-          HELP="$(docker run --rm --volume $(pwd)/docs:/app/terminusdb/docs terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)" envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
+          export HELP="$(docker run --rm terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)"
+          envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
           ronn --roff docs/terminusdb.1.ronn
 
       - name: Commit changes
@@ -136,14 +146,6 @@ jobs:
         with:
           commit_message: Update man page
           file_pattern: docs/terminusdb.1.*
-
-  # This is required for status checks.
-  all_checks_pass_with_build:
-    name: All checks pass
-    runs-on: ubuntu-latest
-    needs: check
-    steps:
-      - run: echo "Celebrate! 🥳"
 
   # This is required for status checks.
   all_checks_pass_without_build:
