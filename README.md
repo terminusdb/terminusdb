@@ -51,7 +51,7 @@ d9fa4a1acf93: Pulling fs layer
 
 ### To stop, attach, etc, see usage
 ```
-./terminusdb-container 
+./terminusdb-container
 
 USAGE:
   terminusdb-container [COMMAND]
