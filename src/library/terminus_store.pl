@@ -693,7 +693,7 @@ clean(TestDir) :-
 
 createng(TestDir) :-
     random_string(RandomString),
-    atomic_list_concat(["testdir", RandomString], TestDir),
+    atomic_list_concat(["storage/testdir", RandomString], TestDir),
     make_directory(TestDir),
     open_directory_store(TestDir, X),
     create_named_graph(X, "sometestdb", _).
@@ -715,9 +715,9 @@ test(open_directory_store_atom_exception, [
     open_directory_store(234, _).
 
 test(create_db, [cleanup(clean(TestDir))]) :-
-    make_directory("testdir"),
-    TestDir = 'testdir',
-    open_directory_store("testdir", X),
+    make_directory("storage/testdir"),
+    TestDir = 'storage/testdir',
+    open_directory_store("storage/testdir", X),
     create_named_graph(X, "sometestdb", _).
 
 

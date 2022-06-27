@@ -88,6 +88,9 @@ Query a database.
   * `-a`, `--author`=[value]:
   author to place on the commit
 
+  * `-j`, `--json`=[value]:
+  return results as a json object
+
 ### push
 
 `terminusdb push DB_SPEC`
@@ -254,8 +257,41 @@ or two commits (path required).
   * `-k`, `--keep`=[value]:
   Skeleton of the document to retain as context
 
+  * `-c`, `--copy-value`, `--copy_value`=[value]:
+  Maintain explit copies of diffs in lists
+
   * `-d`, `--docid`=[value]:
   document id to use for comparisons
+
+  * `-p`, `--before_commit`, `--before-commit`=[value]:
+  Commit of the *before* document(s)
+
+  * `-s`, `--after_commit`, `--after-commit`=[value]:
+  Commit of the *after* document(s)
+
+### apply
+
+`terminusdb apply [Path] OPTIONS`
+
+Apply a diff to path which is obtained from the differences between two commits
+
+  * `-h`, `--help`=[value]:
+  print help for the `apply` command
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-k`, `--keep`=[value]:
+  Skeleton of the document to retain as context
+
+  * `-t`, `--type`=[value]:
+  Variety of commit to create on apply (currently only squash)
+
+  * `-f`, `--match-final-state`, `--match_final_state`=[value]:
+  Allow conflicting patch to apply if patch would yield the same final state
 
   * `-p`, `--before_commit`, `--before-commit`=[value]:
   Commit of the *before* document(s)
@@ -271,6 +307,9 @@ Get the log for a branch given by DB_SPEC.
 
   * `-h`, `--help`=[value]:
   print help for the `log` command
+
+  * `-j`, `--json`=[value]:
+  return log as JSON
 
 ### branch create
 

@@ -1,15 +1,15 @@
 :- module('document/json_rdf', [
               is_json_document_type/1,
               is_json_subdocument_type/1,
-              json_object_triple/3,
-              json_object_triple/4,
+              json_document_triple/3,
+              json_subdocument_triple/4,
               assign_json_document_id/2,
-              assign_json_object_id/2,
               get_json_object/3,
               insert_json_object/3,
               delete_json_object/3,
               delete_json_object/4
           ]).
+
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
@@ -18,6 +18,8 @@
 :- use_module(core(document/instance)).
 :- use_module(core(document/schema)).
 
+:- use_module(library(sha)).
+:- use_module(library(lists)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
 :- use_module(library(plunit)).
@@ -55,48 +57,119 @@ X = null =>
     global_prefix_expand(xsd:token, T),
     R = X^^T.
 
-json_object_triple(Parent_Id, Parent_Prop, Object, Triple),
-is_dict(Object) =>
-    assign_json_object_id(Object,Id),
-    global_prefix_expand(rdf:type, RDF_Type),
-    global_prefix_expand(sys:'JSON', JSON),
-    % Generate triples from fields
-    (   Triple = t(Parent_Id, Parent_Prop, Id)
-    ;   Triple = t(Id, RDF_Type, JSON)
-    ;   get_dict(Key,Object,Value),
-        uri_encoded(segment, Key, Encoded_Key),
-        global_prefix_expand(json:Encoded_Key, Prop),
-        json_object_triple(Id,Prop,Value,Triple)
-    ).
-json_object_triple(Parent_Id, Parent_Prop, Object, Triple),
-is_list(Object),
-Object = [Head|Tail] =>
-    variant_sha1(Object, Hash),
-    json_data_prefix(Data),
-    atomic_list_concat([Data,'Cons/SHA1/',Hash], Id),
-    global_prefix_expand(rdf:type, RDF_Type),
-    global_prefix_expand(rdf:first, RDF_First),
-    global_prefix_expand(rdf:rest, RDF_Rest),
-    global_prefix_expand(rdf:'List', RDF_List),
-    (   Triple = t(Parent_Id, Parent_Prop, Id)
-    ;   Triple = t(Id,RDF_Type,RDF_List)
-    ;   json_object_triple(Id,RDF_First,Head,Triple)
-    ;   json_object_triple(Id,RDF_Rest,Tail,Triple)
-    ).
-json_object_triple(Parent_Id, Parent_Prop, Object, Triple),
-is_list(Object),
-Object = [] =>
-    global_prefix_expand(rdf:nil, RDF_Nil),
-    Triple = t(Parent_Id,Parent_Prop, RDF_Nil).
-json_object_triple(Parent_Id, Parent_Prop, Object, Triple) =>
-    json_type_rdf_type(Object, Value),
-    Triple = t(Parent_Id, Parent_Prop, Value).
+json_hash_init(Ctx) :-
+    sha_new_ctx(Ctx, []).
 
+json_hash_expand(Context_In, Val, Hash_Out, Context_Out),
+string(Val) =>
+    sha_hash_ctx(Context_In, Val, Context_Out, Hash_List),
+    hash_atom(Hash_List, Hash_Out_Atom),
+    atom_string(Hash_Out_Atom, Hash_Out).
 
-assign_json_object_id(Object, Id) :-
-    variant_sha1(Object, Hash),
-    json_data_prefix(Data),
-    atomic_list_concat([Data,'JSON/SHA1/',Hash], Id).
+json_hash_extract(Context, Hash) :-
+    sha_hash_ctx(Context, "", _, Hash_List),
+    hash_atom(Hash_List, Hash_Atom),
+    atom_string(Hash_Atom, Hash).
+
+json_hash_init(Val, Context) :-
+    json_hash_init(Context_1),
+    json_hash_expand(Context_1, Val, _, Context).
+
+json_hash(Val, Hash) :-
+    json_hash_init(Val, Hash).
+
+json_document_triple(Dict, Id, Triple),
+is_dict(Dict) =>
+    global_prefix_expand(sys:'JSONDocument', Sys_JSON_Document),
+    global_prefix_expand(rdf:type, Rdf_Type),
+
+    (   Triple = t(Id, Rdf_Type, Sys_JSON_Document)
+    ;   dict_pairs(Dict, _, Pairs),
+        member(Property-Value, Pairs),
+        uri_encoded(segment, Property, Encoded_Property),
+        global_prefix_expand(json:Encoded_Property, Expanded_Property),
+
+        json_subdocument_triple(Value, X),
+        (   X = t(_,_,_)
+        ->  Triple = X
+        ;   X = hash(_Inner_Hash, Link),
+            Triple = t(Id, Expanded_Property, Link))).
+
+json_subdocument_triple(Id, Property, Dict, Triple) :-
+    json_subdocument_triple(Dict, Triple_Or_Hash),
+    (   Triple_Or_Hash = t(_,_,_)
+    ->  Triple = Triple_Or_Hash
+    ;   Triple_Or_Hash = hash(_, Node),
+        Triple = t(Id, Property, Node)).
+
+json_subdocument_triple(Dict, Triple_Or_Hash),
+is_dict(Dict) =>
+    json_hash_init("Dict(", Init_Hash),
+    State = state(Init_Hash,[]),
+    dict_pairs(Dict, _, Pairs),
+    (   member(Property-Value, Pairs),
+        json_subdocument_triple(Value, X),
+        (   X = t(_,_,_)
+        ->  Triple_Or_Hash = X
+        ;   X = hash(Inner_Hash, Link),
+            State = state(Context_In,Members_In),
+            uri_encoded(segment, Property, Encoded_Property),
+            global_prefix_expand(json:Encoded_Property, Expanded_Property),
+            atom_string(Encoded_Property, Encoded_Property_String),
+            term_string(Encoded_Property_String, Encoded_Property_String_Quoted),
+            json_hash_expand(Context_In, Encoded_Property_String_Quoted, _, Context_Out1),
+            json_hash_expand(Context_Out1, "-", _, Context_Out2),
+            json_hash_expand(Context_Out2, Inner_Hash, _, Context_Out),
+            Members_Out = [Expanded_Property-Link|Members_In],
+            nb_setarg(1, State, Context_Out),
+            nb_setarg(2, State, Members_Out),
+            fail)
+    ;   State = state(Context, Members),
+        json_hash_expand(Context, ")", Hash, _),
+        json_data_prefix(Data_Prefix),
+        format(atom(Node), "~sJSON/SHA1/~s", [Data_Prefix, Hash]),
+        (   global_prefix_expand(rdf:type, Rdf_Type),
+            global_prefix_expand(sys:'JSON', Json_Type),
+            Triple_Or_Hash = t(Node, Rdf_Type, Json_Type)
+        ;   member(Property-Link, Members),
+            Triple_Or_Hash = t(Node, Property, Link)
+        ;   Triple_Or_Hash = hash(Hash, Node))).
+json_subdocument_triple(List, Triple_Or_Hash),
+is_list(List) =>
+    reverse(List, Rev),
+    json_hash_init("List(", Hash_In),
+    global_prefix_expand(rdf:nil, Rdf_Nil),
+    Hash = hash(Hash_In, Rdf_Nil),
+    json_list_triple(Rev, Hash, Triple_Or_Hash).
+json_subdocument_triple(Val, Triple_Or_Hash) =>
+    json_hash_init("val(", Context),
+    format(string(Val_Quoted), "~q", [Val]),
+    json_hash_expand(Context, Val_Quoted, _, Context2),
+    json_hash_expand(Context2, ")", Hash, _),
+    json_type_rdf_type(Val, Rdf_Val),
+    Triple_Or_Hash = hash(Hash, Rdf_Val).
+
+json_list_triple(Nil, Hash, Hash2),
+Nil == [] =>
+    Hash2 = Hash.
+json_list_triple([First|Rest], hash(Context_In, Node_In), Triple_Or_Hash) =>
+    json_subdocument_triple(First, X),
+    (   X = t(_,_,_)
+    ->  Triple_Or_Hash = X
+    ;   X = hash(Document_Hash, Document_Node),
+        json_hash_expand(Context_In, Document_Hash, _, Context_Out),
+        json_hash_expand(Context_Out, ")", Hash_Out, _),
+        json_data_prefix(Data_Prefix),
+        format(atom(Node_Out), "~sCons/SHA1/~s", [Data_Prefix,Hash_Out]),
+        global_prefix_expand(rdf:type, Rdf_Type),
+        global_prefix_expand(rdf:first, Rdf_First),
+        global_prefix_expand(rdf:rest, Rdf_Rest),
+        global_prefix_expand(rdf:'List', Rdf_List),
+        (   Triple_Or_Hash = t(Node_Out, Rdf_Type, Rdf_List)
+        ;   Triple_Or_Hash = t(Node_Out, Rdf_First, Document_Node)
+        ;   Triple_Or_Hash = t(Node_Out, Rdf_Rest, Node_In)
+        ;   json_list_triple(Rest, hash(Context_Out, Node_Out), Triple_Or_Hash))).
+
 
 assign_json_document_id(Prefixes,Id) :-
     get_dict('@base', Prefixes, Base),
@@ -106,20 +179,6 @@ assign_json_document_id(Prefixes,Id) :-
 bind_vars(Object) :-
     term_variables(Object, Vars),
     maplist([json]>>true, Vars).
-
-/* Top level entry point */
-json_object_triple(Object,Id,Triple),
-is_dict(Object) =>
-    % We need stable hashs - so bind all vars.
-    global_prefix_expand(rdf:type, RDF_Type),
-    global_prefix_expand(sys:'JSONDocument', JSON),
-    % Generate triples from fields
-    (   Triple = t(Id, RDF_Type, JSON)
-    ;   get_dict(Key,Object,Value),
-        uri_encoded(segment, Key, Encoded_Key),
-        global_prefix_expand(json:Encoded_Key, Prop),
-        json_object_triple(Id,Prop,Value,Triple)
-    ).
 
 compress_json_field(Key, Prop) :-
     re_matchsub('^http://terminusdb.com/schema/json#(.*)',
@@ -193,7 +252,7 @@ insert_json_object(Transaction, JSON, Id) :-
     ;   true),
     % insert
     forall(
-        json_object_triple(JSON, Id, t(S,P,O)),
+        json_document_triple(JSON, Id, t(S,P,O)),
         insert(Instance, S, P, O, _)
     ).
 
@@ -263,26 +322,29 @@ test(generate_data_triples,[]) :-
                hobby: null,
                sex : true
            },
-    Prefixes = _{ '@base' : 'foo' },
+    Prefixes = _{ '@base' : 'foo/' },
     assign_json_document_id(Prefixes,Id),
     findall(
         Triple,
-        json_object_triple(JSON, Id, Triple),
+        json_document_triple(JSON, Id, Triple),
         Triples),
 
     Triples =
-    [ t(Id,
-        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-        'http://terminusdb.com/schema/sys#JSONDocument'),
-      t(Id,
-        'http://terminusdb.com/schema/json#name',
-        "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-      t(Id,'http://terminusdb.com/schema/json#hobby',
-        null^^'http://www.w3.org/2001/XMLSchema#token'),
-      t(Id,'http://terminusdb.com/schema/json#sex',
-        true^^'http://www.w3.org/2001/XMLSchema#boolean'),
-      t(Id,'http://terminusdb.com/schema/json#age',
-        45^^'http://www.w3.org/2001/XMLSchema#decimal')
+    [t(Id,
+       'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+       'http://terminusdb.com/schema/sys#JSONDocument'),
+     t(Id,
+       'http://terminusdb.com/schema/json#age',
+       45^^'http://www.w3.org/2001/XMLSchema#decimal'),
+     t(Id,
+       'http://terminusdb.com/schema/json#hobby',
+       null^^'http://www.w3.org/2001/XMLSchema#token'),
+     t(Id,
+       'http://terminusdb.com/schema/json#name',
+       "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+     t(Id,
+       'http://terminusdb.com/schema/json#sex',
+       true^^'http://www.w3.org/2001/XMLSchema#boolean')
     ].
 
 test(generate_subdocument_triples,[]) :-
@@ -295,90 +357,90 @@ test(generate_subdocument_triples,[]) :-
                             sex : true
                         }
            },
-    Prefixes = _{ '@base' : 'foo' },
+    Prefixes = _{ '@base' : 'foo/' },
     assign_json_document_id(Prefixes,Id),
     findall(
         Triple,
-        json_object_triple(JSON, Id, Triple),
+        json_document_triple(JSON, Id, Triple),
         Triples),
+
     Triples =
-    [ t(Id,
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/sys#JSONDocument'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#name',
-		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#friend',
-		'terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e'),
-	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/sys#JSON'),
-	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
-		'http://terminusdb.com/schema/json#name',
-		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
-		'http://terminusdb.com/schema/json#hobby',
-		null^^'http://www.w3.org/2001/XMLSchema#token'),
-	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
-		'http://terminusdb.com/schema/json#sex',
-		true^^'http://www.w3.org/2001/XMLSchema#boolean'),
-	  t('terminusdb:///json/JSON/SHA1/3f65164b972b960cb3f8407199dd55ba902b765e',
-		'http://terminusdb.com/schema/json#age',
-		45^^'http://www.w3.org/2001/XMLSchema#decimal')
-	].
+    [t(Id,
+       'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+       'http://terminusdb.com/schema/sys#JSONDocument'),
+     t('terminusdb:///json/JSON/SHA1/b75cadefaf8ec772ec68f8534ab2d2fd9465cf6d',
+       'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+       'http://terminusdb.com/schema/sys#JSON'),
+     t('terminusdb:///json/JSON/SHA1/b75cadefaf8ec772ec68f8534ab2d2fd9465cf6d',
+       'http://terminusdb.com/schema/json#sex',
+       true^^'http://www.w3.org/2001/XMLSchema#boolean'),
+     t('terminusdb:///json/JSON/SHA1/b75cadefaf8ec772ec68f8534ab2d2fd9465cf6d',
+       'http://terminusdb.com/schema/json#name',
+       "Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+     t('terminusdb:///json/JSON/SHA1/b75cadefaf8ec772ec68f8534ab2d2fd9465cf6d',
+       'http://terminusdb.com/schema/json#hobby',
+       null^^'http://www.w3.org/2001/XMLSchema#token'),
+     t('terminusdb:///json/JSON/SHA1/b75cadefaf8ec772ec68f8534ab2d2fd9465cf6d','http://terminusdb.com/schema/json#age',45^^'http://www.w3.org/2001/XMLSchema#decimal'),
+     t(Id,
+       'http://terminusdb.com/schema/json#friend',
+       'terminusdb:///json/JSON/SHA1/b75cadefaf8ec772ec68f8534ab2d2fd9465cf6d'),
+     t(Id,
+       'http://terminusdb.com/schema/json#name',
+       "Susan"^^'http://www.w3.org/2001/XMLSchema#string')
+    ].
 
 test(generate_list_triples,[]) :-
     JSON = json{
                name : "Susan",
                friends : [json{name : "Gavin"},json{name : "Tim"}]
            },
-    Prefixes = _{ '@base' : 'foo' },
+    Prefixes = _{ '@base' : 'foo/' },
     assign_json_document_id(Prefixes,Id),
     findall(
         Triple,
-        json_object_triple(JSON, Id, Triple),
+        json_document_triple(JSON, Id, Triple),
         Triples),
     Triples =
     [ t(Id,
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#JSONDocument'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#name',
-		"Susan"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t(Id,
-		'http://terminusdb.com/schema/json#friends',
-		'terminusdb:///json/Cons/SHA1/5f8ccf7fade4412b027d456b81eae97b6c9b79d2'),
-	  t('terminusdb:///json/Cons/SHA1/5f8ccf7fade4412b027d456b81eae97b6c9b79d2',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
-	  t('terminusdb:///json/Cons/SHA1/5f8ccf7fade4412b027d456b81eae97b6c9b79d2',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
-		'terminusdb:///json/JSON/SHA1/90bfb26e463835fd207b23b1d9774391c540257c'),
-	  t('terminusdb:///json/JSON/SHA1/90bfb26e463835fd207b23b1d9774391c540257c',
+	  t('terminusdb:///json/JSON/SHA1/c23061edfc1f51ee7a7bf85600e735037010c0d8',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#JSON'),
-	  t('terminusdb:///json/JSON/SHA1/90bfb26e463835fd207b23b1d9774391c540257c',
-		'http://terminusdb.com/schema/json#name',
-		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/Cons/SHA1/5f8ccf7fade4412b027d456b81eae97b6c9b79d2',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
-		'terminusdb:///json/Cons/SHA1/8aa912f4be20fd8d26af0787261e45ed53e956e9'),
-	  t('terminusdb:///json/Cons/SHA1/8aa912f4be20fd8d26af0787261e45ed53e956e9',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
-	  t('terminusdb:///json/Cons/SHA1/8aa912f4be20fd8d26af0787261e45ed53e956e9',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
-		'terminusdb:///json/JSON/SHA1/70d8e985ade1df14a4a51b960ff2e1f0858bf2c8'),
-	  t('terminusdb:///json/JSON/SHA1/70d8e985ade1df14a4a51b960ff2e1f0858bf2c8',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-		'http://terminusdb.com/schema/sys#JSON'),
-	  t('terminusdb:///json/JSON/SHA1/70d8e985ade1df14a4a51b960ff2e1f0858bf2c8',
+	  t('terminusdb:///json/JSON/SHA1/c23061edfc1f51ee7a7bf85600e735037010c0d8',
 		'http://terminusdb.com/schema/json#name',
 		"Tim"^^'http://www.w3.org/2001/XMLSchema#string'),
-	  t('terminusdb:///json/Cons/SHA1/8aa912f4be20fd8d26af0787261e45ed53e956e9',
+	  t('terminusdb:///json/Cons/SHA1/e6dba5bead04d2eab971eed16379d3b915c811b1',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+	  t('terminusdb:///json/Cons/SHA1/e6dba5bead04d2eab971eed16379d3b915c811b1',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+		'terminusdb:///json/JSON/SHA1/c23061edfc1f51ee7a7bf85600e735037010c0d8'),
+	  t('terminusdb:///json/Cons/SHA1/e6dba5bead04d2eab971eed16379d3b915c811b1',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
-		'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil') ].
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+	  t('terminusdb:///json/JSON/SHA1/b17a67cefa99604c8fb9840bc22198a4bda93cff',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://terminusdb.com/schema/sys#JSON'),
+	  t('terminusdb:///json/JSON/SHA1/b17a67cefa99604c8fb9840bc22198a4bda93cff',
+		'http://terminusdb.com/schema/json#name',
+		"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
+	  t('terminusdb:///json/Cons/SHA1/1ef375511fd860b6716d56a865ebb6573bcee9aa',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+	  t('terminusdb:///json/Cons/SHA1/1ef375511fd860b6716d56a865ebb6573bcee9aa',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+		'terminusdb:///json/JSON/SHA1/b17a67cefa99604c8fb9840bc22198a4bda93cff'),
+	  t('terminusdb:///json/Cons/SHA1/1ef375511fd860b6716d56a865ebb6573bcee9aa',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+		'terminusdb:///json/Cons/SHA1/e6dba5bead04d2eab971eed16379d3b915c811b1'),
+	  t(Id,
+		'http://terminusdb.com/schema/json#friends',
+		'terminusdb:///json/Cons/SHA1/1ef375511fd860b6716d56a865ebb6573bcee9aa'),
+	  t(Id,
+		'http://terminusdb.com/schema/json#name',
+		"Susan"^^'http://www.w3.org/2001/XMLSchema#string')
+	].
 
 :- use_module(core(util/test_utils)).
 test(round_trip_complex,[
