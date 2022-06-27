@@ -58,6 +58,7 @@ USAGE:
 
   help        show usage
   run         run container
+  cli         use the terminusdb cli
   stop        stop container
   attach      attach to prolog shell
   exec        execute a command inside the container
