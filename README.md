@@ -8,9 +8,9 @@
 ***
 [![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) ![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)
 
-## TerminusDB is a distributed database with a collaboration model. 
+## TerminusDB is a distributed database with a collaboration model.
 
-It is designed to be like git, but for data. If you are reading this, **give this repo a star**. 
+It is designed to be like git, but for data. If you are reading this, **give this repo a star**.
 
 The building blocks of the model are:
 
@@ -64,7 +64,7 @@ USAGE:
   rm          remove volumes
 ```
 
-More information in the [docs](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository. 
+More information in the [docs](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
 
 
 You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
