@@ -1592,6 +1592,8 @@ report_parse_error(error(existence_error(commandline_option, Opt), _), Command) 
     atomic_list_concat(Command_List, Command_Atom),
     format(user_error, '~NERROR: The command line option "~s" does not exist for the command "~s"~n',
            [Opt,Command_Atom]).
+report_parse_error(error(domain_error(flag_value,_),_), _) =>
+    true.
 report_parse_error(error(type_error(flag_value,_),_), _) =>
     true.
 
