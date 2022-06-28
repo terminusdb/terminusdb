@@ -1,5 +1,5 @@
 # Build and run tests every night on non-Docker systems.
-name: Non-Docker
+name: Non-Docker OS
 
 on:
   schedule:

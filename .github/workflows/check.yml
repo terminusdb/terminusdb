@@ -188,7 +188,7 @@ jobs:
         with:
           name: terminusdb-server-docker-image
 
-      - run: make download-lint
+      - run: make download-lint && chmod -R 777 .deps
 
       - name: Run lint
         run: |

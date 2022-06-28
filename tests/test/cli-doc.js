@@ -27,7 +27,7 @@ describe('cli-doc', function () {
     delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
 
-  describe('passes schema insert, get, replace, delete', function () {
+  describe('passes schema insert, get, replace, delete, branch, apply', function () {
     const schema = { '@type': 'Class', negativeInteger: 'xsd:negativeInteger' }
 
     before(async function () {
@@ -59,6 +59,12 @@ describe('cli-doc', function () {
         const r = await exec(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
         expect(JSON.parse(r.stdout)).to.deep.equal(util.defaultContext)
       }
+    })
+
+    it('passes doc query', async function () {
+      const r = await exec('./terminusdb.sh doc get _system -q \'{ "@type" : "User", "name" : "admin"}\'')
+      const j = JSON.parse(r.stdout)
+      expect(j['@id']).to.equal('User/admin')
     })
 
     it('passes instance insert, get, replace, delete', async function () {
@@ -106,6 +112,47 @@ describe('cli-doc', function () {
       {
         const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --graph_type=instance --id=${instance['@id']}`)
         expect(r.stdout).to.match(new RegExp(`^Documents deleted:\n 1: ${instance['@id']}`))
+      }
+    })
+
+    it('passes insert, branch, insert apply', async function () {
+      this.timeout(100000)
+      const instance = { '@type': schema['@id'], '@id': `${schema['@id']}/${util.randomString()}`, negativeInteger: -88 }
+      {
+        const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=instance --data='${JSON.stringify(instance)}'`)
+        expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: terminusdb:///data/${instance['@id']}`))
+      }
+      {
+        const r = await exec(`./terminusdb.sh branch create ${dbSpec}/local/branch/test --origin=${dbSpec}/local/branch/main`)
+        expect(r.stdout).to.match(new RegExp(`^${dbSpec}/local/branch/test branch created`))
+      }
+      {
+        const r = await exec(`./terminusdb.sh doc replace ${dbSpec}/local/branch/test --data='${JSON.stringify(instance)}'`)
+        expect(r.stdout).to.match(new RegExp(`^Documents replaced:\n 1: terminusdb:///data/${instance['@id']}`))
+      }
+      {
+        const newInstance = { '@type': schema['@id'], '@id': `${schema['@id']}/${util.randomString()}`, negativeInteger: -42 }
+        const r = await exec(`./terminusdb.sh doc insert ${dbSpec}/local/branch/test --data='${JSON.stringify(newInstance)}'`)
+        expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: terminusdb:///data/${newInstance['@id']}`))
+      }
+      {
+        const r1 = await exec(`./terminusdb.sh log ${dbSpec}/local/branch/test -j`)
+        const log = JSON.parse(r1.stdout)
+        const latestCommit = log[0].identifier
+        const previousCommit = log[1].identifier
+        const r2 = await exec(`./terminusdb.sh apply ${dbSpec} --before_commit=${previousCommit} --after_commit=${latestCommit}`)
+        const regexp = /^Successfully applied/
+        expect(r2.stdout).to.match(regexp)
+      }
+      {
+        const r = await exec(`./terminusdb.sh doc get ${dbSpec} -l --graph_type=instance`)
+        const j = JSON.parse(r.stdout)
+        expect(j.length).to.equal(2)
+      }
+      {
+        const r = await exec(`./terminusdb.sh doc delete ${dbSpec} --nuke`)
+        const regexp = /^Documents nuked/
+        expect(r.stdout).to.match(regexp)
       }
     })
   })
