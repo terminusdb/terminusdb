@@ -1778,7 +1778,7 @@ run_command(user,create,[Name], Opts) :-
         user,
         api_add_user(System_DB,Auth,User,Id)
     ),
-    format(current_output, "User '~s' added with id ~s~n", [Name,Id]).
+    format(current_output, "~nUser '~s' added with id ~s~n", [Name,Id]).
 run_command(user,delete,[Name_or_Id], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1817,8 +1817,10 @@ run_command(user,get, NameList, Opts) :-
             api_get_users(System_DB,Auth,Users)
         )
     ),
+
     (   option(json(true),Opts)
-    ->  json_write_dict(current_output,Users,[])
+    ->  json_write_dict(current_output,Users,[width(0)]),
+        nl
     ;   forall(member(User,Users),
                (   get_dict(name,User,User_Name),
                    get_dict('@id',User,User_Id),
@@ -1830,13 +1832,14 @@ run_command(user,get, NameList, Opts) :-
                            member(Capability, Capabilities),
                            (   get_dict(scope, Capability, Resource),
                                get_dict(name, Resource, Resource_Name),
+                               get_dict('@id', Resource, Resource_Id),
                                (   get_dict(role, Capability, Roles)
                                ->  true
                                ;   Roles = []),
                                maplist([Role,Role_Name]>>(get_dict(name,Role,Role_Name)),
                                        Roles, Role_Names),
-                               format(current_output, ' and has roles: ~s~n', [Role_Names]),
-                               format(current_output, '  presiding over: ~s~n', [Resource_Name])
+                               format(current_output, '~` t~4|and has roles: ~q~n', [Role_Names]),
+                               format(current_output, '~` t~4|presiding over: ~s (~s)~n', [Resource_Name,Resource_Id])
                            )
                        )
                    ;   true
@@ -1886,10 +1889,13 @@ run_command(capability,grant,[User,Scope|Roles],_Opts) :-
                                                user: User_Id,
                                                roles: Role_Ids })
     ),
-    format(current_output, 'Granted ~q to ~s over ~s~n', [Roles,User,Scope]).
+    format(current_output, "Granted ~q to '~s' over '~s'~n", [Roles,User,Scope]).
 run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
     super_user_authority(Auth),
-    create_context(system_descriptor{}, System_DB),
+    create_context(system_descriptor{}, SystemDB),
+    (   Roles = []
+    ->  format(user_error, 'Warning: No Roles specified~n',[])
+    ;   true),
     % lookup user
     api_report_errors(
         capability,
@@ -1910,12 +1916,14 @@ run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
                     get_dict('@id', Role_Object, Role_Id)),
                 Roles,Role_Ids)
     ),
+
     api_report_errors(
         capability,
-        api_revoke_capability(System_DB,Auth, _{ scope: Scope_Id,
-                                                 user: User_Id,
-                                                 roles: Role_Ids })
-    ).
+        api_revoke_capability(SystemDB,Auth, _{ scope: Scope_Id,
+                                                user: User_Id,
+                                                roles: Role_Ids })
+    ),
+    format(current_output, 'Capability successfully revoked~n', []).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
