@@ -141,7 +141,32 @@
 
               % api_log.pl
               api_log/4,
-              format_log/2
+              format_log/2,
+
+              % api_access_control.pl
+              api_get_roles/3,
+              api_get_role_from_name/4,
+              api_get_role_from_id/4,
+              api_add_role/4,
+              api_delete_role/3,
+              api_update_role/3,
+              api_get_organizations/3,
+              api_get_organization_from_name/4,
+              api_get_organization_from_id/4,
+              api_add_organization/4,
+              api_delete_organization/3,
+              api_grant_capability/3,
+              api_revoke_capability/3,
+              api_get_resource_from_name/4,
+              api_get_user_from_name/4,
+              api_add_user/4,
+              api_delete_user/3,
+              api_add_user/4,
+              api_delete_user/3,
+              api_get_users/3,
+              api_get_user_from_name/4,
+              api_get_user_from_id/4
+
           ]).
 
 :- use_module(api/api_init).
@@ -175,3 +200,4 @@
 :- use_module(api/api_user_organizations).
 :- use_module(api/api_patch).
 :- use_module(api/api_log).
+:- use_module(api/api_access_control).
