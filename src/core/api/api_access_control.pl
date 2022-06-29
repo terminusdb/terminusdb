@@ -28,6 +28,8 @@
 :- use_module(core(document)).
 :- use_module(core(transaction)).
 :- use_module(library(plunit)).
+:- use_module(library(crypto)).
+:- use_module(library(lists)).
 
 api_get_roles(SystemDB, Auth, Roles) :-
     do_or_die(
