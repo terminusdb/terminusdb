@@ -70,6 +70,15 @@ api_global_error_jsonld(error(missing_file(File_Name), _), Type, JSON) :-
                               'api:file_name' : File_Name },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(existence_error(source_sink, File_Name), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "File not found: ~s", [File_Name]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:FileNotFound',
+                              'api:file_name' : File_Name },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Data_Version_String), "~w", [Data_Version]),
@@ -1195,31 +1204,38 @@ api_error_jsonld_(delete_documents, Error, JSON) :-
 api_error_jsonld_(diff, Error, JSON) :-
     api_document_error_jsonld(diff, Error, JSON).
 
-error_type(add_organization, 'api:AddOrganizationErrorResponse').
-error_type(check_db, 'api:DbExistsErrorResponse').
-error_type(clone, 'api:CloneErrorResponse').
-error_type(create_db, 'api:DbCreateErrorResponse').
-error_type(csv, 'api:CsvErrorResponse').
-error_type(delete_db, 'api:DbDeleteErrorResponse').
-error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
-error_type(delete_organization, 'api:DeleteOrganizationErrorResponse').
-error_type(fetch, 'api:FetchErrorResponse').
-error_type(frame, 'api:FrameErrorResponse').
-error_type(get_documents, 'api:GetDocumentErrorResponse').
-error_type(insert_documents, 'api:InsertDocumentErrorResponse').
-error_type(optimize, 'api:OptimizeErrorResponse').
-error_type(pack, 'api:PackErrorResponse').
-error_type(prefix, 'api:PrefixErrorResponse').
-error_type(pull, 'api:PullErrorResponse').
-error_type(push, 'api:PushErrorResponse').
-error_type(remote, 'api:RemoteErrorResponse').
-error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
-error_type(reset, 'api:ResetErrorResponse').
-error_type(rollup, 'api:RollupErrorResponse').
-error_type(squash, 'api:SquashErrorResponse').
-error_type(unpack, 'api:UnpackErrorResponse').
-error_type(woql, 'api:WoqlErrorResponse').
-error_type(role, 'api:RoleErrorResponse').
+error_type(API, Type) :-
+    do_or_die(
+        error_type_(API, Type),
+        error(unrecognized_error_type(API), _)
+    ).
+
+error_type_(add_organization, 'api:AddOrganizationErrorResponse').
+error_type_(bundle, 'api:BundleErrorResponse').
+error_type_(check_db, 'api:DbExistsErrorResponse').
+error_type_(clone, 'api:CloneErrorResponse').
+error_type_(create_db, 'api:DbCreateErrorResponse').
+error_type_(csv, 'api:CsvErrorResponse').
+error_type_(delete_db, 'api:DbDeleteErrorResponse').
+error_type_(delete_documents, 'api:DeleteDocumentErrorResponse').
+error_type_(delete_organization, 'api:DeleteOrganizationErrorResponse').
+error_type_(fetch, 'api:FetchErrorResponse').
+error_type_(frame, 'api:FrameErrorResponse').
+error_type_(get_documents, 'api:GetDocumentErrorResponse').
+error_type_(insert_documents, 'api:InsertDocumentErrorResponse').
+error_type_(optimize, 'api:OptimizeErrorResponse').
+error_type_(pack, 'api:PackErrorResponse').
+error_type_(prefix, 'api:PrefixErrorResponse').
+error_type_(pull, 'api:PullErrorResponse').
+error_type_(push, 'api:PushErrorResponse').
+error_type_(remote, 'api:RemoteErrorResponse').
+error_type_(replace_documents, 'api:ReplaceDocumentErrorResponse').
+error_type_(reset, 'api:ResetErrorResponse').
+error_type_(rollup, 'api:RollupErrorResponse').
+error_type_(squash, 'api:SquashErrorResponse').
+error_type_(unbundle, 'api:UnbundleErrorResponse').
+error_type_(unpack, 'api:UnpackErrorResponse').
+error_type_(woql, 'api:WoqlErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
