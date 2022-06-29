@@ -937,6 +937,20 @@ opt_spec(user,get,'terminusdb user get <USER_NAME_OR_ID>',
            shortflags([j]),
            default(false),
            help('Return answer as a JSON document')]]).
+opt_spec(user,password,'terminusdb user password USER',
+         'Change passowrd for user USER',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `user create` sub command')],
+          [opt(password),
+           type(atom),
+           longflags([password]),
+           shortflags([p]),
+           default('_'),
+           help('Specify the password to use for the user')]]).
 opt_spec(capability,grant,'terminusdb capability grant USER SCOPE ROLE1 <...ROLEN>',
          'Grant ROLE1 ... ROLEN over SCOPE to USER',
          [[opt(help),
@@ -1764,14 +1778,14 @@ run_command(user,create,[Name], Opts) :-
         user,
         api_add_user(System_DB,Auth,User,Id)
     ),
-    format(current_output, "User added: ~s~n", [Id]).
+    format(current_output, "User '~s' added with id ~s~n", [Name,Id]).
 run_command(user,delete,[Name_or_Id], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
     (   option(id(true),Opts)
     ->  User_Id = Name_or_Id
     ;   api_report_errors(
-            organization,
+            user,
             api_get_user_from_name(System_DB, Auth, Name_or_Id, User)
         ),
         get_dict('@id', User, User_Id)
@@ -1794,12 +1808,12 @@ run_command(user,get, NameList, Opts) :-
         Users = [User_Obj]
     ;   [Id] = NameList
     ->  api_report_errors(
-            organization,
+            user,
             api_get_user_from_id(System_DB, Auth, Id, User_Obj)
         ),
         Users = [User_Obj]
     ;   api_report_errors(
-            organization,
+            user,
             api_get_users(System_DB,Auth,Users)
         )
     ),
@@ -1829,6 +1843,20 @@ run_command(user,get, NameList, Opts) :-
                    )
                ))
     ).
+run_command(user,password, [User], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+    api_report_errors(
+        user,
+        api_update_user_password(System_DB, Auth, User, Password)
+    ),
+    format(current_output, '~nPassword updated for ~s~n', [User]).
 run_command(capability,grant,[User,Scope|Roles],_Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),

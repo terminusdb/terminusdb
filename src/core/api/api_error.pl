@@ -1126,6 +1126,23 @@ api_error_jsonld_(organization,
              'api:error' : _{ '@type' : "api:DanglingOrganizationReferencedError",
                               'api:capability' : Capability}
             }.
+api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
+    format(string(Msg), "No id associated with user name ~s", [Name]),
+    JSON = _{'@type' : 'api:UserErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForUserName",
+                              'api:user_name' : Name}
+            }.
+api_error_jsonld_(user,error(can_not_insert_existing_object_with_id(Id),_), JSON) :-
+    format(string(Msg), "A user with this name already exists with id ~s", [Id]),
+    JSON = _{'@type' : 'api:UserErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForUser",
+                              'api:user_id' : Id}
+            }.
+
 
 api_error_jsonld_(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).

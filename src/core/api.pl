@@ -165,8 +165,8 @@
               api_delete_user/3,
               api_get_users/3,
               api_get_user_from_name/4,
-              api_get_user_from_id/4
-
+              api_get_user_from_id/4,
+              api_update_user_password/4
           ]).
 
 :- use_module(api/api_init).
