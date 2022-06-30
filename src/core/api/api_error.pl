@@ -1236,6 +1236,10 @@ error_type_(squash, 'api:SquashErrorResponse').
 error_type_(unbundle, 'api:UnbundleErrorResponse').
 error_type_(unpack, 'api:UnpackErrorResponse').
 error_type_(woql, 'api:WoqlErrorResponse').
+error_type_(user, 'api:UserErrorResponse').
+error_type_(organization, 'api:OrganizationErrorResponse').
+error_type_(role, 'api:RoleErrorResponse').
+error_type_(capability, 'api:CapabilityErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

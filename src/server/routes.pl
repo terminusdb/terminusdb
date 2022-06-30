@@ -2647,7 +2647,7 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
                  methods([options,delete,get])]).
 
 /*
- * roles_handler(Mode, Path, Request, System, Auth) is det.
+ * roles_handler(Mode, Request, System, Auth) is det.
  *
  * Insert a role or update a role
  */
@@ -2680,10 +2680,9 @@ roles_handler(put, Request, System_DB, Auth) :-
     api_report_errors(
         roles,
         Request,
-        (   uri_encoded(segment, Name, Encoded_Name),
-            atom_concat('Role/',Encoded_Name,Name_Id),
-            put_dict(_{'@id': Name_Id}, Role, Role_With_Id),
-            api_update_role(System_DB,Auth,Role_With_Id),
+        (   api_get_role_from_name(System_DB,Auth,Name,Old_Role),
+            put_dict(Role,Old_Role,New_Role),
+            api_update_role(System_DB,Auth,New_Role),
             cors_reply_json(Request,
                             json{'@type' : "api:RolesResponse",
                                  'api:status' : "api:success"})
@@ -2858,7 +2857,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
         Request,
         (   api_get_user_from_name(System_DB, Auth, Name, User),
             get_dict('@id', User, User_Id),
-            api_delete_organization(System_DB,Auth,User_Id),
+            api_delete_user(System_DB,Auth,User_Id),
             cors_reply_json(Request,
                             json{'@type' : "api:UsersResponse",
                                  'api:status' : "api:success"})
