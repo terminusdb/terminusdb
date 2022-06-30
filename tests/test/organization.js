@@ -1,15 +1,7 @@
 const { expect } = require('chai')
-const { Agent, api, db, organization, util } = require('../lib')
+const { Agent, util } = require('../lib')
 
 describe('organization', function () {
-  describe('fails add with missing parameter', function () {
-    let agent
-
-    before(async function () {
-      agent = new Agent().auth()
-    })
-  })
-
   it('passes add', async function () {
     const agent = new Agent().auth()
     const orgName = util.randomString()
@@ -32,8 +24,10 @@ describe('organization', function () {
     const agent = new Agent({ orgName }).auth()
     const result = await agent.delete(`/api/organizations/${orgName}`)
     expect(result.status).to.equal(404)
-    expect(result.body['api:error']).to.deep.equal({ '@type' : 'api:NoIdForOrganizationName',
-                                                     'api:organization_name' : orgName })
+    expect(result.body['api:error']).to.deep.equal({
+      '@type': 'api:NoIdForOrganizationName',
+      'api:organization_name': orgName,
+    })
     expect(result.body['@type']).to.equal('api:OrganizationErrorResponse')
   })
 })
