@@ -30,6 +30,8 @@
 :- use_module(library(plunit)).
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
 
 api_get_roles(SystemDB, Auth, Roles) :-
     do_or_die(
