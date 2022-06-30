@@ -222,10 +222,30 @@ api_delete_organization(_, Auth, Organization_Id) :-
         _
     ).
 
+grant_document_to_ids(SystemDB, Auth, Grant_Document, json{ scope: Scope_Id,
+                                                            user: User_Id,
+                                                            roles: Role_Ids }) :-
+    _{ scope: Scope,
+       user: User,
+       roles: Roles } :< Grant_Document,
+
+    % lookup user
+    api_get_user_from_name(SystemDB,Auth,User,User_Object),
+    get_dict('@id', User_Object, User_Id),
+    % lookup resource
+    api_get_resource_from_name(SystemDB,Auth,Scope,Scope_Object),
+    get_dict('@id', Scope_Object, Scope_Id),
+    % lookup roles
+    maplist({SystemDB,Auth}/[Role,Role_Id]>>(
+                api_get_role_from_name(SystemDB,Auth,Role,Role_Object),
+                get_dict('@id', Role_Object, Role_Id)),
+            Roles,Role_Ids).
+
 api_grant_capability(SystemDB, Auth, Grant_Document) :-
+    grant_document_to_ids(SystemDB, Auth, Grant_Document, Grant_Document_Ids),
     _{ scope: Scope_Id,
        user: User_Id,
-       roles: Role_Ids } :< Grant_Document,
+       roles: Role_Ids } :< Grant_Document_Ids,
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},
@@ -268,9 +288,10 @@ api_grant_capability(SystemDB, Auth, Grant_Document) :-
     ).
 
 api_revoke_capability(SystemDB, Auth, Grant_Document) :-
+    grant_document_to_ids(SystemDB, Auth, Grant_Document, Grant_Document_Ids),
     _{ scope: Scope_Id,
        user: User_Id,
-       roles: Role_Ids } :< Grant_Document,
+       roles: Role_Ids } :< Grant_Document_Ids,
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},

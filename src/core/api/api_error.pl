@@ -1160,7 +1160,7 @@ api_error_jsonld_(capability,error(no_role_to_revoke,_), JSON) :-
             }.
 api_error_jsonld_(capability,error(no_id_for_user_name(Name),_), JSON) :-
     format(string(Msg), "No id associated with user name ~s", [Name]),
-    JSON = _{'@type' : 'api:CapabliityErrorResponse',
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
              'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForUserName",
@@ -1168,7 +1168,7 @@ api_error_jsonld_(capability,error(no_id_for_user_name(Name),_), JSON) :-
             }.
 api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
     format(string(Msg), "No id associated with resource name ~s", [Name]),
-    JSON = _{'@type' : 'api:CapabliityErrorResponse',
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
              'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForResourceName",
@@ -1176,7 +1176,7 @@ api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
             }.
 api_error_jsonld_(capability,error(deleted_roles_do_not_exist_in_capability(Roles,Capability),_),JSON) :-
     format(string(Msg), "Deleted roles ~q do not exist for capability ~s", [Roles,Capability]),
-    JSON = _{'@type' : 'api:CapabliityErrorResponse',
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:RevokedRolesDoNotExistForCapability",
@@ -1185,7 +1185,7 @@ api_error_jsonld_(capability,error(deleted_roles_do_not_exist_in_capability(Role
             }.
 api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope),_), JSON) :-
     format(string(Msg), "There was no capability for the user ~s with scope ~s", [User, Scope]),
-    JSON = _{'@type' : 'api:CapabliityErrorResponse',
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
              'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoCapabilityForUserWithScope",

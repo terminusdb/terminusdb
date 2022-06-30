@@ -6,9 +6,11 @@ describe('users', function () {
     const agent = new Agent().auth()
     const userName = util.randomString()
     const result = await agent
-      .post(`/api/users`)
-      .send({ name: userName,
-              password : userName })
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
 
     expect(result.body).to.equal(`terminusdb://system/data/User/${userName}`)
     expect(result.status).to.equal(200)
@@ -18,9 +20,11 @@ describe('users', function () {
     const agent = new Agent().auth()
     const userName = util.randomString()
     await agent
-      .post(`/api/users`)
-      .send({ name: userName,
-              password : userName })
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
 
     const result = await agent.get(`/api/users/${userName}`)
     expect(result.body.name).to.equal(userName)
@@ -31,9 +35,11 @@ describe('users', function () {
     const agent = new Agent().auth()
     const userName = util.randomString()
     await agent
-      .post(`/api/users`)
-      .send({ name: userName,
-              password : userName })
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
 
     const result = await agent.delete(`/api/users/${userName}`)
     expect(result.body).to.deep.equal({ '@type': 'api:UsersResponse', 'api:status': 'api:success' })
@@ -44,15 +50,19 @@ describe('users', function () {
     const agent = new Agent().auth()
     const userName = util.randomString()
     await agent
-      .post(`/api/users`)
-      .send({ name: userName,
-              password : userName })
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
 
-    const newPassword = "a different password"
+    const newPassword = 'a different password'
     const result = await agent
-      .put(`/api/users`)
-      .send({ name: userName,
-              password : newPassword })
+      .put('/api/users')
+      .send({
+        name: userName,
+        password: newPassword,
+      })
     expect(result.status).to.equal(200)
 
     const userPass = Buffer.from(`${userName}:${newPassword}`).toString('base64')
@@ -66,15 +76,19 @@ describe('users', function () {
     const agent = new Agent().auth()
     const userName = util.randomString()
     await agent
-      .post(`/api/users`)
-      .send({ name: userName,
-              password : userName })
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
 
-    const newPassword = "a different password"
+    const newPassword = 'a different password'
     const result = await agent
-      .put(`/api/users`)
-      .send({ name: userName,
-              password : newPassword })
+      .put('/api/users')
+      .send({
+        name: userName,
+        password: newPassword,
+      })
     expect(result.status).to.equal(200)
 
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')
@@ -83,5 +97,4 @@ describe('users', function () {
     const connectResult = await agent.get('/api/info')
     expect(connectResult.status).to.equal(401)
   })
-
 })

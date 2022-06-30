@@ -2891,12 +2891,12 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         (   Op = "revoke"
         ->  api_revoke_capability(System_DB,Auth,Cap),
             cors_reply_json(Request,
-                            json{'@type' : "api:CapabilitiesResponse",
+                            json{'@type' : "api:CapabilityResponse",
                                  'api:status' : "api:success"})
         ;   Op = "grant"
         ->  api_grant_capability(System_DB,Auth,Cap),
             cors_reply_json(Request,
-                            json{'@type' : "api:CapabilitiesResponse",
+                            json{'@type' : "api:CapabilityResponse",
                                  'api:status' : "api:success"})
         ;   throw(error(unknown_capabilities_operation(Op)))
         )
