@@ -37,7 +37,6 @@ describe('capabilities', function () {
     expect(result1.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
     expect(result1.status).to.equal(200)
 
-
     const result2 = await agent
       .post('/api/capabilities')
       .send({
@@ -49,6 +48,5 @@ describe('capabilities', function () {
 
     expect(result2.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
     expect(result2.status).to.equal(200)
-
   })
 })
