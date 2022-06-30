@@ -1873,32 +1873,11 @@ run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
     (   Roles = []
     ->  format(user_error, 'Warning: No Roles specified~n',[])
     ;   true),
-    % lookup user
     api_report_errors(
         capability,
-        api_get_user_from_name(SystemDB,Auth,User,User_Object)
-    ),
-    get_dict('@id', User_Object, User_Id),
-    % lookup scope
-    api_report_errors(
-        capability,
-        api_get_resource_from_name(SystemDB,Auth,Scope,Scope_Object)
-    ),
-    get_dict('@id', Scope_Object, Scope_Id),
-    % Lookup Roles
-    api_report_errors(
-        capability,
-        maplist([Role,Role_Id]>>(
-                    api_get_role_from_name(SystemDB,Auth,Role,Role_Object),
-                    get_dict('@id', Role_Object, Role_Id)),
-                Roles,Role_Ids)
-    ),
-
-    api_report_errors(
-        capability,
-        api_revoke_capability(SystemDB,Auth, _{ scope: Scope_Id,
-                                                user: User_Id,
-                                                roles: Role_Ids })
+        api_revoke_capability(SystemDB,Auth, _{ scope: Scope,
+                                                user: User,
+                                                roles: Roles })
     ),
     format(current_output, 'Capability successfully revoked~n', []).
 run_command(store,init, _, Opts) :-
