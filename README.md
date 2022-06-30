@@ -8,9 +8,9 @@
 ***
 [![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) ![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)
 
-## TerminusDB is a distributed database with a collaboration model. 
+## TerminusDB is a distributed database with a collaboration model.
 
-It is designed to be like git, but for data. If you are reading this, **give this repo a star**. 
+It is designed to be like git, but for data. If you are reading this, **give this repo a star**.
 
 The building blocks of the model are:
 
@@ -23,7 +23,12 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 
 ## Installation Guide
 
-Install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap):
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/terminusdb)
+
+The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB. 
+
+For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
+
 
 ### Get this repo, cd to it
 
@@ -51,20 +56,21 @@ d9fa4a1acf93: Pulling fs layer
 
 ### To stop, attach, etc, see usage
 ```
-./terminusdb-container 
+./terminusdb-container
 
 USAGE:
   terminusdb-container [COMMAND]
 
   help        show usage
   run         run container
+  cli         use the terminusdb cli
   stop        stop container
   attach      attach to prolog shell
   exec        execute a command inside the container
   rm          remove volumes
 ```
 
-More information in the [docs](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository. 
+More information in the [docs](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
 
 
 You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
@@ -75,8 +81,8 @@ You can also install TerminusDB from the [Source Code](https://terminusdb.com/do
 A simple example creating a person with friends can be created as follows:
 
 ```shell
-./terminusdb db create admin/example1
-./terminusdb doc insert --graph_type=schema admin/example1 <<EOF
+terminusdb db create admin/example1
+terminusdb doc insert --graph_type=schema admin/example1 <<EOF
 { "@id" : "Person",
   "@type" : "Class",
   "name" : "xsd:string",
@@ -84,7 +90,7 @@ A simple example creating a person with friends can be created as follows:
   "friends" : { "@type" : "Set",
                 "@class" : "Person" }}
 EOF
-./terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
+terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 { "@type" : "Person","name" : "Gavin", "occupation" : "Coder"}
 EOF
 ```
@@ -101,9 +107,9 @@ If you make a data product called `example` in the team
 TerminusDB CLI. You should get an API token from your profile page and replace `'XYZ'` with this token.
 
 ```shell
-./terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
-./terminusdb fetch admin/example1 --token='XYZ'
-./terminusdb push admin/example1 --token='XYZ'
+terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
+terminusdb fetch admin/example1 --token='XYZ'
+terminusdb push admin/example1 --token='XYZ'
 ```
 
 Once completed, you'll have a remote copy of this database.

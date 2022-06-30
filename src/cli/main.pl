@@ -1173,28 +1173,25 @@ run_command(bundle,[Path], Opts) :-
         bundle(System_DB, Auth, Path, Payload, [])),
 
     (   var(Payload)
-    ->  format(current_output, "~nNo data to be bundled~n", [])
-    ;   format(current_output, "~nBundle operation performed~n", []),
-        format(current_output, "~nExporting as ~s~n", [Filename]),
+    ->  format(current_output, "Bundle unexpectedly failed~n", [])
+    ;   format(current_output, "Writing to '~s'~n", [Filename]),
         open(Filename, write, Stream),
-        format(Stream, "~s", [Payload])
+        format(Stream, "~s", [Payload]),
+        format(current_output, "Bundle successful~n", [])
     ).
 run_command(unbundle,[Path, Filename], _Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
-    catch(
-        (   read_file_to_string(Filename, Payload, []),
-
-            api_report_errors(
-                unbundle,
-                unbundle(System_DB, Auth, Path, Payload)),
-
-            format(current_output, "~nUnbundle successful~n", [])),
-        E,
-        (   E = error(existence_error(source_sink, File), _)
-        ->  format(current_output, "~nFile ~s does not exist", [File])
-        ;   throw(E))).
+    api_report_errors(
+        unbundle,
+        (   format(current_output, "Reading from file~n", []),
+            read_file_to_string(Filename, Payload, []),
+            format(current_output, "Unbundling '~s'~n", [Filename]),
+            unbundle(System_DB, Auth, Path, Payload),
+            format(current_output, "Unbundle successful~n", [])
+        )
+    ).
 run_command(diff, Args, Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
