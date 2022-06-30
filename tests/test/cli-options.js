@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { util } = require('../lib')
 
 describe('cli-options', function () {
-
+  let dbSpec
   before(async function () {
     this.timeout(30000)
     process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
