@@ -1120,14 +1120,30 @@ run(Argv) :-
         halt(1)).
 
 run_([Command|Rest]) :-
-    opt_spec(Command,_,_,Spec),
-    opt_parse(Spec,Rest,Opts,Positional),
+    catch(
+        (
+            opt_spec(Command,_,_,Spec),
+            opt_parse(Spec,Rest,Opts,Positional)
+        ),
+        Error,
+        (   report_parse_error(Error,[Command]),
+            Opts = [help(true)]
+        )
+    ),
     (   option(help(true), Opts)
     ->  terminusdb_help(Command,Opts)
     ;   run_command(Command,Positional,Opts)).
 run_([Command,Subcommand|Rest]) :-
-    opt_spec(Command,Subcommand,_,_,Spec),
-    opt_parse(Spec,Rest,Opts,Positional),
+    catch(
+        (
+            opt_spec(Command,Subcommand,_,_,Spec),
+            opt_parse(Spec,Rest,Opts,Positional)
+        ),
+        Error,
+        (   report_parse_error(Error,[Command,Subcommand]),
+            Opts = [help(true)]
+        )
+    ),
     (   option(help(true), Opts)
     ->  terminusdb_help(Command,Subcommand,Opts)
     ;   run_command(Command,Subcommand,Positional,Opts)).
@@ -2021,6 +2037,19 @@ create_authorization(Opts,Authorization) :-
         basic_authorization(User,Password,Authorization)
     ;   token_authorization(Token,Authorization)
     ).
+
+report_parse_error(error(existence_error(commandline_option, Opt), _), Command) =>
+    intersperse(' ', Command, Command_List),
+    atomic_list_concat(Command_List, Command_Atom),
+    format(user_error, '~NERROR: The command line option "~s" does not exist for the command "~s"~n',
+           [Opt,Command_Atom]).
+report_parse_error(error(domain_error(flag_value, Opt),_), Command) =>
+    intersperse(' ', Command, Command_List),
+    atomic_list_concat(Command_List, Command_Atom),
+    format(user_error, '~NERROR: The command line option "~s" does not exist for the command "~s"~n',
+           [Opt,Command_Atom]).
+report_parse_error(error(type_error(flag_value,_),_), _) =>
+    true.
 
 :- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
