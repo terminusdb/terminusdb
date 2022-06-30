@@ -2741,7 +2741,7 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
  */
 organizations_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
-        organizations,
+        organization,
         Request,
         (   api_get_organizations(System_DB, Auth, Orgs),
             cors_reply_json(Request,Orgs)
@@ -2755,7 +2755,7 @@ organizations_handler(get, Request, System_DB, Auth) :-
  */
 organizations_handler(post, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        organizations,
+        organization,
         Request,
         (   api_add_organization(System_DB, Auth, _{ name: Name }, Id),
             cors_reply_json(Request,Id)
@@ -2763,7 +2763,7 @@ organizations_handler(post, Name, Request, System_DB, Auth) :-
     ).
 organizations_handler(get, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        organizations,
+        organization,
         Request,
         (   api_get_organization_from_name(System_DB, Auth, Name, Org),
             cors_reply_json(Request,Org)
@@ -2771,7 +2771,7 @@ organizations_handler(get, Name, Request, System_DB, Auth) :-
     ).
 organizations_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        organizations,
+        organization,
         Request,
         (   api_get_organization_from_name(System_DB, Auth, Name, Org),
             get_dict('@id', Org, Org_Id),
@@ -2800,7 +2800,7 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
  */
 users_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
-        users,
+        user,
         Request,
         (   api_get_users(System_DB, Auth, Users),
             cors_reply_json(Request, Users)
@@ -2815,7 +2815,7 @@ users_handler(post, Request, System_DB, Auth) :-
               error(bad_api_document(User, [name,password]))
              ),
     api_report_errors(
-        users,
+        user,
         Request,
         (   api_add_user(System_DB, Auth, User, Id),
             cors_reply_json(Request, Id)
@@ -2830,7 +2830,7 @@ users_handler(put, Request, System_DB, Auth) :-
               error(bad_api_document(User, [name,password]))
              ),
     api_report_errors(
-        users,
+        user,
         Request,
         (   api_update_user_password(System_DB, Auth, Name, Pass),
             cors_reply_json(Request,
@@ -2846,7 +2846,7 @@ users_handler(put, Request, System_DB, Auth) :-
  */
 users_handler(get, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        users,
+        user,
         Request,
         (   api_get_user_from_name(System_DB, Auth, Name, User),
             cors_reply_json(Request,User)
@@ -2854,7 +2854,7 @@ users_handler(get, Name, Request, System_DB, Auth) :-
     ).
 users_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        users,
+        user,
         Request,
         (   api_get_user_from_name(System_DB, Auth, Name, User),
             get_dict('@id', User, User_Id),
@@ -2887,7 +2887,7 @@ capabilities_handler(post, Request, System_DB, Auth) :-
               error(bad_api_document(Cap, [operation,scope,user,roles]))
              ),
     api_report_errors(
-        capabilities,
+        capability,
         Request,
         (   Op = "revoke"
         ->  api_revoke_capability(System_DB,Auth,Cap),

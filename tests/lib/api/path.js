@@ -97,6 +97,11 @@ module.exports = {
   organization () {
     return '/api/organization'
   },
+  organizationName (params, extra) {
+    params = new Params({ ...params, ...extra })
+    const orgName = params.stringRequired('orgName')
+    return `/api/organization/${orgName}`
+  },
   patch () {
     return '/api/patch'
   },

@@ -1,20 +1,28 @@
 const api = require('./api')
 const { Params } = require('./params.js')
 
-function add (agent, params) {
+function get(agent, params) {
   params = new Params(params)
-  const bodyString = params.string('bodyString')
   const orgName = params.string('orgName', agent.orgName)
-  const user = params.string('user', agent.user)
   params.assertEmpty()
 
-  const request = agent.post(api.path.organization())
+  const request = agent.get(api.path.organizationName(orgName))
+  request.send({})
 
-  if (bodyString) {
-    request.type('json').send(bodyString)
-  } else {
-    request.send({ organization_name: orgName, user_name: user })
+  return {
+    then(resolve) {
+      resolve(request.then(api.response.verify(api.response.org)))
+    }
   }
+}
+
+function add (agent, params) {
+  params = new Params(params)
+  const orgName = params.string('name', agent.OrgName)
+  params.assertEmpty()
+
+  const request = agent.post(api.path.organizationName(orgName))
+  request.send({})
 
   return {
     then (resolve) {
@@ -35,17 +43,13 @@ function add (agent, params) {
 
 function delete_ (agent, params) {
   params = new Params(params)
-  const bodyString = params.string('bodyString')
   const orgName = params.string('orgName', agent.orgName)
   params.assertEmpty()
 
-  const request = agent.delete(api.path.organization())
+  const request = agent.delete(api.path.organizationName(orgName))
 
-  if (bodyString) {
-    request.type('json').send(bodyString)
-  } else {
-    request.send({ organization_name: orgName })
-  }
+  request.send({})
+
 
   return {
     then (resolve) {

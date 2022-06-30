@@ -1071,7 +1071,7 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
 api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
     format(string(Msg), "There is either more than one id for role ~s. Consider deleting duplicates if you want to refer to them by name rather than id.", [Name]),
     JSON = _{'@type' : 'api:RoleErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoUniqueIdForRoleName",
                               'api:role_name' : Name}
@@ -1079,7 +1079,7 @@ api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
 api_error_jsonld_(role,error(no_id_for_role_name(Name),_), JSON) :-
     format(string(Msg), "There is no role with the name ~s.", [Name]),
     JSON = _{'@type' : 'api:RoleErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForRoleName",
                               'api:role_name' : Name}
@@ -1109,7 +1109,7 @@ api_error_jsonld_(role,
 api_error_jsonld_(organization,error(no_id_for_organization_name(Name),_), JSON) :-
     format(string(Msg), "There is no organization with the name ~s.", [Name]),
     JSON = _{'@type' : 'api:OrganizationErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForOrganizationName",
                               'api:organization_name' : Name}
@@ -1138,7 +1138,7 @@ api_error_jsonld_(organization,
 api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
     format(string(Msg), "No id associated with user name ~s", [Name]),
     JSON = _{'@type' : 'api:UserErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForUserName",
                               'api:user_name' : Name}
@@ -1161,7 +1161,7 @@ api_error_jsonld_(capability,error(no_role_to_revoke,_), JSON) :-
 api_error_jsonld_(capability,error(no_id_for_user_name(Name),_), JSON) :-
     format(string(Msg), "No id associated with user name ~s", [Name]),
     JSON = _{'@type' : 'api:CapabliityErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForUserName",
                               'api:user_name' : Name}
@@ -1169,7 +1169,7 @@ api_error_jsonld_(capability,error(no_id_for_user_name(Name),_), JSON) :-
 api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
     format(string(Msg), "No id associated with resource name ~s", [Name]),
     JSON = _{'@type' : 'api:CapabliityErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoIdForResourceName",
                               'api:resource_name' : Name}
@@ -1186,7 +1186,7 @@ api_error_jsonld_(capability,error(deleted_roles_do_not_exist_in_capability(Role
 api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope),_), JSON) :-
     format(string(Msg), "There was no capability for the user ~s with scope ~s", [User, Scope]),
     JSON = _{'@type' : 'api:CapabliityErrorResponse',
-             'api:status' : "api:failure",
+             'api:status' : "api:not_found",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NoCapabilityForUserWithScope",
                               'api:user' : User,
