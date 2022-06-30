@@ -1836,7 +1836,7 @@ run_command(user,get, NameList, Opts) :-
                                maplist([Role,Role_Name]>>(get_dict(name,Role,Role_Name)),
                                        Roles, Role_Names),
                                format(current_output, '~` t~4|and has roles: ~q~n', [Role_Names]),
-                               format(current_output, '~` t~4|presiding over: ~s (~s)~n', [Resource_Name,Resource_Id])
+                               format(current_output, "~` t~8|presiding over: '~s' ('~s')~n", [Resource_Name,Resource_Id])
                            )
                        )
                    ;   true

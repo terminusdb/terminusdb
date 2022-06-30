@@ -2640,11 +2640,11 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
 :- http_handler(api(roles), cors_handler(Method, roles_handler),
                 [method(Method),
                  time_limit(infinite),
-                 methods([options,post,put])]).
-:- http_handler(api(roles/Id), cors_handler(Method, roles_handler(Id)),
+                 methods([options,post,put,get])]).
+:- http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
                 [method(Method),
                  time_limit(infinite),
-                 methods([options,delete])]).
+                 methods([options,delete,get])]).
 
 /*
  * roles_handler(Mode, Path, Request, System, Auth) is det.
@@ -2653,38 +2653,48 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
  */
 roles_handler(post, Request, System_DB, Auth) :-
     get_payload(Role, Request),
-    do_or_die((   _{ '@id': _,
-                     name: _,
+    do_or_die((   _{ name: Name,
                      action: _
                    } :< Role
               ),
-              error(bad_api_document(Role, [name,'@id',action]))
+              error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
         roles,
         Request,
-        (   api_add_role(System_DB,Auth,Role,_),
+        (   uri_encoded(segment, Name, Encoded_Name),
+            atom_concat('Role/',Encoded_Name,Name_Id),
+            put_dict(_{'@id': Name_Id}, Role, Role_With_Id),
+            api_add_role(System_DB,Auth,Role_With_Id,Role_Id),
+            cors_reply_json(Request,Role_Id)
+        )
+    ).
+roles_handler(put, Request, System_DB, Auth) :-
+    get_payload(Role, Request),
+    do_or_die((   _{ name: Name,
+                     action: _
+                   } :< Role
+              ),
+              error(bad_api_document(Role, [name,action]))
+             ),
+    api_report_errors(
+        roles,
+        Request,
+        (   uri_encoded(segment, Name, Encoded_Name),
+            atom_concat('Role/',Encoded_Name,Name_Id),
+            put_dict(_{'@id': Name_Id}, Role, Role_With_Id),
+            api_update_role(System_DB,Auth,Role_With_Id),
             cors_reply_json(Request,
                             json{'@type' : "api:RolesResponse",
                                  'api:status' : "api:success"})
         )
     ).
-roles_handler(put, Request, System_DB, Auth) :-
-    get_payload(Role, Request),
-    do_or_die((   _{ '@id': _,
-                     name: _,
-                     action: _
-                   } :< Role
-              ),
-              error(bad_api_document(Role, [name,'@id',action]))
-             ),
+roles_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
         roles,
         Request,
-        (   api_update_role(System_DB,Auth,Role),
-            cors_reply_json(Request,
-                            json{'@type' : "api:RolesResponse",
-                                 'api:status' : "api:success"})
+        (   api_get_roles(System_DB, Auth, Roles),
+            cors_reply_json(Request, Roles)
         )
     ).
 
@@ -2693,14 +2703,24 @@ roles_handler(put, Request, System_DB, Auth) :-
  *
  * Delete a role
  */
-roles_handler(delete, Id, Request, System_DB, Auth) :-
+roles_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
         roles,
         Request,
-        (   api_delete_role(System_DB,Auth,Id),
+        (   uri_encoded(segment, Name, Encoded_Name),
+            atom_concat('Role/',Encoded_Name,Name_Id),
+            api_delete_role(System_DB,Auth,Name_Id),
             cors_reply_json(Request,
                             json{'@type' : "api:RolesResponse",
                                  'api:status' : "api:success"})
+        )
+    ).
+roles_handler(get, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        roles,
+        Request,
+        (   api_get_role_from_name(System_DB,Auth,Name,Role),
+            cors_reply_json(Request, Role)
         )
     ).
 
@@ -2708,52 +2728,143 @@ roles_handler(delete, Id, Request, System_DB, Auth) :-
 :- http_handler(api(organizations), cors_handler(Method, organizations_handler),
                 [method(Method),
                  time_limit(infinite),
-                 methods([options,post])]).
-:- http_handler(api(organizations/Id), cors_handler(Method, organizations_handler(Id)),
+                 methods([options,get])]).
+:- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  time_limit(infinite),
-                 methods([options,delete])]).
+                 methods([options,post,delete,get])]).
 
 /*
- * organizations_handler(Mode, Path, Request, System, Auth) is det.
+ * organizations_handler(Mode, Request, System, Auth) is det.
  *
- * Insert an organization or update an organization
+ * Get all organizations
  */
-organizations_handler(post, Request, System_DB, Auth) :-
-    get_payload(Role, Request),
-    do_or_die((   _{ name: _ } :< Role
-              ),
-              error(bad_api_document(Role, [name]))
-             ),
+organizations_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
         organizations,
         Request,
-        (   api_add_organization(System_DB,Auth,Role,_Id),
-            cors_reply_json(Request,
-                            json{'@type' : "api:OrganizationResponse",
-                                 'api:status' : "api:success"})
+        (   api_get_organizations(System_DB, Auth, Orgs),
+            cors_reply_json(Request,Orgs)
         )
     ).
 
 /*
- * organizations_handler(Mode, Path, Request, System, Auth) is det.
+ * organizations_handler(Mode, Name, Request, System, Auth) is det.
  *
- * Delete a role
+ * Manage organization
  */
-organizations_handler(delete, Id, Request, System_DB, Auth) :-
+organizations_handler(post, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        organizations,
         Request,
-        (   api_delete_organization(System_DB,Auth,Id),
+        (   api_add_organization(System_DB, Auth, _{ name: Name }, Id),
+            cors_reply_json(Request,Id)
+        )
+    ).
+organizations_handler(get, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        organizations,
+        Request,
+        (   api_get_organization_from_name(System_DB, Auth, Name, Org),
+            cors_reply_json(Request,Org)
+        )
+    ).
+organizations_handler(delete, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        organizations,
+        Request,
+        (   api_get_organization_from_name(System_DB, Auth, Name, Org),
+            get_dict('@id', Org, Org_Id),
+            api_delete_organization(System_DB,Auth,Org_Id),
             cors_reply_json(Request,
                             json{'@type' : "api:RolesResponse",
                                  'api:status' : "api:success"})
         )
     ).
 
+
+%%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(users), cors_handler(Method, users_handler),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,post,put,get])]).
+:- http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
+                [method(Method),
+                 time_limit(infinite),
+                 methods([options,delete,get])]).
+
 /*
-Grant a capability to a user by giving them a resource with a role
-*/
+ * users_handler(Mode, Request, System, Auth) is det.
+ *
+ * Manage users
+ */
+users_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        users,
+        Request,
+        (   api_get_users(System_DB, Auth, Users),
+            cors_reply_json(Request, Users)
+        )
+    ).
+users_handler(post, Request, System_DB, Auth) :-
+    get_payload(User, Request),
+    do_or_die((   _{ name: _,
+                     password: _
+                   } :< User
+              ),
+              error(bad_api_document(User, [name,password]))
+             ),
+    api_report_errors(
+        users,
+        Request,
+        (   api_add_user(System_DB, Auth, User, Id),
+            cors_reply_json(Request, Id)
+        )
+    ).
+users_handler(put, Request, System_DB, Auth) :-
+    get_payload(User, Request),
+    do_or_die((   _{ name: Name,
+                     password: Pass
+                   } :< User
+              ),
+              error(bad_api_document(User, [name,password]))
+             ),
+    api_report_errors(
+        users,
+        Request,
+        (   api_update_user_password(System_DB, Auth, Name, Pass),
+            cors_reply_json(Request,
+                            json{'@type' : "api:UsersResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+
+/*
+ * users_handler(Mode, Name, Request, System, Auth) is det.
+ *
+ * Manage Users
+ */
+users_handler(get, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        users,
+        Request,
+        (   api_get_user_from_name(System_DB, Auth, Name, User),
+            cors_reply_json(Request,User)
+        )
+    ).
+users_handler(delete, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        users,
+        Request,
+        (   api_get_user_from_name(System_DB, Auth, Name, User),
+            get_dict('@id', User, User_Id),
+            api_delete_organization(System_DB,Auth,User_Id),
+            cors_reply_json(Request,
+                            json{'@type' : "api:UsersResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% Capabilities handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
                 [method(Method),
