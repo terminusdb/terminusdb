@@ -2140,9 +2140,9 @@ user_handler(delete, Request, System_DB, Auth) :-
                             _{'@type' : "api:DeleteUserResponse",
                               'api:status' : "api:success"}))).
 
-%%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% User Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-% THIS IS A *POTENTIALLY* TEMPORARY HANDLER - YOU SHOULD NOT RELY ON THIS YET
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
 :- http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
                 [method(Method),
@@ -2157,6 +2157,55 @@ user_organizations_handler(get, Request, System_DB, Auth) :-
             cors_reply_json(Request, Result)
         )
     ).
+
+
+%%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
+%
+:- http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,post,delete])]).
+:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,delete])]).
+
+organization_handler(post, Request, System_DB, Auth) :-
+    api_report_errors(
+        add_organization,
+        Request,
+        (   http_read_json_required(json_dict(JSON), Request),
+
+            param_value_json_required(JSON, organization_name, non_empty_string, Org),
+            param_value_json_required(JSON, user_name, non_empty_string, User),
+
+            add_user_organization_transaction(System_DB, Auth, User, Org),
+            cors_reply_json(Request,
+                            _{'@type' : "api:AddOrganizationResponse",
+                              'api:status' : "api:success"}))).
+organization_handler(delete, Request, System_DB, Auth) :-
+    api_report_errors(
+        delete_organization,
+        Request,
+        (   http_read_json_required(json_dict(JSON), Request),
+
+            param_value_json_required(JSON, organization_name, non_empty_string, Name),
+
+            delete_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"}))).
+
+organization_handler(delete, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        delete_organization,
+        Request,
+        (   delete_organization_transaction(System_DB, Auth, Name),
+            cors_reply_json(Request,
+                            _{'@type' : "api:DeleteOrganizationResponse",
+                              'api:status' : "api:success"}))).
 
 %%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
