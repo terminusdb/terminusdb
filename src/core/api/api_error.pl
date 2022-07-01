@@ -1069,7 +1069,7 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
              'api:message' : Msg
             }.
 api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
-    format(string(Msg), "There is either more than one id for role ~s. Consider deleting duplicates if you want to refer to them by name rather than id.", [Name]),
+    format(string(Msg), "There is more than one id for role ~s. Consider deleting duplicates if you want to refer to them by name rather than id.", [Name]),
     JSON = _{'@type' : 'api:RoleErrorResponse',
              'api:status' : "api:not_found",
              'api:message' : Msg,
