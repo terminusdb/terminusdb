@@ -1,49 +1,62 @@
-const { Agent, api, db, organization, util } = require('../lib')
+const { expect } = require('chai')
+const { Agent, util } = require('../lib')
 
 describe('organization', function () {
-  describe('fails add with missing parameter', function () {
-    let agent
-
-    before(async function () {
-      agent = new Agent().auth()
-    })
-
-    const options = [
-      ['{"organization_name":"abd"}', 'user_name'],
-      ['{"user_name":"adj"}', 'organization_name'],
-    ]
-    for (const [bodyString, missingParam] of options) {
-      it(bodyString, async function () {
-        await organization
-          .add(agent, { bodyString })
-          .fails(api.error.missingParameter(missingParam))
-      })
-    }
-  })
-
   it('passes add', async function () {
-    const agent = new Agent({ orgName: util.randomString() }).auth()
-    await organization.add(agent)
-    await organization.delete(agent)
+    const agent = new Agent().auth()
+    const orgName = util.randomString()
+    const result = await agent.post(`/api/organizations/${orgName}`)
+    expect(result.body).to.equal(`terminusdb://system/data/Organization/${orgName}`)
+    expect(result.status).to.equal(200)
+    await agent.delete(`/api/organizations/${orgName}`)
   })
 
   it('passes add with pipe in name', async function () {
-    const agent = new Agent({ orgName: util.randomString() + '|pipe' }).auth()
-    await organization.add(agent)
-    await db.create(agent)
-    await db.delete(agent)
-    await organization.delete(agent)
+    const agent = new Agent().auth()
+    const orgBase = util.randomString()
+    const orgName = orgBase + '|pipe'
+    const result = await agent.post(`/api/organizations/${orgName}`)
+    expect(result.body).to.equal(`terminusdb://system/data/Organization/${orgBase}%7Cpipe`)
+    expect(result.status).to.equal(200)
+    await agent.delete(`/api/organizations/${orgName}`)
   })
 
-  it('fails add with unknown user', async function () {
+  it('passes delete', async function () {
     const agent = new Agent().auth()
-    const user = util.randomString()
-    await organization.add(agent, { user }).fails(api.error.unknownUser(user))
+    const orgName = util.randomString()
+    await agent.post(`/api/organizations/${orgName}`)
+    const result = await agent.delete(`/api/organizations/${orgName}`)
+    expect(result.body).to.deep.equal({ '@type': 'api:RolesResponse', 'api:status': 'api:success' })
+    expect(result.status).to.equal(200)
   })
 
   it('fails delete with unknown organization', async function () {
     const orgName = util.randomString()
     const agent = new Agent({ orgName }).auth()
-    await organization.delete(agent).notFound(api.error.unknownOrganization(orgName))
+    const result = await agent.delete(`/api/organizations/${orgName}`)
+    expect(result.status).to.equal(404)
+    expect(result.body['api:error']).to.deep.equal({
+      '@type': 'api:NoIdForOrganizationName',
+      'api:organization_name': orgName,
+    })
+    expect(result.body['@type']).to.equal('api:OrganizationErrorResponse')
+  })
+
+  it('passes get', async function () {
+    const agent = new Agent().auth()
+    const orgName = util.randomString()
+    await agent.post(`/api/organizations/${orgName}`)
+
+    const result = await agent.get(`/api/organizations/${orgName}`)
+    expect(result.body.name).to.equal(orgName)
+    expect(result.status).to.equal(200)
+    await agent.delete(`/api/organizations/${orgName}`)
+  })
+
+  it('gets everything', async function () {
+    const agent = new Agent().auth()
+    const result = await agent.get('/api/organizations')
+    expect(result.body).to.be.an('Array')
+    expect(result.status).to.equal(200)
   })
 })

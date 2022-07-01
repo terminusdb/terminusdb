@@ -1068,6 +1068,137 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
                               'api:key' : Key},
              'api:message' : Msg
             }.
+api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
+    format(string(Msg), "There is more than one id for role ~s. Consider deleting duplicates if you want to refer to them by name rather than id.", [Name]),
+    JSON = _{'@type' : 'api:RoleErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForRoleName",
+                              'api:role_name' : Name}
+            }.
+api_error_jsonld_(role,error(no_id_for_role_name(Name),_), JSON) :-
+    format(string(Msg), "There is no role with the name ~s.", [Name]),
+    JSON = _{'@type' : 'api:RoleErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForRoleName",
+                              'api:role_name' : Name}
+            }.
+api_error_jsonld_(role,error(can_not_insert_existing_object_with_id(Id),_),JSON) :-
+    format(string(Msg), "A role with the id '~s' already exists.  Consider renaming, deleting the old role, or updating the old role.", [Id]),
+    JSON = _{'@type' : 'api:RoleErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForRoleName",
+                              'api:role_id' : Id}
+            }.
+api_error_jsonld_(role,
+                  error(
+                      schema_check_failure(
+                          [json{'http://terminusdb.com/schema/system#action':
+                                [json{'@type':not_a_valid_enum,
+                                      enum:'http://terminusdb.com/schema/system#Action',
+                                      value:Value}]}]), _), JSON) :-
+    format(string(Msg), "The action ~s is not a valid Action type for the system schema", [Value]),
+    JSON = _{'@type' : 'api:RoleErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InvalidActionType",
+                              'api:action' : Value}
+            }.
+api_error_jsonld_(organization,error(no_id_for_organization_name(Name),_), JSON) :-
+    format(string(Msg), "There is no organization with the name ~s.", [Name]),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForOrganizationName",
+                              'api:organization_name' : Name}
+            }.
+api_error_jsonld_(organization,error(can_not_insert_existing_object_with_id(Id),_),JSON) :-
+    format(string(Msg), "An organization with the id '~s' already exists.  Consider renaming, deleting the old role, or updating the old role.", [Id]),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForOrganizationName",
+                              'api:organization_id' : Id}
+            }.
+api_error_jsonld_(organization,
+                  error(
+                      schema_check_failure([witness{'@type':instance_not_cardinality_one,
+                                                    class:'http://terminusdb.com/schema/system#Resource',
+                                                    instance:Capability,
+                                                    predicate:'http://terminusdb.com/schema/system#scope'}]), _), JSON) :-
+    format(string(Msg), "The organization can not be removed as it is referred to by a capability. Remove the grant of this capability to the organization before removing.", []),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DanglingOrganizationReferencedError",
+                              'api:capability' : Capability}
+            }.
+api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
+    format(string(Msg), "No id associated with user name ~s", [Name]),
+    JSON = _{'@type' : 'api:UserErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForUserName",
+                              'api:user_name' : Name}
+            }.
+api_error_jsonld_(user,error(can_not_delete_super_user,_), JSON) :-
+    format(string(Msg), "You can not delete the super user!", []),
+    JSON = _{'@type' : 'api:UserErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:CanNotDeleteSuperUser"}
+            }.
+api_error_jsonld_(user,error(can_not_insert_existing_object_with_id(Id),_), JSON) :-
+    format(string(Msg), "A user with this name already exists with id ~s", [Id]),
+    JSON = _{'@type' : 'api:UserErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForUser",
+                              'api:user_id' : Id}
+            }.
+api_error_jsonld_(capability,error(no_role_to_revoke,_), JSON) :-
+    format(string(Msg), "You must specify a role to revoke", []),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRoleToRevoke" }
+            }.
+api_error_jsonld_(capability,error(no_id_for_user_name(Name),_), JSON) :-
+    format(string(Msg), "No id associated with user name ~s", [Name]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForUserName",
+                              'api:user_name' : Name}
+            }.
+api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
+    format(string(Msg), "No id associated with resource name ~s", [Name]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForResourceName",
+                              'api:resource_name' : Name}
+            }.
+api_error_jsonld_(capability,error(deleted_roles_do_not_exist_in_capability(Roles,Capability),_),JSON) :-
+    format(string(Msg), "Deleted roles ~q do not exist for capability ~s", [Roles,Capability]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RevokedRolesDoNotExistForCapability",
+                              'api:roles' : Roles,
+                              'api:capability' : Capability }
+            }.
+api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope),_), JSON) :-
+    format(string(Msg), "There was no capability for the user ~s with scope ~s", [User, Scope]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoCapabilityForUserWithScope",
+                              'api:user' : User,
+                              'api:scope' : Scope }
+            }.
 
 api_error_jsonld_(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).
@@ -1112,6 +1243,10 @@ error_type_(squash, 'api:SquashErrorResponse').
 error_type_(unbundle, 'api:UnbundleErrorResponse').
 error_type_(unpack, 'api:UnpackErrorResponse').
 error_type_(woql, 'api:WoqlErrorResponse').
+error_type_(user, 'api:UserErrorResponse').
+error_type_(organization, 'api:OrganizationErrorResponse').
+error_type_(role, 'api:RoleErrorResponse').
+error_type_(capability, 'api:CapabilityErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

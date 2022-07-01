@@ -2140,9 +2140,9 @@ user_handler(delete, Request, System_DB, Auth) :-
                             _{'@type' : "api:DeleteUserResponse",
                               'api:status' : "api:success"}))).
 
-%%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% User Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-% THIS IS A *POTENTIALLY* TEMPORARY HANDLER - YOU SHOULD NOT RELY ON THIS YET
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
 :- http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
                 [method(Method),
@@ -2158,7 +2158,11 @@ user_organizations_handler(get, Request, System_DB, Auth) :-
         )
     ).
 
+
 %%%%%%%%%%%%%%%%%%%% Organization handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
+%
 :- http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
                 [method(Method),
                  prefix,
@@ -2202,7 +2206,6 @@ organization_handler(delete, Name, Request, System_DB, Auth) :-
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteOrganizationResponse",
                               'api:status' : "api:success"}))).
-
 
 %%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
@@ -2681,6 +2684,263 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
         )
     ).
 
+
+%%%%%%%%%%%%%%%%%%%% Roles handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(roles), cors_handler(Method, roles_handler),
+                [method(Method),
+                 methods([options,post,put,get])]).
+:- http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
+                [method(Method),
+                 methods([options,delete,get])]).
+
+/*
+ * roles_handler(Mode, Request, System, Auth) is det.
+ *
+ * Insert a role or update a role
+ */
+roles_handler(post, Request, System_DB, Auth) :-
+    get_payload(Role, Request),
+    do_or_die((   _{ name: Name,
+                     action: _
+                   } :< Role
+              ),
+              error(bad_api_document(Role, [name,action]))
+             ),
+    api_report_errors(
+        roles,
+        Request,
+        (   uri_encoded(segment, Name, Encoded_Name),
+            atom_concat('Role/',Encoded_Name,Name_Id),
+            put_dict(_{'@id': Name_Id}, Role, Role_With_Id),
+            api_add_role(System_DB,Auth,Role_With_Id,Role_Id),
+            cors_reply_json(Request,Role_Id)
+        )
+    ).
+roles_handler(put, Request, System_DB, Auth) :-
+    get_payload(Role, Request),
+    do_or_die((   _{ name: Name,
+                     action: _
+                   } :< Role
+              ),
+              error(bad_api_document(Role, [name,action]))
+             ),
+    api_report_errors(
+        roles,
+        Request,
+        (   api_get_role_from_name(System_DB,Auth,Name,Old_Role),
+            put_dict(Role,Old_Role,New_Role),
+            api_update_role(System_DB,Auth,New_Role),
+            cors_reply_json(Request,
+                            json{'@type' : "api:RolesResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+roles_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        roles,
+        Request,
+        (   api_get_roles(System_DB, Auth, Roles),
+            cors_reply_json(Request, Roles)
+        )
+    ).
+
+/*
+ * roles_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Delete a role
+ */
+roles_handler(delete, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        roles,
+        Request,
+        (   uri_encoded(segment, Name, Encoded_Name),
+            atom_concat('Role/',Encoded_Name,Name_Id),
+            api_delete_role(System_DB,Auth,Name_Id),
+            cors_reply_json(Request,
+                            json{'@type' : "api:RolesResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+roles_handler(get, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        roles,
+        Request,
+        (   api_get_role_from_name(System_DB,Auth,Name,Role),
+            cors_reply_json(Request, Role)
+        )
+    ).
+
+%%%%%%%%%%%%%%%%%%%% Organizations handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(organizations), cors_handler(Method, organizations_handler),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
+                [method(Method),
+                 methods([options,post,delete,get])]).
+
+/*
+ * organizations_handler(Mode, Request, System, Auth) is det.
+ *
+ * Get all organizations
+ */
+organizations_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_get_organizations(System_DB, Auth, Orgs),
+            cors_reply_json(Request,Orgs)
+        )
+    ).
+
+/*
+ * organizations_handler(Mode, Name, Request, System, Auth) is det.
+ *
+ * Manage organization
+ */
+organizations_handler(post, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_add_organization(System_DB, Auth, _{ name: Name }, Id),
+            cors_reply_json(Request,Id)
+        )
+    ).
+organizations_handler(get, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_get_organization_from_name(System_DB, Auth, Name, Org),
+            cors_reply_json(Request,Org)
+        )
+    ).
+organizations_handler(delete, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_get_organization_from_name(System_DB, Auth, Name, Org),
+            get_dict('@id', Org, Org_Id),
+            api_delete_organization(System_DB,Auth,Org_Id),
+            cors_reply_json(Request,
+                            json{'@type' : "api:RolesResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+
+
+%%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(users), cors_handler(Method, users_handler),
+                [method(Method),
+                 methods([options,post,put,get])]).
+:- http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
+                [method(Method),
+                 methods([options,delete,get])]).
+
+/*
+ * users_handler(Mode, Request, System, Auth) is det.
+ *
+ * Manage users
+ */
+users_handler(get, Request, System_DB, Auth) :-
+    api_report_errors(
+        user,
+        Request,
+        (   api_get_users(System_DB, Auth, Users),
+            cors_reply_json(Request, Users)
+        )
+    ).
+users_handler(post, Request, System_DB, Auth) :-
+    get_payload(User, Request),
+    do_or_die((   _{ name: _ } :< User
+              ),
+              error(bad_api_document(User, [name]))
+             ),
+    api_report_errors(
+        user,
+        Request,
+        (   api_add_user(System_DB, Auth, User, Id),
+            cors_reply_json(Request, Id)
+        )
+    ).
+users_handler(put, Request, System_DB, Auth) :-
+    get_payload(User, Request),
+    do_or_die((   _{ name: Name,
+                     password: Pass
+                   } :< User
+              ),
+              error(bad_api_document(User, [name,password]))
+             ),
+    api_report_errors(
+        user,
+        Request,
+        (   api_update_user_password(System_DB, Auth, Name, Pass),
+            cors_reply_json(Request,
+                            json{'@type' : "api:UsersResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+
+/*
+ * users_handler(Mode, Name, Request, System, Auth) is det.
+ *
+ * Manage Users
+ */
+users_handler(get, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        user,
+        Request,
+        (   api_get_user_from_name(System_DB, Auth, Name, User),
+            cors_reply_json(Request,User)
+        )
+    ).
+users_handler(delete, Name, Request, System_DB, Auth) :-
+    api_report_errors(
+        user,
+        Request,
+        (   api_get_user_from_name(System_DB, Auth, Name, User),
+            get_dict('@id', User, User_Id),
+            api_delete_user(System_DB,Auth,User_Id),
+            cors_reply_json(Request,
+                            json{'@type' : "api:UsersResponse",
+                                 'api:status' : "api:success"})
+        )
+    ).
+
+%%%%%%%%%%%%%%%%%%%% Capabilities handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
+                [method(Method),
+                 methods([options,post])]).
+
+/*
+ * capabilities_handler(Mode, Request, System, Auth) is det.
+ *
+ * Insert an organization or update an organization
+ */
+capabilities_handler(post, Request, System_DB, Auth) :-
+    get_payload(Cap, Request),
+    do_or_die((   _{ operation: Op,
+                     scope: _,
+                     user: _,
+                     roles: _
+                   } :< Cap
+              ),
+              error(bad_api_document(Cap, [operation,scope,user,roles]))
+             ),
+    api_report_errors(
+        capability,
+        Request,
+        (   Op = "revoke"
+        ->  api_revoke_capability(System_DB,Auth,Cap),
+            cors_reply_json(Request,
+                            json{'@type' : "api:CapabilityResponse",
+                                 'api:status' : "api:success"})
+        ;   Op = "grant"
+        ->  api_grant_capability(System_DB,Auth,Cap),
+            cors_reply_json(Request,
+                            json{'@type' : "api:CapabilityResponse",
+                                 'api:status' : "api:success"})
+        ;   throw(error(unknown_capabilities_operation(Op)))
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(root(.), cors_handler(Method, console_handler),
