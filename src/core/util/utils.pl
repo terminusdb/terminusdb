@@ -83,7 +83,8 @@
               with_memory_file/1,
               with_memory_file_stream/3,
               with_memory_file_stream/4,
-              terminal_slash/2
+              terminal_slash/2,
+              dict_field_verifier/3
           ]).
 
 /** <module> Utils
@@ -1234,3 +1235,24 @@ terminal_slash(Atom, Slashed) :-
     (   Last = ""
     ->  Atom = Slashed
     ;   atomic_list_concat([Atom, '/'], Slashed)).
+
+/*
+ * dict_field_verifier(+DictIn, +Fields, +Verifier:List[Goal(1)], -DictOut) is det.
+ *
+ * Creates a fresh dictionary having any of fields that exist in Dict
+ * which meet the verifier goals.
+ */
+dict_field_verifier(DictIn, Field_Verifier, DictOut) :-
+    findall(
+        Field-Value,
+        (   get_dict(Field,Field_Verifier,Verifier),
+            get_dict(Field,DictIn,Value),
+            do_or_die(
+                field_verifier(Value,Verifier),
+                error(invalid_field_value(Field,Value),_))),
+        New_Pairs),
+    dict_pairs(DictOut, _, New_Pairs).
+
+:- meta_predicate field_verifier(+,1).
+field_verifier(Field,Verifier) :-
+    call(Verifier, Field).

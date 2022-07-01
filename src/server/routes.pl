@@ -2856,11 +2856,9 @@ users_handler(get, Request, System_DB, Auth) :-
     ).
 users_handler(post, Request, System_DB, Auth) :-
     get_payload(User, Request),
-    do_or_die((   _{ name: _,
-                     password: _
-                   } :< User
+    do_or_die((   _{ name: _ } :< User
               ),
-              error(bad_api_document(User, [name,password]))
+              error(bad_api_document(User, [name]))
              ),
     api_report_errors(
         user,

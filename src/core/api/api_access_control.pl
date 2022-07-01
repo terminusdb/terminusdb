@@ -91,7 +91,13 @@ api_add_role(_, Auth, Role, Id) :-
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
     % Make sure that we only insert role types.
-    put_dict('@type', Role, 'Role', Typed_Role),
+    dict_field_verifier(
+        Role,
+        _{ name: (*),
+           action: (*)},
+        New_Role
+    ),
+    put_dict('@type', New_Role, 'Role', Typed_Role),
 
     create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Add Role"},
                    System_Context),
@@ -107,7 +113,14 @@ api_update_role(_, Auth, Role) :-
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
     % Make sure that we only insert role types.
-    put_dict('@type', Role, 'Role', Typed_Role),
+    dict_field_verifier(
+        Role,
+        _{ '@id' : (*),
+           name: (*),
+           action: (*)},
+        New_Role
+    ),
+    put_dict('@type', New_Role, 'Role', Typed_Role),
 
     create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Update Role"},
                    System_Context),
@@ -123,7 +136,7 @@ api_delete_role(_, Auth, Role_Id) :-
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Update Role"},
+    create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Delete Role"},
                    System_Context),
 
     % Make sure we are actually dealing with a role document
@@ -186,12 +199,13 @@ api_add_organization(_, Auth, Organization, Id) :-
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    % Make sure that we only insert Organization types.
-    put_dict('@type', Organization, 'Organization', Organization1),
-    (   get_dict('database', Organization, _)
-    ->  del_dict('database', Organization1, _, Typed_Organization)
-    ;   Typed_Organization = Organization1
+    % Make sure that we only insert role types.
+    dict_field_verifier(
+        Organization,
+        _{ name: (*) },
+        New_Organization
     ),
+    put_dict('@type', New_Organization, 'Organization', Typed_Organization),
 
     create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Add Organization"},
                    System_Context),
@@ -206,12 +220,13 @@ api_delete_organization(_, Auth, Organization_Id) :-
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Update Organization"},
+    create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Delete Organization"},
                    System_Context),
 
     % Make sure we are actually dealing with a Organization document
-    prefix_expand(Organization_Id, _{ '@base' : 'terminusdb://system/data/'
-                            }, Expanded_Organization_Id),
+    prefix_expand(Organization_Id,
+                  _{ '@base' : 'terminusdb://system/data/' },
+                  Expanded_Organization_Id),
     do_or_die(
         get_document_uri_by_type(System_Context, 'http://terminusdb.com/schema/system#Organization',
                                  Expanded_Organization_Id),
@@ -357,12 +372,18 @@ api_add_user(SystemDB,Auth,User,Id) :-
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    put_dict('@type', User, 'User', Typed_User),
-    del_dict('password', Typed_User, Pass, New_User1),
-    crypto_password_hash(Pass,Hash),
-    put_dict(key_hash, New_User1, Hash, New_User),
+    get_dict(name, User, Name),
+    (   get_dict(password, User, Password)
+    ->  crypto_password_hash(Password, Hash)
+    ;   Hash = null
+    ),
+    New_User =
+    _{
+        name : Name,
+        key_hash : Hash
+    },
 
-    create_context(SystemDB, commit_info{author: "admin", message: "API: Add Organization"},
+    create_context(SystemDB, commit_info{author: "admin", message: "API: Add User"},
                    System_Context),
     with_transaction(
         System_Context,
@@ -375,7 +396,7 @@ api_delete_user(_, Auth, User_Id) :-
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Update Role"},
+    create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Delete User"},
                    System_Context),
 
     % Make sure we are actually dealing with a role document
@@ -474,10 +495,20 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
         ;   get_dict('@id', User, Auth)),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    crypto_password_hash(Password, Hash),
-    put_dict(key_hash, User, Hash, New_User),
+    get_dict('@id', User, Id),
+    get_dict(name, User, Name),
+    (   get_dict(password, User, Password)
+    ->  crypto_password_hash(Password, Hash)
+    ;   Hash = null
+    ),
+    New_User =
+    _{
+        '@id' : Id,
+        name : Name,
+        key_hash : Hash
+    },
 
-    create_context(System_DB, commit_info{author: "admin", message: "API: Add Organization"},
+    create_context(System_DB, commit_info{author: "admin", message: "API: Update User Password"},
                    System_Context),
     with_transaction(
         System_Context,

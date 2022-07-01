@@ -146,6 +146,7 @@
               with_memory_file_stream/3,
               with_memory_file_stream/4,
               terminal_slash/2,
+              dict_field_verifier/3,
 
               % speculative_parse.pl
               %guess_date/2,
