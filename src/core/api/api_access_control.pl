@@ -397,7 +397,7 @@ api_delete_user(_, Auth, User_Id) :-
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
     do_or_die(
-        is_super_user(User_Id),
+        \+ is_super_user(User_Id),
         error(can_not_delete_super_user, _)),
 
     create_context(system_descriptor{}, commit_info{author: "admin", message: "API: Delete User"},

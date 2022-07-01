@@ -1144,7 +1144,7 @@ api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
                               'api:user_name' : Name}
             }.
 api_error_jsonld_(user,error(can_not_delete_super_user,_), JSON) :-
-    format(string(Msg), "You can not delete the super user ~s", []),
+    format(string(Msg), "You can not delete the super user!", []),
     JSON = _{'@type' : 'api:UserErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,
