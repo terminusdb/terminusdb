@@ -884,7 +884,7 @@ opt_spec(organization,get,'terminusdb organization get <ORGANIZATION_NAME_OR_ID>
            default(false),
            help('Return answer as a JSON document')]]).
 opt_spec(user,create,'terminusdb user create USER',
-         'Create a user with a given name USER in the existing organization ORGANIZATION',
+         'Create a user with a given name USER',
          [[opt(help),
            type(boolean),
            longflags([help]),
