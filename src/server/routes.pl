@@ -2688,11 +2688,9 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Roles handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(roles), cors_handler(Method, roles_handler),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,post,put,get])]).
 :- http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,delete,get])]).
 
 /*
@@ -2775,11 +2773,9 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Organizations handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(organizations), cors_handler(Method, organizations_handler),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,get])]).
 :- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,post,delete,get])]).
 
 /*
@@ -2834,11 +2830,9 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(users), cors_handler(Method, users_handler),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,post,put,get])]).
 :- http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,delete,get])]).
 
 /*
@@ -2914,7 +2908,6 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Capabilities handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
                 [method(Method),
-                 time_limit(infinite),
                  methods([options,post])]).
 
 /*
