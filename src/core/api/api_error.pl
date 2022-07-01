@@ -1143,6 +1143,13 @@ api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
              'api:error' : _{ '@type' : "api:NoIdForUserName",
                               'api:user_name' : Name}
             }.
+api_error_jsonld_(user,error(can_not_delete_super_user,_), JSON) :-
+    format(string(Msg), "You can not delete the super user ~s", []),
+    JSON = _{'@type' : 'api:UserErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:CanNotDeleteSuperUser"}
+            }.
 api_error_jsonld_(user,error(can_not_insert_existing_object_with_id(Id),_), JSON) :-
     format(string(Msg), "A user with this name already exists with id ~s", [Id]),
     JSON = _{'@type' : 'api:UserErrorResponse',
