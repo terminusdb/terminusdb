@@ -93,8 +93,9 @@ api_add_role(_, Auth, Role, Id) :-
     % Make sure that we only insert role types.
     dict_field_verifier(
         Role,
-        _{ name: (*),
-           action: (*)},
+        _{ '@id' : (*),
+           name: (*),
+           action: (*) },
         New_Role
     ),
     put_dict('@type', New_Role, 'Role', Typed_Role),
@@ -501,10 +502,7 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
 
     get_dict('@id', User, Id),
     get_dict(name, User, Name),
-    (   get_dict(password, User, Password)
-    ->  crypto_password_hash(Password, Hash)
-    ;   Hash = null
-    ),
+    crypto_password_hash(Password, Hash),
     New_User =
     _{
         '@id' : Id,
