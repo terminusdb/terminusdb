@@ -497,6 +497,168 @@ Query documents.
   * `-q`, `--query`=[value]:
   document query search template
 
+### role create
+
+`terminusdb role create ROLE_NAME ACTION_1 .. ACTION_N OPTIONS`
+
+Create a new role with the listed actions. Actions may be any of:
+ "create_database", "delete_database", "class_frame",
+ "clone", "fetch", "push",
+ "branch", "rebase", "instance_read_access", "instance_write_access",
+ "schema_read_access", "schema_write_access", "meta_read_access",
+ "meta_write_access", "commit_read_access", "commit_write_access",
+ "manage_capabilities"
+
+  * `-h`, `--help`=[value]:
+  print help for the `role create` sub command
+
+### role delete
+
+`terminusdb role create ROLE_ID_OR_ROLE_NAME`
+
+Delete a role from the system database
+
+  * `-h`, `--help`=[value]:
+  print help for the `role delete` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as a role Id rather than a name.
+
+### role update
+
+`terminusdb role update ROLE_ID_OR_ROLE_NAME ACTIONS OPTIONS`
+
+Update a role from the system database
+
+  * `-h`, `--help`=[value]:
+  print help for the `role update` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as a role Id rather than a name.
+
+### role get
+
+`terminusdb role get <ROLE_ID_OR_ROLE_NAME>`
+
+Get a role description from name or id, or all roles if unspecified.
+
+  * `-h`, `--help`=[value]:
+  print help for the `role get` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as a role id rather than a name.
+
+  * `-j`, `--json`=[value]:
+  Return answer as a JSON document
+
+### organization create
+
+`terminusdb organization create ORGANIZATION_NAME`
+
+Create an organization with a given name.
+
+  * `-h`, `--help`=[value]:
+  print help for the `organization create` sub command
+
+### organization delete
+
+`terminusdb organization delete ORGANIZATION_NAME_OR_ID`
+
+Create an organization with a given name or id.
+
+  * `-h`, `--help`=[value]:
+  print help for the `organization delete` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as an organization id rather than a name.
+
+### organization get
+
+`terminusdb organization get <ORGANIZATION_NAME_OR_ID>`
+
+Get an organization from its name or id, or list all if unspecified.
+
+  * `-h`, `--help`=[value]:
+  print help for the `organization get` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as an organization id rather than a name.
+
+  * `-j`, `--json`=[value]:
+  Return answer as a JSON document
+
+### user create
+
+`terminusdb user create USER`
+
+Create a user with a given name USER
+
+  * `-h`, `--help`=[value]:
+  print help for the `user create` sub command
+
+  * `-p`, `--password`=[value]:
+  Specify the password to use for the user
+
+### user delete
+
+`terminusdb organization delete USER`
+
+Delete a user with a given name or ID.
+
+  * `-h`, `--help`=[value]:
+  print help for the `user delete` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as an organization id rather than a name.
+
+### user get
+
+`terminusdb user get <USER_NAME_OR_ID>`
+
+Get a user from its name or id, or list all if unspecified.
+
+  * `-h`, `--help`=[value]:
+  print help for the `organization get` sub command
+
+  * `-i`, `--id`=[value]:
+  Interpret argument as an organization id rather than a name.
+
+  * `-c`, `--capabilities`=[value]:
+  Report on all capabilities of this user.
+
+  * `-j`, `--json`=[value]:
+  Return answer as a JSON document
+
+### user password
+
+`terminusdb user password USER`
+
+Change passowrd for user USER
+
+  * `-h`, `--help`=[value]:
+  print help for the `user create` sub command
+
+  * `-p`, `--password`=[value]:
+  Specify the password to use for the user
+
+### capability grant
+
+`terminusdb capability grant USER SCOPE ROLE1 <...ROLEN>`
+
+Grant ROLE1 ... ROLEN over SCOPE to USER
+
+  * `-h`, `--help`=[value]:
+  print help for the `store init` sub command
+
+### capability revoke
+
+`terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>`
+
+Revoke ROLE1 ... ROLEN over SCOPE from USER
+
+  * `-h`, `--help`=[value]:
+  print help for the `store init` sub command
+
 ### store init
 
 `terminusdb store init OPTIONS`

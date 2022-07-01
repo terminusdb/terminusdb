@@ -17,6 +17,7 @@
 :- use_module(library(http/json)).
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(document), [get_document/3]).
 :- use_module(library(optparse)).
 :- use_module(core(util),
               [do_or_die/2, token_authorization/2,
@@ -781,6 +782,194 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            shortflags([q]),
            default('_'),
            help('document query search template')]]).
+opt_spec(role,create,'terminusdb role create ROLE_NAME ACTION_1 .. ACTION_N OPTIONS',
+         'Create a new role with the listed actions. Actions may be any of:
+ "create_database", "delete_database", "class_frame",
+ "clone", "fetch", "push",
+ "branch", "rebase", "instance_read_access", "instance_write_access",
+ "schema_read_access", "schema_write_access", "meta_read_access",
+ "meta_write_access", "commit_read_access", "commit_write_access",
+ "manage_capabilities"',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `role create` sub command')]]).
+opt_spec(role,delete,'terminusdb role create ROLE_ID_OR_ROLE_NAME',
+         'Delete a role from the system database',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `role delete` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as a role Id rather than a name.')]]).
+opt_spec(role,update,'terminusdb role update ROLE_ID_OR_ROLE_NAME ACTIONS OPTIONS',
+         'Update a role from the system database',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `role update` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as a role Id rather than a name.')]]).
+opt_spec(role,get,'terminusdb role get <ROLE_ID_OR_ROLE_NAME>',
+         'Get a role description from name or id, or all roles if unspecified.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `role get` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as a role id rather than a name.')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('Return answer as a JSON document')]]).
+opt_spec(organization,create,'terminusdb organization create ORGANIZATION_NAME',
+         'Create an organization with a given name.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `organization create` sub command')]]).
+opt_spec(organization,delete,'terminusdb organization delete ORGANIZATION_NAME_OR_ID',
+         'Create an organization with a given name or id.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `organization delete` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as an organization id rather than a name.')]]).
+opt_spec(organization,get,'terminusdb organization get <ORGANIZATION_NAME_OR_ID>',
+         'Get an organization from its name or id, or list all if unspecified.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `organization get` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as an organization id rather than a name.')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('Return answer as a JSON document')]]).
+opt_spec(user,create,'terminusdb user create USER',
+         'Create a user with a given name USER',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `user create` sub command')],
+          [opt(password),
+           type(atom),
+           longflags([password]),
+           shortflags([p]),
+           default('_'),
+           help('Specify the password to use for the user')]]).
+opt_spec(user,delete,'terminusdb organization delete USER',
+         'Delete a user with a given name or ID.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `user delete` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as an organization id rather than a name.')]]).
+opt_spec(user,get,'terminusdb user get <USER_NAME_OR_ID>',
+         'Get a user from its name or id, or list all if unspecified.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `organization get` sub command')],
+          [opt(id),
+           type(boolean),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('Interpret argument as an organization id rather than a name.')],
+          [opt(capabilities),
+           type(boolean),
+           longflags([capabilities]),
+           shortflags([c]),
+           default(false),
+           help('Report on all capabilities of this user.')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('Return answer as a JSON document')]]).
+opt_spec(user,password,'terminusdb user password USER',
+         'Change passowrd for user USER',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `user create` sub command')],
+          [opt(password),
+           type(atom),
+           longflags([password]),
+           shortflags([p]),
+           default('_'),
+           help('Specify the password to use for the user')]]).
+opt_spec(capability,grant,'terminusdb capability grant USER SCOPE ROLE1 <...ROLEN>',
+         'Grant ROLE1 ... ROLEN over SCOPE to USER',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `store init` sub command')]]).
+opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>',
+         'Revoke ROLE1 ... ROLEN over SCOPE from USER',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `store init` sub command')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -1445,6 +1634,271 @@ run_command(doc,get, [Path], Opts) :-
             no_data_version, _Actual_Data_Version,
             [L]>>(ignore((L=true,format('[')))))
     ).
+run_command(role,create,[Name|Actions], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    atom_concat('Role/',Name,Name_Id),
+    Role =
+    _{  '@id' : Name_Id,
+        name : Name,
+        action : Actions
+    },
+    api_report_errors(
+        role,
+        api_add_role(System_DB,Auth,Role,Id)
+    ),
+    format(current_output, "Role added: ~s~n", [Id]).
+run_command(role,delete,[Role_Id_or_Name], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    (   option(id(false), Opts)
+    ->  api_report_errors(
+            role,
+            api_get_role_from_name(System_DB,Auth,Role_Id_or_Name,Role)
+        ),
+        get_dict('@id', Role, Role_Id)
+    ;   Role_Id = Role_Id_or_Name
+    ),
+    api_report_errors(
+        role,
+        api_delete_role(System_DB,Auth,Role_Id)
+    ),
+    format(current_output, "Role deleted~n", []).
+run_command(role,get,NameOrIdList,Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    (   option(id(false),Opts),
+        [Name] = NameOrIdList
+    ->  api_report_errors(
+            role,
+            api_get_role_from_name(System_DB,Auth,Name,Role)
+        ),
+        Roles = [Role]
+    ;   [Id] = NameOrIdList
+    ->  api_report_errors(
+            role,
+            api_get_role_from_id(System_DB, Auth, Id, Role)
+        ),
+        Roles = [Role]
+    ;   api_report_errors(
+            role,
+            api_get_roles(System_DB,Auth,Roles)
+        )
+    ),
+    (   option(json(true),Opts)
+    ->  json_write_dict(current_output,Roles,[])
+    ;   forall(member(Role,Roles),
+               (   get_dict(name,Role,Role_Name),
+                   get_dict('@id',Role,Role_Id),
+                   (   get_dict(action,Role,Role_Actions)
+                   ->  format(current_output, "'~s' has id: '~s'~n  and actions: ~q~n~n",
+                              [Role_Name,Role_Id,Role_Actions])
+                   ;   true
+                   )
+               ))
+    ).
+run_command(role,update,[Role_Id_or_Name|Actions], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        role,
+        (   option(id(false), Opts)
+        ->  api_get_role_from_name(System_DB,Auth,Role_Id_or_Name,Role)
+        ;   get_document(System_DB,Role_Id_or_Name,Role)
+        )
+    ),
+
+    put_dict(action,Role,Actions,New_Role),
+    api_report_errors(
+        role,
+        api_update_role(System_DB,Auth,New_Role)
+    ),
+    get_dict('@id',Role,Role_Id),
+    format(current_output, "Role id: '~s'~n updated with actions: ~q~n", [Role_Id,Actions]).
+run_command(organization,create,[Name], _Opts) :-
+
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    Organization =
+    _{  name : Name
+    },
+    api_report_errors(
+        organization,
+        api_add_organization(System_DB,Auth,Organization,Id)
+    ),
+    format(current_output, "Organization added: ~s~n", [Id]).
+run_command(organization,delete,[Name_or_Id], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    (   option(id(true),Opts)
+    ->  Organization_Id = Name_or_Id
+    ;   api_report_errors(
+            organization,
+            api_get_organization_from_name(System_DB, Auth, Name_or_Id, Organization)
+        ),
+        get_dict('@id', Organization, Organization_Id)
+    ),
+
+    api_report_errors(
+        organization,
+        api_delete_organization(System_DB,Auth,Organization_Id)
+    ),
+    format(current_output, "Organization deleted~n", []).
+run_command(organization,get, NameList, Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    (   option(id(false),Opts),
+        [Name] = NameList
+    ->  api_report_errors(
+            organization,
+            api_get_organization_from_name(System_DB,Auth,Name,Organization)
+        ),
+        Organizations = [Organization]
+    ;   [Id] = NameList
+    ->  api_report_errors(
+            organization,
+            api_get_organization_from_id(System_DB, Auth, Id, Organization)
+        ),
+        Organizations = [Organization]
+    ;   api_report_errors(
+            organization,
+            api_get_organizations(System_DB,Auth,Organizations)
+        )
+    ),
+    (   option(json(true),Opts)
+    ->  json_write_dict(current_output,Organizations,[])
+    ;   forall(member(Organization,Organizations),
+               (   get_dict(name,Organization,Organization_Name),
+                   get_dict('@id',Organization,Organization_Id),
+                   format(current_output, "'~s' has id: '~s'~n",
+                          [Organization_Name,Organization_Id])
+               ))
+    ).
+run_command(user,create,[Name], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+
+    User =
+    _{  name : Name,
+        password : Password
+     },
+
+    api_report_errors(
+        user,
+        api_add_user(System_DB,Auth,User,Id)
+    ),
+    format(current_output, "~nUser '~s' added with id ~s~n", [Name,Id]).
+run_command(user,delete,[Name_or_Id], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    (   option(id(true),Opts)
+    ->  User_Id = Name_or_Id
+    ;   api_report_errors(
+            user,
+            api_get_user_from_name(System_DB, Auth, Name_or_Id, User)
+        ),
+        get_dict('@id', User, User_Id)
+    ),
+
+    api_report_errors(
+        user,
+        api_delete_user(System_DB,Auth,User_Id)
+    ),
+    format(current_output, "User deleted~n", []).
+run_command(user,get, NameList, Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    (   option(id(false),Opts),
+        [Name] = NameList
+    ->  api_report_errors(
+            user,
+            api_get_user_from_name(System_DB,Auth,Name,User_Obj)
+        ),
+        Users = [User_Obj]
+    ;   [Id] = NameList
+    ->  api_report_errors(
+            user,
+            api_get_user_from_id(System_DB, Auth, Id, User_Obj)
+        ),
+        Users = [User_Obj]
+    ;   api_report_errors(
+            user,
+            api_get_users(System_DB,Auth,Users)
+        )
+    ),
+
+    (   option(json(true),Opts)
+    ->  json_write_dict(current_output,Users,[width(0)]),
+        nl
+    ;   forall(member(User,Users),
+               (   get_dict(name,User,User_Name),
+                   get_dict('@id',User,User_Id),
+                   format(current_output, "'~s' has id: '~s'~n",
+                          [User_Name,User_Id]),
+                   (   option(capabilities(true), Opts),
+                       get_dict(capability, User, Capabilities)
+                   ->  forall(
+                           member(Capability, Capabilities),
+                           (   get_dict(scope, Capability, Resource),
+                               get_dict(name, Resource, Resource_Name),
+                               get_dict('@id', Resource, Resource_Id),
+                               (   get_dict(role, Capability, Roles)
+                               ->  true
+                               ;   Roles = []),
+                               maplist([Role,Role_Name]>>(get_dict(name,Role,Role_Name)),
+                                       Roles, Role_Names),
+                               format(current_output, '~` t~4|and has roles: ~q~n', [Role_Names]),
+                               format(current_output, "~` t~8|presiding over: '~s' ('~s')~n", [Resource_Name,Resource_Id])
+                           )
+                       )
+                   ;   true
+                   )
+               ))
+    ).
+run_command(user,password, [User], Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    option(password(Password), Opts),
+    (   var(Password)
+    ->  prompt(_,'Password: '),
+        read_string(user_input, ['\n'], [], _, Password)
+    ;   true),
+    api_report_errors(
+        user,
+        api_update_user_password(System_DB, Auth, User, Password)
+    ),
+    format(current_output, '~nPassword updated for ~s~n', [User]).
+run_command(capability,grant,[User,Scope|Roles],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, SystemDB),
+    api_report_errors(
+        capability,
+        api_grant_capability(SystemDB,Auth, _{ scope: Scope,
+                                               user: User,
+                                               roles: Roles })
+    ),
+    format(current_output, "Granted ~q to '~s' over '~s'~n", [Roles,User,Scope]).
+run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, SystemDB),
+    (   Roles = []
+    ->  format(user_error, 'Warning: No Roles specified~n',[])
+    ;   true),
+    api_report_errors(
+        capability,
+        api_revoke_capability(SystemDB,Auth, _{ scope: Scope,
+                                                user: User,
+                                                roles: Roles })
+    ),
+    format(current_output, 'Capability successfully revoked~n', []).
 run_command(store,init, _, Opts) :-
     (   option(key(Key), Opts)
     ->  true
