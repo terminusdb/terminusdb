@@ -1136,6 +1136,24 @@ compile_wf(delete_document(X),(
     resolve(X,URI),
     view(update_guard, Guard),
     peek(S0).
+compile_wf(delete_document(X),(
+               freeze(Guard,
+                      delete_document(S0, URI)))) -->
+    resolve(X,URI),
+    view(update_guard, Guard),
+    peek(S0).
+compile_wf(patch(Diff),Goal) -->
+    compile_wf(patch(Diff,[]),Goal).
+compile_wf(patch(Diff,Opts),(
+               freeze(Guard,
+                      (   apply_diff(S0, DiffE, Witness, Opts),
+                          (   Witness = null
+                          ->  true
+                          ;   throw(error(patch_witness(Witness))))
+                      )))) -->
+    resolve(Diff,DiffE),
+    view(update_guard, Guard),
+    peek(S0).
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(delete(X,P,Y,G),Goal)
 -->

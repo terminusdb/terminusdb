@@ -1255,3 +1255,12 @@
   "@inherits" : "Query",
   "value" : "Value",
   "type" : "NodeValue" }
+
+{ "@id" : "Patch",
+  "@type" : "Class",
+  "@documentation" : {
+      "@comment" : "Patch allows documents to be modified with a patch, which specifies only what changes."},
+  "@inherits" : "Query",
+  "patch": "Value",
+  "options" : { "@type" : "Optional",
+                "@class" : "Value" }}
