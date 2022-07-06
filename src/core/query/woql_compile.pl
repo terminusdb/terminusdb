@@ -5104,6 +5104,33 @@ test(bad_variable_name, [
     AST = (v(v('X')) = a),
     run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
+test(patch_name, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "schema_db"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    Document = _{ '@type' : 'City',
+                  'name' : 'Londonderry'},
+    resolve_absolute_string_descriptor("admin/schema_db", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, Id),
+        _
+    ),
+    create_context(Descriptor,Commit_Info, Context2),
+    Patch_AST = patch(_{ '@id' : Id, name : _{ '@type' : 'ForceValue', '@after' : "Derry"}}, []),
+    run_context_ast_jsonld_response(Context2, Patch_AST, no_data_version, _, Response),
+    writeq(Response),
+    create_context(Descriptor,Commit_Info, Context3),
+    Read_AST = get_document(Id,v('Doc')),
+    run_context_ast_jsonld_response(Context3, Read_AST, no_data_version, _, Response2),
+    writeq(Response2).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
