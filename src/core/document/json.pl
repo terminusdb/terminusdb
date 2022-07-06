@@ -9437,6 +9437,13 @@ test(subdocument_update,
           )),
       cleanup(
           teardown_temp_store(State)
+      ),
+      error(
+          schema_check_failure(
+              [_{'@type':references_untyped_object,
+                 object:"base://path/Fred",
+                 predicate:"http://xyz#owner",
+                 subject:"base://path/MyDoc/Some%20title"}])
       )
      ]
     ) :-

@@ -803,6 +803,17 @@ referential_range_candidate(Validation_Object,O,P,Type) :-
                  class_predicate_type(Validation_Object, C, P, Type)
              )).
 
+% Generator for: ∃ s,o,p. +(s,p,o) ∧ ¬ (∃ T. o:T)
+references_untyped_range(Validation_Object,S,P,O) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    % Shared dictionary for predicates would be handy here!
+    distinct(S-P-O,
+             (   triple_addition(Instance, S, P, node(O)),
+                 \+ atom_string(Rdf_Type,P),
+                 \+ triple(Instance, O, Rdf_Type, node(_))
+             )).
+
 instance_domain(Validation_Object, S, Descriptor) :-
     rdf_list(Rdf_List),
     rdf_type(Rdf_Type),
@@ -864,6 +875,14 @@ refute_referential_integrity(Validation_Object,Witness) :-
 refute_referential_integrity(Validation_Object,Witness) :-
     referential_range_candidate(Validation_Object, O, P, T),
     refute_range(Validation_Object, O, P, T, Witness).
+refute_referential_integrity(Validation_Object,Witness) :-
+    references_untyped_range(Validation_Object, S, P, O),
+    Witness =
+    _{ '@type': references_untyped_object,
+       subject: S,
+       predicate : P,
+       object: O
+    }.
 
 refute_range(Validation_Object, O, P, T, Witness) :-
     instance_layer(Validation_Object, Instance),
