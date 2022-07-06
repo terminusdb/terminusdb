@@ -807,10 +807,21 @@ referential_range_candidate(Validation_Object,O,P,Type) :-
 references_untyped_range(Validation_Object,S,P,O) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
+    global_prefix_expand(rdf:nil, Rdf_Nil),
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-O,
              (   triple_addition(Instance, S, P, node(O)),
-                 \+ atom_string(Rdf_Type,P),
+                 %% valid typeless scenarios:
+                 %% * P = rdf:type
+                 %% * O is rdf:nil
+                 %% * range(P) = C ∧ is_enum(C)
+                 \+ (   atom_string(Rdf_Type,P)
+                    ;   atom_string(Rdf_Nil,O)
+                    ;   triple(Instance, S, Rdf_Type, node(C)),
+                        class_predicate_type(Validation_Object, C, P, Type),
+                        (   Type = set(enum(_,_))
+                        ;   Type = optional(enum(_,_))
+                        ;   Type = enum(_,_))),
                  \+ triple(Instance, O, Rdf_Type, node(_))
              )).
 
