@@ -111,7 +111,7 @@ jwt_jwks_endpoint(Endpoint) :-
     ;   Endpoint = Value).
 
 jwt_subject_claim_name(Name) :-
-    getenv_default('TERMINUSDB_JWT_SUBJ_CLAIM_NAME', 'http://terminusdb.com/schema/system#agent_name', Name).
+    getenv_default('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', 'preferred_username', Name).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),

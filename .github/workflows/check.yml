@@ -154,6 +154,7 @@ jobs:
             --detach \
             --net=host \
             -e TERMINUSDB_JWT_ENABLED=true \
+            -e TERMINUSDB_JWT_AGENT_NAME_PROPERTY='http://terminusdb.com/schema/system#agent_name' \
             -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
             terminusdb/terminusdb-server:local
 
