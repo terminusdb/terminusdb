@@ -274,8 +274,7 @@ describe('diff-id', function () {
           instance: { '@type': class2, b: 'frog legs' },
         })
       const dv2 = r2.header['terminusdb-data-version']
-      const [docId2Long] = r2.body
-      const docId2 = docId2Long.split('terminusdb:///data/')[1]
+      const [docId2] = r2.body
       const path = api.path.versionDiff(agent)
 
       const r3 = await agent.post(path).send(
