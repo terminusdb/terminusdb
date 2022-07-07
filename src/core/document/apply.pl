@@ -16,6 +16,7 @@
 
 :- use_module(core(document/patch)).
 :- use_module(core(document/json)).
+:- use_module(core(query/jsonld)).
 
 % apply_diff(+Context, +Diff, Conflict ,Options)
 %
@@ -64,16 +65,19 @@ apply_diff(Context, Diff, Conflict, Options) :-
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
     do_or_die(
-        get_dict('@id', Diff, ID),
+        get_dict('@id', Diff, Id_Short),
         error(missing_field('@id', Diff), _)
     ),
-    get_document(Context, ID, JSON_In),
+    get_dict(prefixes,Context,Prefixes),
+    prefix_expand(Id_Short,Prefixes,Id),
+    get_document(Context, Id, JSON_Pre),
+    put_dict(_{ '@id' : Id}, JSON_Pre, JSON_In),
     simple_patch(Diff,JSON_In,Result,Options),
     (   Result = success(JSON_Out)
     ->  replace_document(Context, JSON_Out, _),
         Conflict = null
     ;   Result = conflict(Conflict_Prototype),
-        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+        put_dict(_{ '@id' : Id }, Conflict_Prototype, Conflict)
     ).
 
 

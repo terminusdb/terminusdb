@@ -275,6 +275,9 @@ resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
              get_dict(Key,Dict,V),
              (   Key = '@type'
              ->  resolve_predicate(V,Value,CA,CB)
+             ;   Key = '@op'
+             ->  V = Value,
+                 CA = CB
              ;   resolve_dictionary_(V,Value,CA,CB)
              )
          ), Keys, Pairs, C1, C2),
@@ -513,6 +516,14 @@ partition(insert(A,B,C,D), Reads, Writes) :-
     !,
     Reads = [],
     Writes = [insert(A,B,C,D)].
+partition(patch(A,B,C), Reads, Writes) :-
+    !,
+    Reads = [],
+    Writes = [patch(A,B,C)].
+partition(patch(A,B,C,D), Reads, Writes) :-
+    !,
+    Reads = [],
+    Writes = [patch(A,B,C,D)].
 partition(delete(A,B,C), Reads, Writes) :-
     !,
     Reads = [],
@@ -5123,13 +5134,21 @@ test(patch_name, [
         _
     ),
     create_context(Descriptor,Commit_Info, Context2),
-    Patch_AST = patch(_{ '@id' : Id, name : _{ '@type' : 'ForceValue', '@after' : "Derry"}}, []),
-    run_context_ast_jsonld_response(Context2, Patch_AST, no_data_version, _, Response),
-    writeq(Response),
+    Patch_AST = patch(_{'@id' : Id, name : json{ '@op' : 'ForceValue',
+                                                 '@after' : "Derry"}}, []),
+    run_context_ast_jsonld_response(Context2, Patch_AST, no_data_version, _, _),
     create_context(Descriptor,Commit_Info, Context3),
     Read_AST = get_document(Id,v('Doc')),
-    run_context_ast_jsonld_response(Context3, Read_AST, no_data_version, _, Response2),
-    writeq(Response2).
+    run_context_ast_jsonld_response(Context3, Read_AST, no_data_version, _, Response),
+
+    _{'@type':'api:WoqlResponse','api:status':'api:success','api:variable_names':['Doc'],
+      bindings:[Bindings],deletes:0,inserts:0,transaction_retry_count:0} :< Response,
+
+    get_dict('Doc', Bindings, New_Doc),
+
+    _{'@id':_,
+      '@type':'City',
+      name:"Derry"} :< New_Doc.
 
 :- end_tests(woql).
 
