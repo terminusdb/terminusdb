@@ -9403,6 +9403,73 @@ test(subdocument_update,
 
 :- end_tests(javascript_client_bugs).
 
+:- begin_tests(referential_integrity, []).
+:- use_module(core(util/test_utils)).
+
+:- use_module(core(query)).
+person_schema('
+    {
+        "@type"     : "@context",
+        "@schema"   : "http://xyz#",
+        "@base"     : "base://path/",
+        "xsd"       : "http://www.w3.org/2001/XMLSchema#"
+    }
+    {
+        "@id"           : "Person",
+        "@type"         : "Class",
+        "name"          : "xsd:string",
+        "@key"          : {"@type": "Lexical", "@fields": ["name"]},
+    }
+    {
+        "@id"           : "MyDoc",
+        "@type"         : "Class",
+        "title"         : "xsd:string",
+        "@key"          : {"@type": "Lexical", "@fields": ["title"]},
+        "owner"         : "Person",
+    }
+').
+
+test(subdocument_update,
+     [setup(
+          (   setup_temp_store(State),
+              test_document_label_descriptor(Desc),
+              write_schema(person_schema,Desc)
+          )),
+      cleanup(
+          teardown_temp_store(State)
+      ),
+      error(
+          schema_check_failure(
+              [_{'@type':references_untyped_object,
+                 object:"base://path/Fred",
+                 predicate:"http://xyz#owner",
+                 subject:"base://path/MyDoc/Some%20title"}])
+      )
+     ]
+    ) :-
+    Document =
+    _{
+        '@type' : "MyDoc",
+        title : "Some title",
+        owner : "Fred"
+    },
+    Commit_Info = commit_info{ author : me, message: yes},
+    create_context(Desc, Commit_Info, Context),
+    with_transaction(Context,
+                     insert_document(
+                         Context,
+                         Document,
+                         Id),
+                     _),
+    writeq(Id),
+
+    get_document(Desc, Id, New_Doc),
+    writeq(New_Doc).
+
+
+:- end_tests(referential_integrity).
+
+
 :- begin_tests(document_id_generation, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(query)).
