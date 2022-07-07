@@ -1208,7 +1208,7 @@ run_command(query,[Path,Query],Opts) :-
         woql,
         (   woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Commit_Info, [], _All_Witnesses, no_data_version, _New_Data_Version, Context, Response),
             (   option(json(true), Opts)
-            ->  json_write_dict(user_error, Response, [])
+            ->  json_write_dict(current_output, Response, [])
             ;   get_dict(prefixes, Context, Context_Prefixes),
                 default_prefixes(Defaults),
                 put_dict(Defaults, Context_Prefixes, Final_Prefixes),
