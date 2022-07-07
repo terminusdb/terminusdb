@@ -9,6 +9,7 @@
               db_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
+              jwt_subject_claim_name/1,
               registry_path/1,
               tmp_path/1,
               server_worker_options/1,
@@ -108,6 +109,9 @@ jwt_jwks_endpoint(Endpoint) :-
     (   Value = ''
     ->  false
     ;   Endpoint = Value).
+
+jwt_subject_claim_name(Name) :-
+    getenv_default('TERMINUSDB_JWT_SUBJ_CLAIM_NAME', 'http://terminusdb.com/schema/system#agent_name', Name).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
