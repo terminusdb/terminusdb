@@ -1588,24 +1588,27 @@ json_triple_(JSON,Context,Triple) :-
         ->  (   json_triple_(Value, Context, Triple)
             ;   Triple = t(ID,Key,Value_ID)
             )
-        ;   global_prefix_expand(sys:'JSON', Sys_JSON),
-            get_dict('@type', Value, Sys_JSON)
-        ->  del_dict('@type', Value, _, Pure),
-            json_subdocument_triple(ID,Key,Pure,Triple)
         ;   get_dict('@container', Value, "@list")
         ->  get_dict('@value', Value, List),
-            list_id_key_context_triple(List,ID,Key,Context,Triple)
+            list_id_key_context_triple(List,Value,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@array")
         ->  get_dict('@value', Value, Array),
             get_dict('@dimensions', Value, Dimensions),
-            array_id_key_context_triple(Array,Dimensions,ID,Key,Context,Triple)
+            array_id_key_context_triple(Array,Value,Dimensions,ID,Key,Context,Triple)
         ;   get_dict('@container', Value, "@set")
         ->  get_dict('@value', Value, Set),
-            set_id_key_context_triple(Set,ID,Key,Context,Triple)
+            set_id_key_context_triple(Set,Value,ID,Key,Context,Triple)
+        ;   is_json_datatype(Value)
+        ->  del_dict('@type', Value, _, Pure),
+            json_subdocument_triple(ID,Key,Pure,Triple)
         ;   value_json(Lit,Value),
             Triple = t(ID,Key,Lit)
         )
     ).
+
+is_json_datatype(Object) :-
+    global_prefix_expand(sys:'JSON', Sys_JSON),
+    get_dict('@type', Object, Sys_JSON).
 
 :- table level_predicate_name/2.
 level_predicate_name(Level, Predicate) :-
@@ -1615,10 +1618,10 @@ level_predicate_name(Level, Predicate) :-
     ;   format(atom(Predicate), '~w~q', [SYS_Index,Level])
     ).
 
-array_id_key_context_triple([],_,_,_,_,_) :-
+array_id_key_context_triple([],_,_,_,_,_,_) :-
     !,
     fail.
-array_id_key_context_triple(List,Dimensions,ID,Key,Context,Triple) :-
+array_id_key_context_triple(List,Object,Dimensions,ID,Key,Context,Triple) :-
     get_dict('@base', Context, Base),
     atomic_list_concat([Base,'Array_'], Base_Array),
     list_array_shape(List,Shape),
@@ -1630,13 +1633,17 @@ array_id_key_context_triple(List,Dimensions,ID,Key,Context,Triple) :-
     global_prefix_expand(rdf:type, RDF_Type),
     list_array_index_element(List,Indexes,Elt),
     idgen_random(Base_Array,New_ID),
-    reference(Elt,Ref),
-    (   Triple = t(New_ID, SYS_Value, Ref)
-    ;   json_triple_(Elt,Context,Triple)
-    ;   between(1,Dimensions,N),
+    (   between(1,Dimensions,N),
         level_predicate_name(N,SYS_Index),
         nth1(N,Indexes,Index),
         Triple = t(New_ID, SYS_Index, Index^^XSD_NonNegativeInteger)
+    ;   (   is_json_datatype(Object)
+        ->  del_dict('@type', Elt, _, Pure),
+            json_subdocument_triple(New_ID,SYS_Value,Pure,Triple)
+        ;   reference(Elt,Ref),
+            Triple = t(New_ID, SYS_Value, Ref)
+        ;   json_triple_(Elt,Context,Triple)
+        )
     ;   Triple = t(ID, Key, New_ID)
     ;   Triple = t(New_ID, RDF_Type, SYS_Array)
     ).
@@ -1664,11 +1671,15 @@ list_array_index_element([N|D],L,[I|Idx],Elt) :-
     nth0(I,L,S),
     list_array_index_element(D,S,Idx,Elt).
 
-set_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
-    (   reference(H,HRef),
-        Triple = t(ID,Key,HRef)
-    ;   json_triple_(H,Context,Triple)
-    ;   set_id_key_context_triple(T,ID,Key,Context,Triple)
+set_id_key_context_triple([H|T],Object,ID,Key,Context,Triple) :-
+    (   (   is_json_datatype(Object)
+        ->  del_dict('@type', H, _, Pure),
+            json_subdocument_triple(ID,Key,Pure,Triple)
+        ;   reference(H,HRef),
+            Triple = t(ID,Key,HRef)
+        ;   json_triple_(H,Context,Triple)
+        )
+    ;   set_id_key_context_triple(T,Object,ID,Key,Context,Triple)
     ).
 
 reference(Dict,ID) :-
@@ -1677,9 +1688,9 @@ reference(Dict,ID) :-
 reference(Elt,V) :-
     value_json(V,Elt).
 
-list_id_key_context_triple([],ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
+list_id_key_context_triple([],_Object,ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
     global_prefix_expand(rdf:nil, RDF_Nil).
-list_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
+list_id_key_context_triple([H|T],Object,ID,Key,Context,Triple) :-
     get_dict('@base', Context, Base),
     atomic_list_concat([Base,'Cons/'], Base_Cons),
     idgen_random(Base_Cons,New_ID),
@@ -1687,12 +1698,16 @@ list_id_key_context_triple([H|T],ID,Key,Context,Triple) :-
     ;   global_prefix_expand(rdf:type, RDF_Type),
         global_prefix_expand(rdf:'List', RDF_List),
         Triple = t(New_ID, RDF_Type, RDF_List)
-    ;   reference(H,HRef),
-        global_prefix_expand(rdf:first, RDF_First),
-        Triple = t(New_ID,RDF_First,HRef)
+    ;   global_prefix_expand(rdf:first, RDF_First),
+        (   is_json_datatype(Object)
+        ->  del_dict('@type', H, _, Pure),
+            json_subdocument_triple(New_ID,RDF_First,Pure,Triple)
+        ;   reference(H,HRef),
+            Triple = t(New_ID,RDF_First,HRef)
+        ;   json_triple_(H,Context,Triple)
+        )
     ;   global_prefix_expand(rdf:rest, RDF_Rest),
-        list_id_key_context_triple(T,New_ID,RDF_Rest,Context,Triple)
-    ;   json_triple_(H,Context,Triple)
+        list_id_key_context_triple(T,Object,New_ID,RDF_Rest,Context,Triple)
     ).
 
 rdf_list_list(_Graph, RDF_Nil,[]) :-
@@ -11010,6 +11025,24 @@ json_schema('
   "name" : "xsd:string",
   "json" : "sys:JSON"
 }
+
+{ "@type" : "Class",
+  "@id" : "Thing",
+  "json_set" : { "@type" : "Set",
+                 "@class" : "sys:JSON" }
+}
+
+{ "@type" : "Class",
+  "@id" : "Thing2",
+  "json_array" : { "@type" : "Array",
+                   "@class" : "sys:JSON" }
+}
+
+{ "@type" : "Class",
+  "@id" : "Thing3",
+  "json_list" : { "@type" : "List",
+                  "@class" : "sys:JSON" }
+}
 ').
 
 test(json_triples,
@@ -11287,6 +11320,121 @@ test(replace_named_document,
         C1,
         insert_document(C1,Document,true,_)
     ).
+
+test(insert_json_set,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    _{  json_set : [ json{ some :
+                           json{ random : "stuff",
+                                 that : 2.0
+                               }},
+                     json{ some :
+                           json{ random : "other stuff",
+                                 that : 3.0
+                               }},
+                     json{ three : 3 }]
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id, Doc_Out)
+    ),
+    json{ '@type':'Thing',
+          json_set:[ json{some:json{random:"stuff",that:2.0}},
+		             json{some:json{random:"other stuff",that:3.0}},
+		             json{three:3}
+	               ]
+        } :< Doc_Out.
+
+test(insert_json_array,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    _{  json_array : [ json{ some :
+                             json{ random : "stuff",
+                                   that : 2.0
+                                 }},
+                       json{ some :
+                             json{ random : "other stuff",
+                                   that : 3.0
+                                 }},
+                       json{ three : 3 }]
+     },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id, Doc_Out)
+    ),
+
+    json{ '@type':'Thing2',
+          json_array:[ json{some:json{random:"stuff",that:2.0}},
+		               json{some:json{random:"other stuff",that:3.0}},
+		               json{three:3}
+	                 ]
+        } :< Doc_Out.
+
+test(insert_json_list,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    _{  json_list : [ json{ some :
+                            json{ random : "stuff",
+                                  that : 2.0
+                                }},
+                      json{ some :
+                            json{ random : "other stuff",
+                                  that : 3.0
+                                }},
+                      json{ three : 3 }]
+     },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id, Doc_Out)
+    ),
+    json{ '@type':'Thing3',
+          json_list:[ json{some:json{random:"stuff",that:2.0}},
+		             json{some:json{random:"other stuff",that:3.0}},
+		             json{three:3}
+	               ]
+        } :< Doc_Out.
 
 test(can_not_insert_json_class,
      [setup((setup_temp_store(State),
