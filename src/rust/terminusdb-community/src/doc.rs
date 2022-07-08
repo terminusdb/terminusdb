@@ -33,6 +33,8 @@ pub struct GetDocumentContext<L: Layer> {
     sys_index_ids: Vec<u64>,
     sys_array_id: Option<u64>,
     sys_value_id: Option<u64>,
+    sys_json_type_id: Option<u64>,
+    sys_json_document_type_id: Option<u64>,
 }
 
 impl<L: Layer> GetDocumentContext<L> {
@@ -75,6 +77,8 @@ impl<L: Layer> GetDocumentContext<L> {
         let rdf_rest_id = instance.predicate_id(RDF_REST);
         let rdf_nil_id = instance.object_node_id(RDF_NIL);
         let rdf_list_id = instance.object_node_id(RDF_LIST);
+        let sys_json_type_id = instance.object_node_id(SYS_JSON);
+        let sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
 
         let mut sys_index_ids = Vec::new();
         let mut index_str = SYS_INDEX.to_string();
@@ -110,6 +114,9 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_index_ids,
             sys_array_id,
             sys_value_id,
+
+            sys_json_type_id,
+            sys_json_document_type_id,
         }
     }
 
@@ -225,7 +232,7 @@ impl<L: Layer> GetDocumentContext<L> {
             return Err(value_string_to_json(v));
         }
 
-        // we now id_name is properly a node
+        // we know id_name is properly a node
         let id_name = id_name.node().unwrap();
         let id_name_contracted = self.prefixes.instance_contract(&id_name).to_string();
 
@@ -282,7 +289,6 @@ impl<L: Layer> GetDocumentContext<L> {
                 if cur.is_document() {
                     if let Some(rdf_type_id) = self.rdf_type_id {
                         if let Some(t) = self.layer.single_triple_sp(next_obj, rdf_type_id) {
-                            // todo should actually check that current stack item is a doc
                             if Some(t.object) == self.sys_array_id {
                                 let array_iter = self.get_array_iter(cur);
                                 stack.push(StackEntry::Array(ArrayStackEntry {
