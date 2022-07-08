@@ -51,6 +51,7 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
+:- use_module(core(plugins)).
 
 :- use_module(config(terminus_config)).
 
@@ -70,4 +71,6 @@ main(_Argv) :-
     bootstrap_config_files,
     bootstrap_files,
     debug(terminus(main), 'initialise_woql_contexts completed', []),
-    debug(terminus(main), 'initialise_log_settings completed', []).
+    debug(terminus(main), 'initialise_log_settings completed', []),
+
+    load_plugins.
