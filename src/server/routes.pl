@@ -3156,8 +3156,9 @@ fetch_jwt_data(Token, Username) :-
 
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
+            jwt_subject_claim_name(ClaimName),
             % replace with dict key get (or whatever it is called)
-            get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
+            get_dict(ClaimName, PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
         error(malformed_jwt_payload(Payload))).
 :- else.
