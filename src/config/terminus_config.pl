@@ -27,7 +27,8 @@
               check_insecure_user_header_enabled/1,
               clear_check_insecure_user_header_enabled/0,
               clear_insecure_user_header_key/0,
-              pinned_databases/1
+              pinned_databases/1,
+              plugin_path/1
           ]).
 
 :- use_module(library(pcre)).
@@ -86,6 +87,10 @@ default_database_path(Path) :-
 :- table db_path/1 as shared.
 db_path(Path) :-
     default_database_path(Path).
+
+plugin_path(Path) :-
+    getenv_default('TERMINUSDB_PLUGINS_PATH', './storage/plugins', Value),
+    absolute_file_name(Value, Path).
 
 jwt_enabled_env_var :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
