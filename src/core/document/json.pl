@@ -11043,6 +11043,13 @@ json_schema('
   "json_list" : { "@type" : "List",
                   "@class" : "sys:JSON" }
 }
+
+{ "@type" : "Class",
+  "@id" : "Thing4",
+  "json_optional" : { "@type" : "Optional",
+                      "@class" : "sys:JSON" }
+}
+
 ').
 
 test(json_triples,
@@ -11435,6 +11442,36 @@ test(insert_json_list,
 		             json{three:3}
 	               ]
         } :< Doc_Out.
+
+test(insert_json_optional,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    _{  json_optional : json{ some :
+                              json{ random : "stuff",
+                                    that : 2.0
+                                  }}},
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id,Doc_Out)
+    ),
+
+    json{ '@type':'Thing4',
+          json_optional: json{some:json{random:"stuff",that:2.0}}
+        }:< Doc_Out.
 
 test(can_not_insert_json_class,
      [setup((setup_temp_store(State),
