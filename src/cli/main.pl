@@ -119,7 +119,7 @@ opt_spec(list,'terminusdb list OPTIONS',
            longflags([json]),
            default(false),
            help('Return a JSON as the result of the `list` command')]]).
-opt_spec(optimize,'terminusdb optimize OPTIONS',
+opt_spec(optimize,'terminusdb optimize DB_SPEC OPTIONS',
          'Optimize a database (including _system and _meta).',
          [[opt(help),
            type(boolean),
