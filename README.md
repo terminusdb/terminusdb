@@ -17,6 +17,7 @@ The building blocks of the model are:
   - Revision Control: commits for every update
   - Diff: differences between commits can be interpreted as patches between states
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
+  - Query: You can query any state of the database at any commit.
 
 TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). TerminusDB is available as a standalone server, or you can [use online](https://dashboard.terminusdb.com/).
 
