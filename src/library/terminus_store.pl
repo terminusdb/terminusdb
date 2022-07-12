@@ -716,7 +716,7 @@ test(open_directory_store_atom_exception, [
 
 test(create_db, [cleanup(clean(TestDir))]) :-
     make_directory_path("/tmp/testdir"),
-    TestDir = 'storage/testdir',
+    TestDir = '/tmp/testdir',
     open_directory_store("/tmp/testdir", X),
     create_named_graph(X, "sometestdb", _).
 
