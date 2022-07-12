@@ -4483,6 +4483,74 @@ test(commit_graph, [
     (Commit1.message.'@value') = "message2",
     (Commit2.message.'@value') = "message1".
 
+%:- use_module(core(query)).
+
+test(commit_graph_times, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message1"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, rdf:type, '@schema':test))),
+        _
+    ),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message2"}, Context2),
+    with_transaction(
+        Context2,
+        ask(Context2, (insert(b, rdf:type, '@schema':test))),
+        _
+    ),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message3"}, Context3),
+    with_transaction(
+        Context3,
+        ask(Context3, (insert(c, rdf:type, '@schema':test))),
+        _
+    ),
+
+    PathJSON = '
+{
+  "@type": "Path",
+  "subject": {
+    "@type": "NodeValue",
+    "variable": "commit"
+  },
+  "pattern": {
+    "@type": "PathTimes",
+    "from": "1",
+    "to": "2",
+    "times": {
+      "@type": "PathPredicate",
+      "predicate": "parent"
+    }
+  },
+  "object": {
+    "@type": "Value",
+    "variable": "target_commit"
+  }
+}',
+    atom_json_dict(PathJSON, PathJSONDict, []),
+    json_woql(PathJSONDict, Path),
+
+    AST = using('_commits',
+                limit(499^^xsd:decimal,
+                      (   t(v(branch),name,"main"^^xsd:string),
+                          t(v(branch),head,v(commit)),
+                          Path,
+                          t(v(target_commit),identifier,v(cid)),
+                          t(v(target_commit),author,v(author)),
+                          t(v(target_commit),message,v(message)),
+                          t(v(target_commit),timestamp,v(timestamp))))),
+    writeq(AST),
+    create_context(Descriptor, commit_info{ author : "test", message: "message4"}, Context4),
+    run_context_ast_jsonld_response(Context4, AST, no_data_version, _, Response),
+    writeq(Response).
 
 test(commit_graph_json, [
          setup((setup_temp_store(State),
