@@ -9,6 +9,7 @@
               db_path/1,
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
+              jwt_subject_claim_name/1,
               registry_path/1,
               tmp_path/1,
               server_worker_options/1,
@@ -27,7 +28,8 @@
               check_insecure_user_header_enabled/1,
               clear_check_insecure_user_header_enabled/0,
               clear_insecure_user_header_key/0,
-              pinned_databases/1
+              pinned_databases/1,
+              plugin_path/1
           ]).
 
 :- use_module(library(pcre)).
@@ -87,6 +89,10 @@ default_database_path(Path) :-
 db_path(Path) :-
     default_database_path(Path).
 
+plugin_path(Path) :-
+    getenv_default('TERMINUSDB_PLUGINS_PATH', './storage/plugins', Value),
+    absolute_file_name(Value, Path).
+
 jwt_enabled_env_var :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, true).
 
@@ -108,6 +114,9 @@ jwt_jwks_endpoint(Endpoint) :-
     (   Value = ''
     ->  false
     ;   Endpoint = Value).
+
+jwt_subject_claim_name(Name) :-
+    getenv_default('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', 'preferred_username', Name).
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
