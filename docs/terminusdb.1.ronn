@@ -66,7 +66,7 @@ List databases.
 
 ### optimize
 
-`terminusdb optimize OPTIONS`
+`terminusdb optimize DB_SPEC OPTIONS`
 
 Optimize a database (including _system and _meta).
 
@@ -774,7 +774,8 @@ List remotes.
 
 The designation of databases, repositories, the associated commit
 graph of a database, and various graphs as used in the above command
-requires the use of an appropriate descriptor path.
+requires the use of an appropriate descriptor path which is referred to
+the DB_SPEC.
 
   * `_system`:
   This is the system meta-data, which contains the user information,
@@ -805,6 +806,17 @@ requires the use of an appropriate descriptor path.
   * `<organization>/<database>/<repository>/commit/<commit>`:
   The descriptor which allows an individual commit to be addressed
   directly.
+
+For commands that refer to a GRAPH_SPEC, it should be a DB_SPEC
+(specifying the precise branch if a database) followed by one of:
+
+ * `DB_SPEC/instance`
+
+ * `DB_SPEC/schema`
+
+For example:
+
+`terminusdb triples dump admin/people/local/branch/main/schema`
 
 ## ENVIRONMENT
 
