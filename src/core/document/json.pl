@@ -6017,7 +6017,9 @@ test(bad_unfoldable,
              teardown_temp_store(State)
          ),
          error(
-             schema_check_failure([witness{'@type':property_path_cycle_detected,class:'http://s/B',path:['http://s/q','http://s/A','http://s/p','http://s/B']}]),
+             schema_check_failure([witness{'@type':property_path_cycle_detected,
+                                           class:_,
+                                           path:_}]),
              _)
      ]) :-
      DocumentA =
