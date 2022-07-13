@@ -40,7 +40,12 @@ pub struct GetDocumentContext<L: Layer> {
 
 impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
-    pub fn new<SL: Layer>(schema: &SL, instance: L, unfold: bool) -> GetDocumentContext<L> {
+    pub fn new<SL: Layer>(
+        schema: &SL,
+        instance: L,
+        compress: bool,
+        unfold: bool,
+    ) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
         let mut document_types: HashSet<u64> =
             schema_to_instance_types(schema, &instance, schema_type_ids).collect();
@@ -59,7 +64,12 @@ impl<L: Layer> GetDocumentContext<L> {
             }
         }
 
-        let prefixes = prefix_contracter_from_schema_layer(schema);
+        let prefixes;
+        if compress {
+            prefixes = prefix_contracter_from_schema_layer(schema);
+        } else {
+            prefixes = PrefixContracter::new(std::iter::empty());
+        }
 
         let schema_set_pairs = get_set_pairs_from_schema(schema);
         let mut set_pairs = HashSet::new();
@@ -596,12 +606,13 @@ fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
 use super::types::*;
 predicates! {
     #[module("$moo")]
-    semidet fn get_document_context(context, transaction_term, unfold_term, context_term) {
+    semidet fn get_document_context(context, transaction_term, compress_term, unfold_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?.unwrap();
+        let compress: bool = compress_term.get()?;
         let unfold: bool = unfold_term.get()?;
 
-        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, unfold);
+        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, compress, unfold);
 
         context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
     }

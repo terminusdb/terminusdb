@@ -71,9 +71,6 @@ pub struct PrefixContracter {
 impl PrefixContracter {
     pub fn new<I: IntoIterator<Item = Prefix>>(prefixes: I) -> PrefixContracter {
         let mut items: Vec<_> = prefixes.into_iter().collect();
-        if items.is_empty() {
-            panic!("no prefixes??");
-        }
 
         items.push(Prefix::JSON);
 

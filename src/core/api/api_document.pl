@@ -72,7 +72,7 @@ api_get_documents(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, 
 api_get_and_print_documents(SystemDB, Auth, Path, Graph_Type, JSON_Stream, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
     resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    '$moo':get_document_context(Transaction, Unfold, Get_Context),
+    '$moo':get_document_context(Transaction, Compress_Ids, Unfold, Get_Context),
     (   Graph_Type = instance
     ->  JSON_Stream = json_stream(Initial_Goal, As_List, Stream_Started, _),
         json_stream_write_start(Initial_Goal, As_List, Stream_Started),
