@@ -1372,6 +1372,9 @@ json_schema_predicate_value('@abstract',[],_,_,P,[]) :-
 json_schema_predicate_value('@subdocument',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:subdocument, P).
+json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:unfoldable, P).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -2206,6 +2209,9 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@subdocument',[]) :-
     global_prefix_expand(sys:subdocument,P),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@unfoldable',[]) :-
+    global_prefix_expand(sys:unfoldable,P),
     !.
 schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@inherits',V) :-
     global_prefix_expand(sys:inherits,P),
@@ -11622,7 +11628,8 @@ geojson_schema('[
 
     { "@type" : "Class",
       "@id" : "Geometry",
-      "@abstract" : []
+      "@abstract" : [],
+      "@unfoldable" : []
     },
 
     { "@type" : "Enum",
@@ -11710,6 +11717,31 @@ geojson_schema('[
       "properties": "sys:JSON"
     }
 ]').
+
+test(geojson_unfoldable,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+
+     geojson_schema(Schema_Atom),
+     atom_json_dict(Schema_Atom, Schema_Documents, []),
+
+     with_test_transaction(
+         Desc,
+         C1,
+         forall(member(Schema_Doc, Schema_Documents),
+                insert_schema_document(C1, Schema_Doc))
+     ),
+
+     with_test_transaction(
+         Desc,
+         C2,
+         get_schema_document(C2, 'Geometry', Geometry)
+     ),
+
+     writeq(Geometry).
 
 test(geojson_example,
      [setup((setup_temp_store(State),
