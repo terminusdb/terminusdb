@@ -12,13 +12,12 @@
               api_delete_organization/3,
               api_grant_capability/3,
               api_revoke_capability/3,
-              api_get_user_from_name/4,
+              api_get_user_from_name/5,
               api_get_resource_from_name/4,
               api_add_user/4,
               api_delete_user/3,
-              api_get_users/3,
-              api_get_user_from_name/4,
-              api_get_user_from_id/4,
+              api_get_users/4,
+              api_get_user_from_id/5,
               api_update_user_password/4
           ]).
 
@@ -248,7 +247,7 @@ grant_document_to_ids(SystemDB, Auth, Grant_Document, json{ scope: Scope_Id,
        roles: Roles } :< Grant_Document,
 
     % lookup user
-    api_get_user_from_name(SystemDB,Auth,User,User_Object),
+    api_get_user_from_name(SystemDB,Auth,User,User_Object,_{capablity:false}),
     get_dict('@id', User_Object, User_Id),
     % lookup resource
     api_get_resource_from_name(SystemDB,Auth,Scope,Scope_Object),
@@ -493,7 +492,7 @@ get_users(SystemDB, Users, Opts) :-
         Users).
 
 api_update_user_password(System_DB, Auth, UserName, Password) :-
-    api_get_user_from_name(System_DB, Auth, UserName, User),
+    api_get_user_from_name(System_DB, Auth, UserName, User, _{capability:false}),
 
     do_or_die(
         (   is_super_user(Auth)

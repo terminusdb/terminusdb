@@ -1802,7 +1802,7 @@ run_command(user,delete,[Name_or_Id], Opts) :-
     ->  User_Id = Name_or_Id
     ;   api_report_errors(
             user,
-            api_get_user_from_name(System_DB, Auth, Name_or_Id, User)
+            api_get_user_from_name(System_DB, Auth, Name_or_Id, User,_{capability:false})
         ),
         get_dict('@id', User, User_Id)
     ),
@@ -1815,23 +1815,24 @@ run_command(user,delete,[Name_or_Id], Opts) :-
 run_command(user,get, NameList, Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
+    option(capability(Capability), Opts),
+    User_Opts = options{capability:Capability},
     (   option(id(false),Opts),
         [Name] = NameList
     ->  api_report_errors(
             user,
-            api_get_user_from_name(System_DB,Auth,Name,User_Obj)
+            api_get_user_from_name(System_DB,Auth,Name,User_Obj,User_Opts)
         ),
         Users = [User_Obj]
     ;   [Id] = NameList
     ->  api_report_errors(
             user,
-            api_get_user_from_id(System_DB, Auth, Id, User_Obj)
+            api_get_user_from_id(System_DB, Auth, Id, User_Obj,User_Opts)
         ),
         Users = [User_Obj]
-    ;   option(capability(Capability), Opts),
-        api_report_errors(
+    ;   api_report_errors(
             user,
-            api_get_users(System_DB,Auth,Users,options{capability:Capability})
+            api_get_users(System_DB,Auth,Users,User_Opts)
         )
     ),
 
@@ -1843,8 +1844,7 @@ run_command(user,get, NameList, Opts) :-
                    get_dict('@id',User,User_Id),
                    format(current_output, "'~s' has id: '~s'~n",
                           [User_Name,User_Id]),
-                   (   option(capabilities(true), Opts),
-                       get_dict(capability, User, Capabilities)
+                   (   get_dict(capability, User, Capabilities)
                    ->  forall(
                            member(Capability, Capabilities),
                            (   get_dict(scope, Capability, Resource),

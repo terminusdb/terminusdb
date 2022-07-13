@@ -2841,10 +2841,14 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
  * Manage users
  */
 users_handler(get, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    param_value_search_optional(Search, capability, boolean, false, Capability),
     api_report_errors(
         user,
         Request,
-        (   api_get_users(System_DB, Auth, Users),
+        (   api_get_users(System_DB, Auth, Users,_{capability:Capability}),
             cors_reply_json(Request, Users)
         )
     ).
@@ -2885,10 +2889,14 @@ users_handler(put, Request, System_DB, Auth) :-
  * Manage Users
  */
 users_handler(get, Name, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    param_value_search_optional(Search, capability, boolean, false, Capability),
     api_report_errors(
         user,
         Request,
-        (   api_get_user_from_name(System_DB, Auth, Name, User),
+        (   api_get_user_from_name(System_DB, Auth, Name, User, _{capability:Capability}),
             cors_reply_json(Request,User)
         )
     ).
@@ -2896,7 +2904,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
         user,
         Request,
-        (   api_get_user_from_name(System_DB, Auth, Name, User),
+        (   api_get_user_from_name(System_DB, Auth, Name, User, _{capability:false}),
             get_dict('@id', User, User_Id),
             api_delete_user(System_DB,Auth,User_Id),
             cors_reply_json(Request,
