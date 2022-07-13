@@ -6123,7 +6123,7 @@ test(trans_unfoldable,
          ),
          error(schema_check_failure(
                    [witness{'@type':property_path_cycle_detected,
-                            class:_
+                            class:_,
                             path:_}]),
                _)
      ]) :-
