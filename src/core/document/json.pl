@@ -6209,13 +6209,7 @@ test(always_smaller_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure(
-                 [witness{'@type':property_path_cycle_detected,
-                          class:'http://s/A',
-                          path:['http://s/q','http://s/A']}]),
-             _)
+         )
      ]) :-
 
      DocumentA =
