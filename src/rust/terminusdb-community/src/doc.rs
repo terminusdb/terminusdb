@@ -35,11 +35,12 @@ pub struct GetDocumentContext<L: Layer> {
     sys_value_id: Option<u64>,
     sys_json_type_id: Option<u64>,
     sys_json_document_type_id: Option<u64>,
+    unfold: bool,
 }
 
 impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
-    pub fn new<SL: Layer>(schema: &SL, instance: L) -> GetDocumentContext<L> {
+    pub fn new<SL: Layer>(schema: &SL, instance: L, unfold: bool) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
         let mut document_types: HashSet<u64> =
             schema_to_instance_types(schema, &instance, schema_type_ids).collect();
@@ -121,6 +122,7 @@ impl<L: Layer> GetDocumentContext<L> {
 
             sys_json_type_id,
             sys_json_document_type_id,
+            unfold,
         }
     }
 
@@ -255,7 +257,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut json = false;
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
-                if terminate && self.document_types.contains(&t.object) {
+                if terminate && (self.document_types.contains(&t.object) || !self.unfold) {
                     return Err(Value::String(id_name_contracted));
                 }
 
@@ -594,11 +596,12 @@ fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
 use super::types::*;
 predicates! {
     #[module("$moo")]
-    semidet fn get_document_context(context, transaction_term, context_term) {
+    semidet fn get_document_context(context, transaction_term, unfold_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?.unwrap();
+        let unfold: bool = unfold_term.get()?;
 
-        let get_context = GetDocumentContext::new(&schema_layer, instance_layer);
+        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, unfold);
 
         context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
     }
