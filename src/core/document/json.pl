@@ -6123,10 +6123,8 @@ test(trans_unfoldable,
          ),
          error(schema_check_failure(
                    [witness{'@type':property_path_cycle_detected,
-                            class:'http://s/B',
-                            path:['http://s/q','http://s/C',
-                                  'http://s/r','http://s/A',
-                                  'http://s/p','http://s/B']}]),
+                            class:_
+                            path:_}]),
                _)
      ]) :-
      DocumentA =
