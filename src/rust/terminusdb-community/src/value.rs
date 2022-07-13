@@ -49,6 +49,8 @@ pub fn value_string_to_json(s: &str) -> Value {
 
     if typ == "boolean" {
         Value::Bool(val == "\"true\"")
+    } else if typ == "token" && val == "\"null\"" {
+        Value::Null
     } else if type_is_numeric(typ) {
         // it will have been saved unquoted
         Value::Number(Number::from_str(val).unwrap())
