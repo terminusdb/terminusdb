@@ -15,6 +15,7 @@ pub enum PrefixContraction<'a> {
     Base,
     Schema,
     Other(&'a str),
+    JSON
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -22,6 +23,7 @@ pub enum Prefix {
     Schema(String),
     Base(String),
     Other(String, String),
+    JSON
 }
 
 impl Prefix {
@@ -40,6 +42,7 @@ impl Prefix {
             Prefix::Schema(_) => PrefixContraction::Schema,
             Prefix::Base(_) => PrefixContraction::Base,
             Prefix::Other(contraction, _) => PrefixContraction::Other(contraction),
+            Prefix::JSON => PrefixContraction::JSON
         }
     }
 
@@ -48,6 +51,7 @@ impl Prefix {
             Prefix::Schema(e) => e,
             Prefix::Base(e) => e,
             Prefix::Other(_, e) => e,
+            Prefix::JSON => "http://terminusdb.com/schema/json#"
         }
     }
 }
@@ -71,7 +75,10 @@ impl PrefixContracter {
             panic!("no prefixes??");
         }
 
+        items.push(Prefix::JSON);
+
         items.sort_by(|p1, p2| p1.expansion().cmp(&p2.expansion()));
+        items.dedup();
         items.reverse();
 
         // TODO verify that we don't have duplicates
@@ -255,6 +262,7 @@ impl PrefixContracter {
             Some((PrefixContraction::Base, rest)) => Cow::Owned(format!("@base:{}", rest)),
             Some((PrefixContraction::Schema, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest)),
+            Some((PrefixContraction::JSON, rest)) => Cow::Borrowed(rest),
         }
     }
 
@@ -264,6 +272,7 @@ impl PrefixContracter {
             Some((PrefixContraction::Base, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Schema, rest)) => Cow::Owned(format!("@schema:{}", rest)),
             Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest)),
+            Some((PrefixContraction::JSON, rest)) => Cow::Borrowed(rest),
         }
     }
 }

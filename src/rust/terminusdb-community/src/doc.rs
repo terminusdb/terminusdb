@@ -41,7 +41,7 @@ impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
     pub fn new<SL: Layer>(schema: &SL, instance: L) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
-        let document_types: HashSet<u64> =
+        let mut document_types: HashSet<u64> =
             schema_to_instance_types(schema, &instance, schema_type_ids).collect();
 
         let schema_enum_ids = get_enum_ids_from_schema(schema);
@@ -79,6 +79,10 @@ impl<L: Layer> GetDocumentContext<L> {
         let rdf_list_id = instance.object_node_id(RDF_LIST);
         let sys_json_type_id = instance.object_node_id(SYS_JSON);
         let sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+
+        if let Some(sys_json_document_type_id) = sys_json_document_type_id {
+            document_types.insert(sys_json_document_type_id);
+        }
 
         let mut sys_index_ids = Vec::new();
         let mut index_str = SYS_INDEX.to_string();
@@ -138,10 +142,11 @@ impl<L: Layer> GetDocumentContext<L> {
         } else {
             match self.get_doc_stub(object, true) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
-                Ok((doc, type_id, fields)) => Err(StackEntry::Document {
+                Ok((doc, type_id, fields, json)) => Err(StackEntry::Document {
                     doc,
                     type_id,
                     fields: Some(fields),
+                    json
                 }),
                 Err(v) => Ok(v),
             }
@@ -223,6 +228,7 @@ impl<L: Layer> GetDocumentContext<L> {
             Map<String, Value>,
             Option<u64>,
             Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
+            bool,
         ),
         Value,
     > {
@@ -246,28 +252,43 @@ impl<L: Layer> GetDocumentContext<L> {
 
         let mut type_id = None;
         let mut type_name_contracted: Option<String> = None;
+        let mut json = false;
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
                 if terminate && self.document_types.contains(&t.object) {
                     return Err(Value::String(id_name_contracted));
                 }
+
                 type_id = Some(t.object);
-                let type_name = self.layer.id_object_node(t.object).unwrap();
-                type_name_contracted = Some(self.prefixes.schema_contract(&type_name).to_string());
+                if Some(t.object) == self.sys_json_document_type_id || Some(t.object) == self.sys_json_type_id {
+                    json = true;
+                }
+
+                if !json {
+                    // json objects are special. We don't care about their type names.
+                    // for other types, we do care, so convert to string format.
+                    let type_name = self.layer.id_object_node(t.object).unwrap();
+                    type_name_contracted = Some(self.prefixes.schema_contract(&type_name).to_string());
+                }
             }
         }
 
-        if type_name_contracted.is_none() && fields.peek().is_none() {
+        if type_id.is_none() && fields.peek().is_none() {
             // we're actually dealing with a raw id here
             Err(Value::String(id_name_contracted))
         } else {
             let mut result = Map::new();
-            result.insert("@id".to_string(), Value::String(id_name_contracted));
+
+            if type_id.is_none() || type_id != self.sys_json_type_id {
+                // we only care about the id for non-json types, and for the top level json documents. Json (sub)documents should not include an id.
+                result.insert("@id".to_string(), Value::String(id_name_contracted));
+            }
             if let Some(tn) = type_name_contracted {
+                // since we only contract types for non-json types, this will only add the @type for actual defined types, not the json types.
                 result.insert("@type".to_string(), Value::String(tn));
             }
 
-            Ok((result, type_id, fields))
+            Ok((result, type_id, fields, json))
         }
     }
 
@@ -275,18 +296,20 @@ impl<L: Layer> GetDocumentContext<L> {
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
         let mut stack = Vec::new();
 
-        let (doc, type_id, fields) = self.get_doc_stub(id, false).unwrap();
+        let (doc, type_id, fields, json) = self.get_doc_stub(id, false).unwrap();
         stack.push(StackEntry::Document {
             doc,
             type_id,
             fields: Some(fields),
+            json
         });
 
         loop {
             let cur = stack.last_mut().unwrap();
+            let is_json = cur.is_json();
             if let Some(next_obj) = cur.peek() {
                 // let's first see if this object is one of the expected types
-                if cur.is_document() {
+                if is_json || cur.is_document() {
                     if let Some(rdf_type_id) = self.rdf_type_id {
                         if let Some(t) = self.layer.single_triple_sp(next_obj, rdf_type_id) {
                             if Some(t.object) == self.sys_array_id {
@@ -301,12 +324,14 @@ impl<L: Layer> GetDocumentContext<L> {
                                 stack.push(StackEntry::List {
                                     collect: Vec::new(),
                                     entries: list_iter,
+                                    json: is_json
                                 });
                                 continue;
                             }
                         }
                     }
                 }
+
                 // it's not one of the special types, treat it as an ordinary field.
                 match self.get_field(next_obj) {
                     Ok(val) => {
@@ -339,10 +364,12 @@ enum StackEntry<'a, L: Layer> {
         doc: Map<String, Value>,
         type_id: Option<u64>,
         fields: Option<Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>>,
+        json: bool,
     },
     List {
         collect: Vec<Value>,
         entries: Peekable<RdfListIterator<'a, L>>,
+        json: bool
     },
     Array(ArrayStackEntry<'a, L>),
 }
@@ -351,8 +378,15 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     fn is_document(&self) -> bool {
         match self {
             Self::Document { .. } => true,
-            Self::List { .. } => false,
-            Self::Array(_) => false,
+            _ => false,
+        }
+    }
+
+    fn is_json(&self) -> bool {
+        match self {
+            Self::Document { json, .. } => *json,
+            Self::List { json, .. } => *json,
+            _ => false,
         }
     }
 }
@@ -459,6 +493,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
                 doc,
                 fields,
                 type_id,
+                ..
             } => {
                 // we previously peeked a field and decided we needed to recurse deeper.
                 // this is the time to pop it.
@@ -470,7 +505,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
                 context.add_field(doc, &p_name_contracted, value, is_set);
             }
-            Self::List { collect, entries } => {
+            Self::List { collect, entries, .. } => {
                 // We previously peeked a list entry and decided we needed to recurse deeper.
                 // this is the time to pop it.
                 let _elt = entries.next().unwrap();
@@ -647,7 +682,6 @@ predicates! {
         let mut result = BinaryHeap::new();
         let mut cur = 0;
         while let Ok((ix,s)) = receiver.recv() {
-            //eprintln!("{:?}", ix);
             if ix == cur {
                 context.try_or_die(stream.write_all(s.as_bytes()))?;
                 context.try_or_die(stream.write_all(b"\n"))?;
