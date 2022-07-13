@@ -435,21 +435,22 @@ get_user_from_name(SystemDB,Name,User) :-
         )),
     get_user_from_id(SystemDB,Id,User).
 
-api_get_user_from_id(SystemDB, Auth, Id, User) :-
+api_get_user_from_id(SystemDB, Auth, Id, User, Opts) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
     do_or_die(
-        get_user_from_id(SystemDB, Id, User),
+        get_user_from_id(SystemDB, Id, User, Opts),
         error(no_user_with_give_id(Id), _)).
 
-get_user_from_id(SystemDB, Id, User) :-
+get_user_from_id(SystemDB, Id, User, Opts) :-
     ask(SystemDB,
         (   t(Id, rdf:type, '@schema':'User'),
             get_document(Id, User_Raw))),
     del_dict(key_hash, User_Raw, _, User_Begin),
 
-    (   get_dict(capability, User_Begin, Capability_Ids)
+    (   option(capability(true), Opts),
+        get_dict(capability, User_Begin, Capability_Ids)
     ->  findall(Capability,
                 (   member(Capability_Id, Capability_Ids),
                     get_capability_from_id(SystemDB, Capability_Id, Capability)),
