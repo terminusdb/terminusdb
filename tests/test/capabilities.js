@@ -65,7 +65,7 @@ describe('capabilities', function () {
       })
     const userIdLong = result1.body
     const userIdList = userIdLong.split('terminusdb://system/data/')
-    const userId = userIdList[userIdList.length-1]
+    const userId = userIdList[userIdList.length - 1]
 
     // org
     await agent.post(`/api/organizations/${orgName}`)
@@ -75,9 +75,9 @@ describe('capabilities', function () {
       .send({
         name: roleName,
         action: ['meta_read_access', 'meta_write_access',
-                 'instance_read_access', 'instance_write_access',
-                 'schema_read_access', 'schema_write_access',
-                 'create_database', 'delete_database'],
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
       })
 
     await agent
@@ -89,26 +89,24 @@ describe('capabilities', function () {
         roles: [roleName],
       })
 
-
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')
-    const user_agent = new Agent({ orgName : orgName }).auth()
-    user_agent.set('Authorization', `Basic ${userPass}`)
+    const userAgent = new Agent({ orgName: orgName }).auth()
+    userAgent.set('Authorization', `Basic ${userPass}`)
     const bodyString = '{"label":"hello"}'
-    await db.create(user_agent, { bodyString })
+    await db.create(userAgent, { bodyString })
 
     // organization users
-    const result_users = await agent.get(`/api/organizations/${orgName}/users`)
-    const users = result_users.body
+    const resultUsers = await agent.get(`/api/organizations/${orgName}/users`)
+    const users = resultUsers.body
     expect(users[0]['@id']).to.equal(userId)
 
     // organization users databases
-    const result_databases = await agent
-          .get(`/api/organizations/${orgName}/users/${userName}/databases`)
-    const databases = result_databases.body
-    expect(databases[0]['label']).to.equal('hello')
+    const resultDatabases = await agent
+      .get(`/api/organizations/${orgName}/users/${userName}/databases`)
+    const databases = resultDatabases.body
+    expect(databases[0].label).to.equal('hello')
 
     // cleanup
-    await db.delete(user_agent)
-
+    await db.delete(userAgent)
   })
 })
