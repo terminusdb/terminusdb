@@ -2083,6 +2083,9 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
                             [status(200)]))).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
+%
 :- http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
@@ -2777,6 +2780,14 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
 :- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  methods([options,post,delete,get])]).
+:- http_handler(api(organizations/Org/users),
+                cors_handler(Method, organizations_users_handler(Org)),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(api(organizations/Org/users/User/databases),
+                cors_handler(Method, organizations_users_databases_handler(Org,User)),
+                [method(Method),
+                 methods([options,get])]).
 
 /*
  * organizations_handler(Mode, Request, System, Auth) is det.
@@ -2826,6 +2837,33 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
         )
     ).
 
+/*
+ * organizations_users_handler(get, Org, Request, System_DB, Auth) is det.
+ *
+ * Get all users for an organization
+ */
+organizations_users_handler(get, Org, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_get_organizations_users(System_DB, Auth, Org, Users),
+            cors_reply_json(Request,Users)
+        )
+    ).
+
+/*
+ * organizations_users_databases_handler(get, Org, User, Request, System_DB, Auth) is det.
+ *
+ * Get all databases for a user in an organization
+ */
+organizations_users_databases_handler(get, Org, User, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_get_organizations_users_databases(System_DB, Auth, Org, User, Databases),
+            cors_reply_json(Request,Databases)
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(users), cors_handler(Method, users_handler),
@@ -2921,7 +2959,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
 /*
  * capabilities_handler(Mode, Request, System, Auth) is det.
  *
- * Insert an organization or update an organization
+ * grant or revoke capabilities
  */
 capabilities_handler(post, Request, System_DB, Auth) :-
     get_payload(Cap, Request),
