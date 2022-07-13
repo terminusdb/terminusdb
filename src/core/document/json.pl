@@ -6109,6 +6109,162 @@ test(sub_unfoldable,
          _
      ).
 
+test(trans_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':property_path_cycle_detected,
+                            class:'http://s/B',
+                            path:['http://s/q','http://s/C',
+                                  'http://s/r','http://s/A',
+                                  'http://s/p','http://s/B']}]),
+               _)
+     ]) :-
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        p : "B",
+        '@abstract' : [] },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        q : "C" },
+
+     DocumentC =
+     _{ '@id' : "C",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        r : "A" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB),
+             insert_schema_document(Context, DocumentC)
+         ),
+         _
+     ).
+
+test(oneof_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':property_path_cycle_detected,
+                          class:'http://s/A',
+                          path:['http://s/q','http://s/A']}]),
+             _)
+     ]) :-
+
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@oneOf' :
+        _{
+            p : "B",
+            q : "A"
+        },
+        '@abstract' : [] },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        q : "xsd:string" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
+
+test(always_smaller_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':property_path_cycle_detected,
+                          class:'http://s/A',
+                          path:['http://s/q','http://s/A']}]),
+             _)
+     ]) :-
+
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@abstract' : []
+      },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@abstract' : []},
+
+     DocumentA1 =
+     _{ '@id' : "A1",
+        '@type' : "Class",
+        '@inherits' : ["A"],
+        a1 : "B1"
+      },
+
+     DocumentB1 =
+     _{ '@id' : "B1",
+        '@type' : "Class",
+        '@inherits' : ["B"],
+        b1 : "A2"
+      },
+
+     DocumentA2 =
+     _{ '@id' : "A2",
+        '@type' : "Class",
+        '@inherits' : ["A"],
+        a2 : "xsd:string"
+      },
+
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB),
+             insert_schema_document(Context, DocumentA1),
+             insert_schema_document(Context, DocumentB1),
+             insert_schema_document(Context, DocumentA2)
+         ),
+         _
+     ).
+
 test(subdocument_hash_key,
      [
          setup(
