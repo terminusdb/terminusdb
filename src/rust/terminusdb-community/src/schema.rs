@@ -18,10 +18,40 @@ fn get_direct_subdocument_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<
     }
 }
 
+fn get_direct_unfoldable_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64> {
+    if let Some(unfoldable_id) = layer.predicate_id(SYS_UNFOLDABLE) {
+        itertools::Either::Left(layer.triples_p(unfoldable_id).map(|t| t.subject))
+    } else {
+        itertools::Either::Right(std::iter::empty())
+    }
+}
+
 fn get_subdocument_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
     let mut result = HashSet::new();
     let inheritance = get_reverse_inheritance_graph(layer);
     let mut work: Vec<_> = get_direct_subdocument_ids_from_schema(layer).collect();
+    loop {
+        if let Some(cur) = work.pop() {
+            if !result.insert(cur) {
+                // we already found this type.
+                continue;
+            }
+
+            if let Some(children) = inheritance.get(&cur) {
+                work.extend(children);
+            }
+        } else {
+            break;
+        }
+    }
+
+    result
+}
+
+pub fn get_unfoldable_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
+    let mut result = HashSet::new();
+    let inheritance = get_reverse_inheritance_graph(layer);
+    let mut work: Vec<_> = get_direct_unfoldable_ids_from_schema(layer).collect();
     loop {
         if let Some(cur) = work.pop() {
             if !result.insert(cur) {

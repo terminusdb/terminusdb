@@ -23,6 +23,7 @@ pub struct GetDocumentContext<L: Layer> {
     layer: L,
     prefixes: PrefixContracter,
     document_types: HashSet<u64>,
+    unfoldables: HashSet<u64>,
     enums: HashMap<u64, String>,
     set_pairs: HashSet<(u64, u64)>,
     rdf_type_id: Option<u64>,
@@ -51,6 +52,10 @@ impl<L: Layer> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
         let mut document_types: HashSet<u64> =
             schema_to_instance_types(schema, &instance, schema_type_ids).collect();
+
+        let schema_unfoldable_ids = get_unfoldable_ids_from_schema(schema);
+        let mut unfoldables: HashSet<u64> =
+            schema_to_instance_types(schema, &instance, schema_unfoldable_ids).collect();
 
         let schema_enum_ids = get_enum_ids_from_schema(schema);
         let mut enums = HashMap::new();
@@ -121,6 +126,7 @@ impl<L: Layer> GetDocumentContext<L> {
             layer: instance,
             prefixes,
             document_types,
+            unfoldables,
             enums,
             set_pairs,
             rdf_type_id,
@@ -270,7 +276,11 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut json = false;
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
-                if terminate && (self.document_types.contains(&t.object) || !self.unfold) {
+                if terminate
+                    && (!self.unfold
+                        || (self.document_types.contains(&t.object)
+                            && !self.unfoldables.contains(&t.object)))
+                {
                     return Err(Value::String(id_name_contracted));
                 }
 
