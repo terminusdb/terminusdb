@@ -36,6 +36,7 @@ pub struct GetDocumentContext<L: Layer> {
     sys_json_type_id: Option<u64>,
     sys_json_document_type_id: Option<u64>,
     unfold: bool,
+    minimized: bool,
 }
 
 impl<L: Layer> GetDocumentContext<L> {
@@ -45,6 +46,7 @@ impl<L: Layer> GetDocumentContext<L> {
         instance: L,
         compress: bool,
         unfold: bool,
+        minimized: bool,
     ) -> GetDocumentContext<L> {
         let schema_type_ids = get_document_type_ids_from_schema(schema);
         let mut document_types: HashSet<u64> =
@@ -133,6 +135,7 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_json_type_id,
             sys_json_document_type_id,
             unfold,
+            minimized,
         }
     }
 
@@ -594,8 +597,13 @@ wrapped_arc_blob!(
 );
 
 #[inline(never)]
-fn map_to_string(m: Map<String, Value>) -> String {
-    Value::Object(m).to_string()
+fn map_to_string(m: Map<String, Value>, pretty: bool) -> String {
+    if pretty {
+        serde_json::to_string_pretty(&Value::Object(m))
+            .expect("expected serialization to be possible")
+    } else {
+        Value::Object(m).to_string()
+    }
 }
 
 #[inline(never)]
@@ -606,13 +614,14 @@ fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
 use super::types::*;
 predicates! {
     #[module("$moo")]
-    semidet fn get_document_context(context, transaction_term, compress_term, unfold_term, context_term) {
+    semidet fn get_document_context(context, transaction_term, compress_term, unfold_term, minimized_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?.unwrap();
         let compress: bool = compress_term.get()?;
         let unfold: bool = unfold_term.get()?;
+        let minimized: bool = minimized_term.get()?;
 
-        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, compress, unfold);
+        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, compress, unfold, minimized);
 
         context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
     }
@@ -626,7 +635,7 @@ predicates! {
         let context: GetDocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
         if let Some(result) = context.get_document(&s) {
-            unify_json_string(&doc_json_string_term, map_to_string(result))
+            unify_json_string(&doc_json_string_term, map_to_string(result, !context.minimized))
         }
         else {
             fail()
@@ -643,7 +652,7 @@ predicates! {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
         if let Some(result) = doc_context.get_document(&s) {
-            context.try_or_die(write!(stream, "{}\n", map_to_string(result)))
+            context.try_or_die(write!(stream, "{}\n", map_to_string(result, !doc_context.minimized)))
         }
         else {
             fail()
@@ -665,7 +674,7 @@ predicates! {
                 }
 
                 let map = doc_context.get_id_document(t.subject);
-                let s = map_to_string(map);
+                let s = map_to_string(map, !doc_context.minimized);
 
                 context.try_or_die(stream.write_all(s.as_bytes()))?;
                 context.try_or_die(stream.write_all(b"\n"))?;
@@ -693,7 +702,7 @@ predicates! {
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, t)| {
                     let map = doc_context.get_id_document(t.subject);
-                    let s = map_to_string(map);
+                    let s = map_to_string(map, !doc_context.minimized);
                     sender.send((ix, s)) // failure will kill the task
                 });
         });
