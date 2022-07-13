@@ -33,6 +33,7 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
+:- use_module(library(option)).
 
 api_get_roles(SystemDB, Auth, Roles) :-
     do_or_die(
