@@ -418,7 +418,7 @@ refute_unfoldable_cycle(DB, Original, Witness) :-
 unfoldable_property_cycle(Schema, Original, A, Path, New_Path, State) :-
     reachable_unfoldable(Schema, A, P, C),
     arg(1,State,Set),
-    (   C = Original
+    (   schema_class_subsumed(Schema, Original, C)
     ->  reverse([C,P|Path],New_Path)
     ;   member(C, Set)
     ->  fail
