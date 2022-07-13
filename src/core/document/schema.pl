@@ -433,7 +433,8 @@ is_built_in(P) :-
             sys:base,
             sys:class,
             sys:abstract,
-            sys:subdocument
+            sys:subdocument,
+            sys:unfoldable
         ],
         List),
     memberchk(P,List).
@@ -453,6 +454,18 @@ is_subdocument(Validation_Object, C) :-
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
+
+is_direct_unfoldable(Schema, C) :-
+    xrdf(Schema, C, sys:unfoldable, rdf:nil).
+
+is_unfoldable(Validation_Object, C) :-
+    database_schema(Validation_Object,Schema),
+    schema_is_unfoldable(Schema, C).
+
+:- table schema_is_unfoldable/2 as private.
+schema_is_unfoldable(Schema, C) :-
+    schema_class_subsumed(Schema, C, D),
+    is_direct_unfoldable(Schema, D).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -608,6 +621,14 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     global_prefix_expand(rdf:nil, RDF_Nil),
     Result \= RDF_Nil,
     Witness = witness{ '@type' : bad_subdocument_value,
+                       class: Class,
+                       value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:unfoldable, Result),
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    Result \= RDF_Nil,
+    Witness = witness{ '@type' : bad_unfoldable_value,
                        class: Class,
                        value: Result }.
 
