@@ -146,7 +146,7 @@ impl<L: Layer> GetDocumentContext<L> {
                     doc,
                     type_id,
                     fields: Some(fields),
-                    json
+                    json,
                 }),
                 Err(v) => Ok(v),
             }
@@ -260,7 +260,9 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
 
                 type_id = Some(t.object);
-                if Some(t.object) == self.sys_json_document_type_id || Some(t.object) == self.sys_json_type_id {
+                if Some(t.object) == self.sys_json_document_type_id
+                    || Some(t.object) == self.sys_json_type_id
+                {
                     json = true;
                 }
 
@@ -268,7 +270,8 @@ impl<L: Layer> GetDocumentContext<L> {
                     // json objects are special. We don't care about their type names.
                     // for other types, we do care, so convert to string format.
                     let type_name = self.layer.id_object_node(t.object).unwrap();
-                    type_name_contracted = Some(self.prefixes.schema_contract(&type_name).to_string());
+                    type_name_contracted =
+                        Some(self.prefixes.schema_contract(&type_name).to_string());
                 }
             }
         }
@@ -301,7 +304,7 @@ impl<L: Layer> GetDocumentContext<L> {
             doc,
             type_id,
             fields: Some(fields),
-            json
+            json,
         });
 
         loop {
@@ -324,7 +327,7 @@ impl<L: Layer> GetDocumentContext<L> {
                                 stack.push(StackEntry::List {
                                     collect: Vec::new(),
                                     entries: list_iter,
-                                    json: is_json
+                                    json: is_json,
                                 });
                                 continue;
                             }
@@ -369,7 +372,7 @@ enum StackEntry<'a, L: Layer> {
     List {
         collect: Vec<Value>,
         entries: Peekable<RdfListIterator<'a, L>>,
-        json: bool
+        json: bool,
     },
     Array(ArrayStackEntry<'a, L>),
 }
@@ -505,7 +508,9 @@ impl<'a, L: Layer> StackEntry<'a, L> {
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
                 context.add_field(doc, &p_name_contracted, value, is_set);
             }
-            Self::List { collect, entries, .. } => {
+            Self::List {
+                collect, entries, ..
+            } => {
                 // We previously peeked a list entry and decided we needed to recurse deeper.
                 // this is the time to pop it.
                 let _elt = entries.next().unwrap();

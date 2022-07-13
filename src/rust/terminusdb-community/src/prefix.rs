@@ -15,7 +15,7 @@ pub enum PrefixContraction<'a> {
     Base,
     Schema,
     Other(&'a str),
-    JSON
+    JSON,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -23,7 +23,7 @@ pub enum Prefix {
     Schema(String),
     Base(String),
     Other(String, String),
-    JSON
+    JSON,
 }
 
 impl Prefix {
@@ -42,7 +42,7 @@ impl Prefix {
             Prefix::Schema(_) => PrefixContraction::Schema,
             Prefix::Base(_) => PrefixContraction::Base,
             Prefix::Other(contraction, _) => PrefixContraction::Other(contraction),
-            Prefix::JSON => PrefixContraction::JSON
+            Prefix::JSON => PrefixContraction::JSON,
         }
     }
 
@@ -51,7 +51,7 @@ impl Prefix {
             Prefix::Schema(e) => e,
             Prefix::Base(e) => e,
             Prefix::Other(_, e) => e,
-            Prefix::JSON => "http://terminusdb.com/schema/json#"
+            Prefix::JSON => "http://terminusdb.com/schema/json#",
         }
     }
 }
