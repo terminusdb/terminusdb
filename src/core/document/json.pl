@@ -6006,6 +6006,40 @@ test(bad_documentation,
         _
     ).
 
+test(bad_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure([witness{'@type':property_path_cycle_detected,class:'http://s/B',path:['http://s/q','http://s/A','http://s/p','http://s/B']}]),
+             _)
+     ]) :-
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        p : "B" },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        q : "A" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
 
 test(subdocument_hash_key,
      [
