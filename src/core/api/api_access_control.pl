@@ -419,21 +419,21 @@ api_delete_user(_, Auth, User_Id) :-
         _
     ).
 
-api_get_user_from_name(SystemDB,Auth,Name,User) :-
+api_get_user_from_name(SystemDB,Auth,Name,User,Opts) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
     do_or_die(
-        get_user_from_name(SystemDB, Name, User),
+        get_user_from_name(SystemDB, Name, User, Opts),
         error(no_id_for_user_name(Name), _)).
 
-get_user_from_name(SystemDB,Name,User) :-
+get_user_from_name(SystemDB,Name,User,Opts) :-
     ask(SystemDB,
         (   t(Id,name,Name^^xsd:string),
             t(Id,rdf:type,'@schema':'User')
         )),
-    get_user_from_id(SystemDB,Id,User).
+    get_user_from_id(SystemDB,Id,User,Opts).
 
 api_get_user_from_id(SystemDB, Auth, Id, User, Opts) :-
     do_or_die(
@@ -476,19 +476,19 @@ get_capability_from_id(SystemDB, Id, Capability) :-
     get_resource_from_id(SystemDB,Scope,Resource),
     put_dict(_{scope : Resource}, Capability_Role, Capability).
 
-api_get_users(SystemDB, Auth, Users) :-
+api_get_users(SystemDB, Auth, Users, Opts) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    get_users(SystemDB, Users).
+    get_users(SystemDB, Users, Opts).
 
-get_users(SystemDB, Users) :-
+get_users(SystemDB, Users, Opts) :-
     findall(
         User,
         (   ask(SystemDB,
                 t(Id, rdf:type, '@schema':'User')),
-            get_user_from_id(SystemDB,Id,User)
+            get_user_from_id(SystemDB,Id,User,Opts)
         ),
         Users).
 

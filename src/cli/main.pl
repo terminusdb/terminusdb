@@ -1828,9 +1828,10 @@ run_command(user,get, NameList, Opts) :-
             api_get_user_from_id(System_DB, Auth, Id, User_Obj)
         ),
         Users = [User_Obj]
-    ;   api_report_errors(
+    ;   option(capability(Capability), Opts),
+        api_report_errors(
             user,
-            api_get_users(System_DB,Auth,Users)
+            api_get_users(System_DB,Auth,Users,options{capability:Capability})
         )
     ),
 
