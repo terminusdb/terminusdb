@@ -53,6 +53,7 @@ pub fn value_string_to_json(s: &str) -> Value {
         Value::Null
     } else if type_is_numeric(typ) {
         // it will have been saved unquoted
+        //Value::Number(Number::from_string_unchecked(val.to_string())) // undocumented api - we know this is a number, so might as well save parse effort
         Value::Number(Number::from_str(val).unwrap())
     } else {
         // it will be something quoted, which we're gonna return as a string
