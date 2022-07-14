@@ -419,11 +419,19 @@ get_resource_from_name(SystemDB,Name,Type,Resource) :-
                     t(DBID, name, DB^^xsd:string),
                     get_document(DBID,Resource)
                 ))
-        ;   ask(SystemDB,
-                (   t(DBID, name, Name^^xsd:string),
-                    t(DBID, rdf:type, '@schema':'Database'),
-                    get_document(DBID,Resource)
-                ))
+        ;   findall(
+                Candidate,
+                ask(SystemDB,
+                    (   t(DBID, name, Name^^xsd:string),
+                        t(DBID, rdf:type, '@schema':'Database'),
+                        get_document(DBID,Candidate)
+                    )),
+                Resources
+            ),
+            (   [_,_|_] = Resources
+            ->  throw(error(no_unique_id_for_database_name(Name), _))
+            ;   [Resource] = Resources
+            )
         )
     ;   ask(SystemDB,
             (   t(Id,name,Name^^xsd:string),
