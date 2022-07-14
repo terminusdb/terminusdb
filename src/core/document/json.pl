@@ -11789,4 +11789,59 @@ test(geojson_example,
                         _Id)
     ).
 
+:- use_module(core(api/api_patch)).
+test(json_diff,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+
+    Doc1 =
+    _{
+        prop : "value"
+    },
+
+    create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, C1),
+    with_transaction(
+        C1,
+        insert_document(C1, Doc1, true, Id1),
+        Meta1
+    ),
+    get_dict(data_versions, Meta1, DV1),
+    memberchk(Desc - data_version(branch,Commit1), DV1),
+
+    Doc2 =
+    _{
+        '@id' : Id1,
+        prop : "value2"
+    },
+
+    create_context(Desc, _{ author : "me", message : "cures what ails you!" }, C2),
+    Insert = false,
+    Raw_Json = true,
+    with_transaction(
+        C2,
+        replace_document(C2, Doc2, Insert, Raw_Json, _Id2),
+        Meta2
+    ),
+
+    get_dict(data_versions, Meta2, DV2),
+    memberchk(Desc - data_version(branch,Commit2), DV2),
+    super_user_authority(Auth),
+
+    api_diff_all_documents(
+        system_descriptor{},
+        Auth,
+        "admin/testdb",
+        Commit1,
+        Commit2,
+        Patch,
+        _{ keep : _{ '@id' : true, '_id' : true }}),
+
+    Patch = [json{'@id':_,
+                  prop:json{'@after':"value2",
+                            '@before':"value",
+                            '@op':"SwapValue"}}].
+
 :- end_tests(json_datatype).
