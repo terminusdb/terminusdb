@@ -161,7 +161,7 @@ Pull a branch from a database.
   print help for the `pull` command
 
   * `-e`, `--remote-branch`=[value]:
-  set the branch on the remote for push
+  set the branch on the remote for pull
 
   * `-r`, `--remote`=[value]:
   the name of the remote to use
