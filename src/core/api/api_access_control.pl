@@ -423,7 +423,7 @@ get_resource_from_name(SystemDB,Name,Type,Resource) :-
                 Candidate,
                 ask(SystemDB,
                     (   t(DBID, name, Name^^xsd:string),
-                        t(DBID, rdf:type, '@schema':'Database'),
+                        t(DBID, rdf:type, '@schema':'UserDatabase'),
                         get_document(DBID,Candidate)
                     )),
                 Resources
