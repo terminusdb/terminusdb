@@ -136,7 +136,7 @@ describe('capabilities', function () {
 
     // no role (error)
     const noResultRoles = await agent
-      .get(`/api/organizations/foo/users/bar/roles`)
+      .get('/api/organizations/foo/users/bar/roles')
     const noRoles = noResultRoles.body
     expect(noRoles['api:error']['api:organization_name']).to.equal('foo')
 
@@ -148,15 +148,12 @@ describe('capabilities', function () {
 
     // user2
     const userName2 = userName + '_2'
-    const user2 = await agent
+    await agent
       .post('/api/users')
       .send({
         name: userName2,
         password: userName2,
       })
-    const user2IdLong = user2.body
-    const user2IdList = user2IdLong.split('terminusdb://system/data/')
-    const user2Id = user2IdList[userIdList.length - 1]
 
     // no role3 (empty)
     const noResultRoles3 = await agent
