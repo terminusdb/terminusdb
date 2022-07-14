@@ -601,6 +601,15 @@ api_error_jsonld_(fetch,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld_(fetch,error(fetch_remote_has_no_url(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote being fetched has no URL ~q", [Path]),
+    JSON = _{'@type' : 'api:FetchErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteHasNoURL",
+                              'api:absolute_descriptor' : Path}
+            }.
 api_error_jsonld_(rebase,error(invalid_target_absolute_path(Path),_), JSON) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
@@ -790,6 +799,24 @@ api_error_jsonld_(pull,error(pull_no_common_history(Head_Has_Updated), _), JSON)
              'api:fetch_status' : Head_Has_Updated,
              'api:error' : _{ '@type' : 'api:NoCommonHistoryError'
                             }
+            }.
+api_error_jsonld_(pull,error(branch_does_not_exist(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    JSON = _{'@type' : 'api:PullErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld_(pull,error(fetch_remote_has_no_url(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote being fetched has no URL ~q", [Path]),
+    JSON = _{'@type' : 'api:PullErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteHasNoURL",
+                              'api:absolute_descriptor' : Path}
             }.
 api_error_jsonld_(branch,error(invalid_target_absolute_path(Path),_), JSON) :-
     format(string(Msg), "Invalid target absolute resource descriptor: ~q", [Path]),
