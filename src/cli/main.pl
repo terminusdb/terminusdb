@@ -1342,7 +1342,7 @@ run_command(fetch,[Path],Opts) :-
         remote_fetch(System_DB, Auth, Remote_Path, authorized_fetch(Authorization),
                      New_Head_Layer_Id, Head_Has_Updated)
     ),
-    format(current_output, "~N~s fetch: ~q with ~q~n",
+    format(current_output, "~N~s fetch: ~q with updated head = ~q~n",
            [Path, New_Head_Layer_Id, Head_Has_Updated]).
 run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
