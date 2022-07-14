@@ -1181,6 +1181,14 @@ api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
              'api:error' : _{ '@type' : "api:NoIdForResourceName",
                               'api:resource_name' : Name}
             }.
+api_error_jsonld_(capability,error(no_unique_id_for_database_name(Name),_), JSON) :-
+    format(string(Msg), "There is more than one id for database ~s. Consider deleting duplicates if you want to refer to them by name rather than id, or specify the organization.", [Name]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForDatabaseName",
+                              'api:database_name' : Name}
+            }.
 api_error_jsonld_(capability,error(deleted_roles_do_not_exist_in_capability(Roles,Capability),_),JSON) :-
     format(string(Msg), "Deleted roles ~q do not exist for capability ~s", [Roles,Capability]),
     JSON = _{'@type' : 'api:CapabilityErrorResponse',

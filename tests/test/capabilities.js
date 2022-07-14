@@ -9,45 +9,59 @@ describe('capabilities', function () {
     const roleName = util.randomString()
 
     // user
-    await agent
+    const result1 = await agent
       .post('/api/users')
       .send({
         name: userName,
         password: userName,
       })
+    const userIdLong = result1.body
+    const userIdList = userIdLong.split('terminusdb://system/data/')
+    const userId = userIdList[userIdList.length - 1]
+
     // org
-    await agent.post(`/api/organizations/${orgName}`)
+    const result2 = await agent.post(`/api/organizations/${orgName}`)
+    const orgIdLong = result2.body
+    const orgIdList = orgIdLong.split('terminusdb://system/data/')
+    const orgId = orgIdList[orgIdList.length - 1]
+
     // role
-    await agent
+    const result3 = await agent
       .post('/api/roles')
       .send({
         name: roleName,
-        action: ['meta_read_access', 'meta_write_access'],
+        action: ['meta_read_access', 'meta_write_access',
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
       })
+    const roleIdLong = result3.body
+    const roleIdList = roleIdLong.split('terminusdb://system/data/')
+    const roleId = roleIdList[roleIdList.length - 1]
 
-    const result1 = await agent
+    const result4 = await agent
       .post('/api/capabilities')
       .send({
         operation: 'grant',
-        scope: orgName,
-        user: userName,
-        roles: [roleName],
+        scope: orgId,
+        user: userId,
+        roles: [roleId],
       })
 
-    expect(result1.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
-    expect(result1.status).to.equal(200)
+    expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
+    expect(result4.status).to.equal(200)
 
-    const result2 = await agent
+    const result5 = await agent
       .post('/api/capabilities')
       .send({
         operation: 'revoke',
-        scope: orgName,
-        user: userName,
-        roles: [roleName],
+        scope: orgId,
+        user: userId,
+        roles: [roleId],
       })
 
-    expect(result2.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
-    expect(result2.status).to.equal(200)
+    expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
+    expect(result5.status).to.equal(200)
   })
 
   it('lists organization users', async function () {
@@ -68,9 +82,13 @@ describe('capabilities', function () {
     const userId = userIdList[userIdList.length - 1]
 
     // org
-    await agent.post(`/api/organizations/${orgName}`)
+    const result2 = await agent.post(`/api/organizations/${orgName}`)
+    const orgIdLong = result2.body
+    const orgIdList = orgIdLong.split('terminusdb://system/data/')
+    const orgId = orgIdList[orgIdList.length - 1]
+
     // role
-    await agent
+    const result3 = await agent
       .post('/api/roles')
       .send({
         name: roleName,
@@ -79,14 +97,17 @@ describe('capabilities', function () {
           'schema_read_access', 'schema_write_access',
           'create_database', 'delete_database'],
       })
+    const roleIdLong = result3.body
+    const roleIdList = roleIdLong.split('terminusdb://system/data/')
+    const roleId = roleIdList[roleIdList.length - 1]
 
     await agent
       .post('/api/capabilities')
       .send({
         operation: 'grant',
-        scope: orgName,
-        user: userName,
-        roles: [roleName],
+        scope: orgId,
+        user: userId,
+        roles: [roleId],
       })
 
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')

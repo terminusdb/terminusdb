@@ -961,7 +961,19 @@ opt_spec(capability,grant,'terminusdb capability grant USER SCOPE ROLE1 <...ROLE
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `store init` sub command')]]).
+           help('print help for the `store init` sub command')],
+          [opt(ids),
+           type(boolean),
+           longflags([ids]),
+           shortflags([i]),
+           default(false),
+           help('Should the User, Scope and Role be treated as IDs or names')],
+          [opt(scope_type),
+           type(atom),
+           longflags([scope_type, 'scope-type']),
+           shortflags([s]),
+           default(database),
+           help('Should the scope be interpreted as a `database` (default) or an `organization`')]]).
 opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>',
          'Revoke ROLE1 ... ROLEN over SCOPE from USER',
          [[opt(help),
@@ -969,7 +981,19 @@ opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...RO
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `store init` sub command')]]).
+           help('print help for the `store init` sub command')],
+          [opt(ids),
+           type(boolean),
+           longflags([ids]),
+           shortflags([i]),
+           default(false),
+           help('Should the User, Scope and Role be treated as IDs or names')],
+          [opt(scope_type),
+           type(atom),
+           longflags([scope_type, 'scope-type']),
+           shortflags([s]),
+           default(database),
+           help('Should the scope be interpreted as a `database` (default) or an `organization`')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -1877,27 +1901,43 @@ run_command(user,password, [User], Opts) :-
         api_update_user_password(System_DB, Auth, User, Password)
     ),
     format(current_output, '~nPassword updated for ~s~n', [User]).
-run_command(capability,grant,[User,Scope|Roles],_Opts) :-
+run_command(capability,grant,[User,Scope|Roles],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),
+    option(scope_type(Type),Opts),
+    option(ids(Ids),Opts),
     api_report_errors(
         capability,
-        api_grant_capability(SystemDB,Auth, _{ scope: Scope,
-                                               user: User,
-                                               roles: Roles })
+        (   (   Ids = true
+            ->  Grant_Doc = _{ scope: Scope, user: User, roles: Roles}
+            ;   grant_document_to_ids(SystemDB, Auth, _{ scope: Scope,
+                                                         user: User,
+                                                         roles: Roles,
+                                                         scope_type: Type }, Grant_Doc)
+            ),
+            api_grant_capability(SystemDB,Auth, Grant_Doc)
+        )
     ),
     format(current_output, "Granted ~q to '~s' over '~s'~n", [Roles,User,Scope]).
-run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
+run_command(capability,revoke,[User,Scope|Roles],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),
+    option(scope_type(Type),Opts),
+    option(ids(Ids),Opts),
     (   Roles = []
     ->  format(user_error, 'Warning: No Roles specified~n',[])
     ;   true),
     api_report_errors(
         capability,
-        api_revoke_capability(SystemDB,Auth, _{ scope: Scope,
-                                                user: User,
-                                                roles: Roles })
+        (   (   Ids = true
+            ->  Grant_Doc = _{ scope: Scope, user: User, roles: Roles}
+            ;   grant_document_to_ids(SystemDB, Auth, _{ scope: Scope,
+                                                         user: User,
+                                                         roles: Roles,
+                                                         scope_type: Type }, Grant_Doc)
+            ),
+            api_revoke_capability(SystemDB, Auth, Grant_Doc)
+        )
     ),
     format(current_output, 'Capability successfully revoked~n', []).
 run_command(store,init, _, Opts) :-
