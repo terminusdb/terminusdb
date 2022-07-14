@@ -31,9 +31,9 @@ describe('capabilities', function () {
       .send({
         name: roleName,
         action: ['meta_read_access', 'meta_write_access',
-                 'instance_read_access', 'instance_write_access',
-                 'schema_read_access', 'schema_write_access',
-                 'create_database', 'delete_database'],
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
       })
     const roleIdLong = result3.body
     const roleIdList = roleIdLong.split('terminusdb://system/data/')
