@@ -211,11 +211,16 @@ api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
 
 get_organizations_users(SystemDB, Organization, Users) :-
     get_dict('@id', Organization, Org_Id),
-    findall(User,
-            ask(SystemDB,
-                (   t(Cap_Id, scope, Org_Id),
-                    t(User_Id, capability, Cap_Id),
-                    get_document(User_Id, User))),
+    findall(User_Clean,
+            (   ask(SystemDB,
+                    (   t(Cap_Id, scope, Org_Id),
+                        t(User_Id, capability, Cap_Id),
+                        get_document(User_Id, User))),
+                (   del_dict(key_hash, User, _, User_Clean)
+                ->  true
+                ;   User = User_Clean
+                )
+            ),
             Users).
 
 api_get_organizations_users_databases(SystemDB, Auth, Org_Name, User_Name, Databases) :-
