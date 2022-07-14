@@ -1372,6 +1372,9 @@ json_schema_predicate_value('@abstract',[],_,_,P,[]) :-
 json_schema_predicate_value('@subdocument',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:subdocument, P).
+json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:unfoldable, P).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -2206,6 +2209,9 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@subdocument',[]) :-
     global_prefix_expand(sys:subdocument,P),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@unfoldable',[]) :-
+    global_prefix_expand(sys:unfoldable,P),
     !.
 schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@inherits',V) :-
     global_prefix_expand(sys:inherits,P),
@@ -6000,6 +6006,258 @@ test(bad_documentation,
         _
     ).
 
+test(bad_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure([witness{'@type':property_path_cycle_detected,
+                                           class:_,
+                                           path:_}]),
+             _)
+     ]) :-
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        p : "B" },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        q : "A" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
+
+test(good_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        p : "B" },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        q : "A" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
+
+test(sub_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure([witness{'@type':property_path_cycle_detected,
+                                           class:'http://s/A1',
+                                           path:['http://s/q','http://s/A']}]),
+             _)
+     ]) :-
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@abstract' : [] },
+
+     DocumentB =
+     _{ '@id' : "A1",
+        '@type' : "Class",
+        '@inherits' : ["A"],
+        q : "A" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
+
+test(trans_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':property_path_cycle_detected,
+                            class:_,
+                            path:_}]),
+               _)
+     ]) :-
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        p : "B",
+        '@abstract' : [] },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        q : "C" },
+
+     DocumentC =
+     _{ '@id' : "C",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        r : "A" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB),
+             insert_schema_document(Context, DocumentC)
+         ),
+         _
+     ).
+
+test(oneof_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':property_path_cycle_detected,
+                          class:'http://s/A',
+                          path:['http://s/q','http://s/A']}]),
+             _)
+     ]) :-
+
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@oneOf' :
+        _{
+            p : "B",
+            q : "A"
+        },
+        '@abstract' : [] },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        q : "xsd:string" },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
+
+test(always_smaller_unfoldable,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+     DocumentA =
+     _{ '@id' : "A",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@abstract' : []
+      },
+
+     DocumentB =
+     _{ '@id' : "B",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        '@abstract' : []},
+
+     DocumentA1 =
+     _{ '@id' : "A1",
+        '@type' : "Class",
+        '@inherits' : ["A"],
+        a1 : "B1"
+      },
+
+     DocumentB1 =
+     _{ '@id' : "B1",
+        '@type' : "Class",
+        '@inherits' : ["B"],
+        b1 : "A2"
+      },
+
+     DocumentA2 =
+     _{ '@id' : "A2",
+        '@type' : "Class",
+        '@inherits' : ["A"],
+        a2 : "xsd:string"
+      },
+
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB),
+             insert_schema_document(Context, DocumentA1),
+             insert_schema_document(Context, DocumentB1),
+             insert_schema_document(Context, DocumentA2)
+         ),
+         _
+     ).
 
 test(subdocument_hash_key,
      [
@@ -11622,7 +11880,8 @@ geojson_schema('[
 
     { "@type" : "Class",
       "@id" : "Geometry",
-      "@abstract" : []
+      "@abstract" : [],
+      "@unfoldable" : []
     },
 
     { "@type" : "Enum",
@@ -11710,6 +11969,31 @@ geojson_schema('[
       "properties": "sys:JSON"
     }
 ]').
+
+test(geojson_unfoldable,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+
+     geojson_schema(Schema_Atom),
+     atom_json_dict(Schema_Atom, Schema_Documents, []),
+
+     with_test_transaction(
+         Desc,
+         C1,
+         forall(member(Schema_Doc, Schema_Documents),
+                insert_schema_document(C1, Schema_Doc))
+     ),
+
+     with_test_transaction(
+         Desc,
+         C2,
+         get_schema_document(C2, 'Geometry', Geometry)
+     ),
+
+     writeq(Geometry).
 
 test(geojson_example,
      [setup((setup_temp_store(State),

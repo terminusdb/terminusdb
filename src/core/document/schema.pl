@@ -377,6 +377,7 @@ refute_schema(Validation_Object,Witness) :-
     database_prefixes(Validation_Object, Prefixes),
     is_simple_class(Validation_Object,Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
+    ;   refute_unfoldable_cycle(Validation_Object,Class,Witness)
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
     ;   refute_class_meta(Validation_Object,Class,Witness)
@@ -395,6 +396,35 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
                   to_class : Subclass,
                   path : Path
               }.
+
+reachable_unfoldable(Schema,A,P,B) :-
+    distinct(B,
+             (   schema_class_subsumed(Schema,A,C),
+                 schema_class_predicate_type(Schema,C,P,class(B)),
+                 schema_is_unfoldable(Schema,B)
+             )).
+
+refute_unfoldable_cycle(DB, Original, Witness) :-
+    database_schema(DB,Schema),
+    schema_is_unfoldable(Schema, Original),
+    State = state([]),
+    unfoldable_property_cycle(Schema, Original, Original, [], Path, State),
+    Witness = witness{
+                  '@type' : property_path_cycle_detected,
+                  path : Path,
+                  class : Original
+              }.
+
+unfoldable_property_cycle(Schema, Original, A, Path, New_Path, State) :-
+    reachable_unfoldable(Schema, A, P, C),
+    arg(1,State,Set),
+    (   schema_class_subsumed(Schema, Original, C)
+    ->  reverse([C,P|Path],New_Path)
+    ;   member(C, Set)
+    ->  fail
+    ;   nb_setarg(1,State,[C|Set]),
+        unfoldable_property_cycle(Schema, Original, C, [C,P|Path], New_Path, State)
+    ).
 
 subclass_of(Validation_Object,Subclass,Class) :-
     database_schema(Validation_Object,Schema),
@@ -433,7 +463,8 @@ is_built_in(P) :-
             sys:base,
             sys:class,
             sys:abstract,
-            sys:subdocument
+            sys:subdocument,
+            sys:unfoldable
         ],
         List),
     memberchk(P,List).
@@ -453,6 +484,18 @@ is_subdocument(Validation_Object, C) :-
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
+
+is_direct_unfoldable(Schema, C) :-
+    xrdf(Schema, C, sys:unfoldable, rdf:nil).
+
+is_unfoldable(Validation_Object, C) :-
+    database_schema(Validation_Object,Schema),
+    schema_is_unfoldable(Schema, C).
+
+:- table schema_is_unfoldable/2 as private.
+schema_is_unfoldable(Schema, C) :-
+    schema_class_subsumed(Schema, C, D),
+    is_direct_unfoldable(Schema, D).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -608,6 +651,14 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     global_prefix_expand(rdf:nil, RDF_Nil),
     Result \= RDF_Nil,
     Witness = witness{ '@type' : bad_subdocument_value,
+                       class: Class,
+                       value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:unfoldable, Result),
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    Result \= RDF_Nil,
+    Witness = witness{ '@type' : bad_unfoldable_value,
                        class: Class,
                        value: Result }.
 
