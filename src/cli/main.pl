@@ -292,7 +292,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([password]),
            default('_'),
            help('the password on the remote')]]).
-opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
+opt_spec(fetch,'terminusdb fetch DB_SPEC',
          'fetch data from a remote.',
          [[opt(help),
            type(boolean),
