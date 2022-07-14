@@ -2788,6 +2788,10 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
                 cors_handler(Method, organizations_users_databases_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
+:- http_handler(api(organizations/Org/users/User/roles),
+                cors_handler(Method, organizations_users_roles_handler(Org,User)),
+                [method(Method),
+                 methods([options,get])]).
 
 /*
  * organizations_handler(Mode, Request, System, Auth) is det.
@@ -2861,6 +2865,20 @@ organizations_users_databases_handler(get, Org, User, Request, System_DB, Auth) 
         organization,
         Request,
         (   api_get_organizations_users_databases(System_DB, Auth, Org, User, Databases),
+            cors_reply_json(Request,Databases)
+        )
+    ).
+
+/*
+ * organizations_users_roles_handler(get, Org, User, Request, System_DB, Auth) is det.
+ *
+ * Get all roles for a user in an organization
+ */
+organizations_users_roles_handler(get, Org, User, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   api_get_organizations_users_roles(System_DB, Auth, Org, User, Databases),
             cors_reply_json(Request,Databases)
         )
     ).

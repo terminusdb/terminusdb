@@ -169,7 +169,8 @@
               api_get_user_from_id/5,
               api_update_user_password/4,
               api_get_organizations_users/4,
-              api_get_organizations_users_databases/5
+              api_get_organizations_users_databases/5,
+              api_get_organizations_users_roles/5
           ]).
 
 :- use_module(api/api_init).

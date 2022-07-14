@@ -128,6 +128,42 @@ describe('capabilities', function () {
     const databases = resultDatabases.body
     expect(databases[0].label).to.equal('hello')
 
+    // organization users databases
+    const resultRoles = await agent
+      .get(`/api/organizations/${orgName}/users/${userName}/roles`)
+    const roles = resultRoles.body
+    expect(roles[0].name).to.equal(roleName)
+
+    // no role (error)
+    const noResultRoles = await agent
+      .get(`/api/organizations/foo/users/bar/roles`)
+    const noRoles = noResultRoles.body
+    expect(noRoles['api:error']['api:organization_name']).to.equal('foo')
+
+    // no role2 (error)
+    const noResultRoles2 = await agent
+      .get(`/api/organizations/${orgName}/users/bar/roles`)
+    const noRoles2 = noResultRoles2.body
+    expect(noRoles2['api:error']['api:user_name']).to.equal('bar')
+
+    // user2
+    const userName2 = userName + '_2'
+    const user2 = await agent
+      .post('/api/users')
+      .send({
+        name: userName2,
+        password: userName2,
+      })
+    const user2IdLong = user2.body
+    const user2IdList = user2IdLong.split('terminusdb://system/data/')
+    const user2Id = user2IdList[userIdList.length - 1]
+
+    // no role3 (empty)
+    const noResultRoles3 = await agent
+      .get(`/api/organizations/${orgName}/users/${userName2}/roles`)
+    const noRoles3 = noResultRoles3.body
+    expect(noRoles3).to.deep.equal([])
+
     // cleanup
     await db.delete(userAgent)
   })
