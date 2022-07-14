@@ -177,7 +177,7 @@ Pull a branch from a database.
 
 ### fetch
 
-`terminusdb fetch BRANCH_SPEC`
+`terminusdb fetch DB_SPEC`
 
 fetch data from a remote.
 
