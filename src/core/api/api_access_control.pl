@@ -355,9 +355,13 @@ api_grant_capability(SystemDB, Auth, Grant_Document_Ids) :-
     ).
 
 api_revoke_capability(SystemDB, Auth, Grant_Document_Ids) :-
-    _{ scope: Scope_Id,
-       user: User_Id,
-       roles: Role_Ids } :< Grant_Document_Ids,
+    _{ scope: Scope_Id_String,
+       user: User_Id_String,
+       roles: Role_Id_Strings } :< Grant_Document_Ids,
+
+    atom_string(User_Id, User_Id_String),
+    atom_string(Scope_Id, Scope_Id_String),
+    maplist(atom_string,Role_Ids,Role_Id_Strings),
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},
@@ -365,13 +369,13 @@ api_revoke_capability(SystemDB, Auth, Grant_Document_Ids) :-
 
     assert_auth_action_scope(System_Context, Auth, '@schema':'Action/manage_capabilities', Scope_Id),
 
-    (   ask(System_Context,
-            (   t(User_Id, capability, Capability_Id),
-                t(Capability_Id, scope, Scope_Id)))
+    with_transaction(
+        System_Context,
+        (   ask(System_Context,
+                (   t(User_Id, capability, Capability_Id),
+                    t(Capability_Id, scope, Scope_Id)))
         % has capability with scope.
-    ->  with_transaction(
-            System_Context,
-            (   get_document(System_Context, Capability_Id, Capability),
+        ->  (   get_document(System_Context, Capability_Id, Capability),
                 (   get_dict('role', Capability, Old_Role_Ids)
                 ->  true
                 ;   Old_Role_Ids = []),
@@ -389,9 +393,10 @@ api_revoke_capability(SystemDB, Auth, Grant_Document_Ids) :-
                                                                      Capability_Id),
                             _))
                 )
-            ),
-            _)
-    ;   throw(error(no_capability_for_user_with_scope(User_Id,Scope_Id), _))
+            )
+        ;   throw(error(no_capability_for_user_with_scope(User_Id,Scope_Id), _))
+        ),
+        _
     ).
 
 api_get_resource_from_name(SystemDB,Auth,Name,Type,Resource) :-
