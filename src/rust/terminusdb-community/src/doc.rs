@@ -607,6 +607,19 @@ wrapped_arc_blob!(
 );
 
 #[inline(never)]
+fn map_to_writer<W: Write>(
+    writer: W,
+    m: Map<String, Value>,
+    pretty: bool,
+) -> serde_json::Result<()> {
+    if pretty {
+        serde_json::to_writer_pretty(writer, &Value::Object(m))
+    } else {
+        serde_json::to_writer(writer, &Value::Object(m))
+    }
+}
+
+#[inline(never)]
 fn map_to_string(m: Map<String, Value>, pretty: bool) -> String {
     if pretty {
         serde_json::to_string_pretty(&Value::Object(m))
@@ -662,7 +675,8 @@ predicates! {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
         if let Some(result) = doc_context.get_document(&s) {
-            context.try_or_die(write!(stream, "{}\n", map_to_string(result, !doc_context.minimized)))
+            context.try_or_die_generic(map_to_writer(&mut stream, result, !doc_context.minimized))?;
+            context.try_or_die(stream.write_all(b"\n"))
         }
         else {
             fail()
@@ -684,9 +698,7 @@ predicates! {
                 }
 
                 let map = doc_context.get_id_document(t.subject);
-                let s = map_to_string(map, !doc_context.minimized);
-
-                context.try_or_die(stream.write_all(s.as_bytes()))?;
+                context.try_or_die_generic(map_to_writer(&mut stream, map, !doc_context.minimized))?;
                 context.try_or_die(stream.write_all(b"\n"))?;
                 context.try_or_die(stream.flush())?;
             }
@@ -700,6 +712,7 @@ predicates! {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let minimized = doc_context.minimized;
         //let doc_context_arc = Arc::new(doc_context);
         let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
         types.sort();
@@ -712,16 +725,15 @@ predicates! {
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, t)| {
                     let map = doc_context.get_id_document(t.subject);
-                    let s = map_to_string(map, !doc_context.minimized);
-                    sender.send((ix, s)) // failure will kill the task
+                    sender.send((ix, map)) // failure will kill the task
                 });
         });
 
         let mut result = BinaryHeap::new();
         let mut cur = 0;
-        while let Ok((ix,s)) = receiver.recv() {
+        while let Ok((ix,map)) = receiver.recv() {
             if ix == cur {
-                context.try_or_die(stream.write_all(s.as_bytes()))?;
+                context.try_or_die_generic(map_to_writer(&mut stream, map, !minimized))?;
                 context.try_or_die(stream.write_all(b"\n"))?;
                 context.try_or_die(stream.flush())?;
 
@@ -729,7 +741,7 @@ predicates! {
                 while result.peek().map(|HeapEntry {index,..}|index == &cur).unwrap_or(false) {
                     let HeapEntry {index, value } = result.pop().unwrap();
 
-                    context.try_or_die(stream.write_all(value.as_bytes()))?;
+                    context.try_or_die_generic(map_to_writer(&mut stream, value, !minimized))?;
                     context.try_or_die(stream.write_all(b"\n"))?;
                     context.try_or_die(stream.flush())?;
 
@@ -737,7 +749,7 @@ predicates! {
                 }
             }
             else {
-                result.push(HeapEntry { index: ix, value: s });
+                result.push(HeapEntry { index: ix, value: map });
             }
         }
 
@@ -779,7 +791,7 @@ predicates! {
 
 struct HeapEntry {
     index: usize,
-    value: String,
+    value: Map<String, Value>,
 }
 
 impl PartialEq for HeapEntry {
