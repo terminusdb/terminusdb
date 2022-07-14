@@ -1498,10 +1498,14 @@ run_command(apply,[Path], Opts) :-
 run_command(log,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    api_log(System_DB, Auth, Path, Log),
-    (   option(json(true), Opts)
-    ->  json_write_dict(current_output, Log, [])
-    ;   format_log(current_output,Log)
+    api_report_errors(
+        log,
+        (   api_log(System_DB, Auth, Path, Log),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, Log, [])
+            ;   format_log(current_output,Log)
+            )
+        )
     ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
