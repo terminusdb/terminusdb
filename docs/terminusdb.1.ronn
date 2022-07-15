@@ -161,7 +161,7 @@ Pull a branch from a database.
   print help for the `pull` command
 
   * `-e`, `--remote-branch`=[value]:
-  set the branch on the remote for push
+  set the branch on the remote for pull
 
   * `-r`, `--remote`=[value]:
   the name of the remote to use
@@ -653,6 +653,12 @@ Grant ROLE1 ... ROLEN over SCOPE to USER
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
+  * `-i`, `--ids`=[value]:
+  Should the User, Scope and Role be treated as IDs or names
+
+  * `-s`, `--scope_type`, `--scope-type`=[value]:
+  Should the scope be interpreted as a `database` (default) or an `organization`
+
 ### capability revoke
 
 `terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>`
@@ -661,6 +667,12 @@ Revoke ROLE1 ... ROLEN over SCOPE from USER
 
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
+
+  * `-i`, `--ids`=[value]:
+  Should the User, Scope and Role be treated as IDs or names
+
+  * `-s`, `--scope_type`, `--scope-type`=[value]:
+  Should the scope be interpreted as a `database` (default) or an `organization`
 
 ### store init
 
