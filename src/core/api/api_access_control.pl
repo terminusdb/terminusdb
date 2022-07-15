@@ -37,6 +37,7 @@
 :- use_module(library(yall)).
 :- use_module(library(option)).
 :- use_module(library(pcre)).
+:- use_module(library(solution_sequences)).
 
 api_get_roles(SystemDB, Auth, Roles) :-
     do_or_die(
