@@ -708,6 +708,12 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            shortflags([d]),
            default('_'),
            help('document data')],
+          [opt(raw_json),
+           type(boolean),
+           longflags([raw_json,'raw-json']),
+           shortflags([j]),
+           default(false),
+           help('replace as raw json')],
           [opt(create),
            type(boolean),
            longflags([create]),
@@ -1360,7 +1366,7 @@ run_command(fetch,[Path],Opts) :-
         remote_fetch(System_DB, Auth, Remote_Path, authorized_fetch(Authorization),
                      New_Head_Layer_Id, Head_Has_Updated)
     ),
-    format(current_output, "~N~s fetch: ~q with ~q~n",
+    format(current_output, "~N~s fetch: ~q with updated repository head = ~q~n",
            [Path, New_Head_Layer_Id, Head_Has_Updated]).
 run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
