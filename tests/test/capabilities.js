@@ -73,7 +73,7 @@ describe('capabilities', function () {
     // user
     const result1 = await agent
       .post('/api/users')
-      .send({ 
+      .send({
         name: userName,
         password: userName,
       })
