@@ -2710,7 +2710,7 @@ roles_handler(post, Request, System_DB, Auth) :-
               error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
-        roles,
+        role,
         Request,
         (   uri_encoded(segment, Name, Encoded_Name),
             atom_concat('Role/',Encoded_Name,Name_Id),
@@ -2728,7 +2728,7 @@ roles_handler(put, Request, System_DB, Auth) :-
               error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_role_from_name(System_DB,Auth,Name,Old_Role),
             put_dict(Role,Old_Role,New_Role),
@@ -2740,7 +2740,7 @@ roles_handler(put, Request, System_DB, Auth) :-
     ).
 roles_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_roles(System_DB, Auth, Roles),
             cors_reply_json(Request, Roles)
@@ -2754,7 +2754,7 @@ roles_handler(get, Request, System_DB, Auth) :-
  */
 roles_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   uri_encoded(segment, Name, Encoded_Name),
             atom_concat('Role/',Encoded_Name,Name_Id),
@@ -2766,7 +2766,7 @@ roles_handler(delete, Name, Request, System_DB, Auth) :-
     ).
 roles_handler(get, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_role_from_name(System_DB,Auth,Name,Role),
             cors_reply_json(Request, Role)
