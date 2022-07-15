@@ -1141,6 +1141,14 @@ api_error_jsonld_(organization,error(no_id_for_organization_name(Name),_), JSON)
              'api:error' : _{ '@type' : "api:NoIdForOrganizationName",
                               'api:organization_name' : Name}
             }.
+api_error_jsonld_(organization,error(no_id_for_user_name(Name),_), JSON) :-
+    format(string(Msg), "There is no user with the name ~s.", [Name]),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForRoleName",
+                              'api:user_name' : Name}
+            }.
 api_error_jsonld_(organization,error(can_not_insert_existing_object_with_id(Id),_),JSON) :-
     format(string(Msg), "An organization with the id '~s' already exists.  Consider renaming, deleting the old role, or updating the old role.", [Id]),
     JSON = _{'@type' : 'api:OrganizationErrorResponse',

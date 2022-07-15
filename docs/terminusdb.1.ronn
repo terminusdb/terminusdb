@@ -626,7 +626,7 @@ Get a user from its name or id, or list all if unspecified.
   * `-i`, `--id`=[value]:
   Interpret argument as an organization id rather than a name.
 
-  * `-c`, `--capabilities`=[value]:
+  * `-c`, `--capability`=[value]:
   Report on all capabilities of this user.
 
   * `-j`, `--json`=[value]:

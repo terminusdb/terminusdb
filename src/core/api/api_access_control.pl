@@ -211,12 +211,30 @@ api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
 
 get_organizations_users(SystemDB, Organization, Users) :-
     get_dict('@id', Organization, Org_Id),
-    findall(User,
-            ask(SystemDB,
-                (   t(Cap_Id, scope, Org_Id),
-                    t(User_Id, capability, Cap_Id),
-                    get_document(User_Id, User))),
-            Users).
+    findall(User_Clean,
+            (   ask(SystemDB,
+                    (   path(Org_Id, (   star(p(child))
+                                     ;   star(p(child)),p(database)), Resource_Id),
+                        t(Cap_Id, scope, Resource_Id),
+                        t(User_Id, capability, Cap_Id),
+                        get_document(User_Id, User))),
+                (   del_dict(key_hash, User, _, User_Clean)
+                ->  true
+                ;   User = User_Clean
+                )
+            ),
+            Folded_Users),
+    maplist(
+        {SystemDB}/[User,New_User]>>
+        (   get_dict_default(capability, User, Capabilities, []),
+            findall(Capability,
+                    (   member(Cap_Id, Capabilities),
+                        ask(SystemDB,
+                            get_document(Cap_Id, Capability))),
+                    New_Capabilities),
+            put_dict(_{capability : New_Capabilities}, User, New_User)
+        ),
+        Folded_Users, Users).
 
 api_get_organizations_users_databases(SystemDB, Auth, Org_Name, User_Name, Databases) :-
     do_or_die(
