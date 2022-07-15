@@ -1216,6 +1216,14 @@ api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
              'api:error' : _{ '@type' : "api:NoIdForResourceName",
                               'api:resource_name' : Name}
             }.
+api_error_jsonld_(capability,error(no_id_for_role_name(Name), _), JSON) :-
+    format(string(Msg), "No id associated with role name ~s", [Name]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForRoleName",
+                              'api:role_name' : Name}
+            }.
 api_error_jsonld_(capability,error(no_unique_id_for_database_name(Name),_), JSON) :-
     format(string(Msg), "There is more than one id for database ~s. Consider deleting duplicates if you want to refer to them by name rather than id, or specify the organization.", [Name]),
     JSON = _{'@type' : 'api:CapabilityErrorResponse',
