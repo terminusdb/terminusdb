@@ -213,11 +213,12 @@ api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
 
 get_organizations_users(SystemDB, Org_Id, Users) :-
     findall(User_Object,
-            (   ask(SystemDB,
-                    (   path(Org_Id, (   star(p(child))
-                                     ;   star(p(child)),p(database)), Resource_Id),
-                        t(Cap_Id, scope, Resource_Id),
-                        t(User_Id, capability, Cap_Id))),
+            (   distinct(User_Id,
+                         ask(SystemDB,
+                             (   path(Org_Id, (   star(p(child))
+                                              ;   star(p(child)),p(database)), Resource_Id),
+                                 t(Cap_Id, scope, Resource_Id),
+                                 t(User_Id, capability, Cap_Id)))),
                 get_organizations_users_object(SystemDB, Org_Id, User_Id, User_Object)
             ),
             Users).
@@ -240,14 +241,14 @@ api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) 
 
 get_organizations_users_object(SystemDB, Org_Id, User_Id, Object) :-
     ask(SystemDB,
-        (   path(Org_Id, (   star(p(child))
-                         ;   star(p(child)),p(database)), Resource_Id),
-            t(Cap_Id, scope, Resource_Id),
-            t(User_Id, capability, Cap_Id),
-            get_document(User_Id, User))),
-    (   del_dict(key_hash, User, _, User_Clean)
-    ->  true
-    ;   User = User_Clean
+        get_document(User_Id, User)),
+
+    dict_field_verifier(
+        User,
+        _{ '@id' : (*),
+           name: (*),
+           capability: (*)},
+        User_Clean
     ),
     get_dict_default(capability, User_Clean, Capabilities, []),
     findall(Capability,
@@ -259,7 +260,6 @@ get_organizations_users_object(SystemDB, Org_Id, User_Id, Object) :-
                         get_document(Cap_Id, Capability)))),
             New_Capabilities),
     put_dict(_{capability : New_Capabilities}, User_Clean, Object).
-
 
 api_get_organizations_users_databases(SystemDB, Auth, Org_Name, User_Name, Databases) :-
     do_or_die(
