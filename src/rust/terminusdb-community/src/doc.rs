@@ -20,7 +20,7 @@ use rayon::prelude::*;
 use swipl::prelude::*;
 
 pub struct GetDocumentContext<L: Layer> {
-    layer: L,
+    layer: Option<L>,
     prefixes: PrefixContracter,
     document_types: HashSet<u64>,
     unfoldables: HashSet<u64>,
@@ -44,33 +44,11 @@ impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
     pub fn new<SL: Layer>(
         schema: &SL,
-        instance: L,
+        instance: Option<L>,
         compress: bool,
         unfold: bool,
         minimized: bool,
     ) -> GetDocumentContext<L> {
-        let schema_type_ids = get_document_type_ids_from_schema(schema);
-        let mut document_types: HashSet<u64> =
-            schema_to_instance_types(schema, &instance, schema_type_ids).collect();
-
-        let schema_unfoldable_ids = get_unfoldable_ids_from_schema(schema);
-        let mut unfoldables: HashSet<u64> =
-            schema_to_instance_types(schema, &instance, schema_unfoldable_ids).collect();
-
-        let schema_enum_ids = get_enum_ids_from_schema(schema);
-        let mut enums = HashMap::new();
-        for schema_enum_id in schema_enum_ids {
-            let enum_expanded = schema.id_object_node(schema_enum_id).unwrap();
-            if let Some(instance_enum_id) = instance.object_node_id(&enum_expanded) {
-                // an enum node is its type concatenated with a / followed by an uri encoded string corresponding to its value
-                let pos = enum_expanded.rfind('/').unwrap();
-                let encoded = &enum_expanded[pos + 1..];
-
-                let decoded = urlencoding::decode(encoded).unwrap().to_string();
-                enums.insert(instance_enum_id, decoded);
-            }
-        }
-
         let prefixes;
         if compress {
             prefixes = prefix_contracter_from_schema_layer(schema);
@@ -78,49 +56,94 @@ impl<L: Layer> GetDocumentContext<L> {
             prefixes = PrefixContracter::new(std::iter::empty());
         }
 
-        let schema_set_pairs = get_set_pairs_from_schema(schema);
-        let mut set_pairs = HashSet::new();
-        for (schema_type_id, schema_predicate_id) in schema_set_pairs {
-            if let Some(type_id) = translate_subject_id(schema, &instance, schema_type_id) {
-                if let Some(predicate_id) =
-                    translate_predicate_id(schema, &instance, schema_predicate_id)
-                {
-                    set_pairs.insert((type_id, predicate_id));
+        let mut rdf_type_id = None;
+        let mut rdf_first_id = None;
+        let mut rdf_rest_id = None;
+        let mut rdf_nil_id = None;
+        let mut rdf_list_id = None;
+        let mut sys_json_type_id = None;
+        let mut sys_json_document_type_id = None;
+        let mut document_types: HashSet<u64>;
+        let unfoldables: HashSet<u64>;
+        let mut enums: HashMap<u64, String>;
+        let mut set_pairs: HashSet<(u64, u64)>;
+        let mut sys_index_ids: Vec<u64>;
+        let mut sys_array_id = None;
+        let mut sys_value_id = None;
+
+        if let Some(ref instance) = instance {
+            let schema_type_ids = get_document_type_ids_from_schema(schema);
+            let schema_unfoldable_ids = get_unfoldable_ids_from_schema(schema);
+            let schema_enum_ids = get_enum_ids_from_schema(schema);
+
+            document_types = schema_to_instance_types(schema, instance, schema_type_ids).collect();
+
+            unfoldables =
+                schema_to_instance_types(schema, instance, schema_unfoldable_ids).collect();
+
+            enums = HashMap::new();
+            for schema_enum_id in schema_enum_ids {
+                let enum_expanded = schema.id_object_node(schema_enum_id).unwrap();
+                if let Some(instance_enum_id) = instance.object_node_id(&enum_expanded) {
+                    // an enum node is its type concatenated with a / followed by an uri encoded string corresponding to its value
+                    let pos = enum_expanded.rfind('/').unwrap();
+                    let encoded = &enum_expanded[pos + 1..];
+
+                    let decoded = urlencoding::decode(encoded).unwrap().to_string();
+                    enums.insert(instance_enum_id, decoded);
                 }
             }
-        }
 
-        let rdf_type_id = instance.predicate_id(RDF_TYPE);
-        let rdf_first_id = instance.predicate_id(RDF_FIRST);
-        let rdf_rest_id = instance.predicate_id(RDF_REST);
-        let rdf_nil_id = instance.object_node_id(RDF_NIL);
-        let rdf_list_id = instance.object_node_id(RDF_LIST);
-        let sys_json_type_id = instance.object_node_id(SYS_JSON);
-        let sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
-
-        if let Some(sys_json_document_type_id) = sys_json_document_type_id {
-            document_types.insert(sys_json_document_type_id);
-        }
-
-        let mut sys_index_ids = Vec::new();
-        let mut index_str = SYS_INDEX.to_string();
-        let orig_len = index_str.len();
-        let mut ix = 1;
-
-        loop {
-            if let Some(index_id) = instance.predicate_id(&index_str) {
-                sys_index_ids.push(index_id);
-                ix += 1;
-                let ix_s = ix.to_string();
-                index_str.truncate(orig_len);
-                index_str.push_str(&ix_s);
-            } else {
-                break;
+            let schema_set_pairs = get_set_pairs_from_schema(schema);
+            set_pairs = HashSet::new();
+            for (schema_type_id, schema_predicate_id) in schema_set_pairs {
+                if let Some(type_id) = translate_subject_id(schema, instance, schema_type_id) {
+                    if let Some(predicate_id) =
+                        translate_predicate_id(schema, instance, schema_predicate_id)
+                    {
+                        set_pairs.insert((type_id, predicate_id));
+                    }
+                }
             }
-        }
 
-        let sys_array_id = instance.object_node_id(SYS_ARRAY);
-        let sys_value_id = instance.predicate_id(SYS_VALUE);
+            rdf_type_id = instance.predicate_id(RDF_TYPE);
+            rdf_first_id = instance.predicate_id(RDF_FIRST);
+            rdf_rest_id = instance.predicate_id(RDF_REST);
+            rdf_nil_id = instance.object_node_id(RDF_NIL);
+            rdf_list_id = instance.object_node_id(RDF_LIST);
+            sys_json_type_id = instance.object_node_id(SYS_JSON);
+            sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+
+            if let Some(sys_json_document_type_id) = sys_json_document_type_id {
+                document_types.insert(sys_json_document_type_id);
+            }
+
+            sys_index_ids = Vec::new();
+            let mut index_str = SYS_INDEX.to_string();
+            let orig_len = index_str.len();
+            let mut ix = 1;
+
+            loop {
+                if let Some(index_id) = instance.predicate_id(&index_str) {
+                    sys_index_ids.push(index_id);
+                    ix += 1;
+                    let ix_s = ix.to_string();
+                    index_str.truncate(orig_len);
+                    index_str.push_str(&ix_s);
+                } else {
+                    break;
+                }
+            }
+
+            sys_array_id = instance.object_node_id(SYS_ARRAY);
+            sys_value_id = instance.predicate_id(SYS_VALUE);
+        } else {
+            document_types = HashSet::with_capacity(0);
+            unfoldables = HashSet::with_capacity(0);
+            enums = HashMap::with_capacity(0);
+            set_pairs = HashSet::with_capacity(0);
+            sys_index_ids = Vec::with_capacity(0);
+        }
 
         GetDocumentContext {
             layer: instance,
@@ -145,10 +168,19 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    #[inline(always)]
+    fn layer(&self) -> &L {
+        self.layer.as_ref().unwrap()
+    }
+
     #[inline(never)]
     pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
-        if let Some(id) = self.layer.subject_id(iri) {
-            Some(self.get_id_document(id))
+        if self.layer.is_some() {
+            if let Some(id) = self.layer().subject_id(iri) {
+                Some(self.get_id_document(id))
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -207,7 +239,7 @@ impl<L: Layer> GetDocumentContext<L> {
     #[inline(never)]
     fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<L>> {
         RdfListIterator {
-            layer: &self.layer,
+            layer: self.layer(),
             cur: id,
             rdf_first_id: self.rdf_first_id,
             rdf_rest_id: self.rdf_rest_id,
@@ -226,7 +258,7 @@ impl<L: Layer> GetDocumentContext<L> {
             let subject = t.subject;
             let predicate = t.predicate;
             return ArrayIterator {
-                layer: &self.layer,
+                layer: self.layer(),
                 it,
                 subject,
                 predicate,
@@ -253,7 +285,7 @@ impl<L: Layer> GetDocumentContext<L> {
         ),
         Value,
     > {
-        let id_name = self.layer.id_object(id).unwrap();
+        let id_name = self.layer().id_object(id).unwrap();
         if let Some(v) = id_name.value_ref() {
             // this is not actually a document but a value
             return Err(value_string_to_json(v));
@@ -265,7 +297,7 @@ impl<L: Layer> GetDocumentContext<L> {
 
         let rdf_type_id = self.rdf_type_id;
         let mut fields = (Box::new(
-            self.layer
+            self.layer()
                 .triples_s(id)
                 .filter(move |f| Some(f.predicate) != rdf_type_id),
         ) as Box<dyn Iterator<Item = IdTriple> + Send>)
@@ -275,7 +307,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut type_name_contracted: Option<String> = None;
         let mut json = false;
         if let Some(rdf_type_id) = self.rdf_type_id {
-            if let Some(t) = self.layer.single_triple_sp(id, rdf_type_id) {
+            if let Some(t) = self.layer().single_triple_sp(id, rdf_type_id) {
                 if terminate
                     && (!self.unfold
                         || (self.document_types.contains(&t.object)
@@ -294,7 +326,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 if !json {
                     // json objects are special. We don't care about their type names.
                     // for other types, we do care, so convert to string format.
-                    let type_name = self.layer.id_object_node(t.object).unwrap();
+                    let type_name = self.layer().id_object_node(t.object).unwrap();
                     type_name_contracted =
                         Some(self.prefixes.schema_contract(&type_name).to_string());
                 }
@@ -322,6 +354,10 @@ impl<L: Layer> GetDocumentContext<L> {
 
     #[inline(never)]
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
+        if self.layer.is_none() {
+            panic!("expected id to point at document: {}", id);
+        }
+
         let mut stack = Vec::new();
 
         let (doc, type_id, fields, json) = self.get_doc_stub(id, false).unwrap();
@@ -339,7 +375,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 // let's first see if this object is one of the expected types
                 if is_json || cur.is_document() {
                     if let Some(rdf_type_id) = self.rdf_type_id {
-                        if let Some(t) = self.layer.single_triple_sp(next_obj, rdf_type_id) {
+                        if let Some(t) = self.layer().single_triple_sp(next_obj, rdf_type_id) {
                             if Some(t.object) == self.sys_array_id {
                                 let array_iter = self.get_array_iter(cur);
                                 stack.push(StackEntry::Array(ArrayStackEntry {
@@ -506,7 +542,10 @@ impl<'a, L: Layer> StackEntry<'a, L> {
 
                 let value = collect_array(array.collect);
 
-                let p_name = context.layer.id_predicate(array.entries.predicate).unwrap();
+                let p_name = context
+                    .layer()
+                    .id_predicate(array.entries.predicate)
+                    .unwrap();
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
                 context.add_field(doc, &p_name_contracted, value, false);
             }
@@ -529,7 +568,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
                 let is_set = type_id
                     .map(|type_id| context.set_pairs.contains(&(type_id, t.predicate)))
                     .unwrap_or(false);
-                let p_name = context.layer.id_predicate(t.predicate).unwrap();
+                let p_name = context.layer().id_predicate(t.predicate).unwrap();
                 let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
                 context.add_field(doc, &p_name_contracted, value, is_set);
             }
@@ -639,7 +678,7 @@ predicates! {
     #[module("$moo")]
     semidet fn get_document_context(context, transaction_term, compress_term, unfold_term, minimized_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
-        let instance_layer = transaction_instance_layer(context, transaction_term)?.unwrap();
+        let instance_layer = transaction_instance_layer(context, transaction_term)?;
         let compress: bool = compress_term.get()?;
         let unfold: bool = unfold_term.get()?;
         let minimized: bool = minimized_term.get()?;
@@ -688,11 +727,15 @@ predicates! {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
         let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
         types.sort();
 
         for typ in types {
-            for t in doc_context.layer.triples_o(typ) {
+            for t in doc_context.layer().triples_o(typ) {
                 if Some(t.predicate) != doc_context.rdf_type_id {
                     continue;
                 }
@@ -712,6 +755,10 @@ predicates! {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
         let minimized = doc_context.minimized;
         //let doc_context_arc = Arc::new(doc_context);
         let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
@@ -720,7 +767,7 @@ predicates! {
         let (sender, receiver) = mpsc::channel();
 
         rayon::spawn(move || {
-            types.into_iter().flat_map(|typ| doc_context.layer.triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
+            types.into_iter().flat_map(|typ| doc_context.layer().triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
                 .enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, t)| {
