@@ -87,11 +87,13 @@ changed_id(Transaction,Containing) :-
                      once((path(Containing, star(p), Id),
                            t(Containing,rdf:type,Type),
                            (   t(Type,rdf:type,sys:'Class',schema)
-                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)),
+                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
+                           ;   Type = sys:'JSONDocument'),
                            not(t(Type,sys:subdocument, _,schema))))
                  ;   removal(Id, rdf:type, Type),
                      once(((   t(Type,rdf:type,sys:'Class',schema)
-                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)),
+                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
+                           ;   Type = sys:'JSONDocument'),
                            not(t(Type,sys:subdocument, _,schema))))
                  )
                 )

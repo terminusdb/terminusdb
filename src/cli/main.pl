@@ -292,7 +292,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([password]),
            default('_'),
            help('the password on the remote')]]).
-opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
+opt_spec(fetch,'terminusdb fetch DB_SPEC',
          'fetch data from a remote.',
          [[opt(help),
            type(boolean),
@@ -708,6 +708,12 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            shortflags([d]),
            default('_'),
            help('document data')],
+          [opt(raw_json),
+           type(boolean),
+           longflags([raw_json,'raw-json']),
+           shortflags([j]),
+           default(false),
+           help('replace as raw json')],
           [opt(create),
            type(boolean),
            longflags([create]),
@@ -1360,7 +1366,7 @@ run_command(fetch,[Path],Opts) :-
         remote_fetch(System_DB, Auth, Remote_Path, authorized_fetch(Authorization),
                      New_Head_Layer_Id, Head_Has_Updated)
     ),
-    format(current_output, "~N~s fetch: ~q with ~q~n",
+    format(current_output, "~N~s fetch: ~q with updated repository head = ~q~n",
            [Path, New_Head_Layer_Id, Head_Has_Updated]).
 run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
@@ -1498,10 +1504,14 @@ run_command(apply,[Path], Opts) :-
 run_command(log,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    api_log(System_DB, Auth, Path, Log),
-    (   option(json(true), Opts)
-    ->  json_write_dict(current_output, Log, [])
-    ;   format_log(current_output,Log)
+    api_report_errors(
+        log,
+        (   api_log(System_DB, Auth, Path, Log),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, Log, [])
+            ;   format_log(current_output,Log)
+            )
+        )
     ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
