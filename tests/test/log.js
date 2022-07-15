@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, util, document, db } = require('../lib')
+const { Agent, util, document } = require('../lib')
 
 describe('log', function () {
   let agent
