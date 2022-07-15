@@ -1880,7 +1880,9 @@ run_command(user,get, NameList, Opts) :-
                           [User_Name,User_Id]),
                    (   get_dict(capability, User, Capabilities)
                    ->  forall(
-                           member(Cap, Capabilities),
+                           (   member(Cap, Capabilities),
+                               is_dict(Cap)
+                           ),
                            (   get_dict(scope, Cap, Resource),
                                get_dict(name, Resource, Resource_Name),
                                get_dict('@id', Resource, Resource_Id),

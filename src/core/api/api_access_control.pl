@@ -354,9 +354,13 @@ grant_document_to_ids(SystemDB, Auth, Grant_Document, json{ scope: Scope_Id,
             Roles,Role_Ids).
 
 api_grant_capability(SystemDB, Auth, Grant_Document_Ids) :-
-    _{ scope: Scope_Id,
-       user: User_Id,
-       roles: Role_Ids } :< Grant_Document_Ids,
+    _{ scope: Scope_Id_String,
+       user: User_Id_String,
+       roles: Role_Id_Strings } :< Grant_Document_Ids,
+
+    atom_string(User_Id, User_Id_String),
+    atom_string(Scope_Id, Scope_Id_String),
+    maplist(atom_string,Role_Ids,Role_Id_Strings),
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},
