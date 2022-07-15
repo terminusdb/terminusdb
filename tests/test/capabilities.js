@@ -121,6 +121,7 @@ describe('capabilities', function () {
     const users = resultUsers.body
     expect(users[0]['@id']).to.equal(userId)
     expect(users[0]).to.not.have.property('key_hash')
+    expect(users[0].capability).to.have.property('role')
 
     // organization users databases
     const resultDatabases = await agent

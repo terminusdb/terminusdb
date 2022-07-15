@@ -21,8 +21,7 @@
               api_get_user_from_id/5,
               api_update_user_password/4,
               api_get_organizations_users/4,
-              api_get_organizations_users_databases/5,
-              api_get_organizations_users_roles/5
+              api_get_organizations_users_databases/5
           ]).
 
 :- use_module(core(util)).
@@ -214,7 +213,9 @@ get_organizations_users(SystemDB, Organization, Users) :-
     get_dict('@id', Organization, Org_Id),
     findall(User_Clean,
             (   ask(SystemDB,
-                    (   t(Cap_Id, scope, Org_Id),
+                    (   path(Org_Id, (   star(p(child))
+                                     ;   star(p(child)),p(database)), Resource_Id),
+                        t(Cap_Id, scope, Resource_Id),
                         t(User_Id, capability, Cap_Id),
                         get_document(User_Id, User))),
                 (   del_dict(key_hash, User, _, User_Clean)
@@ -222,7 +223,18 @@ get_organizations_users(SystemDB, Organization, Users) :-
                 ;   User = User_Clean
                 )
             ),
-            Users).
+            Folded_Users),
+    maplist(
+        {SystemDB}/[User,New_User]>>
+        (   get_dict_default(capability, User, Capabilities, []),
+            findall(Capability,
+                    (   member(Cap_Id, Capabilities),
+                        ask(SystemDB,
+                            get_document(Cap_Id, Capability))),
+                    New_Capabilities),
+            put_dict(_{capability : New_Capabilities}, User, New_User)
+        ),
+        Folded_Users, Users).
 
 api_get_organizations_users_databases(SystemDB, Auth, Org_Name, User_Name, Databases) :-
     do_or_die(
@@ -248,31 +260,6 @@ get_organization_users_databases(SystemDB, Organization, User, Databases) :-
                 t(Organization_Id, database, Database_Id),
                 get_document(Database_Id,Database))),
         Databases).
-
-api_get_organizations_users_roles(SystemDB, Auth, Org_Name, User_Name, Roles) :-
-    do_or_die(
-        is_super_user(Auth),
-        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
-    do_or_die(
-        get_organization_from_name(SystemDB, Org_Name, Organization),
-        error(no_id_for_organization_name(Org_Name), _)),
-    do_or_die(
-        get_user_from_name(SystemDB, User_Name, User, _{}),
-        error(no_id_for_user_name(User_Name), _)),
-
-    get_organization_users_roles(SystemDB, Organization, User, Roles).
-
-get_organization_users_roles(SystemDB, Organization, User, Roles) :-
-    get_dict('@id', Organization, Organization_Id),
-    get_dict('@id', User, User_Id),
-    findall(
-        Role,
-        ask(SystemDB,
-            (   t(User_Id, capability, Cap_Id),
-                t(Cap_Id, scope, Organization_Id),
-                t(Cap_Id, role, Role_Id),
-                get_document(Role_Id,Role))),
-        Roles).
 
 api_add_organization(_, Auth, Organization, Id) :-
     do_or_die(
