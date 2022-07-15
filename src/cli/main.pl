@@ -1880,11 +1880,11 @@ run_command(user,get, NameList, Opts) :-
                           [User_Name,User_Id]),
                    (   get_dict(capability, User, Capabilities)
                    ->  forall(
-                           member(Capability, Capabilities),
-                           (   get_dict(scope, Capability, Resource),
+                           member(Cap, Capabilities),
+                           (   get_dict(scope, Cap, Resource),
                                get_dict(name, Resource, Resource_Name),
                                get_dict('@id', Resource, Resource_Id),
-                               (   get_dict(role, Capability, Roles)
+                               (   get_dict(role, Cap, Roles)
                                ->  true
                                ;   Roles = []),
                                maplist([Role,Role_Name]>>(get_dict(name,Role,Role_Name)),

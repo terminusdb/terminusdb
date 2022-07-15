@@ -225,12 +225,15 @@ get_organizations_users(SystemDB, Organization, Users) :-
             ),
             Folded_Users),
     maplist(
-        {SystemDB}/[User,New_User]>>
+        {SystemDB,Org_Id}/[User,New_User]>>
         (   get_dict_default(capability, User, Capabilities, []),
             findall(Capability,
                     (   member(Cap_Id, Capabilities),
                         ask(SystemDB,
-                            get_document(Cap_Id, Capability))),
+                            (   t(Cap_Id, scope, Resource_Id),
+                                path(Org_Id, (   star(p(child))
+                                             ;   star(p(child)),p(database)), Resource_Id),
+                                get_document(Cap_Id, Capability)))),
                     New_Capabilities),
             put_dict(_{capability : New_Capabilities}, User, New_User)
         ),
