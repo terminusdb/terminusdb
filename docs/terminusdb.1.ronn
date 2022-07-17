@@ -54,9 +54,9 @@ Run the TerminusDB server.
 
 ### list
 
-`terminusdb list OPTIONS (DEPRECATED!)`
+`terminusdb list OPTIONS`
 
-List availabile databases.
+List availabile databases. [DEPRECATED]
 
   * `-h`, `--help`=[value]:
   print help for the `list` command
