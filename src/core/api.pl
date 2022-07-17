@@ -82,6 +82,7 @@
 
               % api_db
               list_databases/4,
+              list_database/6,
               list_existing_databases/3,
               pretty_print_databases/1,
               db_exists_api/4,
