@@ -1,11 +1,10 @@
+const fs = require('fs/promises')
 const exec = require('util').promisify(require('child_process').exec)
 const { expect } = require('chai')
 const { util } = require('../lib')
 
 describe('cli-db', function () {
   before(async function () {
-    agent = new Agent().auth()
-
     this.timeout(30000)
     process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
     {

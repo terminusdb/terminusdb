@@ -1,5 +1,3 @@
-const fs = require('fs/promises')
-const exec = require('util').promisify(require('child_process').exec)
 const { expect } = require('chai')
 const { Agent, api, db, util } = require('../lib')
 
