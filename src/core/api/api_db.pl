@@ -1,6 +1,6 @@
 :- module(api_db, [
-              list_databases/3,
-              list_existing_databases/2,
+              list_databases/4,
+              list_existing_databases/3,
               pretty_print_databases/1,
               db_exists_api/4
           ]).
@@ -50,29 +50,32 @@ get_user_databases(System_DB, Auth, User_Databases) :-
             format(string(Path),"~s/~s",[Organization,Name])),
         User_Databases).
 
-list_databases(System_DB, Auth, Database_Objects) :-
+list_databases(System_DB, Auth, Database_Objects, Options) :-
     (   is_super_user(Auth)
     ->  get_all_databases(System_DB, User_Databases)
     ;   get_user_databases(System_DB, Auth, User_Databases)),
-    list_existing_databases(User_Databases, Database_Objects).
+    list_existing_databases(User_Databases, Database_Objects, Options).
 
-list_existing_databases(Databases, Database_Objects) :-
+list_existing_databases(Databases, Database_Objects, Options) :-
     findall(Database_Object,
             (   member(DB, Databases),
-                list_database(DB, Database_Object)),
+                list_database(DB, Database_Object, Options)),
             Database_Objects).
 
-list_database(Database, Database_Object) :-
-    do_or_die(
-        resolve_absolute_string_descriptor(Database, Desc),
-        error(invalid_absolute_path(Database),_)),
+list_database(Database, Database_Object, Options) :-
 
-    Repo = (Desc.repository_descriptor),
+    (   option(branches(true), Options)
+    ->  do_or_die(
+            (   resolve_absolute_string_descriptor(Database,Desc),
+                resolve_relative_string_descriptor(Desc,'_commits', Repo)),
+            error(invalid_absolute_path(Database),_)),
 
-    setof(Branch,has_branch(Repo, Branch),Branches),
+        setof(Branch,has_branch(Repo, Branch),Branches),
 
-    Database_Object = _{ database_name: Database,
-                         branch_name: Branches }.
+        Database_Object = _{ database_name: Database,
+                             branch_name: Branches }
+    ;   Database_Object = _{ database_name: Database }
+    ).
 
 joint(true,"└──").
 joint(false,"├──").
@@ -89,13 +92,14 @@ pretty_print_databases(Databases) :-
             joint(Last_DB,Joint),
             arm(Last_DB,Arm),
             format("~s ~s~n", [Joint, Database_Name]),
-            Branches = (Database_Object.branch_name),
-            forall(
-                member_last(Branch, Branches, Last_Branch),
-                (   joint(Last_Branch, Branch_Joint),
-                    format("~s   ~s ~s~n", [Arm, Branch_Joint, Branch])
+            (   get_dict(branch_name, Database_Object, Branches)
+            ->  forall(
+                    member_last(Branch, Branches, Last_Branch),
+                    (   joint(Last_Branch, Branch_Joint),
+                        format("~s   ~s ~s~n", [Arm, Branch_Joint, Branch])
+                    )
                 )
-            ),
+            ;   true),
             format("~s~n", [Arm])
         )
     ).

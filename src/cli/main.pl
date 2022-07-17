@@ -105,14 +105,20 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            meta(password),
            default('_'),
            help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
-opt_spec(list,'terminusdb list OPTIONS',
-         'List databases.',
+opt_spec(list,'terminusdb list OPTIONS (DEPRECATED!)',
+         'List availabile databases.',
          [[opt(help),
            type(boolean),
            shortflags([h]),
            longflags([help]),
            default(false),
            help('print help for the `list` command')],
+          [opt(branches),
+           type(boolean),
+           shortflags([b]),
+           longflags([branches]),
+           default(true),
+           help('also describe the available branches')],
           [opt(json),
            type(boolean),
            shortflags([j]),
@@ -512,6 +518,26 @@ opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
            shortflags([h]),
            default(false),
            help('print help for the `branch delete` sub command')]]).
+opt_spec(db,list,'terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS',
+         'List availabile databases.',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `list` command')],
+          [opt(branches),
+           type(boolean),
+           shortflags([b]),
+           longflags([branches]),
+           default(false),
+           help('also describe the available branches')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON as the result of the `list` command')]]).
 opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
          'Create a database.',
          [[opt(help),
@@ -1212,9 +1238,11 @@ run_command(serve,_Positional,Opts) :-
     ;   terminus_server([serve|Opts], true)).
 run_command(list,Databases,Opts) :-
     super_user_authority(Auth),
+    format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~n", []),
+    option(branches(Branches), Opts),
     (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects)
-    ;   list_existing_databases(Databases, Database_Objects)
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
+    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
     ),
     (   option(json(true), Opts)
     ->  json_write_dict(current_output, Database_Objects)
@@ -1536,6 +1564,17 @@ run_command(branch,delete,[Path],_Opts) :-
         branch,
         branch_delete(System_DB, Auth, Path)),
     format(current_output, "~N~s branch deleted~n", [Path]).
+run_command(db,list,Databases,Opts) :-
+    super_user_authority(Auth),
+    option(branches(Branches), Opts),
+    (   Databases = []
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
+    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
+    ),
+    (   option(json(true), Opts)
+    ->  json_write_dict(current_output, Database_Objects)
+    ;   pretty_print_databases(Database_Objects)
+    ).
 run_command(db,create,[DB_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
