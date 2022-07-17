@@ -7,18 +7,6 @@ describe('db-auth', function () {
   let agent
   before(async function () {
     agent = new Agent().auth()
-
-    this.timeout(30000)
-    process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
-    {
-      const r = await exec('./terminusdb.sh store init --force')
-      expect(r.stdout).to.match(/^Successfully initialised database/)
-    }
-  })
-
-  after(async function () {
-    await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
-    delete process.env.TERMINUSDB_SERVER_DB_PATH
   })
 
   beforeEach(function () {

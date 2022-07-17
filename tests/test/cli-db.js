@@ -3,6 +3,22 @@ const { expect } = require('chai')
 const { util } = require('../lib')
 
 describe('cli-db', function () {
+  before(async function () {
+    agent = new Agent().auth()
+
+    this.timeout(30000)
+    process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
+    {
+      const r = await exec('./terminusdb.sh store init --force')
+      expect(r.stdout).to.match(/^Successfully initialised database/)
+    }
+  })
+
+  after(async function () {
+    await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
+    delete process.env.TERMINUSDB_SERVER_DB_PATH
+  })
+
   it('lists a db', async function () {
     const r1 = await exec('./terminusdb.sh db list')
     expect(r1.stdout).to.match(/^TerminusDB\n/)
