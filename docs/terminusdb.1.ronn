@@ -54,12 +54,15 @@ Run the TerminusDB server.
 
 ### list
 
-`terminusdb list OPTIONS`
+`terminusdb list OPTIONS (DEPRECATED!)`
 
-List databases.
+List availabile databases.
 
   * `-h`, `--help`=[value]:
   print help for the `list` command
+
+  * `-b`, `--branches`=[value]:
+  also describe the available branches
 
   * `-j`, `--json`=[value]:
   Return a JSON as the result of the `list` command
@@ -331,6 +334,21 @@ Delete a branch.
 
   * `-h`, `--help`=[value]:
   print help for the `branch delete` sub command
+
+### db list
+
+`terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS`
+
+List availabile databases.
+
+  * `-h`, `--help`=[value]:
+  print help for the `list` command
+
+  * `-b`, `--branches`=[value]:
+  also describe the available branches
+
+  * `-j`, `--json`=[value]:
+  Return a JSON as the result of the `list` command
 
 ### db create
 
