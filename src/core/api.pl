@@ -166,10 +166,10 @@
               api_add_user/4,
               api_delete_user/3,
               api_get_users/4,
-              api_get_user_from_name/5,
               api_get_user_from_id/5,
               api_update_user_password/4,
               api_get_organizations_users/4,
+              api_get_organizations_users_object/5,
               api_get_organizations_users_databases/5
           ]).
 

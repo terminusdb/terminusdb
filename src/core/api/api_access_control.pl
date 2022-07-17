@@ -21,6 +21,7 @@
               api_get_user_from_id/5,
               api_update_user_password/4,
               api_get_organizations_users/4,
+              api_get_organizations_users_object/5,
               api_get_organizations_users_databases/5
           ]).
 
@@ -36,6 +37,7 @@
 :- use_module(library(yall)).
 :- use_module(library(option)).
 :- use_module(library(pcre)).
+:- use_module(library(solution_sequences)).
 
 api_get_roles(SystemDB, Auth, Roles) :-
     do_or_die(
@@ -207,34 +209,58 @@ api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
     do_or_die(
         get_organization_from_name(SystemDB, Org_Name, Organization),
         error(no_id_for_organization_name(Org_Name), _)),
-    get_organizations_users(SystemDB, Organization, Users).
-
-get_organizations_users(SystemDB, Organization, Users) :-
     get_dict('@id', Organization, Org_Id),
-    findall(User_Clean,
-            (   ask(SystemDB,
-                    (   path(Org_Id, (   star(p(child))
-                                     ;   star(p(child)),p(database)), Resource_Id),
-                        t(Cap_Id, scope, Resource_Id),
-                        t(User_Id, capability, Cap_Id),
-                        get_document(User_Id, User))),
-                (   del_dict(key_hash, User, _, User_Clean)
-                ->  true
-                ;   User = User_Clean
-                )
+    get_organizations_users(SystemDB, Org_Id, Users).
+
+get_organizations_users(SystemDB, Org_Id, Users) :-
+    findall(User_Object,
+            (   distinct(User_Id,
+                         ask(SystemDB,
+                             (   path(Org_Id, (   star(p(child))
+                                              ;   star(p(child)),p(database)), Resource_Id),
+                                 t(Cap_Id, scope, Resource_Id),
+                                 t(User_Id, capability, Cap_Id)))),
+                get_organizations_users_object(SystemDB, Org_Id, User_Id, User_Object)
             ),
-            Folded_Users),
-    maplist(
-        {SystemDB}/[User,New_User]>>
-        (   get_dict_default(capability, User, Capabilities, []),
-            findall(Capability,
-                    (   member(Cap_Id, Capabilities),
-                        ask(SystemDB,
-                            get_document(Cap_Id, Capability))),
-                    New_Capabilities),
-            put_dict(_{capability : New_Capabilities}, User, New_User)
-        ),
-        Folded_Users, Users).
+            Users).
+
+api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) :-
+    do_or_die(
+        is_super_user(Auth),
+        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
+    do_or_die(
+        get_organization_from_name(SystemDB, Org_Name, Organization),
+        error(no_id_for_organization_name(Org_Name), _)),
+    do_or_die(
+        get_user_from_name(SystemDB, User_Name, User, _{}),
+        error(no_id_for_user_name(User), _)),
+
+    get_dict('@id', Organization, Org_Id),
+    get_dict('@id', User, User_Id),
+
+    get_organizations_users_object(SystemDB, Org_Id, User_Id, Object).
+
+get_organizations_users_object(SystemDB, Org_Id, User_Id, Object) :-
+    ask(SystemDB,
+        get_document(User_Id, User)),
+
+    dict_field_verifier(
+        User,
+        _{ '@id' : (*),
+           name: (*),
+           capability: (*)},
+        User_Clean
+    ),
+    get_dict_default(capability, User_Clean, Capabilities, []),
+    findall(Capability,
+            (   member(Cap_Id, Capabilities),
+                ask(SystemDB,
+                    (   t(Cap_Id, scope, Resource_Id),
+                        path(Org_Id, (   star(p(child))
+                                     ;   star(p(child)),p(database)), Resource_Id),
+                        get_document(Cap_Id, Capability)))),
+            New_Capabilities),
+    put_dict(_{capability : New_Capabilities}, User_Clean, Object).
 
 api_get_organizations_users_databases(SystemDB, Auth, Org_Name, User_Name, Databases) :-
     do_or_die(
@@ -328,9 +354,13 @@ grant_document_to_ids(SystemDB, Auth, Grant_Document, json{ scope: Scope_Id,
             Roles,Role_Ids).
 
 api_grant_capability(SystemDB, Auth, Grant_Document_Ids) :-
-    _{ scope: Scope_Id,
-       user: User_Id,
-       roles: Role_Ids } :< Grant_Document_Ids,
+    _{ scope: Scope_Id_String,
+       user: User_Id_String,
+       roles: Role_Id_Strings } :< Grant_Document_Ids,
+
+    atom_string(User_Id, User_Id_String),
+    atom_string(Scope_Id, Scope_Id_String),
+    maplist(atom_string,Role_Ids,Role_Id_Strings),
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},
