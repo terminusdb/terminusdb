@@ -48,7 +48,7 @@ describe('db-auth', function () {
     const one = await agent.get(`/api/db/${agent.user}/${agent.dbName}`)
     expect(one.body.database_name).to.equal(`${agent.user}/${agent.dbName}`)
     const branch = await agent.get(`/api/db/${agent.user}/${agent.dbName}?branches=true`)
-    expect(branch.body.branch_name).to.equal('main')
+    expect(branch.body.branch_name).to.deep.equal(['main'])
     await db.delete(agent)
   })
 })
