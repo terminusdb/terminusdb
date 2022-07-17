@@ -2793,14 +2793,21 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
 :- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  methods([options,post,delete,get])]).
-:- http_handler(api(organizations/Org/users),
-                cors_handler(Method, organizations_users_handler(Org)),
+:- http_handler(api(organizations/Org/users/Rest),
+                cors_handler(Method, organizations_users_handler(Org,Rest)),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+/*
+:- http_handler(api(organizations/Org/users/User),
+                cors_handler(Method, organizations_users_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
 :- http_handler(api(organizations/Org/users/User/databases),
                 cors_handler(Method, organizations_users_databases_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
+*/
 
 /*
  * organizations_handler(Mode, Request, System, Auth) is det.
@@ -2851,30 +2858,25 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
     ).
 
 /*
- * organizations_users_handler(get, Org, Request, System_DB, Auth) is det.
+ * organizations_users_handler(get, Org, Path, Request, System_DB, Auth) is det.
  *
  * Get all users for an organization
  */
-organizations_users_handler(get, Org, Request, System_DB, Auth) :-
+organizations_users_handler(get, Org, Path, Request, System_DB, Auth) :-
     api_report_errors(
         organization,
         Request,
-        (   api_get_organizations_users(System_DB, Auth, Org, Users),
-            cors_reply_json(Request,Users)
-        )
-    ).
-
-/*
- * organizations_users_databases_handler(get, Org, User, Request, System_DB, Auth) is det.
- *
- * Get all databases for a user in an organization
- */
-organizations_users_databases_handler(get, Org, User, Request, System_DB, Auth) :-
-    api_report_errors(
-        organization,
-        Request,
-        (   api_get_organizations_users_databases(System_DB, Auth, Org, User, Databases),
-            cors_reply_json(Request,Databases)
+        (   split_atom(Path, '/', Path_List),
+            (   Path_List = ['']
+            ->  api_get_organizations_users(System_DB, Auth, Org, Users),
+                cors_reply_json(Request,Users)
+            ;   Path_List = [User]
+            ->  api_get_organizations_users_object(System_DB, Auth, Org, User, Obj),
+                cors_reply_json(Request,Obj)
+            ;   Path_List = [User,databases]
+            ->  api_get_organizations_users_databases(System_DB, Auth, Org, User, Databases),
+                cors_reply_json(Request,Databases)
+            )
         )
     ).
 
