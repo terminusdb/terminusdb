@@ -56,7 +56,7 @@ Run the TerminusDB server.
 
 `terminusdb list OPTIONS`
 
-List availabile databases. [DEPRECATED]
+List available databases. [DEPRECATED]
 
   * `-h`, `--help`=[value]:
   print help for the `list` command
@@ -339,7 +339,7 @@ Delete a branch.
 
 `terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS`
 
-List availabile databases.
+List available databases.
 
   * `-h`, `--help`=[value]:
   print help for the `list` command
