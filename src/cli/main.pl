@@ -1238,7 +1238,7 @@ run_command(serve,_Positional,Opts) :-
     ;   terminus_server([serve|Opts], true)).
 run_command(list,Databases,Opts) :-
     super_user_authority(Auth),
-    format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~n", []),
+    format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~nWarning: Use ('terminusdb db list') instead.~n", []),
     option(branches(Branches), Opts),
     (   Databases = []
     ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
