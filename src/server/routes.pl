@@ -122,6 +122,19 @@ connect_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
+                [method(Method),
+                 methods([options,get])]).
+
+log_handler(get, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        log,
+        Request,
+        (   api_log(System_DB, Auth, Path, Log),
+            cors_reply_json(Request, Log))).
+
+
+%%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(info), cors_handler(Method, info_handler),
                 [method(Method),
                  methods([options,get])]).
