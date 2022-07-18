@@ -913,7 +913,7 @@ api_error_jsonld_(user_delete,error(user_delete_failed_without_error(Name),_),JS
                               'api:user_name' : Name}
             }.
 api_error_jsonld_(add_organization,error(unknown_user(Name),_), JSON) :-
-    format(string(Msg), "Unknown user: ~q", [Name]),
+    format(string(Msg), "Attempt to add an Unknown user: ~q", [Name]),
     JSON = _{'@type' : "api:AddOrganizationErrorResponse",
              'api:status' : "api:failure",
              'api:message' : Msg,
