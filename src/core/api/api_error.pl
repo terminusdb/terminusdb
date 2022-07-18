@@ -601,6 +601,15 @@ api_error_jsonld_(fetch,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld_(fetch,error(fetch_remote_has_no_url(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote being fetched has no URL ~q", [Path]),
+    JSON = _{'@type' : 'api:FetchErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteHasNoURL",
+                              'api:absolute_descriptor' : Path}
+            }.
 api_error_jsonld_(rebase,error(invalid_target_absolute_path(Path),_), JSON) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
@@ -790,6 +799,24 @@ api_error_jsonld_(pull,error(pull_no_common_history(Head_Has_Updated), _), JSON)
              'api:fetch_status' : Head_Has_Updated,
              'api:error' : _{ '@type' : 'api:NoCommonHistoryError'
                             }
+            }.
+api_error_jsonld_(pull,error(branch_does_not_exist(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    JSON = _{'@type' : 'api:PullErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld_(pull,error(fetch_remote_has_no_url(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote being fetched has no URL ~q", [Path]),
+    JSON = _{'@type' : 'api:PullErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteHasNoURL",
+                              'api:absolute_descriptor' : Path}
             }.
 api_error_jsonld_(branch,error(invalid_target_absolute_path(Path),_), JSON) :-
     format(string(Msg), "Invalid target absolute resource descriptor: ~q", [Path]),
@@ -1114,6 +1141,14 @@ api_error_jsonld_(organization,error(no_id_for_organization_name(Name),_), JSON)
              'api:error' : _{ '@type' : "api:NoIdForOrganizationName",
                               'api:organization_name' : Name}
             }.
+api_error_jsonld_(organization,error(no_id_for_user_name(Name),_), JSON) :-
+    format(string(Msg), "There is no user with the name ~s.", [Name]),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForRoleName",
+                              'api:user_name' : Name}
+            }.
 api_error_jsonld_(organization,error(can_not_insert_existing_object_with_id(Id),_),JSON) :-
     format(string(Msg), "An organization with the id '~s' already exists.  Consider renaming, deleting the old role, or updating the old role.", [Id]),
     JSON = _{'@type' : 'api:OrganizationErrorResponse',
@@ -1181,6 +1216,22 @@ api_error_jsonld_(capability,error(no_id_for_resource_name(Name), _), JSON) :-
              'api:error' : _{ '@type' : "api:NoIdForResourceName",
                               'api:resource_name' : Name}
             }.
+api_error_jsonld_(capability,error(no_id_for_role_name(Name), _), JSON) :-
+    format(string(Msg), "No id associated with role name ~s", [Name]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoIdForRoleName",
+                              'api:role_name' : Name}
+            }.
+api_error_jsonld_(capability,error(no_unique_id_for_database_name(Name),_), JSON) :-
+    format(string(Msg), "There is more than one id for database ~s. Consider deleting duplicates if you want to refer to them by name rather than id, or specify the organization.", [Name]),
+    JSON = _{'@type' : 'api:CapabilityErrorResponse',
+             'api:status' : "api:not_found",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoUniqueIdForDatabaseName",
+                              'api:database_name' : Name}
+            }.
 api_error_jsonld_(capability,error(deleted_roles_do_not_exist_in_capability(Roles,Capability),_),JSON) :-
     format(string(Msg), "Deleted roles ~q do not exist for capability ~s", [Roles,Capability]),
     JSON = _{'@type' : 'api:CapabilityErrorResponse',
@@ -1247,6 +1298,7 @@ error_type_(user, 'api:UserErrorResponse').
 error_type_(organization, 'api:OrganizationErrorResponse').
 error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
+error_type_(log, 'api:LogErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

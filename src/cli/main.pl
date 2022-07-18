@@ -267,7 +267,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            shortflags([e]),
            longflags(['remote-branch']),
            default('_'),
-           help('set the branch on the remote for push')],
+           help('set the branch on the remote for pull')],
           [opt(remote),
            type(atom),
            shortflags([r]),
@@ -292,7 +292,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([password]),
            default('_'),
            help('the password on the remote')]]).
-opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
+opt_spec(fetch,'terminusdb fetch DB_SPEC',
          'fetch data from a remote.',
          [[opt(help),
            type(boolean),
@@ -708,6 +708,12 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            shortflags([d]),
            default('_'),
            help('document data')],
+          [opt(raw_json),
+           type(boolean),
+           longflags([raw_json,'raw-json']),
+           shortflags([j]),
+           default(false),
+           help('replace as raw json')],
           [opt(create),
            type(boolean),
            longflags([create]),
@@ -928,9 +934,9 @@ opt_spec(user,get,'terminusdb user get <USER_NAME_OR_ID>',
            shortflags([i]),
            default(false),
            help('Interpret argument as an organization id rather than a name.')],
-          [opt(capabilities),
+          [opt(capability),
            type(boolean),
-           longflags([capabilities]),
+           longflags([capability]),
            shortflags([c]),
            default(false),
            help('Report on all capabilities of this user.')],
@@ -961,7 +967,19 @@ opt_spec(capability,grant,'terminusdb capability grant USER SCOPE ROLE1 <...ROLE
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `store init` sub command')]]).
+           help('print help for the `store init` sub command')],
+          [opt(ids),
+           type(boolean),
+           longflags([ids]),
+           shortflags([i]),
+           default(false),
+           help('Should the User, Scope and Role be treated as IDs or names')],
+          [opt(scope_type),
+           type(atom),
+           longflags([scope_type, 'scope-type']),
+           shortflags([s]),
+           default(database),
+           help('Should the scope be interpreted as a `database` (default) or an `organization`')]]).
 opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>',
          'Revoke ROLE1 ... ROLEN over SCOPE from USER',
          [[opt(help),
@@ -969,7 +987,19 @@ opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...RO
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `store init` sub command')]]).
+           help('print help for the `store init` sub command')],
+          [opt(ids),
+           type(boolean),
+           longflags([ids]),
+           shortflags([i]),
+           default(false),
+           help('Should the User, Scope and Role be treated as IDs or names')],
+          [opt(scope_type),
+           type(atom),
+           longflags([scope_type, 'scope-type']),
+           shortflags([s]),
+           default(database),
+           help('Should the scope be interpreted as a `database` (default) or an `organization`')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -1336,7 +1366,7 @@ run_command(fetch,[Path],Opts) :-
         remote_fetch(System_DB, Auth, Remote_Path, authorized_fetch(Authorization),
                      New_Head_Layer_Id, Head_Has_Updated)
     ),
-    format(current_output, "~N~s fetch: ~q with ~q~n",
+    format(current_output, "~N~s fetch: ~q with updated repository head = ~q~n",
            [Path, New_Head_Layer_Id, Head_Has_Updated]).
 run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
@@ -1474,10 +1504,14 @@ run_command(apply,[Path], Opts) :-
 run_command(log,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    api_log(System_DB, Auth, Path, Log),
-    (   option(json(true), Opts)
-    ->  json_write_dict(current_output, Log, [])
-    ;   format_log(current_output,Log)
+    api_report_errors(
+        log,
+        (   api_log(System_DB, Auth, Path, Log),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, Log, [])
+            ;   format_log(current_output,Log)
+            )
+        )
     ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
@@ -1802,7 +1836,7 @@ run_command(user,delete,[Name_or_Id], Opts) :-
     ->  User_Id = Name_or_Id
     ;   api_report_errors(
             user,
-            api_get_user_from_name(System_DB, Auth, Name_or_Id, User)
+            api_get_user_from_name(System_DB, Auth, Name_or_Id, User,_{capability:false})
         ),
         get_dict('@id', User, User_Id)
     ),
@@ -1815,22 +1849,24 @@ run_command(user,delete,[Name_or_Id], Opts) :-
 run_command(user,get, NameList, Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
+    option(capability(Capability), Opts),
+    User_Opts = options{capability:Capability},
     (   option(id(false),Opts),
         [Name] = NameList
     ->  api_report_errors(
             user,
-            api_get_user_from_name(System_DB,Auth,Name,User_Obj)
+            api_get_user_from_name(System_DB,Auth,Name,User_Obj,User_Opts)
         ),
         Users = [User_Obj]
     ;   [Id] = NameList
     ->  api_report_errors(
             user,
-            api_get_user_from_id(System_DB, Auth, Id, User_Obj)
+            api_get_user_from_id(System_DB, Auth, Id, User_Obj,User_Opts)
         ),
         Users = [User_Obj]
     ;   api_report_errors(
             user,
-            api_get_users(System_DB,Auth,Users)
+            api_get_users(System_DB,Auth,Users,User_Opts)
         )
     ),
 
@@ -1842,14 +1878,15 @@ run_command(user,get, NameList, Opts) :-
                    get_dict('@id',User,User_Id),
                    format(current_output, "'~s' has id: '~s'~n",
                           [User_Name,User_Id]),
-                   (   option(capabilities(true), Opts),
-                       get_dict(capability, User, Capabilities)
+                   (   get_dict(capability, User, Capabilities)
                    ->  forall(
-                           member(Capability, Capabilities),
-                           (   get_dict(scope, Capability, Resource),
+                           (   member(Cap, Capabilities),
+                               is_dict(Cap)
+                           ),
+                           (   get_dict(scope, Cap, Resource),
                                get_dict(name, Resource, Resource_Name),
                                get_dict('@id', Resource, Resource_Id),
-                               (   get_dict(role, Capability, Roles)
+                               (   get_dict(role, Cap, Roles)
                                ->  true
                                ;   Roles = []),
                                maplist([Role,Role_Name]>>(get_dict(name,Role,Role_Name)),
@@ -1876,27 +1913,43 @@ run_command(user,password, [User], Opts) :-
         api_update_user_password(System_DB, Auth, User, Password)
     ),
     format(current_output, '~nPassword updated for ~s~n', [User]).
-run_command(capability,grant,[User,Scope|Roles],_Opts) :-
+run_command(capability,grant,[User,Scope|Roles],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),
+    option(scope_type(Type),Opts),
+    option(ids(Ids),Opts),
     api_report_errors(
         capability,
-        api_grant_capability(SystemDB,Auth, _{ scope: Scope,
-                                               user: User,
-                                               roles: Roles })
+        (   (   Ids = true
+            ->  Grant_Doc = _{ scope: Scope, user: User, roles: Roles}
+            ;   grant_document_to_ids(SystemDB, Auth, _{ scope: Scope,
+                                                         user: User,
+                                                         roles: Roles,
+                                                         scope_type: Type }, Grant_Doc)
+            ),
+            api_grant_capability(SystemDB,Auth, Grant_Doc)
+        )
     ),
     format(current_output, "Granted ~q to '~s' over '~s'~n", [Roles,User,Scope]).
-run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
+run_command(capability,revoke,[User,Scope|Roles],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),
+    option(scope_type(Type),Opts),
+    option(ids(Ids),Opts),
     (   Roles = []
     ->  format(user_error, 'Warning: No Roles specified~n',[])
     ;   true),
     api_report_errors(
         capability,
-        api_revoke_capability(SystemDB,Auth, _{ scope: Scope,
-                                                user: User,
-                                                roles: Roles })
+        (   (   Ids = true
+            ->  Grant_Doc = _{ scope: Scope, user: User, roles: Roles}
+            ;   grant_document_to_ids(SystemDB, Auth, _{ scope: Scope,
+                                                         user: User,
+                                                         roles: Roles,
+                                                         scope_type: Type }, Grant_Doc)
+            ),
+            api_revoke_capability(SystemDB, Auth, Grant_Doc)
+        )
     ),
     format(current_output, 'Capability successfully revoked~n', []).
 run_command(store,init, _, Opts) :-

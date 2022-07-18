@@ -2083,6 +2083,9 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
                             [status(200)]))).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
+%
 :- http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
@@ -2707,7 +2710,7 @@ roles_handler(post, Request, System_DB, Auth) :-
               error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
-        roles,
+        role,
         Request,
         (   uri_encoded(segment, Name, Encoded_Name),
             atom_concat('Role/',Encoded_Name,Name_Id),
@@ -2725,7 +2728,7 @@ roles_handler(put, Request, System_DB, Auth) :-
               error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_role_from_name(System_DB,Auth,Name,Old_Role),
             put_dict(Role,Old_Role,New_Role),
@@ -2737,7 +2740,7 @@ roles_handler(put, Request, System_DB, Auth) :-
     ).
 roles_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_roles(System_DB, Auth, Roles),
             cors_reply_json(Request, Roles)
@@ -2751,7 +2754,7 @@ roles_handler(get, Request, System_DB, Auth) :-
  */
 roles_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   uri_encoded(segment, Name, Encoded_Name),
             atom_concat('Role/',Encoded_Name,Name_Id),
@@ -2763,7 +2766,7 @@ roles_handler(delete, Name, Request, System_DB, Auth) :-
     ).
 roles_handler(get, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_role_from_name(System_DB,Auth,Name,Role),
             cors_reply_json(Request, Role)
@@ -2777,6 +2780,21 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
 :- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  methods([options,post,delete,get])]).
+:- http_handler(api(organizations/Org/users/Rest),
+                cors_handler(Method, organizations_users_handler(Org,Rest)),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+/*
+:- http_handler(api(organizations/Org/users/User),
+                cors_handler(Method, organizations_users_handler(Org,User)),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(api(organizations/Org/users/User/databases),
+                cors_handler(Method, organizations_users_databases_handler(Org,User)),
+                [method(Method),
+                 methods([options,get])]).
+*/
 
 /*
  * organizations_handler(Mode, Request, System, Auth) is det.
@@ -2826,6 +2844,28 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
         )
     ).
 
+/*
+ * organizations_users_handler(get, Org, Path, Request, System_DB, Auth) is det.
+ *
+ * Get all users for an organization
+ */
+organizations_users_handler(get, Org, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   split_atom(Path, '/', Path_List),
+            (   Path_List = ['']
+            ->  api_get_organizations_users(System_DB, Auth, Org, Users),
+                cors_reply_json(Request,Users)
+            ;   Path_List = [User]
+            ->  api_get_organizations_users_object(System_DB, Auth, Org, User, Obj),
+                cors_reply_json(Request,Obj)
+            ;   Path_List = [User,databases]
+            ->  api_get_organizations_users_databases(System_DB, Auth, Org, User, Databases),
+                cors_reply_json(Request,Databases)
+            )
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(users), cors_handler(Method, users_handler),
@@ -2841,10 +2881,14 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
  * Manage users
  */
 users_handler(get, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    param_value_search_optional(Search, capability, boolean, false, Capability),
     api_report_errors(
         user,
         Request,
-        (   api_get_users(System_DB, Auth, Users),
+        (   api_get_users(System_DB, Auth, Users,_{capability:Capability}),
             cors_reply_json(Request, Users)
         )
     ).
@@ -2885,10 +2929,14 @@ users_handler(put, Request, System_DB, Auth) :-
  * Manage Users
  */
 users_handler(get, Name, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    param_value_search_optional(Search, capability, boolean, false, Capability),
     api_report_errors(
         user,
         Request,
-        (   api_get_user_from_name(System_DB, Auth, Name, User),
+        (   api_get_user_from_name(System_DB, Auth, Name, User, _{capability:Capability}),
             cors_reply_json(Request,User)
         )
     ).
@@ -2896,7 +2944,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
         user,
         Request,
-        (   api_get_user_from_name(System_DB, Auth, Name, User),
+        (   api_get_user_from_name(System_DB, Auth, Name, User, _{capability:false}),
             get_dict('@id', User, User_Id),
             api_delete_user(System_DB,Auth,User_Id),
             cors_reply_json(Request,
@@ -2913,7 +2961,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
 /*
  * capabilities_handler(Mode, Request, System, Auth) is det.
  *
- * Insert an organization or update an organization
+ * grant or revoke capabilities
  */
 capabilities_handler(post, Request, System_DB, Auth) :-
     get_payload(Cap, Request),

@@ -161,7 +161,7 @@ Pull a branch from a database.
   print help for the `pull` command
 
   * `-e`, `--remote-branch`=[value]:
-  set the branch on the remote for push
+  set the branch on the remote for pull
 
   * `-r`, `--remote`=[value]:
   the name of the remote to use
@@ -177,7 +177,7 @@ Pull a branch from a database.
 
 ### fetch
 
-`terminusdb fetch BRANCH_SPEC`
+`terminusdb fetch DB_SPEC`
 
 fetch data from a remote.
 
@@ -455,6 +455,9 @@ Replace documents.
   * `-d`, `--data`=[value]:
   document data
 
+  * `-j`, `--raw_json`, `--raw-json`=[value]:
+  replace as raw json
+
   * `-c`, `--create`=[value]:
   create document if it does not exist
 
@@ -623,7 +626,7 @@ Get a user from its name or id, or list all if unspecified.
   * `-i`, `--id`=[value]:
   Interpret argument as an organization id rather than a name.
 
-  * `-c`, `--capabilities`=[value]:
+  * `-c`, `--capability`=[value]:
   Report on all capabilities of this user.
 
   * `-j`, `--json`=[value]:
@@ -650,6 +653,12 @@ Grant ROLE1 ... ROLEN over SCOPE to USER
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
+  * `-i`, `--ids`=[value]:
+  Should the User, Scope and Role be treated as IDs or names
+
+  * `-s`, `--scope_type`, `--scope-type`=[value]:
+  Should the scope be interpreted as a `database` (default) or an `organization`
+
 ### capability revoke
 
 `terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>`
@@ -658,6 +667,12 @@ Revoke ROLE1 ... ROLEN over SCOPE from USER
 
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
+
+  * `-i`, `--ids`=[value]:
+  Should the User, Scope and Role be treated as IDs or names
+
+  * `-s`, `--scope_type`, `--scope-type`=[value]:
+  Should the scope be interpreted as a `database` (default) or an `organization`
 
 ### store init
 
