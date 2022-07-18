@@ -69,19 +69,6 @@ api_get_documents(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, 
         api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
     ).
 
-api_get_and_print_documents(SystemDB, Auth, Path, Graph_Type, JSON_Stream, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
-    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    '$moo':get_document_context(Transaction, Compress_Ids, Unfold, true, Get_Context),
-    (   Graph_Type = instance
-    ->  JSON_Stream = json_stream(Initial_Goal, As_List, Stream_Started, _),
-        json_stream_write_start(Initial_Goal, As_List, Stream_Started),
-        Goal = {Get_Context}/[_Document]>>('$moo':par_print_all_documents_json(current_output, Get_Context))
-    ;   Goal = {Graph_Type, Transaction, Get_Context, Skip, Count, Compress_Ids, Unfold}/[_Document]>>(
-        api_document:api_generate_document_ids(Graph_Type, Transaction, Unfold, Skip, Count, Id),
-        api_document:api_get_and_print_document(Graph_Type, Get_Context, Transaction, JSON_Stream, Compress_Ids, Unfold, Id)
-    )).
-
 api_generate_document_ids_by_type(instance, Transaction, Type, Skip, Count, Id) :-
     skip_generate_nsols(
         get_document_uri_by_type(Transaction, Type, Id),
@@ -123,14 +110,6 @@ api_get_document(instance, Transaction, Compress_Ids, Unfold, Id, Document) :-
 api_get_document(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
-
-api_get_and_print_document(instance, Get_Context, _Transaction, json_stream(Initial_Goal, As_List, Stream_Started, _JSON_Options), _Compress_Ids, _Unfold, Id) :-
-    json_stream_write_start(Initial_Goal, As_List, Stream_Started),
-    '$moo':print_document_json(current_output, Get_Context, Id).
-api_get_and_print_document(schema, _Get_Context, Transaction, json_stream(Initial_Goal, As_List, Stream_Started, JSON_Options),_Prefixed, _Unfold, Id) :-
-    do_or_die(get_schema_document(Transaction, Id, Document),
-              error(document_not_found(Id), _)),
-    json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options).
 
 api_get_document_by_id(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Requested_Data_Version, Actual_Data_Version, Id, Document) :-
     resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
@@ -424,10 +403,10 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Skip, Count, As_Li
         forall(
             call(Goal, Document),
             json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
-    ;   api_get_and_print_documents(System_DB, Auth, Path, Graph_Type, json_stream(Initial_Goal, As_List, Stream_Started, JSON_Options), Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
+    ;   api_get_documents(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
         forall(
             call(Goal, Document),
-            true)
+            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
     ),
 
     json_stream_end(Initial_Goal, As_List, Stream_Started).
