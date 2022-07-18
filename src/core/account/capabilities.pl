@@ -15,6 +15,7 @@
               assert_write_access/4,
               authorisation_object/3,
               user_accessible_database/3,
+              user_accessible_database/5,
               check_descriptor_auth/4,
               is_super_user/1,
               is_super_user/2,
@@ -488,6 +489,36 @@ user_accessible_database(DB, User_ID, Database) :-
             isa(Database_ID, 'UserDatabase'),
             get_document(Database_ID, Database)
         )).
+
+/**
+ * user_accessible_database(DB,User_ID,Org,Name,Database) is det.
+ *
+ * Finds a database object accessible to a user.
+ */
+user_accessible_database(DB, User_ID, Org, Name, Database) :-
+    (   ground(Org)
+    ->  atom_string(Org, Org_S)
+    ;   true),
+    (   ground(Name)
+    ->  atom_string(Name, Name_S)
+    ;   true),
+    ask(DB,
+        (   t(Database_ID, name, Name_S^^xsd:string),
+            isa(Database_ID, 'UserDatabase'),
+            t(Org_Id, database, Database_ID),
+            t(Org_Id, name, Org_S^^xsd:string),
+            t(User_ID, capability, Capability_ID),
+            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            get_document(Database_ID, Database)
+        )),
+    (   var(Org)
+    ->  atom_string(Org, Org_S)
+    ;   true),
+    (   var(Name)
+    ->  atom_string(Name, Name_S)
+    ;   true
+    ).
+
 
 check_descriptor_auth_(system_descriptor{},Action,Auth,System_DB) :-
     assert_auth_action_scope(System_DB,Auth,Action,system).

@@ -122,6 +122,19 @@ connect_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
+                [method(Method),
+                 methods([options,get])]).
+
+log_handler(get, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        log,
+        Request,
+        (   api_log(System_DB, Auth, Path, Log),
+            cors_reply_json(Request, Log))).
+
+
+%%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(info), cors_handler(Method, info_handler),
                 [method(Method),
                  methods([options,get])]).
@@ -146,10 +159,46 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(db), cors_handler(Method, db_handler, [add_payload(false)]),
+                [method(Method),
+                 methods([options,get])]).
 :- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
-                 methods([options,head,post,delete])]).
+                 methods([options,get,head,post,delete])]).
 
+db_handler(get, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    api_report_errors(
+        check_db,
+        Request,
+        (   param_value_search_optional(Search, branches, boolean, false, Branches),
+            list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches }),
+            cors_reply_json(Request, Database_Objects)
+        )
+    ).
+
+db_handler(get, Organization, DB, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    api_report_errors(
+        check_db,
+        Request,
+        (   param_value_search_optional(Search, branches, boolean, false, Branches),
+            Options = _{ branches : Branches },
+            (   list_database(System_DB, Auth, Organization, DB, Database_Object, Options)
+            ->  cors_reply_json(Request, Database_Object)
+            ;   cors_reply_json(Request, _{'@type' : 'api:DbListErrorResponse',
+                                           'api:status' : 'api:failure',
+                                           'api:message' : "Database does not exist, or you do not have permission"},
+                                [status(404)])
+            )
+        )
+    ).
 db_handler(head, Organization, DB, Request, System_DB, Auth) :-
     /* HEAD: Check DB Exists */
     (   memberchk(search(Search), Request)
@@ -171,7 +220,6 @@ db_handler(head, Organization, DB, Request, System_DB, Auth) :-
                             [status(404)])
         )
     ).
-
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
     api_report_errors(

@@ -913,7 +913,7 @@ api_error_jsonld_(user_delete,error(user_delete_failed_without_error(Name),_),JS
                               'api:user_name' : Name}
             }.
 api_error_jsonld_(add_organization,error(unknown_user(Name),_), JSON) :-
-    format(string(Msg), "Unknown user: ~q", [Name]),
+    format(string(Msg), "Attempt to add an Unknown user: ~q", [Name]),
     JSON = _{'@type' : "api:AddOrganizationErrorResponse",
              'api:status' : "api:failure",
              'api:message' : Msg,
@@ -1123,15 +1123,21 @@ api_error_jsonld_(role,
                   error(
                       schema_check_failure(
                           [json{'http://terminusdb.com/schema/system#action':
-                                [json{'@type':not_a_valid_enum,
-                                      enum:'http://terminusdb.com/schema/system#Action',
-                                      value:Value}]}]), _), JSON) :-
-    format(string(Msg), "The action ~s is not a valid Action type for the system schema", [Value]),
+                                List}]), _), JSON) :-
+    (   List = [Error]
+    ->  get_dict(value, Error, Value),
+        format(string(Msg), "The action ~s is not a valid Action type for the system schema", [Value]),
+        Values = [Value]
+    ;   maplist([Error, Value]>>get_dict(value,Error,Value),
+                List, Values),
+        format(string(Msg), "One of the actions ~q is not a valid Action type for the system schema",
+               [Values])
+    ),
     JSON = _{'@type' : 'api:RoleErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:InvalidActionType",
-                              'api:action' : Value}
+                              'api:action' : Values}
             }.
 api_error_jsonld_(organization,error(no_id_for_organization_name(Name),_), JSON) :-
     format(string(Msg), "There is no organization with the name ~s.", [Name]),
