@@ -116,11 +116,6 @@
               unbundle/4,
 
               % api_document.pl
-              api_get_document/6,
-              api_get_documents/11,
-              api_get_documents_by_type/12,
-              api_get_documents_by_query/13,
-              api_get_document_by_id/10,
               api_insert_documents/8,
               api_delete_documents/8,
               api_delete_document/7,

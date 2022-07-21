@@ -1,9 +1,4 @@
 :- module(api_document, [
-              api_get_document/6,
-              api_get_documents/11,
-              api_get_documents_by_type/12,
-              api_get_documents_by_query/13,
-              api_get_document_by_id/10,
               api_insert_documents/8,
               api_delete_documents/8,
               api_delete_document/7,
@@ -61,13 +56,9 @@ api_generate_document_ids(schema, Transaction, _Unfold, Skip, Count, Id) :-
         Skip,
         Count).
 
-api_get_documents(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
-    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    Goal = {Graph_Type, Transaction, Skip, Count, Compress_Ids, Unfold}/[Document]>>(
-        api_document:api_generate_document_ids(Graph_Type, Transaction, Unfold, Skip, Count, Id),
-        api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
-    ).
+api_get_documents(Transaction, Graph_Type, Compress_Ids, Unfold, Skip, Count, Document) :-
+    api_document:api_generate_document_ids(Graph_Type, Transaction, Unfold, Skip, Count, Id),
+    api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
 
 api_generate_document_ids_by_type(instance, Transaction, Type, Skip, Count, Id) :-
     skip_generate_nsols(
@@ -80,13 +71,10 @@ api_generate_document_ids_by_type(schema, Transaction, Type, Skip, Count, Id) :-
         Skip,
         Count).
 
-api_get_documents_by_type(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
-    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    Goal = {Graph_Type, Transaction, Type, Skip, Count, Compress_Ids, Unfold}/[Document]>>(
-        api_document:api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Skip, Count, Id),
-        api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
-    ).
+api_get_documents_by_type(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Document) :-
+    api_document:api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Skip, Count, Id),
+    api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
+
 
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Skip, Count, Id) :-
     skip_generate_nsols(
@@ -96,13 +84,9 @@ api_generate_document_ids_by_query(instance, Transaction, Type, Query, Skip, Cou
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Skip, _Count, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
-api_get_documents_by_query(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal) :-
-    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    Goal = {Graph_Type, Transaction, Type, Query, Skip, Count, Compress_Ids, Unfold}/[Document]>>(
-        api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Skip, Count, Id),
-        api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document)
-    ).
+api_get_documents_by_query(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Document) :-
+    api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Skip, Count, Id),
+    api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
 
 api_get_document(instance, Transaction, Compress_Ids, Unfold, Id, Document) :-
     do_or_die(get_document(Transaction, Compress_Ids, Unfold, Id, Document),
@@ -111,9 +95,7 @@ api_get_document(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document_by_id(SystemDB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Requested_Data_Version, Actual_Data_Version, Id, Document) :-
-    resolve_descriptor_auth(read, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+api_get_document_by_id(Transaction, Graph_Type, Compress_Ids, Unfold, Id, Document) :-
     api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
 
 embed_document_in_error(Error, Document, New_Error) :-
@@ -388,25 +370,21 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,?,+,+,-,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Skip, Count, As_List, Unfold, Id, Type, Compress_Ids, Query, JSON_Options, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     json_stream_start(Stream_Started),
 
     (   nonvar(Query) % dictionaries do not need tags to be bound
-    ->  api_get_documents_by_query(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
-        forall(
-            call(Goal, Document),
-            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+    ->  forall(api_get_documents_by_query(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Document),
+               json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
     ;   ground(Id)
-    ->  api_get_document_by_id(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Requested_Data_Version, Actual_Data_Version, Id, Document),
+    ->  api_get_document_by_id(Transaction, Graph_Type, Compress_Ids, Unfold, Id, Document),
         json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options)
     ;   ground(Type)
-    ->  api_get_documents_by_type(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
-        forall(
-            call(Goal, Document),
-            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
-    ;   api_get_documents(System_DB, Auth, Path, Graph_Type, Compress_Ids, Unfold, Skip, Count, Requested_Data_Version, Actual_Data_Version, Goal),
-        forall(
-            call(Goal, Document),
-            json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+    ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Document),
+               json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+    ;   forall(api_get_documents(Transaction, Graph_Type, Compress_Ids, Unfold, Skip, Count, Document),
+               json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
     ),
 
     json_stream_end(Initial_Goal, As_List, Stream_Started).
