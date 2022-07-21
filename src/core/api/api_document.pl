@@ -369,25 +369,27 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,?,+,+,-,1).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Skip, Count, As_List, Unfold, Id, Type, Compress_Ids, Query, JSON_Options, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Skip, Count, As_List, Unfold, Id, Type, Compress_Ids, Query, Minimized, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
-    json_stream_start(Stream_Started),
+    % At this point we know we can open the stream. Any exit conditions have triggered by now.
+    call(Initial_Goal, As_List),
+    json_stream_start(As_List, Stream_Started),
 
     (   nonvar(Query) % dictionaries do not need tags to be bound
     ->  forall(api_get_documents_by_query(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Document),
-               json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+               json_stream_write_dict(As_List, Minimized, Stream_Started, Document))
     ;   ground(Id)
     ->  api_get_document_by_id(Transaction, Graph_Type, Compress_Ids, Unfold, Id, Document),
-        json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options)
+        json_stream_write_dict(As_List, Minimized, Stream_Started, Document)
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Document),
-               json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+               json_stream_write_dict(As_List, Minimized, Stream_Started, Document))
     ;   forall(api_get_documents(Transaction, Graph_Type, Compress_Ids, Unfold, Skip, Count, Document),
-               json_stream_write_dict(Initial_Goal, As_List, Stream_Started, Document, JSON_Options))
+               json_stream_write_dict(As_List, Minimized, Stream_Started, Document))
     ),
 
-    json_stream_end(Initial_Goal, As_List, Stream_Started).
+    json_stream_end(As_List).
 
 
 :- begin_tests(delete_document, []).

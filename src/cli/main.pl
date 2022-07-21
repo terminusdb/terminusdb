@@ -1694,18 +1694,14 @@ run_command(doc,get, [Path], Opts) :-
     ),
     atom_number(S,Skip),
 
-    (   Minimized = true
-    ->  JSON_Options = [width(0)]
-    ;   JSON_Options = []),
-
     api_report_errors(
         get_documents,
         api_read_document_selector(
             System_DB, Auth, Path, Graph_Type, Skip, Count,
             As_List, Unfold, Id, Type, Compress_Ids, Query,
-            JSON_Options,
+            Minimized,
             no_data_version, _Actual_Data_Version,
-            [L]>>(ignore((L=true,format('[')))))
+            [_L]>>true)
     ).
 run_command(role,create,[Name|Actions], _Opts) :-
     super_user_authority(Auth),
