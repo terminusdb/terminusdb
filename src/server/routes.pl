@@ -502,10 +502,19 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_json_optional(JSON, query, object, _, Query),
 
             read_data_version_header(Request, Requested_Data_Version),
+
+            Config = config{
+                         skip: Skip,
+                         count: Count,
+                         as_list: As_List,
+                         compress: Compress_Ids,
+                         unfold: Unfold,
+                         minimized: Minimized
+                     },
+
             api_read_document_selector(
-                System_DB, Auth, Path, Graph_Type, Skip, Count,
-                As_List, Unfold, Id, Type, Compress_Ids, Query,
-                Minimized,
+                System_DB, Auth, Path, Graph_Type,
+                Id, Type, Query, Config,
                 Requested_Data_Version, Actual_Data_Version,
                 cors_json_stream_write_headers_(Request, Actual_Data_Version)
             )

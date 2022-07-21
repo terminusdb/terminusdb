@@ -1694,12 +1694,20 @@ run_command(doc,get, [Path], Opts) :-
     ),
     atom_number(S,Skip),
 
+    Config = config{
+                 skip: Skip,
+                 count: Count,
+                 as_list: As_List,
+                 compress: Compress_Ids,
+                 unfold: Unfold,
+                 minimized: Minimized
+             },
+
     api_report_errors(
         get_documents,
         api_read_document_selector(
-            System_DB, Auth, Path, Graph_Type, Skip, Count,
-            As_List, Unfold, Id, Type, Compress_Ids, Query,
-            Minimized,
+            System_DB, Auth, Path, Graph_Type,
+            Id, Type, Query, Config,
             no_data_version, _Actual_Data_Version,
             [_L]>>true)
     ).

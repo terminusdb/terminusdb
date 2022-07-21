@@ -4,9 +4,11 @@
               api_delete_document/7,
               api_replace_documents/8,
               api_nuke_documents/6,
-              api_generate_document_ids/6,
+              api_generate_document_ids/4,
               call_catch_document_mutation/2,
-              api_read_document_selector/16
+              api_read_document_selector/11,
+              api_generate_document_ids/4,
+              api_get_document/5
           ]).
 
 :- use_module(core(util)).
@@ -42,61 +44,61 @@ before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Trans
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version).
 
-api_generate_document_ids(instance, Transaction, Unfold, Skip, Count, Id) :-
-    (   Unfold = true
+api_generate_document_ids(instance, Transaction, Config, Id) :-
+    (   Config.unfold = true
     ->  Include_Subdocuments = false
     ;   Include_Subdocuments = true),
     skip_generate_nsols(
         get_document_uri(Transaction, Include_Subdocuments, Id),
-        Skip,
-        Count).
-api_generate_document_ids(schema, Transaction, _Unfold, Skip, Count, Id) :-
+        Config.skip,
+        Config.count).
+api_generate_document_ids(schema, Transaction, Config, Id) :-
     skip_generate_nsols(
         get_schema_document_uri(Transaction, Id),
-        Skip,
-        Count).
+        Config.skip,
+        Config.count).
 
-api_get_documents(Transaction, Graph_Type, Compress_Ids, Unfold, Skip, Count, Document) :-
-    api_document:api_generate_document_ids(Graph_Type, Transaction, Unfold, Skip, Count, Id),
-    api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
+api_get_documents(Transaction, Graph_Type, Config, Document) :-
+    api_document:api_generate_document_ids(Graph_Type, Transaction, Config, Id),
+    api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
-api_generate_document_ids_by_type(instance, Transaction, Type, Skip, Count, Id) :-
+api_generate_document_ids_by_type(instance, Transaction, Type, Config, Id) :-
     skip_generate_nsols(
         get_document_uri_by_type(Transaction, Type, Id),
-        Skip,
-        Count).
-api_generate_document_ids_by_type(schema, Transaction, Type, Skip, Count, Id) :-
+        Config.skip,
+        Config.count).
+api_generate_document_ids_by_type(schema, Transaction, Type, Config, Id) :-
     skip_generate_nsols(
         get_schema_document_uri_by_type(Transaction, Type, Id),
-        Skip,
-        Count).
+        Config.skip,
+        Config.count).
 
-api_get_documents_by_type(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Document) :-
-    api_document:api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Skip, Count, Id),
-    api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
+api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document) :-
+    api_document:api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Config, Id),
+    api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
 
-api_generate_document_ids_by_query(instance, Transaction, Type, Query, Skip, Count, Id) :-
+api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id) :-
     skip_generate_nsols(
         match_query_document_uri(Transaction, Type, Query, Id),
-        Skip,
-        Count).
-api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Skip, _Count, _Id) :-
+        Config.skip,
+        Config.count).
+api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
-api_get_documents_by_query(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Document) :-
-    api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Skip, Count, Id),
-    api_document:api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
+api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
+    api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
+    api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
-api_get_document(instance, Transaction, Compress_Ids, Unfold, Id, Document) :-
-    do_or_die(get_document(Transaction, Compress_Ids, Unfold, Id, Document),
+api_get_document(instance, Transaction, Id, Config, Document) :-
+    do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
               error(document_not_found(Id), _)).
-api_get_document(schema, Transaction, _Prefixed, _Unfold, Id, Document) :-
+api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document_by_id(Transaction, Graph_Type, Compress_Ids, Unfold, Id, Document) :-
-    api_get_document(Graph_Type, Transaction, Compress_Ids, Unfold, Id, Document).
+api_get_document_by_id(Transaction, Graph_Type, Id, Config, Document) :-
+    api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
 embed_document_in_error(Error, Document, New_Error) :-
     Error =.. Error_List,
@@ -368,28 +370,28 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-:- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,?,+,+,-,1).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Skip, Count, As_List, Unfold, Id, Type, Compress_Ids, Query, Minimized, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+:- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.
-    call(Initial_Goal, As_List),
-    json_stream_start(As_List, Stream_Started),
+    call(Initial_Goal, Config.as_list),
+    json_stream_start(Config, Stream_Started),
 
     (   nonvar(Query) % dictionaries do not need tags to be bound
-    ->  forall(api_get_documents_by_query(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Query, Skip, Count, Document),
-               json_stream_write_dict(As_List, Minimized, Stream_Started, Document))
+    ->  forall(api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
     ;   ground(Id)
-    ->  api_get_document_by_id(Transaction, Graph_Type, Compress_Ids, Unfold, Id, Document),
-        json_stream_write_dict(As_List, Minimized, Stream_Started, Document)
+    ->  api_get_document_by_id(Transaction, Graph_Type, Id, Config, Document),
+        json_stream_write_dict(Config, Stream_Started, Document)
     ;   ground(Type)
-    ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Compress_Ids, Unfold, Type, Skip, Count, Document),
-               json_stream_write_dict(As_List, Minimized, Stream_Started, Document))
-    ;   forall(api_get_documents(Transaction, Graph_Type, Compress_Ids, Unfold, Skip, Count, Document),
-               json_stream_write_dict(As_List, Minimized, Stream_Started, Document))
+    ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   forall(api_get_documents(Transaction, Graph_Type, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
     ),
 
-    json_stream_end(As_List).
+    json_stream_end(Config).
 
 
 :- begin_tests(delete_document, []).

@@ -121,8 +121,10 @@
               api_delete_document/7,
               api_replace_documents/8,
               api_nuke_documents/6,
-              api_generate_document_ids/6,
-              api_read_document_selector/16,
+              api_generate_document_ids/4,
+              api_read_document_selector/11,
+              api_generate_document_ids/4,
+              api_get_document/5,
 
               % api_user_organizations.pl
               user_organizations/3,
