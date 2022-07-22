@@ -29,15 +29,26 @@ api_diff(_System_DB, _Auth, Before, After, Diff, Options) :-
               error(unground_patch, _)),
     simple_diff(Before,After,Diff,Options).
 
-coerce_to_commit(Commit_Or_Version, Commit_Id) :-
+coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
     (   read_data_version(Commit_Or_Version, data_version(Type, Commit_Id))
     ->  do_or_die(
             (   branch = Type
             ;   commit = Type),
             error(bad_data_version(Commit_Or_Version), _)
         )
-    ;   Commit_Id = Commit_Or_Version
-    ).
+    ;   resolve_relative_descriptor(Branch_Descriptor,
+                                    ["_commits"],
+                                    Ref_Descriptor)
+    ->   open_descriptor(Ref_Descriptor, T),
+        (   commit_id_uri(T,
+                          Commit_Or_Version,
+                          _)
+        ->  Commit_Id = Commit_Or_Version
+        ;   branch_head_commit(T,
+                               Commit_Or_Version,
+                               Commit_Uri),
+            commit_id_uri(T, Commit_Id, Commit_Uri))
+    ;   Commit_Id = Commit_Or_Version).
 
 document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
                      Map_In, Map_Out) :-
@@ -53,8 +64,8 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
 
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
-    coerce_to_commit(Before_Version, Before_Commit_Id),
-    coerce_to_commit(After_Version, After_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
 
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
@@ -70,7 +81,7 @@ api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, 
 
 api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
-    coerce_to_commit(Before_Version, Before_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
 
     document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _),
 
@@ -94,7 +105,8 @@ changed_id(Transaction,Containing) :-
                      once(((   t(Type,rdf:type,sys:'Class',schema)
                            ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
                            ;   Type = sys:'JSONDocument'),
-                           not(t(Type,sys:subdocument, _,schema))))
+                           not(t(Type,sys:subdocument, _,schema)))),
+                     Containing = Id
                  )
                 )
        ).
@@ -134,8 +146,8 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
 
 api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Diffs, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
-    coerce_to_commit(Before_Version, Before_Commit_Id),
-    coerce_to_commit(After_Version, After_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
 
     findall(Diff,
             document_diffs_from_commits(Branch_Descriptor,
@@ -148,8 +160,8 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Dif
 
 api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
-    coerce_to_commit(Before_Version, Before_Commit_Id),
-    coerce_to_commit(After_Version, After_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
+    coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
     create_context(Branch_Descriptor, Commit_Info, Context),
     merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
     with_transaction(
