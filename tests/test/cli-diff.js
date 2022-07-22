@@ -43,4 +43,13 @@ describe('cli-diff', function () {
     expect(parsedJson[0]['@op']).to.equal('Delete')
     expect(parsedJson[0]['@delete'].name).to.equal('test')
   })
+
+  it('compares two branches with no differences using CLI', async function () {
+    const db = util.randomString()
+    await exec(`./terminusdb.sh db create admin/${db}`)
+    await exec(`./terminusdb.sh branch create admin/${db}/local/branch/test --origin=admin/${db}/local/branch/main`)
+    const r1 = await exec(`./terminusdb.sh diff admin/${db} --before-commit=main --after-commit=test`)
+    const parsedJson = JSON.parse(r1.stdout)
+    expect(parsedJson).to.have.lengthOf(0)
+  })
 })
