@@ -422,13 +422,13 @@ or two commits (path required).',
            longflags([before_commit,'before-commit']),
            shortflags([p]),
            default('_'),
-           help('Commit of the *before* document(s)')],
+           help('Commit or branch of the *before* document(s)')],
           [opt(after_commit),
            type(atom),
            longflags([after_commit,'after-commit']),
            shortflags([s]),
            default('_'),
-           help('Commit of the *after* document(s)')]
+           help('Commit or branch of the *after* document(s)')]
          ]).
 opt_spec(apply,'terminusdb apply [Path] OPTIONS',
          'Apply a diff to path which is obtained from the differences between two commits',
