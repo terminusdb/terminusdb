@@ -26,21 +26,21 @@ describe('cli-diff', function () {
     const r1 = await exec(`./terminusdb.sh diff admin/${db} --before-commit=main --after-commit=test`)
     const parsedJson = JSON.parse(r1.stdout)
     expect(parsedJson).to.have.lengthOf(1)
-    expect(parsedJson[0]["@op"]).to.equal("Insert")
-    expect(parsedJson[0]["@insert"]['name']).to.equal("test")
+    expect(parsedJson[0]['@op']).to.equal('Insert')
+    expect(parsedJson[0]['@insert'].name).to.equal('test')
   })
 
   it('compares two branches with removing a raw JSON document using CLI', async function () {
     const db = util.randomString()
     await exec(`./terminusdb.sh db create admin/${db}`)
     const r1 = await exec(`./terminusdb.sh doc insert -j admin/${db}/local/branch/main -d '{ "name": "test" }'`)
-    const documentId = r1.stdout.split("1: ")[1]
+    const documentId = r1.stdout.split('1: ')[1]
     await exec(`./terminusdb.sh branch create admin/${db}/local/branch/test --origin=admin/${db}/local/branch/main`)
     await exec(`./terminusdb.sh doc delete admin/${db}/local/branch/test --id=${documentId}`)
     const r2 = await exec(`./terminusdb.sh diff admin/${db} --before-commit=main --after-commit=test`)
     const parsedJson = JSON.parse(r2.stdout)
     expect(parsedJson).to.have.lengthOf(1)
-    expect(parsedJson[0]["@op"]).to.equal("Delete")
-    expect(parsedJson[0]["@delete"]['name']).to.equal("test")
+    expect(parsedJson[0]['@op']).to.equal('Delete')
+    expect(parsedJson[0]['@delete'].name).to.equal('test')
   })
 })
