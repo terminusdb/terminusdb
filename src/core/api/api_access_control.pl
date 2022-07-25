@@ -30,6 +30,7 @@
 :- use_module(core(query)).
 :- use_module(core(document)).
 :- use_module(core(transaction)).
+:- use_module(core(triple), [uri_eq/3]).
 :- use_module(library(plunit)).
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
@@ -235,7 +236,11 @@ api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) 
     get_dict('@id', Organization, Org_Id),
     get_dict('@id', User, User_Id),
 
-    assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id),
+    (   Prefixes = _{ '@base' : 'terminusdb://system/data/' },
+        uri_eq(User_Id, Auth, Prefixes) % Let users look at themselves.
+    ->  true
+    ;   assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id)
+    ),
 
     get_organizations_users_object(SystemDB, Org_Id, User_Id, Object).
 

@@ -64,7 +64,7 @@ describe('capabilities', function () {
     expect(result5.status).to.equal(200)
   })
 
-  it('blocks unauthorized organization users', async function () {
+  it('blocks unauthorized organization users, but can look at oneself', async function () {
     const agent = new Agent().auth()
     const orgName = util.randomString()
     const userName = util.randomString()
@@ -117,6 +117,15 @@ describe('capabilities', function () {
     // organization users
     const resultUsers = await userAgent.get(`/api/organizations/${orgName}/users`)
     expect(resultUsers.status).to.equal(403)
+
+    // here is looking at you kid
+    const resultMe = await userAgent.get(`/api/organizations/${orgName}/users/${userName}`)
+    expect(resultMe.status).to.equal(200)
+    expect(resultMe.body.name).to.equal(userName)
+
+    // Can we take a peak at admin...
+    const resultAdmin = await userAgent.get(`/api/organizations/${orgName}/users/admin`)
+    expect(resultAdmin.status).to.equal(403)
   })
 
   it('auth allows authorized organization users', async function () {
