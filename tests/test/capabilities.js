@@ -93,9 +93,9 @@ describe('capabilities', function () {
       .send({
         name: roleName,
         action: ['meta_read_access', 'meta_write_access',
-                 'instance_read_access', 'instance_write_access',
-                 'schema_read_access', 'schema_write_access',
-                 'create_database', 'delete_database'],
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
       })
     const roleIdLong = result3.body
     const roleIdList = roleIdLong.split('terminusdb://system/data/')
@@ -148,10 +148,10 @@ describe('capabilities', function () {
       .send({
         name: roleName,
         action: ['meta_read_access', 'meta_write_access',
-                 'instance_read_access', 'instance_write_access',
-                 'schema_read_access', 'schema_write_access',
-                 'manage_capabilities', 'create_database',
-                 'delete_database'],
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'manage_capabilities', 'create_database',
+          'delete_database'],
       })
     const roleIdLong = result3.body
     const roleIdList = roleIdLong.split('terminusdb://system/data/')
@@ -206,9 +206,9 @@ describe('capabilities', function () {
       .send({
         name: roleName,
         action: ['meta_read_access', 'meta_write_access',
-                 'instance_read_access', 'instance_write_access',
-                 'schema_read_access', 'schema_write_access',
-                 'create_database', 'delete_database'],
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
       })
     const roleIdLong = result3.body
     const roleIdList = roleIdLong.split('terminusdb://system/data/')
@@ -237,14 +237,14 @@ describe('capabilities', function () {
     expect(users[0].capability[0]).to.have.property('role')
     expect(users[0].capability[0].role[0].action)
       .to.have.members(['create_database',
-                        'delete_database',
-                        'instance_read_access',
-                        'instance_write_access',
-                        'meta_read_access',
-                        'meta_write_access',
-                        'schema_read_access',
-                        'schema_write_access'
-                       ])
+        'delete_database',
+        'instance_read_access',
+        'instance_write_access',
+        'meta_read_access',
+        'meta_write_access',
+        'schema_read_access',
+        'schema_write_access',
+      ])
     // organization users databases
     const resultDatabases = await agent
       .get(`/api/organizations/${orgName}/users/${userName}/databases`)
