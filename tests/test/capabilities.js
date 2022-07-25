@@ -122,7 +122,16 @@ describe('capabilities', function () {
     expect(users[0]['@id']).to.equal(userId)
     expect(users[0]).to.not.have.property('key_hash')
     expect(users[0].capability[0]).to.have.property('role')
-
+    expect(users[0].capability[0].role[0].action)
+      .to.have.members(['create_database',
+                        'delete_database',
+                        'instance_read_access',
+                        'instance_write_access',
+                        'meta_read_access',
+                        'meta_write_access',
+                        'schema_read_access',
+                        'schema_write_access'
+                       ])
     // organization users databases
     const resultDatabases = await agent
       .get(`/api/organizations/${orgName}/users/${userName}/databases`)

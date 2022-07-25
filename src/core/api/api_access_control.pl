@@ -258,7 +258,15 @@ get_organizations_users_object(SystemDB, Org_Id, User_Id, Object) :-
                     (   t(Cap_Id, scope, Resource_Id),
                         path(Org_Id, (   star(p(child))
                                      ;   star(p(child)),p(database)), Resource_Id),
-                        get_document(Cap_Id, Capability)))),
+                        get_document(Cap_Id, Pre_Capability))),
+                get_dict_default(role, Pre_Capability, Role_Ids, []),
+                findall(Role,
+                        (   member(Role_Id,Role_Ids),
+                            ask(SystemDB,
+                                get_document(Role_Id, Role))),
+                        Roles),
+                put_dict(_{role: Roles}, Pre_Capability, Capability)
+            ),
             New_Capabilities),
     put_dict(_{capability : New_Capabilities}, User_Clean, Object).
 
