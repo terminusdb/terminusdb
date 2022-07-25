@@ -3054,16 +3054,10 @@ http:location(assets,root(assets),[]).
                  methods([options,get])]).
 
 redirect_to_dashboard(Request) :-
-    http_redirect(moved_temporary, dashboard('index.html'), Request).
+    http_redirect(moved_temporary, dashboard(.), Request).
 
 dashboard_handler(get, Request, _System_DB, _Auth) :-
-    (   (   memberchk(request_uri('/dashboard'), Request)
-        ;   memberchk(request_uri('/dashboard/'), Request)
-        )
-    ->  http_reply_file(dashboard('index.html'), [], Request)
-    ;   serve_files_in_directory(dashboard, Request)
-    ;   format(user_error, 'we have failed~n', [])
-    ).
+    http_reply_file(dashboard('index.html'), [], Request).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
