@@ -267,10 +267,10 @@ or two commits (path required).
   document id to use for comparisons
 
   * `-p`, `--before_commit`, `--before-commit`=[value]:
-  Commit of the *before* document(s)
+  Commit or branch of the *before* document(s)
 
   * `-s`, `--after_commit`, `--after-commit`=[value]:
-  Commit of the *after* document(s)
+  Commit or branch of the *after* document(s)
 
 ### apply
 

@@ -111,7 +111,7 @@ describe('capabilities', function () {
       })
 
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')
-    const userAgent = new Agent({ orgName: orgName }).auth()
+    const userAgent = new Agent({ orgName }).auth()
     userAgent.set('Authorization', `Basic ${userPass}`)
     const bodyString = '{"label":"hello"}'
     await db.create(userAgent, { bodyString })
