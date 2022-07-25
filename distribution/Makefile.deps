@@ -1,5 +1,7 @@
 TUS_VERSION := v0.0.10
 JWT_VERSION := v0.0.5
+DASHBOARD_VERSION := v1.0.0
+DASHBOARD_GITHUB_REPO := terminusdb-labs/react-calculator-sample
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
 
@@ -11,6 +13,7 @@ PACK_INSTALL_OPTIONS := [interactive(false), git(true)]
 default:
 	@$(MAKE) install-tus
 	@$(MAKE) install-jwt
+	@$(MAKE) install-dashboard
 
 .PHONY: install-tus
 install-tus: REPO_URL=https://github.com/terminusdb/tus.git
@@ -23,6 +26,11 @@ install-jwt: REPO_URL=https://github.com/terminusdb-labs/jwt_io.git
 install-jwt: PACK_NAME=jwt_io
 install-jwt: BRANCH=$(JWT_VERSION)
 install-jwt: install-pack
+
+.PHONY: install-dashboard
+install-dashboard:
+	mkdir -p dashboard
+	curl -sL "https://github.com/$(DASHBOARD_GITHUB_REPO)/releases/download/$(DASHBOARD_VERSION)/release.tar.gz" | tar zxf - -C dashboard
 
 .PHONY: install-pack
 install-pack:

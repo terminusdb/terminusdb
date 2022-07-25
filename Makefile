@@ -31,6 +31,11 @@ install-deps: install-tus
 install-tus:
 	@$(MAKE) -f distribution/Makefile.deps $@
 
+# Install the dashboard
+.PHONY: install-dashboard
+install-dashboard:
+	@$(MAKE) -f distribution/Makefile.deps $@
+
 # Install the jwt_io pack.
 .PHONY: install-jwt
 install-jwt:
