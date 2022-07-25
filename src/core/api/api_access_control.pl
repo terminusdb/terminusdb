@@ -204,12 +204,12 @@ get_organization_from_id(SystemDB, Id, Organization) :-
 
 api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
     do_or_die(
-        is_super_user(Auth),
-        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
-    do_or_die(
         get_organization_from_name(SystemDB, Org_Name, Organization),
         error(no_id_for_organization_name(Org_Name), _)),
+
     get_dict('@id', Organization, Org_Id),
+    assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id),
+
     get_organizations_users(SystemDB, Org_Id, Users).
 
 get_organizations_users(SystemDB, Org_Id, Users) :-
@@ -226,9 +226,6 @@ get_organizations_users(SystemDB, Org_Id, Users) :-
 
 api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) :-
     do_or_die(
-        is_super_user(Auth),
-        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
-    do_or_die(
         get_organization_from_name(SystemDB, Org_Name, Organization),
         error(no_id_for_organization_name(Org_Name), _)),
     do_or_die(
@@ -237,6 +234,8 @@ api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) 
 
     get_dict('@id', Organization, Org_Id),
     get_dict('@id', User, User_Id),
+
+    assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id),
 
     get_organizations_users_object(SystemDB, Org_Id, User_Id, Object).
 
