@@ -3040,11 +3040,16 @@ capabilities_handler(post, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).
+http:location(assets,root(assets),[]).
 
 :- http_handler(root(.), redirect_to_dashboard,
                 [methods([options,get])]).
 :- http_handler(dashboard(.), cors_handler(Method, dashboard_handler),
                 [method(Method),
+                 prefix,
+                 methods([options,get])]).
+:- http_handler(assets(.), serve_files_in_directory(assets),
+                [
                  prefix,
                  methods([options,get])]).
 

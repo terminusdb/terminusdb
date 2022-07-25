@@ -125,7 +125,9 @@ add_enterprise_test_path :-
 add_dashboard_path :-
     top_level_directory(Dir),
     directory_file_path(Dir, 'dashboard', Dashboard),
-    asserta(user:file_search_path(dashboard, Dashboard)).
+    directory_file_path(Dir, 'dashboard/assets', Assets),
+    asserta(user:file_search_path(dashboard, Dashboard)),
+    asserta(user:file_search_path(assets, Assets)).
 
 :- add_dashboard_path.
 
