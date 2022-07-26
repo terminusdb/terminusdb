@@ -164,7 +164,7 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
                  methods([options,get])]).
 :- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
-                 methods([options,get,head,post,delete])]).
+                 methods([options,get,head,post,put,delete])]).
 
 db_handler(get, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -254,6 +254,18 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
             delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
+db_handler(post, Organization, DB, Request, System_DB, Auth) :-
+    /* POST: Create database */
+    api_report_errors(
+        update_db,
+        Request,
+        (   http_read_json_required(json_dict(JSON), Request),
+            api_db_update(System_DB, Organization, DB, Auth, commit_info{
+                                                                 author : 'REST API',
+                                                                 message : 'Updating Database Record'
+                                                             }, JSON)
+        )
+    ).
 
 :- begin_tests(db_endpoint).
 
