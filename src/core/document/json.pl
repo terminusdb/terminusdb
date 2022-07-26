@@ -8386,6 +8386,38 @@ test(insert_extra_array_value,
                                   insert(Array, sys:value, "extra entry"^^xsd:string)))),
                      _).
 
+test(add_enum_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Schema1 = _{ '@type' : "Enum",
+                 '@id' : "Number",
+                 '@value' : [ "one", "two", "three" ] },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "Array",
+                                '@class': "Number"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["three", "two", "three", "one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
 :- end_tests(schema_checker).
 
 

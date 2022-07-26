@@ -809,6 +809,7 @@ references_untyped_range(Validation_Object,S,P,O) :-
     global_prefix_expand(rdf:type, Rdf_Type),
     global_prefix_expand(sys:foreign_type, Foreign_Type),
     global_prefix_expand(rdf:nil, Rdf_Nil),
+    %global_prefix_expand(sys:value, Value),
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-O,
              (   triple_addition(Instance, S, P, node(O)),
