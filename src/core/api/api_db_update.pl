@@ -24,6 +24,8 @@
 
 
 api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
+    create_context(System_DB, System_Context),
+
     do_or_die(
         organization_name_uri(System_Context, Organization, _),
         error(unknown_organization(Organization),_)),
@@ -41,7 +43,6 @@ api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     create_context(Descriptor, Commit_Info, DB_Context),
 
-    create_context(System_DB, System_Context),
     assert_auth_action_scope(System_Context, Auth, '@schema':'Action/manage_capabilities', Db_Uri),
 
     with_transaction(
@@ -62,7 +63,7 @@ api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
             put_dict(Clean_Updates, DB_Record, Updated_DB_Record),
 
             ask(System_Context,
-                update_document(Updated_DB_Record)),
+                replace_document(Updated_DB_Record)),
 
             dict_field_verifier(
                 Updates,

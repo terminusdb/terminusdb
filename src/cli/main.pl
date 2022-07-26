@@ -1667,7 +1667,7 @@ run_command(db,update,[DB_Path],Opts) :-
     ;   DB = DB_Path,
         option(organization(Organization), Opts)
     ),
-    dict_options(Opts, Dict),
+    dict_options(Dict, Opts),
     findall(
         Key-Val,
         (   get_dict(Key,Dict,Pre),
