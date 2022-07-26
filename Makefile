@@ -73,7 +73,7 @@ clean:
 
 # Remove everything.
 .PHONY: realclean
-realclean: clean realclean-rust
+realclean: clean realclean-rust dashboard-clean
 
 # Remove the dylib.
 .PHONY: clean-rust
@@ -84,6 +84,11 @@ clean-rust:
 .PHONY: realclean-rust
 realclean-rust:
 	@$(MAKE) -f distribution/Makefile.rust realclean
+
+# Remove the dashboard
+.PHONY: dashboard-clean
+dashboard-clean:
+	@$(MAKE) -f distribution/Makefile.deps clean
 
 # Build the documentation.
 .PHONY: docs

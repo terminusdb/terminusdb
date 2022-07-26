@@ -44,3 +44,10 @@ install-pack:
 	  -g "pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
 	  -g "pack_info($(PACK_NAME))" \
 	  -g halt
+
+.PHONY: clean
+clean: clean-dashboard
+
+.PHONY: clean-dashboard
+clean-dashboard:
+	rm -rf dashboard
