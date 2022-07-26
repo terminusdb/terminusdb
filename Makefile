@@ -86,8 +86,8 @@ realclean-rust:
 	@$(MAKE) -f distribution/Makefile.rust realclean
 
 # Remove the dashboard
-.PHONY: dashboard-clean
-dashboard-clean:
+.PHONY: clean-dashboard
+clean-dashboard:
 	@$(MAKE) -f distribution/Makefile.deps clean
 
 # Build the documentation.
