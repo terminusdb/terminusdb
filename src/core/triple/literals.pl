@@ -19,7 +19,8 @@
               schema_uri_to_prefixed/3,
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
-              prefixed_to_property/3
+              prefixed_to_property/3,
+              uri_eq/3
           ]).
 
 /** <module> Literals
@@ -524,6 +525,11 @@ instance_uri_to_prefixed(URI, Ctx, Prefixed) :-
 instance_uri_to_prefixed(URI, Ctx, Prefixed) :-
     uri_to_prefixed(URI, Ctx, Prefixed).
 
+uri_eq(Uri1, Uri2, Prefixes) :-
+    prefixed_to_uri(Uri1, Prefixes, UriExp1),
+    prefixed_to_uri(Uri2, Prefixes, UriExp2),
+    atom_string(Uri, UriExp1),
+    atom_string(Uri, UriExp2).
 
 prefixed_to_uri(Prefix:Suffix, Ctx, URI) :-
     (   get_dict(Prefix, Ctx, Base)

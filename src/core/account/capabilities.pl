@@ -165,11 +165,12 @@ write_type_access(instance,'@schema':'Action/instance_write_access').
 write_type_access(schema,'@schema':'Action/schema_write_access').
 
 is_super_user(Auth) :-
-    is_super_user(Auth, _{ '@base' : 'terminusdb://system/data/' }).
+    Prefixes = _{ '@base' : 'terminusdb://system/data/' },
+    is_super_user(Auth, Prefixes).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),
-    prefixed_to_uri(Auth, Prefixes, URI).
+    uri_eq(Auth, URI, Prefixes).
 
 require_super_user(Context) :-
     % This allows us to shortcut looking in the database,

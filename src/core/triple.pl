@@ -40,6 +40,7 @@
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3,
+              uri_eq/3,
 
               % temp_graph.pl
               extend_database_with_temp_graph/6,
