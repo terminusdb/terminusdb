@@ -158,8 +158,8 @@ test(list_all,
 
     super_user_authority(Auth),
     list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : true }),
-    Expected_Objects = [_{branch_name:["main"],database_name:"admin/bar"},
-                        _{branch_name:["main"],database_name:"admin/foo"}],
+    Expected_Objects = [_{branches:["main"],path:"admin/bar"},
+                        _{branches:["main"],path:"admin/foo"}],
 
     forall(member(Object, Database_Objects),
            member(Object, Expected_Objects)).
@@ -171,8 +171,8 @@ test(list_existing,
       cleanup(teardown_temp_store(State))]) :-
 
     list_existing_databases(["admin/foo2", "admin/bar2"], Database_Objects, _{branches : true}),
-    Expected_Objects = [_{branch_name:["main"],database_name:"admin/bar2"},
-                        _{branch_name:["main"],database_name:"admin/foo2"}],
+    Expected_Objects = [_{branches:["main"],path:"admin/bar2"},
+                        _{branches:["main"],path:"admin/foo2"}],
 
     forall(member(Object, Database_Objects),
            member(Object, Expected_Objects)).
@@ -184,8 +184,8 @@ test(list_existing_no_branches,
       cleanup(teardown_temp_store(State))]) :-
 
     list_existing_databases(["admin/foo2", "admin/bar2"], Database_Objects, _{branches : false}),
-    Expected_Objects = [_{database_name:"admin/bar2"},
-                        _{database_name:"admin/foo2"}],
+    Expected_Objects = [_{path:"admin/bar2"},
+                        _{path:"admin/foo2"}],
 
     forall(member(Object, Database_Objects),
            member(Object, Expected_Objects)).
