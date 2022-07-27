@@ -62,8 +62,9 @@ api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
 
             put_dict(Clean_Updates, DB_Record, Updated_DB_Record),
 
-            ask(System_Context,
-                replace_document(Updated_DB_Record)),
+            replace_document(
+                System_Context,
+                Updated_DB_Record),
 
             dict_field_verifier(
                 Updates,
@@ -96,7 +97,7 @@ api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
 
             (   Prefixes = none
             ->  true
-            ;   Prefix_Obj = (Prefixes.put('@type', "@context")),
+            ;   put_dict(_{'@type' : "@context"}, Prefixes, Prefix_Obj),
                 insert_context_document(DB_Context, Prefix_Obj)
             )
         ),
