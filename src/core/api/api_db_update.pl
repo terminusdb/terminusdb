@@ -54,9 +54,9 @@ api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
             dict_field_verifier(
                 Updates,
                 _{ '@id' : (*),
-                   name : atom,
-                   label : atom,
-                   comment : atom
+                   name : text,
+                   label : text,
+                   comment : text
                  },
                 Clean_Updates),
 

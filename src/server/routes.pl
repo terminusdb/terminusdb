@@ -254,8 +254,8 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
             delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
-db_handler(post, Organization, DB, Request, System_DB, Auth) :-
-    /* POST: Create database */
+db_handler(put, Organization, DB, Request, System_DB, Auth) :-
+    /* PUT: Update database */
     api_report_errors(
         update_db,
         Request,
@@ -263,7 +263,9 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
             api_db_update(System_DB, Organization, DB, Auth, commit_info{
                                                                  author : 'REST API',
                                                                  message : 'Updating Database Record'
-                                                             }, JSON)
+                                                             }, JSON),
+            cors_reply_json(Request, _{'@type' : 'api:DbUpdateeResponse',
+                                       'api:status' : 'api:success'})
         )
     ).
 

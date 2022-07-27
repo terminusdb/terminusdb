@@ -50,4 +50,13 @@ describe('db-auth', function () {
     expect(branch.body.branch_name).to.deep.equal(['main'])
     await db.delete(agent)
   })
+
+  it('passes update existing', async function () {
+    await db.create(agent)
+    const one = await agent.put(`/api/db/${agent.user}/${agent.dbName}`)
+          .send({ label : "foo", comment: "bar" })
+    expect(one.status).to.equal(200)
+    await db.delete(agent)
+  })
+
 })
