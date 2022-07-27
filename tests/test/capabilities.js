@@ -5,15 +5,11 @@ describe('capabilities', function () {
   it('errors on non existing user', async function () {
     const agent = new Agent().auth()
     const orgName = util.randomString()
-    const userName = util.randomString()
 
     // org
-    const result2 = await agent.post(`/api/organizations/${orgName}`)
-    const orgIdLong = result2.body
-    const orgIdList = orgIdLong.split('terminusdb://system/data/')
-    const orgId = orgIdList[orgIdList.length - 1]
+    await agent.post(`/api/organizations/${orgName}`)
 
-    // here is looking at you kid
+    // get a user that isn't there
     const resultFails = await agent.get(`/api/organizations/${orgName}/users/Frobian`)
     expect(resultFails.status).to.equal(404)
     expect(resultFails.body['api:error']['api:user_name']).to.equal('Frobian')
