@@ -189,7 +189,8 @@ db_handler(get, Organization, DB, Request, System_DB, Auth) :-
         check_db,
         Request,
         (   param_value_search_optional(Search, branches, boolean, false, Branches),
-            Options = _{ branches : Branches },
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            Options = _{ branches : Branches, verbose: Verbose },
             (   list_database(System_DB, Auth, Organization, DB, Database_Object, Options)
             ->  cors_reply_json(Request, Database_Object)
             ;   cors_reply_json(Request, _{'@type' : 'api:DbListErrorResponse',

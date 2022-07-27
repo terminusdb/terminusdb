@@ -532,6 +532,12 @@ opt_spec(db,list,'terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS',
            longflags([branches]),
            default(false),
            help('also describe the available branches')],
+          [opt(verbose),
+           type(boolean),
+           shortflags([v]),
+           longflags([verbose]),
+           default(false),
+           help('return lots of metadata')],
           [opt(json),
            type(boolean),
            shortflags([j]),
@@ -1611,9 +1617,12 @@ run_command(branch,delete,[Path],_Opts) :-
 run_command(db,list,Databases,Opts) :-
     super_user_authority(Auth),
     option(branches(Branches), Opts),
+    option(verbose(Verbose), Opts),
     (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
-    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects,
+                       _{ branches : Branches, verbose: Verbose })
+    ;   list_existing_databases(Databases, Database_Objects,
+                                _{ branches : Branches, verbose: Verbose })
     ),
     (   option(json(true), Opts)
     ->  json_write_dict(current_output, Database_Objects)

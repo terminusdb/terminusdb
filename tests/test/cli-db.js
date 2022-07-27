@@ -51,6 +51,9 @@ describe('cli-db', function () {
     await exec(`./terminusdb.sh db create admin/${db}`)
     const r1 = await exec(`./terminusdb.sh db update admin/${db} --label goo --comment gah`)
     expect(r1.stdout).to.match(new RegExp(`^Database updated: admin/${db}`))
+    const r2 = await exec(`./terminusdb.sh db list admin/${db} -v -j`)
+    const dbObjs = JSON.parse(r2.stdout)
+    expect(dbObjs[0].label).to.equal('goo')
+    expect(dbObjs[0].comment).to.equal('gah')
   })
-
 })
