@@ -810,7 +810,7 @@ references_untyped_range(Validation_Object,S,P,O) :-
     global_prefix_expand(sys:foreign_type, Foreign_Type),
     global_prefix_expand(rdf:nil, Rdf_Nil),
     global_prefix_expand(sys:value, Value),
-    global_prefix_expand(sys:first, Rdf_First),
+    global_prefix_expand(rdf:first, Rdf_First),
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-O,
              (   triple_addition(Instance, S, P, node(O)),
@@ -847,9 +847,9 @@ references_untyped_array_range(Validation_Object,S,P,O) :-
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-O,
              (   triple_addition(Instance, Array, Value, node(O)),
-                 triple(Instance, S, P, Array),
+                 triple(Instance, S, P, node(Array)),
                  triple(Instance, S, Rdf_Type, node(C)),
-                 class_predicate_type(Validation_Object, C, P, array(E)),
+                 class_predicate_type(Validation_Object, C, P, array(E,_Dimensions)),
                  \+ (   type_descriptor(Validation_Object, E, Type),
                         (   Type = enum(_,_)
                         ->  true
@@ -858,23 +858,41 @@ references_untyped_array_range(Validation_Object,S,P,O) :-
                      )
              )).
 
-references_untyped_list_range(Validation_Object,S,P,O) :-
+% Try to scan exactly once for lists. This is surely too much work, and
+% relies on new cons cells being created, but should be correct.
+references_untyped_list_range(Validation_Object,S,P,O,Idx) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
-    global_prefix_expand(sys:value, Value),
-    % Shared dictionary for predicates would be handy here!
+    global_prefix_expand(rdf:'List', Rdf_List),
     distinct(S-P-O,
-             (   triple_addition(Instance, Array, Value, node(O)),
-                 triple(Instance, S, P, Array),
+             (   triple_addition(Instance, S, P, node(List)),
+                 triple_addition(Instance, List, Rdf_Type, node(Rdf_List)),
                  triple(Instance, S, Rdf_Type, node(C)),
-                 class_predicate_type(Validation_Object, C, P, array(E)),
+                 class_predicate_type(Validation_Object, C, P, list(E)),
                  \+ (   type_descriptor(Validation_Object, E, Type),
                         (   Type = enum(_,_)
                         ->  true
                         ;   Type = foreign(_)
                         )
-                     )
+                    ),
+                 find_untyped_element_in_list(Instance,List,O,Idx)
              )).
+
+find_untyped_element_in_list(Instance,Cons,O,Idx) :-
+    find_untyped_element_in_list(Instance,Cons,O,0,Idx).
+
+find_untyped_element_in_list(Instance,Cons,O,Current_Idx,Idx) :-
+    global_prefix_expand(rdf:first, Rdf_First),
+    global_prefix_expand(rdf:rest, Rdf_Rest),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    triple(Instance,Cons,Rdf_First,node(Elt)),
+    (   \+ triple(Instance,Elt,Rdf_Type,node(_Type))
+    ->  Current_Idx = Idx,
+        O = Elt
+    ;   Next_Idx is Current_Idx + 1,
+        triple(Instance,Cons,Rdf_Rest,node(Next_Cons)),
+        find_untyped_element_in_list(Instance,Next_Cons,O,Next_Idx,Idx)
+    ).
 
 instance_domain(Validation_Object, S, Descriptor) :-
     rdf_list(Rdf_List),
@@ -948,11 +966,20 @@ refute_referential_integrity(Validation_Object,Witness) :-
 refute_referential_integrity(Validation_Object,Witness) :-
     references_untyped_array_range(Validation_Object, S, P, O),
     Witness =
-    writness{ '@type': references_untyped_array_range,
-              subject: S,
-              predicate : P,
-              object: O
-            }.
+    witness{ '@type': references_untyped_array_range,
+             subject: S,
+             predicate : P,
+             object: O
+           }.
+refute_referential_integrity(Validation_Object,Witness) :-
+    references_untyped_list_range(Validation_Object, S, P, O, Idx),
+    Witness =
+    witness{ '@type': references_untyped_list_range,
+             subject: S,
+             predicate : P,
+             object: O,
+             index: Idx
+           }.
 
 refute_range(Validation_Object, O, P, T, Witness) :-
     instance_layer(Validation_Object, Instance),
