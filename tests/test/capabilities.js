@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, util, db, document } = require('../lib')
+const { Agent, util, db } = require('../lib')
 
 describe('capabilities', function () {
   it('passes grant and revoke', async function () {
@@ -268,29 +268,25 @@ describe('capabilities', function () {
     const agent = new Agent().auth()
     const orgName = util.randomString()
     const userName = util.randomString()
-    const roleName = util.randomString()
 
     // org
-    const result2 = await agent.post(`/api/organizations/${orgName}`)
-    const orgIdLong = result2.body
-    const orgIdList = orgIdLong.split('terminusdb://system/data/')
-    const orgId = orgIdList[orgIdList.length - 1]
+    await agent.post(`/api/organizations/${orgName}`)
 
     // user
     const user = {
       '@type': 'User',
       name: userName,
-      capability:  {
+      capability: {
         '@type': 'Capability',
         scope: {
           '@type': 'Organization',
           name: orgName,
-          database: []
+          database: [],
         },
-        role: 'Role/admin'
-      }
+        role: 'Role/admin',
+      },
     }
-    const result = await agent.post(`/api/document/_system?author=me&message=foo&graph_type=instance`).send(user)
+    const result = await agent.post('/api/document/_system?author=me&message=foo&graph_type=instance').send(user)
     expect(result.status).to.equal(200)
 
     const resultMe = await agent.get(`/api/organizations/${orgName}/users/${userName}`)
