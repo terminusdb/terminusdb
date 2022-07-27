@@ -3038,45 +3038,35 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         )
     ).
 
-%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(.), cors_handler(Method, console_handler),
-                [method(Method),
-                 methods([options,get])]).
-:- http_handler(root(db), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(home), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(clone), cors_handler(Method, console_handler),
+
+%%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+http:location(dashboard,root(dashboard),[]).
+http:location(assets,root(assets),[]).
+
+:- http_handler(root(.), redirect_to_dashboard,
+                [methods([options,get])]).
+:- http_handler(dashboard(.), cors_handler(Method, dashboard_handler),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
-:- http_handler(root(collaborate), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(newdb), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(profile), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(hub), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
+:- http_handler(assets(.), serve_dashboard_assets,
+                [prefix,
                  methods([options,get])]).
 
-/*
- * console_handler(+Method,+Request) is det.
- */
-console_handler(get, _Request, _System_DB, _Auth) :-
-    index_template(Index),
-    throw(http_reply(bytes('text/html', Index))).
+serve_dashboard_assets(Request) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    serve_files_in_directory(assets, Request).
+
+redirect_to_dashboard(Request) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    http_redirect(moved_temporary, dashboard(.), Request).
+
+dashboard_handler(get, Request, _System_DB, _Auth) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    http_reply_file(dashboard('index.html'), [], Request).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).

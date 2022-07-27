@@ -5,7 +5,7 @@ ARG DIST=community
 # Install the SWI-Prolog pack dependencies.
 FROM terminusdb/swipl:v8.4.2 AS pack_installer
 RUN set -eux; \
-    BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config"; \
+    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*

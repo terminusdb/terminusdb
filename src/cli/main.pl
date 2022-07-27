@@ -556,13 +556,13 @@ opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
            type(atom),
            longflags([label]),
            shortflags([l]),
-           default(''),
+           default('_'),
            help('label to use for this database')],
           [opt(comment),
            type(atom),
            longflags([comment]),
            shortflags([c]),
-           default(''),
+           default('_'),
            help('long description of this database')],
           [opt(public),
            type(boolean),
@@ -1586,7 +1586,15 @@ run_command(db,create,[DB_Path],Opts) :-
         option(organization(Organization),Opts)
     ),
     option(label(Label), Opts),
+    (   var(Label)
+    ->  DB = Label
+    ;   true
+    ),
     option(comment(Comment), Opts),
+    (   var(Comment)
+    ->  Comment = Label
+    ;   true
+    ),
     option(public(Public), Opts),
     option(schema(Schema), Opts),
     option(data_prefix(Data_Prefix), Opts),
