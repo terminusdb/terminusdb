@@ -3048,15 +3048,23 @@ http:location(assets,root(assets),[]).
                 [method(Method),
                  prefix,
                  methods([options,get])]).
-:- http_handler(assets(.), serve_files_in_directory(assets),
-                [
-                 prefix,
+:- http_handler(assets(.), serve_dashboard_assets,
+                [prefix,
                  methods([options,get])]).
 
+serve_dashboard_assets(Request) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    serve_files_in_directory(assets, Request).
+
 redirect_to_dashboard(Request) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
     http_redirect(moved_temporary, dashboard(.), Request).
 
 dashboard_handler(get, Request, _System_DB, _Auth) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
     http_reply_file(dashboard('index.html'), [], Request).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
