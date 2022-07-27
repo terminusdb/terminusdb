@@ -5,7 +5,7 @@ ARG DIST=community
 # Install the SWI-Prolog pack dependencies.
 FROM terminusdb/swipl:v8.4.2 AS pack_installer
 RUN set -eux; \
-    BUILD_DEPS="git build-essential make libjwt-dev libssl-dev pkg-config"; \
+    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
@@ -53,6 +53,7 @@ ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 COPY --from=pack_installer /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
+COPY --from=pack_installer /app/pack/dashboard /app/terminusdb/dashboard
 WORKDIR /app/terminusdb
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
