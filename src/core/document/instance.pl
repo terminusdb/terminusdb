@@ -847,6 +847,7 @@ references_untyped_array_range(Validation_Object,S,P,O) :-
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-O,
              (   triple_addition(Instance, Array, Value, node(O)),
+                 \+ triple(Instance, O, Rdf_Type, node(_)),
                  triple(Instance, S, P, node(Array)),
                  triple(Instance, S, Rdf_Type, node(C)),
                  class_predicate_type(Validation_Object, C, P, array(E,_Dimensions)),
