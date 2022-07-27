@@ -45,4 +45,12 @@ describe('cli-db', function () {
     const r1 = await exec(`./terminusdb.sh db list admin/${db} --branches`)
     expect(r1.stdout).to.match(new RegExp(`^TerminusDB\n│\n└── admin/${db}\n    └── main`))
   })
+
+  it('updates name of an existing db', async function () {
+    const db = util.randomString()
+    await exec(`./terminusdb.sh db create admin/${db}`)
+    const r1 = await exec(`./terminusdb.sh db update admin/${db} --label goo --comment gah`)
+    expect(r1.stdout).to.match(new RegExp(`^Database updated: ${db}`))
+  })
+
 })

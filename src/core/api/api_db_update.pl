@@ -32,7 +32,7 @@ api_db_update(System_DB, Organization, Database, Auth, Commit_Info, Updates) :-
 
     do_or_die(
         organization_database_name_uri(System_Context,Organization,Database,Db_Uri),
-        error(unknown_database(Database), _)),
+        error(unknown_database(Organization,Database), _)),
 
     (   get_dict(prefixes, Updates, Prefixes)
     ->  validate_prefixes(Prefixes)
