@@ -50,7 +50,7 @@ describe('cli-db', function () {
     const db = util.randomString()
     await exec(`./terminusdb.sh db create admin/${db}`)
     const r1 = await exec(`./terminusdb.sh db update admin/${db} --label goo --comment gah`)
-    expect(r1.stdout).to.match(new RegExp(`^Database updated: ${db}`))
+    expect(r1.stdout).to.match(new RegExp(`^Database updated: admin/${db}`))
   })
 
 })

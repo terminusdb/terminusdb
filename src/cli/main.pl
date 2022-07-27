@@ -1630,12 +1630,21 @@ run_command(db,create,[DB_Path],Opts) :-
         option(organization(Organization),Opts)
     ),
     option(label(Label), Opts),
+    (   var(Label)
+    ->  Label = DB
+    ;   true
+    ),
     option(comment(Comment), Opts),
+    (   var(Comment)
+    ->  Comment = Label
+    ;   true
+    ),
     option(public(Public), Opts),
     option(schema(Schema), Opts),
     option(data_prefix(Data_Prefix), Opts),
     option(schema_prefix(Schema_Prefix), Opts),
     option(prefixes(Prefixes_Atom), Opts),
+
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     put_dict(Prefixes, _{'@base' : Data_Prefix, '@schema' : Schema_Prefix}, Merged),
     api_report_errors(
