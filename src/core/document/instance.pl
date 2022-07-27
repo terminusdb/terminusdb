@@ -809,7 +809,8 @@ references_untyped_range(Validation_Object,S,P,O) :-
     global_prefix_expand(rdf:type, Rdf_Type),
     global_prefix_expand(sys:foreign_type, Foreign_Type),
     global_prefix_expand(rdf:nil, Rdf_Nil),
-    %global_prefix_expand(sys:value, Value),
+    global_prefix_expand(sys:value, Value),
+    global_prefix_expand(sys:first, Rdf_First),
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-O,
              (   triple_addition(Instance, S, P, node(O)),
@@ -821,6 +822,8 @@ references_untyped_range(Validation_Object,S,P,O) :-
                  \+ (   atom_string(Rdf_Type,P)
                     ;   atom_string(Foreign_Type, P)
                     ;   atom_string(Rdf_Nil,O)
+                    ;   atom_string(Value,P)
+                    ;   atom_string(Rdf_First,P)
                     ;   triple(Instance, S, Rdf_Type, node(C)),
                         class_predicate_type(Validation_Object, C, P, Pre_Type),
                         (   Pre_Type = set(E)
@@ -835,6 +838,42 @@ references_untyped_range(Validation_Object,S,P,O) :-
                         )
                     ),
                  \+ triple(Instance, O, Rdf_Type, node(_))
+             )).
+
+references_untyped_array_range(Validation_Object,S,P,O) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    global_prefix_expand(sys:value, Value),
+    % Shared dictionary for predicates would be handy here!
+    distinct(S-P-O,
+             (   triple_addition(Instance, Array, Value, node(O)),
+                 triple(Instance, S, P, Array),
+                 triple(Instance, S, Rdf_Type, node(C)),
+                 class_predicate_type(Validation_Object, C, P, array(E)),
+                 \+ (   type_descriptor(Validation_Object, E, Type),
+                        (   Type = enum(_,_)
+                        ->  true
+                        ;   Type = foreign(_)
+                        )
+                     )
+             )).
+
+references_untyped_list_range(Validation_Object,S,P,O) :-
+    instance_layer(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, Rdf_Type),
+    global_prefix_expand(sys:value, Value),
+    % Shared dictionary for predicates would be handy here!
+    distinct(S-P-O,
+             (   triple_addition(Instance, Array, Value, node(O)),
+                 triple(Instance, S, P, Array),
+                 triple(Instance, S, Rdf_Type, node(C)),
+                 class_predicate_type(Validation_Object, C, P, array(E)),
+                 \+ (   type_descriptor(Validation_Object, E, Type),
+                        (   Type = enum(_,_)
+                        ->  true
+                        ;   Type = foreign(_)
+                        )
+                     )
              )).
 
 instance_domain(Validation_Object, S, Descriptor) :-
@@ -901,11 +940,19 @@ refute_referential_integrity(Validation_Object,Witness) :-
 refute_referential_integrity(Validation_Object,Witness) :-
     references_untyped_range(Validation_Object, S, P, O),
     Witness =
-    _{ '@type': references_untyped_object,
-       subject: S,
-       predicate : P,
-       object: O
-    }.
+    witness{ '@type': references_untyped_object,
+             subject: S,
+             predicate : P,
+             object: O
+           }.
+refute_referential_integrity(Validation_Object,Witness) :-
+    references_untyped_array_range(Validation_Object, S, P, O),
+    Witness =
+    writness{ '@type': references_untyped_array_range,
+              subject: S,
+              predicate : P,
+              object: O
+            }.
 
 refute_range(Validation_Object, O, P, T, Witness) :-
     instance_layer(Validation_Object, Instance),

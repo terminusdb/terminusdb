@@ -8418,6 +8418,114 @@ test(add_enum_array,
                           insert_document(C2, Document, _),
                           _).
 
+test(bad_enum_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [json{'@type':no_unique_type_for_document,
+                         document:json{sequence:["three","two","asdf","one"]},
+                         reason:json{'@type':not_a_valid_enum,
+                                     enum:'http://somewhere.for.now/schema#Number',
+                                     value:"asdf"}}]))
+     ]) :-
+    Schema1 = _{ '@type' : "Enum",
+                 '@id' : "Number",
+                 '@value' : [ "one", "two", "three" ] },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "Array",
+                                '@class': "Number"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["three", "two", "asdf", "one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(untyped_object_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [json{'@type':no_unique_type_for_document,
+                         document:json{sequence:["three","two","asdf","one"]},
+                         reason:json{'@type':not_a_valid_enum,
+                                     enum:'http://somewhere.for.now/schema#Number',
+                                     value:"asdf"}}]))
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 name : "xsd:string" },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "Array",
+                                '@class': "Thing"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': [_{name : "foo"},_{name : "bar"}, _{name : "baz"}]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(add_enum_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Schema1 = _{ '@type' : "Enum",
+                 '@id' : "Number",
+                 '@value' : [ "one", "two", "three" ] },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "List",
+                                '@class': "Number"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["three", "two", "three", "one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
 :- end_tests(schema_checker).
 
 
