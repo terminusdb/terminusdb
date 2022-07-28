@@ -175,7 +175,9 @@ db_handler(get, Request, System_DB, Auth) :-
         check_db,
         Request,
         (   param_value_search_optional(Search, branches, boolean, false, Branches),
-            list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches }),
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches,
+                                                                 verbose: Verbose}),
             cors_reply_json(Request, Database_Objects)
         )
     ).
