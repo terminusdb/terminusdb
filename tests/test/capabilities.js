@@ -2,6 +2,19 @@ const { expect } = require('chai')
 const { Agent, util, db } = require('../lib')
 
 describe('capabilities', function () {
+  it('errors on non existing user', async function () {
+    const agent = new Agent().auth()
+    const orgName = util.randomString()
+
+    // org
+    await agent.post(`/api/organizations/${orgName}`)
+
+    // get a user that isn't there
+    const resultFails = await agent.get(`/api/organizations/${orgName}/users/Frobian`)
+    expect(resultFails.status).to.equal(404)
+    expect(resultFails.body['api:error']['api:user_name']).to.equal('Frobian')
+  })
+
   it('passes grant and revoke', async function () {
     const agent = new Agent().auth()
     const orgName = util.randomString()
