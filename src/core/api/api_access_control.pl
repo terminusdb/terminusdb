@@ -231,7 +231,7 @@ api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) 
         error(no_id_for_organization_name(Org_Name), _)),
     do_or_die(
         get_user_from_name(SystemDB, User_Name, User, _{}),
-        error(no_id_for_user_name(User), _)),
+        error(no_id_for_user_name(User_Name), _)),
 
     get_dict('@id', Organization, Org_Id),
     get_dict('@id', User, User_Id),
