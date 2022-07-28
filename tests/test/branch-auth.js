@@ -16,7 +16,7 @@ describe('branch', function () {
   it('fails create with bad origin descriptor', async function () {
     const origin = util.randomString()
     const result = await branch
-          .create(agent, util.randomString(), { origin }).unverified()
+      .create(agent, util.randomString(), { origin }).unverified()
     expect(result.body['api:error']['@type']).to.equal('api:OriginBranchDoesNotExist')
   })
 
