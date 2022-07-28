@@ -203,18 +203,10 @@ db_handler(get, Organization, DB, Request, System_DB, Auth) :-
         )
     ).
 db_handler(head, Organization, DB, Request, System_DB, Auth) :-
-    /* HEAD: Check DB Exists */
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []),
-
     api_report_errors(
         check_db,
         Request,
-        (   param_value_search_optional(Search, exists, boolean, false, Exists),
-            die_if(Exists \= true,
-                   error(bad_parameter_value(exists, true, Exists), _)),
-            db_exists_api(System_DB, Auth, Organization, DB)
+        (   db_exists_api(System_DB, Auth, Organization, DB)
         ->  cors_reply_json(Request, _{'@type' : 'api:DbExistsResponse',
                                        'api:status' : 'api:success'})
         ;   cors_reply_json(Request, _{'@type' : 'api:DbExistsErrorResponse',
