@@ -164,7 +164,7 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
                  methods([options,get])]).
 :- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
-                 methods([options,get,head,post,delete])]).
+                 methods([options,get,head,post,put,delete])]).
 
 db_handler(get, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -189,7 +189,8 @@ db_handler(get, Organization, DB, Request, System_DB, Auth) :-
         check_db,
         Request,
         (   param_value_search_optional(Search, branches, boolean, false, Branches),
-            Options = _{ branches : Branches },
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            Options = _{ branches : Branches, verbose: Verbose },
             (   list_database(System_DB, Auth, Organization, DB, Database_Object, Options)
             ->  cors_reply_json(Request, Database_Object)
             ;   cors_reply_json(Request, _{'@type' : 'api:DbListErrorResponse',
@@ -254,6 +255,20 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
             delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
+db_handler(put, Organization, DB, Request, System_DB, Auth) :-
+    /* PUT: Update database */
+    api_report_errors(
+        update_db,
+        Request,
+        (   http_read_json_required(json_dict(JSON), Request),
+            api_db_update(System_DB, Organization, DB, Auth, commit_info{
+                                                                 author : 'REST API',
+                                                                 message : 'Updating Database Record'
+                                                             }, JSON),
+            cors_reply_json(Request, _{'@type' : 'api:DbUpdateeResponse',
+                                       'api:status' : 'api:success'})
+        )
+    ).
 
 :- begin_tests(db_endpoint).
 

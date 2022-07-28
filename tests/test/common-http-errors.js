@@ -39,7 +39,6 @@ describe('common-http-errors', function () {
     const requestPairs = [
       ['post', '/api/ok'],
       ['put', '/api/ok'],
-      ['put', '/api/db/' + util.randomString() + '/' + util.randomString()],
       ['get', '/api/optimize/'],
       ['put', '/api/optimize/'],
       ['get', '/api/reset/'],

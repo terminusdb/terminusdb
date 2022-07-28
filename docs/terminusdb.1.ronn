@@ -347,6 +347,9 @@ List available databases.
   * `-b`, `--branches`=[value]:
   also describe the available branches
 
+  * `-v`, `--verbose`=[value]:
+  return lots of metadata
+
   * `-j`, `--json`=[value]:
   Return a JSON as the result of the `list` command
 
@@ -397,6 +400,30 @@ Delete a database.
 
   * `-f`, `--force`=[value]:
   force the deletion of the database (unsafe)
+
+### db update
+
+`terminusdb db update DATABASE_SPEC OPTIONS`
+
+Update a database setting the OPTIONS in an existing database.
+
+  * `-h`, `--help`=[value]:
+  print help for the `db update` sub command
+
+  * `-l`, `--label`=[value]:
+  label to use for this database
+
+  * `-c`, `--comment`=[value]:
+  long description of this database
+
+  * `-p`, `--public`=[value]:
+  whether this database is to be public
+
+  * `-k`, `--schema`=[value]:
+  whether to use a schema
+
+  * `-x`, `--prefixes`=[value]:
+  Explicitly defined prefix set (in JSON)
 
 ### doc insert
 
