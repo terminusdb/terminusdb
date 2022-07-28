@@ -494,6 +494,15 @@ opt_spec(log,'terminusdb log DB_SPEC',
            default(false),
            help('return log as JSON')]
          ]).
+opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
+         'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `reset` command')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -1583,6 +1592,15 @@ run_command(log,[Path], Opts) :-
             ->  json_write_dict(current_output, Log, [])
             ;   format_log(current_output,Log)
             )
+        )
+    ).
+run_command(reset,[Path,Ref], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        reset,
+        (   api_reset(System_DB, Auth, Path, Ref),
+            format(current_output, "Succesfully reset ~s to ~s~n", [Path,Ref])
         )
     ).
 run_command(Command,_Args, Opts) :-
