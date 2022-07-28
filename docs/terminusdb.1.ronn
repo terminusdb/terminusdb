@@ -410,9 +410,6 @@ Update a database setting the OPTIONS in an existing database.
   * `-h`, `--help`=[value]:
   print help for the `db update` sub command
 
-  * `-o`, `--organization`=[value]:
-  organizational owner of the database
-
   * `-l`, `--label`=[value]:
   label to use for this database
 
