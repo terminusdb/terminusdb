@@ -82,11 +82,7 @@ describe('cli-db', function () {
     await exec(`./terminusdb.sh db create admin/${db}`)
     // turn off schema
     await exec(`./terminusdb.sh db update admin/${db} --public true`)
-    const q = `./terminusdb.sh query _system "
-        t(DB_Uri, name, \"${db}\"^^xsd:string),
-        t(Cap_Id, scope, DB_Uri),
-        t(Cap_Id, role, 'Role/consumer'),
-        t('User/anonymous', capability, Cap_Id)"`
+    const q = `./terminusdb.sh query _system "t(DB_Uri, name, \"${db}\"^^xsd:string),t(Cap_Id, scope, DB_Uri),t(Cap_Id, role, 'Role/consumer'),t('User/anonymous', capability, Cap_Id)"` // eslint-disable-line
     // demonstrate success
     const r3 = await exec(q)
     expect(r3.stdout).to.match(/^DB_Uri\s+Cap_Id\n.*\n$/)
@@ -96,5 +92,4 @@ describe('cli-db', function () {
     expect(r4.stdout).to.match(/^DB_Uri\s+Cap_Id\n$/)
     await exec(`./terminusdb.sh db delete admin/${db}`)
   })
-
 })
