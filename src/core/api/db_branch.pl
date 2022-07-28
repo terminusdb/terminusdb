@@ -113,7 +113,7 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch
 
     (   has_branch(Repository_Descriptor, Branch_Descriptor.branch_name)
     ->  true
-    ;   throw(error(origin_branch_does_not_exist(Branch_Descriptor.branch_name)))),
+    ;   throw(error(origin_branch_does_not_exist(Branch_Descriptor.branch_name),_))),
 
     % In this case, both source and destination branch exist in the same repository.
     % A new branch is trivial to create by inserting the branch object and pointing it at the head of the other branch.
@@ -133,7 +133,7 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch
 
     (   has_branch(Branch_Descriptor.repository_descriptor, Branch_Descriptor.branch_name)
     ->  true
-    ;   throw(error(origin_branch_does_not_exist(Branch_Descriptor.branch_name)))),
+    ;   throw(error(origin_branch_does_not_exist(Branch_Descriptor.branch_name),_))),
 
     % in this case, the source is a branch descriptor, but it could come from anywhere.
     % We'll have to copy over the commit onformation into the destination commit graph
@@ -159,7 +159,7 @@ branch_create_(Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Branch
     with_transaction(Context,
                      (   (   commit_id_uri(Context, Commit_Descriptor.commit_id, Commit_Uri)
                          ->  true
-                         ;   throw(error(origin_commit_does_not_exist(Commit_Descriptor.commit_id)))),
+                         ;   throw(error(origin_commit_does_not_exist(Commit_Descriptor.commit_id),_))),
 
                          (   insert_branch_object(Context,
                                                   New_Branch_Name,
@@ -176,7 +176,7 @@ branch_create_(Destination_Repository_Descriptor, Commit_Descriptor, New_Branch_
 
     (   commit_id_uri(Origin_Context_Defaults, Commit_Descriptor.commit_id, Commit_Uri)
     ->  true
-    ;   throw(error(origin_commit_does_not_exist(Commit_Descriptor.commit_id)))),
+    ;   throw(error(origin_commit_does_not_exist(Commit_Descriptor.commit_id),_))),
 
     create_context(Destination_Repository_Descriptor, Destination_Context),
     with_transaction(Destination_Context,
