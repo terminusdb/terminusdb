@@ -259,7 +259,7 @@ db_handler(put, Organization, DB, Request, System_DB, Auth) :-
                                                                  author : 'REST API',
                                                                  message : 'Updating Database Record'
                                                              }, JSON),
-            cors_reply_json(Request, _{'@type' : 'api:DbUpdateeResponse',
+            cors_reply_json(Request, _{'@type' : 'api:DbUpdatedResponse',
                                        'api:status' : 'api:success'})
         )
     ).
