@@ -263,4 +263,34 @@ describe('capabilities', function () {
     // cleanup
     await db.delete(userAgent)
   })
+
+  it('gets passwordless users', async function () {
+    const agent = new Agent().auth()
+    const orgName = util.randomString()
+    const userName = util.randomString()
+
+    // org
+    await agent.post(`/api/organizations/${orgName}`)
+
+    // user
+    const user = {
+      '@type': 'User',
+      name: userName,
+      capability: {
+        '@type': 'Capability',
+        scope: {
+          '@type': 'Organization',
+          name: orgName,
+          database: [],
+        },
+        role: 'Role/admin',
+      },
+    }
+    const result = await agent.post('/api/document/_system?author=me&message=foo&graph_type=instance').send(user)
+    expect(result.status).to.equal(200)
+
+    const resultMe = await agent.get(`/api/organizations/${orgName}/users/${userName}`)
+    expect(resultMe.status).to.equal(200)
+    expect(resultMe.body.name).to.equal(userName)
+  })
 })
