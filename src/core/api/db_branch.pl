@@ -203,7 +203,12 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
 
     (   Origin_Option = branch(Origin_Path)
     ->  do_or_die(
-            resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor),
+            (   resolve_absolute_string_descriptor(Origin_Path, Origin_Descriptor)
+            ;   atom_string(Origin_Path, Origin_Branch),
+                resolve_relative_descriptor(Destination_Descriptor,
+                                            ["branch", Origin_Branch],
+                                            Origin_Descriptor)
+            ),
             error(invalid_origin_absolute_path(Origin_Path),_)),
 
         do_or_die(

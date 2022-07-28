@@ -508,8 +508,8 @@ opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
            type(atom),
            shortflags([o]),
            longflags([origin]),
-           default(false),
-           help('the origin branch to use')]]).
+           default(main),
+           help('the origin branch to use (false for none)')]]).
 opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
          'Delete a branch.',
          [[opt(help),
@@ -1597,6 +1597,7 @@ run_command(branch,create,[Path],Opts) :-
     (   Origin_Base = false
     ->  Origin_Option = empty(_,_)
     ;   Origin_Option = branch(Origin_Base)),
+
     api_report_errors(
         branch,
         branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
