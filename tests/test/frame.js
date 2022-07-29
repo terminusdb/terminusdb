@@ -30,4 +30,26 @@ describe('frame', function () {
       name: 'xsd:string',
     })
   })
+
+  it('passes frame for _system using a real GET', async function () {
+    const path = api.path.frameSystem() + '?type=User'
+    const r = await agent
+      .get(path)
+    expect(r.body).to.deep.equal({
+      '@documentation': {
+        '@comment': 'A database user.',
+        '@properties': {
+          capability: 'A set of capabilities which the user has access to.',
+          key_hash: 'An optional key hash for authentication.',
+          name: 'The users name.',
+        },
+      },
+      '@key': { '@fields': ['name'], '@type': 'Lexical' },
+      '@type': 'Class',
+      capability: { '@class': 'Capability', '@type': 'Set' },
+      key_hash: { '@class': 'xsd:string', '@type': 'Optional' },
+      name: 'xsd:string',
+    })
+  })
+
 })
