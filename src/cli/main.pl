@@ -494,6 +494,15 @@ opt_spec(log,'terminusdb log DB_SPEC',
            default(false),
            help('return log as JSON')]
          ]).
+opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
+         'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `reset` command')]
+         ]).
 
 % subcommands
 opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
@@ -532,6 +541,12 @@ opt_spec(db,list,'terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS',
            longflags([branches]),
            default(false),
            help('also describe the available branches')],
+          [opt(verbose),
+           type(boolean),
+           shortflags([v]),
+           longflags([verbose]),
+           default(false),
+           help('return lots of metadata')],
           [opt(json),
            type(boolean),
            shortflags([j]),
@@ -556,13 +571,13 @@ opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
            type(atom),
            longflags([label]),
            shortflags([l]),
-           default(''),
+           default('_'),
            help('label to use for this database')],
           [opt(comment),
            type(atom),
            longflags([comment]),
            shortflags([c]),
-           default(''),
+           default('_'),
            help('long description of this database')],
           [opt(public),
            type(boolean),
@@ -614,6 +629,44 @@ opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
            shortflags([f]),
            default(false),
            help('force the deletion of the database (unsafe)')]]).
+opt_spec(db,update,'terminusdb db update DATABASE_SPEC OPTIONS',
+         'Update a database setting the OPTIONS in an existing database.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `db update` sub command')],
+          [opt(label),
+           type(atom),
+           longflags([label]),
+           shortflags([l]),
+           default('_'),
+           help('label to use for this database')],
+          [opt(comment),
+           type(atom),
+           longflags([comment]),
+           shortflags([c]),
+           default('_'),
+           help('long description of this database')],
+          [opt(public),
+           type(boolean),
+           longflags([public]),
+           shortflags([p]),
+           default('_'),
+           help('whether this database is to be public')],
+          [opt(schema),
+           type(boolean),
+           longflags([schema]),
+           shortflags([k]),
+           default('_'),
+           help('whether to use a schema')],
+          [opt(prefixes),
+           type(atom),
+           longflags(['prefixes']),
+           shortflags([x]),
+           default('_'),
+           help('Explicitly defined prefix set (in JSON)')]]).
 opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
          'Insert documents.',
          [[opt(help),
@@ -1541,6 +1594,15 @@ run_command(log,[Path], Opts) :-
             )
         )
     ).
+run_command(reset,[Path,Ref], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        reset,
+        (   api_reset(System_DB, Auth, Path, Ref),
+            format(current_output, "Succesfully reset ~s to ~s~n", [Path,Ref])
+        )
+    ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
@@ -1567,9 +1629,12 @@ run_command(branch,delete,[Path],_Opts) :-
 run_command(db,list,Databases,Opts) :-
     super_user_authority(Auth),
     option(branches(Branches), Opts),
+    option(verbose(Verbose), Opts),
     (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
-    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects,
+                       _{ branches : Branches, verbose: Verbose })
+    ;   list_existing_databases(Databases, Database_Objects,
+                                _{ branches : Branches, verbose: Verbose })
     ),
     (   option(json(true), Opts)
     ->  json_write_dict(current_output, Database_Objects)
@@ -1586,12 +1651,21 @@ run_command(db,create,[DB_Path],Opts) :-
         option(organization(Organization),Opts)
     ),
     option(label(Label), Opts),
+    (   var(Label)
+    ->  Label = DB
+    ;   true
+    ),
     option(comment(Comment), Opts),
+    (   var(Comment)
+    ->  Comment = Label
+    ;   true
+    ),
     option(public(Public), Opts),
     option(schema(Schema), Opts),
     option(data_prefix(Data_Prefix), Opts),
     option(schema_prefix(Schema_Prefix), Opts),
     option(prefixes(Prefixes_Atom), Opts),
+
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     put_dict(Prefixes, _{'@base' : Data_Prefix, '@schema' : Schema_Prefix}, Merged),
     api_report_errors(
@@ -1613,6 +1687,36 @@ run_command(db,delete,[DB_Path],Opts) :-
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output, "Database deleted: ~s/~s~n", [Organization, DB]).
+run_command(db,update,[DB_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    ->  Organization = (Match.1),
+        DB = (Match.2)
+    ;   DB = DB_Path,
+        option(organization(Organization), Opts)
+    ),
+    dict_options(Dict, Opts),
+    findall(
+        Key-Val,
+        (   get_dict(Key,Dict,Pre),
+            ground(Pre),
+            (   Key = 'prefixes'
+            ->  atom_json_dict(Pre,Val, [])
+            ;   Val = Pre)
+        ),
+        Pairs),
+    dict_pairs(Options, _, Pairs),
+    Commit_Info = commit_info{
+                      author : 'CLI: db update',
+                      message : 'DB Update'
+                  },
+    api_report_errors(
+        update_db,
+        api_db_update(System_DB, Organization, DB, Auth, Commit_Info, Options)
+    ),
+    format(current_output, "Database updated: ~s/~s~n", [Organization, DB]).
 run_command(doc,insert,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),

@@ -170,7 +170,12 @@
               api_update_user_password/4,
               api_get_organizations_users/4,
               api_get_organizations_users_object/5,
-              api_get_organizations_users_databases/5
+              api_get_organizations_users_databases/5,
+
+
+              % api_db_update.pl
+              api_db_update/6
+
           ]).
 
 :- use_module(api/api_init).
@@ -205,3 +210,4 @@
 :- use_module(api/api_patch).
 :- use_module(api/api_log).
 :- use_module(api/api_access_control).
+:- use_module(api/api_db_update).

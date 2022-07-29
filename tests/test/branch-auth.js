@@ -1,4 +1,5 @@
 const { Agent, api, branch, db, util } = require('../lib')
+const { expect } = require('chai')
 
 describe('branch', function () {
   let agent
@@ -14,9 +15,9 @@ describe('branch', function () {
 
   it('fails create with bad origin descriptor', async function () {
     const origin = util.randomString()
-    await branch
-      .create(agent, util.randomString(), { origin })
-      .fails(api.error.badOriginDescriptor(origin))
+    const result = await branch
+      .create(agent, util.randomString(), { origin }).unverified()
+    expect(result.body['api:error']['@type']).to.equal('api:BadOriginAbsoluteDescriptor')
   })
 
   it('fails create with _commits descriptor', async function () {

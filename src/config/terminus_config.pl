@@ -29,7 +29,8 @@
               clear_check_insecure_user_header_enabled/0,
               clear_insecure_user_header_key/0,
               pinned_databases/1,
-              plugin_path/1
+              plugin_path/1,
+              dashboard_enabled/0
           ]).
 
 :- use_module(library(pcre)).
@@ -88,6 +89,10 @@ default_database_path(Path) :-
 :- table db_path/1 as shared.
 db_path(Path) :-
     default_database_path(Path).
+
+dashboard_enabled :-
+    getenv_default('TERMINUSDB_ENABLE_DASHBOARD', true, Value),
+    Value = true.
 
 plugin_path(Path) :-
     getenv_default('TERMINUSDB_PLUGINS_PATH', './storage/plugins', Value),

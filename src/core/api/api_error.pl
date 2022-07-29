@@ -264,6 +264,35 @@ api_global_error_jsonld(error(unknown_local_branch(Branch), _), Type, JSON) :-
              'api:error' : _{ '@type' : "api:UknownLocalBranch",
                               'api:branch' : Branch}
             }.
+api_global_error_jsonld(error(invalid_ref_path(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid ref path: ~w", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:fetch_status' : false,
+             'api:error' : _{ '@type' : "api:InvalidRefPath",
+                              'api:ref' : Path}
+            }.
+api_global_error_jsonld(error(unresolvable_commit_id(Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid ref path: ~w", [Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:fetch_status' : false,
+             'api:error' : _{ '@type' : "api:UnresolvableCommitId",
+                              'api:commit' : Id}
+            }.
+api_global_error_jsonld(error(unresolvable_absolute_descriptor(Descriptor),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "Unable to resolve an invalid absolute path for descriptor ~q", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg}.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
@@ -1305,6 +1334,7 @@ error_type_(organization, 'api:OrganizationErrorResponse').
 error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
+error_type_(update_db, 'api:DbUpdateErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
