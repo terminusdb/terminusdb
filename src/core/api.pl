@@ -61,7 +61,7 @@
               graph_dump/5,
 
               % api_frame.pl
-              api_class_frame/5,
+              api_class_frame/6,
               api_filled_frame/5,
 
               % api_woql.pl
