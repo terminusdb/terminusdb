@@ -2982,6 +2982,7 @@ users_handler(post, Request, System_DB, Auth) :-
               ),
               error(bad_api_document(User, [name]))
              ),
+    % should explicitly search for params...
     api_report_errors(
         user,
         Request,

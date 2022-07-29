@@ -1527,7 +1527,188 @@ paths:
           description: Forbidden
         400:
           description: Bad Request
-
+  /users:
+    get:
+      tags:
+        - Account Management
+      summary: Get all users
+      parameters:
+        - name: capability
+          in: query
+          description: Get capabilities for the listed users
+          schema:
+            type: boolean
+            default: false
+      responses:
+        200:
+          description: Success at listing users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  example: {"@id":"User/admin","@type":"User","capability":["Capability/server_access"],"name":"admin"}
+        403:
+          description: Forbidden
+    put:
+      tags:
+        - Account management
+      summary: Update a user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "name"
+                - "password"
+              properties:
+                "name":
+                  type: string
+                  example: 'Jim'
+                "password":
+                  type: string
+                  example: "Very secret"
+      responses:
+        200:
+          description: "Successfully updated user"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:UsersResponse","api:status":"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      tags:
+        - Account management
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "name"
+              properties:
+                "name":
+                  type: string
+                  example: 'Jim'
+                "password":
+                  type: string
+                  example: "Very secret"
+      responses:
+        200:
+          description: "Successfully added user"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:UsersResponse","api:status":"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+  /users/{userName}:
+    parameters:
+      - name: userName
+        in: path
+        required: true
+        schema:
+          type: string
+          example: Bob
+    get:
+      tags:
+        - Account Management
+      summary: Get a user by name
+      parameters:
+        - name: capability
+          in: query
+          description: Get capabilities for the given user
+          schema:
+            type: boolean
+            default: false
+      responses:
+        200:
+          description: Success at acquiring user record
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@id":"User/admin","@type":"User","capability":["Capability/server_access"],"name":"admin"}
+        403:
+          description: Forbidden
+    delete:
+      tags:
+        - Account Management
+      summary: Delete a user
+      responses:
+        200:
+          description: Success at deleting a user
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {'@type':"api:UsersResponse",'api:status' :"api:success"}
+        403:
+          description: Forbidden
+  /capabilities:
+    post:
+      tags:
+        - Account management
+      summary: Grant or remove capabilities over a resource to a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "operation"
+                - "scope"
+                - "user"
+                - "roles"
+              properties:
+                "operation":
+                  type: string
+                  enum:
+                    - "revoke"
+                    - "grant"
+                "scope":
+                  type: string
+                  example: "UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"
+                "user":
+                  type: string
+                  example: "User/admin"
+                "roles":
+                  type: array
+                  items:
+                    type: string
+                    example: "Role/consumer"
+                  example: ["Role/consumer", "Role/admin"]
+      responses:
+        200:
+          description: "Successfully granted or revoked roles"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:CapabilityResponse","api:status":"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
 
 components:
 
