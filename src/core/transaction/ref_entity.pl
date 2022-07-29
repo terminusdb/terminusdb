@@ -61,8 +61,8 @@ has_branch(Askable, Branch_Name) :-
     !,
     once(ask(Askable,
              (
-                 t(Branch_Uri, rdf:type, '@schema':'Branch'),
-                 t(Branch_Uri, name, Branch_Name^^xsd:string)
+                 t(Branch_Uri, name, Branch_Name^^xsd:string),
+                 t(Branch_Uri, rdf:type, '@schema':'Branch')
              ))).
 has_branch(Askable, Branch_Name) :-
     ask(Askable,
