@@ -2570,7 +2570,7 @@ remote_handler(delete, Path, Request, System_DB, Auth) :-
             ->  true
             ;   Search = []),
 
-            param_value_search_or_json_required(Search, JSON, remote_name, text, Rename_Name),
+            param_value_search_or_json_required(Search, JSON, remote_name, text, Remote_Name),
             remove_remote(System_DB, Auth, Path, Remote_Name),
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
