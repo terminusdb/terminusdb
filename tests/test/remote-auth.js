@@ -51,4 +51,22 @@ describe('remote-auth', function () {
       .query(query)
       .notFound(api.error.remoteDoesNotExist(query.remote_name))
   })
+
+  it('deletes with post payload', async function () {
+    const query = {
+      remote_name: util.randomString(),
+      remote_location: 'http://example.com/foo',
+    }
+    // Post a remote
+    await remote.add(agent, query)
+    // Delete the remote
+    const path = api.path.remote(agent)
+    await agent.delete(path).send(query)
+    // Query the remote
+    await remote
+      .get(agent)
+      .query(query)
+      .notFound(api.error.remoteDoesNotExist(query.remote_name))
+  })
+
 })
