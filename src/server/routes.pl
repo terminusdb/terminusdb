@@ -2539,7 +2539,7 @@ test(optimize_system, [
 :- end_tests(optimize_endpoint).
 
 
-%%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Remote handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
                 [method(Method),
                  prefix,
