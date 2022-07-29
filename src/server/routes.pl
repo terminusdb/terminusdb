@@ -2560,16 +2560,18 @@ remote_handler(post, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(delete, Path, Request, System_DB, Auth) :-
-
-    do_or_die(
-        (   get_payload(Document, Request),
-            _{ remote_name : Remote_Name } :< Document),
-        error(bad_api_document(Document, [remote_name]), _)),
-
     api_report_errors(
         remote,
         Request,
-        (   remove_remote(System_DB, Auth, Path, Remote_Name),
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_required(Search, JSON, remote_name, text, Rename_Name),
+            remove_remote(System_DB, Auth, Path, Remote_Name),
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(put, Path, Request, System_DB, Auth) :-
@@ -2908,7 +2910,7 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
             get_dict('@id', Org, Org_Id),
             api_delete_organization(System_DB,Auth,Org_Id),
             cors_reply_json(Request,
-                            json{'@type' : "api:RolesResponse",
+                            json{'@type' : "api:OrganizationResponse",
                                  'api:status' : "api:success"})
         )
     ).

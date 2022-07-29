@@ -21,8 +21,6 @@ tags:
   externalDocs:
     description: Find out more
     url: https://terminusdb.com
-# TODO: Some paths are not covered yet:
-# - a lot of the git-like features
 paths:
   /:
     get:
@@ -387,6 +385,8 @@ paths:
                     example: api:not_found
         401:
           $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
 
   /document/{path}:
     get:
@@ -799,6 +799,148 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+  /remote/{path}:
+    post:
+      summary: Create a new remote
+      tags:
+        - Collaboration
+      parameters:
+        - $ref: '#/components/parameters/branch_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - remote_name
+                - remote_location
+              properties:
+                remote_name:
+                  type: string
+                  example: origin
+                  description: The name of the remote
+                remote_location:
+                  type: string
+                  example: 'http://cloud.terminusdb.com/TerminatorsX/TerminatorsX/nuclear'
+                  description: The URI to associate with the remote
+      responses:
+        200:
+          description: "Remote update success"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    enum:
+                      - "api:RemoteResponse"
+                  "api:status":
+                    type: string
+                    enum:
+                      - "api:success"
+    delete:
+      summary: Delete a remote
+      tags:
+        - Collaboration
+      parameters:
+        - $ref: '#/components/parameters/branch_path'
+        - name: remote_name
+          in: query
+          schema:
+            type: string
+            example: origin
+          description: The name of the remote
+      responses:
+        200:
+          description: "Remote delete success"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    enum:
+                      - "api:RemoteResponse"
+                  "api:status":
+                    type: string
+                    enum:
+                      - "api:success"
+    put:
+      summary: Update a remote with a new location
+      tags:
+        - Collaboration
+      parameters:
+        - $ref: '#/components/parameters/branch_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - remote_name
+                - remote_location
+              properties:
+                remote_name:
+                  type: string
+                  example: origin
+                  description: The name of the remote
+                remote_location:
+                  type: string
+                  example: 'http://cloud.terminusdb.com/TerminatorsX/TerminatorsX/nuclear'
+                  description: The URI to associate with the remote
+      responses:
+        200:
+          description: "Remote update success"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    enum:
+                      - "api:RemoteResponse"
+                  "api:status":
+                    type: string
+                    enum:
+                      - "api:success"
+    get:
+      summary: Get the url for a given remote
+      tags:
+        - Collaboration
+      parameters:
+        - $ref: '#/components/parameters/branch_path'
+        - name: remote_name
+          in: query
+          schema:
+            type: string
+            example: origin
+      responses:
+        200:
+          description: "Remote delete success"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    enum:
+                      - "api:RemoteResponse"
+                  "api:remote_name":
+                    type: string
+                    example: origin
+                  "api:remote_url":
+                    type: string
+                    example: 'http://cloud.terminusdb.com/TerminatorsX/TerminatorsX/nuclear'
+                  "api:status":
+                    type: string
+                    enum:
+                      - "api:success"
   /branch/{path}:
     post:
       tags:
@@ -973,6 +1115,15 @@ paths:
                 "after":
                   type: object
                   example: { "@id" : "Person/Jane", "@type" : "Person", "name" : "Jannet"}
+                "before_data_version":
+                  type: string
+                  example: ow5ysf361fc2o6qf3aqn7twuuhbzi1
+                "after_data_version":
+                  type: string
+                  example: sxs3t5ua25yydnn5scfcr32uy4m19wt
+                "document_id":
+                  type: string
+                  example: Person/Jane
                 "keep":
                   type: object
                   example: { "@id" : true, "_id" : true }
@@ -1020,6 +1171,363 @@ paths:
               schema:
                 type: object
                 example: { "name" : { "@op" : "ValueSwap", "@before" : "Doug", "@after": "Jane" }}
+  /apply/{path}:
+    parameters:
+      - $ref: '#/components/parameters/branch_path'
+    post:
+      tags:
+        - Change management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "before_commit"
+                - "after_commit"
+                - "commit_info"
+              properties:
+                "before_commit":
+                  type: object
+                  example: { "@id" : "Person/Jane", "@type" : "Person", "name" : "Jane"}
+                "after_commit":
+                  type: object
+                  example: { "name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}
+                "commit_info":
+                  $ref: "#/components/schemas/CommitInfo"
+                "match_final_state":
+                  type: boolean
+                  default: false
+                "keep":
+                  type: object
+                  example: { "@id" : true, "_id" : true }
+      responses:
+        200:
+          description: "Successful Patch Application"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        409:
+          description: "Failed to apply patch: returning conflict patch"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
+
+  /roles:
+    post:
+      tags:
+        - Account management
+      summary: Adding a new role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "name"
+                - "action"
+              properties:
+                "name":
+                  type: string
+                  example: 'Grand Pubah'
+                "action":
+                  type: array
+                  items:
+                    type: string
+                    example: "branch"
+                  example: ["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"]
+      responses:
+        200:
+          description: "Successfully added role"
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Role/Grand%20Pubah"
+        403:
+          description: Forbidden
+        400:
+          description: Bad Request
+    put:
+      tags:
+        - Account management
+      summary: Changing actions for a role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "name"
+                - "action"
+              properties:
+                "name":
+                  type: string
+                  example: 'Grand Pubah'
+                "action":
+                  type: array
+                  items:
+                    type: string
+                    example: "branch"
+                  example: ["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"]
+      responses:
+        200:
+          description: "Successfully updated role"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type" : "api:RolesResponse", "api:status" : "api:success"}
+        404:
+          description: Not Found
+        403:
+          description: Forbidden
+        400:
+          description: Bad Request
+    get:
+      tags:
+        - Account management
+      summary: Get all roles available with the current authority
+      responses:
+        200:
+          description: "Listing of all roles"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: [{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"Admin Role"},{"@id":"Role/consumer","@type":"Role","action":["class_frame","instance_read_access","schema_read_access"],"name":"ConsumerRole"}]
+  /roles/{roleName}:
+    delete:
+      tags:
+        - Account management
+      parameters:
+        - name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: Editor
+      responses:
+        200:
+          description: "Successfully deleted role"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type" : "api:RolesResponse", "api:status" : "api:success"}
+        404:
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
+    get:
+      tags:
+        - Account management
+      summary: Get the role object by role name
+      parameters:
+        - name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: Consumer Role
+      responses:
+        200:
+          description: "Successfully aquired role"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@id":"Role/consumer","@type":"Role","action": ["class_frame", "instance_read_access", "schema_read_access" ],"name":"Consumer Role"}
+        404:
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
+  /organizations:
+    get:
+      tags:
+        - Account management
+      summary: Get all organizations according to the capabilities of the user
+      responses:
+        200:
+          description: Succesful listing of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                example: [{"@id":"Organization/admin","@type":"Organization","database": ["SystemDatabase/system",  "UserDatabase/326f41af8c9499b0eea69b67fdced3efbd31663ca601dee8c50d3ad3393b367d","UserDatabase/462333349c1a8271aca185a3bd2d601057fdf2584a88687ad55e43cab635da48","UserDatabase/b4e01001e90bd368f8f19640426f346970f5ceb8eb02acaa42c759f3758e1901","UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"],"name":"admin"}]
+  /organizations/{organizationName}:
+    parameters:
+      - name: organizationName
+        in: path
+        required: true
+        schema:
+          type: string
+          example: admin
+    get:
+      tags:
+        - Account management
+      summary: Get the organization object by name
+      responses:
+        200:
+          description: "Successfully aquired organization"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@id":"Organization/admin","@type":"Organization","database": ["SystemDatabase/system",  "UserDatabase/326f41af8c9499b0eea69b67fdced3efbd31663ca601dee8c50d3ad3393b367d","UserDatabase/462333349c1a8271aca185a3bd2d601057fdf2584a88687ad55e43cab635da48","UserDatabase/b4e01001e90bd368f8f19640426f346970f5ceb8eb02acaa42c759f3758e1901","UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"],"name":"admin"}
+        404:
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:OrganizationErrorResponse","api:error":{"@type":"api:NoIdForOrganizationName","api:organization_name":"Garbage"},"api:message":"There is no organization with the name adsdfmin.","api:status":"api:not_found"}
+        403:
+          description: Forbidden
+    post:
+      tags:
+        - Account management
+      summary: Add an organization with the given name
+      responses:
+        200:
+          description: "Successfully added organization"
+          content:
+            application/json:
+              schema:
+                type: string
+                example: terminusdb://system/data/Organization/admin
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
+    delete:
+      tags:
+        - Account management
+      summary: Delete the organization of the given name
+      responses:
+        200:
+          description: "Successfully deleted organization"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {'@type':"api:OrganizationResponse",'api:status':"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
+  /organizations/{organizationName}/users:
+    parameters:
+      - name: organizationName
+        in: path
+        required: true
+        schema:
+          type: string
+          example: admin
+    get:
+      tags:
+        - Account management
+      summary: Get all available users according to capabilities within an organization
+      responses:
+        200:
+          description: "Successfully listing users in organization"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Users with their capabilities
+                example: [{"@id":"User/admin","capability":[{"@id":"Capability/server_access","@type":"Capability","role":[{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"AdminRole"}],"scope":"Organization/admin"}],"name":"admin"}]
+        403:
+          description: Forbidden
+        400:
+          description: Bad Request
+  /organizations/{organizationName}/users/{userName}:
+    get:
+      tags:
+        - Account management
+      summary: Get a user record for a given organization
+      parameters:
+        - name: organizationName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: admin
+        - name: userName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: admin
+      responses:
+        200:
+          description: "Successfully listing users in organization"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@id":"User/admin","capability":[{"@id":"Capability/server_access","@type":"Capability","role":[{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"AdminRole"}],"scope":"Organization/admin"}],"name":"admin"}
+        403:
+          description: Forbidden
+        400:
+          description: Bad Request
+  /organizations/{organizationName}/users/{userName}/databases:
+    get:
+      tags:
+        - Account management
+      summary: Get the databases available to a user which are inside an organization
+      parameters:
+        - name: organizationName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: admin
+        - name: userName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: admin
+      responses:
+        200:
+          description: "Successfully listing users in organization"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  example: {"@id":"SystemDatabase/system","@type":"SystemDatabase","name":"_system"}
+                example: [{"@id":"SystemDatabase/system","@type":"SystemDatabase","name":"_system"}]
+        403:
+          description: Forbidden
+        400:
+          description: Bad Request
+
 
 components:
 
