@@ -316,6 +316,12 @@ assert_read_access(Context) :-
     % This probably makes all super user checks redundant.
     !.
 assert_read_access(Context) :-
+    system_descriptor{} :< Context.default_collection,
+    !,
+    Auth = (Context.authorization),
+    DB = (Context.system),
+    assert_auth_action_scope(DB, Auth, '@schema':'Action/meta_read_access', 'system').
+assert_read_access(Context) :-
     database_descriptor{
         organization_name: Organization_Name,
         database_name : Database_Name

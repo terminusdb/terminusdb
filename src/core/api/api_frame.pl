@@ -18,9 +18,9 @@ api_class_frame(System_DB, Auth, Path, Class, Frame, Options) :-
 
     (   Class = uri(Class_Uri)
     ->  do_or_die(class_frame(Context,Class_Uri,Frame,Options),
-                  error(could_not_create_class_frame(Class_Uri)))
+                  error(could_not_create_class_frame(Class_Uri),_))
     ;   do_or_die(all_class_frames(Context,Frame),
-                  error(could_not_create_class_frames))
+                  error(could_not_create_class_frames,_))
     ).
 
 api_filled_frame(System_DB, Auth, Path, Instance_Uri, Filled_Frame) :-

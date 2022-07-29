@@ -531,7 +531,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
         )).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
-    memberchk(x_http_method_override('GET'), Request),
+    memberchk(x_http_method_override('GET'), Request), % Is this not redundant?
     !,
     document_handler(get, Path, Request, System_DB, Auth).
 document_handler(post, Path, Request, System_DB, Auth) :-
@@ -639,7 +639,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 :- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 methods([options,get])]).
+                 methods([options,get,post])]).
 
 /**
  * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
@@ -649,26 +649,24 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 frame_handler(get, Path, Request, System_DB, Auth) :-
     % TODO This possibly throws a json error, which gets reinterpreted
     % as a schema check failure for some reason. gotta fix that.
-    (   http_read_json_semidet(json_dict(Posted), Request)
-    ->  true
-    ;   Posted = _{}),
-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []),
-
-    (   get_dict(type, Posted, Class_Uri)
-    ->  Class = uri(Class_Uri)
-    ;   memberchk(type=Class_Uri, Search)
-    ->  Class = uri(Class_Uri)
-    ;   Class = all
-    ),
-
     api_report_errors(
         frame,
         Request,
-        (   param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
-            param_value_search_optional(Search, expand_abstract, boolean, true, Expand_Abstract),
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_optional(Search, JSON, type, text, all, Class_URI),
+            param_value_search_or_json_optional(Search, JSON, compress_ids, boolean, true, Compress_Ids),
+            param_value_search_or_json_optional(Search, JSON, expand_abstract, boolean, true, Expand_Abstract),
+            (   Class_URI = all
+            ->  Class = all
+            ;   Class = uri(Class_URI)
+            ),
+
             Options =
             _{
                 compress_ids: Compress_Ids,
