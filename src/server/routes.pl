@@ -2198,16 +2198,17 @@ user_handler(post, Request, System_DB, Auth) :-
                             _{'@type' : "api:UpdateUserResponse",
                               'api:status' : "api:success"}))).
 user_handler(delete, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ agent_name : Agent_Name },
-              error(malformed_user_deletion_document(Document))
-             ),
-
     api_report_errors(
         user_delete,
         Request,
-        (   delete_user_transaction(System_DB, Auth, Agent_Name),
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, agent_name, text, Remote_Name),
+            delete_user_transaction(System_DB, Auth, Agent_Name),
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteUserResponse",
                               'api:status' : "api:success"}))).
@@ -2261,9 +2262,13 @@ organization_handler(delete, Request, System_DB, Auth) :-
     api_report_errors(
         delete_organization,
         Request,
-        (   http_read_json_required(json_dict(JSON), Request),
-
-            param_value_json_required(JSON, organization_name, non_empty_string, Name),
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, organization_name, non_empty_string, Name),
 
             delete_organization_transaction(System_DB, Auth, Name),
             cors_reply_json(Request,
@@ -2569,6 +2574,8 @@ remote_handler(delete, Path, Request, System_DB, Auth) :-
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
+            format(user_error, "~n~nSearch ~q~n~n", [Search]),
+            format(user_error, "~n~nJSON ~q~n~n", [JSON]),
 
             param_value_search_or_json_required(Search, JSON, remote_name, text, Remote_Name),
             remove_remote(System_DB, Auth, Path, Remote_Name),
