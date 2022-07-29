@@ -2207,7 +2207,7 @@ user_handler(delete, Request, System_DB, Auth) :-
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
-            param_value_search_or_json_required(Search, JSON, agent_name, text, Remote_Name),
+            param_value_search_or_json_required(Search, JSON, agent_name, text, Agent_Name),
             delete_user_transaction(System_DB, Auth, Agent_Name),
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteUserResponse",
