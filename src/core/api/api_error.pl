@@ -260,8 +260,16 @@ api_global_error_jsonld(error(unknown_local_branch(Branch), _), Type, JSON) :-
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:message' : Msg,
-             'api:fetch_status' : false,
              'api:error' : _{ '@type' : "api:UknownLocalBranch",
+                              'api:branch' : Branch}
+            }.
+api_global_error_jsonld(error(origin_branch_does_not_exist(Branch), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Origin branch does not exist as specified ~w", [Branch]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OriginBranchDoesNotExist",
                               'api:branch' : Branch}
             }.
 api_global_error_jsonld(error(invalid_ref_path(Path), _), Type, JSON) :-
@@ -270,7 +278,6 @@ api_global_error_jsonld(error(invalid_ref_path(Path), _), Type, JSON) :-
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:message' : Msg,
-             'api:fetch_status' : false,
              'api:error' : _{ '@type' : "api:InvalidRefPath",
                               'api:ref' : Path}
             }.
@@ -280,7 +287,6 @@ api_global_error_jsonld(error(unresolvable_commit_id(Id), _), Type, JSON) :-
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:message' : Msg,
-             'api:fetch_status' : false,
              'api:error' : _{ '@type' : "api:UnresolvableCommitId",
                               'api:commit' : Id}
             }.
@@ -1335,6 +1341,7 @@ error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
+error_type_(branch, 'api:BranchErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

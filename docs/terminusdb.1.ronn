@@ -333,7 +333,7 @@ Create a branch.
   print help for the `branch create` sub command
 
   * `-o`, `--origin`=[value]:
-  the origin branch to use
+  the origin branch to use (false for none)
 
 ### branch delete
 

@@ -9,14 +9,6 @@ describe('db-noauth', function () {
     agent.orgName = util.randomString()
   })
 
-  it('fails exists with bad parameter value', async function () {
-    await db.exists(agent, { query: {} }).fails()
-  })
-
-  it('fails exists with bad parameter type', async function () {
-    await db.exists(agent, { query: { exists: 5 } }).fails()
-  })
-
   it('fails exists with unknown database', async function () {
     await db.exists(agent).notFound()
   })
