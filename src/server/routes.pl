@@ -2563,7 +2563,7 @@ remote_handler(delete, Path, Request, System_DB, Auth) :-
     api_report_errors(
         remote,
         Request,
-        (   (   http_read_json_semidet(json_dict(JSON), Request)
+        (   (   memberchk(payload(JSON), Request)
             ->  true
             ;   JSON = _{}),
             (   memberchk(search(Search), Request)
@@ -2575,7 +2575,6 @@ remote_handler(delete, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(put, Path, Request, System_DB, Auth) :-
-
     do_or_die(
         (   get_payload(Document, Request),
             _{ remote_name : Remote_Name,
@@ -2590,11 +2589,18 @@ remote_handler(put, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(get, Path, Request, System_DB, Auth) :-
-
     api_report_errors(
         remote,
         Request,
-        (   get_param(remote_name,Request,Remote_Name)
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}
+            ),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_optional(Search, JSON, remote_name, text, [], Remote_Name),
+            \+ Remote_Name = []
         ->  show_remote(System_DB, Auth, Path, Remote_Name, Remote_URL),
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:remote_name' : Remote_Name,
@@ -3566,6 +3572,7 @@ http_read_utf8(string(String), Request) :-
     read_string(Stream, _Length, String).
 http_read_utf8(json_dict(JSON), Request) :-
     http_read_utf8(string(String), Request),
+    memberchk(content_length(_Len), Request),
     read_json_dict(String, JSON).
 
 /*
@@ -3587,7 +3594,7 @@ http_read_json_required(Output, Request) :-
  */
 http_read_json_semidet(Output, Request) :-
     json_content_type(Request),
-    memberchk(content_length(_), Request),
+    memberchk(content_length(_Len), Request),
     http_read_utf8(Output, Request).
 
 /*
