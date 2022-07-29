@@ -175,7 +175,9 @@ db_handler(get, Request, System_DB, Auth) :-
         check_db,
         Request,
         (   param_value_search_optional(Search, branches, boolean, false, Branches),
-            list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches }),
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches,
+                                                                 verbose: Verbose}),
             cors_reply_json(Request, Database_Objects)
         )
     ).
@@ -201,18 +203,10 @@ db_handler(get, Organization, DB, Request, System_DB, Auth) :-
         )
     ).
 db_handler(head, Organization, DB, Request, System_DB, Auth) :-
-    /* HEAD: Check DB Exists */
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []),
-
     api_report_errors(
         check_db,
         Request,
-        (   param_value_search_optional(Search, exists, boolean, false, Exists),
-            die_if(Exists \= true,
-                   error(bad_parameter_value(exists, true, Exists), _)),
-            db_exists_api(System_DB, Auth, Organization, DB)
+        (   db_exists_api(System_DB, Auth, Organization, DB)
         ->  cors_reply_json(Request, _{'@type' : 'api:DbExistsResponse',
                                        'api:status' : 'api:success'})
         ;   cors_reply_json(Request, _{'@type' : 'api:DbExistsErrorResponse',
@@ -265,7 +259,7 @@ db_handler(put, Organization, DB, Request, System_DB, Auth) :-
                                                                  author : 'REST API',
                                                                  message : 'Updating Database Record'
                                                              }, JSON),
-            cors_reply_json(Request, _{'@type' : 'api:DbUpdateeResponse',
+            cors_reply_json(Request, _{'@type' : 'api:DbUpdatedResponse',
                                        'api:status' : 'api:success'})
         )
     ).
