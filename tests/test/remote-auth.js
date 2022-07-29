@@ -68,5 +68,4 @@ describe('remote-auth', function () {
       .query(query)
       .notFound(api.error.remoteDoesNotExist(query.remote_name))
   })
-
 })
