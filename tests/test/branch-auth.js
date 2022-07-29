@@ -17,7 +17,7 @@ describe('branch', function () {
     const origin = util.randomString()
     const result = await branch
       .create(agent, util.randomString(), { origin }).unverified()
-    expect(result.body['api:error']['@type']).to.equal('api:BadOriginAbsoluteDescriptor')
+    expect(result.body['api:error']['@type']).to.equal('api:OriginBranchDoesNotExist')
   })
 
   it('fails create with _commits descriptor', async function () {

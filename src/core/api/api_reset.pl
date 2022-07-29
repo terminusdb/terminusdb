@@ -8,6 +8,9 @@
 
 :- use_module(library(plunit)).
 
+/* Reset branches to a commit
+ */
+
 api_reset(System_DB, Auth, Path, Ref) :-
 
     do_or_die(
