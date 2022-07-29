@@ -22,6 +22,7 @@ use swipl::prelude::*;
 pub struct GetDocumentContext<L: Layer> {
     layer: Option<L>,
     prefixes: PrefixContracter,
+    types: HashSet<u64>,
     document_types: HashSet<u64>,
     unfoldables: HashSet<u64>,
     enums: HashMap<u64, String>,
@@ -63,6 +64,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut rdf_list_id = None;
         let mut sys_json_type_id = None;
         let mut sys_json_document_type_id = None;
+        let mut types: HashSet<u64>;
         let mut document_types: HashSet<u64>;
         let unfoldables: HashSet<u64>;
         let mut enums: HashMap<u64, String>;
@@ -72,11 +74,13 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut sys_value_id = None;
 
         if let Some(ref instance) = instance {
-            let schema_type_ids = get_document_type_ids_from_schema(schema);
+            let schema_document_type_ids = get_document_type_ids_from_schema(schema);
+            let schema_type_ids = get_type_ids_from_schema(schema);
             let schema_unfoldable_ids = get_unfoldable_ids_from_schema(schema);
             let schema_enum_ids = get_enum_ids_from_schema(schema);
 
-            document_types = schema_to_instance_types(schema, instance, schema_type_ids).collect();
+            document_types = schema_to_instance_types(schema, instance, schema_document_type_ids).collect();
+            types = schema_to_instance_types(schema, instance, schema_type_ids).collect();
 
             unfoldables =
                 schema_to_instance_types(schema, instance, schema_unfoldable_ids).collect();
@@ -138,6 +142,7 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_array_id = instance.object_node_id(SYS_ARRAY);
             sys_value_id = instance.predicate_id(SYS_VALUE);
         } else {
+            types = HashSet::with_capacity(0);
             document_types = HashSet::with_capacity(0);
             unfoldables = HashSet::with_capacity(0);
             enums = HashMap::with_capacity(0);
@@ -147,7 +152,8 @@ impl<L: Layer> GetDocumentContext<L> {
 
         GetDocumentContext {
             layer: instance,
-            prefixes,
+
+            types,
             document_types,
             unfoldables,
             enums,
@@ -688,23 +694,7 @@ predicates! {
         context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
     }
 
-    #[module("$moo")]
-    semidet fn get_document_json_string(_context, get_context_term, doc_name_term, doc_json_string_term) {
-        if !doc_name_term.is_string() && !doc_name_term.is_atom() {
-            return fail();
-        }
-
-        let context: GetDocumentContextBlob = get_context_term.get()?;
-        let s: PrologText = doc_name_term.get()?;
-        if let Some(result) = context.get_document(&s) {
-            unify_json_string(&doc_json_string_term, map_to_string(result, !context.minimized))
-        }
-        else {
-            fail()
-        }
-    }
-
-    #[module("$moo")]
+    #[module("$doc")]
     semidet fn print_document_json(context, stream_term, get_context_term, doc_name_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
         if !doc_name_term.is_string() && !doc_name_term.is_atom() {
@@ -722,8 +712,8 @@ predicates! {
         }
     }
 
-    #[module("$moo")]
-    semidet fn print_all_documents_json(context, stream_term, get_context_term) {
+    #[module("$doc")]
+    semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
@@ -731,11 +721,29 @@ predicates! {
             return Ok(());
         }
 
-        let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
+        let mut types: Vec<u64> = match doc_context.unfold {
+            true => doc_context.document_types.iter().cloned().collect(),
+            false => doc_context.types.iter().cloned().collect()
+        };
         types.sort();
+
+        let mut skip: u64 = skip_term.get_ex()?;
+        let mut count: Option<u64> = attempt_opt(count_term.get())?;
 
         for typ in types {
             for t in doc_context.layer().triples_o(typ) {
+                if skip != 0 {
+                    // skip
+                    skip -= 1;
+                    continue;
+                }
+                if let Some(count) = count.as_mut() {
+                    if *count == 0 {
+                        break;
+                    }
+                    *count -= 1;
+                }
+
                 if Some(t.predicate) != doc_context.rdf_type_id {
                     continue;
                 }
@@ -750,8 +758,8 @@ predicates! {
         Ok(())
     }
 
-    #[module("$moo")]
-    semidet fn par_print_all_documents_json(context, stream_term, get_context_term) {
+    #[module("$doc")]
+    semidet fn par_print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
@@ -760,20 +768,34 @@ predicates! {
         }
 
         let minimized = doc_context.minimized;
-        //let doc_context_arc = Arc::new(doc_context);
-        let mut types: Vec<u64> = doc_context.document_types.iter().cloned().collect();
+        let skip: u64 = skip_term.get_ex()?;
+        let count: Option<u64> = attempt_opt(count_term.get())?;
+
+        // We either iterate over the document types, or iif unfold is false, we iterate over all types
+        let mut types: Vec<u64> = match doc_context.unfold {
+            true => doc_context.document_types.iter().cloned().collect(),
+            false => doc_context.types.iter().cloned().collect()
+        };
         types.sort();
 
         let (sender, receiver) = mpsc::channel();
 
+        let iter = types.into_iter().skip(skip as usize);
+        let iter = if let Some(count) = count {
+            itertools::Either::Left(iter.take(count as usize))
+        }
+        else {
+            itertools::Either::Right(iter)
+        };
+
         rayon::spawn(move || {
-            types.into_iter().flat_map(|typ| doc_context.layer().triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
+            iter.flat_map(|typ| doc_context.layer().triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
                 .enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, t)| {
                     let map = doc_context.get_id_document(t.subject);
                     sender.send((ix, map)) // failure will kill the task
-                });
+                }).unwrap();
         });
 
         let mut result = BinaryHeap::new();
@@ -804,36 +826,6 @@ predicates! {
 
         Ok(())
     }
-
-
-    #[module("$moo")]
-    semidet fn print_prefix_tree(_context, get_context_term) {
-        let get_context: GetDocumentContextBlob = get_context_term.get()?;
-
-        println!("{:?}", get_context.prefixes);
-
-        Ok(())
-    }
-
-    #[module("$moo")]
-    semidet fn prefix_schema_contract(_context, get_context_term, expanded_term, contracted_term) {
-        let expanded: String = expanded_term.get()?;
-        let get_context: GetDocumentContextBlob = get_context_term.get()?;
-
-        let contracted = get_context.prefixes.schema_contract(&expanded);
-
-        contracted_term.unify(&*contracted)
-    }
-
-    #[module("$moo")]
-    semidet fn prefix_instance_contract(_context, get_context_term, expanded_term, contracted_term) {
-        let expanded: String = expanded_term.get()?;
-        let get_context: GetDocumentContextBlob = get_context_term.get()?;
-
-        let contracted = get_context.prefixes.instance_contract(&expanded);
-
-        contracted_term.unify(&*contracted)
-    }
 }
 
 struct HeapEntry {
@@ -863,13 +855,9 @@ impl Ord for HeapEntry {
 
 pub fn register() {
     register_get_document_context();
-    register_get_document_json_string();
     register_print_document_json();
     register_print_all_documents_json();
     register_par_print_all_documents_json();
-    register_prefix_schema_contract();
-    register_prefix_instance_contract();
-    register_print_prefix_tree();
 }
 
 #[cfg(test)]

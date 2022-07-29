@@ -90,6 +90,15 @@ api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Documen
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
+api_print_document(instance, Transaction, Id, Config) :-
+    do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
+              error(document_not_found(Id), _)),
+    json_stream_write_dict(Config, started(true), Document).
+api_print_document(schema, Transaction, Id, Config) :-
+    do_or_die(get_schema_document(Transaction, Id, Document),
+              error(document_not_found(Id), _)),
+    json_stream_write_dict(Config, started(true), Document).
+
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
               error(document_not_found(Id), _)).
@@ -97,8 +106,8 @@ api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
 
-api_get_document_by_id(Transaction, Graph_Type, Id, Config, Document) :-
-    api_get_document(Graph_Type, Transaction, Id, Config, Document).
+api_print_document_by_id(Transaction, Graph_Type, Id, Config) :-
+    api_print_document(Graph_Type, Transaction, Id, Config).
 
 embed_document_in_error(Error, Document, New_Error) :-
     Error =.. Error_List,
@@ -382,8 +391,7 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, Query, C
     ->  forall(api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
     ;   ground(Id)
-    ->  api_get_document_by_id(Transaction, Graph_Type, Id, Config, Document),
-        json_stream_write_dict(Config, Stream_Started, Document)
+    ->  api_print_document_by_id(Transaction, Graph_Type, Id, Config)
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
