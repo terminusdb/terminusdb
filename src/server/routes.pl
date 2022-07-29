@@ -242,10 +242,16 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     api_report_errors(
         delete_db,
         Request,
-        (   (   http_read_json_semidet(json_dict(JSON), Request),
-                param_value_json_optional(JSON, force, boolean, false, Force_Delete)
+        (   % Deprecating request body in delete
+            (   http_read_json_semidet(json_dict(JSON), Request)
             ->  true
-            ;   Force_Delete = false),
+            ;   JSON = json{}),
+
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_optional(Search, JSON, force, boolean, false, Force_Delete),
             delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
@@ -633,7 +639,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 :- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 methods([options,get,post])]).
+                 methods([options,get])]).
 
 /**
  * frame_handler(+Mode, +DB, +Class_ID, +Request:http_request) is det.
@@ -661,10 +667,18 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
     api_report_errors(
         frame,
         Request,
-        api_class_frame(System_DB, Auth, Path, Class, Frame)),
-
-    write_cors_headers(Request),
-    reply_json(Frame).
+        (   param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
+            param_value_search_optional(Search, expand_abstract, boolean, true, Expand_Abstract),
+            Options =
+            _{
+                compress_ids: Compress_Ids,
+                expand_abstract: Expand_Abstract
+            },
+            api_class_frame(System_DB, Auth, Path, Class, Frame, Options),
+            write_cors_headers(Request),
+            reply_json(Frame)
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
