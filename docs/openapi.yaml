@@ -27,7 +27,7 @@ paths:
   /:
     get:
       tags:
-        - connection
+        - Connection
       summary: Get a list of databases for the authenticated user
       responses:
         200:
@@ -43,7 +43,7 @@ paths:
   /info:
     get:
       tags:
-        - connection
+        - Connection
       summary: Get information about the TerminusDB version
       responses:
         200:
@@ -86,7 +86,7 @@ paths:
   /ok:
     get:
       tags:
-        - connection
+        - Connection
       summary: Simple status update
       responses:
         200:
@@ -94,7 +94,7 @@ paths:
   /db/:
     get:
       tags:
-        - database
+        - Database
       summary: List details of all databases available to the authorized user.
       parameters:
         - name: branches
@@ -128,7 +128,7 @@ paths:
   /db/{organization}/{database}:
     get:
       tags:
-        - database
+        - Database
       summary: List details of the database under the given organization.
       parameters:
         - $ref: '#/components/parameters/organization'
@@ -165,7 +165,7 @@ paths:
                 type: object
     head:
       tags:
-        - database
+        - Database
       summary: Check that a db exists
       parameters:
         - $ref: '#/components/parameters/organization'
@@ -186,7 +186,7 @@ paths:
 
     post:
       tags:
-        - database
+        - Database
       summary: Create a database
       parameters:
         - $ref: '#/components/parameters/organization'
@@ -262,7 +262,7 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
     delete:
       tags:
-        - database
+        - Database
       summary: Delete a database
       parameters:
         - $ref: '#/components/parameters/organization'
@@ -314,7 +314,7 @@ paths:
                         example: admin
     put:
       tags:
-        - database
+        - Database
       summary: Change qualities of a database (label, comment, etc.)
       parameters:
         - $ref: '#/components/parameters/organization'
@@ -391,7 +391,7 @@ paths:
   /document/{path}:
     get:
       tags:
-        - document
+        - Document
       summary: Get a document
       parameters:
         - $ref: '#/components/parameters/document_path'
@@ -464,7 +464,7 @@ paths:
 
     post:
       tags:
-        - document
+        - Document
       summary: Insert a new document
       parameters:
         - $ref: '#/components/parameters/document_path'
@@ -496,7 +496,7 @@ paths:
 
     delete:
       tags:
-        - document
+        - Document
       summary: Delete one or multiple documents
       parameters:
         - $ref: '#/components/parameters/document_path'
@@ -521,7 +521,7 @@ paths:
           # TODO: Need the proper JSON resposne!
     put:
       tags:
-        - document
+        - Document
       summary: Replace a document
       parameters:
         - $ref: '#/components/parameters/document_path'
@@ -548,7 +548,7 @@ paths:
   /schema:
     get:
       tags:
-        - frame
+        - Frame
       summary: Get the full class frame for a class or all classes for a schema
       parameters:
         - $ref: '#/components/parameters/document_path'
@@ -615,7 +615,7 @@ paths:
   /clone/{organization}/{database}:
     post:
       tags:
-        - collaboration
+        - Collaboration
       parameters:
         - $ref: '#/components/parameters/organization'
         - $ref: '#/components/parameters/database'
@@ -655,7 +655,7 @@ paths:
   /fetch/{path}:
     post:
       tags:
-        - collaboration
+        - Collaboration
       summary: Fetch the remote repository for the given path (default is origin)
       parameters:
         - $ref: '#/components/parameters/branch_path'
@@ -691,7 +691,7 @@ paths:
     post:
       summary: Push the branch to the remote
       tags:
-        - collaboration
+        - Collaboration
       parameters:
         - $ref: '#/components/parameters/branch_path'
       requestBody:
@@ -762,7 +762,7 @@ paths:
     post:
       summary: Pull to a branch from a remote
       tags:
-        - collaboration
+        - Collaboration
       parameters:
         - $ref: '#/components/parameters/branch_path'
       requestBody:
@@ -802,7 +802,7 @@ paths:
   /branch/{path}:
     post:
       tags:
-        - branches
+        - Branches
       parameters:
         - $ref: '#/components/parameters/branch_path'
       requestBody:
@@ -829,7 +829,7 @@ paths:
                       - "api:success"
     delete:
       tags:
-        - branches
+        - Branches
       parameters:
         - $ref: '#/components/parameters/branch_path'
       responses:
@@ -854,7 +854,7 @@ paths:
         - $ref: '#/components/parameters/branch_path'
     get:
       tags:
-        - branches
+        - Branches
       responses:
         200:
           description: "Succesfully squashed the branch"
@@ -882,7 +882,7 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       tags:
-        - branches
+        - Branches
       requestBody:
         required: true
         content:
@@ -912,7 +912,7 @@ paths:
   /optimize/{path}:
     post:
       tags:
-        - database
+        - Optimize
       parameters:
         - name: path
           description: Database Path
@@ -940,7 +940,7 @@ paths:
   /prefixes/{path}:
     get:
       tags:
-        - prefixes
+        - Prefixes
       parameters:
         - name: path
           description: Database Path
@@ -959,7 +959,7 @@ paths:
   /diff:
     post:
       tags:
-        - change management
+        - Change management
       requestBody:
         required: true
         content:
@@ -991,7 +991,7 @@ paths:
   /patch:
     post:
       tags:
-        - change management
+        - Change management
       requestBody:
         required: true
         content:
