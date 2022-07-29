@@ -51,5 +51,4 @@ describe('frame', function () {
       name: 'xsd:string',
     })
   })
-
 })
