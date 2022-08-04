@@ -52,8 +52,9 @@ parts:
       export PATH=/root/.cargo/bin:$PATH
       export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
       export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
+      make install-dashboard
       make
-      cp -r terminusdb distribution "$SNAPCRAFT_PART_INSTALL/"
+      cp -r terminusdb distribution dashboard "$SNAPCRAFT_PART_INSTALL/"
     build-environment:
       - TERMINUSDB_SERVER_PACK_DIR: /root/stage
       - LANG: C.UTF-8
@@ -63,6 +64,7 @@ parts:
 
     artifacts:
       - terminusdb
+      - dashboard
       - init_snap.sh
 apps:
   terminusdb:
