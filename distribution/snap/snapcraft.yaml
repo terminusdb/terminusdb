@@ -52,7 +52,7 @@ parts:
       export PATH=/root/.cargo/bin:$PATH
       export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
       export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
-      export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${LIBRARY_PATH}"
+      export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+LD_LIBRARY_PATH:}${LIBRARY_PATH}"
       make install-dashboard
       make
       cp -r terminusdb distribution dashboard "$SNAPCRAFT_PART_INSTALL/"
