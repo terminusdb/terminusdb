@@ -1,3 +1,33 @@
+# TerminusDB Server v10.1.2 Release Notes
+
+## Enhancements
++ Added data product and user management dashboard
++ Speed up for raw JSON processing, especially large arrays
++ User Management Endpoints added
++ OpenAPI Specification of Endpoints expanded and added to source
++ Allow configurable name in JWT
++ Classes can be marked unfoldable, to get default unfolding of
+  trees. Classes which have circularities leading to infinite
+  unfoldings, will give an error
++ Added api/log route, so that history of a data product can be obtained
++ Added api/list and `terminusdb db list` to CLI to list databases with enhanced
+  metadata display
++ Branches can be diffed by name, rather than commit now.
++ Added `terminusdb db update` to CLI
++ Added `terminusdb reset` to CLI
+
+## Bug fixes
++ Referential integrity checking over-conservatism fixed
++ Raw JSON can now be used in containers (Lists, Sets, Arrays)
++ Path queries with path{n,m} fixed to be more forgiving about n and m
+  arguments (strings will be parsed as ints)
++ Various error handling improvements to CLI
++ Fixed bug in enum checking of containers (Lists, Sets, Arrays)
++ Fixed enum inference to allow full enum URI
+
+## Other
++ DB_SPEC explained in man page
+
 # TerminusDB Server v10.1.1 Release Notes
 
 ## Enhancements
