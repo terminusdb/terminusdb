@@ -957,6 +957,22 @@ test(reference_success,
                      json{'@id':'terminusdb:///data/Mentioned/something_or_other',
                           '@type':"@id"}}.
 
+test(expanded_enum,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multi,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc,Database),
+
+    Document =
+    json{
+        rocks : 'terminusdb:///schema#Rocks/big'
+    },
+    infer_type(Database,Document,Type,success(_)),
+    Type = 'terminusdb:///schema#Planet'.
+
 test(planet_choice,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),

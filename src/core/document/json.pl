@@ -905,8 +905,13 @@ enum_value(Type,Value,ID) :-
     ground(Type),
     ground(Value),
     !,
-    encode_id_fragment(Value, Encoded_Value),
-    atomic_list_concat([Type, '/', Encoded_Value], ID).
+    % First check to see if type is a prefix of value
+    atom_string(Value_Atom, Value),
+    (   atom_concat(Type, _, Value_Atom)
+    ->  ID = Value_Atom
+    ;   encode_id_fragment(Value, Encoded_Value),
+        atomic_list_concat([Type, '/', Encoded_Value], ID)
+    ).
 enum_value(Type,Value,ID) :-
     ground(Type),
     !,
