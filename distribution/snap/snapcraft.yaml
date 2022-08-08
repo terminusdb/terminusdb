@@ -17,7 +17,7 @@ contact: team@terminusdb.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
 confinement: strict
-base: core18
+base: core20
 grade: stable
 package-repositories:
  - type: apt
@@ -40,6 +40,7 @@ parts:
       - tus
     plugin: make
     build-packages:
+      - rsync
       - swi-prolog-nox
       - curl
       - clang
@@ -52,8 +53,12 @@ parts:
       export PATH=/root/.cargo/bin:$PATH
       export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
       export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
+      export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+LD_LIBRARY_PATH:}${LIBRARY_PATH}"
+      rsync -rt ./ /snap/terminusdb/current/
+      cd /snap/terminusdb/current
+      make install-dashboard
       make
-      cp -r terminusdb distribution "$SNAPCRAFT_PART_INSTALL/"
+      cp -r terminusdb distribution dashboard "$SNAPCRAFT_PART_INSTALL/"
     build-environment:
       - TERMINUSDB_SERVER_PACK_DIR: /root/stage
       - LANG: C.UTF-8
@@ -61,12 +66,9 @@ parts:
     source: ./terminusdb_source
     source-type: local
 
-    artifacts:
-      - terminusdb
-      - init_snap.sh
 apps:
   terminusdb:
-    command: init_snap.sh
+    command: distribution/init_snap.sh
     environment:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
