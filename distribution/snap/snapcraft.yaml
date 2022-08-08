@@ -40,6 +40,7 @@ parts:
       - tus
     plugin: make
     build-packages:
+      - rsync
       - swi-prolog-nox
       - curl
       - clang
