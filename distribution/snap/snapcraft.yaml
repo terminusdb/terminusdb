@@ -53,7 +53,7 @@ parts:
       export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
       export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
       export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+LD_LIBRARY_PATH:}${LIBRARY_PATH}"
-      cp -r * /snap/terminusdb/current/
+      rsync -rt ./ /snap/terminusdb/current/
       cd /snap/terminusdb/current
       make install-dashboard
       make
