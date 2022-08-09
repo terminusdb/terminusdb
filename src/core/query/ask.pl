@@ -37,12 +37,13 @@
 :- use_module(library(debug)).
 :- use_module(library(lists)).
 :- use_module(library(gensym)).
+:- use_module(library(when)).
 
 prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
-    freeze(Woql_Var,
+    when(ground(Woql_Var),
            (   is_dict(Woql_Var) % Document
            ->  Woql_Var = Pre_Term
-           ;   Woql_Var = [_|_]
+           ;   is_list(Woql_Var), Woql_Var = [_|_]
            ->  maplist(prefix_preterm(Ctx),Woql_Var,Pre_Term)
            ;   number(Woql_Var)
            ->  Woql_Var = Pre_Term
