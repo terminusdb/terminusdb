@@ -5191,8 +5191,8 @@ test(uri_casting, [
                 )),
             URIs),
 
-    URIs = ['terminusdb://system/data/Capability/server_access',
-            'terminusdb://system/data/Role/admin'].
+    URIs = ['http://somewhere.for.now/document/Capability/server_access',
+            'http://somewhere.for.now/document/Role/admin'].
 
 
 :- end_tests(woql).
