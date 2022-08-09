@@ -5186,7 +5186,7 @@ test(uri_casting, []) :-
                     typecast(X, sys:'Top', [], URI)
                 )),
             URIs),
-
+    print_term(URIs,[]),nl,
     URIs = ['terminusdb://system/data/Capability/server_access',
             'terminusdb://system/data/Role/admin'].
 
