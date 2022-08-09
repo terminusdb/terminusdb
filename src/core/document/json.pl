@@ -12219,7 +12219,7 @@ test(geojson_unfoldable,
          get_schema_document(C2, 'Geometry', Geometry)
      ),
 
-     writeq(Geometry).
+     Geometry = json{'@abstract':[],'@id':'Geometry','@type':'Class','@unfoldable':[]}.
 
 test(geojson_example,
      [setup((setup_temp_store(State),
