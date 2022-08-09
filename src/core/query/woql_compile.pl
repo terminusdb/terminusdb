@@ -5155,6 +5155,21 @@ test(bad_variable_name, [
     AST = (v(v('X')) = a),
     run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
+test(uri_casting, []) :-
+
+    findall(URI,
+            ask(system_descriptor{},
+                (
+                    split("Capability/server_access,Role/admin"^^xsd:string,','^^xsd:string,List),
+                    member(X, List),
+                    typecast(X, sys:'Top', [], URI)
+                )),
+            URIs),
+
+    URIs = ['terminusdb://system/data/Capability/server_access',
+            'terminusdb://system/data/Role/admin'].
+
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
