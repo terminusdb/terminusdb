@@ -37,6 +37,7 @@
 :- use_module(library(debug)).
 :- use_module(library(lists)).
 :- use_module(library(gensym)).
+:- use_module(library(when)).
 
 prefix_preterm(Ctx, Woql_Var, Pre_Term) :-
     when(ground(Woql_Var),
