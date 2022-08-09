@@ -1412,7 +1412,8 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
             throw(error(M)))
     }.
 compile_wf(typecast(Val,Type,_Hints,Cast),
-           (typecast(ValE, TypeE, [], CastE))) -->
+           (   typecast(ValE, TypeE, [prefixes(Prefixes)], CastE))) -->
+    view(prefixes,Prefixes),
     resolve(Val,ValE),
     resolve(Type,TypeE),
     resolve(Cast,CastE).
