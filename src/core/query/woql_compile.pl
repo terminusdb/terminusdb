@@ -1412,7 +1412,8 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
             throw(error(M)))
     }.
 compile_wf(typecast(Val,Type,_Hints,Cast),
-           (typecast(ValE, TypeE, [], CastE))) -->
+           (   typecast(ValE, TypeE, [prefixes(Prefixes)], CastE))) -->
+    view(prefixes,Prefixes),
     resolve(Val,ValE),
     resolve(Type,TypeE),
     resolve(Cast,CastE).
@@ -4547,10 +4548,31 @@ test(commit_graph_times, [
                           t(v(target_commit),author,v(author)),
                           t(v(target_commit),message,v(message)),
                           t(v(target_commit),timestamp,v(timestamp))))),
-    writeq(AST),
+
     create_context(Descriptor, commit_info{ author : "test", message: "message4"}, Context4),
     run_context_ast_jsonld_response(Context4, AST, no_data_version, _, Response),
-    writeq(Response).
+
+    Response = _{'@type':'api:WoqlResponse',
+                 'api:status':'api:success',
+                 'api:variable_names':[branch,commit,target_commit,cid,author,message,timestamp],
+                 bindings:[_{author:json{'@type':'xsd:string','@value':"test"},
+                             branch:'terminusdb://ref/data/Branch/main',
+                             cid:json{'@type':'xsd:string',
+                                      '@value':_},
+                             commit:_,
+                             message:json{'@type':'xsd:string','@value':"message2"},
+                             target_commit:_,
+                             timestamp:json{'@type':'xsd:decimal',
+                                            '@value':_}},
+                           _{author:json{'@type':'xsd:string','@value':"test"},
+                             branch:'terminusdb://ref/data/Branch/main',
+                             cid:json{'@type':'xsd:string','@value':_},
+                             commit:_,
+                             message:json{'@type':'xsd:string','@value':"message1"},
+                             target_commit:_,
+                             timestamp:json{'@type':'xsd:decimal',
+                                            '@value':_}}],
+                 deletes:0,inserts:0,transaction_retry_count:0}.
 
 test(commit_graph_json, [
          setup((setup_temp_store(State),
@@ -5173,6 +5195,24 @@ test(doc_insert_split, [
     [_{'Split':[json{'@type':'xsd:string','@value':"A"},
                 json{'@type':'xsd:string','@value':"B"},
                 json{'@type':'xsd:string','@value':"C"}]}] = (JSON.bindings).
+
+test(uri_casting, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    findall(URI,
+            ask(Descriptor,
+                (
+                    split("Capability/server_access,Role/admin"^^xsd:string,','^^xsd:string,List),
+                    member(X, List),
+                    typecast(X, sys:'Top', [], URI)
+                )),
+            URIs),
+
+    URIs = ['http://somewhere.for.now/document/Capability/server_access',
+            'http://somewhere.for.now/document/Role/admin'].
 
 :- end_tests(woql).
 
