@@ -5154,6 +5154,26 @@ test(bad_variable_name, [
     AST = (v(v('X')) = a),
     run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
+
+test(doc_insert_split, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+
+    AST = (   split('A,B,C'^^xsd:string, ','^^xsd:string, v('Split')),
+              insert_document(json{ '@type' : 'Aliases',
+                                    names : v('Split')})
+          ),
+
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+    [_{'Split':[json{'@type':'xsd:string','@value':"A"},
+                json{'@type':'xsd:string','@value':"B"},
+                json{'@type':'xsd:string','@value':"C"}]}] = (JSON.bindings).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
