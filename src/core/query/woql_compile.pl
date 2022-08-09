@@ -5176,10 +5176,14 @@ test(bad_variable_name, [
     AST = (v(v('X')) = a),
     run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
-test(uri_casting, []) :-
-
+test(uri_casting, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
     findall(URI,
-            ask(system_descriptor{},
+            ask(Descriptor,
                 (
                     split("Capability/server_access,Role/admin"^^xsd:string,','^^xsd:string,List),
                     member(X, List),
