@@ -19,7 +19,7 @@ describe('cli-query', function () {
   })
 
   it('queries with a list response', async function () {
-    const r = await exec(`./terminusdb.sh query _system 'split("A,B,C"^^xsd:string,","^^xsd:string,R)'`)
+    const r = await exec('./terminusdb.sh query _system \'split("A,B,C"^^xsd:string,","^^xsd:string,R)\'')
     expect(r.stdout).to.match(/["A"^^'xsd:string',"B"^^'xsd:string',"C"^^'xsd:string']/)
   })
 })
