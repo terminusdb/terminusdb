@@ -4548,10 +4548,31 @@ test(commit_graph_times, [
                           t(v(target_commit),author,v(author)),
                           t(v(target_commit),message,v(message)),
                           t(v(target_commit),timestamp,v(timestamp))))),
-    writeq(AST),
+
     create_context(Descriptor, commit_info{ author : "test", message: "message4"}, Context4),
     run_context_ast_jsonld_response(Context4, AST, no_data_version, _, Response),
-    writeq(Response).
+
+    Response = _{'@type':'api:WoqlResponse',
+                 'api:status':'api:success',
+                 'api:variable_names':[branch,commit,target_commit,cid,author,message,timestamp],
+                 bindings:[_{author:json{'@type':'xsd:string','@value':"test"},
+                             branch:'terminusdb://ref/data/Branch/main',
+                             cid:json{'@type':'xsd:string',
+                                      '@value':_},
+                             commit:_,
+                             message:json{'@type':'xsd:string','@value':"message2"},
+                             target_commit:_,
+                             timestamp:json{'@type':'xsd:decimal',
+                                            '@value':_}},
+                           _{author:json{'@type':'xsd:string','@value':"test"},
+                             branch:'terminusdb://ref/data/Branch/main',
+                             cid:json{'@type':'xsd:string','@value':_},
+                             commit:_,
+                             message:json{'@type':'xsd:string','@value':"message1"},
+                             target_commit:_,
+                             timestamp:json{'@type':'xsd:decimal',
+                                            '@value':_}}],
+                 deletes:0,inserts:0,transaction_retry_count:0}.
 
 test(commit_graph_json, [
          setup((setup_temp_store(State),
