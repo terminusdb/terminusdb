@@ -12323,3 +12323,79 @@ test(json_diff,
                             '@op':"SwapValue"}}].
 
 :- end_tests(json_datatype).
+
+:- begin_tests(language_codes).
+:- use_module(core(util/test_utils)).
+
+language_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Language",
+  "language" : "xsd:language" }').
+
+test(various_lang_combos,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_document(C1, _{ 'language': "en-GB"}, _),
+            insert_document(C1, _{ 'language': "egy-Egyd"}, _),
+            insert_document(C1, _{ 'language' : "en-Latn-US"}, _),
+            insert_document(C1, _{ 'language' : "cy-GB-Latn"}, _),
+            insert_document(C1, _{ 'language' : "az-Latn-IR"}, _)
+        )
+    ).
+
+test(nonsense_1,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [json{'@type':no_unique_type_for_document,
+                      document:json{language:"foo-Bar"},
+                      reason:json{'terminusdb:///schema#language':
+                                  json{'@type':could_not_interpret_as_type,
+                                       type:'http://www.w3.org/2001/XMLSchema#language',
+                                       value:"foo-Bar"}}}]), _)
+
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'language': "foo-Bar"}, _)
+    ).
+
+test(nonsense_2,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [json{'@type':no_unique_type_for_document,
+                      document:json{language:"en-GBR"},
+                      reason:json{'terminusdb:///schema#language':
+                                  json{'@type':could_not_interpret_as_type,
+                                       type:'http://www.w3.org/2001/XMLSchema#language',
+                                       value:"en-GBR"}}}]), _)
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'language': "en-GBR"}, _)
+    ).
+
+:- end_tests(language_codes).
