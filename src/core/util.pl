@@ -263,7 +263,10 @@
               % json_stream.pl
               json_stream_start/1,
               json_stream_end/3,
-              json_stream_write_dict/5
+              json_stream_write_dict/5,
+
+              % iana.pl
+              iana/3
           ]).
 
 % note: test_utils is intentionally omitted
@@ -280,3 +283,4 @@
 :- use_module(util/json_log).
 :- use_module(util/data_version).
 :- use_module(util/json_stream).
+:- use_module(util/iana).

@@ -18,9 +18,6 @@
               error_on_excluded_organization/1,
               error_on_excluded_database/1,
 
-              % iana.pl
-              iana/3,
-
               % literals.pl
               literal_to_turtle/2,
               normalise_triple/2,
@@ -130,7 +127,6 @@
 :- use_module(triple/base_type).
 :- use_module(triple/casting).
 :- use_module(triple/database_utils).
-:- use_module(triple/iana).
 :- use_module(triple/literals).
 :- use_module(triple/temp_graph).
 :- use_module(triple/constants).
