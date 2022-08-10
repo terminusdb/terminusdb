@@ -8,6 +8,8 @@
  * File-Date: "2022-08-08",
  *
  */
+:- use_module(library(apply)).
+:- use_module(library(lists)).
 
 /* iana(?Language_Entry) is nondet.
  *
