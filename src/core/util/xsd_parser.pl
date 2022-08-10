@@ -68,7 +68,7 @@
  *                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-:- use_module(core(triple/iana)). % dubious - seems to be the only place where iana is used, so shouldn't iana be part of this module?
+:- use_module(iana).
 
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -371,7 +371,7 @@ iso_639_base([H1,H2,H3|T],T) :- atom_codes(A,[H1,H2,H3]), iso_639_2(A,_).
 language --> "en-US" .
 language --> "en-GB" .
 language --> iso_639_base .
-language --> iana(_) . % IANA
+language(In,[]) :- atom_codes(Atom,In), iana(Atom). % IANA
 language --> "x-", alphas . % unregistered
 
 any([_H|T],T).
