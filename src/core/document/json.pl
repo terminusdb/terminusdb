@@ -8612,6 +8612,29 @@ test(untyped_elt_deep_in_list,
                           insert_document(C2, Document, _),
                           _).
 
+test(non_existing_class_reference,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':not_a_class_or_base_type,
+                            class:'http://somewhere.for.now/schema#star'}]),
+               _)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Repository",
+                 repository_star : _{ '@class' : "star", '@type': "Set" }},
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema1),
+                          _).
+
 :- end_tests(schema_checker).
 
 
