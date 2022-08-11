@@ -73,10 +73,16 @@ list_existing_database(Database, Database_Object, Options) :-
             resolve_relative_string_descriptor(Desc,'_commits', Repo)),
         error(invalid_absolute_path(Database),_)),
 
+    Db = (Desc.repository_descriptor.database_descriptor),
+    % Check the database exists.
+    do_or_die(
+        organization_database_name_uri(system_descriptor{},
+                                       Db.organization_name,Db.database_name, Db_Uri),
+        error(invalid_database_name(Database), _)
+    ),
+
     (   option(verbose(true), Options)
-    ->  Db = (Desc.repository_descriptor.database_descriptor),
-        organization_database_name_uri(system_descriptor{}, Db.organization_name, Db.database_name, Db_Uri),
-        get_document(system_descriptor{}, Db_Uri, Database_Record)
+    ->  get_document(system_descriptor{}, Db_Uri, Database_Record)
     ;   Database_Record = _{}
     ),
     (   (   option(branches(true), Options)
