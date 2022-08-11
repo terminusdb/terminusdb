@@ -30,8 +30,7 @@ describe('cli-query', function () {
   })
 
   it('catches existence error', async function () {
-    const r = await exec(`./terminusdb.sh query _system 'sum(1,2)' | true`)
+    const r = await exec('./terminusdb.sh query _system \'sum(1,2)\' | true')
     expect(r.stderr).to.match(/^Error: The program: .* used a predicate with unhandled arguments/)
   })
-
 })
