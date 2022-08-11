@@ -49,7 +49,7 @@ describe('log', function () {
 
     await document.insert(agent, { instance: instance2 })
 
-    const logRequest = await agent.get('/api/log/admin/hello?from=1&count=1')
+    const logRequest = await agent.get('/api/log/admin/hello?start=1&count=1')
     const log = logRequest.body
 
     expect(log).to.have.lengthOf(1)
