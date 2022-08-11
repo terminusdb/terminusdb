@@ -47,8 +47,7 @@ describe('log', function () {
     const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
     const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
 
-    const result2 = await document.insert(agent, { instance: instance2 })
-    const version2 = result2.headers['terminusdb-data-version'].split('branch:')[1]
+    await document.insert(agent, { instance: instance2 })
 
     const logRequest = await agent.get('/api/log/admin/hello?from=1&count=1')
     const log = logRequest.body
@@ -56,10 +55,9 @@ describe('log', function () {
     expect(log).to.have.lengthOf(1)
     expect(log[0].author).to.equal('default_author')
     expect(log[0].identifier).to.equal(version1)
-    //expect(log[1].identifier).to.equal(version1)
+    // expect(log[1].identifier).to.equal(version1)
 
     // cleanup
     await agent.delete('/api/db/admin/hello')
   })
-
 })
