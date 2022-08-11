@@ -113,5 +113,16 @@ describe('cli-db', function () {
     const r = await exec(`./terminusdb.sh branch delete admin/${db}/local/branch/foo | true`)
     expect(r.stderr).to.match(/Error: Branch foo does not exist/)
     await exec(`./terminusdb.sh db delete admin/${db}`)
+
+  it('gives a graceful bad path error', async function () {
+    const rand = util.randomString()
+    const r = await exec(`./terminusdb.sh db list ${rand} | true`)
+    expect(r.stderr).to.match(new RegExp(`^Error: Bad descriptor path: ${rand}`))
+  })
+
+  it('gives a graceful non-existence error', async function () {
+    const rand = util.randomString()
+    const r = await exec(`./terminusdb.sh db list admin/${rand} | true`)
+    expect(r.stderr).to.match(new RegExp(`^Error: Invalid database name: 'admin/${rand}'`))
   })
 })
