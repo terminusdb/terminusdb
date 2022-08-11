@@ -45,6 +45,5 @@ describe('cli-options', function () {
       const errorPattern = /ERROR: The command line does not accept -<shortflag>=<value> syntax in the command "db list".*/
       expect(r.stderr).to.match(new RegExp(errorPattern))
     })
-
   })
 })
