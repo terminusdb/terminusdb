@@ -108,5 +108,4 @@ describe('cli-db', function () {
     const r = await exec(`./terminusdb.sh db list admin/${rand} | true`)
     expect(r.stderr).to.match(new RegExp(`^Error: Invalid database name: 'admin/${rand}'`))
   })
-
 })
