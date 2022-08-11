@@ -2260,6 +2260,11 @@ report_parse_error(error(domain_error(flag_value, Opt),_), Command) =>
     atomic_list_concat(Command_List, Command_Atom),
     format(user_error, '~NERROR: The command line option "~s" does not exist for the command "~s"~n',
            [Opt,Command_Atom]).
+report_parse_error(error(syntax_error('disallowed: <shortflag>=<value>'),_), Command) =>
+    intersperse(' ', Command, Command_List),
+    atomic_list_concat(Command_List, Command_Atom),
+    format(user_error, '~NERROR: The command line does not accept -<shortflag>=<value> syntax in the command "~s"~n',
+           [Command_Atom]).
 report_parse_error(error(type_error(flag_value,_),_), _) =>
     true.
 

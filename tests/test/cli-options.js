@@ -39,5 +39,11 @@ describe('cli-options', function () {
       const errorPattern = /ERROR: flag 'public': expected atom parsable as boolean, found 'foo'.*/
       expect(r.stdout).to.match(new RegExp(errorPattern))
     })
+
+    it('nice error for bad shortflag option', async function () {
+      const r = await exec('./terminusdb.sh db list admin/bar -b=true')
+      const errorPattern = /ERROR: The command line does not accept -<shortflag>=<value> syntax in the command "db list".*/
+      expect(r.stderr).to.match(new RegExp(errorPattern))
+    })
   })
 })
