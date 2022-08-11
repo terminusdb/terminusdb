@@ -12360,7 +12360,15 @@ test(duplicate,
              test_document_label_descriptor(Desc),
              write_schema(language_schema,Desc)
             )),
-      cleanup(teardown_temp_store(State))
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure(
+              [json{'@type':no_unique_type_for_document,
+                    document:json{language:"en-en"},
+                    reason:json{'terminusdb:///schema#language':
+                                json{'@type':could_not_interpret_as_type,
+                                     type:'http://www.w3.org/2001/XMLSchema#language',
+                                     value:"en-en"}}}])
      ]) :-
 
     with_test_transaction(
