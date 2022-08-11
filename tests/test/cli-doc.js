@@ -172,9 +172,11 @@ describe('cli-doc', function () {
     it('gets a truncated log', async function () {
       const db = `admin/${util.randomString()}`
       await exec(`./terminusdb.sh db create ${db}`)
-      const schema = { '@id' : 'Thing',
-                       '@type': 'Class',
-                       negativeInteger: 'xsd:negativeInteger' }
+      const schema = {
+        '@id': 'Thing',
+        '@type': 'Class',
+        negativeInteger: 'xsd:negativeInteger',
+      }
 
       await exec(`./terminusdb.sh doc insert ${db} -g schema --data='${JSON.stringify(schema)}'`)
 
