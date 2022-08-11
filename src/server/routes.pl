@@ -134,9 +134,9 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         log,
         Request,
         (
-            param_value_search_optional(Search, from, integer, 0, From),
+            param_value_search_optional(Search, start, integer, 0, Start),
             param_value_search_optional(Search, count, integer, -1, Count),
-            Options = opts{ from: From, count: Count},
+            Options = opts{ start: Start, count: Count},
             api_log(System_DB, Auth, Path, Log, Options),
             cors_reply_json(Request, Log))).
 

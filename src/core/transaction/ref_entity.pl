@@ -1130,16 +1130,16 @@ invalidate_commit(Context, Commit_Id) :-
     ;   true).
 
 commit_uri_to_history_commit_uris_(_, _, _, 0, []).
-commit_uri_to_history_commit_uris_(Context, Commit_Uri, From, Count, History_Commit_Uris) :-
+commit_uri_to_history_commit_uris_(Context, Commit_Uri, Start, Count, History_Commit_Uris) :-
     (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
-    ->  Next_From is From - 1,
-        (   From =< 0
+    ->  Next_Start is Start - 1,
+        (   Start =< 0
         ->  Next_Count is Count - 1
         ;   Next_Count is Count
         ),
-        commit_uri_to_history_commit_uris_(Context, Parent_Uri, Next_From, Next_Count,
+        commit_uri_to_history_commit_uris_(Context, Parent_Uri, Next_Start, Next_Count,
                                            Next_History_Commit_Uris),
-        (   From =< 0
+        (   Start =< 0
         ->  History_Commit_Uris = [Commit_Uri|Next_History_Commit_Uris]
         ;   History_Commit_Uris = Next_History_Commit_Uris)
     ;   History_Commit_Uris = [Commit_Uri]).
@@ -1148,9 +1148,9 @@ commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris) :-
     commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, []).
 
 commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, Options) :-
-    option(from(From), Options, 0),
+    option(start(Start), Options, 0),
     option(count(Count), Options, -1),
-    commit_uri_to_history_commit_uris_(Context, Commit_Uri, From, Count, Reversed_History_Commit_Uris),
+    commit_uri_to_history_commit_uris_(Context, Commit_Uri, Start, Count, Reversed_History_Commit_Uris),
     reverse(Reversed_History_Commit_Uris, History_Commit_Uris).
 
 commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit_Ids]) :-
