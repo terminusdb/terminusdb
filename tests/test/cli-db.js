@@ -113,6 +113,7 @@ describe('cli-db', function () {
     const r = await exec(`./terminusdb.sh branch delete admin/${db}/local/branch/foo | true`)
     expect(r.stderr).to.match(/Error: Branch foo does not exist/)
     await exec(`./terminusdb.sh db delete admin/${db}`)
+  })
 
   it('gives a graceful bad path error', async function () {
     const rand = util.randomString()
