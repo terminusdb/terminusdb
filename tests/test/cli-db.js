@@ -96,4 +96,22 @@ describe('cli-db', function () {
     expect(r4.stdout).to.match(/^DB_Uri\s+Cap_Id\n$/)
     await exec(`./terminusdb.sh db delete admin/${db}`)
   })
+
+  it('does not allow branch "main" to be deleted', async function () {
+    const db = util.randomString()
+    await exec(`./terminusdb.sh db create admin/${db}`)
+    // turn off schema
+    const r = await exec(`./terminusdb.sh branch delete admin/${db} | true`)
+    expect(r.stderr).to.match(/Error: Branch 'main' should not be deleted as it is special/)
+    await exec(`./terminusdb.sh db delete admin/${db}`)
+  })
+
+  it('is graceful on deleting non-existing branch', async function () {
+    const db = util.randomString()
+    await exec(`./terminusdb.sh db create admin/${db}`)
+    // turn off schema
+    const r = await exec(`./terminusdb.sh branch delete admin/${db}/local/branch/foo | true`)
+    expect(r.stderr).to.match(/Error: Branch foo does not exist/)
+    await exec(`./terminusdb.sh db delete admin/${db}`)
+  })
 })

@@ -905,6 +905,21 @@ api_error_jsonld_(branch,error(repository_is_not_local(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:NotLocalRepositoryError",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(branch,error(branch_does_not_exist(Branch_Name), _), JSON) :-
+    format(string(Msg), "Branch ~s does not exist", [Branch_Name]),
+    JSON = _{'@type' : "api:BranchErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:BranchDoesNotExistError",
+                              'api:branch_name' : Branch_Name}
+            }.
+api_error_jsonld_(branch,error(deleting_branch_main, _), JSON) :-
+    format(string(Msg), "Branch 'main' should not be deleted as it is special", []),
+    JSON = _{'@type' : "api:BranchErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:BranchMainDeletionError"}
+            }.
 api_error_jsonld_(branch,error(branch_already_exists(Branch_Name), _), JSON) :-
     format(string(Msg), "Branch ~s already exists", [Branch_Name]),
     JSON = _{'@type' : "api:BranchErrorResponse",
