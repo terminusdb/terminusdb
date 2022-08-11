@@ -8612,6 +8612,32 @@ test(untyped_elt_deep_in_list,
                           insert_document(C2, Document, _),
                           _).
 
+test(inherit_missing_class,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':inherits_from_non_existent_class,
+                            class:'http://somewhere.for.now/schema#Thing',
+                            super:'http://somewhere.for.now/schema#Something'}]),_)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 '@inherits' : ["Something"],
+                 name : "xsd:string" },
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema1),
+                          _),
+
+    true.
+
 :- end_tests(schema_checker).
 
 
