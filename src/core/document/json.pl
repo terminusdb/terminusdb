@@ -8604,12 +8604,70 @@ test(untyped_elt_deep_in_list,
                           (   insert_schema_document(C1, Schema1),
                               insert_schema_document(C1, Schema2)
                           ),
-                     _),
+                          _),
 
     Document = _{ 'sequence': [_{ name : "foo" },"Thing/one"]},
     with_test_transaction(Desc,
                           C2,
                           insert_document(C2, Document, _),
+                          _).
+
+test(optional_to_required,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':instance_not_cardinality_one,
+                          class:'http://www.w3.org/2001/XMLSchema#string',
+                          instance:'http://somewhere.for.now/document/Foo/+none+',
+                          predicate:'http://somewhere.for.now/schema#name'}]),
+             _)
+     ]) :-
+
+    Schema = _{ '@id': "Foo",
+                 '@key': _{
+                     '@fields': [
+                         "name"
+                     ],
+                     '@type': "Lexical"
+                 },
+                 '@type': "Class",
+                 'name': _{ '@class': "xsd:string",
+                            '@type': "Optional"
+                          }},
+
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema),
+                          _),
+
+    Document = _{'@id': "Foo/+none+", '@type': "Foo"},
+
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _),
+
+    Schema2 = _{ '@id': "Foo",
+                 '@key': _{
+                     '@fields': [
+                         "name"
+                     ],
+                     '@type': "Lexical"
+                 },
+                 '@type': "Class",
+                 'name': "xsd:string"},
+
+    with_test_transaction(Desc,
+                          C3,
+                          replace_schema_document(C3, Schema2),
                           _).
 
 :- end_tests(schema_checker).

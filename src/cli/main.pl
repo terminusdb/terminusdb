@@ -1631,15 +1631,19 @@ run_command(db,list,Databases,Opts) :-
     super_user_authority(Auth),
     option(branches(Branches), Opts),
     option(verbose(Verbose), Opts),
-    (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects,
-                       _{ branches : Branches, verbose: Verbose })
-    ;   list_existing_databases(Databases, Database_Objects,
-                                _{ branches : Branches, verbose: Verbose })
-    ),
-    (   option(json(true), Opts)
-    ->  json_write_dict(current_output, Database_Objects)
-    ;   pretty_print_databases(Database_Objects)
+    api_report_errors(
+        check_db,
+        (   (   Databases = []
+            ->  list_databases(system_descriptor{}, Auth, Database_Objects,
+                               _{ branches : Branches, verbose: Verbose })
+            ;   list_existing_databases(Databases, Database_Objects,
+                                        _{ branches : Branches, verbose: Verbose })
+            ),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, Database_Objects)
+            ;   pretty_print_databases(Database_Objects)
+            )
+        )
     ).
 run_command(db,create,[DB_Path],Opts) :-
     super_user_authority(Auth),
