@@ -177,11 +177,11 @@ describe('cli-doc', function () {
       await exec(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance)}'`)
       await exec(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance2)}'`)
       await exec(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance3)}'`)
-      const r1 = await exec(`./terminusdb.sh log ${dbSpec} -j -f 1 -c 3`)
+      const r1 = await exec(`./terminusdb.sh log ${dbSpec} -j -s 1 -c 3`)
       const log1 = JSON.parse(r1.stdout)
       expect(log1.length).to.equal(3)
 
-      const r2 = await exec(`./terminusdb.sh log ${dbSpec} -j -f 2 -c 3`)
+      const r2 = await exec(`./terminusdb.sh log ${dbSpec} -j -s 2 -c 3`)
       const log2 = JSON.parse(r2.stdout)
       expect(log2.length).to.equal(2)
     })
