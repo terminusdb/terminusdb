@@ -127,10 +127,17 @@ connect_handler(get, Request, System_DB, Auth) :-
                  methods([options,get])]).
 
 log_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
     api_report_errors(
         log,
         Request,
-        (   api_log(System_DB, Auth, Path, Log),
+        (
+            param_value_search_optional(Search, from, integer, 0, From),
+            param_value_search_optional(Search, count, integer, -1, Count),
+            Options = opts{ from: From, count: Count},
+            api_log(System_DB, Auth, Path, Log, Options),
             cors_reply_json(Request, Log))).
 
 

@@ -39,7 +39,8 @@
               invalidate_commit/2,
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
-              commit_uri_to_history_commit_uris/3
+              commit_uri_to_history_commit_uris/3,
+              commit_uri_to_history_commit_uris/4
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -1128,13 +1129,28 @@ invalidate_commit(Context, Commit_Id) :-
                      insert(Commit_Uri, rdf:type, '@schema':'InvalidCommit'))))
     ;   true).
 
-commit_uri_to_history_commit_uris_(Context, Commit_Uri, [Commit_Uri|History_Commit_Uris]) :-
+commit_uri_to_history_commit_uris_(_, _, _, 0, []).
+commit_uri_to_history_commit_uris_(Context, Commit_Uri, From, Count, History_Commit_Uris) :-
     (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
-    ->  commit_uri_to_history_commit_uris_(Context, Parent_Uri, History_Commit_Uris)
-    ;   History_Commit_Uris = []).
+    ->  Next_From is From - 1,
+        (   From =< 0
+        ->  Next_Count is Count - 1
+        ;   Next_Count is Count
+        ),
+        commit_uri_to_history_commit_uris_(Context, Parent_Uri, Next_From, Next_Count,
+                                           Next_History_Commit_Uris),
+        (   From =< 0
+        ->  History_Commit_Uris = [Commit_Uri|Next_History_Commit_Uris]
+        ;   History_Commit_Uris = Next_History_Commit_Uris)
+    ;   History_Commit_Uris = [Commit_Uri]).
 
 commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris) :-
-    commit_uri_to_history_commit_uris_(Context, Commit_Uri, Reversed_History_Commit_Uris),
+    commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, []).
+
+commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, Options) :-
+    option(from(From), Options, 0),
+    option(count(Count), Options, -1),
+    commit_uri_to_history_commit_uris_(Context, Commit_Uri, From, Count, Reversed_History_Commit_Uris),
     reverse(Reversed_History_Commit_Uris, History_Commit_Uris).
 
 commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit_Ids]) :-

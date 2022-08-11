@@ -34,4 +34,32 @@ describe('log', function () {
     // cleanup
     await agent.delete('/api/db/admin/hello')
   })
+
+  it('gets a log with count', async function () {
+    await agent.post('/api/db/admin/hello').send({ label: 'Hello' })
+
+    const id = util.randomString()
+    const schema = { '@type': 'Class', '@id': id }
+    await document.insert(agent, { schema })
+    const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
+    const result1 = await document.insert(agent, { instance: instance1 })
+
+    const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
+    const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
+
+    const result2 = await document.insert(agent, { instance: instance2 })
+    const version2 = result2.headers['terminusdb-data-version'].split('branch:')[1]
+
+    const logRequest = await agent.get('/api/log/admin/hello?from=1&count=1')
+    const log = logRequest.body
+
+    expect(log).to.have.lengthOf(1)
+    expect(log[0].author).to.equal('default_author')
+    expect(log[0].identifier).to.equal(version1)
+    //expect(log[1].identifier).to.equal(version1)
+
+    // cleanup
+    await agent.delete('/api/db/admin/hello')
+  })
+
 })
