@@ -96,4 +96,16 @@ describe('cli-db', function () {
     expect(r4.stdout).to.match(/^DB_Uri\s+Cap_Id\n$/)
     await exec(`./terminusdb.sh db delete admin/${db}`)
   })
+
+  it('gives a graceful bad path error', async function () {
+    const rand = util.randomString()
+    const r = await exec(`./terminusdb.sh db list ${rand} | true`)
+    expect(r.stderr).to.match(new RegExp(`^Error: Bad descriptor path: ${rand}`))
+  })
+
+  it('gives a graceful non-existence error', async function () {
+    const rand = util.randomString()
+    const r = await exec(`./terminusdb.sh db list admin/${rand} | true`)
+    expect(r.stderr).to.match(new RegExp(`^Error: Invalid database name: 'admin/${rand}'`))
+  })
 })
