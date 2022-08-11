@@ -8634,9 +8634,7 @@ test(inherit_missing_class,
     with_test_transaction(Desc,
                           C1,
                           insert_schema_document(C1, Schema1),
-                          _),
-
-    true.
+                          _).
 
 :- end_tests(schema_checker).
 
