@@ -12355,6 +12355,20 @@ test(various_lang_combos,
         )
     ).
 
+test(duplicate,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'language': "en-en"}, _)
+    ).
+
 test(nonsense_1,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
