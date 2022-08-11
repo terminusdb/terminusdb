@@ -12368,7 +12368,8 @@ test(duplicate,
                     reason:json{'terminusdb:///schema#language':
                                 json{'@type':could_not_interpret_as_type,
                                      type:'http://www.w3.org/2001/XMLSchema#language',
-                                     value:"en-en"}}}])
+                                     value:"en-en"}}}]),
+          _)
      ]) :-
 
     with_test_transaction(
