@@ -1315,6 +1315,7 @@ error_type_(check_db, 'api:DbExistsErrorResponse').
 error_type_(clone, 'api:CloneErrorResponse').
 error_type_(create_db, 'api:DbCreateErrorResponse').
 error_type_(csv, 'api:CsvErrorResponse').
+error_type_(list_db, 'api:DbDeleteErrorResponse').
 error_type_(delete_db, 'api:DbDeleteErrorResponse').
 error_type_(delete_documents, 'api:DeleteDocumentErrorResponse').
 error_type_(delete_organization, 'api:DeleteOrganizationErrorResponse').
@@ -2009,7 +2010,7 @@ generic_exception_jsonld(schema_check_failure(Witnesses),JSON) :-
              'api:status' : 'api:failure',
              'system:witnesses' : Witnesses}.
 generic_exception_jsonld(database_not_found(DB),JSON) :-
-    format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
+    format(atom(MSG), 'Database ~s does not exist', [DB]),
     JSON = _{'api:message' : MSG,
              'api:status' : 'api:failure'}.
 generic_exception_jsonld(database_files_do_not_exist(DB),JSON) :-
