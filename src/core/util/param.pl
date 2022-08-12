@@ -76,15 +76,12 @@ param_check_search_(non_empty_atom, Value_In, Value_Out) :-
 param_check_common_(boolean, false, false).
 param_check_common_(boolean, true, true).
 param_check_common_(integer, Value_In, Value_Out) :-
-    input_to_integer(Value_In, Value_Out),
-    Value_Out = Value_In.
+    input_to_integer(Value_In, Value_Out).
 param_check_common_(nonnegative_integer, Value_In, Value_Out) :-
-    input_to_integer(Value_In, Value_Integer),
-    Value_Integer >= 0,
-    Value_Out = Value_Integer.
-param_check_common_(text, Value_In, Value_Out) :-
-    text(Value_In),
-    Value_Out = Value_In.
+    input_to_integer(Value_In, Value_Out),
+    Value_Out >= 0.
+param_check_common_(text, Value_In, Value_In) :-
+    text(Value_In).
 
 param_value_search_(Search, Param, Type, Value) :-
     memberchk(Param=Value_Unchecked, Search),
