@@ -1121,6 +1121,14 @@ api_error_jsonld_(store_init,error(storage_already_exists(Path),_),JSON) :-
              'api:error' : _{ '@type' : "api:StorageAlreadyInitializedError",
                               'api:path' : Path}
             }.
+api_error_jsonld_(store_init,error(permission_error(create,directory,Path),_), JSON) :-
+    format(string(Msg), "You do not have permissions to create directory ~s", [Path]),
+    JSON = _{'@type' : 'api:StoreInitErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DirectoryPermissionsError",
+                              'api:path' : Path}
+            }.
 api_error_jsonld_(info,error(access_not_authorized(Auth),_),JSON) :-
     format(string(Msg), "Access to `info` is not authorised with auth ~q",
            [Auth]),
