@@ -67,7 +67,6 @@ describe('cli-log', function () {
       await exec(`./terminusdb.sh db delete ${db}`)
     })
 
-
     it('gets all the logs even with higher count than amount of entries', async function () {
       const db = `admin/${util.randomString()}`
       await exec(`./terminusdb.sh db create ${db}`)
@@ -91,7 +90,6 @@ describe('cli-log', function () {
 
       await exec(`./terminusdb.sh db delete ${db}`)
     })
-
 
     it('gets empty log list with higher start than amount of entries', async function () {
       const db = `admin/${util.randomString()}`
@@ -117,7 +115,6 @@ describe('cli-log', function () {
       await exec(`./terminusdb.sh db delete ${db}`)
     })
 
-
     it('gets empty log when count is zero', async function () {
       const db = `admin/${util.randomString()}`
       await exec(`./terminusdb.sh db create ${db}`)
@@ -139,7 +136,6 @@ describe('cli-log', function () {
 
       await exec(`./terminusdb.sh db delete ${db}`)
     })
-
 
     it('gets two entries when count is two', async function () {
       const db = `admin/${util.randomString()}`
@@ -165,6 +161,4 @@ describe('cli-log', function () {
       await exec(`./terminusdb.sh db delete ${db}`)
     })
   })
-
-
 })
