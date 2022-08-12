@@ -314,6 +314,12 @@ Get the log for a branch given by DB_SPEC.
   * `-j`, `--json`=[value]:
   return log as JSON
 
+  * `-s`, `--start`=[value]:
+  How far back in commit log to start giving results
+
+  * `-c`, `--count`=[value]:
+  Number of results to return
+
 ### reset
 
 `terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC`
