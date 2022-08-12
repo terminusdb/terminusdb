@@ -141,7 +141,7 @@
               api_apply_squash_commit/7,
 
               % api_log.pl
-              api_log/4,
+              api_log/5,
               format_log/2,
 
               % api_access_control.pl

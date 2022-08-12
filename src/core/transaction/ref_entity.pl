@@ -39,13 +39,15 @@
               invalidate_commit/2,
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
-              commit_uri_to_history_commit_uris/3
+              commit_uri_to_history_commit_uris/3,
+              commit_uri_to_history_commit_uris/4
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
+:- use_module(library(option)).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -1128,13 +1130,30 @@ invalidate_commit(Context, Commit_Id) :-
                      insert(Commit_Uri, rdf:type, '@schema':'InvalidCommit'))))
     ;   true).
 
-commit_uri_to_history_commit_uris_(Context, Commit_Uri, [Commit_Uri|History_Commit_Uris]) :-
+commit_uri_to_history_commit_uris_(_, _, _, 0, []).
+commit_uri_to_history_commit_uris_(Context, Commit_Uri, Start, Count, History_Commit_Uris) :-
     (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
-    ->  commit_uri_to_history_commit_uris_(Context, Parent_Uri, History_Commit_Uris)
+    ->  Next_Start is Start - 1,
+        (   Start =< 0
+        ->  Next_Count is Count - 1
+        ;   Next_Count is Count
+        ),
+        commit_uri_to_history_commit_uris_(Context, Parent_Uri, Next_Start, Next_Count,
+                                           Next_History_Commit_Uris),
+        (   Start =< 0
+        ->  History_Commit_Uris = [Commit_Uri|Next_History_Commit_Uris]
+        ;   History_Commit_Uris = Next_History_Commit_Uris)
+    ;   Start =< 0
+    ->  History_Commit_Uris = [Commit_Uri]
     ;   History_Commit_Uris = []).
 
 commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris) :-
-    commit_uri_to_history_commit_uris_(Context, Commit_Uri, Reversed_History_Commit_Uris),
+    commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, []).
+
+commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, Options) :-
+    option(start(Start), Options, 0),
+    option(count(Count), Options, -1),
+    commit_uri_to_history_commit_uris_(Context, Commit_Uri, Start, Count, Reversed_History_Commit_Uris),
     reverse(Reversed_History_Commit_Uris, History_Commit_Uris).
 
 commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit_Ids]) :-
