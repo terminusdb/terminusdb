@@ -378,6 +378,7 @@ refute_schema(Validation_Object,Witness) :-
     is_simple_class(Validation_Object,Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
     ;   refute_unfoldable_cycle(Validation_Object,Class,Witness)
+    ;   refute_class_inherits(Validation_Object,Class,Witness)
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
     ;   refute_class_meta(Validation_Object,Class,Witness)
@@ -424,6 +425,28 @@ unfoldable_property_cycle(Schema, Original, A, Path, New_Path, State) :-
     ->  fail
     ;   nb_setarg(1,State,[C|Set]),
         unfoldable_property_cycle(Schema, Original, C, [C,P|Path], New_Path, State)
+    ).
+
+refute_class_inherits(DB,Class,Witness) :-
+    database_schema(DB,Schema),
+    xrdf(Schema,Class,sys:inherits,Super),
+    (   \+ xrdf(Schema, Super, rdf:type, _Type)
+    ->  Witness =
+        witness{
+            '@type': inherits_from_non_existent_class,
+            class: Class,
+            super: Super
+        }
+    ;   xrdf(Schema, Super, rdf:type, Type),
+        global_prefix_expand(sys:'Class', Class_Type),
+        global_prefix_expand(sys:'TaggedUnion', Tagged_Type),
+        \+ member(Type, [Class_Type,Tagged_Type])
+    ->  Witness =
+        witness{
+            '@type': inherits_from_invalid_super_class,
+            class: Class,
+            super: Super
+        }
     ).
 
 subclass_of(Validation_Object,Subclass,Class) :-
