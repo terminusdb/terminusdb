@@ -1143,7 +1143,9 @@ commit_uri_to_history_commit_uris_(Context, Commit_Uri, Start, Count, History_Co
         (   Start =< 0
         ->  History_Commit_Uris = [Commit_Uri|Next_History_Commit_Uris]
         ;   History_Commit_Uris = Next_History_Commit_Uris)
-    ;   History_Commit_Uris = [Commit_Uri]).
+    ;   Start =< 0
+    ->  History_Commit_Uris = [Commit_Uri]
+    ;   History_Commit_Uris = []).
 
 commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris) :-
     commit_uri_to_history_commit_uris(Context, Commit_Uri, History_Commit_Uris, []).
