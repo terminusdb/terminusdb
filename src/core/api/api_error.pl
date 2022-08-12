@@ -589,6 +589,15 @@ api_error_jsonld_(woql,error(unresolvable_absolute_descriptor(Descriptor), _), J
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(woql,error(branch_does_not_exist(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The WOQL query referenced a non existing branch for descriptor ~q", [Path]),
+    JSON = _{'@type' : "api:WoqlErrorResponse",
+             'api:status' : 'api:not_found',
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:BranchDoesNotExistError",
+                              'api:absolute_descriptor' : Path}
+            }.
 api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
     format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
@@ -597,6 +606,15 @@ api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
              'api:error' : _{ '@type' : 'api:BadCast',
                               'api:value' : ValS,
                               'api:type' : Type},
+             'api:message' : Msg
+            }.
+api_error_jsonld_(woql,error(existence_error(matching_rule,Term),_), JSON) :-
+    format(string(TermW), "~q", [Term]),
+    format(string(Msg), "The program: '~w' used a predicate with unhandled arguments", [Term]),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ExistenceError',
+                              'api:value' : TermW},
              'api:message' : Msg
             }.
 api_error_jsonld_(clone,error(no_remote_authorization,_),JSON) :-
