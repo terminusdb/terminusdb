@@ -116,5 +116,55 @@ describe('cli-log', function () {
 
       await exec(`./terminusdb.sh db delete ${db}`)
     })
+
+
+    it('gets empty log when count is zero', async function () {
+      const db = `admin/${util.randomString()}`
+      await exec(`./terminusdb.sh db create ${db}`)
+      const schema = {
+        '@id': 'Thing',
+        '@type': 'Class',
+        negativeInteger: 'xsd:negativeInteger',
+      }
+
+      await exec(`./terminusdb.sh doc insert ${db} -g schema --data='${JSON.stringify(schema)}'`)
+
+      const instance = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      const instance2 = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance)}'`)
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance2)}'`)
+      const r1 = await exec(`./terminusdb.sh log ${db} -j -s 1 -c 0`)
+      const log1 = JSON.parse(r1.stdout)
+      expect(log1.length).to.equal(0)
+
+      await exec(`./terminusdb.sh db delete ${db}`)
+    })
+
+
+    it('gets two entries when count is two', async function () {
+      const db = `admin/${util.randomString()}`
+      await exec(`./terminusdb.sh db create ${db}`)
+      const schema = {
+        '@id': 'Thing',
+        '@type': 'Class',
+        negativeInteger: 'xsd:negativeInteger',
+      }
+
+      await exec(`./terminusdb.sh doc insert ${db} -g schema --data='${JSON.stringify(schema)}'`)
+
+      const instance = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      const instance2 = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      const instance3 = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance)}'`)
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance2)}'`)
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance3)}'`)
+      const r1 = await exec(`./terminusdb.sh log ${db} -j -s 0 -c 2`)
+      const log1 = JSON.parse(r1.stdout)
+      expect(log1.length).to.equal(2)
+
+      await exec(`./terminusdb.sh db delete ${db}`)
+    })
   })
+
+
 })
