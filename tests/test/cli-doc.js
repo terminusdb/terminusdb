@@ -156,4 +156,45 @@ describe('cli-doc', function () {
       }
     })
   })
+
+  describe('checks logs', function () {
+    const schema = { '@type': 'Class', negativeInteger: 'xsd:negativeInteger' }
+
+    before(async function () {
+      this.timeout(50000)
+      schema['@id'] = util.randomString()
+      {
+        const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
+        expect(r.stdout).to.match(new RegExp(`^Documents inserted:\n 1: ${schema['@id']}`))
+      }
+    })
+
+    it('gets a truncated log', async function () {
+      const db = `admin/${util.randomString()}`
+      await exec(`./terminusdb.sh db create ${db}`)
+      const schema = {
+        '@id': 'Thing',
+        '@type': 'Class',
+        negativeInteger: 'xsd:negativeInteger',
+      }
+
+      await exec(`./terminusdb.sh doc insert ${db} -g schema --data='${JSON.stringify(schema)}'`)
+
+      const instance = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      const instance2 = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      const instance3 = { '@id': `Thing/${util.randomString()}`, negativeInteger: -88 }
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance)}'`)
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance2)}'`)
+      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance3)}'`)
+      const r1 = await exec(`./terminusdb.sh log ${db} -j -s 0 -c 3`)
+      const log1 = JSON.parse(r1.stdout)
+      expect(log1.length).to.equal(3)
+
+      const r2 = await exec(`./terminusdb.sh log ${db} -j -s 2 -c 3`)
+      const log2 = JSON.parse(r2.stdout)
+      expect(log2.length).to.equal(2)
+
+      await exec(`./terminusdb.sh db delete ${db}`)
+    })
+  })
 })

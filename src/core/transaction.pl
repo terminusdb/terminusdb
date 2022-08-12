@@ -86,6 +86,7 @@
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
+              commit_uri_to_history_commit_uris/4,
               layer_uri_for_commit/4,
 
               % repo_entity.pl
