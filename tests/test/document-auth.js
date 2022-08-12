@@ -514,6 +514,13 @@ describe('document', function () {
         const id = `terminusdb:///data/${instance['@id']}`
         await document.insert(agent, { instance, raw_json: true }).fails(api.error.invalidJSONDocumentId(id))
       })
+
+      it('fails gracefully with bad key prefix', async function () {
+        const instance = { '@type' : "foo:User" }
+        const result = await document.insert(agent, { instance }).unverified()
+        expect(result.status).to.equal(400)
+        expect(result.body['api:error']['api:key']).to.equal('foo:User')
+      })
     })
   })
 })
