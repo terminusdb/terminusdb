@@ -8635,6 +8635,97 @@ test(non_existing_class_reference,
                           insert_schema_document(C1, Schema1),
                           _).
 
+test(inherit_missing_class,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':inherits_from_non_existent_class,
+                            class:'http://somewhere.for.now/schema#Thing',
+                            super:'http://somewhere.for.now/schema#Something'}]),_)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 '@inherits' : ["Something"],
+                 name : "xsd:string" },
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema1),
+                          _).
+
+test(inherit_tagged_union,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Schema1 =
+    _{
+        '@type': "TaggedUnion",
+        '@id': "EitherAorB",
+        '@abstract': [],
+        a : "xsd:string",
+        b : "xsd:integer"
+    },
+    Schema2 =
+    _{
+        '@type': "Class",
+        '@id': "EitherAorBandC",
+        '@inherits': "EitherAorB",
+        c : "xsd:float"
+    },
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                          _).
+
+
+test(inherit_enum,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':inherits_from_invalid_super_class,
+                            class:'http://somewhere.for.now/schema#EnumBaby',
+                            super:'http://somewhere.for.now/schema#Number'}]), _)
+     ]) :-
+    Schema1 =
+    _{ '@type' : "Enum",
+       '@id' : "Number",
+       '@value' : [ "one", "two", "three" ] },
+    Schema2 =
+    _{
+        '@type': "Class",
+        '@id': "EnumBaby",
+        '@inherits': "Number",
+        c : "xsd:float"
+    },
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                          _).
+
 :- end_tests(schema_checker).
 
 
