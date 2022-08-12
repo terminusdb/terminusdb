@@ -438,10 +438,12 @@ refute_class_inherits(DB,Class,Witness) :-
             super: Super
         }
     ;   xrdf(Schema, Super, rdf:type, Type),
-        \+ is_system_class(Type)
+        global_prefix_expand(sys:'Class', Class_Type),
+        global_prefix_expand(sys:'TaggedUnion', Tagged_Type),
+        \+ member(Type, [Class_Type,Tagged_Type])
     ->  Witness =
         witness{
-            '@type': inherits_from_non_system_class,
+            '@type': inherits_from_invalid_super_class,
             class: Class,
             super: Super
         }
