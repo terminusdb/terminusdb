@@ -49,15 +49,13 @@ iana(Tag,Records) :-
     split_string(Tag,'-','',List),
     maplist(atom_string,Parts,List),
     Types = [language,extlang,script,region,variant,extension,privateuse],
-    findall(Record,
-            (   member(Type,Types),
-                member(Elt,Parts),
-                once(iana(Type,Elt,Record))
-            ),
-            Records),
-    % We better have gotten a record for each!
-    length(Records,N),
-    length(Parts,N).
+    select_iana(Parts,Types,Records).
+
+select_iana([],_,[]) .
+select_iana([Tag|Tags],Types,[Record|Records]) :-
+    select(Type,Types,Remaining),
+    iana(Type,Tag,Record),
+    select_iana(Tags,Remaining,Records).
 
 iana(language,aa,tag{
          type: "language",
