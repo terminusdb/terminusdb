@@ -97,24 +97,6 @@ describe('cli-db', function () {
     await exec(`./terminusdb.sh db delete admin/${db}`)
   })
 
-  it('does not allow branch "main" to be deleted', async function () {
-    const db = util.randomString()
-    await exec(`./terminusdb.sh db create admin/${db}`)
-    // turn off schema
-    const r = await exec(`./terminusdb.sh branch delete admin/${db} | true`)
-    expect(r.stderr).to.match(/Error: Branch 'main' should not be deleted as it is special/)
-    await exec(`./terminusdb.sh db delete admin/${db}`)
-  })
-
-  it('is graceful on deleting non-existing branch', async function () {
-    const db = util.randomString()
-    await exec(`./terminusdb.sh db create admin/${db}`)
-    // turn off schema
-    const r = await exec(`./terminusdb.sh branch delete admin/${db}/local/branch/foo | true`)
-    expect(r.stderr).to.match(/Error: Branch foo does not exist/)
-    await exec(`./terminusdb.sh db delete admin/${db}`)
-  })
-
   it('gives a graceful bad path error', async function () {
     const rand = util.randomString()
     const r = await exec(`./terminusdb.sh db list ${rand} | true`)
