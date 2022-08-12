@@ -244,6 +244,9 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
 
 branch_delete_(Branch_Descriptor) :-
     Branch_Name = (Branch_Descriptor.branch_name),
+    do_or_die(
+        \+ Branch_Name = "main",
+        error(deleting_branch_main,_)),
     Repository_Descriptor = (Branch_Descriptor.repository_descriptor),
     create_context(Repository_Descriptor,Repository_Context),
     with_transaction(
