@@ -1966,6 +1966,15 @@ api_document_error_jsonld(Type,error(not_a_unit_type(Value, Document), _), JSON)
                               'api:document': Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type,error(key_has_unknown_prefix(Prefixed_Key), _), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The key '~w' is utilising an unknown prefix.", [Prefixed_Key]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownPrefixError",
+                              'api:key' : Prefixed_Key}
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
