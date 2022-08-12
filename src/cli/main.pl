@@ -492,7 +492,19 @@ opt_spec(log,'terminusdb log DB_SPEC',
            longflags([json]),
            shortflags([j]),
            default(false),
-           help('return log as JSON')]
+           help('return log as JSON')],
+          [opt(start),
+           type(integer),
+           longflags([start]),
+           shortflags([s]),
+           default(0),
+           help('How far back in commit log to start giving results')],
+          [opt(count),
+           type(integer),
+           longflags([count]),
+           shortflags([c]),
+           default(-1),
+           help('Number of results to return')]
          ]).
 opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
          'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
@@ -1587,7 +1599,7 @@ run_command(log,[Path], Opts) :-
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         log,
-        (   api_log(System_DB, Auth, Path, Log),
+        (   api_log(System_DB, Auth, Path, Log, Opts),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Log, [])
             ;   format_log(current_output,Log)

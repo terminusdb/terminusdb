@@ -299,6 +299,16 @@ api_global_error_jsonld(error(unresolvable_absolute_descriptor(Descriptor),_), T
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg}.
+api_global_error_jsonld(error(branch_does_not_exist(Descriptor), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path}
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
