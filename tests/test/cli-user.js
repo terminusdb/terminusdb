@@ -21,11 +21,12 @@ describe('cli-user', function () {
   it('add db, change password, list db', async function () {
     const db = util.randomString()
     await exec(`./terminusdb.sh db create admin/${db}`)
+    const r1 = await exec(`./terminusdb.sh user get admin -c -j`)
+    const Users1 = JSON.parse(r1.stdout)
+
     await exec(`./terminusdb.sh user password admin -pfoo`)
-    const r = await exec(`./terminusdb.sh db list admin/${db}`)
-    expect(r.stdout).to.match(new RegExp(`^TerminusDB\n│\n└── admin/${db}.*`))
     const r2 = await exec(`./terminusdb.sh user get admin -c -j`)
-    const Users = JSON.parse(r2.stdout)
-    expect(Users[0]['capability']).to.have.lengthOf.above(0)
+    const Users2 = JSON.parse(r2.stdout)
+    expect(Users2[0]['capability']).to.deep.equal(Users1[0]['capability'])
   })
 })
