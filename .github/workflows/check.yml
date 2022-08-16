@@ -99,7 +99,6 @@ jobs:
           TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
         run: |
           npm install-ci-test
-          npm run check
 
   integration_tests_header:
     name: Integration tests (header)
