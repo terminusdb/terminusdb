@@ -24,5 +24,8 @@ describe('cli-user', function () {
     await exec(`./terminusdb.sh user password admin -pfoo`)
     const r = await exec(`./terminusdb.sh db list admin/${db}`)
     expect(r.stdout).to.match(new RegExp(`^TerminusDB\n│\n└── admin/${db}.*`))
+    const r2 = await exec(`./terminusdb.sh user get admin -c -j`)
+    const Users = JSON.parse(r2.stdout)
+    expect(Users[0]['capability']).to.have.lengthOf.above(0)
   })
 })
