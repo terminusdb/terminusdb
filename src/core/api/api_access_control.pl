@@ -642,15 +642,8 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
         ;   get_dict('@id', User, Auth)),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    get_dict('@id', User, Id),
-    get_dict(name, User, Name),
     crypto_password_hash(Password, Hash),
-    New_User =
-    _{
-        '@id' : Id,
-        name : Name,
-        key_hash : Hash
-    },
+    put_dict(_{ key_hash : Hash}, User, New_User),
 
     create_context(System_DB, commit_info{author: "admin", message: "API: Update User Password"},
                    System_Context),
