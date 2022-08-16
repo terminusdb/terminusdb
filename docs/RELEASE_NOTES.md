@@ -1,3 +1,22 @@
+# TerminusDB Server v10.1.3 Release Notes
+
+## Enhancements
+
++ Pretty print lists
++ Better error messages
++ Add count option to `terminusdb log`
++ Users can now cast strings to 'sys:Top' in WOQL allowing them to
+  treat a string as a node in the graph.
+
+## Bug fixes
+
++ Improved error handling
++ Fixed password change bug, where a user would lose its capabilities when password changed.
++ Fix bug in WOQL inserting typed lists. (#1349)
++ Fix IANA code recognition
++ Fix read lock errors
++ Check inheritance of non-existing classes
+
 # TerminusDB Server v10.1.2 Release Notes
 
 ## Enhancements
