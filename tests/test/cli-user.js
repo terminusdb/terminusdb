@@ -21,12 +21,12 @@ describe('cli-user', function () {
   it('add db, change password, list db', async function () {
     const db = util.randomString()
     await exec(`./terminusdb.sh db create admin/${db}`)
-    const r1 = await exec(`./terminusdb.sh user get admin -c -j`)
+    const r1 = await exec('./terminusdb.sh user get admin -c -j')
     const Users1 = JSON.parse(r1.stdout)
 
-    await exec(`./terminusdb.sh user password admin -pfoo`)
-    const r2 = await exec(`./terminusdb.sh user get admin -c -j`)
+    await exec('./terminusdb.sh user password admin -pfoo')
+    const r2 = await exec('./terminusdb.sh user get admin -c -j')
     const Users2 = JSON.parse(r2.stdout)
-    expect(Users2[0]['capability']).to.deep.equal(Users1[0]['capability'])
+    expect(Users2[0].capability).to.deep.equal(Users1[0].capability)
   })
 })
