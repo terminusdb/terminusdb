@@ -396,7 +396,9 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, 
     json_stream_start(Config, Stream_Started),
 
     forall(api_get_documents_by_query(Transaction, Graph_Type, Type_Ex, Query_Ex, Config, Document),
-           json_stream_write_dict(Config, Stream_Started, Document)).
+           json_stream_write_dict(Config, Stream_Started, Document)),
+
+    json_stream_end(Config).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
