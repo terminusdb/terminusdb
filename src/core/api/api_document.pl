@@ -80,7 +80,7 @@ api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document) :-
 
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id) :-
     skip_generate_nsols(
-        match_query_document_uri(Transaction, Type, Query, Id),
+        match_expanded_query_document_uri(Transaction, Type, Query, Id),
         Config.skip,
         Config.count).
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config, _Id) :-
@@ -380,17 +380,31 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    nonvar(Query),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    % do stuff with the stream and stuff
+    die_if(Graph_Type \= instance,
+           error(query_is_only_supported_for_instance_graphs, _)),
+
+    expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+
+    % At this point we know we can open the stream. Any exit conditions have triggered by now.
+    call(Initial_Goal, Config.as_list),
+    json_stream_start(Config, Stream_Started),
+
+    forall(api_get_documents_by_query(Transaction, Graph_Type, Type_Ex, Query_Ex, Config, Document),
+           json_stream_write_dict(Config, Stream_Started, Document)).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.
     call(Initial_Goal, Config.as_list),
     json_stream_start(Config, Stream_Started),
 
-    (   nonvar(Query) % dictionaries do not need tags to be bound
-    ->  forall(api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document),
-               json_stream_write_dict(Config, Stream_Started, Document))
-    ;   ground(Id)
+    (   ground(Id)
     ->  api_print_document_by_id(Transaction, Graph_Type, Id, Config)
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document),

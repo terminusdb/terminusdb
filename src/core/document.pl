@@ -61,6 +61,8 @@
 
               % query.pl
               match_query_document_uri/4,
+              match_expanded_query_document_uri/4,
+              expand_query_document/5,
 
               % diff.pl
               simple_diff/4,

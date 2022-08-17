@@ -1,5 +1,7 @@
 :- module('document/query', [
-              match_query_document_uri/4
+              match_query_document_uri/4,
+              match_expanded_query_document_uri/4,
+              expand_query_document/5
           ]).
 
 :- use_module(instance).
@@ -235,6 +237,9 @@ match_query_document_uri_(Query, DB, Uri) :-
 
 match_query_document_uri(DB, Type, Query, Uri) :-
     expand_query_document(DB, Type, Query, Query_Ex, Type_Ex),
+    match_expanded_query_document_uri(DB, Type_Ex, Query_Ex, Uri).
+
+match_expanded_query_document_uri(DB, Type_Ex, Query_Ex, Uri) :-
 
     (   (   is_dict(Query_Ex)
         ->  (   get_dict('@id', Query_Ex, id_exact(_,Uri))
