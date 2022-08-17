@@ -26,7 +26,7 @@ describe('organization', function () {
     const orgName = util.randomString()
     await agent.post(`/api/organizations/${orgName}`)
     const result = await agent.delete(`/api/organizations/${orgName}`)
-    expect(result.body).to.deep.equal({ '@type': 'api:RolesResponse', 'api:status': 'api:success' })
+    expect(result.body).to.deep.equal({ '@type': 'api:OrganizationResponse', 'api:status': 'api:success' })
     expect(result.status).to.equal(200)
   })
 

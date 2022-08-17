@@ -905,8 +905,13 @@ enum_value(Type,Value,ID) :-
     ground(Type),
     ground(Value),
     !,
-    encode_id_fragment(Value, Encoded_Value),
-    atomic_list_concat([Type, '/', Encoded_Value], ID).
+    % First check to see if type is a prefix of value
+    atom_string(Value_Atom, Value),
+    (   atom_concat(Type, _, Value_Atom)
+    ->  ID = Value_Atom
+    ;   encode_id_fragment(Value, Encoded_Value),
+        atomic_list_concat([Type, '/', Encoded_Value], ID)
+    ).
 enum_value(Type,Value,ID) :-
     ground(Type),
     !,
@@ -8386,6 +8391,341 @@ test(insert_extra_array_value,
                                   insert(Array, sys:value, "extra entry"^^xsd:string)))),
                      _).
 
+test(add_enum_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Schema1 = _{ '@type' : "Enum",
+                 '@id' : "Number",
+                 '@value' : [ "one", "two", "three" ] },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "Array",
+                                '@class': "Number"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["three", "two", "three", "one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(bad_enum_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [json{'@type':no_unique_type_for_document,
+                         document:json{sequence:["three","two","asdf","one"]},
+                         reason:json{'@type':not_a_valid_enum,
+                                     enum:'http://somewhere.for.now/schema#Number',
+                                     value:"asdf"}}]))
+     ]) :-
+    Schema1 = _{ '@type' : "Enum",
+                 '@id' : "Number",
+                 '@value' : [ "one", "two", "three" ] },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "Array",
+                                '@class': "Number"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["three", "two", "asdf", "one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(untyped_object_array,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':references_untyped_array_range,
+                            object:_,
+                            predicate:"http://somewhere.for.now/schema#sequence",
+                            subject:_Array_Cell}]),
+               _)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 '@key' : _{ '@type' : "Lexical",
+                             '@fields' : ["name"]},
+                 name : "xsd:string" },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "Array",
+                                '@class': "Thing"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["Thing/foo", "Thing/bar"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(add_enum_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Schema1 = _{ '@type' : "Enum",
+                 '@id' : "Number",
+                 '@value' : [ "one", "two", "three" ] },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "List",
+                                '@class': "Number"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["three", "two", "three", "one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(untyped_elt_in_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':references_untyped_list_range,
+                            index:0,
+                            object:"http://somewhere.for.now/document/Thing/one",
+                            predicate:"http://somewhere.for.now/schema#sequence",
+                            subject:_}]),
+               _)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 name : "xsd:string" },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "List",
+                                '@class': "Thing"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': ["Thing/one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(untyped_elt_deep_in_list,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':references_untyped_list_range,
+                            index:1,
+                            object:"http://somewhere.for.now/document/Thing/one",
+                            predicate:"http://somewhere.for.now/schema#sequence",
+                            subject:_}]),
+               _)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 '@key' : _{ '@type' : "Lexical", '@fields' : ["name"]},
+                 name : "xsd:string" },
+
+    Schema2 = _{ '@type' : "Class",
+                 '@id' : "Sequence",
+                 'sequence' : _{'@type': "List",
+                                '@class': "Thing"}},
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                     _),
+
+    Document = _{ 'sequence': [_{ name : "foo" },"Thing/one"]},
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2, Document, _),
+                          _).
+
+test(non_existing_class_reference,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':not_a_class_or_base_type,
+                            class:'http://somewhere.for.now/schema#star'}]),
+               _)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Repository",
+                 repository_star : _{ '@class' : "star", '@type': "Set" }},
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema1),
+                          _).
+
+test(inherit_missing_class,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':inherits_from_non_existent_class,
+                            class:'http://somewhere.for.now/schema#Thing',
+                            super:'http://somewhere.for.now/schema#Something'}]),_)
+     ]) :-
+    Schema1 = _{ '@type' : "Class",
+                 '@id' : "Thing",
+                 '@inherits' : ["Something"],
+                 name : "xsd:string" },
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema1),
+                          _).
+
+test(inherit_tagged_union,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    Schema1 =
+    _{
+        '@type': "TaggedUnion",
+        '@id': "EitherAorB",
+        '@abstract': [],
+        a : "xsd:string",
+        b : "xsd:integer"
+    },
+    Schema2 =
+    _{
+        '@type': "Class",
+        '@id': "EitherAorBandC",
+        '@inherits': "EitherAorB",
+        c : "xsd:float"
+    },
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                          _).
+
+
+test(inherit_enum,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(schema_check_failure(
+                   [witness{'@type':inherits_from_invalid_super_class,
+                            class:'http://somewhere.for.now/schema#EnumBaby',
+                            super:'http://somewhere.for.now/schema#Number'}]), _)
+     ]) :-
+    Schema1 =
+    _{ '@type' : "Enum",
+       '@id' : "Number",
+       '@value' : [ "one", "two", "three" ] },
+    Schema2 =
+    _{
+        '@type': "Class",
+        '@id': "EnumBaby",
+        '@inherits': "Number",
+        c : "xsd:float"
+    },
+    with_test_transaction(Desc,
+                          C1,
+                          (   insert_schema_document(C1, Schema1),
+                              insert_schema_document(C1, Schema2)
+                          ),
+                          _).
+
 :- end_tests(schema_checker).
 
 
@@ -11993,7 +12333,7 @@ test(geojson_unfoldable,
          get_schema_document(C2, 'Geometry', Geometry)
      ),
 
-     writeq(Geometry).
+     Geometry = json{'@abstract':[],'@id':'Geometry','@type':'Class','@unfoldable':[]}.
 
 test(geojson_example,
      [setup((setup_temp_store(State),
@@ -12097,3 +12437,102 @@ test(json_diff,
                             '@op':"SwapValue"}}].
 
 :- end_tests(json_datatype).
+
+:- begin_tests(language_codes).
+:- use_module(core(util/test_utils)).
+
+language_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Language",
+  "language" : "xsd:language" }').
+
+test(various_lang_combos,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_document(C1, _{ 'language': "en-GB"}, _),
+            insert_document(C1, _{ 'language': "egy-Egyd"}, _),
+            insert_document(C1, _{ 'language' : "en-Latn-US"}, _),
+            insert_document(C1, _{ 'language' : "cy-GB-Latn"}, _),
+            insert_document(C1, _{ 'language' : "az-Latn-IR"}, _)
+        )
+    ).
+
+test(duplicate,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure(
+              [json{'@type':no_unique_type_for_document,
+                    document:json{language:"en-en"},
+                    reason:json{'terminusdb:///schema#language':
+                                json{'@type':could_not_interpret_as_type,
+                                     type:'http://www.w3.org/2001/XMLSchema#language',
+                                     value:"en-en"}}}]),
+          _)
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'language': "en-en"}, _)
+    ).
+
+test(nonsense_1,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [json{'@type':no_unique_type_for_document,
+                      document:json{language:"foo-Bar"},
+                      reason:json{'terminusdb:///schema#language':
+                                  json{'@type':could_not_interpret_as_type,
+                                       type:'http://www.w3.org/2001/XMLSchema#language',
+                                       value:"foo-Bar"}}}]), _)
+
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'language': "foo-Bar"}, _)
+    ).
+
+test(nonsense_2,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(
+                [json{'@type':no_unique_type_for_document,
+                      document:json{language:"en-GBR"},
+                      reason:json{'terminusdb:///schema#language':
+                                  json{'@type':could_not_interpret_as_type,
+                                       type:'http://www.w3.org/2001/XMLSchema#language',
+                                       value:"en-GBR"}}}]), _)
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'language': "en-GBR"}, _)
+    ).
+
+:- end_tests(language_codes).

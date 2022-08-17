@@ -165,11 +165,12 @@ write_type_access(instance,'@schema':'Action/instance_write_access').
 write_type_access(schema,'@schema':'Action/schema_write_access').
 
 is_super_user(Auth) :-
-    is_super_user(Auth, _{ '@base' : 'terminusdb://system/data/' }).
+    Prefixes = _{ '@base' : 'terminusdb://system/data/' },
+    is_super_user(Auth, Prefixes).
 
 is_super_user(Auth,Prefixes) :-
     super_user_authority(URI),
-    prefixed_to_uri(Auth, Prefixes, URI).
+    uri_eq(Auth, URI, Prefixes).
 
 require_super_user(Context) :-
     % This allows us to shortcut looking in the database,
@@ -314,6 +315,12 @@ assert_read_access(Context) :-
     is_super_user(Context.authorization, Context.prefixes),
     % This probably makes all super user checks redundant.
     !.
+assert_read_access(Context) :-
+    system_descriptor{} :< Context.default_collection,
+    !,
+    Auth = (Context.authorization),
+    DB = (Context.system),
+    assert_auth_action_scope(DB, Auth, '@schema':'Action/meta_read_access', 'system').
 assert_read_access(Context) :-
     database_descriptor{
         organization_name: Organization_Name,

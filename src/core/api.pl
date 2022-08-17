@@ -61,7 +61,7 @@
               graph_dump/5,
 
               % api_frame.pl
-              api_class_frame/5,
+              api_class_frame/6,
               api_filled_frame/5,
 
               % api_woql.pl
@@ -138,7 +138,7 @@
               api_apply_squash_commit/7,
 
               % api_log.pl
-              api_log/4,
+              api_log/5,
               format_log/2,
 
               % api_access_control.pl
@@ -167,7 +167,12 @@
               api_update_user_password/4,
               api_get_organizations_users/4,
               api_get_organizations_users_object/5,
-              api_get_organizations_users_databases/5
+              api_get_organizations_users_databases/5,
+
+
+              % api_db_update.pl
+              api_db_update/6
+
           ]).
 
 :- use_module(api/api_init).
@@ -202,3 +207,4 @@
 :- use_module(api/api_patch).
 :- use_module(api/api_log).
 :- use_module(api/api_access_control).
+:- use_module(api/api_db_update).

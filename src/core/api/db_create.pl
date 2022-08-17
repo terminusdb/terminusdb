@@ -3,7 +3,10 @@
               create_db/9,
               create_schema/3,
               create_ref_layer/1,
-              finalize_db/1
+              finalize_db/1,
+              make_db_private/2,
+              make_db_public/2,
+              validate_prefixes/1
           ]).
 
 /** <module> Implementation of database graph management
@@ -73,18 +76,31 @@ finalize_db(DB_Uri) :-
         ;   throw(error(database_in_inconsistent_state))),
         _).
 
-make_db_public(System_Context,DB_Uri) :-
-    insert_document(
-        System_Context,
-        _{
-            '@type' : 'Capability',
-            'scope' : DB_Uri,
-            'role' : [ 'Role/consumer' ]
-        },
-        Capability_Uri),
-
+make_db_private(System_Context,Db_Uri) :-
     ask(System_Context,
-        (   insert('User/anonymous', capability, Capability_Uri))).
+        (   t(Cap_Id, scope, Db_Uri),
+            t(Cap_Id, role, 'Role/consumer'),
+            delete_document(Cap_Id))
+       ).
+
+make_db_public(System_Context,DB_Uri) :-
+    (   ask(System_Context,
+            (   t(Cap_Id, scope, DB_Uri),
+                t(Cap_Id, role, 'Role/consumer'),
+                t('User/anonymous', capability, Cap_Id)
+            ))
+    ->  true
+    ;   insert_document(
+            System_Context,
+            _{
+                '@type' : 'Capability',
+                'scope' : DB_Uri,
+                'role' : [ 'Role/consumer' ]
+            },
+            Capability_Uri),
+        ask(System_Context,
+            (   insert('User/anonymous', capability, Capability_Uri)))
+    ).
 
 create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     validate_prefixes(Prefixes),

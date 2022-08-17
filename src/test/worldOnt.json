@@ -23,3 +23,8 @@
   "twins" : { "@type" : "Cardinality",
               "@class" : "Person",
               "@cardinality" : 2 }}
+
+{ "@id" : "Aliases",
+  "@type" : "Class",
+  "names" : { "@type" : "Set",
+              "@class" : "xsd:string" }}

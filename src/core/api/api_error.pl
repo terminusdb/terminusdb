@@ -260,9 +260,54 @@ api_global_error_jsonld(error(unknown_local_branch(Branch), _), Type, JSON) :-
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:message' : Msg,
-             'api:fetch_status' : false,
              'api:error' : _{ '@type' : "api:UknownLocalBranch",
                               'api:branch' : Branch}
+            }.
+api_global_error_jsonld(error(origin_branch_does_not_exist(Branch), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Origin branch does not exist as specified ~w", [Branch]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OriginBranchDoesNotExist",
+                              'api:branch' : Branch}
+            }.
+api_global_error_jsonld(error(invalid_ref_path(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid ref path: ~w", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InvalidRefPath",
+                              'api:ref' : Path}
+            }.
+api_global_error_jsonld(error(unresolvable_commit_id(Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Invalid ref path: ~w", [Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableCommitId",
+                              'api:commit' : Id}
+            }.
+api_global_error_jsonld(error(unresolvable_absolute_descriptor(Descriptor),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "Unable to resolve an invalid absolute path for descriptor ~q", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg}.
+api_global_error_jsonld(error(branch_does_not_exist(Descriptor), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The branch does not exist for ~q", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
+                              'api:absolute_descriptor' : Path}
             }.
 
 :- multifile api_error_jsonld_/3.
@@ -554,6 +599,15 @@ api_error_jsonld_(woql,error(unresolvable_absolute_descriptor(Descriptor), _), J
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(woql,error(branch_does_not_exist(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The WOQL query referenced a non existing branch for descriptor ~q", [Path]),
+    JSON = _{'@type' : "api:WoqlErrorResponse",
+             'api:status' : 'api:not_found',
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:BranchDoesNotExistError",
+                              'api:absolute_descriptor' : Path}
+            }.
 api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
     format(string(ValS), "~w", [Val]),
     format(string(Msg), "The value ~s could not be cast as ~q", [ValS,Type]),
@@ -562,6 +616,15 @@ api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
              'api:error' : _{ '@type' : 'api:BadCast',
                               'api:value' : ValS,
                               'api:type' : Type},
+             'api:message' : Msg
+            }.
+api_error_jsonld_(woql,error(existence_error(matching_rule,Term),_), JSON) :-
+    format(string(TermW), "~q", [Term]),
+    format(string(Msg), "The program: '~w' used a predicate with unhandled arguments", [Term]),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ExistenceError',
+                              'api:value' : TermW},
              'api:message' : Msg
             }.
 api_error_jsonld_(clone,error(no_remote_authorization,_),JSON) :-
@@ -870,6 +933,21 @@ api_error_jsonld_(branch,error(repository_is_not_local(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:NotLocalRepositoryError",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(branch,error(branch_does_not_exist(Branch_Name), _), JSON) :-
+    format(string(Msg), "Branch ~s does not exist", [Branch_Name]),
+    JSON = _{'@type' : "api:BranchErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:BranchDoesNotExistError",
+                              'api:branch_name' : Branch_Name}
+            }.
+api_error_jsonld_(branch,error(deleting_branch_main, _), JSON) :-
+    format(string(Msg), "Branch 'main' should not be deleted as it is special", []),
+    JSON = _{'@type' : "api:BranchErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:BranchMainDeletionError"}
+            }.
 api_error_jsonld_(branch,error(branch_already_exists(Branch_Name), _), JSON) :-
     format(string(Msg), "Branch ~s already exists", [Branch_Name]),
     JSON = _{'@type' : "api:BranchErrorResponse",
@@ -1041,6 +1119,14 @@ api_error_jsonld_(store_init,error(storage_already_exists(Path),_),JSON) :-
              'api:status' : 'api:failure',
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:StorageAlreadyInitializedError",
+                              'api:path' : Path}
+            }.
+api_error_jsonld_(store_init,error(permission_error(create,directory,Path),_), JSON) :-
+    format(string(Msg), "You do not have permissions to create directory ~s", [Path]),
+    JSON = _{'@type' : 'api:StoreInitErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DirectoryPermissionsError",
                               'api:path' : Path}
             }.
 api_error_jsonld_(info,error(access_not_authorized(Auth),_),JSON) :-
@@ -1280,6 +1366,7 @@ error_type_(check_db, 'api:DbExistsErrorResponse').
 error_type_(clone, 'api:CloneErrorResponse').
 error_type_(create_db, 'api:DbCreateErrorResponse').
 error_type_(csv, 'api:CsvErrorResponse').
+error_type_(list_db, 'api:DbDeleteErrorResponse').
 error_type_(delete_db, 'api:DbDeleteErrorResponse').
 error_type_(delete_documents, 'api:DeleteDocumentErrorResponse').
 error_type_(delete_organization, 'api:DeleteOrganizationErrorResponse').
@@ -1305,6 +1392,8 @@ error_type_(organization, 'api:OrganizationErrorResponse').
 error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
+error_type_(update_db, 'api:DbUpdateErrorResponse').
+error_type_(branch, 'api:BranchErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1877,6 +1966,15 @@ api_document_error_jsonld(Type,error(not_a_unit_type(Value, Document), _), JSON)
                               'api:document': Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type,error(key_has_unknown_prefix(Prefixed_Key), _), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The key '~w' is utilising an unknown prefix.", [Prefixed_Key]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownPrefixError",
+                              'api:key' : Prefixed_Key}
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
@@ -1972,7 +2070,7 @@ generic_exception_jsonld(schema_check_failure(Witnesses),JSON) :-
              'api:status' : 'api:failure',
              'system:witnesses' : Witnesses}.
 generic_exception_jsonld(database_not_found(DB),JSON) :-
-    format(atom(MSG), 'Database ~s could not be destroyed', [DB]),
+    format(atom(MSG), 'Database ~s does not exist', [DB]),
     JSON = _{'api:message' : MSG,
              'api:status' : 'api:failure'}.
 generic_exception_jsonld(database_files_do_not_exist(DB),JSON) :-

@@ -8,6 +8,9 @@
 
 :- use_module(library(plunit)).
 
+/* Reset branches to a commit
+ */
+
 api_reset(System_DB, Auth, Path, Ref) :-
 
     do_or_die(
@@ -18,15 +21,24 @@ api_reset(System_DB, Auth, Path, Ref) :-
         branch_descriptor{ branch_name : Branch_Name } :< Branch_Descriptor,
         error(not_a_branch_descriptor(Branch_Descriptor),_)),
 
+    Repo = (Branch_Descriptor.repository_descriptor),
     do_or_die(
-        resolve_absolute_string_descriptor(Ref, Ref_Descriptor),
-        error(invalid_absolute_path(Ref),_)),
+        askable_context(Repo, System_DB, Auth, Context),
+        error(unresolvable_absolute_descriptor(Repo), _)),
+
+    do_or_die(
+        (   resolve_absolute_string_descriptor(Ref, Ref_Descriptor)
+        ->  true
+        ;   resolve_relative_descriptor(Branch_Descriptor,
+                                        ["commit", Ref],
+                                        Ref_Descriptor)
+        ),
+        error(invalid_ref_path(Ref),_)),
 
     do_or_die(
         commit_descriptor{ commit_id : Commit_Id } :< Ref_Descriptor,
         error(not_a_commit_descriptor(Ref_Descriptor),_)),
 
-    Repo = (Branch_Descriptor.repository_descriptor),
     Ref_Repo = (Ref_Descriptor.repository_descriptor),
 
     do_or_die(
@@ -41,7 +53,6 @@ api_reset(System_DB, Auth, Path, Ref) :-
         branch_name_uri(Repo, Branch_Name, Branch_Uri),
         error(branch_does_not_exist(Branch_Descriptor),_)),
 
-    askable_context(Repo, System_DB, Auth, Context),
     assert_write_access(Context),
 
     with_transaction(

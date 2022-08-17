@@ -85,7 +85,7 @@ function delete_ (agent, query, params) {
   const path = params.string('path', api.path.remote(agent, params))
   params.assertEmpty()
 
-  const request = agent.delete(path).send(query)
+  const request = agent.delete(path).query(query).send()
 
   return {
     then (resolve) {

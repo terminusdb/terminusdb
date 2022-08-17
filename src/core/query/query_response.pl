@@ -111,6 +111,12 @@ pretty_print_value(Literal,Prefixes,Compressed) :-
     ;   get_dict('@language', Literal, Lang),
         format(atom(Compressed),'~q@~q',[Value,Lang])
     ).
+pretty_print_value(List,Prefixes,Atom) :-
+    is_list(List),
+    !,
+    maplist({Prefixes}/[Literal,Printed]>>pretty_print_value(Literal,Prefixes,Printed),
+            List, Atoms),
+    format(atom(Atom), '~w', [Atoms]).
 pretty_print_value(Value,_Prefixes,_Compressed) :-
     throw(error(no_case_coverage_for_pretty_printer(Value))).
 

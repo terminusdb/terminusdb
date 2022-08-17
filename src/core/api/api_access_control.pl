@@ -30,6 +30,7 @@
 :- use_module(core(query)).
 :- use_module(core(document)).
 :- use_module(core(transaction)).
+:- use_module(core(triple), [uri_eq/3]).
 :- use_module(library(plunit)).
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
@@ -204,12 +205,12 @@ get_organization_from_id(SystemDB, Id, Organization) :-
 
 api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
     do_or_die(
-        is_super_user(Auth),
-        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
-    do_or_die(
         get_organization_from_name(SystemDB, Org_Name, Organization),
         error(no_id_for_organization_name(Org_Name), _)),
+
     get_dict('@id', Organization, Org_Id),
+    assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id),
+
     get_organizations_users(SystemDB, Org_Id, Users).
 
 get_organizations_users(SystemDB, Org_Id, Users) :-
@@ -226,17 +227,20 @@ get_organizations_users(SystemDB, Org_Id, Users) :-
 
 api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) :-
     do_or_die(
-        is_super_user(Auth),
-        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
-    do_or_die(
         get_organization_from_name(SystemDB, Org_Name, Organization),
         error(no_id_for_organization_name(Org_Name), _)),
     do_or_die(
         get_user_from_name(SystemDB, User_Name, User, _{}),
-        error(no_id_for_user_name(User), _)),
+        error(no_id_for_user_name(User_Name), _)),
 
     get_dict('@id', Organization, Org_Id),
     get_dict('@id', User, User_Id),
+
+    (   Prefixes = _{ '@base' : 'terminusdb://system/data/' },
+        uri_eq(User_Id, Auth, Prefixes) % Let users look at themselves.
+    ->  true
+    ;   assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id)
+    ),
 
     get_organizations_users_object(SystemDB, Org_Id, User_Id, Object).
 
@@ -258,7 +262,15 @@ get_organizations_users_object(SystemDB, Org_Id, User_Id, Object) :-
                     (   t(Cap_Id, scope, Resource_Id),
                         path(Org_Id, (   star(p(child))
                                      ;   star(p(child)),p(database)), Resource_Id),
-                        get_document(Cap_Id, Capability)))),
+                        get_document(Cap_Id, Pre_Capability))),
+                get_dict_default(role, Pre_Capability, Role_Ids, []),
+                findall(Role,
+                        (   member(Role_Id,Role_Ids),
+                            ask(SystemDB,
+                                get_document(Role_Id, Role))),
+                        Roles),
+                put_dict(_{role: Roles}, Pre_Capability, Capability)
+            ),
             New_Capabilities),
     put_dict(_{capability : New_Capabilities}, User_Clean, Object).
 
@@ -573,16 +585,19 @@ get_user_from_id(SystemDB, Id, User, Opts) :-
     ask(SystemDB,
         (   t(Id, rdf:type, '@schema':'User'),
             get_document(Id, User_Raw))),
-    del_dict(key_hash, User_Raw, _, User_Begin),
+    (   del_dict(key_hash, User_Raw, _, User_Base)
+    ->  true
+    ;   User_Raw = User_Base
+    ),
 
     (   option(capability(true), Opts),
-        get_dict(capability, User_Begin, Capability_Ids)
+        get_dict(capability, User_Base, Capability_Ids)
     ->  findall(Capability,
                 (   member(Capability_Id, Capability_Ids),
                     get_capability_from_id(SystemDB, Capability_Id, Capability)),
                 Capabilities),
-        put_dict(_{capability:Capabilities}, User_Begin, User)
-    ;   User_Begin = User
+        put_dict(_{capability:Capabilities}, User_Base, User)
+    ;   User_Base = User
     ).
 
 get_capability_from_id(SystemDB, Id, Capability) :-
@@ -627,15 +642,8 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
         ;   get_dict('@id', User, Auth)),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    get_dict('@id', User, Id),
-    get_dict(name, User, Name),
     crypto_password_hash(Password, Hash),
-    New_User =
-    _{
-        '@id' : Id,
-        name : Name,
-        key_hash : Hash
-    },
+    put_dict(_{ key_hash : Hash}, User, New_User),
 
     create_context(System_DB, commit_info{author: "admin", message: "API: Update User Password"},
                    System_Context),
