@@ -14,7 +14,7 @@
     "check": "eslint --ext .js,.json .",
     "lint": "eslint --ext .js,.json --fix .",
     "start-server": "http-server ./served -c-1 --port 7474",
-    "test": "npm run test-local && npm run test-served",
+    "test": "npm run check && npm run test-local && npm run test-served",
     "test-local": "mocha test",
     "test-served": "start-server-and-test start-server http://127.0.0.1:7474/ 'mocha test-served'"
   },
