@@ -108,4 +108,13 @@ describe('cli-db', function () {
     const r = await exec(`./terminusdb.sh db list admin/${rand} | true`)
     expect(r.stderr).to.match(new RegExp(`^Error: Invalid database name: 'admin/${rand}'`))
   })
+
+  it('cannot delete organization with databases', async function () {
+    const org = util.randomString()
+    const db = util.randomString()
+    await exec(`./terminusdb.sh organization create ${org}`)
+    await exec(`./terminusdb.sh db create ${org}/${db}`)
+    const r = await exec(`./terminusdb.sh organization delete ${org} | true`)
+    expect(r.stderr).to.match(new RegExp(`^Error: The organization ${org}.*`))
+  })
 })
