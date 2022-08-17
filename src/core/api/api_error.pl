@@ -1984,7 +1984,15 @@ api_document_error_jsonld(Type,error(key_has_unknown_prefix(Prefixed_Key), _), J
              'api:error' : _{ '@type' : "api:UnknownPrefixError",
                               'api:key' : Prefixed_Key}
             }.
-
+api_document_error_jsonld(Type,error(json_document_as_range(Pred,Range), _), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The range '~w' used on '~w' is illegal, use 'sys:JSON'.", [Range,Pred]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:JSONDocumentInvalidRangeError",
+                              'api:field' : Pred}
+            }.
 /**
  * generic_exception_jsonld(Error,JSON) is det.
  *
