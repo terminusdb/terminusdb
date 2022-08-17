@@ -1262,6 +1262,15 @@ api_error_jsonld_(organization,
              'api:error' : _{ '@type' : "api:DanglingOrganizationReferencedError",
                               'api:capability' : Capability}
             }.
+api_error_jsonld_(organization,error(organization_still_has_databases(Organization,Databases),_),JSON) :-
+    format(string(Msg), "The organization ~s still has databases: ~w.", [Organization,Databases]),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OrganizationRefersToDatabases",
+                              'api:organization' : Organization,
+                              'api:databases' : Databases}
+            }.
 api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
     format(string(Msg), "No id associated with user name ~s", [Name]),
     JSON = _{'@type' : 'api:UserErrorResponse',

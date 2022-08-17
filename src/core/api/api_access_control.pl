@@ -340,7 +340,21 @@ api_delete_organization(_, Auth, Organization_Id) :-
 
     with_transaction(
         System_Context,
-        delete_document(System_Context,Organization_Id),
+        (
+            get_document(System_Context,Organization_Id,Organization),
+            die_if(
+                (   get_dict(database,Organization,Databases),
+                    \+ Databases = [],
+                    get_dict(name,Organization,Organization_Name),
+                    findall(DB,
+                            (   member(Db_Id,Databases),
+                                ask(System_Context,
+                                    t(Db_Id, name, DB^^xsd:string))),
+                            DBs)
+                ),
+                error(organization_still_has_databases(Organization_Name,DBs), _)),
+            delete_document(System_Context,Organization_Id)
+        ),
         _
     ).
 
