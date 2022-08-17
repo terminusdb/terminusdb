@@ -1414,7 +1414,11 @@ json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
 json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
                                                     '@id' : VEx }) :-
     prefix_expand_schema(P,Context,Prop),
-    prefix_expand_schema(V,Context,VEx).
+    prefix_expand_schema(V,Context,VEx),
+    die_if(
+        global_prefix_expand(sys:'JSONDocument',VEx),
+        error(json_document_as_range(P,V),_)).
+
 
 json_schema_elaborate(JSON,Context,Path,Elaborated) :-
     do_or_die(
@@ -8724,6 +8728,30 @@ test(inherit_enum,
                           (   insert_schema_document(C1, Schema1),
                               insert_schema_document(C1, Schema2)
                           ),
+                          _).
+
+test(json_document_range,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(json_document_as_range(json_document,"sys:JSONDocument"),
+               _)
+     ]) :-
+
+    Schema =
+    _{ '@id': "HasJSONDocument",
+       '@type': "Class",
+       'json_document': "sys:JSONDocument"
+     },
+    with_test_transaction(Desc,
+                          C1,
+                          insert_schema_document(C1, Schema),
                           _).
 
 :- end_tests(schema_checker).

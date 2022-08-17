@@ -516,10 +516,23 @@ describe('document', function () {
       })
 
       it('fails gracefully with bad key prefix', async function () {
-        const instance = { '@type': 'foo:User' }
+        const classid = `foo:${util.randomString()}`
+        const instance = { '@type': classid }
         const result = await document.insert(agent, { instance }).unverified()
         expect(result.status).to.equal(400)
-        expect(result.body['api:error']['api:key']).to.equal('foo:User')
+        expect(result.body['api:error']['api:key']).to.equal(classid)
+      })
+
+      it('fails with JSONDocument', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          json_document: 'sys:JSONDocument',
+        }
+        const result = await document.insert(agent, { schema }).unverified()
+        expect(result.status).to.equal(400)
+        expect(result.body['api:error']['@type']).to.equal('api:JSONDocumentInvalidRangeError')
+        expect(result.body['api:error']['api:field']).to.equal('json_document')
       })
     })
   })
