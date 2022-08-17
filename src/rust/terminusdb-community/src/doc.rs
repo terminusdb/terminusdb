@@ -153,6 +153,7 @@ impl<L: Layer> GetDocumentContext<L> {
         GetDocumentContext {
             layer: instance,
 
+            prefixes,
             types,
             document_types,
             unfoldables,
