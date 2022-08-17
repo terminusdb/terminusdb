@@ -524,9 +524,11 @@ describe('document', function () {
       })
 
       it('fails with JSONDocument', async function () {
-        const schema = { '@type': 'Class',
-                         '@id' : util.randomString(),
-                         json_document: 'sys:JSONDocument'}
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          json_document: 'sys:JSONDocument',
+        }
         const result = await document.insert(agent, { schema }).unverified()
         expect(result.status).to.equal(400)
         expect(result.body['api:error']['api:field']).to.equal('json_document')
