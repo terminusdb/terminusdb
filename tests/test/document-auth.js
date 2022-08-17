@@ -531,6 +531,7 @@ describe('document', function () {
         }
         const result = await document.insert(agent, { schema }).unverified()
         expect(result.status).to.equal(400)
+        expect(result.body['api:error']['@type']).to.equal('api:JSONDocumentInvalidRangeError')
         expect(result.body['api:error']['api:field']).to.equal('json_document')
       })
     })
