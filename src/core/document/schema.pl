@@ -568,7 +568,7 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
 refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Doc, Prop, _),
-    prefix_list([sys:comment, sys:properties, sys:values, sys:language, rdf:type], List),
+    prefix_list([sys:comment, sys:label, sys:properties, sys:values, sys:language, rdf:type], List),
     (   \+ memberchk(Prop, List)
     ->  Witness = witness{ '@type' : not_a_valid_documentation_object,
                            predicate: Prop,
@@ -1017,7 +1017,7 @@ schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) 
     !,
     findall(Record,
             (   xrdf(Schema, Type, sys:documentation, Obj),
-                Record0 = _{},
+                Record0 = json{},
                 (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
                 ->  Record1 = (Record0.put('@language', Lang))
                 ;   Record1 = Record0),
@@ -1029,17 +1029,17 @@ schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) 
                 ;   Record3 = Record2
                 ),
                 findall(Key-Value,
-                        (   xrdf(Schema, Obj, sys:values, Enum),
+                         (  xrdf(Schema, Obj, sys:values, Enum),
                             (   xrdf(Schema, Enum, Key, Value^^xsd:string)
                             ->  true
-                            ;   V = _{},
-                                xrdf(Schema, Enum, Key, Obj),
-                                (   xrdf(Schema, Obj, sys:label, EnumLabel^^xsd:string)
+                            ;   V = json{},
+                                xrdf(Schema, Enum, Key, Enum_Obj),
+                                \+ global_prefix_expand(rdf:type, Key),
+                                (   xrdf(Schema, Enum_Obj, sys:label, EnumLabel^^xsd:string)
                                 ->  put_dict(_{ '@label' : EnumLabel}, V, V1)
                                 ;   V = V1
                                 ),
-                                print_term(V1, []),nl,
-                                (   xrdf(Schema, Obj, sys:comment, EnumComment^^xsd:string)
+                                (   xrdf(Schema, Enum_Obj, sys:comment, EnumComment^^xsd:string)
                                 ->  put_dict(_{ '@comment' : EnumComment}, V1, Value)
                                 ;   Value = V1
                                 )
@@ -1055,9 +1055,10 @@ schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) 
             ),
             Records).
 schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :-
+    is_schema_simple_class(Schema,Type),
     findall(Record,
             (   xrdf(Schema, Type, sys:documentation, Obj),
-                Record0 = _{},
+                Record0 = json{},
                 (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
                 ->  Record1 = (Record0.put('@language', Lang))
                 ;   Record1 = Record0),
@@ -1069,24 +1070,17 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :
                 ;   Record3 = Record2
                 ),
                 findall(Key-Value,
-                        (   format(current_output, 'Please let me in!~n', []),
-                            findall(t(Obj,Thingy,Props),
-                                    xrdf(Schema, Obj, Thingy, Props),
-                                    Triples),
-                            format(current_output, 'Triples ~q~n', [Triples]),
-                            xrdf(Schema, Obj, sys:properties, Property),
-                            format(current_output, 'Found Property ~q~n', [Property]),
+                        (   xrdf(Schema, Obj, sys:properties, Property),
                             (   xrdf(Schema, Property, Key, Value^^xsd:string)
                             ->  true
-                            ;   V = _{},
-                                format(current_output, 'Attempting to get properties~n', []),
-                                xrdf(Schema, Property, Key, Obj),
-                                format(current_output, 'obj: ~q~n', [Obj]),
-                                (   xrdf(Schema, Obj, sys:label, PropertyLabel^^xsd:string)
+                            ;   V = json{},
+                                xrdf(Schema, Property, Key, Prop_Obj),
+                                \+ global_prefix_expand(rdf:type, Key),
+                                (   xrdf(Schema, Prop_Obj, sys:label, PropertyLabel^^xsd:string)
                                 ->  put_dict(_{ '@label' : PropertyLabel}, V, V1)
                                 ;   V = V1
                                 ),
-                                (   xrdf(Schema, Obj, sys:comment, PropertyComment^^xsd:string)
+                                (   xrdf(Schema, Prop_Obj, sys:comment, PropertyComment^^xsd:string)
                                 ->  put_dict(_{ '@comment' : PropertyComment}, V1, Value)
                                 ;   Value = V1
                                 )

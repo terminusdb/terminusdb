@@ -1246,7 +1246,8 @@ json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
             ->  prefix_expand_schema(K, Context, Key),
                 json_schema_elaborate_documentation_value(Context,
                                                           [property(Key)
-                                                           |Path], V, Value)
+                                                           |Path],
+                                                          V, Value)
             ;   is_dict(V)
             ->  prefix_expand_schema(K, Context, Key),
                 Value = V
@@ -1296,7 +1297,7 @@ json_schema_elaborate_documentation_value(Context, Path, V, Value2) :-
     property_id(V, Context, Path, Id),
     global_prefix_expand(sys:'comment',Comment_Ex),
     global_prefix_expand(sys:'label',Label_Ex),
-    Value = _{ '@id' : Id, '@type' : Doc_Ex },
+    Value = json{ '@id' : Id, '@type' : Doc_Ex },
     (   get_dict('@comment', V, Comment)
     ->  wrap_text(Comment, Comment_Wrapped),
         put_dict(Comment_Ex, Value, Comment_Wrapped, Value1)
@@ -1329,7 +1330,7 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
     ;   VSet = [V]
     ),
     index_list(VSet, Indexes),
-    maplist({Context,Path,Documentation_Ex}/[VElt,Idx,Res4]>>
+    maplist({Context,Path,Documentation_Ex}/[VElt,Idx,Res5]>>
             (   documentation_id(Context,[index(Idx)|Path],Doc_Id),
                 Res = json{'@id' : Doc_Id,
                            '@type' : Documentation_Ex
@@ -1345,11 +1346,19 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
                              Res1)
                 ;   Res1 = Res
                 ),
+
                 (   get_dict('@comment', VElt, Comment_Text)
                 ->  wrap_text(Comment_Text, Comment),
                     global_prefix_expand(sys:'comment',CommentP),
                     put_dict(CommentP,Res1,Comment,Res2)
                 ;   Res2 = Res1
+                ),
+
+                (   get_dict('@label', VElt, Label_Text)
+                ->  wrap_text(Label_Text, Label),
+                    global_prefix_expand(sys:'label',LabelP),
+                    put_dict(LabelP,Res2,Label,Res3)
+                ;   Res3 = Res2
                 ),
 
                 (   get_dict('@properties',VElt,Property_Obj)
@@ -1363,8 +1372,8 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
                          |Path],
                         Property_Obj,
                         Property_Obj2),
-                    put_dict(PropertiesP,Res2,Property_Obj,Res3)
-                ;   Res3 = Res2),
+                    put_dict(PropertiesP, Res3, Property_Obj2, Res4)
+                ;   Res4 = Res3),
 
                 (   get_dict('@values',VElt,Property_Obj)
                 ->  global_prefix_expand(sys:'values',PropertiesP),
@@ -1377,8 +1386,8 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
                          |Path],
                         Property_Obj,
                         Property_Obj2),
-                    put_dict(PropertiesP, Res3, Property_Obj2, Res4)
-                ;   Res4 = Res3)
+                    put_dict(PropertiesP, Res4, Property_Obj2, Res5)
+                ;   Res5 = Res4)
             ),
             VSet, Indexes, VSetElab).
 
@@ -2182,7 +2191,7 @@ documentation_descriptor_json(enum_documentation(Type,Records),
     (   option(compress_ids(true), Options)
     ->  findall(Result,
                 (   member(Record, Records),
-                    get_dict(Record,'@values',Elements),
+                    get_dict('@values',Record,Elements),
                     dict_pairs(Elements, _, Pairs),
                     maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
                                 enum_value(Type,Val,Enum),
@@ -2201,12 +2210,13 @@ documentation_descriptor_json(enum_documentation(Type,Records),
     ->  true
     ;   Results = JSON
     ).
-documentation_descriptor_json(property_documentation(Records), Prefixes,
-                              Result, Options) :-
+documentation_descriptor_json(property_documentation(Records),
+                              Prefixes,
+                              JSON, Options) :-
     (   option(compress_ids(true), Options)
     ->  findall(Result,
                 (   member(Record, Records),
-                    get_dict(Record,'@properties',Elements),
+                    get_dict('@properties',Record,Elements),
                     dict_pairs(Elements, _, Pairs),
                     maplist({Prefixes}/[Prop-X,Small-X]>>(
                                 compress_schema_uri(Prop, Prefixes, Small)
@@ -12570,7 +12580,7 @@ multilingual_schema('
                                       "@comment" : "A thing to choose" }}
      },
      {
-        "@lang" : "en",
+        "@lang" : "ka",
         "@label" : "მაგალითი",
         "@comment" : "მაგალითი კლასი",
         "@properties" : { "name" : { "@label" : "სახელი",
@@ -12589,6 +12599,7 @@ multilingual_schema('
      {
        "@lang" : "en",
        "@label" : "Choice",
+       "@comment" : "A Choice of a thing",
        "@values" : {
          "yes" : { "@label" : "yes",
                    "@comment" : "Is it a yes?" },
@@ -12629,7 +12640,28 @@ test(schema_read,
      ]) :-
 
     get_schema_document(Desc, 'Example', Example),
-    writeq(Example).
+    Example =
+    json{'@documentation':
+         [json{'@comment':"An example class",
+               '@label':"Example",
+               '@language':"en",
+               '@properties':
+               json{choice:json{'@comment':"A thing to choose",
+                                '@label':"choice"},
+                    name:json{'@comment':"The name of the example object",
+                              '@label':"name"}}},
+          json{'@comment':"მაგალითი კლასი",
+               '@label':"მაგალითი",
+               '@language':"ka",
+               '@properties':
+               json{choice:json{'@comment':"რაც უნდა აირჩიოთ",
+                                '@label':"არჩევანი"},
+                    name:json{'@comment':"მაგალითის ობიექტის სახელი",
+                              '@label':"სახელი"}}}],
+         '@id':'Example',
+         '@type':'Class',
+         choice:'Choice',
+         name:'xsd:string'}.
 
 :- end_tests(multilingual).
 
