@@ -12466,6 +12466,93 @@ test(json_diff,
 
 :- end_tests(json_datatype).
 
+:- begin_tests(multilingual).
+:- use_module(core(util/test_utils)).
+
+multi_lingual_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "@documentation" : [{
+      "@lang" : "en",
+      "@title" : "Example Schema",
+      "@description" : "This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+   },
+   {  "@lang" : "ka",
+      "@title" : "მაგალითი სქემა",
+      "@description" : "ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
+      "@authors" : ["გავინ მენდელ-გლისონი"]
+   }
+  ],
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}
+
+{ "@id" : "Example",
+  "@type" : "Class"
+  "@documentation : [
+     {
+       "@lang" : "en",
+       "@label" : "Example",
+       "@comment" : "An example class",
+       "@properties" : { "name" : { "@label" : "name",
+                                    "@comment" : "The name of the example object" },
+                         "choice" : { "@label" : "choice",
+                                      "@comment" : "A thing to choose" }}
+     },
+     {
+        "@lang" : "en",
+        "@label" : "მაგალითი",
+        "@comment" : "მაგალითი კლასი",
+        "@properties" : { "name" : { "@label" : "სახელი",
+                                     "@comment" : "მაგალითის ობიექტის სახელი" },
+                          "choice" : { "@label" : "არჩევანი",
+                                       "@comment" : "რაც უნდა აირჩიოთ" }}
+     }
+  ],
+  "name" : "xsd:string"
+  "choice" : "Choice"
+}
+
+{ "@id" : "Choice",
+  "@type" : "Enum",
+  "@documentation" : [
+     {
+       "@lang" : "en",
+       "@label" : "Choice",
+       "@values" : {
+         "yes" : { "@label" : "yes",
+                   "@comment", "Is it a yes?" },
+         "no" : { "@label" : "no",
+                  "@comment" : "Or is it a no?" }
+       }
+     },
+     {
+        "@lang" : "ka",
+        "@label" : "არჩევანი",
+        "@values" : {
+          "yes" : { "@label" : "დიახ",
+                    "@comment", "კია?" },
+          "no" : { "@label" : "არა",
+                   "@comment" : "ან არის არა?" }
+        }
+     }
+  ],
+  "@value" : ["yes", "no"]
+}
+').
+
+test(various_lang_combos,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    write_schema(language_schema,Desc).
+
+:- end_tests(multilingual).
+
 :- begin_tests(language_codes).
 :- use_module(core(util/test_utils)).
 
