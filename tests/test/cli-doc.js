@@ -173,7 +173,7 @@ describe('cli-doc', function () {
       const db = util.randomString()
       await exec(`./terminusdb.sh db create admin/${db}`)
       const r = await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}' | true`)
-      expect(r.stderr).to.match(/^Error: Could not cast the value "bogus" to the type .*/)
+      expect(r.stderr).to.match(/^Error: value "bogus" could not be casted to a .*/)
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
   })

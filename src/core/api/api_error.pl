@@ -309,17 +309,6 @@ api_global_error_jsonld(error(branch_does_not_exist(Descriptor), _), Type, JSON)
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
-api_global_error_jsonld(error(casting_error(Value, Ascribed), _), Type, JSON) :-
-    error_type(Type, Type_Displayed),
-    format(string(Msg), "Could not cast the value ~q to the type ~q.", [Value,Ascribed]),
-    JSON = _{'@type' : Type_Displayed,
-             'api:status' : "api:failure",
-             'api:message' : Msg,
-             'api:error' : _{ '@type' : "api:CastingError",
-                              'api:value' : Value,
-                              'api:type' : Ascribed
-                            }
-            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
