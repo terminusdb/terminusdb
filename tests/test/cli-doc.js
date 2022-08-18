@@ -157,18 +157,19 @@ describe('cli-doc', function () {
     })
   })
 
-  describe('schema manipulation', function (){
-
+  describe('schema manipulation', function () {
     it('adds a bad language', async function () {
-      const schema = { '@base': 'terminusdb:///data/',
-                       '@schema': 'terminusdb:///schema#',
-                       '@type': '@context',
-                       '@documentation' : {
-                         '@language' : 'bogus',
-                         '@title' : 'Example Schema',
-                         '@description' : 'This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.',
-                         '@authors' : ['Gavin Mendel-Gleason']
-                       }}
+      const schema = {
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@type': '@context',
+        '@documentation': {
+          '@language': 'bogus',
+          '@title': 'Example Schema',
+          '@description': 'This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.',
+          '@authors': ['Gavin Mendel-Gleason'],
+        },
+      }
       const db = util.randomString()
       await exec(`./terminusdb.sh db create admin/${db}`)
       const r = await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}' | true`)
