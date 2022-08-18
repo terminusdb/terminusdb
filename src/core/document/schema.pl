@@ -1047,7 +1047,12 @@ schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) 
                         ),
                         Pairs),
                 dict_pairs(Elements,json,Pairs),
-                Record = (Record.put('@values', Elements))),
+                (   Elements = _{}
+                ->  Record = Record3
+                ;   Record = (Record3.put('@values', Elements))
+                ),
+                Record \= _{}
+            ),
             Records).
 schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :-
     findall(Record,
@@ -1064,16 +1069,23 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :
                 ;   Record3 = Record2
                 ),
                 findall(Key-Value,
-                        (   xrdf(Schema, Obj, sys:properties, Property),
+                        (   format(current_output, 'Please let me in!~n', []),
+                            findall(t(Obj,Thingy,Props),
+                                    xrdf(Schema, Obj, Thingy, Props),
+                                    Triples),
+                            format(current_output, 'Triples ~q~n', [Triples]),
+                            xrdf(Schema, Obj, sys:properties, Property),
+                            format(current_output, 'Found Property ~q~n', [Property]),
                             (   xrdf(Schema, Property, Key, Value^^xsd:string)
                             ->  true
                             ;   V = _{},
+                                format(current_output, 'Attempting to get properties~n', []),
                                 xrdf(Schema, Property, Key, Obj),
+                                format(current_output, 'obj: ~q~n', [Obj]),
                                 (   xrdf(Schema, Obj, sys:label, PropertyLabel^^xsd:string)
                                 ->  put_dict(_{ '@label' : PropertyLabel}, V, V1)
                                 ;   V = V1
                                 ),
-                                print_term(V1, []),nl,
                                 (   xrdf(Schema, Obj, sys:comment, PropertyComment^^xsd:string)
                                 ->  put_dict(_{ '@comment' : PropertyComment}, V1, Value)
                                 ;   Value = V1
@@ -1082,7 +1094,12 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :
                         ),
                         Pairs),
                 dict_pairs(Elements,json,Pairs),
-                Record = (Record.put('@properties', Elements))),
+                (   Elements = _{}
+                ->  Record = Record3
+                ;   Record = (Record3.put('@properties', Elements))
+                ),
+                Record \= _{}
+            ),
             Records).
 
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-

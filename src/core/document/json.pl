@@ -2190,7 +2190,7 @@ documentation_descriptor_json(enum_documentation(Type,Records),
                             ),
                             Pairs,
                             JSON_Pairs),
-                    dict_pairs(JSONs,json,JSON_Pairs),
+                    dict_pairs(JSON,json,JSON_Pairs),
                     Result = (Record.put('@values', JSON))
                 ;   Result = Record
                 ),
