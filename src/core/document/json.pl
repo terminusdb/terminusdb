@@ -12715,6 +12715,19 @@ multilingual_schema('
 }
 ').
 
+bogus_context_multilingual_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "@documentation" : {
+      "@language" : "bogus",
+      "@title" : "Example Schema",
+      "@description" : "This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+   },
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}').
+
 test(schema_write,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc)
@@ -12814,7 +12827,37 @@ test(class_frame,
      ]) :-
 
     class_frame(Desc, 'Example', Frame),
-    writeq(Frame).
+
+    Frame =
+    json{'@documentation':[
+             json{'@comment':"An example class",
+                  '@label':"Example",
+                  '@language':"en",
+                  '@properties':json{choice:json{'@comment':"A thing to choose",
+                                                 '@label':"choice"},
+                                     name:json{'@comment':"The name of the example object",
+                                               '@label':"name"}}},
+             json{'@comment':"მაგალითი კლასი",
+                  '@label':"მაგალითი",
+                  '@language':"ka",
+                  '@properties':json{choice:json{'@comment':"რაც უნდა აირჩიოთ",
+                                                 '@label':"არჩევანი"},
+                                     name:json{'@comment':"მაგალითის ობიექტის სახელი",
+                                               '@label':"სახელი"}}}],
+         '@type':'Class',
+         choice:json{'@id':'Choice',
+                     '@type':'Enum',
+                     '@values':[yes,no]},
+         name:'xsd:string'}.
+
+test(bogus_schema_write,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(casting_error("bogus",'http://www.w3.org/2001/XMLSchema#language'),_)
+     ]) :-
+    write_schema(bogus_context_multilingual_schema,Desc).
 
 :- end_tests(multilingual).
 
