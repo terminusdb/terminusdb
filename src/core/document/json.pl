@@ -451,21 +451,35 @@ class_descriptor_image(set(C),json{ '@container' : "@set",
 class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
                                                  '@type' : C }).
 
-get_context_documentation(DB, ID, Documentation) :-
+get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
-    xrdf(Schema, ID, sys:documentation, Doc_ID),
-    Documentation0 = _{},
-    (   xrdf(Schema, Doc_ID, sys:title, Title^^_)
-    ->  put_dict(_{ '@title': Title}, Documentation0, Documentation1)
-    ;   Documentation0 = Documentation1),
-    (   xrdf(Schema, Doc_ID, sys:description, Desc^^_)
-    ->  put_dict(_{ '@description': Desc}, Documentation1, Documentation2)
-    ;   Documentation1 = Documentation2),
-    (   xrdf(Schema, Doc_ID, sys:authors, Author_ID)
-    ->  rdf_list_list(Schema, Author_ID, Authors),
-        maplist([Author^^_,Author]>>true, Authors, Authors_List),
-        put_dict(_{ '@authors': Authors_List}, Documentation2, Documentation)
-    ;   Documentation2 = Documentation).
+    findall(
+        Documentation,
+        (   xrdf(Schema, ID, sys:documentation, Doc_ID),
+            Documentation0 = json{},
+            (   xrdf(Schema, Doc_ID, sys:title, Title^^_)
+            ->  put_dict(_{ '@title': Title}, Documentation0, Documentation1)
+            ;   Documentation0 = Documentation1),
+            (   xrdf(Schema, Doc_ID, sys:description, Desc^^_)
+            ->  put_dict(_{ '@description': Desc}, Documentation1, Documentation2)
+            ;   Documentation1 = Documentation2),
+            (   xrdf(Schema, Doc_ID, sys:authors, Author_ID)
+            ->  rdf_list_list(Schema, Author_ID, Authors),
+                maplist([Author^^_,Author]>>true, Authors, Authors_List),
+                put_dict(_{ '@authors': Authors_List}, Documentation2, Documentation3)
+            ;   Documentation2 = Documentation3),
+            (   xrdf(Schema, Doc_ID, sys:language, Language^^_)
+            ->  put_dict(_{ '@language': Language}, Documentation3, Documentation)
+            ;   Documentation3 = Documentation)
+        ),
+        Documentations
+    ),
+    (   Documentations = []
+    ->  fail
+    ;   Documentations = [Doc]
+    ->  true
+    ;   Documentations = Doc
+    ).
 
 database_context_object(DB,Prefixes) :-
     is_transaction(DB),
@@ -1096,7 +1110,8 @@ context_keyword_value_map('@documentation',Documentation,'sys:documentation',Res
     ->  DocSet = Documentation
     ;   DocSet = [Documentation]
     ),
-    maplist([Doc,Res]>>(
+    index_list(DocSet,Indexes),
+    maplist([Doc,Idx,Res]>>(
                 dict_pairs(Doc, json, Pairs),
                 findall(P-V,
                         (   member(Keyword-Value,Pairs),
@@ -1104,12 +1119,17 @@ context_keyword_value_map('@documentation',Documentation,'sys:documentation',Res
                             context_documentation_value_map(Keyword,Value,P,V)
                         ),
                         PVs),
-                dict_pairs(Res,json,['@id'-"terminusdb://context/SchemaDocumentation",
+                atomic_list_concat(
+                    ["terminusdb://context/SchemaDocumentation/",Idx], Id),
+                dict_pairs(Res,json,['@id'-Id,
                                      '@type'-"sys:SchemaDocumentation"|PVs])),
-            DocSet,ValueSet),
+            DocSet,Indexes,ValueSet),
     Result = json{ '@container' : "@set",
                    '@type' : 'sys:SchemaDocumentation',
                    '@value' : ValueSet }.
+
+context_documentation_value_map('@language',Value,'sys:language',
+                                json{'@type' : "xsd:language", '@value' : Value}).
 context_documentation_value_map('@title',Value,'sys:title',
                                 json{'@type' : "xsd:string", '@value' : Value}).
 context_documentation_value_map('@description',Value,'sys:description',
@@ -1335,7 +1355,7 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
                 Res = json{'@id' : Doc_Id,
                            '@type' : Documentation_Ex
                           },
-                (   get_dict('@lang', VElt, Lang)
+                (   get_dict('@language', VElt, Lang)
                 ->  do_or_die(
                         iana(Lang,_),
                         error(unknown_language_tag(Lang))),
@@ -12626,12 +12646,12 @@ multilingual_schema('
   "@schema": "terminusdb:///schema#",
   "@type": "@context",
   "@documentation" : [{
-      "@lang" : "en",
+      "@language" : "en",
       "@title" : "Example Schema",
       "@description" : "This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
       "@authors" : ["Gavin Mendel-Gleason"]
    },
-   {  "@lang" : "ka",
+   {  "@language" : "ka",
       "@title" : "მაგალითი სქემა",
       "@description" : "ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
       "@authors" : ["გავინ მენდელ-გლისონი"]
@@ -12644,7 +12664,7 @@ multilingual_schema('
   "@type" : "Class",
   "@documentation" : [
      {
-       "@lang" : "en",
+       "@language" : "en",
        "@label" : "Example",
        "@comment" : "An example class",
        "@properties" : { "name" : { "@label" : "name",
@@ -12653,7 +12673,7 @@ multilingual_schema('
                                       "@comment" : "A thing to choose" }}
      },
      {
-        "@lang" : "ka",
+        "@language" : "ka",
         "@label" : "მაგალითი",
         "@comment" : "მაგალითი კლასი",
         "@properties" : { "name" : { "@label" : "სახელი",
@@ -12670,7 +12690,7 @@ multilingual_schema('
   "@type" : "Enum",
   "@documentation" : [
      {
-       "@lang" : "en",
+       "@language" : "en",
        "@label" : "Choice",
        "@comment" : "A Choice of a thing",
        "@values" : {
@@ -12681,7 +12701,7 @@ multilingual_schema('
        }
      },
      {
-       "@lang" : "ka",
+       "@language" : "ka",
        "@label" : "არჩევანი",
        "@values" : {
           "yes" : { "@label" : "დიახ",
@@ -12704,7 +12724,7 @@ test(schema_write,
 
     write_schema(multilingual_schema,Desc).
 
-test(schema_read,
+test(schema_read_class,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
              write_schema(multilingual_schema,Desc)
@@ -12735,6 +12755,66 @@ test(schema_read,
          '@type':'Class',
          choice:'Choice',
          name:'xsd:string'}.
+
+
+test(schema_read_enum,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    get_schema_document(Desc, 'Choice', Choice),
+    Choice =
+    json{'@documentation':
+         [json{'@comment':"A Choice of a thing",
+               '@label':"Choice",
+               '@language':"en",
+               '@values':json{no:json{'@comment':"Or is it a no?",'@label':"no"},
+                              yes:json{'@comment':"Is it a yes?",'@label':"yes"}}},
+          json{'@label':"არჩევანი",
+               '@language':"ka",
+               '@values':json{no:json{'@comment':"ან არის არა?",'@label':"არა"},
+                              yes:json{'@comment':"კია?",'@label':"დიახ"}}}],
+         '@id':'Choice',
+         '@type':'Enum',
+         '@value':[yes,no]}.
+
+test(schema_read_context,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    database_context_object(Desc, Context),
+    Context =
+    _5642{'@base':"terminusdb:///data/",
+          '@documentation':[
+              json{'@authors':["Gavin Mendel-Gleason"],
+                   '@description':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+                   '@language':"en",
+                   '@title':"Example Schema"},
+              json{'@authors':["გავინ მენდელ-გლისონი"],
+                   '@description':"ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
+                   '@language':"ka",
+                   '@title':"მაგალითი სქემა"}],
+          '@schema':"terminusdb:///schema#",
+          '@type':'Context',
+          xsd:"http://www.w3.org/2001/XMLSchema#"}.
+
+test(class_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, 'Example', Frame),
+    writeq(Frame).
 
 :- end_tests(multilingual).
 
