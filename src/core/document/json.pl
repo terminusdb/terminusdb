@@ -3364,7 +3364,7 @@ test(expand_context_with_documentation, []) :-
          'sys:documentation':
          json{'@container':"@set",'@type':'sys:SchemaDocumentation',
               '@value':
-              [json{'@id':"terminusdb://context/SchemaDocumentation",
+              [json{'@id':'terminusdb://context/SchemaDocumentation/0',
                     '@type':"sys:SchemaDocumentation",
                     'sys:authors':
                     json{'@container':"@list",
@@ -3380,6 +3380,7 @@ test(expand_context_with_documentation, []) :-
          'sys:schema':json{'@type':"xsd:string",'@value':"http://s/"}},
 
     findall(Triple, context_triple(Context, Triple), Triples),
+
     Triples =
     [ t("terminusdb://context",
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
@@ -3389,11 +3390,11 @@ test(expand_context_with_documentation, []) :-
 		"http://i/" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
 	  t("terminusdb://context",
 		'http://terminusdb.com/schema/sys#documentation',
-		"terminusdb://context/SchemaDocumentation"),
-	  t("terminusdb://context/SchemaDocumentation",
+		'terminusdb://context/SchemaDocumentation/0'),
+	  t('terminusdb://context/SchemaDocumentation/0',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
 		'http://terminusdb.com/schema/sys#SchemaDocumentation'),
-	  t("terminusdb://context/SchemaDocumentation",
+	  t('terminusdb://context/SchemaDocumentation/0',
 		'http://terminusdb.com/schema/sys#authors',
 		Cons),
 	  t(Cons,
@@ -3405,10 +3406,10 @@ test(expand_context_with_documentation, []) :-
 	  t(Cons,
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
 		'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
-	  t("terminusdb://context/SchemaDocumentation",
+	  t('terminusdb://context/SchemaDocumentation/0',
 		'http://terminusdb.com/schema/sys#description',
 		"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products." ^^ 'http://www.w3.org/2001/XMLSchema#string'),
-	  t("terminusdb://context/SchemaDocumentation",
+	  t('terminusdb://context/SchemaDocumentation/0',
 		'http://terminusdb.com/schema/sys#title',
 		"WOQL schema" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
 	  t("terminusdb://context",
