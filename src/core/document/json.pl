@@ -1092,16 +1092,24 @@ context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
-    dict_pairs(Documentation, json, Pairs),
-    findall(P-V,
-            (   member(Keyword-Value,Pairs),
-                \+ Keyword = '@type',
-                context_documentation_value_map(Keyword,Value,P,V)
-            ),
-            PVs),
-    dict_pairs(Result,json,['@id'-"terminusdb://context/SchemaDocumentation",
-                            '@type'-"sys:SchemaDocumentation"|PVs]).
-
+    (   is_list(Documentation) % multilingual
+    ->  DocSet = Documentation
+    ;   DocSet = [Documentation]
+    ),
+    maplist([Doc,Res]>>(
+                dict_pairs(Doc, json, Pairs),
+                findall(P-V,
+                        (   member(Keyword-Value,Pairs),
+                            \+ Keyword = '@type',
+                            context_documentation_value_map(Keyword,Value,P,V)
+                        ),
+                        PVs),
+                dict_pairs(Res,json,['@id'-"terminusdb://context/SchemaDocumentation",
+                                     '@type'-"sys:SchemaDocumentation"|PVs])),
+            DocSet,ValueSet),
+    Result = json{ '@container' : "@set",
+                   '@type' : 'sys:SchemaDocumentation',
+                   '@value' : ValueSet }.
 context_documentation_value_map('@title',Value,'sys:title',
                                 json{'@type' : "xsd:string", '@value' : Value}).
 context_documentation_value_map('@description',Value,'sys:description',
@@ -1232,6 +1240,13 @@ json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
             ->  fail
             ;   K = '@type'
             ->  fail
+            ;   is_dict(V),
+                (   get_dict('@comment', V, _)
+                ;   get_dict('@label', V, _))
+            ->  prefix_expand_schema(K, Context, Key),
+                json_schema_elaborate_documentation_value(Context,
+                                                          [property(Key)
+                                                           |Path], V, Value)
             ;   is_dict(V)
             ->  prefix_expand_schema(K, Context, Key),
                 Value = V
@@ -1255,6 +1270,15 @@ json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
             ->  fail
             ;   K = '@type'
             ->  fail
+            ;   is_dict(V),
+                (   get_dict('@comment', V, _)
+                ;   get_dict('@label', V, _))
+            ->  enum_value(Type,K,Enum_Value),
+                prefix_expand_schema(Enum_Value, Context, Key),
+                json_schema_elaborate_documentation_value(Context,
+                                                          [property(Key)
+                                                           |Path],
+                                                          V, Value)
             ;   is_dict(V)
             ->  enum_value(Type,K,Enum_Value),
                 prefix_expand_schema(Enum_Value, Context, Key),
@@ -1267,54 +1291,96 @@ json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
         Pairs),
     dict_pairs(Out, json, ['@id'-Id,'@type'-Enum_Ex|Pairs]).
 
+json_schema_elaborate_documentation_value(Context, Path, V, Value2) :-
+    global_prefix_expand(sys:'DocumentationLabelComment',Doc_Ex),
+    property_id(V, Context, Path, Id),
+    global_prefix_expand(sys:'comment',Comment_Ex),
+    global_prefix_expand(sys:'label',Label_Ex),
+    Value = _{ '@id' : Id, '@type' : Doc_Ex },
+    (   get_dict('@comment', V, Comment)
+    ->  wrap_text(Comment, Comment_Wrapped),
+        put_dict(Comment_Ex, Value, Comment_Wrapped, Value1)
+    ;   Value = Value1
+    ),
+    (   get_dict('@label', V, Label)
+    ->  wrap_text(Label, Label_Wrapped),
+        put_dict(Label_Ex, Value1, Label_Wrapped, Value2)
+    ;   Value2 = Value1
+    ).
+
 json_schema_elaborate_documentation(V,Context,Path,json{'@type' : Documentation_Ex,
                                                         '@id' : ID,
                                                         '@comment' :
                                                         json{ '@type' : XSD,
-                                                              '@value' : V}}) :-
-    string(V),
-    !,
+                                                              '@value' : V}}),
+string(V) =>
     global_prefix_expand(sys:'Documentation',Documentation_Ex),
     global_prefix_expand(xsd:string, XSD),
     documentation_id(Context,Path,ID).
-json_schema_elaborate_documentation(V,Context,Path,Result3) :-
-    is_dict(V),
-    !,
+json_schema_elaborate_documentation(V,Context,Path,Result),
+(   is_list(V)
+;   is_dict(V)) =>
     global_prefix_expand(sys:'Documentation',Documentation_Ex),
-    documentation_id(Context,Path,Doc_Id),
-    Result = json{'@id' : Doc_Id,
-                  '@type' : Documentation_Ex},
-
-    (   get_dict('@comment', V, Comment_Text)
-    ->  wrap_text(Comment_Text, Comment),
-        global_prefix_expand(sys:'comment',CommentP),
-        Result1 = Result.put(CommentP, Comment)
-    ;   Result1 = Result
+    Result = json{ '@container' : "@set",
+                   '@type' : Documentation_Ex,
+                   '@value' : VSetElab },
+    (   is_list(V)
+    ->  VSet = V
+    ;   VSet = [V]
     ),
+    index_list(VSet, Indexes),
+    maplist({Context,Path,Documentation_Ex}/[VElt,Idx,Res4]>>
+            (   documentation_id(Context,[index(Idx)|Path],Doc_Id),
+                Res = json{'@id' : Doc_Id,
+                           '@type' : Documentation_Ex
+                          },
+                (   get_dict('@lang', VElt, Lang)
+                ->  do_or_die(
+                        iana(Lang,_),
+                        error(unknown_language_tag(Lang))),
+                    global_prefix_expand(sys:language, LangTag),
+                    global_prefix_expand(xsd:language, LangType),
+                    put_dict(LangTag,Res,json{ '@value' : Lang,
+                                               '@type' : LangType},
+                             Res1)
+                ;   Res1 = Res
+                ),
+                (   get_dict('@comment', VElt, Comment_Text)
+                ->  wrap_text(Comment_Text, Comment),
+                    global_prefix_expand(sys:'comment',CommentP),
+                    put_dict(CommentP,Res1,Comment,Res2)
+                ;   Res2 = Res1
+                ),
 
-    (   get_dict('@properties',V,Property_Obj)
-    ->  global_prefix_expand(sys:'properties',PropertiesP),
-        json_schema_elaborate_property_documentation(Context,
-                                                     [property('properties'),
-                                                      type('Documentation'),
-                                                      property('documentation')
-                                                      |Path],
-                                                     Property_Obj,
-                                                     Property_Obj2),
-        Result2 = (Result1.put(PropertiesP,Property_Obj2))
-    ;   Result2 = Result1),
+                (   get_dict('@properties',VElt,Property_Obj)
+                ->  global_prefix_expand(sys:'properties',PropertiesP),
+                    json_schema_elaborate_property_documentation(
+                        Context,
+                        [property('properties'),
+                         type('Documentation'),
+                         property('documentation'),
+                         index(Idx)
+                         |Path],
+                        Property_Obj,
+                        Property_Obj2),
+                    put_dict(PropertiesP,Res2,Property_Obj,Res3)
+                ;   Res3 = Res2),
 
-    (   get_dict('@values',V,Property_Obj)
-    ->  global_prefix_expand(sys:'values',PropertiesP),
-        json_schema_elaborate_enum_documentation(Context,
-                                                 [property('values'),
-                                                  type('Documentation'),
-                                                  property('documentation')
-                                                  |Path],
-                                                 Property_Obj,
-                                                 Property_Obj2),
-        Result3 = (Result2.put(PropertiesP,Property_Obj2))
-    ;   Result3 = Result2).
+                (   get_dict('@values',VElt,Property_Obj)
+                ->  global_prefix_expand(sys:'values',PropertiesP),
+                    json_schema_elaborate_enum_documentation(
+                        Context,
+                        [property('values'),
+                         type('Documentation'),
+                         property('documentation'),
+                         index(Idx)
+                         |Path],
+                        Property_Obj,
+                        Property_Obj2),
+                    put_dict(PropertiesP, Res3, Property_Obj2, Res4)
+                ;   Res4 = Res3)
+            ),
+            VSet, Indexes, VSetElab).
 
 json_schema_predicate_value('@id',V,Context,_,'@id',V_Ex) :-
     !,
@@ -2110,50 +2176,53 @@ key_descriptor_json(random(_), _, json{ '@type' : "Random" },_).
 documentation_descriptor_json(Descriptor, Prefixes, Result) :-
     documentation_descriptor_json(Descriptor,Prefixes, Result, [compress_ids(true)]).
 
-documentation_descriptor_json(enum_documentation(Type, Comment_Option, Elements),
+documentation_descriptor_json(enum_documentation(Type,Records),
                               Prefixes,
+                              JSON, Options) :-
+    (   option(compress_ids(true), Options)
+    ->  findall(Result,
+                (   member(Record, Records),
+                    get_dict(Record,'@values',Elements),
+                    dict_pairs(Elements, _, Pairs),
+                    maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
+                                enum_value(Type,Val,Enum),
+                                compress_schema_uri(Val, Prefixes, Small)
+                            ),
+                            Pairs,
+                            JSON_Pairs),
+                    dict_pairs(JSONs,json,JSON_Pairs),
+                    Result = (Record.put('@values', JSON))
+                ;   Result = Record
+                ),
+                Results)
+    ;   Results = Records
+    ),
+    (   Results = [JSON]
+    ->  true
+    ;   Results = JSON
+    ).
+documentation_descriptor_json(property_documentation(Records), Prefixes,
                               Result, Options) :-
-    (   Comment_Option = some(Comment)
-    ->  Template = json{ '@comment' : Comment}
-    ;   Template = json{}
+    (   option(compress_ids(true), Options)
+    ->  findall(Result,
+                (   member(Record, Records),
+                    get_dict(Record,'@properties',Elements),
+                    dict_pairs(Elements, _, Pairs),
+                    maplist({Prefixes}/[Prop-X,Small-X]>>(
+                                compress_schema_uri(Prop, Prefixes, Small)
+                            ),
+                            Pairs,
+                            JSON_Pairs),
+                    dict_pairs(JSON,json,JSON_Pairs),
+                    Result = (Record.put('@properties', JSON))
+                ),
+                Results)
+    ;   Results = Records
     ),
-    (   Elements = json{}
-    ->  Result = Template
-    ;   (   option(compress_ids(true), Options)
-        ->  dict_pairs(Elements, _, Pairs),
-            maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
-                        enum_value(Type,Val,Enum),
-                        compress_schema_uri(Val, Prefixes, Small)
-                    ),
-                    Pairs,
-                    JSON_Pairs),
-            dict_pairs(JSONs,json,JSON_Pairs)
-        ;   JSONs = Elements
-        ),
-        Result = (Template.put('@values', JSONs))
-    ),
-    Result \= json{}.
-documentation_descriptor_json(property_documentation(Comment_Option, Elements), Prefixes,
-                              Result, Options) :-
-    (   Comment_Option = some(Comment)
-    ->  Template = json{ '@comment' : Comment}
-    ;   Template = json{}
-    ),
-    (   Elements = json{}
-    ->  Result = Template
-    ;   (   option(compress_ids(true), Options)
-        ->  dict_pairs(Elements, _, Pairs),
-            maplist({Prefixes}/[Prop-X,Small-X]>>(
-                        compress_schema_uri(Prop, Prefixes, Small)
-                    ),
-                    Pairs,
-                    JSON_Pairs),
-            dict_pairs(JSONs,json,JSON_Pairs)
-        ;   JSONs = Elements
-        ),
-        Result = (Template.put('@properties', JSONs))
-    ),
-    Result \= json{}.
+    (   Results = [JSON]
+    ->  true
+    ;   Results = JSON
+    ).
 
 oneof_descriptor_json(Descriptor, Prefixes, JSON) :-
     oneof_descriptor_json(Descriptor, Prefixes, JSON, [compress_ids(true)]).
@@ -12489,8 +12558,8 @@ multilingual_schema('
 }
 
 { "@id" : "Example",
-  "@type" : "Class"
-  "@documentation : [
+  "@type" : "Class",
+  "@documentation" : [
      {
        "@lang" : "en",
        "@label" : "Example",
@@ -12510,7 +12579,7 @@ multilingual_schema('
                                        "@comment" : "რაც უნდა აირჩიოთ" }}
      }
   ],
-  "name" : "xsd:string"
+  "name" : "xsd:string",
   "choice" : "Choice"
 }
 
@@ -12522,27 +12591,27 @@ multilingual_schema('
        "@label" : "Choice",
        "@values" : {
          "yes" : { "@label" : "yes",
-                   "@comment", "Is it a yes?" },
+                   "@comment" : "Is it a yes?" },
          "no" : { "@label" : "no",
                   "@comment" : "Or is it a no?" }
        }
      },
      {
-        "@lang" : "ka",
-        "@label" : "არჩევანი",
-        "@values" : {
+       "@lang" : "ka",
+       "@label" : "არჩევანი",
+       "@values" : {
           "yes" : { "@label" : "დიახ",
-                    "@comment", "კია?" },
+                    "@comment" : "კია?" },
           "no" : { "@label" : "არა",
                    "@comment" : "ან არის არა?" }
-        }
+       }
      }
   ],
   "@value" : ["yes", "no"]
 }
 ').
 
-test(various_lang_combos,
+test(schema_write,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc)
             )),
@@ -12550,6 +12619,17 @@ test(various_lang_combos,
      ]) :-
 
     write_schema(multilingual_schema,Desc).
+
+test(schema_read,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    get_schema_document(Desc, 'Example', Example),
+    writeq(Example).
 
 :- end_tests(multilingual).
 
