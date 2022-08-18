@@ -12469,7 +12469,7 @@ test(json_diff,
 :- begin_tests(multilingual).
 :- use_module(core(util/test_utils)).
 
-multi_lingual_schema('
+multilingual_schema('
 { "@base": "terminusdb:///data/",
   "@schema": "terminusdb:///schema#",
   "@type": "@context",
@@ -12549,7 +12549,7 @@ test(various_lang_combos,
       cleanup(teardown_temp_store(State))
      ]) :-
 
-    write_schema(language_schema,Desc).
+    write_schema(multilingual_schema,Desc).
 
 :- end_tests(multilingual).
 
