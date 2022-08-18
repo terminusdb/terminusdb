@@ -1029,21 +1029,21 @@ schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) 
                 ;   Record3 = Record2
                 ),
                 findall(Key-Value,
-                         (  xrdf(Schema, Obj, sys:values, Enum),
-                            (   xrdf(Schema, Enum, Key, Value^^xsd:string)
-                            ->  true
-                            ;   V = json{},
-                                xrdf(Schema, Enum, Key, Enum_Obj),
-                                \+ global_prefix_expand(rdf:type, Key),
-                                (   xrdf(Schema, Enum_Obj, sys:label, EnumLabel^^xsd:string)
-                                ->  put_dict(_{ '@label' : EnumLabel}, V, V1)
-                                ;   V = V1
-                                ),
-                                (   xrdf(Schema, Enum_Obj, sys:comment, EnumComment^^xsd:string)
-                                ->  put_dict(_{ '@comment' : EnumComment}, V1, Value)
-                                ;   Value = V1
-                                )
-                            )
+                        (  xrdf(Schema, Obj, sys:values, Enum),
+                           xrdf(Schema, Enum, Key, Enum_Obj),
+                           \+ global_prefix_expand(rdf:type, Key),
+                           (   Enum_Obj = Value^^_
+                           ->  true
+                           ;   V = json{},
+                               (   xrdf(Schema, Enum_Obj, sys:label, EnumLabel^^xsd:string)
+                               ->  put_dict(_{ '@label' : EnumLabel}, V, V1)
+                               ;   V = V1
+                               ),
+                               (   xrdf(Schema, Enum_Obj, sys:comment, EnumComment^^xsd:string)
+                               ->  put_dict(_{ '@comment' : EnumComment}, V1, Value)
+                               ;   Value = V1
+                               )
+                           )
                         ),
                         Pairs),
                 dict_pairs(Elements,json,Pairs),
@@ -1071,11 +1071,11 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :
                 ),
                 findall(Key-Value,
                         (   xrdf(Schema, Obj, sys:properties, Property),
-                            (   xrdf(Schema, Property, Key, Value^^xsd:string)
+                            xrdf(Schema, Property, Key, Prop_Obj),
+                            \+ global_prefix_expand(rdf:type, Key),
+                            (   Prop_Obj = Value^^_
                             ->  true
                             ;   V = json{},
-                                xrdf(Schema, Property, Key, Prop_Obj),
-                                \+ global_prefix_expand(rdf:type, Key),
                                 (   xrdf(Schema, Prop_Obj, sys:label, PropertyLabel^^xsd:string)
                                 ->  put_dict(_{ '@label' : PropertyLabel}, V, V1)
                                 ;   V = V1

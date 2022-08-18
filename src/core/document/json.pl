@@ -2191,23 +2191,26 @@ documentation_descriptor_json(enum_documentation(Type,Records),
     (   option(compress_ids(true), Options)
     ->  findall(Result,
                 (   member(Record, Records),
-                    get_dict('@values',Record,Elements),
-                    dict_pairs(Elements, _, Pairs),
-                    maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
-                                enum_value(Type,Val,Enum),
-                                compress_schema_uri(Val, Prefixes, Small)
-                            ),
-                            Pairs,
-                            JSON_Pairs),
-                    dict_pairs(JSON,json,JSON_Pairs),
-                    Result = (Record.put('@values', JSON))
-                ;   Result = Record
+                    (   get_dict('@values',Record,Elements)
+                    ->  dict_pairs(Elements, _, Pairs),
+                        maplist({Type,Prefixes}/[Enum-X,Small-X]>>(
+                                    enum_value(Type,Val,Enum),
+                                    compress_schema_uri(Val, Prefixes, Small)
+                                ),
+                                Pairs,
+                                JSON_Pairs),
+                        dict_pairs(JSON,json,JSON_Pairs),
+                        Result = (Record.put('@values', JSON))
+                    ;   Result = Record
+                    )
                 ),
                 Results)
     ;   Results = Records
     ),
     (   Results = [JSON]
     ->  true
+    ;   Results = []
+    ->  false
     ;   Results = JSON
     ).
 documentation_descriptor_json(property_documentation(Records),
@@ -2216,21 +2219,25 @@ documentation_descriptor_json(property_documentation(Records),
     (   option(compress_ids(true), Options)
     ->  findall(Result,
                 (   member(Record, Records),
-                    get_dict('@properties',Record,Elements),
-                    dict_pairs(Elements, _, Pairs),
-                    maplist({Prefixes}/[Prop-X,Small-X]>>(
-                                compress_schema_uri(Prop, Prefixes, Small)
-                            ),
-                            Pairs,
-                            JSON_Pairs),
-                    dict_pairs(JSON,json,JSON_Pairs),
-                    Result = (Record.put('@properties', JSON))
+                    (   get_dict('@properties',Record,Elements)
+                    ->  dict_pairs(Elements, _, Pairs),
+                        maplist({Prefixes}/[Prop-X,Small-X]>>(
+                                    compress_schema_uri(Prop, Prefixes, Small)
+                                ),
+                                Pairs,
+                                JSON_Pairs),
+                        dict_pairs(JSON,json,JSON_Pairs),
+                        Result = (Record.put('@properties', JSON))
+                    ;   Result = Record
+                    )
                 ),
                 Results)
     ;   Results = Records
     ),
     (   Results = [JSON]
     ->  true
+    ;   Results = []
+    ->  false
     ;   Results = JSON
     ).
 
@@ -3335,34 +3342,59 @@ test(expand_context_with_documentation, []) :-
          '@type':'sys:Context',
          'sys:base':json{'@type':"xsd:string",'@value':"http://i/"},
          'sys:documentation':
-         json{'@id':"terminusdb://context/SchemaDocumentation",
-              '@type':"sys:SchemaDocumentation",
-              'sys:authors':
-              json{'@container':"@list",
-                   '@type':"xsd:string",
-                   '@value':[json{'@type':"xsd:string", '@value':"Gavin"}]},
-              'sys:description':
-              json{'@type':"xsd:string",
-                   '@value':"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products."},
-              'sys:title':json{'@type':"xsd:string",
-                               '@value':"WOQL schema"}},
-         'sys:prefix_pair':json{'@container':"@set",'@type':"sys:Prefix",'@value':[]},
+         json{'@container':"@set",'@type':'sys:SchemaDocumentation',
+              '@value':
+              [json{'@id':"terminusdb://context/SchemaDocumentation",
+                    '@type':"sys:SchemaDocumentation",
+                    'sys:authors':
+                    json{'@container':"@list",
+                         '@type':"xsd:string",
+                         '@value':[json{'@type':"xsd:string",
+                                        '@value':"Gavin"}]},
+                    'sys:description':json{'@type':"xsd:string",
+                                           '@value':"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products."},
+                    'sys:title':json{'@type':"xsd:string",
+                                     '@value':"WOQL schema"}}]},
+         'sys:prefix_pair':json{'@container':"@set",
+                                '@type':"sys:Prefix",'@value':[]},
          'sys:schema':json{'@type':"xsd:string",'@value':"http://s/"}},
 
     findall(Triple, context_triple(Context, Triple), Triples),
-
     Triples =
-    [t("terminusdb://context",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/sys#Context'),
-     t("terminusdb://context",'http://terminusdb.com/schema/sys#base',"http://i/"^^'http://www.w3.org/2001/XMLSchema#string'),
-     t("terminusdb://context/SchemaDocumentation",'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://terminusdb.com/schema/sys#SchemaDocumentation'),
-     t("terminusdb://context/SchemaDocumentation",'http://terminusdb.com/schema/sys#authors',Cons),
-     t(Cons,'http://www.w3.org/1999/02/22-rdf-syntax-ns#type','http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
-     t(Cons,'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',"Gavin"^^'http://www.w3.org/2001/XMLSchema#string'),
-     t(Cons,'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest','http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
-     t("terminusdb://context/SchemaDocumentation",'http://terminusdb.com/schema/sys#description',"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products."^^'http://www.w3.org/2001/XMLSchema#string'),
-     t("terminusdb://context/SchemaDocumentation",'http://terminusdb.com/schema/sys#title',"WOQL schema"^^'http://www.w3.org/2001/XMLSchema#string'),
-     t("terminusdb://context",'http://terminusdb.com/schema/sys#documentation',"terminusdb://context/SchemaDocumentation"),
-     t("terminusdb://context",'http://terminusdb.com/schema/sys#schema',"http://s/"^^'http://www.w3.org/2001/XMLSchema#string')].
+    [ t("terminusdb://context",
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://terminusdb.com/schema/sys#Context'),
+	  t("terminusdb://context",
+		'http://terminusdb.com/schema/sys#base',
+		"http://i/" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
+	  t("terminusdb://context",
+		'http://terminusdb.com/schema/sys#documentation',
+		"terminusdb://context/SchemaDocumentation"),
+	  t("terminusdb://context/SchemaDocumentation",
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://terminusdb.com/schema/sys#SchemaDocumentation'),
+	  t("terminusdb://context/SchemaDocumentation",
+		'http://terminusdb.com/schema/sys#authors',
+		Cons),
+	  t(Cons,
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#List'),
+	  t(Cons,
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',
+		"Gavin" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
+	  t(Cons,
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest',
+		'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil'),
+	  t("terminusdb://context/SchemaDocumentation",
+		'http://terminusdb.com/schema/sys#description',
+		"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products." ^^ 'http://www.w3.org/2001/XMLSchema#string'),
+	  t("terminusdb://context/SchemaDocumentation",
+		'http://terminusdb.com/schema/sys#title',
+		"WOQL schema" ^^ 'http://www.w3.org/2001/XMLSchema#string'),
+	  t("terminusdb://context",
+		'http://terminusdb.com/schema/sys#schema',
+		"http://s/" ^^ 'http://www.w3.org/2001/XMLSchema#string')
+	].
 
 context_schema('
 { "@type" : "@context",
@@ -5993,39 +6025,72 @@ test(comment_elaborate,
     json_schema_elaborate(Document, Context, Elaborated),
 
     Elaborated =
-    json{'@id':'https://s/Squash',
-         '@type':'http://terminusdb.com/schema/sys#Class',
-         'http://terminusdb.com/schema/sys#documentation':
-         json{'@id':'https://s/Squash/documentation/Documentation',
-              '@type':'http://terminusdb.com/schema/sys#Documentation',
-              'http://terminusdb.com/schema/sys#comment':
-              json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                   '@value':"Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica."},
-              'http://terminusdb.com/schema/sys#properties':
-              json{'@id':'https://s/Squash/documentation/Documentation/properties/colour+genus+shape+species',
-                   '@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
-                   'https://s/colour':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                           '@value':"Red, Green, Brown, Yellow, lots of things here."},
-                   'https://s/genus':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                          '@value':"The genus of the Cucurtiba is always Cucurtiba"},
-                   'https://s/shape':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                          '@value':"Round, Silly, or very silly!"},
-                   'https://s/species':json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                                            '@value':"There are between 13 and 30 species of Cucurtiba"}}},
-         'http://terminusdb.com/schema/sys#key':json{'@id':'https://s/Squash/key/Lexical/genus+species',
-                                                     '@type':'http://terminusdb.com/schema/sys#Lexical',
-                                                     'http://terminusdb.com/schema/sys#fields':
-                                                     json{'@container':"@list",
-                                                          '@type':"@id",
-                                                          '@value':[json{'@id':'https://s/genus',
-                                                                         '@type':"@id"},
-                                                                    json{'@id':'https://s/species',
-                                                                         '@type':"@id"}]}},
-         'https://s/colour':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
-         'https://s/genus':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
-         'https://s/name':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
-         'https://s/shape':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"},
-         'https://s/species':json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"}},
+    json{ '@id':'https://s/Squash',
+		  '@type':'http://terminusdb.com/schema/sys#Class',
+		  'http://terminusdb.com/schema/sys#documentation':
+          json{ '@container':"@set",
+				'@type':'http://terminusdb.com/schema/sys#Documentation',
+				'@value':[
+                    json{ '@id':'https://s/Squash/0/documentation/Documentation',
+						  '@type':'http://terminusdb.com/schema/sys#Documentation',
+						  'http://terminusdb.com/schema/sys#comment':
+                          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+								'@value':"Cucurbita is a genus of herbaceous vines in the gourd family, Cucurbitaceae native to the Andes and Mesoamerica."
+							  },
+						  'http://terminusdb.com/schema/sys#properties':
+                          json{ '@id':'https://s/Squash/0/documentation/Documentation/properties/colour+genus+shape+species',
+								'@type':'http://terminusdb.com/schema/sys#PropertyDocumentation',
+								'https://s/colour':
+                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+									  '@value':"Red, Green, Brown, Yellow, lots of things here."
+									},
+								'https://s/genus':
+                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+									  '@value':"The genus of the Cucurtiba is always Cucurtiba"
+									},
+								'https://s/shape':
+                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+									  '@value':"Round, Silly, or very silly!"
+									},
+								'https://s/species':
+                                json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+									  '@value':"There are between 13 and 30 species of Cucurtiba"
+									}
+							  }
+						}
+				]
+			  },
+		  'http://terminusdb.com/schema/sys#key':
+          json{ '@id':'https://s/Squash/key/Lexical/genus+species',
+				'@type':'http://terminusdb.com/schema/sys#Lexical',
+				'http://terminusdb.com/schema/sys#fields':
+                json{ '@container':"@list",
+					  '@type':"@id",
+					  '@value':[ json{ '@id':'https://s/genus',
+									   '@type':"@id"
+									 },
+								 json{ '@id':'https://s/species',
+									   '@type':"@id"
+									 }
+							   ]
+					}
+			  },
+		  'https://s/colour':json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+								   '@type':"@id"
+								 },
+		  'https://s/genus':json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+								  '@type':"@id"
+								},
+		  'https://s/name':json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+								 '@type':"@id"
+							   },
+		  'https://s/shape':json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+								  '@type':"@id"
+								},
+		  'https://s/species':json{ '@id':'http://www.w3.org/2001/XMLSchema#string',
+									'@type':"@id"
+								  }
+		},
 
     open_descriptor(Desc, DB),
     create_context(DB, _{ author : "me", message : "Have you tried bitcoin?" }, Context2),
@@ -6070,7 +6135,7 @@ test(bad_documentation,
                  [witness{'@type':invalid_property_in_property_documentation_object,
                           class:'http://s/Not_A_Squash',
                           predicate:'http://s/shape',
-                          subject:'http://s/Not_A_Squash/documentation/Documentation/properties/genus+shape'}])
+                          subject:'http://s/Not_A_Squash/0/documentation/Documentation/properties/genus+shape'}])
          )
      ]) :-
 
@@ -7159,7 +7224,11 @@ test(property_documentation_mismatch,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([witness{'@type':invalid_property_in_property_documentation_object,class:'http://somewhere.for.now/schema#User',predicate:'http://somewhere.for.now/schema#times',subject:'http://somewhere.for.now/schema#User/documentation/Documentation/properties/times'}]), _)
+         error(schema_check_failure(
+                   [witness{'@type':invalid_property_in_property_documentation_object,
+                            class:'http://somewhere.for.now/schema#User',
+                            predicate:'http://somewhere.for.now/schema#times',
+                            subject:'http://somewhere.for.now/schema#User/0/documentation/Documentation/properties/times'}]), _)
      ]) :-
 
     Schema_Atom = '{
@@ -7696,24 +7765,28 @@ test(enum_documentation,
     default_prefixes(Prefixes),
     Context = (Prefixes.put('@schema', 'https://s/')),
     json_schema_elaborate(Schema, Context, Elaborate),
+
     Elaborate =
     json{'@id':'https://s/Pet',
          '@type':'http://terminusdb.com/schema/sys#Enum',
          'http://terminusdb.com/schema/sys#documentation':
-         json{'@id':'https://s/Pet/documentation/Documentation',
+         json{'@container':"@set",
               '@type':'http://terminusdb.com/schema/sys#Documentation',
-              'http://terminusdb.com/schema/sys#comment':
-              json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                   '@value':"What kind of pet?"},
-              'http://terminusdb.com/schema/sys#values':
-              json{'@id':'https://s/Pet/documentation/Documentation/values/cat+dog',
-                   '@type':'http://terminusdb.com/schema/sys#EnumDocumentation',
-                   'https://s/Pet/cat':
-                   json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                        '@value':"A kitty"},
-                   'https://s/Pet/dog':
-                   json{'@type':'http://www.w3.org/2001/XMLSchema#string',
-                        '@value':"A doggie"}}},
+              '@value':[
+                  json{'@id':'https://s/Pet/0/documentation/Documentation',
+                       '@type':'http://terminusdb.com/schema/sys#Documentation',
+                       'http://terminusdb.com/schema/sys#comment':
+                       json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                            '@value':"What kind of pet?"},
+                       'http://terminusdb.com/schema/sys#values':
+                       json{'@id':'https://s/Pet/0/documentation/Documentation/values/cat+dog',
+                            '@type':'http://terminusdb.com/schema/sys#EnumDocumentation',
+                            'https://s/Pet/cat':
+                            json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                 '@value':"A kitty"},
+                            'https://s/Pet/dog':
+                            json{'@type':'http://www.w3.org/2001/XMLSchema#string',
+                                 '@value':"A doggie"}}}]},
          'http://terminusdb.com/schema/sys#value':
          json{'@container':"@list",
               '@type':"@id",
