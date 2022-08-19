@@ -1806,6 +1806,32 @@ api_document_error_jsonld(insert_documents, error(can_not_insert_existing_object
                               'api:document' : Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(insert_documents, error(unknown_language_tag(Tag,Document), _), JSON) :-
+    format(string(Msg), "Unknown language tag used ~q", [Tag]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnknownLanguageTag',
+                              'api:language' : Tag,
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents, error(no_language_tag_for_multilingual(Document), _), JSON) :-
+    format(string(Msg), "Multiple languages are used, but not all with language tags", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoLanguageTagForMultilingual',
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents, error(language_tags_repeated(Tags,Document),_), JSON) :-
+    format(string(Msg), "The same language tags ~q were used repeatedly", [Tags]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LanguageTagsRepeated',
+                              'api:languages' : Tags,
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _), JSON) :-
     format(string(Msg), "No context found in submitted schema", []),
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',

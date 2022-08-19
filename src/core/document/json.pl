@@ -89,6 +89,19 @@
 :- use_module(core(document/inference)).
 :- use_module(core(document/json_rdf)).
 
+verify_languages(Docs) :-
+    length(Docs,N),
+    (   N > 1
+    ->  convlist([D,R]>>get_dict('@language',D,R), Docs, Langs),
+        do_or_die(
+            length(Langs,N),
+            error(no_language_tag_for_multilingual, _)),
+        die_if(
+            (   duplicates(Langs,Repeating),
+                \+ Repeating = []),
+            error(language_tags_repeated(Repeating), _))
+    ;   true).
+
 encode_id_fragment(Elt, Encoded) :-
     ground(Elt),
     !,
@@ -1110,6 +1123,9 @@ context_keyword_value_map('@documentation',Documentation,'sys:documentation',Res
     ->  DocSet = Documentation
     ;   DocSet = [Documentation]
     ),
+
+    verify_languages(DocSet),
+
     index_list(DocSet,Indexes),
     maplist([Doc,Idx,Res]>>(
                 dict_pairs(Doc, json, Pairs),
@@ -1349,6 +1365,9 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
     ->  VSet = V
     ;   VSet = [V]
     ),
+
+    verify_languages(VSet),
+
     index_list(VSet, Indexes),
     maplist({Context,Path,Documentation_Ex}/[VElt,Idx,Res5]>>
             (   documentation_id(Context,[index(Idx)|Path],Doc_Id),
@@ -1358,7 +1377,7 @@ json_schema_elaborate_documentation(V,Context,Path,Result),
                 (   get_dict('@language', VElt, Lang)
                 ->  do_or_die(
                         iana(Lang,_),
-                        error(unknown_language_tag(Lang))),
+                        error(unknown_language_tag(Lang),_)),
                     global_prefix_expand(sys:language, LangTag),
                     global_prefix_expand(xsd:language, LangType),
                     put_dict(LangTag,Res,json{ '@value' : Lang,
@@ -12729,6 +12748,74 @@ bogus_context_multilingual_schema('
   "xsd" : "http://www.w3.org/2001/XMLSchema#"
 }').
 
+bogus_multilingual_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "@documentation" : [{
+      "@title" : "Example Schema",
+      "@description" : "This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+   },
+   {  "@language" : "ka",
+      "@title" : "მაგალითი სქემა",
+      "@description" : "ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
+      "@authors" : ["გავინ მენდელ-გლისონი"]
+   }
+  ],
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}').
+
+bogus_multilingual_class('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+}
+
+{ "@id" : "Example",
+  "@type" : "Class",
+  "@documentation" : [
+     {
+       "@label" : "Example",
+       "@comment" : "An example class",
+       "@properties" : { "name" : { "@label" : "name",
+                                    "@comment" : "The name of the example object" },
+                         "choice" : { "@label" : "choice",
+                                      "@comment" : "A thing to choose" }}
+     },
+     {
+        "@language" : "ka",
+        "@label" : "მაგალითი",
+        "@comment" : "მაგალითი კლასი",
+        "@properties" : { "name" : { "@label" : "სახელი",
+                                     "@comment" : "მაგალითის ობიექტის სახელი" },
+                          "choice" : { "@label" : "არჩევანი",
+                                       "@comment" : "რაც უნდა აირჩიოთ" }}
+     }
+  ],
+  "name" : "xsd:string"
+}
+').
+
+repeating_multilingual_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "@documentation" : [{
+      "@language" : "ka",
+      "@title" : "Example Schema",
+      "@description" : "This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+   },
+   {  "@language" : "ka",
+      "@title" : "მაგალითი სქემა",
+      "@description" : "ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
+      "@authors" : ["გავინ მენდელ-გლისონი"]
+   }
+  ],
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}').
+
 test(schema_write,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc)
@@ -12769,7 +12856,6 @@ test(schema_read_class,
          '@type':'Class',
          choice:'Choice',
          name:'xsd:string'}.
-
 
 test(schema_read_enum,
      [setup((setup_temp_store(State),
@@ -12859,6 +12945,33 @@ test(bogus_schema_write,
       error(casting_error("bogus",'http://www.w3.org/2001/XMLSchema#language'),_)
      ]) :-
     write_schema(bogus_context_multilingual_schema,Desc).
+
+test(bogus_multilingual_write,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(no_language_tag_for_multilingual,_)
+     ]) :-
+    write_schema(bogus_multilingual_schema,Desc).
+
+test(repeating_multilingual_schema,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(language_tags_repeated(["ka"]),_)
+     ]) :-
+    write_schema(repeating_multilingual_schema,Desc).
+
+test(bogus_multilingual_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(no_language_tag_for_multilingual,_)
+     ]) :-
+    write_schema(bogus_multilingual_class,Desc).
 
 :- end_tests(multilingual).
 

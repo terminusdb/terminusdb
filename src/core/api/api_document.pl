@@ -142,6 +142,9 @@ known_document_error(inserted_subdocument_as_document).
 known_document_error(capture_already_bound(_)).
 known_document_error(wrong_array_dimensions(_,_)).
 known_document_error(not_a_unit_type(_)).
+known_document_error(unknown_language_tag(_)).
+known_document_error(no_language_tag_for_multilingual).
+known_document_error(language_tags_repeated(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
