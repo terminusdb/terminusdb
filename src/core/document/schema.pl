@@ -568,7 +568,7 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
 refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Doc, Prop, _),
-    prefix_list([sys:comment, sys:properties, sys:values, rdf:type], List),
+    prefix_list([sys:comment, sys:label, sys:properties, sys:values, sys:language, rdf:type], List),
     (   \+ memberchk(Prop, List)
     ->  Witness = witness{ '@type' : not_a_valid_documentation_object,
                            predicate: Prop,
@@ -582,12 +582,8 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
         ;   xrdf(Schema, Doc, sys:values, Val_Obj)
         ->  xrdf(Schema, Val_Obj, Key, Result),
             \+ global_prefix_expand(rdf:type, Key),
-            global_prefix_expand(xsd:string, XSD),
-            (   Result \= _^^XSD
-            ->  Witness = witness{ '@type' : not_a_valid_enum_documentation_object,
-                                   value: Key,
-                                   class: Class,
-                                   subject: Val_Obj }
+            (   refute_documentation_value(Schema,enum,Class,Result,Witness)
+            ->  true
             ;   xrdf(Schema, Class, sys:value, Cons),
                 \+ graph_member_list(Schema, Key, Cons)
             ->   Witness = witness{ '@type' : invalid_enum_in_documentation_object,
@@ -599,18 +595,43 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     ;   xrdf(Schema, Doc, sys:properties, Prop_Obj),
         xrdf(Schema, Prop_Obj, Key, Result),
         \+ global_prefix_expand(rdf:type, Key),
-        global_prefix_expand(xsd:string, XSD),
-        (   Result \= _^^XSD
-        ->  Witness = witness{ '@type' : not_a_valid_property_documentation_object,
-                               predicate: Key,
-                               class: Class,
-                               subject: Prop_Obj }
+        (   refute_documentation_value(Schema,property,Class,Result,Witness)
+        ->  true
         ;   \+ class_predicate_type(Validation_Object,Class,Key,_),
             Witness = witness{ '@type' : invalid_property_in_property_documentation_object,
                                predicate: Key,
                                class: Class,
                                subject: Prop_Obj }
         )
+    ).
+
+documentation_error_selector(enum,not_a_valid_enum_documentation_object).
+documentation_error_selector(property,not_a_valid_property_documentation_object).
+
+refute_documentation_value(Schema,Type,Class,Result,Witness) :-
+    documentation_error_selector(Type,Error),
+    global_prefix_expand(xsd:string, XSD),
+    \+ Result = _^^XSD,
+    prefix_list([sys:comment, sys:label, rdf:type], DocList),
+    xrdf(Schema, Result, Predicate, Value),
+    (   \+ member(Predicate, DocList)
+    ->  Witness = witness{ '@type' : Error,
+                           predicate: Predicate,
+                           class: Class,
+                           subject: Value }
+    ;   global_prefix_expand(rdf:type, Predicate)
+    ->  \+ global_prefix_expand(sys:'DocumentationLabelComment', Value),
+        Witness = witness{
+                      '@type' : Error,
+                      predicate : Predicate,
+                      class: Class,
+                      subject: Value
+                  }
+    ;   \+ Value = _^^XSD
+    ->  Witness = witness{ '@type' : Error,
+                           predicate: Predicate,
+                           class: Class,
+                           subject: Value }
     ).
 
 is_key(Type) :-
@@ -991,30 +1012,89 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_documentation_descriptor(Schema, Type, Descriptor).
 
-schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment_Option, Elements)) :-
-    xrdf(Schema, Type, sys:documentation, Obj),
+schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) :-
     is_schema_enum(Schema,Type),
     !,
-    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
-    ->  Comment_Option = some(Comment)
-    ;   Comment_Option = none
-    ),
-    findall(Key-Value,
-            (   xrdf(Schema, Obj, sys:values, Enum),
-                xrdf(Schema, Enum, Key, Value^^xsd:string)),
-            Pairs),
-    dict_pairs(Elements,json,Pairs).
-schema_documentation_descriptor(Schema, Type, property_documentation(Comment_Option, Elements)) :-
-    xrdf(Schema, Type, sys:documentation, Obj),
-    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
-    ->  Comment_Option = some(Comment)
-    ;   Comment_Option = none
-    ),
-    findall(Key-Value,
-            (   xrdf(Schema, Obj, sys:properties, Property),
-                xrdf(Schema, Property, Key, Value^^xsd:string)),
-            Pairs),
-    dict_pairs(Elements,json,Pairs).
+    findall(Record,
+            (   xrdf(Schema, Type, sys:documentation, Obj),
+                Record0 = json{},
+                (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                ->  Record1 = (Record0.put('@language', Lang))
+                ;   Record1 = Record0),
+                (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+                ->  Record2 = (Record1.put('@comment', Comment))
+                ;   Record2 = Record1),
+                (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
+                ->  Record3 = (Record2.put('@label', Label))
+                ;   Record3 = Record2
+                ),
+                findall(Key-Value,
+                        (  xrdf(Schema, Obj, sys:values, Enum),
+                           xrdf(Schema, Enum, Key, Enum_Obj),
+                           \+ global_prefix_expand(rdf:type, Key),
+                           (   Enum_Obj = Value^^_
+                           ->  true
+                           ;   V = json{},
+                               (   xrdf(Schema, Enum_Obj, sys:label, EnumLabel^^xsd:string)
+                               ->  put_dict(_{ '@label' : EnumLabel}, V, V1)
+                               ;   V = V1
+                               ),
+                               (   xrdf(Schema, Enum_Obj, sys:comment, EnumComment^^xsd:string)
+                               ->  put_dict(_{ '@comment' : EnumComment}, V1, Value)
+                               ;   Value = V1
+                               )
+                           )
+                        ),
+                        Pairs),
+                dict_pairs(Elements,json,Pairs),
+                (   Elements = _{}
+                ->  Record = Record3
+                ;   Record = (Record3.put('@values', Elements))
+                ),
+                Record \= _{}
+            ),
+            Records).
+schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :-
+    is_schema_simple_class(Schema,Type),
+    findall(Record,
+            (   xrdf(Schema, Type, sys:documentation, Obj),
+                Record0 = json{},
+                (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                ->  Record1 = (Record0.put('@language', Lang))
+                ;   Record1 = Record0),
+                (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+                ->  Record2 = (Record1.put('@comment', Comment))
+                ;   Record2 = Record1),
+                (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
+                ->  Record3 = (Record2.put('@label', Label))
+                ;   Record3 = Record2
+                ),
+                findall(Key-Value,
+                        (   xrdf(Schema, Obj, sys:properties, Property),
+                            xrdf(Schema, Property, Key, Prop_Obj),
+                            \+ global_prefix_expand(rdf:type, Key),
+                            (   Prop_Obj = Value^^_
+                            ->  true
+                            ;   V = json{},
+                                (   xrdf(Schema, Prop_Obj, sys:label, PropertyLabel^^xsd:string)
+                                ->  put_dict(_{ '@label' : PropertyLabel}, V, V1)
+                                ;   V = V1
+                                ),
+                                (   xrdf(Schema, Prop_Obj, sys:comment, PropertyComment^^xsd:string)
+                                ->  put_dict(_{ '@comment' : PropertyComment}, V1, Value)
+                                ;   Value = V1
+                                )
+                            )
+                        ),
+                        Pairs),
+                dict_pairs(Elements,json,Pairs),
+                (   Elements = _{}
+                ->  Record = Record3
+                ;   Record = (Record3.put('@properties', Elements))
+                ),
+                Record \= _{}
+            ),
+            Records).
 
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),

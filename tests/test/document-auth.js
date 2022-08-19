@@ -534,6 +534,50 @@ describe('document', function () {
         expect(result.body['api:error']['@type']).to.equal('api:JSONDocumentInvalidRangeError')
         expect(result.body['api:error']['api:field']).to.equal('json_document')
       })
+
+      it('fails duplicate language schema', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          '@documentation': [{
+            '@language': 'en',
+            '@label': 'Example Class',
+            '@comment': 'This is an example class',
+            '@properties': { name: 'name' },
+          }, {
+            '@language': 'en',
+            '@label': 'Παράδειγμα τάξης',
+            '@comment': 'Αυτό είναι ένα παράδειγμα κλάσης',
+            '@properties': { name: 'όνομα' },
+          }],
+          name: 'xsd:string',
+        }
+        const r = await document.insert(agent, { schema }).unverified()
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:LanguageTagsRepeated')
+        expect(r.body['api:error']['api:languages']).to.deep.equal(['en'])
+      })
+
+      it('fails no language schema', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          '@documentation': [{
+            '@label': 'Example Class',
+            '@comment': 'This is an example class',
+            '@properties': { name: 'name' },
+          }, {
+            '@language': 'en',
+            '@label': 'Παράδειγμα τάξης',
+            '@comment': 'Αυτό είναι ένα παράδειγμα κλάσης',
+            '@properties': { name: 'όνομα' },
+          }],
+          name: 'xsd:string',
+        }
+        const r = await document.insert(agent, { schema }).unverified()
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:NoLanguageTagForMultilingual')
+      })
     })
   })
 })
