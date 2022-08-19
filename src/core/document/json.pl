@@ -1566,11 +1566,15 @@ json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
     prefix_expand_schema(ID,Context,ID_Ex),
     get_dict('@type', JSON, Type),
     maybe_expand_schema_type(Type,Expanded),
-    get_dict('@value', JSON, List),
-    maplist({ID_Ex}/[Elt,json{'@type' : "@id",
-                              '@id' : V}]>>(
-                enum_value(ID_Ex,Elt,V)
-            ),List,New_List),
+    do_or_die(
+        (   get_dict('@value', JSON, List),
+            maplist({ID_Ex}/[Elt,json{'@type' : "@id",
+                                      '@id' : V}]>>(
+                        enum_value(ID_Ex,Elt,V)
+                    ),List,New_List)
+        ),
+        error(invalid_enum_values(JSON),_)),
+
     Type_ID = json{ '@id' : ID_Ex,
                     '@type' : Expanded
                   },
@@ -13086,8 +13090,20 @@ metadata_class('
 
 { "@id" : "Choice",
   "@type" : "Enum",
-  "@metadata" : { "blah" : "blah"}},
+  "@metadata" : { "blah" : "blah"},
   "@value" : ["yes", "no"]
+}
+').
+
+garbage_metadata_enum('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"
+}
+
+{ "@id" : "Garbage",
+  "@type" : "Enum",
+  "@metadata" : { "blah" : "blah"}
 }
 ').
 
@@ -13117,11 +13133,10 @@ test(elaborate_class_metadata,
     json{'@id':'terminusdb:///schema#Example',
          '@type':'http://terminusdb.com/schema/sys#Class',
          'http://terminusdb.com/schema/sys#metadata':
-         json{'@type':"sys:JSON",over:{the:["r","a"]},
-              some:3,where:[null,true]},
+         json{'@type':'http://terminusdb.com/schema/sys#JSON',
+              over:{the:["r","a"]},some:3,where:[null,true]},
          'terminusdb:///schema#name':
-         json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-              '@type':"@id"}}.
+         json{'@id':'http://www.w3.org/2001/XMLSchema#string','@type':"@id"}}.
 
 test(class_metadata,
      [setup((setup_temp_store(State),
@@ -13130,7 +13145,6 @@ test(class_metadata,
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
-    print_all_triples(Desc, schema),
     get_schema_document(Desc, 'Example', Example),
     Example =
     json{'@id':'Example',
@@ -13140,7 +13154,7 @@ test(class_metadata,
 
 test(elaborate_enum_metadata,
      []) :-
-    Class = json{'@id':"Example",
+    Class = json{'@id':"Choice",
                  '@metadata':json{blah : "blah"},
                  '@type':"Enum",
                  '@value' : ["yes", "no"]},
@@ -13159,14 +13173,46 @@ test(elaborate_enum_metadata,
                     xsd:'http://www.w3.org/2001/XMLSchema#'},
     json_schema_elaborate(Class,Prefixes, Elaborated),
     Elaborated =
-    json{'@id':'terminusdb:///schema#Example',
-         '@type':'http://terminusdb.com/schema/sys#Class',
+    json{'@id':'terminusdb:///schema#Choice',
+         '@type':'http://terminusdb.com/schema/sys#Enum',
          'http://terminusdb.com/schema/sys#metadata':
-         json{'@type':"sys:JSON",over:{the:["r","a"]},
-              some:3,where:[null,true]},
-         'terminusdb:///schema#name':
-         json{'@id':'http://www.w3.org/2001/XMLSchema#string',
-              '@type':"@id"}}.
+         json{'@type':'http://terminusdb.com/schema/sys#JSON',
+              blah:"blah"},
+         'http://terminusdb.com/schema/sys#value':
+         json{'@container':"@list",
+              '@type':"@id",
+              '@value':[json{'@id':'terminusdb:///schema#Choice/yes',
+                             '@type':"@id"},
+                        json{'@id':'terminusdb:///schema#Choice/no',
+                             '@type':"@id"}]}}.
+
+test(enum_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    write_schema(metadata_class,Desc),
+    get_schema_document(Desc, 'Choice', Choice),
+    Choice =
+    json{'@id':'Choice',
+         '@metadata':json{blah:"blah"},
+         '@type':'Enum',
+         '@value':[yes,no]}.
+
+test(garbage_metadata_enum,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(invalid_enum_values(
+                json{'@id':"Garbage",
+                     '@metadata':json{blah:"blah"},
+                     '@type':"Enum"}), _)
+     ]) :-
+    write_schema(garbage_metadata_enum,Desc).
+
 
 :- end_tests(json_metadata).
 

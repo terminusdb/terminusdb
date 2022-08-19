@@ -1839,6 +1839,14 @@ api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _)
              'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
              'api:message' : Msg
             }.
+api_document_error_jsonld(insert_documents, error(invalid_enum_values(Values), _), JSON) :-
+    format(string(Msg), "Enum values are not valid", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidEnumValues',
+                              'api:document' : Values },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
     JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
              'api:status' : "api:failure",

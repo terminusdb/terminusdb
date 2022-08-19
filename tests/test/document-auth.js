@@ -578,6 +578,28 @@ describe('document', function () {
         expect(r.status).to.equal(400)
         expect(r.body['api:error']['@type']).to.equal('api:NoLanguageTagForMultilingual')
       })
+
+      it('saves metadata', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          '@metadata' : { 'some' : 'metadata'},
+          name: 'xsd:string',
+        }
+        await document.insert(agent, { schema }).unverified()
+        const r = await document.get(agent, { query: { graph_type: 'schema', id: schema['@id'] } }).unverified()
+        expect(r.body['@metadata']).to.deep.equal({some: 'metadata'})
+      })
+
+      it('fails bad enum', async function () {
+        const schema = {
+          '@type': 'Enum',
+          '@id': util.randomString(),
+        }
+        const r = await document.insert(agent, { schema }).unverified()
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:InvalidEnumValues')
+      })
     })
   })
 })
