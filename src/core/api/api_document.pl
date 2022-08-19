@@ -142,6 +142,9 @@ known_document_error(inserted_subdocument_as_document).
 known_document_error(capture_already_bound(_)).
 known_document_error(wrong_array_dimensions(_,_)).
 known_document_error(not_a_unit_type(_)).
+known_document_error(unknown_language_tag(_)).
+known_document_error(no_language_tag_for_multilingual).
+known_document_error(language_tags_repeated(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -182,7 +185,10 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var,
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
         json_read_required_context(Stream, Context, Tail_Stream),
-        replace_context_document(Transaction, Context)
+        call_catch_document_mutation(
+            Context,
+            replace_context_document(Transaction, Context)
+        )
     ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
         database_prefixes(Transaction, Context),
         json_init_tail_stream(Stream, Tail_Stream)

@@ -266,6 +266,7 @@
               json_stream_write_dict/5,
 
               % iana.pl
+              iana/2,
               iana/3
           ]).
 
