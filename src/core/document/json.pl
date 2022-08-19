@@ -464,6 +464,9 @@ class_descriptor_image(set(C),json{ '@container' : "@set",
 class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
                                                  '@type' : C }).
 
+get_context_metadata(DB, ID, Metadata) :-
+    metadata_descriptor(DB, ID, metadata(Metadata)).
+
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
     findall(
@@ -513,11 +516,15 @@ database_context_object(DB,Context) :-
             _{ '@base' : Base_String,
                '@schema' : Schema_String,
                '@documentation' : Documentation},
-            Prefixes, Context)
+            Prefixes, Context0)
     ;   put_dict(
             _{ '@base' : Base_String,
                '@schema' : Schema_String},
-            Prefixes, Context)
+            Prefixes, Context0)
+    ),
+    (   get_context_metadata(DB, ID, Metadata)
+    ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
+    ;   Context = Context0
     ).
 database_context_object(Query_Context,Context) :-
     is_query_context(Query_Context),
@@ -1118,6 +1125,8 @@ context_triple(JSON,Triple) :-
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
+context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
+    Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
     (   is_list(Documentation) % multilingual
     ->  DocSet = Documentation
@@ -1159,7 +1168,8 @@ context_elaborate(JSON,Elaborated) :-
     is_context(JSON),
     !,
     dict_pairs(JSON,json,Pairs),
-    partition([P-_]>>(member(P, ['@type', '@base', '@schema', '@documentation'])),
+    partition([P-_]>>(member(P, ['@type', '@base', '@schema',
+                                 '@documentation', '@metadata'])),
               Pairs, Keyword_Values, Prop_Values),
     findall(
         P-V,
@@ -1491,6 +1501,11 @@ json_schema_predicate_value('@abstract',[],_,_,P,[]) :-
 json_schema_predicate_value('@subdocument',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:subdocument, P).
+json_schema_predicate_value('@metadata',V,_,_,P,Value) :-
+    !,
+    global_prefix_expand(sys:metadata, P),
+    global_prefix_expand(sys:'JSON', Type),
+    Value = (V.put('@type', Type)).
 json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfoldable, P).
@@ -1563,8 +1578,16 @@ json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
     ->  json_schema_predicate_value('@documentation', Documentation,
                                     Context,[type(ID_Ex)|Old_Path],
                                     Doc_Prop,Elaborated_Docs),
-        put_dict(Doc_Prop, Type_ID, Elaborated_Docs, Schema_Obj)
-    ;   Schema_Obj = Type_ID),
+        put_dict(Doc_Prop, Type_ID, Elaborated_Docs, Schema_Obj0)
+    ;   Schema_Obj0 = Type_ID),
+
+    (   get_dict('@metadata', JSON, Metadata)
+    ->  json_schema_predicate_value('@metadata', Metadata,
+                                    Context,[],
+                                    Metadata_Prop,
+                                    Elaborated_Metadata),
+        put_dict(Metadata_Prop, Schema_Obj0, Elaborated_Metadata, Schema_Obj)
+    ;   Schema_Obj = Schema_Obj0),
 
     global_prefix_expand(sys:value, Sys_Value),
     Elaborated = (Schema_Obj.put(Sys_Value,
@@ -2384,6 +2407,10 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@documentation
     !,
     schema_documentation_descriptor(Schema, Id, Documentation_Desc),
     documentation_descriptor_json(Documentation_Desc,Prefixes,V).
+schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@metadata',V) :-
+    global_prefix_expand(sys:metadata,P),
+    !,
+    schema_metadata_descriptor(Schema,Id,metadata(V)).
 schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@oneOf',V) :-
     global_prefix_expand(sys:oneOf,P),
     !,
@@ -3042,8 +3069,11 @@ class_frame(Transaction, Class, Frame, Options) :-
 	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json, Options)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
+    % metadata
+    (   metadata_descriptor(Transaction, Class_Ex, metadata(Metadata))
+    ->  Pairs7 = ['@metadata'-Metadata|Pairs6]
+    ;   Pairs7 = Pairs6),
     % enum
-
     (   is_enum(Transaction,Class_Ex)
     ->  database_schema(Transaction, Schema),
         schema_type_descriptor(Schema, Class, enum(Class,List)),
@@ -3053,11 +3083,11 @@ class_frame(Transaction, Class, Frame, Options) :-
         ;   List = Enum_List
         ),
         expand_system_uri(sys:'Enum', Enum, Options),
-        Pairs7 = ['@type'-Enum,'@values'-Enum_List|Pairs6]
+        Pairs8 = ['@type'-Enum,'@values'-Enum_List|Pairs7]
     ;   expand_system_uri(sys:'Class', C, Options),
-        Pairs7 = ['@type'-C|Pairs6]
+        Pairs8 = ['@type'-C|Pairs7]
     ),
-    sort(Pairs7, Sorted_Pairs),
+    sort(Pairs8, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -12974,6 +13004,171 @@ test(bogus_multilingual_class,
     write_schema(bogus_multilingual_class,Desc).
 
 :- end_tests(multilingual).
+
+:- begin_tests(json_metadata).
+:- use_module(core(util/test_utils)).
+
+metadata_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "@metadata" : { "some" : [1,2,3], "things" : null, "remain" : { "value" : true }},
+  "@documentation" : {
+      "@title" : "Example Schema",
+      "@description" : "This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+      "@authors" : ["Gavin Mendel-Gleason"]
+   }
+}').
+
+test(elaborate_schema_metadata,
+     []) :-
+    metadata_schema(Schema),
+    atom_json_dict(Schema, Context, []),
+    context_elaborate(
+        Context,
+        Elaborated),
+    Elaborated =
+    json{'@id':"terminusdb://context",
+         '@type':'sys:Context',
+         'sys:base':json{'@type':"xsd:string",'@value':"terminusdb:///data/"},
+         'sys:documentation':
+         json{'@container':"@set",
+              '@type':'sys:SchemaDocumentation',
+              '@value':
+              [json{'@id':'terminusdb://context/SchemaDocumentation/0',
+                    '@type':"sys:SchemaDocumentation",
+                    'sys:authors':
+                    json{'@container':"@list",
+                         '@type':"xsd:string",
+                         '@value':[json{'@type':"xsd:string",
+                                        '@value':"Gavin Mendel-Gleason"}]},
+                    'sys:description':json{'@type':"xsd:string",
+                                           '@value':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content."},
+                    'sys:title':
+                    json{'@type':"xsd:string",'@value':"Example Schema"}}]},
+         'sys:metadata':_{'@type':"sys:JSON",
+                          remain:_{value:true},some:[1,2,3],things:null},
+         'sys:prefix_pair':json{'@container':"@set",'@type':"sys:Prefix",'@value':[]},
+         'sys:schema':json{'@type':"xsd:string",'@value':"terminusdb:///schema#"}}.
+
+test(schema_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    write_schema(metadata_schema,Desc),
+
+    database_context_object(Desc,Context),
+    Context =
+    _{'@base':"terminusdb:///data/",
+      '@documentation':
+      json{
+          '@authors':["Gavin Mendel-Gleason"],
+          '@description':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+          '@title':"Example Schema"},
+      '@metadata':json{remain:json{value:true},some:[1,2,3],things:null},
+      '@schema':"terminusdb:///schema#",
+      '@type':'Context'}.
+
+metadata_class('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"
+}
+
+{ "@id" : "Example",
+  "@type" : "Class",
+  "@metadata" : { "some" : 3, "where" : [null,true], "over" : { "the" : ["r","a"]}},
+  "name" : "xsd:string"
+}
+
+{ "@id" : "Choice",
+  "@type" : "Enum",
+  "@metadata" : { "blah" : "blah"}},
+  "@value" : ["yes", "no"]
+}
+').
+
+test(elaborate_class_metadata,
+     []) :-
+    Class = json{'@id':"Example",
+                 '@metadata':json{over: { the : ["r", "a"]},
+                                  some:3,
+                                  where: [null,true]},
+                 '@type':"Class",
+                 name:"xsd:string"},
+    Prefixes = json{'@base':"terminusdb:///data/",
+                    '@schema':"terminusdb:///schema#",
+                    '@type':"@context",
+                    api:'http://terminusdb.com/schema/api#',
+                    json:'http://terminusdb.com/schema/json#',
+                    owl:'http://www.w3.org/2002/07/owl#',
+                    rdf:'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+                    rdfs:'http://www.w3.org/2000/01/rdf-schema#',
+                    sys:'http://terminusdb.com/schema/sys#',
+                    vio:'http://terminusdb.com/schema/vio#',
+                    woql:'http://terminusdb.com/schema/woql#',
+                    xdd:'http://terminusdb.com/schema/xdd#',
+                    xsd:'http://www.w3.org/2001/XMLSchema#'},
+    json_schema_elaborate(Class,Prefixes, Elaborated),
+    Elaborated =
+    json{'@id':'terminusdb:///schema#Example',
+         '@type':'http://terminusdb.com/schema/sys#Class',
+         'http://terminusdb.com/schema/sys#metadata':
+         json{'@type':"sys:JSON",over:{the:["r","a"]},
+              some:3,where:[null,true]},
+         'terminusdb:///schema#name':
+         json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+              '@type':"@id"}}.
+
+test(class_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(metadata_class,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    print_all_triples(Desc, schema),
+    get_schema_document(Desc, 'Example', Example),
+    Example =
+    json{'@id':'Example',
+         '@metadata':json{over:json{the:["r","a"]},some:3,where:[null,true]},
+         '@type':'Class',
+         name:'xsd:string'}.
+
+test(elaborate_enum_metadata,
+     []) :-
+    Class = json{'@id':"Example",
+                 '@metadata':json{blah : "blah"},
+                 '@type':"Enum",
+                 '@value' : ["yes", "no"]},
+    Prefixes = json{'@base':"terminusdb:///data/",
+                    '@schema':"terminusdb:///schema#",
+                    '@type':"@context",
+                    api:'http://terminusdb.com/schema/api#',
+                    json:'http://terminusdb.com/schema/json#',
+                    owl:'http://www.w3.org/2002/07/owl#',
+                    rdf:'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+                    rdfs:'http://www.w3.org/2000/01/rdf-schema#',
+                    sys:'http://terminusdb.com/schema/sys#',
+                    vio:'http://terminusdb.com/schema/vio#',
+                    woql:'http://terminusdb.com/schema/woql#',
+                    xdd:'http://terminusdb.com/schema/xdd#',
+                    xsd:'http://www.w3.org/2001/XMLSchema#'},
+    json_schema_elaborate(Class,Prefixes, Elaborated),
+    Elaborated =
+    json{'@id':'terminusdb:///schema#Example',
+         '@type':'http://terminusdb.com/schema/sys#Class',
+         'http://terminusdb.com/schema/sys#metadata':
+         json{'@type':"sys:JSON",over:{the:["r","a"]},
+              some:3,where:[null,true]},
+         'terminusdb:///schema#name':
+         json{'@id':'http://www.w3.org/2001/XMLSchema#string',
+              '@type':"@id"}}.
+
+:- end_tests(json_metadata).
 
 :- begin_tests(language_codes).
 :- use_module(core(util/test_utils)).
