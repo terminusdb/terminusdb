@@ -583,12 +583,12 @@ describe('document', function () {
         const schema = {
           '@type': 'Class',
           '@id': util.randomString(),
-          '@metadata' : { 'some' : 'metadata'},
+          '@metadata': { some: 'metadata' },
           name: 'xsd:string',
         }
         await document.insert(agent, { schema }).unverified()
         const r = await document.get(agent, { query: { graph_type: 'schema', id: schema['@id'] } }).unverified()
-        expect(r.body['@metadata']).to.deep.equal({some: 'metadata'})
+        expect(r.body['@metadata']).to.deep.equal({ some: 'metadata' })
       })
 
       it('fails bad enum', async function () {
