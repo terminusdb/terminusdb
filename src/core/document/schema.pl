@@ -81,11 +81,11 @@ is_choice(Validation_Object, Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_choice(Schema, Class).
 
-%:- table is_schema_enum/2 as private.
+:- table is_schema_enum/2 as private.
 is_schema_enum(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Enum').
 
-%:- table is_schema_choice/2 as private.
+:- table is_schema_choice/2 as private.
 is_schema_choice(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Choice').
 
@@ -93,7 +93,7 @@ is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_foreign(Schema, Class).
 
-%:- table is_schema_foreign/2 as private.
+:- table is_schema_foreign/2 as private.
 is_schema_foreign(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Foreign').
 
@@ -101,7 +101,7 @@ is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_tagged_union(Schema, Class).
 
-%:- table is_schema_tagged_union/2 as private.
+:- table is_schema_tagged_union/2 as private.
 is_schema_tagged_union(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
 
@@ -132,7 +132,7 @@ is_schema_json_class(Schema,Class) :-
 
 % NOTE
 % This generator is no longer stable under ordering!
-%:- table is_schema_simple_class/2 as private.
+:- table is_schema_simple_class/2 as private.
 is_schema_simple_class(Schema, Class) :-
     xrdf(Schema,Class, rdf:type, C),
     is_system_class(C).
@@ -166,7 +166,7 @@ class_predicate_conjunctive_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_conjunctive_type(Schema, Class, Predicate, Type).
 
-%:- table schema_class_predicate_conjunctive_type/4 as private.
+:- table schema_class_predicate_conjunctive_type/4 as private.
 schema_class_predicate_conjunctive_type(Schema,Class,Predicate,Type) :-
     schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type).
 schema_class_predicate_conjunctive_type(Schema,Class,Predicate,Type) :-
@@ -187,7 +187,7 @@ class_predicate_oneof(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_oneof(Schema, Class, Predicate, Type).
 
-%:- table schema_class_predicate_oneof/4 as private.
+:- table schema_class_predicate_oneof/4 as private.
 schema_class_predicate_oneof(Schema,Class,Predicate,Type) :-
     schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
 schema_class_predicate_oneof(Schema,Class,Predicate,Type) :-
@@ -212,7 +212,7 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_type(Schema, Class, Predicate, Type).
 
-%:- table schema_class_predicate_type/4 as private.
+:- table schema_class_predicate_type/4 as private.
 schema_class_predicate_type(Schema,Class,Predicate,Type) :-
     schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
 schema_class_predicate_type(Schema,Class,Predicate,Type) :-
@@ -516,7 +516,7 @@ is_subdocument(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_subdocument(Schema, C).
 
-%:- table schema_is_subdocument/2 as private.
+:- table schema_is_subdocument/2 as private.
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
@@ -528,7 +528,7 @@ is_unfoldable(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_unfoldable(Schema, C).
 
-%:- table schema_is_unfoldable/2 as private.
+:- table schema_is_unfoldable/2 as private.
 schema_is_unfoldable(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_unfoldable(Schema, D).
@@ -909,7 +909,7 @@ type_descriptor(Validation_Object, Class, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_type_descriptor(Schema, Class, Descriptor).
 
-%:- table schema_type_descriptor/3 as private.
+:- table schema_type_descriptor/3 as private.
 schema_type_descriptor(_Schema, Class, unit) :-
     is_unit(Class),
     !.
@@ -986,7 +986,7 @@ key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_key_descriptor(Schema, Prefixes, Type, Descriptor).
 
-%:- table schema_key_descriptor/4 as private.
+:- table schema_key_descriptor/4 as private.
 schema_key_descriptor(Schema, Prefixes, Type, Descriptor) :-
     xrdf(Schema, Type, sys:key, Obj),
     schema_key_descriptor_(Schema,Prefixes,Type,Obj,Descriptor),
