@@ -89,7 +89,7 @@ paths:
       responses:
         200:
           description: Succeeded
-  /db/:
+  /db:
     get:
       tags:
         - Database
