@@ -23,6 +23,8 @@
               schema_key_descriptor/4,
               documentation_descriptor/3,
               schema_documentation_descriptor/3,
+              metadata_descriptor/3,
+              schema_metadata_descriptor/3,
               oneof_descriptor/3,
               schema_oneof_descriptor/3,
               type_family_constructor/1,
@@ -57,6 +59,7 @@
 
 :- use_module(json). % This feels very circular.
 :- use_module(instance). % This is most definitely circular.
+:- use_module(json_rdf, [graph_get_json_object/3]).
 
 graph_member_list(Instance, O,L) :-
     xrdf(Instance, L, rdf:first, O).
@@ -118,6 +121,14 @@ is_system_class(Class) :-
 is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_simple_class(Schema, Class).
+
+is_json_class(Validation_Object,Class) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_json_class(Schema,Class).
+
+is_schema_json_class(Schema,Class) :-
+    global_prefix_expand(sys:'JSON',JSON),
+    xrdf(Schema,Class,rdf:type,JSON).
 
 % NOTE
 % This generator is no longer stable under ordering!
@@ -342,6 +353,7 @@ refute_schema_context(Validation_Object, Witness) :-
             sys:schema,
             sys:prefix_pair,
             sys:documentation,
+            sys:metadata,
             rdf:type
         ], List),
     \+ memberchk(Property, List),
@@ -376,6 +388,7 @@ refute_schema(Validation_Object, Witness) :-
 refute_schema(Validation_Object,Witness) :-
     database_prefixes(Validation_Object, Prefixes),
     is_simple_class(Validation_Object,Class),
+    \+ is_json_class(Validation_Object, Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
     ;   refute_unfoldable_cycle(Validation_Object,Class,Witness)
     ;   refute_class_inherits(Validation_Object,Class,Witness)
@@ -1095,6 +1108,14 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :
                 Record \= _{}
             ),
             Records).
+
+metadata_descriptor(Validation_Object, Type, Descriptor) :-
+    database_schema(Validation_Object, Schema),
+    schema_metadata_descriptor(Schema, Type, Descriptor).
+
+schema_metadata_descriptor(Schema, Type, metadata(JSON)) :-
+    xrdf(Schema, Type, sys:metadata, Metadata),
+    graph_get_json_object(Schema, Metadata, JSON).
 
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),
