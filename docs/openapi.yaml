@@ -1219,6 +1219,7 @@ paths:
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /log/{organization}/{database}:
     get:
+      summary: "Get commits from a specific database or branch"
       tags:
         - Change management
       parameters:
