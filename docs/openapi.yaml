@@ -1224,6 +1224,20 @@ paths:
       parameters:
         - $ref: '#/components/parameters/organization'
         - $ref: '#/components/parameters/database'
+        - name: start
+          description: Index to start from
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 0
+        - name: count
+          description: Amount of commits to show
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 10
       responses:
         200:
           description: "Successful log request"
