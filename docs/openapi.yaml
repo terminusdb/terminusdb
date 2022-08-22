@@ -1217,7 +1217,45 @@ paths:
               schema:
                 type: object
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
-
+  /log/{organization}/{database}:
+    get:
+      tags:
+        - Change management
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+      responses:
+        200:
+          description: "Successful log request"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    "@id":
+                      type: string
+                      example: InitialCommit/hpl18q42dbnab4vzq8me4bg1xn8p2a0
+                    "@type":
+                      type: string
+                      example: InitialCommit
+                    "author":
+                      type: string
+                      example: admin
+                    "identifier":
+                      type: string
+                      example: hpl18q42dbnab4vzq8me4bg1xn8p2a0
+                    "message":
+                      type: string
+                      example: create initial schema
+                    "schema":
+                      type: string
+                      example: layer_data:Layer_4234adfe377fa9563a17ad764ac37f5dcb14de13668ea725ef0748248229a91b
+                    "timestamp":
+                      type: number
+                      example: 1660919664.9129035
+                  example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
   /roles:
     post:
       tags:
