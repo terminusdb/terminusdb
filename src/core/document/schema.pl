@@ -30,7 +30,6 @@
               type_family_constructor/1,
               is_schemaless/1,
               drop_schemaless_mode/1,
-              class_subsumed/3,
               concrete_subclass/3,
               is_abstract/2,
               is_subdocument/2,
@@ -144,13 +143,13 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
     class_super(Validation_Object,Concrete,Class),
     \+ is_abstract(Validation_Object,Concrete).
 
-class_subsumed(Validation_Object,Class,Subsumed) :-
+class_subsumed(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
-    schema_class_subsumed(Schema,Class,Subsumed).
+    schema_class_subsumed(Schema,Class,Super).
 
 schema_class_subsumed(_Schema,Class,Class).
-schema_class_subsumed(Schema,Class,Subsumed) :-
-    schema_class_super(Schema,Class,Subsumed).
+schema_class_subsumed(Schema,Class,Super) :-
+    schema_class_super(Schema,Class,Super).
 
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
@@ -1067,20 +1066,25 @@ schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) 
                 Record \= _{}
             ),
             Records).
-schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :-
+schema_documentation_descriptor(Schema, Type, property_documentation(Merged)) :-
     is_schema_simple_class(Schema,Type),
     findall(Record,
-            (   xrdf(Schema, Type, sys:documentation, Obj),
+            (   schema_class_subsumed(Schema,Type,Super),
+                xrdf(Schema, Super, sys:documentation, Obj),
                 Record0 = json{},
-                (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
-                ->  Record1 = (Record0.put('@language', Lang))
-                ;   Record1 = Record0),
-                (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
-                ->  Record2 = (Record1.put('@comment', Comment))
-                ;   Record2 = Record1),
-                (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
-                ->  Record3 = (Record2.put('@label', Label))
-                ;   Record3 = Record2
+                (   Type = Super
+                ->  (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                    ->  Record1 = (Record0.put('@language', Lang))
+                    ;   Record1 = Record0),
+                    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+                    ->  Record2 = (Record1.put('@comment', Comment))
+                    ;   Record2 = Record1),
+                    (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
+                    ->  Record3 = (Record2.put('@label', Label))
+                    ;   Record3 = Record2)
+                ;   (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                    ->  Record3 = (Record0.put('@language', Lang))
+                    ;   Record3 = Record0)
                 ),
                 findall(Key-Value,
                         (   xrdf(Schema, Obj, sys:properties, Property),
@@ -1107,7 +1111,26 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Records)) :
                 ),
                 Record \= _{}
             ),
-            Records).
+            Records),
+    merge_documentation_language_records(Records,Merged).
+
+merge_documentation_language_records([],[]).
+merge_documentation_language_records([Record],[Record]) :-
+    !.
+merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
+    get_dict('@language', Record, Lang),
+    partition({Lang}/[R]>>get_dict('@language',R,Lang),Rest,Same,Different),
+    foldl([R1,R2,Result]>>(
+              (   get_dict('@properties', R2, Properties2)
+              ->  (   get_dict('@properties', R1, Properties1)
+                  ->  put_dict(Properties2, Properties1, Properties),
+                      put_dict(_{'@properties' : Properties}, R1, Result)
+                  ;   put_dict(_{'@properties' : Properties2}, R1, Result)
+                  )
+              ;   R1 = R2
+              )
+          ),Same,Record,MergedRecord),
+    merge_documentation_language_records(Different,Merged).
 
 metadata_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
