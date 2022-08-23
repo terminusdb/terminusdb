@@ -1262,6 +1262,15 @@ api_error_jsonld_(organization,
              'api:error' : _{ '@type' : "api:DanglingOrganizationReferencedError",
                               'api:capability' : Capability}
             }.
+api_error_jsonld_(organization,error(organization_still_has_databases(Organization,Databases),_),JSON) :-
+    format(string(Msg), "The organization ~s still has databases: ~w.", [Organization,Databases]),
+    JSON = _{'@type' : 'api:OrganizationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OrganizationRefersToDatabases",
+                              'api:organization' : Organization,
+                              'api:databases' : Databases}
+            }.
 api_error_jsonld_(user,error(no_id_for_user_name(Name),_), JSON) :-
     format(string(Msg), "No id associated with user name ~s", [Name]),
     JSON = _{'@type' : 'api:UserErrorResponse',
@@ -1797,11 +1806,45 @@ api_document_error_jsonld(insert_documents, error(can_not_insert_existing_object
                               'api:document' : Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(insert_documents, error(unknown_language_tag(Tag,Document), _), JSON) :-
+    format(string(Msg), "Unknown language tag used ~q", [Tag]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnknownLanguageTag',
+                              'api:language' : Tag,
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents, error(no_language_tag_for_multilingual(Document), _), JSON) :-
+    format(string(Msg), "Multiple languages are used, but not all with language tags", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoLanguageTagForMultilingual',
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents, error(language_tags_repeated(Tags,Document),_), JSON) :-
+    format(string(Msg), "The same language tags ~q were used repeatedly", [Tags]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LanguageTagsRepeated',
+                              'api:languages' : Tags,
+                              'api:document' : Document},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _), JSON) :-
     format(string(Msg), "No context found in submitted schema", []),
     JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(insert_documents, error(invalid_enum_values(Values), _), JSON) :-
+    format(string(Msg), "Enum values are not valid", []),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidEnumValues',
+                              'api:document' : Values },
              'api:message' : Msg
             }.
 api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
@@ -1974,6 +2017,26 @@ api_document_error_jsonld(Type,error(key_has_unknown_prefix(Prefixed_Key), _), J
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:UnknownPrefixError",
                               'api:key' : Prefixed_Key}
+            }.
+api_document_error_jsonld(Type,error(json_document_as_range(Pred,Range), _), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The range '~w' used on '~w' is illegal, use 'sys:JSON'.", [Range,Pred]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:JSONDocumentInvalidRangeError",
+                              'api:field' : Pred}
+            }.
+api_document_error_jsonld(Type,error(casting_error(Elt,Type),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Could not cast the value ~q to the type ~q.", [Elt,Type]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:CastingError",
+                              'api:value' : Elt,
+                              'api:type' : Type
+                            }
             }.
 
 /**

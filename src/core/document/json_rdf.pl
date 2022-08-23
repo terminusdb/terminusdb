@@ -5,6 +5,7 @@
               json_subdocument_triple/4,
               assign_json_document_id/2,
               get_json_object/3,
+              graph_get_json_object/3,
               insert_json_object/3,
               delete_json_object/3,
               delete_json_object/4
@@ -201,38 +202,37 @@ get_json_object(Transaction, Id, JSON) :-
     ;   is_validation_object(Transaction)
     ),
     !,
-    get_json_object_(Transaction, Id, JSON).
+    database_instance(Transaction, Instance),
+    graph_get_json_object(Instance, Id, JSON).
 
 marshall_value(_^^'http://www.w3.org/2001/XMLSchema#token', null) :-
     !.
 marshall_value(Value^^_, Value).
 
-get_json_object_(_Transaction, Id, []) :-
+graph_get_json_object(_Graph, Id, []) :-
     global_prefix_expand(rdf:nil, Id),
     !.
-get_json_object_(Transaction, Id, [Head|Tail]) :-
-    database_instance(Transaction, Instance),
-    xrdf(Instance, Id, rdf:type, rdf:'List'),
+graph_get_json_object(Graph, Id, [Head|Tail]) :-
+    xrdf(Graph, Id, rdf:type, rdf:'List'),
     !,
-    xrdf(Instance, Id, rdf:first, First),
+    xrdf(Graph, Id, rdf:first, First),
     (   marshall_value(First,Head)
     ->  true
-    ;   get_json_object_(Transaction, First, Head)
+    ;   graph_get_json_object(Graph, First, Head)
     ),
-    xrdf(Instance, Id, rdf:rest, Rest),
-    get_json_object_(Transaction, Rest, Tail).
-get_json_object_(Transaction, Id, Document) :-
-    database_instance(Transaction, Instance),
-    (   xrdf(Instance, Id, rdf:type, sys:'JSONDocument')
-    ;   xrdf(Instance, Id, rdf:type, sys:'JSON')),
+    xrdf(Graph, Id, rdf:rest, Rest),
+    graph_get_json_object(Graph, Rest, Tail).
+graph_get_json_object(Graph, Id, Document) :-
+    (   xrdf(Graph, Id, rdf:type, sys:'JSONDocument')
+    ;   xrdf(Graph, Id, rdf:type, sys:'JSON')),
     !,
     findall(Prop-Value,
-            (   xrdf(Instance, Id, Key, Val_or_Uri),
+            (   xrdf(Graph, Id, Key, Val_or_Uri),
                 (   Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
                 ->  fail % ignore type field
                 ;   marshall_value(Val_or_Uri,Value)
                 ->  true % strip type from value
-                ;   get_json_object_(Transaction, Val_or_Uri, Value) % subdocument or list
+                ;   graph_get_json_object(Graph, Val_or_Uri, Value) % subdocument or list
                 ),
                 compress_json_field(Key,Prop)
             ),

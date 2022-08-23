@@ -516,10 +516,89 @@ describe('document', function () {
       })
 
       it('fails gracefully with bad key prefix', async function () {
-        const instance = { '@type': 'foo:User' }
+        const classid = `foo:${util.randomString()}`
+        const instance = { '@type': classid }
         const result = await document.insert(agent, { instance }).unverified()
         expect(result.status).to.equal(400)
-        expect(result.body['api:error']['api:key']).to.equal('foo:User')
+        expect(result.body['api:error']['api:key']).to.equal(classid)
+      })
+
+      it('fails with JSONDocument', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          json_document: 'sys:JSONDocument',
+        }
+        const result = await document.insert(agent, { schema }).unverified()
+        expect(result.status).to.equal(400)
+        expect(result.body['api:error']['@type']).to.equal('api:JSONDocumentInvalidRangeError')
+        expect(result.body['api:error']['api:field']).to.equal('json_document')
+      })
+
+      it('fails duplicate language schema', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          '@documentation': [{
+            '@language': 'en',
+            '@label': 'Example Class',
+            '@comment': 'This is an example class',
+            '@properties': { name: 'name' },
+          }, {
+            '@language': 'en',
+            '@label': 'Παράδειγμα τάξης',
+            '@comment': 'Αυτό είναι ένα παράδειγμα κλάσης',
+            '@properties': { name: 'όνομα' },
+          }],
+          name: 'xsd:string',
+        }
+        const r = await document.insert(agent, { schema }).unverified()
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:LanguageTagsRepeated')
+        expect(r.body['api:error']['api:languages']).to.deep.equal(['en'])
+      })
+
+      it('fails no language schema', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          '@documentation': [{
+            '@label': 'Example Class',
+            '@comment': 'This is an example class',
+            '@properties': { name: 'name' },
+          }, {
+            '@language': 'en',
+            '@label': 'Παράδειγμα τάξης',
+            '@comment': 'Αυτό είναι ένα παράδειγμα κλάσης',
+            '@properties': { name: 'όνομα' },
+          }],
+          name: 'xsd:string',
+        }
+        const r = await document.insert(agent, { schema }).unverified()
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:NoLanguageTagForMultilingual')
+      })
+
+      it('saves metadata', async function () {
+        const schema = {
+          '@type': 'Class',
+          '@id': util.randomString(),
+          '@metadata': { some: 'metadata' },
+          name: 'xsd:string',
+        }
+        await document.insert(agent, { schema }).unverified()
+        const r = await document.get(agent, { query: { graph_type: 'schema', id: schema['@id'] } }).unverified()
+        expect(r.body['@metadata']).to.deep.equal({ some: 'metadata' })
+      })
+
+      it('fails bad enum', async function () {
+        const schema = {
+          '@type': 'Enum',
+          '@id': util.randomString(),
+        }
+        const r = await document.insert(agent, { schema }).unverified()
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:InvalidEnumValues')
       })
     })
   })
