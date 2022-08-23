@@ -682,7 +682,7 @@ fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
 
 use super::types::*;
 predicates! {
-    #[module("$moo")]
+    #[module("$doc")]
     semidet fn get_document_context(context, transaction_term, compress_term, unfold_term, minimized_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?;
@@ -714,7 +714,7 @@ predicates! {
     }
 
     #[module("$doc")]
-    semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term) {
+    semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
@@ -730,6 +730,8 @@ predicates! {
 
         let mut skip: u64 = skip_term.get_ex()?;
         let mut count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
+        let mut started = false;
 
         for typ in types {
             for t in doc_context.layer().triples_o(typ) {
@@ -750,8 +752,16 @@ predicates! {
                 }
 
                 let map = doc_context.get_id_document(t.subject);
+                if as_list && started {
+                    context.try_or_die_generic(stream.write_all(b",\n"))?;
+                }
+                started = true;
+
                 context.try_or_die_generic(map_to_writer(&mut stream, map, !doc_context.minimized))?;
-                context.try_or_die(stream.write_all(b"\n"))?;
+
+                if !as_list {
+                    context.try_or_die(stream.write_all(b"\n"))?;
+                }
                 context.try_or_die(stream.flush())?;
             }
         }
@@ -760,7 +770,7 @@ predicates! {
     }
 
     #[module("$doc")]
-    semidet fn par_print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term) {
+    semidet fn par_print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
@@ -771,6 +781,7 @@ predicates! {
         let minimized = doc_context.minimized;
         let skip: u64 = skip_term.get_ex()?;
         let count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
 
         // We either iterate over the document types, or iif unfold is false, we iterate over all types
         let mut types: Vec<u64> = match doc_context.unfold {
@@ -799,20 +810,35 @@ predicates! {
                 }).unwrap();
         });
 
+        let mut started = false;
+
         let mut result = BinaryHeap::new();
         let mut cur = 0;
         while let Ok((ix,map)) = receiver.recv() {
             if ix == cur {
+                if as_list && started {
+                    context.try_or_die(stream.write_all(b",\n"))?;
+                }
+                started = true;
+
                 context.try_or_die_generic(map_to_writer(&mut stream, map, !minimized))?;
-                context.try_or_die(stream.write_all(b"\n"))?;
+                if !as_list {
+                    context.try_or_die(stream.write_all(b"\n"))?;
+                }
                 context.try_or_die(stream.flush())?;
 
                 cur += 1;
                 while result.peek().map(|HeapEntry {index,..}|index == &cur).unwrap_or(false) {
-                    let HeapEntry {index, value } = result.pop().unwrap();
+                    let HeapEntry {index: _index, value } = result.pop().unwrap();
+
+                    if as_list {
+                        context.try_or_die(stream.write_all(b",\n"))?;
+                    }
 
                     context.try_or_die_generic(map_to_writer(&mut stream, value, !minimized))?;
-                    context.try_or_die(stream.write_all(b"\n"))?;
+                    if !as_list {
+                        context.try_or_die(stream.write_all(b"\n"))?;
+                    }
                     context.try_or_die(stream.flush())?;
 
                     cur += 1;

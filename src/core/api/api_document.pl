@@ -101,6 +101,15 @@ api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
               error(document_not_found(Id), _)),
     json_stream_write_dict(Config, Stream_Started, Document).
 
+api_print_documents(schema, Transaction, Config, Stream_Started) :-
+    forall(api_get_documents(Transaction, schema, Config, Document),
+           json_stream_write_dict(Config, Stream_Started, Document)).
+api_print_documents(instance, Transaction, Config, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    (   parallelize_enabled
+    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list))
+    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list))).
+
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
               error(document_not_found(Id), _)).
@@ -419,8 +428,7 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, _Query, 
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
-    ;   forall(api_get_documents(Transaction, Graph_Type, Config, Document),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
     ),
 
     json_stream_end(Config).
