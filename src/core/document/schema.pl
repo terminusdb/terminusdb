@@ -1115,7 +1115,8 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Merged)) :-
     merge_documentation_language_records(Records,Merged).
 
 merge_documentation_language_records([],[]).
-merge_documentation_language_records([Record],[Record]).
+merge_documentation_language_records([Record],[Record]) :-
+    !.
 merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
     get_dict('@language', Record, Lang),
     partition({Lang}/[R]>>get_dict('@language',R,Lang),Rest,Same,Different),
