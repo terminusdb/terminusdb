@@ -79,7 +79,8 @@ impl<L: Layer> GetDocumentContext<L> {
             let schema_unfoldable_ids = get_unfoldable_ids_from_schema(schema);
             let schema_enum_ids = get_enum_ids_from_schema(schema);
 
-            document_types = schema_to_instance_types(schema, instance, schema_document_type_ids).collect();
+            document_types =
+                schema_to_instance_types(schema, instance, schema_document_type_ids).collect();
             types = schema_to_instance_types(schema, instance, schema_type_ids).collect();
 
             unfoldables =
@@ -680,6 +681,30 @@ fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
     term.unify(s)
 }
 
+fn print_document<C: QueryableContextType>(
+    context: &Context<C>,
+    stream: &mut WritablePrologStream,
+    doc: Map<String, Value>,
+    as_list: bool,
+    minimized: bool,
+    stream_started: &mut bool,
+) -> PrologResult<()> {
+    if as_list && *stream_started {
+        context.try_or_die_generic(stream.write_all(b",\n"))?;
+    }
+    *stream_started = true;
+
+    context.try_or_die_generic(map_to_writer(&mut *stream, doc, !minimized))?;
+
+    if !as_list {
+        context.try_or_die(stream.write_all(b"\n"))?;
+    }
+
+    context.try_or_die(stream.flush())?;
+
+    Ok(())
+}
+
 use super::types::*;
 predicates! {
     #[module("$doc")]
@@ -752,17 +777,8 @@ predicates! {
                 }
 
                 let map = doc_context.get_id_document(t.subject);
-                if as_list && started {
-                    context.try_or_die_generic(stream.write_all(b",\n"))?;
-                }
-                started = true;
+                print_document(context, &mut stream, map, as_list, doc_context.minimized, &mut started)?;
 
-                context.try_or_die_generic(map_to_writer(&mut stream, map, !doc_context.minimized))?;
-
-                if !as_list {
-                    context.try_or_die(stream.write_all(b"\n"))?;
-                }
-                context.try_or_die(stream.flush())?;
             }
         }
 
@@ -816,30 +832,13 @@ predicates! {
         let mut cur = 0;
         while let Ok((ix,map)) = receiver.recv() {
             if ix == cur {
-                if as_list && started {
-                    context.try_or_die(stream.write_all(b",\n"))?;
-                }
-                started = true;
-
-                context.try_or_die_generic(map_to_writer(&mut stream, map, !minimized))?;
-                if !as_list {
-                    context.try_or_die(stream.write_all(b"\n"))?;
-                }
-                context.try_or_die(stream.flush())?;
+                print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
 
                 cur += 1;
                 while result.peek().map(|HeapEntry {index,..}|index == &cur).unwrap_or(false) {
                     let HeapEntry {index: _index, value } = result.pop().unwrap();
 
-                    if as_list {
-                        context.try_or_die(stream.write_all(b",\n"))?;
-                    }
-
-                    context.try_or_die_generic(map_to_writer(&mut stream, value, !minimized))?;
-                    if !as_list {
-                        context.try_or_die(stream.write_all(b"\n"))?;
-                    }
-                    context.try_or_die(stream.flush())?;
+                    print_document(context, &mut stream, value, as_list, minimized, &mut started)?;
 
                     cur += 1;
                 }
