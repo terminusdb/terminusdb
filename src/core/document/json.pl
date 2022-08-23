@@ -7340,6 +7340,91 @@ test(property_documentation_mismatch,
             Doc)
     ).
 
+test(inherits_documentation,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Schema_Parent =
+    _{
+        '@id' : "Agent",
+        '@type' : "Class",
+        '@documentation' :
+        [_{ '@language' : "en",
+            '@label' : "Agent",
+            '@comment' : "An agent",
+            '@properties' : _{ name : "Super Docs",
+                               id : "Id"}},
+        _{ '@language' : "de",
+           '@label' : "Agent*in",
+           '@comment' : "Ein*e Agent*in",
+           '@properties' : _{ name : _{ '@label' : "Name",
+                                        '@comment' : "Uber Dokus" },
+                              id : _{ '@label' : "ID",
+                                      '@comment' : "ID des Agent*in"}}}],
+        id : "xsd:integer",
+        name : "xsd:string"},
+
+    Schema_Child =
+    _{
+        '@id' : "User",
+        '@type' : "Class",
+        '@inherits' : ["Agent"],
+        '@documentation' :
+        [_{ '@language' : "en",
+            '@label' : "User",
+            '@comment' : "A user",
+            '@properties' : _{ name : "Sub Docs",
+                               age : "Age"}},
+         _{ '@language' : "de",
+            '@label' : "Benutzer",
+            '@properties' : _{ name : "Unterdocument",
+                               age : "Das Alter"}}],
+        age : "xsd:integer"
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_schema_document(
+                C1,
+                Schema_Parent),
+            insert_schema_document(
+                C1,
+                Schema_Child)
+        )
+    ),
+
+    class_frame(Desc, 'User', User, [compress_ids(true)]),
+
+    User =
+    json{'@documentation':
+         [json{'@comment':"An agent",
+               '@label':"Agent",
+               '@language':"en",
+               '@properties':json{age:"Age",
+                                  id:"Id",
+                                  name:"Super Docs"}},
+          json{'@comment':"Ein*e Agent*in",
+               '@label':"Agent*in",
+               '@language':"de",
+               '@properties':json{age:"Das Alter",
+                                  id:json{'@comment':"ID des Agent*in",
+                                          '@label':"ID"},
+                                  name:json{'@comment':"Uber Dokus",
+                                            '@label':"Name"}}}],
+         '@type':'Class',
+         age:'xsd:integer',
+         id:'xsd:integer',
+         name:'xsd:string'}.
+
 test(empty_test_for_optional,
      [
          setup(
