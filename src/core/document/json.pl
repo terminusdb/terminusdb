@@ -7366,7 +7366,7 @@ test(inherits_documentation,
            '@label' : "Agent*in",
            '@comment' : "Ein*e Agent*in",
            '@properties' : _{ name : _{ '@label' : "Name",
-                                        '@comment' : "Uber Dokus" },
+                                        '@comment' : "Uberdokument" },
                               id : _{ '@label' : "ID",
                                       '@comment' : "ID des Agent*in"}}}],
         id : "xsd:integer",
@@ -7385,7 +7385,7 @@ test(inherits_documentation,
                                age : "Age"}},
          _{ '@language' : "de",
             '@label' : "Benutzer",
-            '@properties' : _{ name : "Unterdocument",
+            '@properties' : _{ name : "Unterdokument",
                                age : "Das Alter"}}],
         age : "xsd:integer"
     },
@@ -7403,27 +7403,25 @@ test(inherits_documentation,
     ),
 
     class_frame(Desc, 'User', User, [compress_ids(true)]),
-
     User =
-    json{'@documentation':
-         [json{'@comment':"An agent",
-               '@label':"Agent",
-               '@language':"en",
-               '@properties':json{age:"Age",
-                                  id:"Id",
-                                  name:"Super Docs"}},
-          json{'@comment':"Ein*e Agent*in",
-               '@label':"Agent*in",
-               '@language':"de",
-               '@properties':json{age:"Das Alter",
-                                  id:json{'@comment':"ID des Agent*in",
-                                          '@label':"ID"},
-                                  name:json{'@comment':"Uber Dokus",
-                                            '@label':"Name"}}}],
-         '@type':'Class',
-         age:'xsd:integer',
-         id:'xsd:integer',
-         name:'xsd:string'}.
+    json{ '@documentation':
+          [ json{ '@language':"en",
+			      '@properties':json{age:"Age",id:"Id",name:"Sub Docs"}
+			    },
+			json{ '@language':"de",
+			      '@properties':json{ age:"Das Alter",
+						              id:json{ '@comment':"ID des Agent*in",
+							                   '@label':"ID"
+							                 },
+						              name:"Unterdokument"
+						            }
+			    }
+		  ],
+          '@type':'Class',
+          age:'xsd:integer',
+          id:'xsd:integer',
+          name:'xsd:string'
+        }.
 
 test(empty_test_for_optional,
      [
@@ -9664,62 +9662,65 @@ test(all_class_frames, [
 						         '@type':'Context'
 						       },
 				   'Address':json{ '@documentation':
-                                            json{ '@comment':"This is address"
-										        },
-							                '@key':json{'@type':"Random"},
-							                '@subdocument':[],
-							                '@type':'Class',
-							                country:'Country',
-							                postal_code:'xsd:string',
-							                street:'xsd:string'
-							              },
+                                   json{ '@comment':"This is address"
+									   },
+							       '@key':json{'@type':"Random"},
+							       '@subdocument':[],
+							       '@type':'Class',
+							       country:'Country',
+							       postal_code:'xsd:string',
+							       street:'xsd:string'
+							     },
 				   'Coordinate':json{ '@key':json{ '@type':"Random"
-									                      },
-								               '@type':'Class',
-								               x:'xsd:decimal',
-								               y:'xsd:decimal'
-							                 },
+									             },
+								      '@type':'Class',
+								      x:'xsd:decimal',
+								      y:'xsd:decimal'
+							        },
 				   'Country':json{ '@key':json{ '@type':"ValueHash"
-									                   },
-							                '@type':'Class',
-							                name:'xsd:string',
-							                perimeter:json{ '@class':'Coordinate',
-									                        '@type':'List'
-									                      }
-							              },
+									          },
+							       '@type':'Class',
+							       name:'xsd:string',
+							       perimeter:json{ '@class':'Coordinate',
+									               '@type':'List'
+									             }
+							     },
 				   'Employee':json{ '@key':json{ '@type':"Random"
-									                    },
-							                 '@type':'Class',
-							                 address_of:json{ '@class':'Address',
-										                      '@subdocument':[]
-									                        },
-							                 age:'xsd:integer',
-							                 contact_number:json{ '@class':'xsd:string',
-										                          '@type':'Optional'
-										                        },
-							                 friend_of:json{ '@class':'Person',
-									                         '@type':'Set'
-									                       },
-							                 managed_by:'Employee',
-							                 name:'xsd:string'
-							               },
+									           },
+							        '@type':'Class',
+                                    '@documentation' :
+                                    json{'@properties':json{age:"Age of the person.",
+                                                            name:"Name of the person."}},
+							        address_of:json{ '@class':'Address',
+										             '@subdocument':[]
+									               },
+							        age:'xsd:integer',
+							        contact_number:json{ '@class':'xsd:string',
+										                 '@type':'Optional'
+										               },
+							        friend_of:json{ '@class':'Person',
+									                '@type':'Set'
+									              },
+							        managed_by:'Employee',
+							        name:'xsd:string'
+							      },
 				   'Person':json{ '@documentation':
-                                           json{ '@comment':"This is a person",
-										         '@properties':json{ age:"Age of the person.",
-													                 name:"Name of the person."
-												                   }
-										       },
-							               '@key':json{'@type':"Random"},
-							               '@type':'Class',
-							               age:'xsd:integer',
-							               friend_of:json{ '@class':'Person',
-									                       '@type':'Set'
-									                     },
-							               name:'xsd:string'
-							             },
+                                  json{ '@comment':"This is a person",
+										'@properties':json{ age:"Age of the person.",
+													        name:"Name of the person."
+												          }
+									  },
+							      '@key':json{'@type':"Random"},
+							      '@type':'Class',
+							      age:'xsd:integer',
+							      friend_of:json{ '@class':'Person',
+									              '@type':'Set'
+									            },
+							      name:'xsd:string'
+							    },
 				   'Team':json{ '@type':'Enum',
-							             '@values':['IT','Marketing']
-							           }
+							    '@values':['IT','Marketing']
+							  }
 				 }.
 
 test(doc_frame, [

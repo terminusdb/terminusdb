@@ -1072,15 +1072,19 @@ schema_documentation_descriptor(Schema, Type, property_documentation(Merged)) :-
             (   schema_class_subsumed(Schema,Type,Super),
                 xrdf(Schema, Super, sys:documentation, Obj),
                 Record0 = json{},
-                (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
-                ->  Record1 = (Record0.put('@language', Lang))
-                ;   Record1 = Record0),
-                (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
-                ->  Record2 = (Record1.put('@comment', Comment))
-                ;   Record2 = Record1),
-                (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
-                ->  Record3 = (Record2.put('@label', Label))
-                ;   Record3 = Record2
+                (   Type = Super
+                ->  (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                    ->  Record1 = (Record0.put('@language', Lang))
+                    ;   Record1 = Record0),
+                    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+                    ->  Record2 = (Record1.put('@comment', Comment))
+                    ;   Record2 = Record1),
+                    (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
+                    ->  Record3 = (Record2.put('@label', Label))
+                    ;   Record3 = Record2)
+                ;   (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                    ->  Record3 = (Record0.put('@language', Lang))
+                    ;   Record3 = Record0)
                 ),
                 findall(Key-Value,
                         (   xrdf(Schema, Obj, sys:properties, Property),
@@ -1118,7 +1122,7 @@ merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
     foldl([R1,R2,Result]>>(
               (   get_dict('@properties', R2, Properties2)
               ->  (   get_dict('@properties', R1, Properties1)
-                  ->  put_dict(Properties1, Properties2, Properties),
+                  ->  put_dict(Properties2, Properties1, Properties),
                       put_dict(_{'@properties' : Properties}, R1, Result)
                   ;   put_dict(_{'@properties' : Properties2}, R1, Result)
                   )
