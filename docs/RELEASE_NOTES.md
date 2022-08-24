@@ -9,7 +9,7 @@
 ## Bug fixes
 
 + Fix serious performance regression (https://github.com/terminusdb/terminusdb/pull/1401)
-+ Fixed JSONDocument type is not linkdable from Option, Set, List, Array (issue #1278)
++ Fix JSONDocument type is not linkable from Option, Set, List, Array (issue #1278)
 
 # TerminusDB Server v10.1.3 Release Notes
 
