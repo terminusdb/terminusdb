@@ -29,6 +29,8 @@ run_text_query(Askable, Query, Results) :-
     scored_documents(Askable, Bag, Results).
 
 scored_documents(Askable, Bag, Results) :-
+    maplist([_-C,C]>>true,Bag,Counts),
+    sumlist(Counts,Doc_Length),
     findall(
         DocumentId-Scores,
         group_by(
@@ -36,15 +38,17 @@ scored_documents(Askable, Bag, Results) :-
             Score,
             (   member(Term-Count,Bag),
                 tf_idf(Askable,Term,DocumentId,TF_IDF),
-                Score is Count * TF_IDF),
+                * format(current_output, 'Doc: ~q~nTerm: ~q~nTF_IDF: ~q~n~n~n', [DocumentId,Term,TF_IDF]),
+                QTF is Count / Doc_Length,
+                Score is QTF * TF_IDF),
             Scores),
         DocumentId_Scores),
     maplist([Doc-Scores,Doc-Final]>>sum_list(Scores,Final), DocumentId_Scores, Pre_Sort),
     sort(2,@>=, Pre_Sort, Results).
 
-show_top_ten(Askable, Query) :-
+show_top_n(Askable, Query, N) :-
     run_text_query(Askable, Query, Results),
-    length(L,10),
+    length(L,N),
     append(L,_,Results),
     index_list(L,Idx),
     maplist({Askable}/[Doc-L,I]>>(
