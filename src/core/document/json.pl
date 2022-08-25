@@ -7590,11 +7590,14 @@ test(inherits_documentation,
     class_frame(Desc, 'User', User, [compress_ids(true)]),
     User =
     json{ '@documentation':
-          [ json{ '@language':"en",
+          [ json{ '@comment':"A user",
+				  '@label':"User",
+				  '@language':"en",
 			      '@properties':json{age:"Age",id:"Id",name:"Sub Docs"}
 			    },
 			json{ '@language':"de",
-			      '@properties':json{ age:"Das Alter",
+			      '@label':"Benutzer",
+				  '@properties':json{ age:"Das Alter",
 						              id:json{ '@comment':"ID des Agent*in",
 							                   '@label':"ID"
 							                 },
