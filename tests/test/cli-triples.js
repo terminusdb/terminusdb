@@ -30,7 +30,7 @@ describe('cli-triples', function () {
     const db = util.randomString()
     await exec(`./terminusdb.sh db create admin/${db} --schema=false`)
     const r = await exec(`./terminusdb.sh triples load admin/${db}/local/branch/main/instance served/MW00KG01635.trig`)
-    expect(r.stdout).to.match(new RegExp(`^Successfully inserted triples from \'served/MW00KG01635.trig`))
+    expect(r.stdout).to.match(new RegExp('^Successfully inserted triples from \'served/MW00KG01635.trig'))
     await exec(`./terminusdb.sh db delete admin/${db}`)
   })
 })
