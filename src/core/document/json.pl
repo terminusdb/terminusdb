@@ -178,12 +178,26 @@ value_json(RDF_Nil,[]) :-
 value_json(V^^T,json{ '@value' : JV, '@type' : JT}) :-
     value_type_json_type(V,T,JV,JT),
     !.
-value_json(X@Y,O) :-
+value_json(X@Lang,O) :-
     O = json{
-            '@lang': Y,
+            '@lang': Lang,
             '@value': X
         },
-    !.
+    !,
+    do_or_die(
+        iana(Lang,_),
+        error(unknown_language_tag(Lang),_)).
+value_json(X@Lang,O) :-
+    global_prefix_expand(rdf:langString,RDF_LangString),
+    O = json{
+            '@lang': Lang,
+            '@value': X,
+            '@type' : RDF_LangString
+        },
+    !,
+    do_or_die(
+        iana(Lang,_),
+        error(unknown_language_tag(Lang),_)).
 value_json(X,X) :-
     atom(X).
 
@@ -2072,8 +2086,8 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,_,DB,Prefixes,_Compress,_Unfol
     % as possible.
     (   C = 'http://terminusdb.com/schema/sys#JSON'
     ->  get_json_object(DB, Elt, V)
-    ;   Elt = X^^T,
-        (   C = T % The type is not just subsumed but identical - no ambiguity.
+    ;   Elt = X^^T
+    ->  (   C = T % The type is not just subsumed but identical - no ambiguity.
         ->  value_type_json_type(X,T,V,_)
         ;   value_type_json_type(X,T,D,T2),
             % NOTE: We're always compressing, even if Compress_Ids is false
@@ -2082,6 +2096,8 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,_,DB,Prefixes,_Compress,_Unfol
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
+    ;   Elt = X@L
+    ->  V = json{ '@value' : X, '@lang' : L}
     ).
 
 compress_dict_uri(URI, Dict, Folded_URI, Options) :-
@@ -13496,11 +13512,18 @@ test(garbage_metadata_enum,
 language_schema('
 { "@base": "terminusdb:///data/",
   "@schema": "terminusdb:///schema#",
+  "rdfs" : "http://www.w3.org/2000/01/rdf-schema#",
+  "rdf" : "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
   "@type": "@context"}
 
 { "@type" : "Class",
   "@id" : "Language",
-  "language" : "xsd:language" }').
+  "language" : "xsd:language" }
+
+{ "@type" : "Class",
+  "@id" : "LangString",
+  "rdfs:label" : "rdf:langString" }
+').
 
 test(various_lang_combos,
      [setup((setup_temp_store(State),
@@ -13585,6 +13608,68 @@ test(nonsense_2,
         Desc,
         C1,
         insert_document(C1, _{ 'language': "en-GBR"}, _)
+    ).
+
+test(rdf_language,[]) :-
+    findall(t(S,P,V),
+            json_triple_(
+                json{'@id':'terminusdb:///data/This/thing',
+                     '@type':'terminusdb:///schema#This',
+                     'http://www.w3.org/2000/01/rdf-schema#label':
+                     json{'@lang':"en",
+                          '@type':'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString',
+                          '@value':"Test"}},
+                context{'@base':"terminusdb:///data/",
+                        '@schema':"terminusdb:///schema#",
+                        '@type':'Context',
+                        rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                        rdfs:"http://www.w3.org/2000/01/rdf-schema#"},
+                t(S, P, V)),
+            Triples),
+    Triples =
+    [ t('terminusdb:///data/This/thing',
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+        'terminusdb:///schema#This'),
+      t('terminusdb:///data/This/thing',
+        'http://www.w3.org/2000/01/rdf-schema#label',
+        "Test"@"en")
+    ].
+
+test(rdf_language_doc_insert_get,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : "en", '@value' : "Me"}}, Id)
+    ),
+
+    get_document(Desc, Id, Doc),
+
+    Doc = json{ '@id':_Id,
+                '@type':'LangString',
+                'rdfs:label':json{'@lang':"en",'@value':"Me"}
+              }.
+
+
+test(rdf_language_nonsense,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(language_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(unknown_language_tag("foobar"), _)
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : "foobar", '@value' : "Me"}}, _Id)
     ).
 
 :- end_tests(language_codes).
