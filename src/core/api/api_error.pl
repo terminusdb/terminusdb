@@ -1403,6 +1403,7 @@ error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
+error_type_(triples, 'api:TriplesErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
