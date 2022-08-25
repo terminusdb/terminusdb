@@ -7340,6 +7340,191 @@ test(property_documentation_mismatch,
             Doc)
     ).
 
+test(inherits_documentation_multi,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 create_db_with_empty_schema("admin", "foo"),
+                 resolve_absolute_string_descriptor("admin/foo", Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Schema_Atom1 = '{
+        "@abstract": [],
+        "@documentation": [
+            {
+                "@comment": "An abstract Subject Class",
+                "@label": "Subject",
+                "@language": "en",
+                "@properties": {
+                    "Number_of_classes_attended": {
+                        "@comment": "Number of Classes Attended",
+                        "@label": "Classes Attended"
+                    },
+                    "course_start_date": {
+                        "@comment": "Course Start Date",
+                        "@label": "Start Date"
+                    }
+                }
+            },
+            {
+                "@comment": "აბსტრაქტული საგნობრივი კლასი",
+                "@label": "საგანი",
+                "@language": "ka",
+                "@properties": {
+                    "Number_of_classes_attended": {
+                        "@comment": "კლასების რაოდენობა",
+                        "@label": "კლასები დაესწრო"
+                    },
+                    "course_start_date": {
+                        "@comment": "კურსის დაწყების თარიღი",
+                        "@label": "Დაწყების თარიღი"
+                    }
+                }
+            }
+        ],
+        "@id": "Subject",
+        "@subdocument": [],
+        "@type": "Class",
+        "Number_of_classes_attended": {
+            "@class": "xsd:integer",
+            "@type": "Optional"
+        },
+        "course_start_date": {
+            "@class": "xsd:dateTime",
+            "@type": "Optional"
+        }
+    }',
+    Schema_Atom2 = '{
+        "@id": "Maths",
+        "@documentation": [
+            {
+                "@comment": "A Maths Subject class",
+                "@label": "Maths",
+                "@language": "en",
+                "@properties": {
+                    "level": {
+                        "@comment": "Math level",
+                        "@label": "Level"
+                    },
+                    "love_maths": {
+                        "@comment": "a choice to love maths",
+                        "@label": "Do you like Maths?"
+                    }
+                }
+            },
+            {
+                "@comment": "მათემატიკის გაკვეთილი",
+                "@label": "Მათემატიკა",
+                "@language": "ka",
+                "@properties": {
+                    "level": {
+                        "@comment": "მათემატიკის დონე",
+                        "@label": "დონე"
+                    },
+                    "love_maths": {
+                        "@comment": "არჩევანი გიყვარდეს მათემატიკა",
+                        "@label": "მოგწონთ მათემატიკა?"
+                    }
+                }
+            }
+        ],
+        "@inherits": "Subject",
+        "@key": {
+            "@type": "Random"
+        },
+        "@subdocument": [],
+        "@type": "Class",
+        "level": {
+            "@class": "xsd:string",
+            "@type": "Optional"
+        },
+        "love_maths": {
+            "@class": "xsd:boolean",
+            "@type": "Optional"
+        }
+    }',
+
+    atom_json_dict(Schema_Atom1, Schema1, []),
+    atom_json_dict(Schema_Atom2, Schema2, []),
+
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_schema_document(
+                C1,
+                Schema1),
+            insert_schema_document(
+                C1,
+                Schema2)
+        )
+    ),
+
+    class_frame(Desc, 'Maths', Maths, [compress_ids(true)]),
+
+    Maths =
+    json{ '@documentation':
+          [ json{ '@language':"en",
+                  '@comment': "A Maths Subject class",
+                  '@label': "Maths",
+				  '@properties':
+                  json{
+                      'Number_of_classes_attended':
+                      json{ '@comment':"Number of Classes Attended",
+							'@label':"Classes Attended"
+						  },
+					  course_start_date:json{ '@comment':"Course Start Date",
+											  '@label':"Start Date"
+											},
+					  level:json{ '@comment':"Math level",
+								  '@label':"Level"
+								},
+					  love_maths:json{ '@comment':"a choice to love maths",
+									   '@label':"Do you like Maths?"
+									 }
+				  }
+				},
+			json{ '@language':"ka",
+                  '@comment': "მათემატიკის გაკვეთილი",
+                  '@label': "Მათემატიკა",
+				  '@properties':json{ 'Number_of_classes_attended':
+                                      json{ '@comment':"კლასების რაოდენობა",
+											'@label':"კლასები დაესწრო"
+										  },
+									  course_start_date:
+                                      json{
+                                          '@comment':"კურსის დაწყების თარიღი",
+										  '@label':"\u1C93აწყების თარიღი"
+									  },
+									  level:json{ '@comment':"მათემატიკის დონე",
+												  '@label':"დონე"
+												},
+									  love_maths:json{ '@comment':"არჩევანი გიყვარდეს მათემატიკა",
+													   '@label':"მოგწონთ მათემატიკა?"
+													 }
+									}
+				}
+		  ],
+		  '@key':json{'@type':"Random"},
+		  '@subdocument':[],
+		  '@type':'Class',
+		  'Number_of_classes_attended':json{ '@class':'xsd:integer',
+										     '@type':'Optional'
+										   },
+		  course_start_date:json{ '@class':'xsd:dateTime',
+								  '@type':'Optional'
+								},
+		  level:json{ '@class':'xsd:string',
+					  '@type':'Optional'
+					},
+		  love_maths:json{ '@class':'xsd:boolean',
+						   '@type':'Optional'
+						 }
+		}.
+
 test(inherits_documentation,
      [
          setup(
@@ -7405,11 +7590,14 @@ test(inherits_documentation,
     class_frame(Desc, 'User', User, [compress_ids(true)]),
     User =
     json{ '@documentation':
-          [ json{ '@language':"en",
+          [ json{ '@comment':"A user",
+				  '@label':"User",
+				  '@language':"en",
 			      '@properties':json{age:"Age",id:"Id",name:"Sub Docs"}
 			    },
 			json{ '@language':"de",
-			      '@properties':json{ age:"Das Alter",
+			      '@label':"Benutzer",
+				  '@properties':json{ age:"Das Alter",
 						              id:json{ '@comment':"ID des Agent*in",
 							                   '@label':"ID"
 							                 },
