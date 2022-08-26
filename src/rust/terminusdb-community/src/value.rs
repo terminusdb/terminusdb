@@ -8,6 +8,7 @@ const TYPE_PREFIX_LEN: usize = "http://www.w3.org/2001/XMLSchema#".len();
 // funnily, this type prefix works for both the xsd types, and our own custom terminusdb xdd types, as the prefix is the same length!
 // for terminusdb xdd this is   http://terminusdb.com/schema/xdd#
 
+// FIXME: this does not currently deal with langstrings
 fn value_string_to_slices(s: &str) -> (&str, &str) {
     // The format of these value strings is something like
     debug_assert!(s.as_bytes()[s.len() - 1] == '\'' as u8);
