@@ -17,6 +17,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(account)).
+:- use_module(config(terminus_config)).
 
 :- use_module(library(option)).
 :- use_module(library(assoc)).
