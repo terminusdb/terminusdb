@@ -808,7 +808,15 @@ predicates! {
 
         let (sender, receiver) = mpsc::channel();
 
-        let iter = types.into_iter().skip(skip as usize);
+        // cloning here cause we need to use the doc context from two places.
+        // Since we are dealing with an arc, the clone is cheap.
+        let doc_context2: Arc<_> = doc_context.0.clone();
+
+        let rdf_type_id = doc_context.rdf_type_id;
+        let iter = types.into_iter()
+            .flat_map(move |typ| doc_context.layer().triples_o(typ))
+            .filter(move |t| Some(t.predicate) == rdf_type_id)
+            .skip(skip as usize);
         let iter = if let Some(count) = count {
             itertools::Either::Left(iter.take(count as usize))
         }
@@ -817,11 +825,10 @@ predicates! {
         };
 
         rayon::spawn(move || {
-            iter.flat_map(|typ| doc_context.layer().triples_o(typ).filter(|t|Some(t.predicate) == doc_context.rdf_type_id))
-                .enumerate()
+            iter.enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, t)| {
-                    let map = doc_context.get_id_document(t.subject);
+                    let map = doc_context2.get_id_document(t.subject);
                     sender.send((ix, map)) // failure will kill the task
                 }).unwrap();
         });
