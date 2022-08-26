@@ -8,7 +8,7 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-swipl = "0.3.8"
+swipl = "0.3.9"
 terminus-store = {version="=0.19.9", features=[]}
 csv = "1.1"
 sha-1 = "0.9.1"
