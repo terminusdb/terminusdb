@@ -1,3 +1,16 @@
+# TerminusDB Server v10.1.4 Release Notes
+
+## Enhancements
+
++ New version of TerminusDB dashboard
++ Add multilanguage support in schemas
++ Add free (untyped) JSON metadata to classes
+
+## Bug fixes
+
++ Fix serious performance regression (https://github.com/terminusdb/terminusdb/pull/1401)
++ Fix JSONDocument type is not linkable from Option, Set, List, Array (issue #1278)
+
 # TerminusDB Server v10.1.3 Release Notes
 
 ## Enhancements
