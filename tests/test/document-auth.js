@@ -603,7 +603,7 @@ describe('document', function () {
     })
 
     it('fails with 404 for nonexistent schema document', async function () {
-        const r = await document.get(agent, { query: { graph_type: 'schema', id: 'asdf' } }).unverified()
+      const r = await document.get(agent, { query: { graph_type: 'schema', id: 'asdf' } }).unverified()
       expect(r.status).to.equal(404)
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
     })
