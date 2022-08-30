@@ -48,6 +48,8 @@
               json_read_required_context/3,
               insert_context_document/2,
               replace_context_document/2,
+              schema_document_exists/2,
+              document_exists/2,
 
               % instance.pl
               is_instance/3,

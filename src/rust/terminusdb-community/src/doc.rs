@@ -721,7 +721,7 @@ predicates! {
     }
 
     #[module("$doc")]
-    semidet fn print_document_json(context, stream_term, get_context_term, doc_name_term) {
+    semidet fn print_document_json(context, stream_term, get_context_term, doc_name_term, as_list_term, started_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
         if !doc_name_term.is_string() && !doc_name_term.is_atom() {
             return fail();
@@ -729,9 +729,19 @@ predicates! {
 
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
+        let as_list: bool = as_list_term.get()?;
+        let started: bool = started_term.get()?;
+
         if let Some(result) = doc_context.get_document(&s) {
+            if as_list && started {
+                context.try_or_die_generic(stream.write_all(b",\n"))?;
+            }
             context.try_or_die_generic(map_to_writer(&mut stream, result, !doc_context.minimized))?;
-            context.try_or_die(stream.write_all(b"\n"))
+            if !as_list {
+                context.try_or_die(stream.write_all(b"\n"))?;
+            }
+
+            Ok(())
         }
         else {
             fail()

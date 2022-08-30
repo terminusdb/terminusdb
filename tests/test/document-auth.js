@@ -601,5 +601,17 @@ describe('document', function () {
         expect(r.body['api:error']['@type']).to.equal('api:InvalidEnumValues')
       })
     })
+
+    it('fails with 404 for nonexistent schema document', async function () {
+        const r = await document.get(agent, { query: { graph_type: 'schema', id: 'asdf' } }).unverified()
+      expect(r.status).to.equal(404)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
+    })
+
+    it('fails with 404 for nonexistent instance document', async function () {
+      const r = await document.get(agent, { query: { id: 'asdf' } }).unverified()
+      expect(r.status).to.equal(404)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
+    })
   })
 })

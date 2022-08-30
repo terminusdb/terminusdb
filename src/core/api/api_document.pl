@@ -87,16 +87,33 @@ api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, I
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
+api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+    Stream_Started = started(Started),
+    do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, Started),
+              error(document_not_found(Id), _)),
+    nb_setarg(1, Stream_Started, true).
+
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
+api_document_exists(schema, Transaction, Id) :-
+    schema_document_exists(Transaction, Id).
+api_document_exists(instance, Transaction, Id) :-
+    document_exists(Transaction, Id).
+
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    Stream_Started = started(Started),
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, Started),
               error(document_not_found(Id), _)),
-    json_stream_write_dict(Config, Stream_Started, Document).
+   nb_setarg(1, Stream_Started, true).
 api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)),
@@ -117,9 +134,6 @@ api_get_document(instance, Transaction, Id, Config, Document) :-
 api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
-
-api_print_document_by_id(Transaction, Graph_Type, Id, Config, Stream_Started) :-
-    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started).
 
 embed_document_in_error(Error, Document, New_Error) :-
     Error =.. Error_List,
@@ -413,20 +427,30 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, 
     call(Initial_Goal, Config.as_list),
     json_stream_start(Config, Stream_Started),
 
-    forall(api_get_documents_by_query(Transaction, Graph_Type, Type_Ex, Query_Ex, Config, Document),
-           json_stream_write_dict(Config, Stream_Started, Document)),
+    api_print_documents_by_query(Transaction, Type_Ex, Query_Ex, Config, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    ground(Id),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    do_or_die(api_document_exists(Graph_Type, Transaction, Id),
+              error(document_not_found(Id), _)),
+    call(Initial_Goal, Config.as_list),
+    json_stream_start(Config, Stream_Started),
+
+    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+
+    json_stream_end(Config).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.
     call(Initial_Goal, Config.as_list),
     json_stream_start(Config, Stream_Started),
 
-    (   ground(Id)
-    ->  api_print_document_by_id(Transaction, Graph_Type, Id, Config, Stream_Started)
-    ;   ground(Type)
+    (   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
     ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
