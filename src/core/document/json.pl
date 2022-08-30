@@ -3331,7 +3331,6 @@ document_exists(Transaction, Id) :-
     ground(Instance_Layer),
     database_prefixes(Transaction, Prefixes),
     prefix_expand(Id, Prefixes, Id_Ex),
-    json_log_error_formatted("What ~q ~q", [Instance_Layer, Id_Ex]),
     subject_id(Instance_Layer, Id_Ex, _).
 
 :- begin_tests(json_stream, [concurrent(true)]).
