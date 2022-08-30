@@ -89,11 +89,12 @@ api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config,
 
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
     '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
-    api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
-    Stream_Started = started(Started),
-    do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, Started),
-              error(document_not_found(Id), _)),
-    nb_setarg(1, Stream_Started, true).
+    forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+           (   Stream_Started = started(Started),
+               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, Started),
+                         error(document_not_found(Id), _)),
+               nb_setarg(1, Stream_Started, true)
+           )).
 
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
