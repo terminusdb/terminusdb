@@ -21,6 +21,7 @@
               % literals.pl
               literal_to_turtle/2,
               normalise_triple/2,
+              reset_normalise_warning/0,
               object_storage/2,
               ground_object_storage/2,
               storage_object/2,
