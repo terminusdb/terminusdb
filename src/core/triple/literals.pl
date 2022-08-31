@@ -349,7 +349,7 @@ reset_normalise_warning :-
 normalise_triple(rdf(X,P,Y,G),rdf(XF,P,YF)) :-
     (   normalise_warning_
     ->  true
-    ;   json_log_error_formatted('Warning: ignoring graph ~q~n', [G]),
+    ;   json_log_warning_formatted('Warning: ignoring graph ~q~n', [G]),
         set_normalise_warning
     ),
     normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)).
