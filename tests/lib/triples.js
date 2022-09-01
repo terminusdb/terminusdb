@@ -44,7 +44,6 @@ function insert (agent, path, turtle, params) {
   params = new Params(params)
   const author = params.string('author', 'default_author')
   const message = params.string('message', 'default_message')
-  params.assertEmpty()
 
   assert(
     util.isString(turtle),
@@ -68,8 +67,39 @@ function insert (agent, path, turtle, params) {
   }
 }
 
+function replace (agent, path, turtle, params) {
+  params = new Params(params)
+  const author = params.string('author', 'default_author')
+  const message = params.string('message', 'default_message')
+
+  assert(
+    util.isString(turtle),
+    `Unexpected type for 'turtle'. Expected string, got: ${util.typeString(turtle)}`,
+  )
+
+  const body = { commit_info: { author, message }, turtle }
+
+  const request = agent.post(path).send(body)
+
+  return {
+    then (resolve) {
+      resolve(request.then(api.response.verify(api.response.triples.insertSuccess)))
+    },
+    fails (error) {
+      return request.then(api.response.verify(api.response.triples.failure(error)))
+    },
+    unverified () {
+      return request
+    },
+  }
+}
+
 function insertIntoBranch (agent, turtle, params) {
   return insert(agent, api.path.triplesBranch(agent, params), turtle, params)
+}
+
+function replaceIntoBranch (agent, turtle, params) {
+  return replace(agent, api.path.triplesBranch(agent, params), turtle, params)
 }
 
 module.exports = {
@@ -77,5 +107,6 @@ module.exports = {
   getFromBranch,
   getFromSystem,
   insert,
+  replaceIntoBranch,
   insertIntoBranch,
 }
