@@ -141,7 +141,7 @@ api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started
 
     (   parallelize_enabled
     ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))
-    ;   '$doc':print_all_documents_json(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
+    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),

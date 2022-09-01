@@ -219,6 +219,33 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         )
     }
 
+    pub fn get_subtype_ids(&self) -> HashMap<u64, HashSet<u64>> {
+        let inheritance = self.get_inheritance_graph();
+        let mut result = HashMap::new();
+
+        for (sub, supers) in inheritance.iter() {
+            // every type is a subtype of itself
+            let entry = result.entry(*sub).or_insert_with(|| HashSet::new());
+            entry.insert(*sub);
+
+            // next, find all super types
+            let mut visited = HashSet::new();
+            let mut supers: Vec<&u64> = supers.iter().collect();
+            while let Some(sup) = supers.pop() {
+                if !visited.contains(&sup) {
+                    visited.insert(sup);
+                    let entry = result.entry(*sup).or_insert_with(|| HashSet::new());
+                    entry.insert(*sub);
+                    if let Some(more_supers) = inheritance.get(&sup) {
+                        supers.extend(more_supers.iter());
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
     pub fn translate_subject_id<L2: Layer>(&self, layer2: &L2, id: u64) -> Option<u64> {
         let subject = self.layer.id_subject(id).unwrap();
         layer2.subject_id(&subject)
