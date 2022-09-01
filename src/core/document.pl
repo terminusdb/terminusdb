@@ -48,6 +48,9 @@
               json_read_required_context/3,
               insert_context_document/2,
               replace_context_document/2,
+              schema_document_exists/2,
+              document_exists/2,
+              prefix_expand_schema/3,
 
               % instance.pl
               is_instance/3,
@@ -61,6 +64,8 @@
 
               % query.pl
               match_query_document_uri/4,
+              match_expanded_query_document_uri/4,
+              expand_query_document/5,
 
               % diff.pl
               simple_diff/4,

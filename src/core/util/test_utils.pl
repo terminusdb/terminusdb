@@ -336,9 +336,17 @@ print_all_documents(Askable) :-
 
 print_all_documents(Askable, Selector) :-
     nl,
+    Config = config{
+                 skip: 0,
+                 count: unlimited,
+                 as_list: false,
+                 compress: true,
+                 unfold: false,
+                 minimized: false
+             },
     forall(
-        api_generate_document_ids(Selector, Askable, false, 0, unlimited, Id),
-        (   api_get_document(Selector, Askable, true, false, Id, Document),
+        api_generate_document_ids(Selector, Askable, Config, Id),
+        (   api_get_document(Selector, Askable, Id, Config, Document),
             json_write_dict(current_output, Document, []))),
     nl.
 

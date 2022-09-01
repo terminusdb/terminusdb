@@ -30,7 +30,8 @@
               clear_insecure_user_header_key/0,
               pinned_databases/1,
               plugin_path/1,
-              dashboard_enabled/0
+              dashboard_enabled/0,
+              parallelize_enabled/0
           ]).
 
 :- use_module(library(pcre)).
@@ -288,3 +289,7 @@ pinned_databases(Pinned) :-
     !,
     parse_pinned_databases(Pinned_Env, Pinned).
 pinned_databases([]).
+
+:- table parallelize_enabled.
+parallelize_enabled :-
+    getenv_default('TERMINUSDB_PARALLELIZE_ENABLED', true, true).
