@@ -14,7 +14,6 @@ describe('common-http-errors', function () {
       '/api/abc',
       '/api/branch',
       '/api/clone',
-      '/api/db',
       '/api/document',
       '/api/fetch',
       '/api/optimize',
@@ -40,8 +39,6 @@ describe('common-http-errors', function () {
     const requestPairs = [
       ['post', '/api/ok'],
       ['put', '/api/ok'],
-      ['get', '/api/db/' + util.randomString() + '/' + util.randomString()],
-      ['put', '/api/db/' + util.randomString() + '/' + util.randomString()],
       ['get', '/api/optimize/'],
       ['put', '/api/optimize/'],
       ['get', '/api/reset/'],

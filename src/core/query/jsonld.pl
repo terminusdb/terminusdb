@@ -420,7 +420,11 @@ value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
 value_jsonld(D@L,json{'@language' : L, '@value' : D}) :-
     !.
 value_jsonld(D,D) :-
-    atom(D).
+    atom(D),
+    !.
+value_jsonld(List,JSON_List) :-
+    is_list(List),
+    maplist(value_jsonld,List,JSON_List).
 
 /*
  * term_jsonld(Term,JSON) is det.

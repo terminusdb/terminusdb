@@ -23,12 +23,13 @@
               schema_key_descriptor/4,
               documentation_descriptor/3,
               schema_documentation_descriptor/3,
+              metadata_descriptor/3,
+              schema_metadata_descriptor/3,
               oneof_descriptor/3,
               schema_oneof_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
               drop_schemaless_mode/1,
-              class_subsumed/3,
               concrete_subclass/3,
               is_abstract/2,
               is_subdocument/2,
@@ -57,6 +58,7 @@
 
 :- use_module(json). % This feels very circular.
 :- use_module(instance). % This is most definitely circular.
+:- use_module(json_rdf, [graph_get_json_object/3]).
 
 graph_member_list(Instance, O,L) :-
     xrdf(Instance, L, rdf:first, O).
@@ -119,6 +121,14 @@ is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_simple_class(Schema, Class).
 
+is_json_class(Validation_Object,Class) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_json_class(Schema,Class).
+
+is_schema_json_class(Schema,Class) :-
+    global_prefix_expand(sys:'JSON',JSON),
+    xrdf(Schema,Class,rdf:type,JSON).
+
 % NOTE
 % This generator is no longer stable under ordering!
 :- table is_schema_simple_class/2 as private.
@@ -133,13 +143,13 @@ concrete_subclass(Validation_Object,Class,Concrete) :-
     class_super(Validation_Object,Concrete,Class),
     \+ is_abstract(Validation_Object,Concrete).
 
-class_subsumed(Validation_Object,Class,Subsumed) :-
+class_subsumed(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
-    schema_class_subsumed(Schema,Class,Subsumed).
+    schema_class_subsumed(Schema,Class,Super).
 
 schema_class_subsumed(_Schema,Class,Class).
-schema_class_subsumed(Schema,Class,Subsumed) :-
-    schema_class_super(Schema,Class,Subsumed).
+schema_class_subsumed(Schema,Class,Super) :-
+    schema_class_super(Schema,Class,Super).
 
 class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
@@ -342,6 +352,7 @@ refute_schema_context(Validation_Object, Witness) :-
             sys:schema,
             sys:prefix_pair,
             sys:documentation,
+            sys:metadata,
             rdf:type
         ], List),
     \+ memberchk(Property, List),
@@ -376,7 +387,10 @@ refute_schema(Validation_Object, Witness) :-
 refute_schema(Validation_Object,Witness) :-
     database_prefixes(Validation_Object, Prefixes),
     is_simple_class(Validation_Object,Class),
+    \+ is_json_class(Validation_Object, Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
+    ;   refute_unfoldable_cycle(Validation_Object,Class,Witness)
+    ;   refute_class_inherits(Validation_Object,Class,Witness)
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
     ;   refute_class_meta(Validation_Object,Class,Witness)
@@ -395,6 +409,57 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
                   to_class : Subclass,
                   path : Path
               }.
+
+reachable_unfoldable(Schema,A,P,B) :-
+    distinct(B,
+             (   schema_class_subsumed(Schema,A,C),
+                 schema_class_predicate_type(Schema,C,P,class(B)),
+                 schema_is_unfoldable(Schema,B)
+             )).
+
+refute_unfoldable_cycle(DB, Original, Witness) :-
+    database_schema(DB,Schema),
+    schema_is_unfoldable(Schema, Original),
+    State = state([]),
+    unfoldable_property_cycle(Schema, Original, Original, [], Path, State),
+    Witness = witness{
+                  '@type' : property_path_cycle_detected,
+                  path : Path,
+                  class : Original
+              }.
+
+unfoldable_property_cycle(Schema, Original, A, Path, New_Path, State) :-
+    reachable_unfoldable(Schema, A, P, C),
+    arg(1,State,Set),
+    (   schema_class_subsumed(Schema, Original, C)
+    ->  reverse([C,P|Path],New_Path)
+    ;   member(C, Set)
+    ->  fail
+    ;   nb_setarg(1,State,[C|Set]),
+        unfoldable_property_cycle(Schema, Original, C, [C,P|Path], New_Path, State)
+    ).
+
+refute_class_inherits(DB,Class,Witness) :-
+    database_schema(DB,Schema),
+    xrdf(Schema,Class,sys:inherits,Super),
+    (   \+ xrdf(Schema, Super, rdf:type, _Type)
+    ->  Witness =
+        witness{
+            '@type': inherits_from_non_existent_class,
+            class: Class,
+            super: Super
+        }
+    ;   xrdf(Schema, Super, rdf:type, Type),
+        global_prefix_expand(sys:'Class', Class_Type),
+        global_prefix_expand(sys:'TaggedUnion', Tagged_Type),
+        \+ member(Type, [Class_Type,Tagged_Type])
+    ->  Witness =
+        witness{
+            '@type': inherits_from_invalid_super_class,
+            class: Class,
+            super: Super
+        }
+    ).
 
 subclass_of(Validation_Object,Subclass,Class) :-
     database_schema(Validation_Object,Schema),
@@ -433,7 +498,8 @@ is_built_in(P) :-
             sys:base,
             sys:class,
             sys:abstract,
-            sys:subdocument
+            sys:subdocument,
+            sys:unfoldable
         ],
         List),
     memberchk(P,List).
@@ -453,6 +519,18 @@ is_subdocument(Validation_Object, C) :-
 schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
+
+is_direct_unfoldable(Schema, C) :-
+    xrdf(Schema, C, sys:unfoldable, rdf:nil).
+
+is_unfoldable(Validation_Object, C) :-
+    database_schema(Validation_Object,Schema),
+    schema_is_unfoldable(Schema, C).
+
+:- table schema_is_unfoldable/2 as private.
+schema_is_unfoldable(Schema, C) :-
+    schema_class_subsumed(Schema, C, D),
+    is_direct_unfoldable(Schema, D).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -502,7 +580,7 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
 refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Doc, Prop, _),
-    prefix_list([sys:comment, sys:properties, sys:values, rdf:type], List),
+    prefix_list([sys:comment, sys:label, sys:properties, sys:values, sys:language, rdf:type], List),
     (   \+ memberchk(Prop, List)
     ->  Witness = witness{ '@type' : not_a_valid_documentation_object,
                            predicate: Prop,
@@ -516,12 +594,8 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
         ;   xrdf(Schema, Doc, sys:values, Val_Obj)
         ->  xrdf(Schema, Val_Obj, Key, Result),
             \+ global_prefix_expand(rdf:type, Key),
-            global_prefix_expand(xsd:string, XSD),
-            (   Result \= _^^XSD
-            ->  Witness = witness{ '@type' : not_a_valid_enum_documentation_object,
-                                   value: Key,
-                                   class: Class,
-                                   subject: Val_Obj }
+            (   refute_documentation_value(Schema,enum,Class,Result,Witness)
+            ->  true
             ;   xrdf(Schema, Class, sys:value, Cons),
                 \+ graph_member_list(Schema, Key, Cons)
             ->   Witness = witness{ '@type' : invalid_enum_in_documentation_object,
@@ -533,18 +607,43 @@ refute_documentation_object(Validation_Object,Class,Doc,Witness) :-
     ;   xrdf(Schema, Doc, sys:properties, Prop_Obj),
         xrdf(Schema, Prop_Obj, Key, Result),
         \+ global_prefix_expand(rdf:type, Key),
-        global_prefix_expand(xsd:string, XSD),
-        (   Result \= _^^XSD
-        ->  Witness = witness{ '@type' : not_a_valid_property_documentation_object,
-                               predicate: Key,
-                               class: Class,
-                               subject: Prop_Obj }
+        (   refute_documentation_value(Schema,property,Class,Result,Witness)
+        ->  true
         ;   \+ class_predicate_type(Validation_Object,Class,Key,_),
             Witness = witness{ '@type' : invalid_property_in_property_documentation_object,
                                predicate: Key,
                                class: Class,
                                subject: Prop_Obj }
         )
+    ).
+
+documentation_error_selector(enum,not_a_valid_enum_documentation_object).
+documentation_error_selector(property,not_a_valid_property_documentation_object).
+
+refute_documentation_value(Schema,Type,Class,Result,Witness) :-
+    documentation_error_selector(Type,Error),
+    global_prefix_expand(xsd:string, XSD),
+    \+ Result = _^^XSD,
+    prefix_list([sys:comment, sys:label, rdf:type], DocList),
+    xrdf(Schema, Result, Predicate, Value),
+    (   \+ member(Predicate, DocList)
+    ->  Witness = witness{ '@type' : Error,
+                           predicate: Predicate,
+                           class: Class,
+                           subject: Value }
+    ;   global_prefix_expand(rdf:type, Predicate)
+    ->  \+ global_prefix_expand(sys:'DocumentationLabelComment', Value),
+        Witness = witness{
+                      '@type' : Error,
+                      predicate : Predicate,
+                      class: Class,
+                      subject: Value
+                  }
+    ;   \+ Value = _^^XSD
+    ->  Witness = witness{ '@type' : Error,
+                           predicate: Predicate,
+                           class: Class,
+                           subject: Value }
     ).
 
 is_key(Type) :-
@@ -608,6 +707,14 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     global_prefix_expand(rdf:nil, RDF_Nil),
     Result \= RDF_Nil,
     Witness = witness{ '@type' : bad_subdocument_value,
+                       class: Class,
+                       value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:unfoldable, Result),
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    Result \= RDF_Nil,
+    Witness = witness{ '@type' : bad_unfoldable_value,
                        class: Class,
                        value: Result }.
 
@@ -917,30 +1024,121 @@ documentation_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_documentation_descriptor(Schema, Type, Descriptor).
 
-schema_documentation_descriptor(Schema, Type, enum_documentation(Type, Comment_Option, Elements)) :-
-    xrdf(Schema, Type, sys:documentation, Obj),
+schema_documentation_descriptor(Schema, Type, enum_documentation(Type,Records)) :-
     is_schema_enum(Schema,Type),
     !,
-    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
-    ->  Comment_Option = some(Comment)
-    ;   Comment_Option = none
-    ),
-    findall(Key-Value,
-            (   xrdf(Schema, Obj, sys:values, Enum),
-                xrdf(Schema, Enum, Key, Value^^xsd:string)),
-            Pairs),
-    dict_pairs(Elements,json,Pairs).
-schema_documentation_descriptor(Schema, Type, property_documentation(Comment_Option, Elements)) :-
-    xrdf(Schema, Type, sys:documentation, Obj),
-    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
-    ->  Comment_Option = some(Comment)
-    ;   Comment_Option = none
-    ),
-    findall(Key-Value,
-            (   xrdf(Schema, Obj, sys:properties, Property),
-                xrdf(Schema, Property, Key, Value^^xsd:string)),
-            Pairs),
-    dict_pairs(Elements,json,Pairs).
+    findall(Record,
+            (   xrdf(Schema, Type, sys:documentation, Obj),
+                Record0 = json{},
+                (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                ->  Record1 = (Record0.put('@language', Lang))
+                ;   Record1 = Record0),
+                (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+                ->  Record2 = (Record1.put('@comment', Comment))
+                ;   Record2 = Record1),
+                (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
+                ->  Record3 = (Record2.put('@label', Label))
+                ;   Record3 = Record2
+                ),
+                findall(Key-Value,
+                        (  xrdf(Schema, Obj, sys:values, Enum),
+                           xrdf(Schema, Enum, Key, Enum_Obj),
+                           \+ global_prefix_expand(rdf:type, Key),
+                           (   Enum_Obj = Value^^_
+                           ->  true
+                           ;   V = json{},
+                               (   xrdf(Schema, Enum_Obj, sys:label, EnumLabel^^xsd:string)
+                               ->  put_dict(_{ '@label' : EnumLabel}, V, V1)
+                               ;   V = V1
+                               ),
+                               (   xrdf(Schema, Enum_Obj, sys:comment, EnumComment^^xsd:string)
+                               ->  put_dict(_{ '@comment' : EnumComment}, V1, Value)
+                               ;   Value = V1
+                               )
+                           )
+                        ),
+                        Pairs),
+                dict_pairs(Elements,json,Pairs),
+                (   Elements = _{}
+                ->  Record = Record3
+                ;   Record = (Record3.put('@values', Elements))
+                ),
+                Record \= _{}
+            ),
+            Records).
+schema_documentation_descriptor(Schema, Type, property_documentation(Merged)) :-
+    is_schema_simple_class(Schema,Type),
+    findall(Record,
+            (   schema_class_subsumed(Schema,Type,Super),
+                xrdf(Schema, Super, sys:documentation, Obj),
+                Record0 = json{},
+                (   Type = Super
+                ->  (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                    ->  Record1 = (Record0.put('@language', Lang))
+                    ;   Record1 = Record0),
+                    (   xrdf(Schema, Obj, sys:comment, Comment^^xsd:string)
+                    ->  Record2 = (Record1.put('@comment', Comment))
+                    ;   Record2 = Record1),
+                    (   xrdf(Schema, Obj, sys:label, Label^^xsd:string)
+                    ->  Record3 = (Record2.put('@label', Label))
+                    ;   Record3 = Record2)
+                ;   (   xrdf(Schema, Obj, sys:language, Lang^^xsd:language)
+                    ->  Record3 = (Record0.put('@language', Lang))
+                    ;   Record3 = Record0)
+                ),
+                findall(Key-Value,
+                        (   xrdf(Schema, Obj, sys:properties, Property),
+                            xrdf(Schema, Property, Key, Prop_Obj),
+                            \+ global_prefix_expand(rdf:type, Key),
+                            (   Prop_Obj = Value^^_
+                            ->  true
+                            ;   V = json{},
+                                (   xrdf(Schema, Prop_Obj, sys:label, PropertyLabel^^xsd:string)
+                                ->  put_dict(_{ '@label' : PropertyLabel}, V, V1)
+                                ;   V = V1
+                                ),
+                                (   xrdf(Schema, Prop_Obj, sys:comment, PropertyComment^^xsd:string)
+                                ->  put_dict(_{ '@comment' : PropertyComment}, V1, Value)
+                                ;   Value = V1
+                                )
+                            )
+                        ),
+                        Pairs),
+                dict_pairs(Elements,json,Pairs),
+                (   Elements = _{}
+                ->  Record = Record3
+                ;   Record = (Record3.put('@properties', Elements))
+                ),
+                Record \= _{}
+            ),
+            Records),
+    merge_documentation_language_records(Records,Merged).
+
+merge_documentation_language_records([],[]).
+merge_documentation_language_records([Record],[Record]) :-
+    !.
+merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
+    get_dict('@language', Record, Lang),
+    partition({Lang}/[R]>>get_dict('@language',R,Lang),Rest,Same,Different),
+    foldl([R1,R2,Result]>>(
+              (   get_dict('@properties', R2, Properties2)
+              ->  (   get_dict('@properties', R1, Properties1)
+                  ->  put_dict(Properties2, Properties1, Properties),
+                      put_dict(_{'@properties' : Properties}, R2, Result)
+                  ;   put_dict(_{'@properties' : Properties2}, R2, Result)
+                  )
+              ;   R1 = R2
+              )
+          ),Same,Record,MergedRecord),
+    merge_documentation_language_records(Different,Merged).
+
+metadata_descriptor(Validation_Object, Type, Descriptor) :-
+    database_schema(Validation_Object, Schema),
+    schema_metadata_descriptor(Schema, Type, Descriptor).
+
+schema_metadata_descriptor(Schema, Type, metadata(JSON)) :-
+    xrdf(Schema, Type, sys:metadata, Metadata),
+    graph_get_json_object(Schema, Metadata, JSON).
 
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),

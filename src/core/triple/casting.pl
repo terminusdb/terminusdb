@@ -19,6 +19,7 @@
 
 :- use_module(library(lists)).
 
+:- use_module(library(option)).
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
 :- use_module(library(yall)).
@@ -34,7 +35,8 @@ typecast(Val, Type, Hint, Cast) :-
     ->  format(atom(M), 'Variable unbound in typecast to ~q', [Type]),
         throw(error(M))
     ;   (   \+ (   base_type(Type)
-               ;   Type = 'http://www.w3.org/2002/07/owl#Thing')
+               ;   Type = 'http://www.w3.org/2002/07/owl#Thing'
+               ;   Type = 'http://terminusdb.com/schema/sys#Top')
         ->  throw(error(unknown_type_casting_error(Val, Type), _))
         ;   Val = Bare_Literal^^Source_Type,
             (   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#string')
@@ -75,10 +77,26 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
     !,
     atom_string(Val,String).
 %%% xsd:string => owl:Thing
-typecast_switch('http://www.w3.org/2002/07/owl#Thing', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Atom) :-
+typecast_switch('http://www.w3.org/2002/07/owl#Thing', 'http://www.w3.org/2001/XMLSchema#string', Val, Hints, Atom) :-
     /* Note: It might be wise to check URI validity */
     !,
-    format(atom(Atom), '~w', [Val]).
+    (   option(prefixes(Prefixes), Hints)
+    ->  prefix_expand(Val, Prefixes, Atom)
+    ;   format(atom(Atom), '~w', [Val])
+    ).
+%%% sys:Top => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/sys#Top', Val, _, String^^'http://www.w3.org/2001/XMLSchema#string') :-
+    atom(Val),
+    !,
+    atom_string(Val,String).
+%%% xsd:string => sys:Top
+typecast_switch('http://terminusdb.com/schema/sys#Top', 'http://www.w3.org/2001/XMLSchema#string', Val, Hints, Atom) :-
+    /* Note: It might be wise to check URI validity */
+    !,
+    (   option(prefixes(Prefixes), Hints)
+    ->  prefix_expand(Val, Prefixes, Atom)
+    ;   format(atom(Atom), '~w', [Val])
+    ).
 %%% xsd:string => xdd:coordinatePolygon
 typecast_switch('http://terminusdb.com/schema/xdd#coordinatePolygon', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#coordinatePolygon') :-
     !,

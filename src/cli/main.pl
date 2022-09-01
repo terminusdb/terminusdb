@@ -23,6 +23,7 @@
               [do_or_die/2, token_authorization/2,
                basic_authorization/3, intersperse/3,
                with_memory_file/1, with_memory_file_stream/3]).
+:- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -40,6 +41,8 @@
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
+
+    load_plugins,
     % Better error handling here...
     catch_with_backtrace(
         (   set_prolog_flag(verbose, true),
@@ -103,20 +106,26 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            default('_'),
            help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
 opt_spec(list,'terminusdb list OPTIONS',
-         'List databases.',
+         'List available databases. [DEPRECATED]',
          [[opt(help),
            type(boolean),
            shortflags([h]),
            longflags([help]),
            default(false),
            help('print help for the `list` command')],
+          [opt(branches),
+           type(boolean),
+           shortflags([b]),
+           longflags([branches]),
+           default(true),
+           help('also describe the available branches')],
           [opt(json),
            type(boolean),
            shortflags([j]),
            longflags([json]),
            default(false),
            help('Return a JSON as the result of the `list` command')]]).
-opt_spec(optimize,'terminusdb optimize OPTIONS',
+opt_spec(optimize,'terminusdb optimize DB_SPEC OPTIONS',
          'Optimize a database (including _system and _meta).',
          [[opt(help),
            type(boolean),
@@ -264,7 +273,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            shortflags([e]),
            longflags(['remote-branch']),
            default('_'),
-           help('set the branch on the remote for push')],
+           help('set the branch on the remote for pull')],
           [opt(remote),
            type(atom),
            shortflags([r]),
@@ -289,7 +298,7 @@ opt_spec(pull,'terminusdb pull BRANCH_SPEC',
            longflags([password]),
            default('_'),
            help('the password on the remote')]]).
-opt_spec(fetch,'terminusdb fetch BRANCH_SPEC',
+opt_spec(fetch,'terminusdb fetch DB_SPEC',
          'fetch data from a remote.',
          [[opt(help),
            type(boolean),
@@ -413,13 +422,13 @@ or two commits (path required).',
            longflags([before_commit,'before-commit']),
            shortflags([p]),
            default('_'),
-           help('Commit of the *before* document(s)')],
+           help('Commit or branch of the *before* document(s)')],
           [opt(after_commit),
            type(atom),
            longflags([after_commit,'after-commit']),
            shortflags([s]),
            default('_'),
-           help('Commit of the *after* document(s)')]
+           help('Commit or branch of the *after* document(s)')]
          ]).
 opt_spec(apply,'terminusdb apply [Path] OPTIONS',
          'Apply a diff to path which is obtained from the differences between two commits',
@@ -483,7 +492,28 @@ opt_spec(log,'terminusdb log DB_SPEC',
            longflags([json]),
            shortflags([j]),
            default(false),
-           help('return log as JSON')]
+           help('return log as JSON')],
+          [opt(start),
+           type(integer),
+           longflags([start]),
+           shortflags([s]),
+           default(0),
+           help('How far back in commit log to start giving results')],
+          [opt(count),
+           type(integer),
+           longflags([count]),
+           shortflags([c]),
+           default(-1),
+           help('Number of results to return')]
+         ]).
+opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
+         'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `reset` command')]
          ]).
 
 % subcommands
@@ -499,8 +529,8 @@ opt_spec(branch,create,'terminusdb branch create BRANCH_SPEC OPTIONS',
            type(atom),
            shortflags([o]),
            longflags([origin]),
-           default(false),
-           help('the origin branch to use')]]).
+           default(main),
+           help('the origin branch to use (false for none)')]]).
 opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
          'Delete a branch.',
          [[opt(help),
@@ -509,6 +539,32 @@ opt_spec(branch,delete,'terminusdb branch delete BRANCH_SPEC OPTIONS',
            shortflags([h]),
            default(false),
            help('print help for the `branch delete` sub command')]]).
+opt_spec(db,list,'terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS',
+         'List available databases.',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('print help for the `list` command')],
+          [opt(branches),
+           type(boolean),
+           shortflags([b]),
+           longflags([branches]),
+           default(false),
+           help('also describe the available branches')],
+          [opt(verbose),
+           type(boolean),
+           shortflags([v]),
+           longflags([verbose]),
+           default(false),
+           help('return lots of metadata')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON as the result of the `list` command')]]).
 opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
          'Create a database.',
          [[opt(help),
@@ -527,13 +583,13 @@ opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
            type(atom),
            longflags([label]),
            shortflags([l]),
-           default(''),
+           default('_'),
            help('label to use for this database')],
           [opt(comment),
            type(atom),
            longflags([comment]),
            shortflags([c]),
-           default(''),
+           default('_'),
            help('long description of this database')],
           [opt(public),
            type(boolean),
@@ -549,13 +605,13 @@ opt_spec(db,create,'terminusdb db create DATABASE_SPEC OPTIONS',
            help('whether to use a schema')],
           [opt(data_prefix),
            type(atom),
-           longflags(['data-prefix']),
+           longflags([data_prefix,'data-prefix']),
            shortflags([d]),
            default('terminusdb:///data/'),
            help('uri prefix to use for data')],
           [opt(schema_prefix),
            type(atom),
-           longflags(['schema-prefix']),
+           longflags([schema_prefix,'schema-prefix']),
            shortflags([s]),
            default('terminusdb:///schema#'),
            help('uri prefix to use for schema')],
@@ -585,6 +641,44 @@ opt_spec(db,delete,'terminusdb db delete DATABASE_SPEC OPTIONS',
            shortflags([f]),
            default(false),
            help('force the deletion of the database (unsafe)')]]).
+opt_spec(db,update,'terminusdb db update DATABASE_SPEC OPTIONS',
+         'Update a database setting the OPTIONS in an existing database.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `db update` sub command')],
+          [opt(label),
+           type(atom),
+           longflags([label]),
+           shortflags([l]),
+           default('_'),
+           help('label to use for this database')],
+          [opt(comment),
+           type(atom),
+           longflags([comment]),
+           shortflags([c]),
+           default('_'),
+           help('long description of this database')],
+          [opt(public),
+           type(boolean),
+           longflags([public]),
+           shortflags([p]),
+           default('_'),
+           help('whether this database is to be public')],
+          [opt(schema),
+           type(boolean),
+           longflags([schema]),
+           shortflags([k]),
+           default('_'),
+           help('whether to use a schema')],
+          [opt(prefixes),
+           type(atom),
+           longflags(['prefixes']),
+           shortflags([x]),
+           default('_'),
+           help('Explicitly defined prefix set (in JSON)')]]).
 opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
          'Insert documents.',
          [[opt(help),
@@ -705,6 +799,12 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            shortflags([d]),
            default('_'),
            help('document data')],
+          [opt(raw_json),
+           type(boolean),
+           longflags([raw_json,'raw-json']),
+           shortflags([j]),
+           default(false),
+           help('replace as raw json')],
           [opt(create),
            type(boolean),
            longflags([create]),
@@ -721,7 +821,7 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            help('print help for the `doc get` sub command')],
           [opt(graph_type),
            type(atom),
-           longflags([graph_type]),
+           longflags([graph_type, 'graph-type']),
            shortflags([g]),
            default(instance),
            help('graph type (instance or schema)')],
@@ -925,9 +1025,9 @@ opt_spec(user,get,'terminusdb user get <USER_NAME_OR_ID>',
            shortflags([i]),
            default(false),
            help('Interpret argument as an organization id rather than a name.')],
-          [opt(capabilities),
+          [opt(capability),
            type(boolean),
-           longflags([capabilities]),
+           longflags([capability]),
            shortflags([c]),
            default(false),
            help('Report on all capabilities of this user.')],
@@ -958,7 +1058,19 @@ opt_spec(capability,grant,'terminusdb capability grant USER SCOPE ROLE1 <...ROLE
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `store init` sub command')]]).
+           help('print help for the `store init` sub command')],
+          [opt(ids),
+           type(boolean),
+           longflags([ids]),
+           shortflags([i]),
+           default(false),
+           help('Should the User, Scope and Role be treated as IDs or names')],
+          [opt(scope_type),
+           type(atom),
+           longflags([scope_type, 'scope-type']),
+           shortflags([s]),
+           default(database),
+           help('Should the scope be interpreted as a `database` (default) or an `organization`')]]).
 opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...ROLEN>',
          'Revoke ROLE1 ... ROLEN over SCOPE from USER',
          [[opt(help),
@@ -966,7 +1078,19 @@ opt_spec(capability,revoke,'terminusdb capability revoke USER SCOPE ROLE1 <...RO
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `store init` sub command')]]).
+           help('print help for the `store init` sub command')],
+          [opt(ids),
+           type(boolean),
+           longflags([ids]),
+           shortflags([i]),
+           default(false),
+           help('Should the User, Scope and Role be treated as IDs or names')],
+          [opt(scope_type),
+           type(atom),
+           longflags([scope_type, 'scope-type']),
+           shortflags([s]),
+           default(database),
+           help('Should the scope be interpreted as a `database` (default) or an `organization`')]]).
 opt_spec(store,init,'terminusdb store init OPTIONS',
          'Initialize a store for TerminusDB.',
          [[opt(help),
@@ -1179,9 +1303,11 @@ run_command(serve,_Positional,Opts) :-
     ;   terminus_server([serve|Opts], true)).
 run_command(list,Databases,Opts) :-
     super_user_authority(Auth),
+    format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~nWarning: Use ('terminusdb db list') instead.~n", []),
+    option(branches(Branches), Opts),
     (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects)
-    ;   list_existing_databases(Databases, Database_Objects)
+    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
+    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
     ),
     (   option(json(true), Opts)
     ->  json_write_dict(current_output, Database_Objects)
@@ -1333,7 +1459,7 @@ run_command(fetch,[Path],Opts) :-
         remote_fetch(System_DB, Auth, Remote_Path, authorized_fetch(Authorization),
                      New_Head_Layer_Id, Head_Has_Updated)
     ),
-    format(current_output, "~N~s fetch: ~q with ~q~n",
+    format(current_output, "~N~s fetch: ~q with updated repository head = ~q~n",
            [Path, New_Head_Layer_Id, Head_Has_Updated]).
 run_command(rebase,[Path,From_Path],Opts) :-
     super_user_authority(Auth),
@@ -1471,10 +1597,23 @@ run_command(apply,[Path], Opts) :-
 run_command(log,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
-    api_log(System_DB, Auth, Path, Log),
-    (   option(json(true), Opts)
-    ->  json_write_dict(current_output, Log, [])
-    ;   format_log(current_output,Log)
+    api_report_errors(
+        log,
+        (   api_log(System_DB, Auth, Path, Log, Opts),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, Log, [])
+            ;   format_log(current_output,Log)
+            )
+        )
+    ).
+run_command(reset,[Path,Ref], _Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        reset,
+        (   api_reset(System_DB, Auth, Path, Ref),
+            format(current_output, "Succesfully reset ~s to ~s~n", [Path,Ref])
+        )
     ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
@@ -1488,6 +1627,7 @@ run_command(branch,create,[Path],Opts) :-
     (   Origin_Base = false
     ->  Origin_Option = empty(_,_)
     ;   Origin_Option = branch(Origin_Base)),
+
     api_report_errors(
         branch,
         branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
@@ -1499,6 +1639,24 @@ run_command(branch,delete,[Path],_Opts) :-
         branch,
         branch_delete(System_DB, Auth, Path)),
     format(current_output, "~N~s branch deleted~n", [Path]).
+run_command(db,list,Databases,Opts) :-
+    super_user_authority(Auth),
+    option(branches(Branches), Opts),
+    option(verbose(Verbose), Opts),
+    api_report_errors(
+        check_db,
+        (   (   Databases = []
+            ->  list_databases(system_descriptor{}, Auth, Database_Objects,
+                               _{ branches : Branches, verbose: Verbose })
+            ;   list_existing_databases(Databases, Database_Objects,
+                                        _{ branches : Branches, verbose: Verbose })
+            ),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, Database_Objects)
+            ;   pretty_print_databases(Database_Objects)
+            )
+        )
+    ).
 run_command(db,create,[DB_Path],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1510,12 +1668,21 @@ run_command(db,create,[DB_Path],Opts) :-
         option(organization(Organization),Opts)
     ),
     option(label(Label), Opts),
+    (   var(Label)
+    ->  Label = DB
+    ;   true
+    ),
     option(comment(Comment), Opts),
+    (   var(Comment)
+    ->  Comment = Label
+    ;   true
+    ),
     option(public(Public), Opts),
     option(schema(Schema), Opts),
     option(data_prefix(Data_Prefix), Opts),
     option(schema_prefix(Schema_Prefix), Opts),
     option(prefixes(Prefixes_Atom), Opts),
+
     atom_json_dict(Prefixes_Atom, Prefixes, []),
     put_dict(Prefixes, _{'@base' : Data_Prefix, '@schema' : Schema_Prefix}, Merged),
     api_report_errors(
@@ -1537,6 +1704,36 @@ run_command(db,delete,[DB_Path],Opts) :-
         delete_db,
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output, "Database deleted: ~s/~s~n", [Organization, DB]).
+run_command(db,update,[DB_Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+
+    (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
+    ->  Organization = (Match.1),
+        DB = (Match.2)
+    ;   DB = DB_Path,
+        option(organization(Organization), Opts)
+    ),
+    dict_options(Dict, Opts),
+    findall(
+        Key-Val,
+        (   get_dict(Key,Dict,Pre),
+            ground(Pre),
+            (   Key = 'prefixes'
+            ->  atom_json_dict(Pre,Val, [])
+            ;   Val = Pre)
+        ),
+        Pairs),
+    dict_pairs(Options, _, Pairs),
+    Commit_Info = commit_info{
+                      author : 'CLI: db update',
+                      message : 'DB Update'
+                  },
+    api_report_errors(
+        update_db,
+        api_db_update(System_DB, Organization, DB, Auth, Commit_Info, Options)
+    ),
+    format(current_output, "Database updated: ~s/~s~n", [Organization, DB]).
 run_command(doc,insert,[Path], Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
@@ -1799,7 +1996,7 @@ run_command(user,delete,[Name_or_Id], Opts) :-
     ->  User_Id = Name_or_Id
     ;   api_report_errors(
             user,
-            api_get_user_from_name(System_DB, Auth, Name_or_Id, User)
+            api_get_user_from_name(System_DB, Auth, Name_or_Id, User,_{capability:false})
         ),
         get_dict('@id', User, User_Id)
     ),
@@ -1812,22 +2009,24 @@ run_command(user,delete,[Name_or_Id], Opts) :-
 run_command(user,get, NameList, Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
+    option(capability(Capability), Opts),
+    User_Opts = options{capability:Capability},
     (   option(id(false),Opts),
         [Name] = NameList
     ->  api_report_errors(
             user,
-            api_get_user_from_name(System_DB,Auth,Name,User_Obj)
+            api_get_user_from_name(System_DB,Auth,Name,User_Obj,User_Opts)
         ),
         Users = [User_Obj]
     ;   [Id] = NameList
     ->  api_report_errors(
             user,
-            api_get_user_from_id(System_DB, Auth, Id, User_Obj)
+            api_get_user_from_id(System_DB, Auth, Id, User_Obj,User_Opts)
         ),
         Users = [User_Obj]
     ;   api_report_errors(
             user,
-            api_get_users(System_DB,Auth,Users)
+            api_get_users(System_DB,Auth,Users,User_Opts)
         )
     ),
 
@@ -1839,14 +2038,15 @@ run_command(user,get, NameList, Opts) :-
                    get_dict('@id',User,User_Id),
                    format(current_output, "'~s' has id: '~s'~n",
                           [User_Name,User_Id]),
-                   (   option(capabilities(true), Opts),
-                       get_dict(capability, User, Capabilities)
+                   (   get_dict(capability, User, Capabilities)
                    ->  forall(
-                           member(Capability, Capabilities),
-                           (   get_dict(scope, Capability, Resource),
+                           (   member(Cap, Capabilities),
+                               is_dict(Cap)
+                           ),
+                           (   get_dict(scope, Cap, Resource),
                                get_dict(name, Resource, Resource_Name),
                                get_dict('@id', Resource, Resource_Id),
-                               (   get_dict(role, Capability, Roles)
+                               (   get_dict(role, Cap, Roles)
                                ->  true
                                ;   Roles = []),
                                maplist([Role,Role_Name]>>(get_dict(name,Role,Role_Name)),
@@ -1873,27 +2073,43 @@ run_command(user,password, [User], Opts) :-
         api_update_user_password(System_DB, Auth, User, Password)
     ),
     format(current_output, '~nPassword updated for ~s~n', [User]).
-run_command(capability,grant,[User,Scope|Roles],_Opts) :-
+run_command(capability,grant,[User,Scope|Roles],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),
+    option(scope_type(Type),Opts),
+    option(ids(Ids),Opts),
     api_report_errors(
         capability,
-        api_grant_capability(SystemDB,Auth, _{ scope: Scope,
-                                               user: User,
-                                               roles: Roles })
+        (   (   Ids = true
+            ->  Grant_Doc = _{ scope: Scope, user: User, roles: Roles}
+            ;   grant_document_to_ids(SystemDB, Auth, _{ scope: Scope,
+                                                         user: User,
+                                                         roles: Roles,
+                                                         scope_type: Type }, Grant_Doc)
+            ),
+            api_grant_capability(SystemDB,Auth, Grant_Doc)
+        )
     ),
     format(current_output, "Granted ~q to '~s' over '~s'~n", [Roles,User,Scope]).
-run_command(capability,revoke,[User,Scope|Roles],_Opts) :-
+run_command(capability,revoke,[User,Scope|Roles],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, SystemDB),
+    option(scope_type(Type),Opts),
+    option(ids(Ids),Opts),
     (   Roles = []
     ->  format(user_error, 'Warning: No Roles specified~n',[])
     ;   true),
     api_report_errors(
         capability,
-        api_revoke_capability(SystemDB,Auth, _{ scope: Scope,
-                                                user: User,
-                                                roles: Roles })
+        (   (   Ids = true
+            ->  Grant_Doc = _{ scope: Scope, user: User, roles: Roles}
+            ;   grant_document_to_ids(SystemDB, Auth, _{ scope: Scope,
+                                                         user: User,
+                                                         roles: Roles,
+                                                         scope_type: Type }, Grant_Doc)
+            ),
+            api_revoke_capability(SystemDB, Auth, Grant_Doc)
+        )
     ),
     format(current_output, 'Capability successfully revoked~n', []).
 run_command(store,init, _, Opts) :-
@@ -1978,14 +2194,14 @@ run_command(triples,load,[Path,File],Opts) :-
     option(author(Author), Opts),
     option(format(Format_Atom), Opts),
     atom_string(Format_Atom,Format),
-    open(File,read,Stream),
-    read_string(Stream, _, TTL),
-    close(Stream),
     api_report_errors(
         triples,
-        graph_insert(System_DB, Auth, Path, _{ message : Message,
-                                               author : Author},
-                     Format,TTL)),
+        (    open(File,read,Stream),
+             read_string(Stream, _, TTL),
+             close(Stream),
+             graph_insert(System_DB, Auth, Path, _{ message : Message,
+                                                    author : Author},
+                          Format,TTL))),
     format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
@@ -2048,6 +2264,11 @@ report_parse_error(error(domain_error(flag_value, Opt),_), Command) =>
     atomic_list_concat(Command_List, Command_Atom),
     format(user_error, '~NERROR: The command line option "~s" does not exist for the command "~s"~n',
            [Opt,Command_Atom]).
+report_parse_error(error(syntax_error('disallowed: <shortflag>=<value>'),_), Command) =>
+    intersperse(' ', Command, Command_List),
+    atomic_list_concat(Command_List, Command_Atom),
+    format(user_error, '~NERROR: The command line does not accept -<shortflag>=<value> syntax in the command "~s"~n',
+           [Command_Atom]).
 report_parse_error(error(type_error(flag_value,_),_), _) =>
     true.
 

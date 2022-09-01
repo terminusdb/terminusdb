@@ -61,7 +61,7 @@
               graph_dump/5,
 
               % api_frame.pl
-              api_class_frame/5,
+              api_class_frame/6,
               api_filled_frame/5,
 
               % api_woql.pl
@@ -81,8 +81,9 @@
               update_prefixes/5,
 
               % api_db
-              list_databases/3,
-              list_existing_databases/2,
+              list_databases/4,
+              list_database/6,
+              list_existing_databases/3,
               pretty_print_databases/1,
               db_exists_api/4,
 
@@ -140,7 +141,7 @@
               api_apply_squash_commit/7,
 
               % api_log.pl
-              api_log/4,
+              api_log/5,
               format_log/2,
 
               % api_access_control.pl
@@ -156,17 +157,25 @@
               api_add_organization/4,
               api_delete_organization/3,
               api_grant_capability/3,
+              grant_document_to_ids/4,
               api_revoke_capability/3,
-              api_get_resource_from_name/4,
-              api_get_user_from_name/4,
+              api_get_resource_from_name/5,
+              api_get_user_from_name/5,
               api_add_user/4,
               api_delete_user/3,
               api_add_user/4,
               api_delete_user/3,
-              api_get_users/3,
-              api_get_user_from_name/4,
-              api_get_user_from_id/4,
-              api_update_user_password/4
+              api_get_users/4,
+              api_get_user_from_id/5,
+              api_update_user_password/4,
+              api_get_organizations_users/4,
+              api_get_organizations_users_object/5,
+              api_get_organizations_users_databases/5,
+
+
+              % api_db_update.pl
+              api_db_update/6
+
           ]).
 
 :- use_module(api/api_init).
@@ -201,3 +210,4 @@
 :- use_module(api/api_patch).
 :- use_module(api/api_log).
 :- use_module(api/api_access_control).
+:- use_module(api/api_db_update).

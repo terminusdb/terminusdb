@@ -38,10 +38,10 @@ in_open_set(Elt,[_|Set]) :-
     in_open_set(Elt,Set).
 
 make_edge(X,P,Y,
-          _{ '@type' : "http://terminusdb.com/schema/woql#Edge",
-             'http://terminusdb.com/schema/woql#subject' : X,
-             'http://terminusdb.com/schema/woql#predicate' : P,
-             'http://terminusdb.com/schema/woql#object' : Y}).
+          edge{ '@type' : "http://terminusdb.com/schema/woql#Edge",
+                'http://terminusdb.com/schema/woql#subject' : X,
+                'http://terminusdb.com/schema/woql#predicate' : P,
+                'http://terminusdb.com/schema/woql#object' : Y}).
 
 run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     ground(Y),

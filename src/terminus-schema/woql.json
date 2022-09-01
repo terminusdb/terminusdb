@@ -455,23 +455,6 @@
   "has_header" : { "@type" : "Optional",
                    "@class" : "xsd:boolean" } }
 
-{ "@id" : "AddData",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Add a (terminal) edge with a data value.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "DataValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
 { "@id" : "AddedData",
   "@type" : "Class",
   "@documentation" : {

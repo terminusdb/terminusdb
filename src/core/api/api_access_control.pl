@@ -11,15 +11,18 @@
               api_add_organization/4,
               api_delete_organization/3,
               api_grant_capability/3,
+              grant_document_to_ids/4,
               api_revoke_capability/3,
-              api_get_user_from_name/4,
-              api_get_resource_from_name/4,
+              api_get_user_from_name/5,
+              api_get_resource_from_name/5,
               api_add_user/4,
               api_delete_user/3,
-              api_get_users/3,
-              api_get_user_from_name/4,
-              api_get_user_from_id/4,
-              api_update_user_password/4
+              api_get_users/4,
+              api_get_user_from_id/5,
+              api_update_user_password/4,
+              api_get_organizations_users/4,
+              api_get_organizations_users_object/5,
+              api_get_organizations_users_databases/5
           ]).
 
 :- use_module(core(util)).
@@ -27,11 +30,15 @@
 :- use_module(core(query)).
 :- use_module(core(document)).
 :- use_module(core(transaction)).
+:- use_module(core(triple), [uri_eq/3]).
 :- use_module(library(plunit)).
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
+:- use_module(library(option)).
+:- use_module(library(pcre)).
+:- use_module(library(solution_sequences)).
 
 api_get_roles(SystemDB, Auth, Roles) :-
     do_or_die(
@@ -195,6 +202,103 @@ get_organization_from_id(SystemDB, Id, Organization) :-
         (   t(Id,rdf:type,'@schema':'Organization'),
             get_document(Id,Organization))).
 
+
+api_get_organizations_users(SystemDB, Auth, Org_Name, Users) :-
+    do_or_die(
+        get_organization_from_name(SystemDB, Org_Name, Organization),
+        error(no_id_for_organization_name(Org_Name), _)),
+
+    get_dict('@id', Organization, Org_Id),
+    assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id),
+
+    get_organizations_users(SystemDB, Org_Id, Users).
+
+get_organizations_users(SystemDB, Org_Id, Users) :-
+    findall(User_Object,
+            (   distinct(User_Id,
+                         ask(SystemDB,
+                             (   path(Org_Id, (   star(p(child))
+                                              ;   star(p(child)),p(database)), Resource_Id),
+                                 t(Cap_Id, scope, Resource_Id),
+                                 t(User_Id, capability, Cap_Id)))),
+                get_organizations_users_object(SystemDB, Org_Id, User_Id, User_Object)
+            ),
+            Users).
+
+api_get_organizations_users_object(SystemDB, Auth, Org_Name, User_Name, Object) :-
+    do_or_die(
+        get_organization_from_name(SystemDB, Org_Name, Organization),
+        error(no_id_for_organization_name(Org_Name), _)),
+    do_or_die(
+        get_user_from_name(SystemDB, User_Name, User, _{}),
+        error(no_id_for_user_name(User_Name), _)),
+
+    get_dict('@id', Organization, Org_Id),
+    get_dict('@id', User, User_Id),
+
+    (   Prefixes = _{ '@base' : 'terminusdb://system/data/' },
+        uri_eq(User_Id, Auth, Prefixes) % Let users look at themselves.
+    ->  true
+    ;   assert_auth_action_scope(SystemDB, Auth, '@schema':'Action/manage_capabilities', Org_Id)
+    ),
+
+    get_organizations_users_object(SystemDB, Org_Id, User_Id, Object).
+
+get_organizations_users_object(SystemDB, Org_Id, User_Id, Object) :-
+    ask(SystemDB,
+        get_document(User_Id, User)),
+
+    dict_field_verifier(
+        User,
+        _{ '@id' : (*),
+           name: (*),
+           capability: (*)},
+        User_Clean
+    ),
+    get_dict_default(capability, User_Clean, Capabilities, []),
+    findall(Capability,
+            (   member(Cap_Id, Capabilities),
+                ask(SystemDB,
+                    (   t(Cap_Id, scope, Resource_Id),
+                        path(Org_Id, (   star(p(child))
+                                     ;   star(p(child)),p(database)), Resource_Id),
+                        get_document(Cap_Id, Pre_Capability))),
+                get_dict_default(role, Pre_Capability, Role_Ids, []),
+                findall(Role,
+                        (   member(Role_Id,Role_Ids),
+                            ask(SystemDB,
+                                get_document(Role_Id, Role))),
+                        Roles),
+                put_dict(_{role: Roles}, Pre_Capability, Capability)
+            ),
+            New_Capabilities),
+    put_dict(_{capability : New_Capabilities}, User_Clean, Object).
+
+api_get_organizations_users_databases(SystemDB, Auth, Org_Name, User_Name, Databases) :-
+    do_or_die(
+        is_super_user(Auth),
+        error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
+    do_or_die(
+        get_organization_from_name(SystemDB, Org_Name, Organization),
+        error(no_id_for_organization_name(Org_Name), _)),
+    do_or_die(
+        get_user_from_name(SystemDB, User_Name, User, _{}),
+        error(no_id_for_user_name(User_Name), _)),
+
+    get_organization_users_databases(SystemDB, Organization, User, Databases).
+
+get_organization_users_databases(SystemDB, Organization, User, Databases) :-
+    get_dict('@id', Organization, Organization_Id),
+    get_dict('@id', User, User_Id),
+    findall(
+        Database,
+        ask(SystemDB,
+            (   t(User_Id, capability, Cap_Id),
+                t(Cap_Id, scope, Organization_Id),
+                t(Organization_Id, database, Database_Id),
+                get_document(Database_Id,Database))),
+        Databases).
+
 api_add_organization(_, Auth, Organization, Id) :-
     do_or_die(
         is_super_user(Auth),
@@ -236,22 +340,38 @@ api_delete_organization(_, Auth, Organization_Id) :-
 
     with_transaction(
         System_Context,
-        delete_document(System_Context,Organization_Id),
+        (
+            get_document(System_Context,Organization_Id,Organization),
+            die_if(
+                (   get_dict(database,Organization,Databases),
+                    \+ Databases = [],
+                    get_dict(name,Organization,Organization_Name),
+                    findall(DB,
+                            (   member(Db_Id,Databases),
+                                ask(System_Context,
+                                    t(Db_Id, name, DB^^xsd:string))),
+                            DBs)
+                ),
+                error(organization_still_has_databases(Organization_Name,DBs), _)),
+            delete_document(System_Context,Organization_Id)
+        ),
         _
     ).
 
 grant_document_to_ids(SystemDB, Auth, Grant_Document, json{ scope: Scope_Id,
                                                             user: User_Id,
-                                                            roles: Role_Ids }) :-
+                                                            roles: Role_Ids}) :-
     _{ scope: Scope,
        user: User,
-       roles: Roles } :< Grant_Document,
+       roles: Roles,
+       scope_type: Scope_Type
+     } :< Grant_Document,
 
     % lookup user
-    api_get_user_from_name(SystemDB,Auth,User,User_Object),
+    api_get_user_from_name(SystemDB,Auth,User,User_Object,_{capablity:false}),
     get_dict('@id', User_Object, User_Id),
     % lookup resource
-    api_get_resource_from_name(SystemDB,Auth,Scope,Scope_Object),
+    api_get_resource_from_name(SystemDB,Auth,Scope,Scope_Type,Scope_Object),
     get_dict('@id', Scope_Object, Scope_Id),
     % lookup roles
     maplist({SystemDB,Auth}/[Role,Role_Id]>>(
@@ -259,11 +379,14 @@ grant_document_to_ids(SystemDB, Auth, Grant_Document, json{ scope: Scope_Id,
                 get_dict('@id', Role_Object, Role_Id)),
             Roles,Role_Ids).
 
-api_grant_capability(SystemDB, Auth, Grant_Document) :-
-    grant_document_to_ids(SystemDB, Auth, Grant_Document, Grant_Document_Ids),
-    _{ scope: Scope_Id,
-       user: User_Id,
-       roles: Role_Ids } :< Grant_Document_Ids,
+api_grant_capability(SystemDB, Auth, Grant_Document_Ids) :-
+    _{ scope: Scope_Id_String,
+       user: User_Id_String,
+       roles: Role_Id_Strings } :< Grant_Document_Ids,
+
+    atom_string(User_Id, User_Id_String),
+    atom_string(Scope_Id, Scope_Id_String),
+    maplist(atom_string,Role_Ids,Role_Id_Strings),
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},
@@ -305,11 +428,14 @@ api_grant_capability(SystemDB, Auth, Grant_Document) :-
             _)
     ).
 
-api_revoke_capability(SystemDB, Auth, Grant_Document) :-
-    grant_document_to_ids(SystemDB, Auth, Grant_Document, Grant_Document_Ids),
-    _{ scope: Scope_Id,
-       user: User_Id,
-       roles: Role_Ids } :< Grant_Document_Ids,
+api_revoke_capability(SystemDB, Auth, Grant_Document_Ids) :-
+    _{ scope: Scope_Id_String,
+       user: User_Id_String,
+       roles: Role_Id_Strings } :< Grant_Document_Ids,
+
+    atom_string(User_Id, User_Id_String),
+    atom_string(Scope_Id, Scope_Id_String),
+    maplist(atom_string,Role_Ids,Role_Id_Strings),
 
     create_context(SystemDB,
                    commit_info{author: "admin", message: "API: Add Grant"},
@@ -317,13 +443,13 @@ api_revoke_capability(SystemDB, Auth, Grant_Document) :-
 
     assert_auth_action_scope(System_Context, Auth, '@schema':'Action/manage_capabilities', Scope_Id),
 
-    (   ask(System_Context,
-            (   t(User_Id, capability, Capability_Id),
-                t(Capability_Id, scope, Scope_Id)))
+    with_transaction(
+        System_Context,
+        (   ask(System_Context,
+                (   t(User_Id, capability, Capability_Id),
+                    t(Capability_Id, scope, Scope_Id)))
         % has capability with scope.
-    ->  with_transaction(
-            System_Context,
-            (   get_document(System_Context, Capability_Id, Capability),
+        ->  (   get_document(System_Context, Capability_Id, Capability),
                 (   get_dict('role', Capability, Old_Role_Ids)
                 ->  true
                 ;   Old_Role_Ids = []),
@@ -341,26 +467,52 @@ api_revoke_capability(SystemDB, Auth, Grant_Document) :-
                                                                      Capability_Id),
                             _))
                 )
-            ),
-            _)
-    ;   throw(error(no_capability_for_user_with_scope(User_Id,Scope_Id), _))
+            )
+        ;   throw(error(no_capability_for_user_with_scope(User_Id,Scope_Id), _))
+        ),
+        _
     ).
 
-api_get_resource_from_name(SystemDB,Auth,Name,Resource) :-
+api_get_resource_from_name(SystemDB,Auth,Name,Type,Resource) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
     do_or_die(
-        get_resource_from_name(SystemDB,Name,Resource),
+        get_resource_from_name(SystemDB,Name,Type,Resource),
         error(no_id_for_resource_name(Name), _)).
 
-get_resource_from_name(SystemDB,Name,Resource) :-
-    ask(SystemDB,
-        (   t(Id,name,Name^^xsd:string),
-            isa(Id,'@schema':'Resource'),
-            get_document(Id,Resource)
-        )).
+get_resource_from_name(SystemDB,Name,Type,Resource) :-
+    (   Type = database
+    ->  (   re_matchsub('([^/]*)/([^/]*)', Name, Match, [])
+        ->  Organization = (Match.1),
+            DB = (Match.2),
+            ask(SystemDB,
+                (   t(OID, name, Organization^^xsd:string),
+                    t(OID, database, DBID),
+                    t(DBID, name, DB^^xsd:string),
+                    get_document(DBID,Resource)
+                ))
+        ;   findall(
+                Candidate,
+                ask(SystemDB,
+                    (   t(DBID, name, Name^^xsd:string),
+                        t(DBID, rdf:type, '@schema':'UserDatabase'),
+                        get_document(DBID,Candidate)
+                    )),
+                Resources
+            ),
+            (   [_,_|_] = Resources
+            ->  throw(error(no_unique_id_for_database_name(Name), _))
+            ;   [Resource] = Resources
+            )
+        )
+    ;   ask(SystemDB,
+            (   t(Id,name,Name^^xsd:string),
+                t(Id,rdf:type,'@schema':'Organization'),
+                get_document(Id,Resource)
+            ))
+    ).
 
 get_resource_from_id(SystemDB,Id,Resource) :-
     ask(SystemDB,
@@ -419,43 +571,47 @@ api_delete_user(_, Auth, User_Id) :-
         _
     ).
 
-api_get_user_from_name(SystemDB,Auth,Name,User) :-
+api_get_user_from_name(SystemDB,Auth,Name,User,Opts) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
     do_or_die(
-        get_user_from_name(SystemDB, Name, User),
+        get_user_from_name(SystemDB, Name, User, Opts),
         error(no_id_for_user_name(Name), _)).
 
-get_user_from_name(SystemDB,Name,User) :-
+get_user_from_name(SystemDB,Name,User,Opts) :-
     ask(SystemDB,
         (   t(Id,name,Name^^xsd:string),
             t(Id,rdf:type,'@schema':'User')
         )),
-    get_user_from_id(SystemDB,Id,User).
+    get_user_from_id(SystemDB,Id,User,Opts).
 
-api_get_user_from_id(SystemDB, Auth, Id, User) :-
+api_get_user_from_id(SystemDB, Auth, Id, User, Opts) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
     do_or_die(
-        get_user_from_id(SystemDB, Id, User),
+        get_user_from_id(SystemDB, Id, User, Opts),
         error(no_user_with_give_id(Id), _)).
 
-get_user_from_id(SystemDB, Id, User) :-
+get_user_from_id(SystemDB, Id, User, Opts) :-
     ask(SystemDB,
         (   t(Id, rdf:type, '@schema':'User'),
             get_document(Id, User_Raw))),
-    del_dict(key_hash, User_Raw, _, User_Begin),
+    (   del_dict(key_hash, User_Raw, _, User_Base)
+    ->  true
+    ;   User_Raw = User_Base
+    ),
 
-    (   get_dict(capability, User_Begin, Capability_Ids)
+    (   option(capability(true), Opts),
+        get_dict(capability, User_Base, Capability_Ids)
     ->  findall(Capability,
                 (   member(Capability_Id, Capability_Ids),
                     get_capability_from_id(SystemDB, Capability_Id, Capability)),
                 Capabilities),
-        put_dict(_{capability:Capabilities}, User_Begin, User)
-    ;   User_Begin = User
+        put_dict(_{capability:Capabilities}, User_Base, User)
+    ;   User_Base = User
     ).
 
 get_capability_from_id(SystemDB, Id, Capability) :-
@@ -475,24 +631,24 @@ get_capability_from_id(SystemDB, Id, Capability) :-
     get_resource_from_id(SystemDB,Scope,Resource),
     put_dict(_{scope : Resource}, Capability_Role, Capability).
 
-api_get_users(SystemDB, Auth, Users) :-
+api_get_users(SystemDB, Auth, Users, Opts) :-
     do_or_die(
         is_super_user(Auth),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    get_users(SystemDB, Users).
+    get_users(SystemDB, Users, Opts).
 
-get_users(SystemDB, Users) :-
+get_users(SystemDB, Users, Opts) :-
     findall(
         User,
         (   ask(SystemDB,
                 t(Id, rdf:type, '@schema':'User')),
-            get_user_from_id(SystemDB,Id,User)
+            get_user_from_id(SystemDB,Id,User,Opts)
         ),
         Users).
 
 api_update_user_password(System_DB, Auth, UserName, Password) :-
-    api_get_user_from_name(System_DB, Auth, UserName, User),
+    api_get_user_from_name(System_DB, Auth, UserName, User, _{capability:false}),
 
     do_or_die(
         (   is_super_user(Auth)
@@ -500,15 +656,8 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
         ;   get_dict('@id', User, Auth)),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    get_dict('@id', User, Id),
-    get_dict(name, User, Name),
     crypto_password_hash(Password, Hash),
-    New_User =
-    _{
-        '@id' : Id,
-        name : Name,
-        key_hash : Hash
-    },
+    put_dict(_{ key_hash : Hash}, User, New_User),
 
     create_context(System_DB, commit_info{author: "admin", message: "API: Update User Password"},
                    System_Context),

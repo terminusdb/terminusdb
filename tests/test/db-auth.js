@@ -1,9 +1,9 @@
+const { expect } = require('chai')
 const { Agent, api, db, util } = require('../lib')
 
 describe('db-auth', function () {
   let agent
-
-  before(function () {
+  before(async function () {
     agent = new Agent().auth()
   })
 
@@ -37,6 +37,28 @@ describe('db-auth', function () {
     await db.delete(agent).notFound(api.error.unknownOrganization(agent.orgName))
     // Delete the created database
     agent.orgName = orgName
+    await db.delete(agent)
+  })
+
+  it('passes list existing', async function () {
+    await db.create(agent)
+    const all = await agent.get('/api/db')
+    expect(all.body).to.be.an('array')
+    const one = await agent.get(`/api/db/${agent.user}/${agent.dbName}`)
+    expect(one.body.path).to.equal(`${agent.user}/${agent.dbName}`)
+    const branch = await agent.get(`/api/db/${agent.user}/${agent.dbName}?branches=true`)
+    expect(branch.body.branches).to.deep.equal(['main'])
+    await db.delete(agent)
+  })
+
+  it('passes update existing', async function () {
+    await db.create(agent)
+    const one = await agent.put(`/api/db/${agent.user}/${agent.dbName}`)
+      .send({ label: 'foo', comment: 'bar' })
+    expect(one.status).to.equal(200)
+    const two = await agent.get(`/api/db/${agent.user}/${agent.dbName}?verbose=true`)
+    expect(two.body.label).to.equal('foo')
+    expect(two.body.comment).to.equal('bar')
     await db.delete(agent)
   })
 })

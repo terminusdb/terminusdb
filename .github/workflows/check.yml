@@ -99,7 +99,6 @@ jobs:
           TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
         run: |
           npm install-ci-test
-          npm run check
 
   integration_tests_header:
     name: Integration tests (header)
@@ -154,6 +153,7 @@ jobs:
             --detach \
             --net=host \
             -e TERMINUSDB_JWT_ENABLED=true \
+            -e TERMINUSDB_JWT_AGENT_NAME_PROPERTY='http://terminusdb.com/schema/system#agent_name' \
             -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
             terminusdb/terminusdb-server:local
 
@@ -188,7 +188,7 @@ jobs:
         with:
           name: terminusdb-server-docker-image
 
-      - run: make download-lint && chmod -R 777 .deps
+      - run: make download-lint
 
       - name: Run lint
         run: |

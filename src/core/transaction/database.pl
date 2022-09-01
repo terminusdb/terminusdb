@@ -19,6 +19,7 @@
 :- use_module(core(util)).
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
+:- use_module(core(plugins)).
 
 :- use_module(config(terminus_config), [max_transaction_retries/1]).
 
@@ -30,7 +31,7 @@
 :- use_module(library(yall)).
 :- use_module(library(random)).
 :- use_module(library(terminus_store)).
-
+:- use_module(library(aggregate)).
 
 descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
     system_descriptor{} = Descriptor,
@@ -245,7 +246,6 @@ with_transaction_(_,
                   _) :-
     throw(error(transaction_retry_exceeded, _)).
 
-
 :- use_module(core(util/test_utils)).
 :- use_module(library(http/json)).
 /*
@@ -275,8 +275,8 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     commit_validation_objects(Validations, Committed),
     collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
-    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data).
-
+    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data),
+    ignore(forall(post_commit_hook(Validations, Meta_Data), true)).
 
 /* Note: This should not exist */
 graph_inserts_deletes(Graph, I, D) :-

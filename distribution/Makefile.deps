@@ -1,5 +1,7 @@
 TUS_VERSION := v0.0.10
 JWT_VERSION := v0.0.5
+DASHBOARD_VERSION := v0.0.6
+DASHBOARD_GITHUB_REPO := terminusdb/terminusdb-dashboard
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
 
@@ -11,6 +13,7 @@ PACK_INSTALL_OPTIONS := [interactive(false), git(true)]
 default:
 	@$(MAKE) install-tus
 	@$(MAKE) install-jwt
+	@$(MAKE) install-dashboard
 
 .PHONY: install-tus
 install-tus: REPO_URL=https://github.com/terminusdb/tus.git
@@ -24,6 +27,11 @@ install-jwt: PACK_NAME=jwt_io
 install-jwt: BRANCH=$(JWT_VERSION)
 install-jwt: install-pack
 
+.PHONY: install-dashboard
+install-dashboard:
+	mkdir -p dashboard
+	curl -sL "https://github.com/$(DASHBOARD_GITHUB_REPO)/releases/download/$(DASHBOARD_VERSION)/release.tar.gz" | tar zxf - -C dashboard
+
 .PHONY: install-pack
 install-pack:
 	mkdir -p .deps/$(PACK_NAME)
@@ -36,3 +44,10 @@ install-pack:
 	  -g "pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
 	  -g "pack_info($(PACK_NAME))" \
 	  -g halt
+
+.PHONY: clean
+clean: clean-dashboard
+
+.PHONY: clean-dashboard
+clean-dashboard:
+	rm -rf dashboard

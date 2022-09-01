@@ -6,7 +6,7 @@
 />
 
 ***
-[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) ![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)
+[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) [![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
 
 ## TerminusDB is a distributed database with a collaboration model.
 
@@ -17,8 +17,9 @@ The building blocks of the model are:
   - Revision Control: commits for every update
   - Diff: differences between commits can be interpreted as patches between states
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
+  - Query: You can query any state of the database at any commit.
 
-TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/v10.0/#/reference/reference-document-interface). TerminusDB is available as a standalone server, or you can [use online](https://dashboard.terminusdb.com/).
+TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/guides/reference-guides/document-interface). TerminusDB is available as a standalone server, or you can [use online](https://dashboard.terminusdb.com/).
 
 
 ## Installation Guide
@@ -27,7 +28,7 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 
 The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB. 
 
-For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
+For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/get-started/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
 
 
 ### Get this repo, cd to it
@@ -70,10 +71,10 @@ USAGE:
   rm          remove volumes
 ```
 
-More information in the [docs](https://terminusdb.com/docs/index/terminusdb/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
+More information in the [docs](https://terminusdb.com/docs/get-started/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
 
 
-You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/index/terminusdb/install/install-from-source-code).
+You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/get-started/install/install-from-source-code).
 
 
 ## TerminusDB CLI
@@ -114,7 +115,7 @@ terminusdb push admin/example1 --token='XYZ'
 
 Once completed, you'll have a remote copy of this database.
 
-More on the [CLI here](https://github.com/GavinMendelGleason/blog/blob/main/entries/terminusdb_cli.md)
+More on the [CLI here](https://terminusdb.com/blog/distributed-database-with-collaboration-model/)
 
 ## Community
 

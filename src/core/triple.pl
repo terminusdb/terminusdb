@@ -18,12 +18,10 @@
               error_on_excluded_organization/1,
               error_on_excluded_database/1,
 
-              % iana.pl
-              iana/3,
-
               % literals.pl
               literal_to_turtle/2,
               normalise_triple/2,
+              reset_normalise_warning/0,
               object_storage/2,
               ground_object_storage/2,
               storage_object/2,
@@ -40,6 +38,7 @@
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3,
+              uri_eq/3,
 
               % temp_graph.pl
               extend_database_with_temp_graph/6,
@@ -129,7 +128,6 @@
 :- use_module(triple/base_type).
 :- use_module(triple/casting).
 :- use_module(triple/database_utils).
-:- use_module(triple/iana).
 :- use_module(triple/literals).
 :- use_module(triple/temp_graph).
 :- use_module(triple/constants).

@@ -104,7 +104,8 @@ insert_turtle_graph(Context,TTL) :-
         open_string(TTLS, TTLStream),
         insert_turtle_graph_(Context, Graph, TTLStream, Blank_Node_Prefix, _),
         close(TTLStream)
-    ).
+    ),
+    reset_normalise_warning.
 
 add_all_turtle_triples(Graph,Triples,_Resource) :-
     forall(member(T, Triples),

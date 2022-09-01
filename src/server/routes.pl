@@ -122,6 +122,25 @@ connect_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
+                [method(Method),
+                 methods([options,get])]).
+
+log_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    api_report_errors(
+        log,
+        Request,
+        (   param_value_search_optional(Search, start, integer, 0, Start),
+            param_value_search_optional(Search, count, integer, -1, Count),
+            Options = opts{ start: Start, count: Count},
+            api_log(System_DB, Auth, Path, Log, Options),
+            cors_reply_json(Request, Log))).
+
+
+%%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(info), cors_handler(Method, info_handler),
                 [method(Method),
                  methods([options,get])]).
@@ -146,12 +165,14 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(db), cors_handler(Method, db_handler, [add_payload(false)]),
+                [method(Method),
+                 methods([options,get])]).
 :- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
-                 methods([options,head,post,delete])]).
+                 methods([options,get,head,post,put,delete])]).
 
-db_handler(head, Organization, DB, Request, System_DB, Auth) :-
-    /* HEAD: Check DB Exists */
+db_handler(get, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
     ->  true
     ;   Search = []),
@@ -159,10 +180,39 @@ db_handler(head, Organization, DB, Request, System_DB, Auth) :-
     api_report_errors(
         check_db,
         Request,
-        (   param_value_search_optional(Search, exists, boolean, false, Exists),
-            die_if(Exists \= true,
-                   error(bad_parameter_value(exists, true, Exists), _)),
-            db_exists_api(System_DB, Auth, Organization, DB)
+        (   param_value_search_optional(Search, branches, boolean, false, Branches),
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches,
+                                                                 verbose: Verbose}),
+            cors_reply_json(Request, Database_Objects)
+        )
+    ).
+
+db_handler(get, Organization, DB, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    api_report_errors(
+        check_db,
+        Request,
+        (   param_value_search_optional(Search, branches, boolean, false, Branches),
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            Options = _{ branches : Branches, verbose: Verbose },
+            (   list_database(System_DB, Auth, Organization, DB, Database_Object, Options)
+            ->  cors_reply_json(Request, Database_Object)
+            ;   cors_reply_json(Request, _{'@type' : 'api:DbListErrorResponse',
+                                           'api:status' : 'api:failure',
+                                           'api:message' : "Database does not exist, or you do not have permission"},
+                                [status(404)])
+            )
+        )
+    ).
+db_handler(head, Organization, DB, Request, System_DB, Auth) :-
+    api_report_errors(
+        check_db,
+        Request,
+        (   db_exists_api(System_DB, Auth, Organization, DB)
         ->  cors_reply_json(Request, _{'@type' : 'api:DbExistsResponse',
                                        'api:status' : 'api:success'})
         ;   cors_reply_json(Request, _{'@type' : 'api:DbExistsErrorResponse',
@@ -171,7 +221,6 @@ db_handler(head, Organization, DB, Request, System_DB, Auth) :-
                             [status(404)])
         )
     ).
-
 db_handler(post, Organization, DB, Request, System_DB, Auth) :-
     /* POST: Create database */
     api_report_errors(
@@ -199,13 +248,33 @@ db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     api_report_errors(
         delete_db,
         Request,
-        (   (   http_read_json_semidet(json_dict(JSON), Request),
-                param_value_json_optional(JSON, force, boolean, false, Force_Delete)
+        (   % Deprecating request body in delete
+            (   http_read_json_semidet(json_dict(JSON), Request)
             ->  true
-            ;   Force_Delete = false),
+            ;   JSON = json{}),
+
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_optional(Search, JSON, force, boolean, false, Force_Delete),
             delete_db(System_DB, Auth, Organization, DB, Force_Delete),
             cors_reply_json(Request, _{'@type' : 'api:DbDeleteResponse',
                                        'api:status' : 'api:success'}))).
+db_handler(put, Organization, DB, Request, System_DB, Auth) :-
+    /* PUT: Update database */
+    api_report_errors(
+        update_db,
+        Request,
+        (   http_read_json_required(json_dict(JSON), Request),
+            api_db_update(System_DB, Organization, DB, Auth, commit_info{
+                                                                 author : 'REST API',
+                                                                 message : 'Updating Database Record'
+                                                             }, JSON),
+            cors_reply_json(Request, _{'@type' : 'api:DbUpdatedResponse',
+                                       'api:status' : 'api:success'})
+        )
+    ).
 
 :- begin_tests(db_endpoint).
 
@@ -468,7 +537,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
         )).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
-    memberchk(x_http_method_override('GET'), Request),
+    memberchk(x_http_method_override('GET'), Request), % Is this not redundant?
     !,
     document_handler(get, Path, Request, System_DB, Auth).
 document_handler(post, Path, Request, System_DB, Auth) :-
@@ -586,28 +655,34 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 frame_handler(get, Path, Request, System_DB, Auth) :-
     % TODO This possibly throws a json error, which gets reinterpreted
     % as a schema check failure for some reason. gotta fix that.
-    (   http_read_json_semidet(json_dict(Posted), Request)
-    ->  true
-    ;   Posted = _{}),
-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []),
-
-    (   get_dict(type, Posted, Class_Uri)
-    ->  Class = uri(Class_Uri)
-    ;   memberchk(type=Class_Uri, Search)
-    ->  Class = uri(Class_Uri)
-    ;   Class = all
-    ),
-
     api_report_errors(
         frame,
         Request,
-        api_class_frame(System_DB, Auth, Path, Class, Frame)),
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
 
-    write_cors_headers(Request),
-    reply_json(Frame).
+            param_value_search_or_json_optional(Search, JSON, type, text, all, Class_URI),
+            param_value_search_or_json_optional(Search, JSON, compress_ids, boolean, true, Compress_Ids),
+            param_value_search_or_json_optional(Search, JSON, expand_abstract, boolean, true, Expand_Abstract),
+            (   Class_URI = all
+            ->  Class = all
+            ;   Class = uri(Class_URI)
+            ),
+
+            Options =
+            _{
+                compress_ids: Compress_Ids,
+                expand_abstract: Expand_Abstract
+            },
+            api_class_frame(System_DB, Auth, Path, Class, Frame, Options),
+            write_cors_headers(Request),
+            reply_json(Frame)
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
@@ -2083,6 +2158,9 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
                             [status(200)]))).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
+%
 :- http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
@@ -2126,16 +2204,17 @@ user_handler(post, Request, System_DB, Auth) :-
                             _{'@type' : "api:UpdateUserResponse",
                               'api:status' : "api:success"}))).
 user_handler(delete, Request, System_DB, Auth) :-
-    get_payload(Document, Request),
-
-    do_or_die(_{ agent_name : Agent_Name },
-              error(malformed_user_deletion_document(Document))
-             ),
-
     api_report_errors(
         user_delete,
         Request,
-        (   delete_user_transaction(System_DB, Auth, Agent_Name),
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, agent_name, text, Agent_Name),
+            delete_user_transaction(System_DB, Auth, Agent_Name),
             cors_reply_json(Request,
                             _{'@type' : "api:DeleteUserResponse",
                               'api:status' : "api:success"}))).
@@ -2189,9 +2268,13 @@ organization_handler(delete, Request, System_DB, Auth) :-
     api_report_errors(
         delete_organization,
         Request,
-        (   http_read_json_required(json_dict(JSON), Request),
-
-            param_value_json_required(JSON, organization_name, non_empty_string, Name),
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, organization_name, non_empty_string, Name),
 
             delete_organization_transaction(System_DB, Auth, Name),
             cors_reply_json(Request,
@@ -2465,7 +2548,7 @@ test(optimize_system, [
 :- end_tests(optimize_endpoint).
 
 
-%%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%% Remote handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
                 [method(Method),
                  prefix,
@@ -2488,20 +2571,23 @@ remote_handler(post, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(delete, Path, Request, System_DB, Auth) :-
-
-    do_or_die(
-        (   get_payload(Document, Request),
-            _{ remote_name : Remote_Name } :< Document),
-        error(bad_api_document(Document, [remote_name]), _)),
-
     api_report_errors(
         remote,
         Request,
-        (   remove_remote(System_DB, Auth, Path, Remote_Name),
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            format(user_error, "~n~nSearch ~q~n~n", [Search]),
+            format(user_error, "~n~nJSON ~q~n~n", [JSON]),
+
+            param_value_search_or_json_required(Search, JSON, remote_name, text, Remote_Name),
+            remove_remote(System_DB, Auth, Path, Remote_Name),
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(put, Path, Request, System_DB, Auth) :-
-
     do_or_die(
         (   get_payload(Document, Request),
             _{ remote_name : Remote_Name,
@@ -2516,11 +2602,18 @@ remote_handler(put, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:status' : "api:success"}))).
 remote_handler(get, Path, Request, System_DB, Auth) :-
-
     api_report_errors(
         remote,
         Request,
-        (   get_param(remote_name,Request,Remote_Name)
+        (   (   memberchk(payload(JSON), Request)
+            ->  true
+            ;   JSON = _{}
+            ),
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_optional(Search, JSON, remote_name, text, [], Remote_Name),
+            \+ Remote_Name = []
         ->  show_remote(System_DB, Auth, Path, Remote_Name, Remote_URL),
             cors_reply_json(Request, _{'@type' : 'api:RemoteResponse',
                                        'api:remote_name' : Remote_Name,
@@ -2707,7 +2800,7 @@ roles_handler(post, Request, System_DB, Auth) :-
               error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
-        roles,
+        role,
         Request,
         (   uri_encoded(segment, Name, Encoded_Name),
             atom_concat('Role/',Encoded_Name,Name_Id),
@@ -2725,7 +2818,7 @@ roles_handler(put, Request, System_DB, Auth) :-
               error(bad_api_document(Role, [name,action]))
              ),
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_role_from_name(System_DB,Auth,Name,Old_Role),
             put_dict(Role,Old_Role,New_Role),
@@ -2737,7 +2830,7 @@ roles_handler(put, Request, System_DB, Auth) :-
     ).
 roles_handler(get, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_roles(System_DB, Auth, Roles),
             cors_reply_json(Request, Roles)
@@ -2751,7 +2844,7 @@ roles_handler(get, Request, System_DB, Auth) :-
  */
 roles_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   uri_encoded(segment, Name, Encoded_Name),
             atom_concat('Role/',Encoded_Name,Name_Id),
@@ -2763,7 +2856,7 @@ roles_handler(delete, Name, Request, System_DB, Auth) :-
     ).
 roles_handler(get, Name, Request, System_DB, Auth) :-
     api_report_errors(
-        roles,
+        role,
         Request,
         (   api_get_role_from_name(System_DB,Auth,Name,Role),
             cors_reply_json(Request, Role)
@@ -2777,6 +2870,21 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
 :- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  methods([options,post,delete,get])]).
+:- http_handler(api(organizations/Org/users/Rest),
+                cors_handler(Method, organizations_users_handler(Org,Rest)),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+/*
+:- http_handler(api(organizations/Org/users/User),
+                cors_handler(Method, organizations_users_handler(Org,User)),
+                [method(Method),
+                 methods([options,get])]).
+:- http_handler(api(organizations/Org/users/User/databases),
+                cors_handler(Method, organizations_users_databases_handler(Org,User)),
+                [method(Method),
+                 methods([options,get])]).
+*/
 
 /*
  * organizations_handler(Mode, Request, System, Auth) is det.
@@ -2821,11 +2929,33 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
             get_dict('@id', Org, Org_Id),
             api_delete_organization(System_DB,Auth,Org_Id),
             cors_reply_json(Request,
-                            json{'@type' : "api:RolesResponse",
+                            json{'@type' : "api:OrganizationResponse",
                                  'api:status' : "api:success"})
         )
     ).
 
+/*
+ * organizations_users_handler(get, Org, Path, Request, System_DB, Auth) is det.
+ *
+ * Get all users for an organization
+ */
+organizations_users_handler(get, Org, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        organization,
+        Request,
+        (   split_atom(Path, '/', Path_List),
+            (   Path_List = ['']
+            ->  api_get_organizations_users(System_DB, Auth, Org, Users),
+                cors_reply_json(Request,Users)
+            ;   Path_List = [User]
+            ->  api_get_organizations_users_object(System_DB, Auth, Org, User, Obj),
+                cors_reply_json(Request,Obj)
+            ;   Path_List = [User,databases]
+            ->  api_get_organizations_users_databases(System_DB, Auth, Org, User, Databases),
+                cors_reply_json(Request,Databases)
+            )
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(users), cors_handler(Method, users_handler),
@@ -2841,10 +2971,14 @@ organizations_handler(delete, Name, Request, System_DB, Auth) :-
  * Manage users
  */
 users_handler(get, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    param_value_search_optional(Search, capability, boolean, false, Capability),
     api_report_errors(
         user,
         Request,
-        (   api_get_users(System_DB, Auth, Users),
+        (   api_get_users(System_DB, Auth, Users,_{capability:Capability}),
             cors_reply_json(Request, Users)
         )
     ).
@@ -2854,6 +2988,7 @@ users_handler(post, Request, System_DB, Auth) :-
               ),
               error(bad_api_document(User, [name]))
              ),
+    % should explicitly search for params...
     api_report_errors(
         user,
         Request,
@@ -2885,10 +3020,14 @@ users_handler(put, Request, System_DB, Auth) :-
  * Manage Users
  */
 users_handler(get, Name, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    param_value_search_optional(Search, capability, boolean, false, Capability),
     api_report_errors(
         user,
         Request,
-        (   api_get_user_from_name(System_DB, Auth, Name, User),
+        (   api_get_user_from_name(System_DB, Auth, Name, User, _{capability:Capability}),
             cors_reply_json(Request,User)
         )
     ).
@@ -2896,7 +3035,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
     api_report_errors(
         user,
         Request,
-        (   api_get_user_from_name(System_DB, Auth, Name, User),
+        (   api_get_user_from_name(System_DB, Auth, Name, User, _{capability:false}),
             get_dict('@id', User, User_Id),
             api_delete_user(System_DB,Auth,User_Id),
             cors_reply_json(Request,
@@ -2913,7 +3052,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
 /*
  * capabilities_handler(Mode, Request, System, Auth) is det.
  *
- * Insert an organization or update an organization
+ * grant or revoke capabilities
  */
 capabilities_handler(post, Request, System_DB, Auth) :-
     get_payload(Cap, Request),
@@ -2942,45 +3081,35 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         )
     ).
 
-%%%%%%%%%%%%%%%%%%%% Console Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(root(.), cors_handler(Method, console_handler),
-                [method(Method),
-                 methods([options,get])]).
-:- http_handler(root(db), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(home), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(clone), cors_handler(Method, console_handler),
+
+%%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+http:location(dashboard,root(dashboard),[]).
+http:location(assets,root(assets),[]).
+
+:- http_handler(root(.), redirect_to_dashboard,
+                [methods([options,get])]).
+:- http_handler(dashboard(.), cors_handler(Method, dashboard_handler),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
-:- http_handler(root(collaborate), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(newdb), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(profile), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
-                 methods([options,get])]).
-:- http_handler(root(hub), cors_handler(Method, console_handler),
-                [method(Method),
-                 prefix,
+:- http_handler(assets(.), serve_dashboard_assets,
+                [prefix,
                  methods([options,get])]).
 
-/*
- * console_handler(+Method,+Request) is det.
- */
-console_handler(get, _Request, _System_DB, _Auth) :-
-    index_template(Index),
-    throw(http_reply(bytes('text/html', Index))).
+serve_dashboard_assets(Request) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    serve_files_in_directory(assets, Request).
+
+redirect_to_dashboard(Request) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    http_redirect(moved_temporary, dashboard(.), Request).
+
+dashboard_handler(get, Request, _System_DB, _Auth) :-
+    do_or_die(config:dashboard_enabled,
+              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
+    http_reply_file(dashboard('index.html'), [], Request).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
@@ -3156,8 +3285,9 @@ fetch_jwt_data(Token, Username) :-
 
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
+            jwt_subject_claim_name(ClaimName),
             % replace with dict key get (or whatever it is called)
-            get_dict('http://terminusdb.com/schema/system#agent_name', PayloadDict, UsernameString),
+            get_dict(ClaimName, PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
         error(malformed_jwt_payload(Payload))).
 :- else.
@@ -3456,6 +3586,7 @@ http_read_utf8(string(String), Request) :-
     read_string(Stream, _Length, String).
 http_read_utf8(json_dict(JSON), Request) :-
     http_read_utf8(string(String), Request),
+    memberchk(content_length(_Len), Request),
     read_json_dict(String, JSON).
 
 /*
@@ -3477,7 +3608,7 @@ http_read_json_required(Output, Request) :-
  */
 http_read_json_semidet(Output, Request) :-
     json_content_type(Request),
-    memberchk(content_length(_), Request),
+    memberchk(content_length(_Len), Request),
     http_read_utf8(Output, Request).
 
 /*

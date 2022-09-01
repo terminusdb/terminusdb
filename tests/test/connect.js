@@ -13,6 +13,5 @@ describe('connect', function () {
     const agent = new Agent().auth()
     const r = await agent.get('/api/')
     expect(r.status).to.equal(200)
-    expect(r.body).to.be.an('array').that.has.lengthOf(0)
   })
 })

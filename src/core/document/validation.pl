@@ -70,6 +70,7 @@ only_needs_referential_integrity_validation(Validation_Object) :-
         instance_objects : Instance_Objects
     } :< Validation_Object,
     Schema_Objects \= [],
+    exists(validation_object_changed, Instance_Objects),
     \+ exists(validation_triple_update, Instance_Objects),
     \+ is_schemaless(Validation_Object).
 

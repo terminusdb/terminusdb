@@ -1005,12 +1005,22 @@ json_type_to_woql_path_pattern('PathTimes',JSON,Pattern,Path) :-
     json_data_to_woql_ast(N,WN),
     json_data_to_woql_ast(M,WM),
     do_or_die(
-        (WN = N_int ^^ _),
+        (   WN = N_int_Pre ^^ _,
+            (   integer(N_int_Pre)
+            ->  N_int_Pre = N_int
+            ;   number_string(N_int, N_int_Pre)
+            )
+        ),
         error(woql_syntax_error(JSON,
                                 [from|Path],
                                 N), _)),
     do_or_die(
-        (WM = M_int ^^ _),
+        (   WM = M_int_Pre ^^ _,
+            (   integer(N_int_Pre)
+            ->  M_int_Pre = M_int
+            ;   number_string(M_int, M_int_Pre)
+            )
+        ),
         error(woql_syntax_error(JSON,
                                 [to|Path],
                                 M), _)),

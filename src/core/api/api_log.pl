@@ -1,4 +1,4 @@
-:- module(api_log, [api_log/4, format_log/2]).
+:- module(api_log, [api_log/5, format_log/2]).
 
 :- use_module(core(util)).
 :- use_module(core(document)).
@@ -7,7 +7,7 @@
 :- use_module(core(transaction)).
 :- use_module(library(lists)).
 
-api_log(System_DB, Auth, Path, Log) :-
+api_log(System_DB, Auth, Path, Log, Options) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path,Branch_Descriptor),
         error(invalid_absolute_path(Path),_)),
@@ -22,7 +22,8 @@ api_log(System_DB, Auth, Path, Log) :-
     branch_head_commit(Repository_Descriptor,
                        (Branch_Descriptor.branch_name),
                        Commit_Uri),
-    commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, History_Commit_Uris),
+
+    commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, History_Commit_Uris, Options),
 
     findall(Commit_Doc,
             (   member(This_Uri, History_Commit_Uris),
