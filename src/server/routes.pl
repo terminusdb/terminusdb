@@ -359,25 +359,6 @@ test(db_force_delete_unfinalized_system_and_label, [
     \+ database_exists("admin", "foo"),
     \+ safe_open_named_graph(Store, Label, _).
 
-
-test(db_auth_test, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    add_user('TERMINUS_QA',some('password'),_User_ID),
-
-    atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ '@base' : "https://terminushub.com/document",
-                           '@schema' : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-
-    http_post(URI, json(Doc),
-              In, [json_object(dict),
-                   authorization(basic('TERMINUS_QA', "password"))]),
-    _{'api:status' : "api:success"} :< In.
-
 :- end_tests(db_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
