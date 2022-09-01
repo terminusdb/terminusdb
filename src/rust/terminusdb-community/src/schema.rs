@@ -1,4 +1,3 @@
-use crate::swipl::prelude::*;
 use crate::terminus_store::layer::*;
 use itertools;
 use lazy_init::Lazy;
@@ -230,6 +229,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         layer2.predicate_id(&predicate)
     }
 
+    #[allow(dead_code)]
     pub fn translate_object_id<L2: Layer>(&self, layer2: &L2, id: u64) -> Option<u64> {
         let object = self.layer.id_object(id).unwrap();
         match object {

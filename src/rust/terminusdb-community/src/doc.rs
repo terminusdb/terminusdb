@@ -65,7 +65,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut rdf_list_id = None;
         let mut sys_json_type_id = None;
         let mut sys_json_document_type_id = None;
-        let mut types: HashSet<u64>;
+        let types: HashSet<u64>;
         let mut document_types: HashSet<u64>;
         let unfoldables: HashSet<u64>;
         let mut enums: HashMap<u64, String>;
@@ -671,21 +671,6 @@ fn map_to_writer<W: Write>(
     } else {
         serde_json::to_writer(writer, &Value::Object(m))
     }
-}
-
-#[inline(never)]
-fn map_to_string(m: Map<String, Value>, pretty: bool) -> String {
-    if pretty {
-        serde_json::to_string_pretty(&Value::Object(m))
-            .expect("expected serialization to be possible")
-    } else {
-        Value::Object(m).to_string()
-    }
-}
-
-#[inline(never)]
-fn unify_json_string(term: &Term, s: String) -> PrologResult<()> {
-    term.unify(s)
 }
 
 fn print_document<C: QueryableContextType>(

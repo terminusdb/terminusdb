@@ -16,6 +16,3 @@ lazy_static = "1.4"
 urlencoding = "2.1"
 rayon = "1.5"
 lazy-init = "0.5"
-
-[profile.release]
-debug = 1

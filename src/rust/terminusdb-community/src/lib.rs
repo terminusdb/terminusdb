@@ -10,8 +10,6 @@ pub use swipl;
 use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
 
-use terminusdb_store_prolog::layer::*;
-
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
     /// module. This should go away as soon as some real predicates

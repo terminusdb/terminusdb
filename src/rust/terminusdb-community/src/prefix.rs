@@ -1,3 +1,4 @@
+use super::consts::*;
 use std::borrow::Cow;
 
 fn common_prefix<'a>(s1: &'a [u8], s2: &'a [u8]) -> &'a [u8] {
@@ -51,7 +52,7 @@ impl Prefix {
             Prefix::Schema(e) => e,
             Prefix::Base(e) => e,
             Prefix::Other(_, e) => e,
-            Prefix::JSON => "http://terminusdb.com/schema/json#",
+            Prefix::JSON => SYS_JSON_PREFIX,
         }
     }
 }
