@@ -897,9 +897,9 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "swipl"
-version = "0.3.9"
+version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf95680c3dda372efbfe975853bbe3f02475650e6768d6c8b36116d8b7aaad41"
+checksum = "96ca6f887750ac5f78020268a3768e39fe2f60654c25992ffda6601389d47a11"
 dependencies = [
  "lazy_static",
  "swipl-fli",

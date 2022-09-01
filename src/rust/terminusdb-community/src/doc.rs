@@ -790,13 +790,12 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     };
 
     rayon::spawn(move || {
-        iter.enumerate()
+        let _result = iter.enumerate()
             .par_bridge()
             .try_for_each_with(sender, |sender, (ix, t)| {
                 let map = doc_context2.get_id_document(t.subject);
                 sender.send((ix, map)) // failure will kill the task
-            })
-            .unwrap();
+            });
     });
 
     let mut started = false;
@@ -964,7 +963,7 @@ predicates! {
             return Ok(());
         }
 
-        // We either iterate over the document types, or iif unfold is false, we iterate over all types
+        // We either iterate over the document types, or if unfold is false, we iterate over all types
         let mut types: Vec<u64> = match doc_context.unfold {
             true => doc_context.document_types.iter().cloned().collect(),
             false => doc_context.types.iter().cloned().collect()

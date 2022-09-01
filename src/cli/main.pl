@@ -53,6 +53,8 @@ cli_toplevel :-
         Exception,
         (   Exception = error(io_error(write,user_output),_)
         ->  halt(0)
+        ;   Exception = error(rust_io_error('WriteZero',_),_)
+        ->  halt(0)
         ;   Exception = error(Error,context(prolog_stack(Stack),_)),
             print_prolog_backtrace(user_error, Stack)
         ->  format(user_error, "~NError: ~q~n~n", [Error]),
