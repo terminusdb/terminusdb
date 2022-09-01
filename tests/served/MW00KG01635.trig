@@ -1,0 +1,90 @@
+@prefix :      <http://purl.bdrc.io/ontology/core/> .
+@prefix adm:   <http://purl.bdrc.io/ontology/admin/> .
+@prefix bda:   <http://purl.bdrc.io/admindata/> .
+@prefix bdg:   <http://purl.bdrc.io/graph/> .
+@prefix bdr:   <http://purl.bdrc.io/resource/> .
+@prefix bdu:   <http://purl.bdrc.io/resource-nc/user/> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+bdg:MW00KG01635 {
+    bda:LG325A37A8250224DB
+        a                   adm:UpdateData ;
+        adm:logDate         "2007-08-24T12:24:41.038Z"^^xsd:dateTime ;
+        adm:logMessage      "released first time"@en ;
+        adm:logWho          bdu:U00016 .
+    
+    bda:LGEAD43EF0144689AD
+        a                   adm:UpdateData ;
+        adm:logDate         "2013-02-04T10:29:04.18Z"^^xsd:dateTime ;
+        adm:logMessage      "added Print type and sourcePrintery"@en ;
+        adm:logWho          bdu:U00013 .
+    
+    bda:LGF76047D28BD3D3E1
+        a                   adm:InitialDataCreation ;
+        adm:logDate         "2007-05-29T13:08:15.787Z"^^xsd:dateTime ;
+        adm:logMessage      "catalog work"@en ;
+        adm:logWho          bdu:U00016 .
+    
+    bda:LGIM6B433BA01E
+        a                   adm:UpdateData ;
+        adm:logDate         "2014-04-22T00:30:13.577Z"^^xsd:dateTime ;
+        adm:logMessage      "normalize encoding field for pub info"@en ;
+        adm:logMethod       bda:BatchMethod ;
+        adm:logWho          bdu:U00012 .
+    
+    bda:LGIMD5FAEE0C6C
+        a                   adm:UpdateData ;
+        adm:logDate         "2015-01-05T17:22:13.356Z"^^xsd:dateTime ;
+        adm:logMessage      "added hollis field to pub info"@en ;
+        adm:logMethod       bda:BatchMethod ;
+        adm:logWho          bdu:U00006 .
+    
+    bda:MW00KG01635  a      adm:AdminData ;
+        :isRoot             true ;
+        adm:adminAbout      bdr:MW00KG01635 ;
+        adm:facetIndex      10 ;
+        adm:gitPath         "0b/MW00KG01635.trig" ;
+        adm:gitRepo         bda:GR0012 ;
+        adm:graphId         bdg:MW00KG01635 ;
+        adm:logEntry        bda:LG325A37A8250224DB , bda:LGEAD43EF0144689AD , bda:LGF76047D28BD3D3E1 , bda:LGIM6B433BA01E , bda:LGIMD5FAEE0C6C ;
+        adm:metadataLegal   bda:LD_BDRC_CC0 ;
+        adm:status          bda:StatusReleased .
+    
+    bdr:ID28016DFBE64A6354
+        a                   bdr:HollisId ;
+        rdf:value           "014254116" .
+    
+    bdr:MW00KG01635  a      :Instance ;
+        skos:prefLabel      "ris med chos kyi 'byung gnas mdo tsam smos pa blo gsal mgrin pa'i mdzes rgyan/"@bo-x-ewts ;
+        <http://id.loc.gov/ontologies/bibframe/identifiedBy>
+            bdr:ID28016DFBE64A6354 ;
+        :authorshipStatement  "ces pa'ang skyabs mgon chen po'i zhabs 'debs pa mgron gnyer che chung sogs don gnyer snga phyi mang po'i ngor/ yon tan rgya mtshos dpal spungs yid dga' chos 'dzin du bris pa dge legs 'phel/"@bo-x-ewts ;
+        :biblioNote         "photocopies from original microfilm"@en ;
+        :extentStatement    "16 ff." ;
+        :hasSourcePrintery  bdr:G3JT12497 ;
+        :hasTitle           bdr:TT015B84C522935CCB , bdr:TTF05BD0D1CBB48B56 ;
+        :instanceHasReproduction  bdr:W00KG01635 ;
+        :instanceOf         bdr:WA00KG01635 ;
+        :isRoot             true ;
+        :note               bdr:NT2FE687359FD3E32F ;
+        :numberOfVolumes    1 ;
+        :printMethod        bdr:PrintMethod_Relief_WoodBlock ;
+        :script             bdr:ScriptTibt .
+    
+    bdr:NT2FE687359FD3E32F
+        a                   :Note ;
+        :noteText           "existed in microfilm folder zj13 - \n004427 (zj0000136-zj0000143)"@en .
+    
+    bdr:TT015B84C522935CCB
+        a                   :Title ;
+        rdfs:label          "ris med chos 'byung /"@bo-x-ewts .
+    
+    bdr:TTF05BD0D1CBB48B56
+        a                   :TitlePageTitle ;
+        rdfs:label          "ris med chos kyi 'byung gnas mdo tsam smos pa blo gsal mgrin pa'i mdzes rgyan/"@bo-x-ewts .
+}

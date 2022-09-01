@@ -1124,8 +1124,8 @@ merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
               (   get_dict('@properties', R2, Properties2)
               ->  (   get_dict('@properties', R1, Properties1)
                   ->  put_dict(Properties2, Properties1, Properties),
-                      put_dict(_{'@properties' : Properties}, R1, Result)
-                  ;   put_dict(_{'@properties' : Properties2}, R1, Result)
+                      put_dict(_{'@properties' : Properties}, R2, Result)
+                  ;   put_dict(_{'@properties' : Properties2}, R2, Result)
                   )
               ;   R1 = R2
               )
