@@ -790,7 +790,8 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     };
 
     rayon::spawn(move || {
-        let _result = iter.enumerate()
+        let _result = iter
+            .enumerate()
             .par_bridge()
             .try_for_each_with(sender, |sender, (ix, t)| {
                 let map = doc_context2.get_id_document(t.subject);
