@@ -1,9 +1,11 @@
-mod builder;
-mod csv;
-mod layer;
-mod named_graph;
-mod store;
+pub mod builder;
+pub mod layer;
+pub mod named_graph;
+pub mod store;
 
+mod csv;
+
+pub use swipl;
 pub use terminus_store;
 
 pub fn install(module: Option<&str>) {

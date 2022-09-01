@@ -261,9 +261,9 @@
               meta_data_version/3,
 
               % json_stream.pl
-              json_stream_start/1,
-              json_stream_end/3,
-              json_stream_write_dict/5,
+              json_stream_start/2,
+              json_stream_end/1,
+              json_stream_write_dict/3,
 
               % iana.pl
               iana/2,

@@ -1,5 +1,14 @@
+mod consts;
+mod doc;
+mod prefix;
+mod schema;
+mod types;
+mod value;
+
 use lcs;
+pub use swipl;
 use swipl::prelude::*;
+pub use terminusdb_store_prolog::terminus_store;
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -37,4 +46,5 @@ predicates! {
 
 pub fn install() {
     register_list_diff();
+    doc::register();
 }

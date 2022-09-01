@@ -7,6 +7,12 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-swipl = "0.3.6"
 lcs = "0.2.0"
+swipl = "0.3.10"
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+itertools = "0.10.3"
+serde_json = {version="1", features=["preserve_order", "arbitrary_precision"]}
+lazy_static = "1.4"
+urlencoding = "2.1"
+rayon = "1.5"
+lazy-init = "0.5"
