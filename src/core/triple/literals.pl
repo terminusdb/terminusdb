@@ -2,6 +2,7 @@
               literal_to_string/2,
               literal_to_turtle/2,
               normalise_triple/2,
+              reset_normalise_warning/0,
               object_storage/2,
               ground_object_storage/2,
               storage_object/2,
@@ -332,11 +333,26 @@ turtle_to_literal(literal(type(Type,A)),Val^^Type) :-
     atom_string(A,S),
     typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Val^^_),
     !.
-turtle_to_literal(literal(L),String@en) :-
+turtle_to_literal(literal(L),String^^'http://www.w3.org/2001/XMLSchema#string') :-
     (   atom(L)
     ->  atom_string(L,String)
     ;   L = String).
 
+:- dynamic normalise_warning_/0.
+
+set_normalise_warning :-
+    assertz(normalise_warning_).
+
+reset_normalise_warning :-
+    retractall(normalise_warning_).
+
+normalise_triple(rdf(X,P,Y,G),rdf(XF,P,YF)) :-
+    (   normalise_warning_
+    ->  true
+    ;   json_log_warning_formatted('Warning: ignoring graph ~q~n', [G]),
+        set_normalise_warning
+    ),
+    normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)).
 normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
     (   X = node(N)
     ->  atomic_list_concat(['_:',N], XF)

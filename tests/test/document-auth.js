@@ -505,7 +505,7 @@ describe('document', function () {
       it('passes insert, get JSONDocument', async function () {
         const r1 = await document.insert(agent, { instance: { a: [42, 23, 12] }, raw_json: true })
         const id = r1.body[0]
-        const r2 = await document.get(agent, { query: { id, as_list: true } })
+        const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
         expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
       })
 
@@ -600,6 +600,18 @@ describe('document', function () {
         expect(r.status).to.equal(400)
         expect(r.body['api:error']['@type']).to.equal('api:InvalidEnumValues')
       })
+    })
+
+    it('fails with 404 for nonexistent schema document', async function () {
+      const r = await document.get(agent, { query: { graph_type: 'schema', id: 'asdf' } }).unverified()
+      expect(r.status).to.equal(404)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
+    })
+
+    it('fails with 404 for nonexistent instance document', async function () {
+      const r = await document.get(agent, { query: { id: 'asdf' } }).unverified()
+      expect(r.status).to.equal(404)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
     })
   })
 })

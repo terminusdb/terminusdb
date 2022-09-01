@@ -54,7 +54,9 @@
               enum_value/3,
               update_id_field/3,
               update_captures/3,
-              capture_ref/4
+              capture_ref/4,
+              schema_document_exists/2,
+              document_exists/2
           ]).
 
 :- use_module(instance).
@@ -3330,6 +3332,22 @@ replace_schema_document(Query_Context, Document, Create, Id) :-
     !,
     query_default_collection(Query_Context, TO),
     replace_schema_document(TO, Document, Create, Id).
+
+schema_document_exists(Transaction, Id) :-
+    [Schema_RWO] = (Transaction.schema_objects),
+    Schema_Layer = (Schema_RWO.read),
+    ground(Schema_Layer),
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand_schema(Id, Prefixes, Id_Ex),
+    subject_id(Schema_Layer, Id_Ex, _).
+
+document_exists(Transaction, Id) :-
+    [Instance_RWO] = (Transaction.instance_objects),
+    Instance_Layer = (Instance_RWO.read),
+    ground(Instance_Layer),
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    subject_id(Instance_Layer, Id_Ex, _).
 
 :- begin_tests(json_stream, [concurrent(true)]).
 :- use_module(core(util)).

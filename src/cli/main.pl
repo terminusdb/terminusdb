@@ -53,6 +53,8 @@ cli_toplevel :-
         Exception,
         (   Exception = error(io_error(write,user_output),_)
         ->  halt(0)
+        ;   Exception = error(rust_io_error('WriteZero',_),_)
+        ->  halt(0)
         ;   Exception = error(Error,context(prolog_stack(Stack),_)),
             print_prolog_backtrace(user_error, Stack)
         ->  format(user_error, "~NError: ~q~n~n", [Error]),
@@ -1815,18 +1817,22 @@ run_command(doc,get, [Path], Opts) :-
     ),
     atom_number(S,Skip),
 
-    (   Minimized = true
-    ->  JSON_Options = [width(0)]
-    ;   JSON_Options = []),
+    Config = config{
+                 skip: Skip,
+                 count: Count,
+                 as_list: As_List,
+                 compress: Compress_Ids,
+                 unfold: Unfold,
+                 minimized: Minimized
+             },
 
     api_report_errors(
         get_documents,
         api_read_document_selector(
-            System_DB, Auth, Path, Graph_Type, Skip, Count,
-            As_List, Unfold, Id, Type, Compress_Ids, Query,
-            JSON_Options,
+            System_DB, Auth, Path, Graph_Type,
+            Id, Type, Query, Config,
             no_data_version, _Actual_Data_Version,
-            [L]>>(ignore((L=true,format('[')))))
+            [_L]>>true)
     ).
 run_command(role,create,[Name|Actions], _Opts) :-
     super_user_authority(Auth),
@@ -2194,14 +2200,14 @@ run_command(triples,load,[Path,File],Opts) :-
     option(author(Author), Opts),
     option(format(Format_Atom), Opts),
     atom_string(Format_Atom,Format),
-    open(File,read,Stream),
-    read_string(Stream, _, TTL),
-    close(Stream),
     api_report_errors(
         triples,
-        graph_insert(System_DB, Auth, Path, _{ message : Message,
-                                               author : Author},
-                     Format,TTL)),
+        (    open(File,read,Stream),
+             read_string(Stream, _, TTL),
+             close(Stream),
+             graph_insert(System_DB, Auth, Path, _{ message : Message,
+                                                    author : Author},
+                          Format,TTL))),
     format(current_output,'~nSuccessfully inserted triples from ~q~n',[File]).
 run_command(Command,Subcommand,_Args,_Opts) :-
     format_help(Command,Subcommand).
