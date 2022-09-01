@@ -42,6 +42,38 @@ describe('triples', function () {
     await db.delete(agent)
   })
 
+  it('passes replace schema with string literals', async function () {
+    // Create a database
+    await db.create(agent)
+    // Put the first triple
+    const turtle = `
+
+    @base <terminusdb:///schema#> .
+    @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix woql: <http://terminusdb.com/schema/woql#> .
+    @prefix json: <http://terminusdb.com/schema/json#> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    @prefix xdd: <http://terminusdb.com/schema/xdd#> .
+    @prefix vio: <http://terminusdb.com/schema/vio#> .
+    @prefix sys: <http://terminusdb.com/schema/sys#> .
+    @prefix api: <http://terminusdb.com/schema/api#> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    @prefix doc: <data/> .
+
+    <schema#Philosopher>
+      a sys:Class ;
+      <schema#name> xsd:string .
+    <terminusdb://context>
+      a sys:Context ;
+      sys:base "terminusdb:///data/" ;
+      sys:schema "terminusdb:///schema#" .
+    `
+    await triples.replaceIntoBranch(agent, turtle, { graph: 'schema' })
+    // Delete the database
+    await db.delete(agent)
+  })
+
   it('passes insert with trig', async function () {
     // Create a database
     await db.create(agent, { schema: false })
