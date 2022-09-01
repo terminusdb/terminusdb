@@ -83,7 +83,7 @@ function replace (agent, path, turtle, params) {
 
   return {
     then (resolve) {
-      resolve(request.then(api.response.verify(api.response.triples.insertSuccess)))
+      resolve(request.then(api.response.verify(api.response.triples.updateSuccess)))
     },
     fails (error) {
       return request.then(api.response.verify(api.response.triples.failure(error)))

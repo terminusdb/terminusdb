@@ -42,7 +42,7 @@ describe('triples', function () {
     await db.delete(agent)
   })
 
-  it('passes insert with string literals', async function () {
+  it('passes replace schema with string literals', async function () {
     // Create a database
     await db.create(agent)
     // Put the first triple
@@ -69,8 +69,7 @@ describe('triples', function () {
       sys:base "terminusdb:///data/" ;
       sys:schema "terminusdb:///schema#" .
     `
-    const r = await triples.replaceIntoBranch(agent, turtle, { graph: 'schema' })
-    console.log(r.body)
+    await triples.replaceIntoBranch(agent, turtle, { graph: 'schema' })
     // Delete the database
     await db.delete(agent)
   })
