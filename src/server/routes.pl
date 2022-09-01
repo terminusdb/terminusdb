@@ -509,6 +509,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
             param_value_search_or_json_optional(Search, JSON, skip, nonnegative_integer, 0, Skip),
             param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
+            param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
             param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
@@ -529,7 +530,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          as_list: As_List,
                          compress: Compress_Ids,
                          unfold: Unfold,
-                         minimized: true
+                         minimized: Minimized
                      },
 
             api_read_document_selector(
