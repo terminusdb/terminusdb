@@ -359,25 +359,6 @@ test(db_force_delete_unfinalized_system_and_label, [
     \+ database_exists("admin", "foo"),
     \+ safe_open_named_graph(Store, Label, _).
 
-
-test(db_auth_test, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-    add_user('TERMINUS_QA',some('password'),_User_ID),
-
-    atomic_list_concat([Server, '/api/db/TERMINUS_QA/TEST_DB'], URI),
-    Doc = _{ prefixes : _{ '@base' : "https://terminushub.com/document",
-                           '@schema' : "https://terminushub.com/schema"},
-             comment : "A quality assurance test",
-             label : "A label"
-           },
-
-    http_post(URI, json(Doc),
-              In, [json_object(dict),
-                   authorization(basic('TERMINUS_QA', "password"))]),
-    _{'api:status' : "api:success"} :< In.
-
 :- end_tests(db_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -427,64 +408,6 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
                                        'api:status' : "api:success"}))).
 
-:- begin_tests(triples_endpoint).
-
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-:- use_module(library(readutil)).
-:- use_module(core(document)).
-
-test(triples_update, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema(admin, 'TEST_DB'),
-    terminus_path(Path),
-    interpolate([Path, '/terminus-schema/system_instance.ttl'], TTL_File),
-    interpolate([Path, '/terminus-schema/system_schema.json'], Schema_TTL_File),
-    open(Schema_TTL_File, read, Stream),
-    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
-    create_context(Branch_Descriptor, commit_info{ author: "me", message: "something"}, Ctx),
-    with_transaction(Ctx,
-                     replace_json_schema(Ctx,Stream),
-                     _),
-    close(Stream),
-    % We actually have to create the graph before we can post to it!
-    % First make the schema graph
-
-    read_file_to_string(TTL_File, TTL, []),
-    %Server2 = 'http://127.0.0.1:6363',
-    %writeq(Server2),
-    atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/instance'], URI),
-    admin_pass(Key),
-    http_post(URI, json(_{commit_info : _{ author : "Test",
-                                           message : "testing" },
-                          turtle : TTL}),
-              _In, [json_object(dict),
-                    status_code(_),
-                    authorization(basic(admin, Key)),
-                    cert_verify_hook(cert_accept_any),
-                    reply_header(_)]),
-
-    findall(A-B-C,
-            ask(Branch_Descriptor,
-                t(A, B, C, "schema")),
-            Triples),
-
-    memberchk('http://terminusdb.com/schema/system#Capability'-(rdf:type)-(sys:'Class'), Triples),
-
-    findall(A-B-C,
-            ask(Branch_Descriptor,
-                t(A, B, C)),
-            Triples2),
-
-    memberchk(system-(rdf:type)-'http://terminusdb.com/schema/system#SystemDatabase', Triples2).
-
-
-:- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
@@ -2327,84 +2250,6 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
                                        'api:status' : "api:success"})
         )).
 
-:- begin_tests(squash_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-:- use_module(library(terminus_store)).
-:- use_module(library(ordsets)).
-
-test(squash_a_branch, [
-         setup((setup_temp_server(State, Server),
-                create_db_without_schema("admin", "test"))),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    Path = "admin/test",
-    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
-
-    resolve_absolute_string_descriptor(Path, Descriptor),
-
-    Commit_Info_1 = commit_info{
-                      author : "me",
-                      message: "first commit"
-                  },
-
-    create_context(Descriptor, Commit_Info_1, Context1),
-
-    with_transaction(
-        Context1,
-        ask(Context1,
-            insert(a,b,c)),
-        _),
-
-    Commit_Info_2 = commit_info{
-                        author : "me",
-                        message: "second commit"
-                    },
-
-    create_context(Descriptor, Commit_Info_2, Context2),
-
-    with_transaction(
-        Context2,
-        ask(Context2,
-            insert(e,f,g)),
-        _),
-
-    descriptor_commit_id_uri((Descriptor.repository_descriptor),
-                             Descriptor,
-                             Commit_Id, _Commit_Uri),
-
-    Commit_Info = commit_info{
-                      author : "me",
-                      message: "Squash"
-                  },
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ commit_info: Commit_Info}),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-    JSON = _{'@type':"api:SquashResponse",
-             'api:commit': New_Commit_Path,
-             'api:old_commit' : Old_Commit_Path,
-             'api:status':"api:success"},
-    resolve_absolute_string_descriptor(New_Commit_Path, Commit_Descriptor),
-    open_descriptor(Commit_Descriptor, Transaction),
-
-    [RWO] = (Transaction.instance_objects),
-    Layer = (RWO.read),
-    \+ parent(Layer,_),
-    findall(X-Y-Z,ask(Commit_Descriptor,t(X,Y,Z)), Triples),
-    sort(Triples,Sorted),
-    sort([a-b-c,e-f-g],Correct),
-    ord_seteq(Sorted, Correct),
-
-    resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
-    commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
-
-:- end_tests(squash_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
@@ -2431,76 +2276,6 @@ reset_handler(post, Path, Request, System_DB, Auth) :-
         (   api_reset(System_DB, Auth, Path, Ref),
             cors_reply_json(Request, _{'@type' : 'api:ResetResponse',
                                        'api:status' : "api:success"}))).
-
-:- begin_tests(reset_endpoint).
-:- use_module(core(util/test_utils)).
-:- use_module(library(terminus_store)).
-
-test(reset, [
-         setup((setup_temp_server(State, Server),
-                create_db_without_schema("admin", "testdb"))),
-         cleanup(teardown_temp_server(State))
-     ]) :-
-
-    Path = "admin/testdb",
-
-    resolve_absolute_string_descriptor(Path,Descriptor),
-    Repository_Descriptor = (Descriptor.repository_descriptor),
-
-    super_user_authority(Auth),
-
-    askable_context(Descriptor, system_descriptor{}, Auth,
-                    commit_info{ author : "me",
-                                 message : "commit 1" },
-                    Context),
-
-    with_transaction(
-        Context,
-        ask(Context,
-            insert(a,b,c)),
-        _),
-
-    descriptor_commit_id_uri(Repository_Descriptor,
-                             Descriptor,
-                             Commit_Id,
-                             _Commit_Uri),
-
-    askable_context(Descriptor, system_descriptor{}, Auth,
-                    commit_info{ author : "me",
-                                 message : "commit 2" },
-                    Context2),
-
-    with_transaction(
-        Context2,
-        ask(Context2,
-            insert(e,f,g)),
-        _),
-
-    resolve_relative_descriptor(Repository_Descriptor,
-                                ["commit",Commit_Id],
-                                Commit_Descriptor),
-
-    resolve_absolute_string_descriptor(Ref,Commit_Descriptor),
-
-    atomic_list_concat([Server, '/api/reset/admin/testdb'], URI),
-
-    admin_pass(Key),
-    http_post(URI,
-              json(_{ commit_descriptor : Ref }),
-              JSON,
-              [json_object(dict),authorization(basic(admin,Key))]),
-
-    JSON = _{'@type':"api:ResetResponse",
-             'api:status':"api:success"},
-
-    findall(X-Y-Z,
-            ask(Descriptor,
-                t(X,Y,Z)),
-            Triples),
-
-    [a-b-c] = Triples.
-
-:- end_tests(reset_endpoint).
 
 
 %%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%

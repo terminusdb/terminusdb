@@ -100,6 +100,42 @@ jobs:
         run: |
           npm install-ci-test
 
+
+  integration_tests_non_parallel:
+    name: Integration tests (non-parallel)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: terminusdb-server-docker-image
+
+      - name: Run server
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker run \
+            --detach \
+            --net=host \
+            terminusdb/terminusdb-server:local
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
+      - uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
+      - name: Run tests
+        working-directory: tests
+        env:
+          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_PARALLELIZE_ENABLED: false
+        run: |
+          npm install-ci-test
+
   integration_tests_header:
     name: Integration tests (header)
     runs-on: ubuntu-latest
