@@ -427,64 +427,6 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:TriplesInsertResponse',
                                        'api:status' : "api:success"}))).
 
-:- begin_tests(triples_endpoint).
-
-:- use_module(core(util/test_utils)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/http_open)).
-:- use_module(library(readutil)).
-:- use_module(core(document)).
-
-test(triples_update, [
-         setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
-     ])
-:-
-    create_db_without_schema(admin, 'TEST_DB'),
-    terminus_path(Path),
-    interpolate([Path, '/terminus-schema/system_instance.ttl'], TTL_File),
-    interpolate([Path, '/terminus-schema/system_schema.json'], Schema_TTL_File),
-    open(Schema_TTL_File, read, Stream),
-    make_branch_descriptor(admin, 'TEST_DB', Branch_Descriptor),
-    create_context(Branch_Descriptor, commit_info{ author: "me", message: "something"}, Ctx),
-    with_transaction(Ctx,
-                     replace_json_schema(Ctx,Stream),
-                     _),
-    close(Stream),
-    % We actually have to create the graph before we can post to it!
-    % First make the schema graph
-
-    read_file_to_string(TTL_File, TTL, []),
-    %Server2 = 'http://127.0.0.1:6363',
-    %writeq(Server2),
-    atomic_list_concat([Server, '/api/triples/admin/TEST_DB/local/branch/main/instance'], URI),
-    admin_pass(Key),
-    http_post(URI, json(_{commit_info : _{ author : "Test",
-                                           message : "testing" },
-                          turtle : TTL}),
-              _In, [json_object(dict),
-                    status_code(_),
-                    authorization(basic(admin, Key)),
-                    cert_verify_hook(cert_accept_any),
-                    reply_header(_)]),
-
-    findall(A-B-C,
-            ask(Branch_Descriptor,
-                t(A, B, C, "schema")),
-            Triples),
-
-    memberchk('http://terminusdb.com/schema/system#Capability'-(rdf:type)-(sys:'Class'), Triples),
-
-    findall(A-B-C,
-            ask(Branch_Descriptor,
-                t(A, B, C)),
-            Triples2),
-
-    memberchk(system-(rdf:type)-'http://terminusdb.com/schema/system#SystemDatabase', Triples2).
-
-
-:- end_tests(triples_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
