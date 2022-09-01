@@ -8,4 +8,12 @@ ignore_predicate("dateTime/11").
 % until we can figure out what actually causes this.
 ignore_predicate("woql_compile/5").
 ignore_predicate("woql_compile/3").
+
 ignore_file("./src/library").
+
+% These predicates come from rust. We need a better way to ignore those
+ignore_predicate("get_document_context/5").
+ignore_predicate("print_all_documents_json/5").
+ignore_predicate("par_print_all_documents_json/5").
+ignore_predicate("print_all_documents_json_by_type/6").
+ignore_predicate("par_print_all_documents_json_by_type/6").
