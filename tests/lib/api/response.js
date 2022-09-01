@@ -360,6 +360,13 @@ module.exports = {
         'api:status': 'api:success',
       },
     },
+    updateSuccess: {
+      status: 200,
+      body: {
+        '@type': 'api:TriplesUpdateResponse',
+        'api:status': 'api:success',
+      },
+    },
     failure (errorObject) {
       const result = {
         status: 400,
