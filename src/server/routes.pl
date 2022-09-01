@@ -509,7 +509,6 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
             param_value_search_or_json_optional(Search, JSON, skip, nonnegative_integer, 0, Skip),
             param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
-            param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
             param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
@@ -522,9 +521,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_json_optional(JSON, query, object, _, Query),
 
-            (   Minimized = true
-            ->  JSON_Options = [width(0)]
-            ;   JSON_Options = []),
+            JSON_Options = [width(0)],
 
             read_data_version_header(Request, Requested_Data_Version),
             api_read_document_selector(
@@ -3395,11 +3392,11 @@ write_cors_headers(Request) :-
 
 cors_reply_json(Request, JSON) :-
     write_cors_headers(Request),
-    reply_json(JSON, [json_object(dict)]).
+    reply_json(JSON, [json_object(dict), width(0)]).
 
 cors_reply_json(Request, JSON, Options) :-
     write_cors_headers(Request),
-    reply_json(JSON, [json_object(dict)|Options]).
+    reply_json(JSON, [width(0), json_object(dict)|Options]).
 
 /**
  * cors_json_stream_write_headers_(+Request, +Data_Version, +As_List) is det.
