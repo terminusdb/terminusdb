@@ -521,8 +521,6 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_json_optional(JSON, query, object, _, Query),
 
-            JSON_Options = [width(0)],
-
             read_data_version_header(Request, Requested_Data_Version),
 
             Config = config{
@@ -531,7 +529,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          as_list: As_List,
                          compress: Compress_Ids,
                          unfold: Unfold,
-                         minimized: Minimized
+                         minimized: true
                      },
 
             api_read_document_selector(
