@@ -333,7 +333,7 @@ turtle_to_literal(literal(type(Type,A)),Val^^Type) :-
     atom_string(A,S),
     typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Val^^_),
     !.
-turtle_to_literal(literal(L),String@en) :-
+turtle_to_literal(literal(L),String^^xsd:string) :-
     (   atom(L)
     ->  atom_string(L,String)
     ;   L = String).
