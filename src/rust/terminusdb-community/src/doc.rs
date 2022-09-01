@@ -43,7 +43,6 @@ pub struct GetDocumentContext<L: Layer> {
 }
 
 impl<L: Layer> GetDocumentContext<L> {
-    #[inline(never)]
     pub fn new<SL: Layer>(
         schema: &SL,
         instance: Option<L>,
@@ -203,12 +202,10 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    #[inline(always)]
     fn layer(&self) -> &L {
         self.layer.as_ref().unwrap()
     }
 
-    #[inline(never)]
     pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
         if self.layer.is_some() {
             if let Some(id) = self.layer().subject_id(iri) {
@@ -221,7 +218,6 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    #[inline(never)]
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
@@ -241,7 +237,6 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    #[inline(never)]
     fn add_field(&self, obj: &mut Map<String, Value>, key: &str, value: Value, is_set: bool) {
         // add a field, but if the field is already there, make it a collection
         match obj.entry(key) {
@@ -271,7 +266,6 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    #[inline(never)]
     fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<L>> {
         RdfListIterator {
             layer: self.layer(),
@@ -283,7 +277,6 @@ impl<L: Layer> GetDocumentContext<L> {
         .peekable()
     }
 
-    #[inline(never)]
     fn get_array_iter(&self, stack_entry: &mut StackEntry<L>) -> ArrayIterator<L> {
         if let StackEntry::Document { fields, .. } = stack_entry {
             let mut it = None;
@@ -306,7 +299,6 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    #[inline(never)]
     fn get_doc_stub(
         &self,
         id: u64,
@@ -387,7 +379,6 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    #[inline(never)]
     pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
         if self.layer.is_none() {
             panic!("expected id to point at document: {}", id);
@@ -542,7 +533,6 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
 }
 
 impl<'a, L: Layer> StackEntry<'a, L> {
-    #[inline(never)]
     fn peek(&mut self) -> Option<u64> {
         match self {
             Self::Document { fields, .. } => fields.as_mut().unwrap().peek().map(|t| t.object),
@@ -551,7 +541,6 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
-    #[inline(never)]
     fn into_value(self) -> Value {
         match self {
             Self::Document { doc, .. } => Value::Object(doc),
@@ -560,7 +549,6 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
-    #[inline(never)]
     fn integrate(&mut self, context: &GetDocumentContext<L>, child: StackEntry<'a, L>) {
         match child {
             StackEntry::Array(a) => self.integrate_array(context, a),
@@ -568,7 +556,6 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
-    #[inline(never)]
     fn integrate_array(&mut self, context: &GetDocumentContext<L>, array: ArrayStackEntry<'a, L>) {
         // self has to be an object, let's make sure of that.
         match self {
@@ -588,7 +575,6 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
-    #[inline(never)]
     fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value) {
         match self {
             Self::Document {
@@ -625,7 +611,6 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     }
 }
 
-#[inline(never)]
 fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
     elements.sort_by(|(i1, _), (i2, _)| i1.cmp(i2));
 
@@ -680,7 +665,6 @@ wrapped_arc_blob!(
     defaults
 );
 
-#[inline(never)]
 fn map_to_writer<W: Write>(
     writer: W,
     m: Map<String, Value>,
