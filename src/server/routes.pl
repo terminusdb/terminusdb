@@ -522,15 +522,20 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_json_optional(JSON, query, object, _, Query),
 
-            (   Minimized = true
-            ->  JSON_Options = [width(0)]
-            ;   JSON_Options = []),
-
             read_data_version_header(Request, Requested_Data_Version),
+
+            Config = config{
+                         skip: Skip,
+                         count: Count,
+                         as_list: As_List,
+                         compress: Compress_Ids,
+                         unfold: Unfold,
+                         minimized: Minimized
+                     },
+
             api_read_document_selector(
-                System_DB, Auth, Path, Graph_Type, Skip, Count,
-                As_List, Unfold, Id, Type, Compress_Ids, Query,
-                JSON_Options,
+                System_DB, Auth, Path, Graph_Type,
+                Id, Type, Query, Config,
                 Requested_Data_Version, Actual_Data_Version,
                 cors_json_stream_write_headers_(Request, Actual_Data_Version)
             )
@@ -3412,8 +3417,8 @@ cors_json_stream_write_headers_(Request, Data_Version, As_List) :-
     write_cors_headers(Request),
     write_data_version_header(Data_Version),
     (   As_List = true
-    ->  % Write the JSON header and the list start character (left square bracket).
-        format("Content-type: application/json; charset=UTF-8~n~n[")
+    ->  % Write the JSON header
+        format("Content-type: application/json; charset=UTF-8~n~n")
     ;   % Write the JSON stream header.
         format("Content-type: application/json; stream=true; charset=UTF-8~n~n")).
 
