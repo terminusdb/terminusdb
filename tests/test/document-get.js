@@ -273,8 +273,6 @@ describe('document-get', function () {
       [{ bodyString: '{"prefixed":1}' }, 'prefixed', 'boolean (true, false)', 1],
       [{ queryString: 'unfold=' }, 'unfold', 'boolean (true, false)', ''],
       [{ bodyString: '{"unfold":"false"}' }, 'unfold', 'boolean (true, false)', 'false'],
-      [{ queryString: 'minimized="3"' }, 'minimized', 'boolean (true, false)', '"3"'],
-      [{ bodyString: '{"minimized":0}' }, 'minimized', 'boolean (true, false)', 0],
       [{ queryString: 'skip=true' }, 'skip', 'non-negative integer', true],
       [{ bodyString: '{"skip":[]}' }, 'skip', 'non-negative integer', []],
       [{ bodyString: '{"skip":-1000}' }, 'skip', 'non-negative integer', -1000],
