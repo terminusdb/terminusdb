@@ -50,6 +50,7 @@ impl<L: Layer> GetDocumentContext<L> {
         unfold: bool,
         minimized: bool,
     ) -> GetDocumentContext<L> {
+        let schema_query_context = SchemaQueryContext::new(schema);
         let prefixes;
         if compress {
             prefixes = prefix_contracter_from_schema_layer(schema);
@@ -74,17 +75,21 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut sys_value_id = None;
 
         if let Some(ref instance) = instance {
-            let schema_document_type_ids = get_document_type_ids_from_schema(schema);
-            let schema_type_ids = get_type_ids_from_schema(schema);
-            let schema_unfoldable_ids = get_unfoldable_ids_from_schema(schema);
-            let schema_enum_ids = get_enum_ids_from_schema(schema);
+            let schema_document_type_ids = schema_query_context.get_document_type_ids_from_schema();
+            let schema_type_ids = schema_query_context.get_type_ids_from_schema();
+            let schema_unfoldable_ids = schema_query_context.get_unfoldable_ids_from_schema();
+            let schema_enum_ids = schema_query_context.get_enum_ids_from_schema();
 
-            document_types =
-                schema_to_instance_types(schema, instance, schema_document_type_ids).collect();
-            types = schema_to_instance_types(schema, instance, schema_type_ids).collect();
+            document_types = schema_query_context
+                .schema_to_instance_types(instance, schema_document_type_ids)
+                .collect();
+            types = schema_query_context
+                .schema_to_instance_types(instance, schema_type_ids)
+                .collect();
 
-            unfoldables =
-                schema_to_instance_types(schema, instance, schema_unfoldable_ids).collect();
+            unfoldables = schema_query_context
+                .schema_to_instance_types(instance, schema_unfoldable_ids)
+                .collect();
 
             enums = HashMap::new();
             for schema_enum_id in schema_enum_ids {
@@ -99,12 +104,14 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
             }
 
-            let schema_set_pairs = get_set_pairs_from_schema(schema);
+            let schema_set_pairs = schema_query_context.get_set_pairs_from_schema();
             set_pairs = HashSet::new();
             for (schema_type_id, schema_predicate_id) in schema_set_pairs {
-                if let Some(type_id) = translate_subject_id(schema, instance, schema_type_id) {
+                if let Some(type_id) =
+                    schema_query_context.translate_subject_id(instance, schema_type_id)
+                {
                     if let Some(predicate_id) =
-                        translate_predicate_id(schema, instance, schema_predicate_id)
+                        schema_query_context.translate_predicate_id(instance, schema_predicate_id)
                     {
                         set_pairs.insert((type_id, predicate_id));
                     }
@@ -749,6 +756,132 @@ predicates! {
     }
 
     #[module("$doc")]
+    semidet fn print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term) {
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
+        let type_name: PrologText = type_term.get()?;
+        let typ = doc_context.layer().subject_id(&type_name);
+        if typ.is_none() {
+            // type not found, so no objects of that type
+            return Ok(());
+        }
+
+        let typ = typ.unwrap();
+
+        let mut skip: u64 = skip_term.get_ex()?;
+        let mut count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
+        let mut started = false;
+
+        for t in doc_context.layer().triples_o(typ) {
+            if skip != 0 {
+                // skip
+                skip -= 1;
+                continue;
+            }
+            if let Some(count) = count.as_mut() {
+                if *count == 0 {
+                    break;
+                }
+                *count -= 1;
+            }
+
+            if Some(t.predicate) != doc_context.rdf_type_id {
+                continue;
+            }
+
+            let map = doc_context.get_id_document(t.subject);
+            print_document(context, &mut stream, map, as_list, doc_context.minimized, &mut started)?;
+
+        }
+
+        Ok(())
+    }
+
+    #[module("$doc")]
+    semidet fn par_print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term) {
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
+        let minimized = doc_context.minimized;
+        let skip: u64 = skip_term.get_ex()?;
+        let count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
+
+        let type_name: PrologText = type_term.get()?;
+        let typ = doc_context.layer().subject_id(&type_name);
+        if typ.is_none() {
+            // type not found, so no objects of that type
+            return Ok(());
+        }
+        let typ = typ.unwrap();
+
+        // not just this type, but all its subtypes have to be retrieved
+
+
+
+        let (sender, receiver) = mpsc::channel();
+
+        // cloning here cause we need to use the doc context from two places.
+        // Since we are dealing with an arc, the clone is cheap.
+        let doc_context2: Arc<_> = doc_context.0.clone();
+
+        let rdf_type_id = doc_context.rdf_type_id;
+        let iter = doc_context.layer().triples_o(typ)
+            .filter(move |t| Some(t.predicate) == rdf_type_id)
+            .skip(skip as usize);
+        let iter = if let Some(count) = count {
+            itertools::Either::Left(iter.take(count as usize))
+        }
+        else {
+            itertools::Either::Right(iter)
+        };
+
+        rayon::spawn(move || {
+            iter.enumerate()
+                .par_bridge()
+                .try_for_each_with(sender, |sender, (ix, t)| {
+                    let map = doc_context2.get_id_document(t.subject);
+                    sender.send((ix, map)) // failure will kill the task
+                }).unwrap();
+        });
+
+        let mut started = false;
+
+        let mut result = BinaryHeap::new();
+        let mut cur = 0;
+        while let Ok((ix,map)) = receiver.recv() {
+            if ix == cur {
+                print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
+
+                cur += 1;
+                while result.peek().map(|HeapEntry {index,..}|index == &cur).unwrap_or(false) {
+                    let HeapEntry {index: _index, value } = result.pop().unwrap();
+
+                    print_document(context, &mut stream, value, as_list, minimized, &mut started)?;
+
+                    cur += 1;
+                }
+            }
+            else {
+                result.push(HeapEntry { index: ix, value: map });
+            }
+        }
+
+        assert!(result.is_empty());
+
+        Ok(())
+    }
+    #[module("$doc")]
     semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
@@ -901,6 +1034,8 @@ pub fn register() {
     register_print_document_json();
     register_print_all_documents_json();
     register_par_print_all_documents_json();
+    register_print_all_documents_json_by_type();
+    register_par_print_all_documents_json_by_type();
 }
 
 #[cfg(test)]

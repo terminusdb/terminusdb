@@ -1,14 +1,253 @@
 use crate::swipl::prelude::*;
 use crate::terminus_store::layer::*;
 use itertools;
+use lazy_init::Lazy;
 
 use std::collections::{HashMap, HashSet};
 
 use super::consts::*;
 use super::prefix::*;
-use super::types::*;
 
-use terminusdb_store_prolog::layer::WrappedLayer;
+pub struct SchemaQueryContext<'a, L: Layer> {
+    layer: &'a L,
+    inheritance_graph: Lazy<InheritanceGraph>,
+    reverse_inheritance_graph: Lazy<ReverseInheritanceGraph>,
+}
+
+impl<'a, L: Layer> SchemaQueryContext<'a, L> {
+    pub fn new(layer: &'a L) -> Self {
+        Self {
+            layer,
+            inheritance_graph: Lazy::new(),
+            reverse_inheritance_graph: Lazy::new(),
+        }
+    }
+
+    fn get_inheritance_graph_(&self) -> InheritanceGraph {
+        if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
+            let mut result = HashMap::new();
+            for triple in self.layer.triples_p(inherits_id) {
+                let entry = result
+                    .entry(triple.subject)
+                    .or_insert_with(|| HashSet::new());
+                entry.insert(triple.object);
+            }
+
+            InheritanceGraph(result)
+        } else {
+            InheritanceGraph(HashMap::with_capacity(0))
+        }
+    }
+
+    pub fn get_inheritance_graph(&self) -> &InheritanceGraph {
+        self.inheritance_graph
+            .get_or_create(|| self.get_inheritance_graph_())
+    }
+
+    fn get_reverse_inheritance_graph_(&self) -> ReverseInheritanceGraph {
+        if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
+            let mut result = HashMap::new();
+            for triple in self.layer.triples_p(inherits_id) {
+                let entry = result
+                    .entry(triple.object)
+                    .or_insert_with(|| HashSet::new());
+                entry.insert(triple.subject);
+            }
+
+            ReverseInheritanceGraph(result)
+        } else {
+            ReverseInheritanceGraph(HashMap::with_capacity(0))
+        }
+    }
+
+    pub fn get_reverse_inheritance_graph(&self) -> &ReverseInheritanceGraph {
+        self.reverse_inheritance_graph
+            .get_or_create(|| self.get_reverse_inheritance_graph_())
+    }
+
+    fn get_subdocument_ids_from_schema(&self) -> HashSet<u64> {
+        let mut result = HashSet::new();
+        let inheritance = self.get_reverse_inheritance_graph();
+        let mut work: Vec<_> = get_direct_subdocument_ids_from_schema(self.layer).collect();
+        loop {
+            if let Some(cur) = work.pop() {
+                if !result.insert(cur) {
+                    // we already found this type.
+                    continue;
+                }
+
+                if let Some(children) = inheritance.get(&cur) {
+                    work.extend(children);
+                }
+            } else {
+                break;
+            }
+        }
+
+        result
+    }
+
+    pub fn get_unfoldable_ids_from_schema(&self) -> HashSet<u64> {
+        let mut result = HashSet::new();
+        let inheritance = self.get_reverse_inheritance_graph();
+        let mut work: Vec<_> = get_direct_unfoldable_ids_from_schema(self.layer).collect();
+        loop {
+            if let Some(cur) = work.pop() {
+                if !result.insert(cur) {
+                    // we already found this type.
+                    continue;
+                }
+
+                if let Some(children) = inheritance.get(&cur) {
+                    work.extend(children);
+                }
+            } else {
+                break;
+            }
+        }
+
+        result
+    }
+
+    pub fn get_set_pairs_from_schema<'b>(&'b self) -> impl Iterator<Item = (u64, u64)> + 'b {
+        let sys_set_id = self.layer.object_node_id(SYS_SET);
+        if sys_set_id.is_none() {
+            return itertools::Either::Left(std::iter::empty());
+        }
+        let sys_set_id = sys_set_id.unwrap();
+
+        let rdf_type_id = self.layer.predicate_id(RDF_TYPE);
+        if rdf_type_id.is_none() {
+            return itertools::Either::Left(std::iter::empty());
+        }
+        let rdf_type_id = rdf_type_id.unwrap();
+
+        let inheritance_graph = self.get_inheritance_graph();
+        itertools::Either::Right(
+            self.layer
+                .triples_o(sys_set_id)
+                .filter(move |t| t.predicate == rdf_type_id)
+                .map(move |t| {
+                    let set_origin = self
+                        .layer
+                        .triples_o(t.subject)
+                        .next()
+                        .expect("Expected set to be connected");
+
+                    let mut subjects: Vec<u64> = vec![set_origin.subject];
+                    let predicate = set_origin.predicate;
+                    let mut r = Vec::new();
+
+                    while let Some(s) = subjects.pop() {
+                        r.push((s, predicate));
+                        if let Some(children) = inheritance_graph.get(&s) {
+                            subjects.extend(children.iter());
+                        }
+                    }
+
+                    r.into_iter()
+                })
+                .flatten(),
+        )
+    }
+
+    pub fn get_document_type_ids_from_schema(&self) -> impl Iterator<Item = u64> {
+        let subdocument_ids = self.get_subdocument_ids_from_schema();
+
+        self.get_type_ids_from_schema()
+            .filter(move |t| !subdocument_ids.contains(t))
+    }
+
+    pub fn get_enum_ids_from_schema(&self) -> HashSet<u64> {
+        let mut result = HashSet::new();
+        let sys_enum_id = self.layer.object_node_id(SYS_ENUM);
+        let rdf_type_id = self.layer.predicate_id(RDF_TYPE);
+        let rdf_first_id = self.layer.predicate_id(RDF_FIRST);
+        let rdf_rest_id = self.layer.predicate_id(RDF_REST);
+        let rdf_nil_id = self.layer.object_node_id(RDF_NIL);
+
+        if sys_enum_id.is_none() || rdf_type_id.is_none() {
+            return result;
+        }
+        let sys_enum_id = sys_enum_id.unwrap();
+        let rdf_type_id = rdf_type_id.unwrap();
+
+        for t in self.layer.triples_o(sys_enum_id) {
+            if t.predicate == rdf_type_id {
+                // we found an enum type!
+                // it is going to have a value field pointing at a list of possible enum values
+                let sys_value_id = self.layer.predicate_id(SYS_VALUE).unwrap();
+                let value_list_id = self
+                    .layer
+                    .single_triple_sp(t.subject, sys_value_id)
+                    .unwrap()
+                    .object;
+
+                result.extend(RdfListIterator {
+                    rdf_first_id,
+                    rdf_rest_id,
+                    rdf_nil_id,
+                    layer: self.layer,
+                    cur: value_list_id,
+                });
+            }
+        }
+
+        result
+    }
+
+    pub fn get_type_ids_from_schema(&self) -> impl Iterator<Item = u64> {
+        let type_id_opt = self.layer.predicate_id(RDF_TYPE);
+        if type_id_opt.is_none() {
+            // no rdf:type? then there cannot be any type definitions.
+            return itertools::Either::Left(std::iter::empty());
+        }
+
+        let type_id = type_id_opt.unwrap();
+        let class_id = self.layer.object_node_id(SYS_CLASS);
+        let tagged_union_id = self.layer.object_node_id(SYS_TAGGED_UNION);
+        let foreign_id = self.layer.object_node_id(SYS_FOREIGN);
+
+        itertools::Either::Right(
+            self.layer
+                .triples_p(type_id)
+                .filter(move |t| {
+                    Some(t.object) == class_id
+                        || Some(t.object) == tagged_union_id
+                        || Some(t.object) == foreign_id
+                })
+                .map(|t| t.subject),
+        )
+    }
+
+    pub fn translate_subject_id<L2: Layer>(&self, layer2: &L2, id: u64) -> Option<u64> {
+        let subject = self.layer.id_subject(id).unwrap();
+        layer2.subject_id(&subject)
+    }
+
+    pub fn translate_predicate_id<L2: Layer>(&self, layer2: &L2, id: u64) -> Option<u64> {
+        let predicate = self.layer.id_predicate(id).unwrap();
+        layer2.predicate_id(&predicate)
+    }
+
+    pub fn translate_object_id<L2: Layer>(&self, layer2: &L2, id: u64) -> Option<u64> {
+        let object = self.layer.id_object(id).unwrap();
+        match object {
+            ObjectType::Node(n) => layer2.object_node_id(&n),
+            ObjectType::Value(v) => layer2.object_value_id(&v),
+        }
+    }
+
+    pub fn schema_to_instance_types<'b, L2: 'b + Layer, I: 'b + IntoIterator<Item = u64>>(
+        &'b self,
+        instance_layer: &'b L2,
+        type_iter: I,
+    ) -> impl Iterator<Item = u64> + 'b {
+        type_iter
+            .into_iter()
+            .filter_map(move |t| self.translate_subject_id(instance_layer, t))
+    }
+}
 
 fn get_direct_subdocument_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64> {
     if let Some(subdocument_id) = layer.predicate_id(SYS_SUBDOCUMENT) {
@@ -24,50 +263,6 @@ fn get_direct_unfoldable_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<I
     } else {
         itertools::Either::Right(std::iter::empty())
     }
-}
-
-fn get_subdocument_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
-    let mut result = HashSet::new();
-    let inheritance = get_reverse_inheritance_graph(layer);
-    let mut work: Vec<_> = get_direct_subdocument_ids_from_schema(layer).collect();
-    loop {
-        if let Some(cur) = work.pop() {
-            if !result.insert(cur) {
-                // we already found this type.
-                continue;
-            }
-
-            if let Some(children) = inheritance.get(&cur) {
-                work.extend(children);
-            }
-        } else {
-            break;
-        }
-    }
-
-    result
-}
-
-pub fn get_unfoldable_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
-    let mut result = HashSet::new();
-    let inheritance = get_reverse_inheritance_graph(layer);
-    let mut work: Vec<_> = get_direct_unfoldable_ids_from_schema(layer).collect();
-    loop {
-        if let Some(cur) = work.pop() {
-            if !result.insert(cur) {
-                // we already found this type.
-                continue;
-            }
-
-            if let Some(children) = inheritance.get(&cur) {
-                work.extend(children);
-            }
-        } else {
-            break;
-        }
-    }
-
-    result
 }
 
 pub struct RdfListIterator<'a, L: Layer> {
@@ -105,215 +300,23 @@ impl<'a, L: Layer> Iterator for RdfListIterator<'a, L> {
     }
 }
 
-fn get_list_ids<'a, L: Layer>(layer: &'a L, list: u64) -> impl Iterator<Item = u64> + 'a {
-    let rdf_first_id = layer.predicate_id(RDF_FIRST);
-    let rdf_rest_id = layer.predicate_id(RDF_REST);
-    let rdf_nil_id = layer.object_node_id(RDF_NIL);
+pub struct InheritanceGraph(HashMap<u64, HashSet<u64>>);
+pub struct ReverseInheritanceGraph(HashMap<u64, HashSet<u64>>);
 
-    RdfListIterator {
-        rdf_first_id,
-        rdf_rest_id,
-        rdf_nil_id,
-        layer,
-        cur: list,
+impl std::ops::Deref for InheritanceGraph {
+    type Target = HashMap<u64, HashSet<u64>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-pub fn get_enum_ids_from_schema<L: Layer>(layer: &L) -> HashSet<u64> {
-    let mut result = HashSet::new();
-    let sys_enum_id = layer.object_node_id(SYS_ENUM);
-    let rdf_type_id = layer.predicate_id(RDF_TYPE);
-    let rdf_first_id = layer.predicate_id(RDF_FIRST);
-    let rdf_rest_id = layer.predicate_id(RDF_REST);
-    let rdf_nil_id = layer.object_node_id(RDF_NIL);
+impl std::ops::Deref for ReverseInheritanceGraph {
+    type Target = HashMap<u64, HashSet<u64>>;
 
-    if sys_enum_id.is_none() || rdf_type_id.is_none() {
-        return result;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
-    let sys_enum_id = sys_enum_id.unwrap();
-    let rdf_type_id = rdf_type_id.unwrap();
-
-    for t in layer.triples_o(sys_enum_id) {
-        if t.predicate == rdf_type_id {
-            // we found an enum type!
-            // it is going to have a value field pointing at a list of possible enum values
-            let sys_value_id = layer.predicate_id(SYS_VALUE).unwrap();
-            let value_list_id = layer
-                .single_triple_sp(t.subject, sys_value_id)
-                .unwrap()
-                .object;
-
-            result.extend(RdfListIterator {
-                rdf_first_id,
-                rdf_rest_id,
-                rdf_nil_id,
-                layer,
-                cur: value_list_id,
-            });
-        }
-    }
-
-    result
-}
-
-// TODO this doesn't take into account subsumptions.
-// types that inherit should be included here
-pub fn get_set_pairs_from_schema<'a, L: Layer>(
-    layer: &'a L,
-) -> impl Iterator<Item = (u64, u64)> + 'a {
-    let sys_set_id = layer.object_node_id(SYS_SET);
-    if sys_set_id.is_none() {
-        return itertools::Either::Left(std::iter::empty());
-    }
-    let sys_set_id = sys_set_id.unwrap();
-
-    let rdf_type_id = layer.predicate_id(RDF_TYPE);
-    if rdf_type_id.is_none() {
-        return itertools::Either::Left(std::iter::empty());
-    }
-    let rdf_type_id = rdf_type_id.unwrap();
-
-    let inheritance_graph = get_inheritance_graph(layer);
-    itertools::Either::Right(
-        layer
-            .triples_o(sys_set_id)
-            .filter(move |t| t.predicate == rdf_type_id)
-            .map(move |t| {
-                let set_origin = layer
-                    .triples_o(t.subject)
-                    .next()
-                    .expect("Expected set to be connected");
-
-                let mut subjects: Vec<u64> = vec![set_origin.subject];
-                let predicate = set_origin.predicate;
-                let mut r = Vec::new();
-
-                while let Some(s) = subjects.pop() {
-                    r.push((s, predicate));
-                    if let Some(children) = inheritance_graph.get(&s) {
-                        subjects.extend(children.iter());
-                    }
-                }
-
-                r.into_iter()
-            })
-            .flatten(),
-    )
-}
-
-fn get_inheritance_graph<L: Layer>(layer: &L) -> HashMap<u64, HashSet<u64>> {
-    if let Some(inherits_id) = layer.predicate_id(SYS_INHERITS) {
-        let mut result = HashMap::new();
-        for triple in layer.triples_p(inherits_id) {
-            let entry = result
-                .entry(triple.subject)
-                .or_insert_with(|| HashSet::new());
-            entry.insert(triple.object);
-        }
-
-        result
-    } else {
-        HashMap::with_capacity(0)
-    }
-}
-
-fn get_reverse_inheritance_graph<L: Layer>(layer: &L) -> HashMap<u64, HashSet<u64>> {
-    if let Some(inherits_id) = layer.predicate_id(SYS_INHERITS) {
-        let mut result = HashMap::new();
-        for triple in layer.triples_p(inherits_id) {
-            let entry = result
-                .entry(triple.object)
-                .or_insert_with(|| HashSet::new());
-            entry.insert(triple.subject);
-        }
-
-        result
-    } else {
-        HashMap::with_capacity(0)
-    }
-}
-
-pub fn get_type_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64> {
-    let type_id_opt = layer.predicate_id(RDF_TYPE);
-    if type_id_opt.is_none() {
-        // no rdf:type? then there cannot be any type definitions.
-        return itertools::Either::Left(std::iter::empty());
-    }
-
-    let type_id = type_id_opt.unwrap();
-    let class_id = layer.object_node_id(SYS_CLASS);
-    let tagged_union_id = layer.object_node_id(SYS_TAGGED_UNION);
-    let foreign_id = layer.object_node_id(SYS_FOREIGN);
-
-    itertools::Either::Right(
-        layer
-            .triples_p(type_id)
-            .filter(move |t| {
-                Some(t.object) == class_id
-                    || Some(t.object) == tagged_union_id
-                    || Some(t.object) == foreign_id
-            })
-            .map(|t| t.subject),
-    )
-}
-
-pub fn get_document_type_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64> {
-    let subdocument_ids = get_subdocument_ids_from_schema(layer);
-
-    get_type_ids_from_schema(layer).filter(move |t| !subdocument_ids.contains(t))
-}
-
-pub fn get_types_from_schema<L: Layer>(layer: &L) -> Vec<String> {
-    get_type_ids_from_schema(layer)
-        .map(|t| layer.id_subject(t).unwrap())
-        .collect()
-}
-
-pub fn get_document_types_from_schema<L: Layer>(layer: &L) -> Vec<String> {
-    get_document_type_ids_from_schema(layer)
-        .map(|t| layer.id_subject(t).unwrap())
-        .collect()
-}
-
-pub fn translate_subject_id<L1: Layer, L2: Layer>(
-    layer1: &L1,
-    layer2: &L2,
-    id: u64,
-) -> Option<u64> {
-    let subject = layer1.id_subject(id).unwrap();
-    layer2.subject_id(&subject)
-}
-
-pub fn translate_predicate_id<L1: Layer, L2: Layer>(
-    layer1: &L1,
-    layer2: &L2,
-    id: u64,
-) -> Option<u64> {
-    let predicate = layer1.id_predicate(id).unwrap();
-    layer2.predicate_id(&predicate)
-}
-
-pub fn translate_object_id<L1: Layer, L2: Layer>(layer1: &L1, layer2: &L2, id: u64) -> Option<u64> {
-    let object = layer1.id_object(id).unwrap();
-    match object {
-        ObjectType::Node(n) => layer2.object_node_id(&n),
-        ObjectType::Value(v) => layer2.object_value_id(&v),
-    }
-}
-
-pub fn schema_to_instance_types<
-    'a,
-    L1: 'a + Layer,
-    L2: 'a + Layer,
-    I: 'a + IntoIterator<Item = u64>,
->(
-    schema_layer: &'a L1,
-    instance_layer: &'a L2,
-    type_iter: I,
-) -> impl Iterator<Item = u64> + 'a {
-    type_iter
-        .into_iter()
-        .filter_map(move |t| translate_subject_id(schema_layer, instance_layer, t))
 }
 
 fn triple_str_to_string(input: &str) -> &str {
@@ -378,48 +381,4 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
         // TODO proper error
         panic!("invalid schema");
     }
-}
-
-predicates! {
-    #[module("$moo")]
-    semidet fn transaction_types(context, transaction_term, types_term) {
-        if let Some(layer) = transaction_schema_layer(context, transaction_term)? {
-            let types = get_types_from_schema(&layer);
-            types_term.unify(types.as_slice())
-        }
-        else {
-            fail()
-        }
-    }
-    #[module("$moo")]
-    semidet fn transaction_doctypes(context, transaction_term, types_term) {
-        if let Some(layer) = transaction_schema_layer(context, transaction_term)? {
-            let types = get_document_types_from_schema(&layer);
-            types_term.unify(types.as_slice())
-        }
-        else {
-            fail()
-        }
-    }
-
-    #[module("$moo")]
-    semidet fn layer_types(_context, layer_term, types_term) {
-        let layer: WrappedLayer = layer_term.get()?;
-        let types = get_types_from_schema(&*layer);
-        types_term.unify(types.as_slice())
-    }
-
-    #[module("$moo")]
-    semidet fn layer_doctypes(_context, layer_term, types_term) {
-        let layer: WrappedLayer = layer_term.get()?;
-        let types = get_document_types_from_schema(&*layer);
-        types_term.unify(types.as_slice())
-    }
-}
-
-pub fn register() {
-    register_transaction_types();
-    register_transaction_doctypes();
-    register_layer_types();
-    register_layer_doctypes();
 }

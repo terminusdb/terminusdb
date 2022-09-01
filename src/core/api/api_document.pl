@@ -129,6 +129,20 @@ api_print_documents(instance, Transaction, Config, _Stream_Started) :-
     ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list))
     ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list))).
 
+api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :-
+    forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
+           json_stream_write_dict(Config, Stream_Started, Document)).
+api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+
+    database_prefixes(Transaction, Prefixes),
+    % TODO errors on unknown prefix
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+
+    (   parallelize_enabled
+    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))
+    ;   '$doc':print_all_documents_json(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
+
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
               error(document_not_found(Id), _)).
@@ -452,8 +466,7 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query,
     json_stream_start(Config, Stream_Started),
 
     (   ground(Type)
-    ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ->  api_print_documents_by_type(Graph_Type, Transaction, Config, Type, Stream_Started)
     ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
     ),
 

@@ -50,6 +50,7 @@
               replace_context_document/2,
               schema_document_exists/2,
               document_exists/2,
+              prefix_expand_schema/3,
 
               % instance.pl
               is_instance/3,

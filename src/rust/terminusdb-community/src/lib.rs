@@ -44,21 +44,9 @@ predicates! {
 
         diff.unify(vec.as_slice())
     }
-
-    #[module("$moo")]
-    semidet fn transaction_instance_layer(context, transaction_term, layer_term) {
-        if let Some(layer) = types::transaction_instance_layer(context, transaction_term)? {
-            layer_term.unify(WrappedLayer(layer))
-        }
-        else {
-            fail()
-        }
-    }
 }
 
 pub fn install() {
     register_list_diff();
-    register_transaction_instance_layer();
-    schema::register();
     doc::register();
 }
