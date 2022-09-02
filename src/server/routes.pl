@@ -378,7 +378,11 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
     ->  atom_string(Format_Atom,Format)
     ;   Format = "turtle"
     ),
-    memberchk(accept(Accepted), Request),
+
+    (   memberchk(accept(Accepted), Request)
+    ->  true
+    ;   Accepted = []),
+
     api_report_errors(
         triples,
         Request,
