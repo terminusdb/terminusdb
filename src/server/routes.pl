@@ -378,11 +378,22 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
     ->  atom_string(Format_Atom,Format)
     ;   Format = "turtle"
     ),
+    memberchk(accept(Accepted), Request),
     api_report_errors(
         triples,
         Request,
         (   graph_dump(System_DB, Auth, Path, Format, String),
-            cors_reply_json(Request, String))).
+            % Accept: */*
+            % Somehow media(_330/_332,[],1.0,[]), passes this
+            (   [media(Type/SubType,_, _, _)] = Accepted,
+                var(Type),
+                var(SubType)
+            ->  cors_reply_json(Request, String)
+            ;   memberchk(media(text/turtle,_,_,_), Accepted)
+            ->  format('Content-type: text/turtle~n', []),
+                format('Status: 200 OK~n~n', []),
+                format(String, [])
+            ;   cors_reply_json(Request, String)))).
 triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
     do_or_die(_{ turtle : TTL,

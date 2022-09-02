@@ -112,7 +112,8 @@ describe('triples', function () {
   // TODO: Create test for this, it responds with an application/json type now... which it isn't.
   // See issue: https://github.com/terminusdb/terminusdb/issues/981
   it('responds with a turtle mimetype', async function () {
-    this.skip()
+    const response = await agent.get(api.path.triplesSystem()).set('Accept', 'text/turtle')
+    expect(response.headers['content-type']).to.equal('text/turtle; charset=UTF-8')
   })
 
   it('responds with proper status code on anonymous request', async function () {
