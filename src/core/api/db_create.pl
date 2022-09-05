@@ -1,6 +1,7 @@
 :- module(db_create, [
               create_db_unfinalized/10,
               create_db/9,
+              create_db/10,
               create_schema/3,
               create_ref_layer/1,
               finalize_db/1,
@@ -188,6 +189,9 @@ validate_prefixes(Prefixes) :-
                      error(invalid_uri_prefix(Prefix_Name, Prefix_Value), _))).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes) :-
+    create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, _).
+
+create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
     create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
 
     % update system with finalized
