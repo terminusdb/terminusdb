@@ -239,9 +239,10 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
             param_value_json_optional(JSON, public, boolean, false, Public),
             param_value_json_optional(JSON, schema, boolean, true, Schema),
 
-            create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
+            create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes, DB_Uri),
 
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
+                                       'api:database_uri' : DB_Uri,
                                        'api:status' : 'api:success'}))).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
