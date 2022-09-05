@@ -89,6 +89,7 @@
               super_user_authority/1,
 
               % triplestore
+              safe_graph_name_length_ok/1,
               safe_create_named_graph/3,
               safe_named_graph_exists/2,
               safe_open_named_graph/3,

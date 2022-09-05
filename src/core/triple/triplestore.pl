@@ -1,4 +1,5 @@
 :- module(triplestore, [
+              safe_graph_name_length_ok/1,
               safe_create_named_graph/3,
               safe_named_graph_exists/2,
               safe_open_named_graph/3,
@@ -188,6 +189,18 @@ storage(Triple_Store) :-
 safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
+
+/*
+ * graph_name_valid(+Graph_ID) is semidet.
+ *
+ * Succeeds if the given name for a graph can be used, and fails otherwise.
+ * A graph name is bad if it is too long, cause we cannot create a
+ * label file in that case.
+ */
+safe_graph_name_length_ok(Graph_ID) :-
+    www_form_encode(Graph_ID,Safe_Graph_ID),
+    atom_length(Safe_Graph_ID, Len),
+    Len < 250.
 
 /*
  * safe_named_graph_exists(+Store,+Graph_ID) is semidet.
