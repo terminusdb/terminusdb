@@ -3,6 +3,7 @@ const { Agent, api, db, document, util, woql } = require('../lib')
 
 const randomType0 = util.randomString()
 const randomType1 = util.randomString()
+const randomType2 = util.randomString()
 
 describe('woql-auth', function () {
   let agent
@@ -195,6 +196,55 @@ describe('woql-auth', function () {
         expect(r.body.inserts).to.equal(0)
         expect(r.body.transaction_retry_count).to.equal(0)
       }
+    })
+  })
+
+  describe('key type: Lexical', function () {
+    const schema = {
+      '@id': randomType2,
+      '@key': { '@type': 'Lexical', '@fields': ['label'] },
+      '@type': 'Class',
+      label: 'xsd:string',
+    }
+
+    before(async function () {
+      await document.insert(agent, { schema })
+    })
+
+    function insertTemplate () {
+      return {
+        '@type': 'InsertDocument',
+        document: {
+          '@type': 'Value',
+          dictionary: {
+            '@type': 'DictionaryTemplate',
+            data: [
+              {
+                '@type': 'FieldValuePair',
+                field: 'label',
+                value: {
+                  '@type': 'Value',
+                  data: { '@type': 'xsd:string', '@value': 'test' },
+                },
+              },
+              {
+                '@type': 'FieldValuePair',
+                field: '@type',
+                value: {
+                  '@type': 'Value',
+                  data: { '@type': 'xsd:string', '@value': randomType2 },
+                },
+              },
+            ],
+          },
+        },
+      }
+    }
+
+    it('fails double insert', async function () {
+      await woql.post(agent, insertTemplate())
+      const r = await woql.post(agent, insertTemplate()).unverified()
+      expect(r.body['api:error']).to.have.property('@type').that.equals('api:DocumentIdAlreadyExists')
     })
   })
 
