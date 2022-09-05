@@ -83,7 +83,7 @@ describe('capabilities', function () {
     const roleName = util.randomString()
 
     // user
-    const result1 = await agent
+    await agent
       .post('/api/users')
       .send({
         name: userName,
@@ -91,10 +91,10 @@ describe('capabilities', function () {
       })
 
     // org
-    const result2 = await agent.post(`/api/organizations/${orgName}`)
+    await agent.post(`/api/organizations/${orgName}`)
 
     // role
-    const result3 = await agent
+    await agent
       .post('/api/roles')
       .send({
         name: roleName,
@@ -136,7 +136,7 @@ describe('capabilities', function () {
     const roleName = util.randomString()
 
     // user
-    const result1 = await agent
+    await agent
       .post('/api/users')
       .send({
         name: userName,
@@ -144,7 +144,7 @@ describe('capabilities', function () {
       })
 
     // role
-    const result3 = await agent
+    await agent
       .post('/api/roles')
       .send({
         name: roleName,

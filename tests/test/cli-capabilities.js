@@ -40,7 +40,6 @@ describe('cli-capabilities', function () {
   })
 
   it('passes grant and revoke database', async function () {
-    const orgName = util.randomString()
     const dbName = util.randomString()
     const userName = util.randomString()
     const roleName = util.randomString()
