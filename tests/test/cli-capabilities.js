@@ -35,7 +35,6 @@ describe('cli-capabilities', function () {
     const result1 = await exec(`./terminusdb.sh capability grant ${userName} ${orgName} ${roleName} --scope_type=organization`)
     expect(result1.stdout).to.match(new RegExp(`^Granted.*${roleName}.*to.*${userName}.*over.*${orgName}.*`))
 
-
     const result2 = await exec(`./terminusdb.sh capability revoke ${userName} ${orgName} ${roleName} --scope_type=organization`)
     expect(result2.stdout).to.match(/^Capability successfully revoked/)
   })

@@ -58,7 +58,7 @@ describe('capabilities', function () {
         operation: 'grant',
         scope: orgId,
         user: userId,
-        roles: [roleId]
+        roles: [roleId],
       })
     expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
     expect(result4.status).to.equal(200)
@@ -69,7 +69,7 @@ describe('capabilities', function () {
         operation: 'revoke',
         scope: orgId,
         user: userId,
-        roles: [roleId]
+        roles: [roleId],
       })
 
     expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
@@ -111,7 +111,7 @@ describe('capabilities', function () {
         scope: orgName,
         user: userName,
         roles: [roleName],
-        scope_type: 'organization'
+        scope_type: 'organization',
       })
     expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
     expect(result4.status).to.equal(200)
@@ -123,7 +123,7 @@ describe('capabilities', function () {
         scope: orgName,
         user: userName,
         roles: [roleName],
-        scope_type: 'organization'
+        scope_type: 'organization',
       })
 
     expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
@@ -165,7 +165,7 @@ describe('capabilities', function () {
         scope: `${agent.user}/${agent.dbName}`,
         user: userName,
         roles: [roleName],
-        scope_type: 'database'
+        scope_type: 'database',
       })
 
     expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
@@ -178,7 +178,7 @@ describe('capabilities', function () {
         scope: `${agent.user}/${agent.dbName}`,
         user: userName,
         roles: [roleName],
-        scope_type: 'database'
+        scope_type: 'database',
       })
 
     expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
@@ -228,7 +228,7 @@ describe('capabilities', function () {
         operation: 'grant',
         scope: orgId,
         user: userId,
-        roles: [roleId]
+        roles: [roleId],
       })
 
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')
@@ -293,7 +293,7 @@ describe('capabilities', function () {
         operation: 'grant',
         scope: orgId,
         user: userId,
-        roles: [roleId]
+        roles: [roleId],
       })
 
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')
@@ -350,7 +350,7 @@ describe('capabilities', function () {
         operation: 'grant',
         scope: orgId,
         user: userId,
-        roles: [roleId]
+        roles: [roleId],
       })
 
     const userPass = Buffer.from(`${userName}:${userName}`).toString('base64')
