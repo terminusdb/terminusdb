@@ -118,7 +118,7 @@ connect_handler(get, Request, System_DB, Auth) :-
             Databases),
 
     write_cors_headers(Request),
-    reply_json(Databases).
+    reply_json(Databases, [width(0)]).
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -378,11 +378,26 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
     ->  atom_string(Format_Atom,Format)
     ;   Format = "turtle"
     ),
+
+    (   memberchk(accept(Accepted), Request)
+    ->  true
+    ;   Accepted = []),
+
     api_report_errors(
         triples,
         Request,
         (   graph_dump(System_DB, Auth, Path, Format, String),
-            cors_reply_json(Request, String))).
+            % Accept: */*
+            % Somehow media(_330/_332,[],1.0,[]), passes this
+            (   [media(Type/SubType,_, _, _)] = Accepted,
+                var(Type),
+                var(SubType)
+            ->  cors_reply_json(Request, String)
+            ;   memberchk(media(text/turtle,_,_,_), Accepted)
+            ->  format('Content-type: text/turtle~n', []),
+                format('Status: 200 OK~n~n', []),
+                format(String, [])
+            ;   cors_reply_json(Request, String)))).
 triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
     do_or_die(_{ turtle : TTL,
@@ -497,7 +512,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            reply_json(Ids),
+            reply_json(Ids, [width(0)]),
             nl
         )).
 
@@ -565,7 +580,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            reply_json(Ids),
+            reply_json(Ids, [width(0)]),
             nl
         )).
 
@@ -608,7 +623,7 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
             },
             api_class_frame(System_DB, Auth, Path, Class, Frame, Options),
             write_cors_headers(Request),
-            reply_json(Frame)
+            reply_json(Frame, [width(0)])
         )
     ).
 
@@ -661,7 +676,7 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            reply_json_dict(Response)
+            reply_json_dict(Response, [width(0)])
         )).
 
 
@@ -694,7 +709,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
-                  'api:status' : 'api:success'})
+                  'api:status' : 'api:success'}, [width(0)])
         )).
 
 :- begin_tests(clone_endpoint).
@@ -827,7 +842,7 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
                 _{'@type' : 'api:FetchRequest',
                   'api:status' : 'api:success',
                   'api:head_has_changed' : Head_Has_Updated,
-                  'api:head' : New_Head_Layer_Id}))).
+                  'api:head' : New_Head_Layer_Id}, [width(0)]))).
 
 :- begin_tests(fetch_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1116,7 +1131,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
                          Incomplete_Reply,
                          Reply)
             ;   Reply = Incomplete_Reply),
-            cors_reply_json(Request, Reply, [status(200)]))).
+            cors_reply_json(Request, Reply, [status(200), width(0)]))).
 
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1337,7 +1352,7 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request,
                             _{'@type' : 'api:UnpackResponse',
                               'api:status' : "api:success"},
-                            [status(200)])
+                            [status(200), width(0)])
         )).
 
 %:- begin_tests(unpack_endpoint).
@@ -1370,7 +1385,7 @@ tus_auth_wrapper(Goal,Request) :-
                            'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                            'api:message' : 'Incorrect authentication information'
                           },
-                         [status(401)]))),
+                         [status(401), width(0)]))),
     !.
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1413,7 +1428,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
 
             cors_reply_json(Request,
                             Response,
-                            [status(200)]))).
+                            [status(200), width(0)]))).
 
 :- begin_tests(push_endpoint).
 :- use_module(core(util/test_utils)).
@@ -1723,7 +1738,7 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
             put_dict(Result,JSON_Base,JSON_Response),
             cors_reply_json(Request,
                             JSON_Response,
-                            [status(200)]))).
+                            [status(200), width(0)]))).
 
 :- begin_tests(pull_endpoint, []).
 :- use_module(core(util/test_utils)).
@@ -2927,7 +2942,7 @@ cors_handler(Method, Goal, Options, R) :-
                                    'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
                                    'api:message' : 'Incorrect authentication information'
                                   },
-                                 [status(401)]))))),
+                                 [width(0), status(401)]))))),
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
@@ -2937,7 +2952,7 @@ cors_handler(_Method, Goal, _Options, R) :-
                  'api:error' : _{'@type' : 'api:APIEndpointFailed'},
                  'api:message' : Msg
                 },
-               [status(500)]).
+               [status(500), width(0)]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
 :- meta_predicate cors_catch(+, 0).
@@ -2955,7 +2970,7 @@ cors_catch(Request, _Goal) :-
     % Probably should extract the path from Request
     reply_json(_{'api:status' : 'api:failure',
                  'api:message' :'Unexpected failure in request handler'},
-               [status(500)]).
+               [status(500), width(0)]).
 
 call_http_handler(Method, Goal, Request, System_Database, Auth) :-
     strip_module(Goal, Module, PlainGoal),
@@ -2968,35 +2983,35 @@ call_http_handler(Method, Goal, Request, System_Database, Auth) :-
 
 customise_exception(reply_json(M,Status)) :-
     reply_json(M,
-               [status(Status)]).
+               [status(Status), width(0)]).
 customise_exception(reply_json(M)) :-
     customise_exception(reply_json(M,200)).
 customise_exception(error(E)) :-
     generic_exception_jsonld(E,JSON),
     json_http_code(JSON,Status),
-    reply_json(JSON,[status(Status)]).
+    reply_json(JSON,[status(Status), width(0)]).
 customise_exception(error(E,_)) :-
     generic_exception_jsonld(E,JSON),
     json_http_code(JSON,Status),
-    reply_json(JSON,[status(Status)]).
+    reply_json(JSON,[status(Status), width(0)]).
 customise_exception(http_reply(method_not_allowed(JSON))) :-
-    reply_json(JSON,[status(405)]).
+    reply_json(JSON,[status(405), width(0)]).
 customise_exception(http_reply(not_found(JSON))) :-
-    reply_json(JSON,[status(404)]).
+    reply_json(JSON,[status(404), width(0)]).
 customise_exception(http_reply(authorize(JSON))) :-
-    reply_json(JSON,[status(401)]).
+    reply_json(JSON,[status(401), width(0)]).
 customise_exception(http_reply(not_acceptable(JSON))) :-
-    reply_json(JSON,[status(406)]).
+    reply_json(JSON,[status(406), width(0)]).
 customise_exception(time_limit_exceeded) :-
     reply_json(_{'api:status' : 'api:failure',
                  'api:message' : 'Connection timed out'
                },
-               [status(408)]).
+               [status(408), width(0)]).
 customise_exception(error(E)) :-
     format(atom(EM),'Error: ~q', [E]),
     reply_json(_{'api:status' : 'api:server_error',
                  'api:message' : EM},
-               [status(500)]).
+               [status(500), width(0)]).
 customise_exception(error(E, CTX)) :-
     json_log_error_formatted('~N[Exception] ~q~n',[error(E,CTX)]),
     (   CTX = context(prolog_stack(Stack),_)
@@ -3007,7 +3022,7 @@ customise_exception(error(E, CTX)) :-
     format(atom(EM),'Error: ~q~n~s~n', [E, Ctx_String]),
     reply_json(_{'api:status' : 'api:server_error',
                  'api:message' : EM},
-               [status(500)]).
+               [status(500), width(0)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
 customise_exception(E) :-
@@ -3175,11 +3190,11 @@ write_cors_headers(Request) :-
 
 cors_reply_json(Request, JSON) :-
     write_cors_headers(Request),
-    reply_json(JSON, [json_object(dict)]).
+    reply_json(JSON, [json_object(dict), width(0)]).
 
 cors_reply_json(Request, JSON, Options) :-
     write_cors_headers(Request),
-    reply_json(JSON, [json_object(dict)|Options]).
+    reply_json(JSON, [width(0), json_object(dict)|Options]).
 
 /**
  * cors_json_stream_write_headers_(+Request, +Data_Version, +As_List) is det.
