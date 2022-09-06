@@ -713,11 +713,8 @@ Grant ROLE1 ... ROLEN over SCOPE to USER
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
-  * `-i`, `--ids`=[value]:
-  Should the User, Scope and Role be treated as IDs or names
-
   * `-s`, `--scope_type`, `--scope-type`=[value]:
-  Should the scope be interpreted as a `database` (default) or an `organization`
+  Should the scope be interpreted as a `database` (default) or an `organization`. If `ids` is specified then the parameters are assumed to be ids rather than names.
 
 ### capability revoke
 
@@ -728,11 +725,8 @@ Revoke ROLE1 ... ROLEN over SCOPE from USER
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
-  * `-i`, `--ids`=[value]:
-  Should the User, Scope and Role be treated as IDs or names
-
   * `-s`, `--scope_type`, `--scope-type`=[value]:
-  Should the scope be interpreted as a `database` (default) or an `organization`
+  Should the scope be interpreted as a `database` (default) or an `organization`. If `ids` is specified then the parameters are assumed to be ids rather than names.
 
 ### store init
 

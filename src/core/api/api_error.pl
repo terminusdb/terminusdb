@@ -349,6 +349,14 @@ api_error_jsonld_(create_db, error(invalid_uri_prefix(Prefix_Name, Prefix_Value)
                              'api:prefix_name' : Prefix_Name,
                              'api:prefix_value' : Prefix_Value},
              'api:message' : Msg}.
+api_error_jsonld_(create_db, error(database_name_too_long(Organization, Database), _), JSON) :-
+    format(string(Msg), "The combination of organization ~s and database ~s results in a database name that is too long.", [Organization, Database]),
+    JSON = _{'@type' : 'api:DbCreateErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:DatabaseNameTooLong',
+                             'api:organization_name' : Organization,
+                             'api:database_value' : Database},
+             'api:message' : Msg}.
 %% DB Delete
 api_error_jsonld_(delete_db,error(database_not_finalized(Organization,Database), _),JSON) :-
     format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),

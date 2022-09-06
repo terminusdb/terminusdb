@@ -15,7 +15,7 @@ describe('capabilities', function () {
     expect(resultFails.body['api:error']['api:user_name']).to.equal('Frobian')
   })
 
-  it('passes grant and revoke', async function () {
+  it('passes grant and revoke by ids', async function () {
     const agent = new Agent().auth()
     const orgName = util.randomString()
     const userName = util.randomString()
@@ -60,7 +60,6 @@ describe('capabilities', function () {
         user: userId,
         roles: [roleId],
       })
-
     expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
     expect(result4.status).to.equal(200)
 
@@ -71,6 +70,115 @@ describe('capabilities', function () {
         scope: orgId,
         user: userId,
         roles: [roleId],
+      })
+
+    expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
+    expect(result5.status).to.equal(200)
+  })
+
+  it('passes grant and revoke organization by name', async function () {
+    const agent = new Agent().auth()
+    const orgName = util.randomString()
+    const userName = util.randomString()
+    const roleName = util.randomString()
+
+    // user
+    await agent
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
+
+    // org
+    await agent.post(`/api/organizations/${orgName}`)
+
+    // role
+    await agent
+      .post('/api/roles')
+      .send({
+        name: roleName,
+        action: ['meta_read_access', 'meta_write_access',
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
+      })
+
+    const result4 = await agent
+      .post('/api/capabilities')
+      .send({
+        operation: 'grant',
+        scope: orgName,
+        user: userName,
+        roles: [roleName],
+        scope_type: 'organization',
+      })
+    expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
+    expect(result4.status).to.equal(200)
+
+    const result5 = await agent
+      .post('/api/capabilities')
+      .send({
+        operation: 'revoke',
+        scope: orgName,
+        user: userName,
+        roles: [roleName],
+        scope_type: 'organization',
+      })
+
+    expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
+    expect(result5.status).to.equal(200)
+  })
+
+  it('passes grant and revoke db by name', async function () {
+    const agent = new Agent().auth()
+    const userName = util.randomString()
+    const roleName = util.randomString()
+
+    // user
+    await agent
+      .post('/api/users')
+      .send({
+        name: userName,
+        password: userName,
+      })
+
+    // role
+    await agent
+      .post('/api/roles')
+      .send({
+        name: roleName,
+        action: ['meta_read_access', 'meta_write_access',
+          'instance_read_access', 'instance_write_access',
+          'schema_read_access', 'schema_write_access',
+          'create_database', 'delete_database'],
+      })
+
+    // Create the db
+    await db.create(agent)
+
+    // Capability grant
+    const result4 = await agent
+      .post('/api/capabilities')
+      .send({
+        operation: 'grant',
+        scope: `${agent.user}/${agent.dbName}`,
+        user: userName,
+        roles: [roleName],
+        scope_type: 'database',
+      })
+
+    expect(result4.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })
+    expect(result4.status).to.equal(200)
+
+    const result5 = await agent
+      .post('/api/capabilities')
+      .send({
+        operation: 'revoke',
+        scope: `${agent.user}/${agent.dbName}`,
+        user: userName,
+        roles: [roleName],
+        scope_type: 'database',
       })
 
     expect(result5.body).to.deep.equal({ '@type': 'api:CapabilityResponse', 'api:status': 'api:success' })

@@ -239,9 +239,10 @@ db_handler(post, Organization, DB, Request, System_DB, Auth) :-
             param_value_json_optional(JSON, public, boolean, false, Public),
             param_value_json_optional(JSON, schema, boolean, true, Schema),
 
-            create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes),
+            create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Prefixes, DB_Uri),
 
             cors_reply_json(Request, _{'@type' : 'api:DbCreateResponse',
+                                       'api:database_uri' : DB_Uri,
                                        'api:status' : 'api:success'}))).
 db_handler(delete,Organization,DB,Request, System_DB, Auth) :-
     /* DELETE: Delete database */
@@ -2862,17 +2863,25 @@ capabilities_handler(post, Request, System_DB, Auth) :-
     api_report_errors(
         capability,
         Request,
-        (   Op = "revoke"
-        ->  api_revoke_capability(System_DB,Auth,Cap),
-            cors_reply_json(Request,
-                            json{'@type' : "api:CapabilityResponse",
-                                 'api:status' : "api:success"})
-        ;   Op = "grant"
-        ->  api_grant_capability(System_DB,Auth,Cap),
-            cors_reply_json(Request,
-                            json{'@type' : "api:CapabilityResponse",
-                                 'api:status' : "api:success"})
-        ;   throw(error(unknown_capabilities_operation(Op)))
+        (
+            (   get_dict(scope_type, Cap, Scope_Type_String)
+            ->  atom_string(Scope_Type, Scope_Type_String),
+                put_dict(_{ scope_type : Scope_Type}, Cap, Grant_Doc),
+                grant_document_to_ids(System_DB, Auth, Grant_Doc, Cap_Ids)
+            ;   Cap = Cap_Ids
+            ),
+            (   Op = "revoke"
+            ->  api_revoke_capability(System_DB,Auth,Cap_Ids),
+                cors_reply_json(Request,
+                                json{'@type' : "api:CapabilityResponse",
+                                     'api:status' : "api:success"})
+            ;   Op = "grant"
+            ->  api_grant_capability(System_DB,Auth,Cap_Ids),
+                cors_reply_json(Request,
+                                json{'@type' : "api:CapabilityResponse",
+                                     'api:status' : "api:success"})
+            ;   throw(error(unknown_capabilities_operation(Op)))
+            )
         )
     ).
 

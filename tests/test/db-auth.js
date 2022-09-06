@@ -20,7 +20,8 @@ describe('db-auth', function () {
 
   it('passes create with no comment', async function () {
     const bodyString = '{"label":"hello"}'
-    await db.create(agent, { bodyString })
+    const result = await db.create(agent, { bodyString })
+    expect(result.body).to.have.property('api:database_uri')
     await db.delete(agent)
   })
 

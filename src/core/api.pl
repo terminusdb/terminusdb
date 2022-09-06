@@ -13,6 +13,7 @@
 
               % db_create.pl
               create_db/9,
+              create_db/10,
               create_db_unfinalized/10,
               create_schema/3,
               create_ref_layer/1,
