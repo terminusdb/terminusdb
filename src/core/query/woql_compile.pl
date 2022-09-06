@@ -32,7 +32,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
-
+:- use_module(core(api), [call_catch_document_mutation/2]).
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
@@ -1106,26 +1106,34 @@ compile_wf(get_document(Doc_ID,Doc),
     peek(S0).
 compile_wf(replace_document(Doc),(
                freeze(Guard,
-                      replace_document(S0, DocE, _)))) -->
+                      call_catch_document_mutation(
+                          DocE,
+                          replace_document(S0, DocE, _))))) -->
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
 compile_wf(replace_document(Doc,X),(
                freeze(Guard,
-                      replace_document(S0, DocE, URI)))) -->
+                      call_catch_document_mutation(
+                          DocE,
+                          replace_document(S0, DocE, URI))))) -->
     resolve(X,URI),
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
 compile_wf(insert_document(Doc),(
                freeze(Guard,
-                      insert_document(S0, DocE, _URI)))) -->
+                      call_catch_document_mutation(
+                          DocE,
+                          insert_document(S0, DocE, _URI))))) -->
     resolve(Doc,DocE),
     view(update_guard, Guard),
     peek(S0).
 compile_wf(insert_document(Doc,X),(
                freeze(Guard,
-                      insert_document(S0, DocE, URI)))) -->
+                      call_catch_document_mutation(
+                          DocE,
+                          insert_document(S0, DocE, URI))))) -->
     resolve(X,URI),
     resolve(Doc,DocE),
     view(update_guard, Guard),
