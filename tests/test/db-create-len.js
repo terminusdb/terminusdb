@@ -8,11 +8,6 @@ describe('db-create-len', function () {
     agent = new Agent().auth()
   })
 
-  beforeEach(function () {
-    // Use a unique database for each test.
-    agent.dbName = util.randomString()
-  })
-
   it('passes db creation for a name that is just short enough', async function () {
     const namePrefix = util.randomString()
     const orgnameLen = agent.orgName.length
