@@ -309,6 +309,15 @@ api_global_error_jsonld(error(branch_does_not_exist(Descriptor), _), Type, JSON)
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
+api_global_error_jsonld(error(not_a_valid_commit_or_branch(Ref),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The specified commit or branch ~q is not valid.", [Ref]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NotValidRefError',
+                              'api:ref' : Ref},
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
@@ -1189,14 +1198,6 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
                               'api:key' : Key},
              'api:message' : Msg
             }.
-api_error_jsonld_(diff,error(not_a_valid_commit_or_branch(Ref),_), JSON) :-
-    format(string(Msg), "The specified commit or branch ~q is not valid.", [Ref]),
-    JSON = _{'@type' : 'api:DiffErrorResponse',
-             'api:status' : 'api:failure',
-             'api:error' : _{ '@type' : 'api:NotValidRefError',
-                              'api:ref' : Ref},
-             'api:message' : Msg
-            }.
 api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
     format(string(Msg), "There is more than one id for role ~s. Consider deleting duplicates if you want to refer to them by name rather than id.", [Name]),
     JSON = _{'@type' : 'api:RoleErrorResponse',
@@ -1422,6 +1423,7 @@ error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
 error_type_(diff, 'api:DiffErrorResponse').
+error_type_(apply, 'api:ApplyErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

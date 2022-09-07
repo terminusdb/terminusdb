@@ -2553,7 +2553,7 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
     ),
 
     api_report_errors(
-        diff,
+        apply,
         Request,
         catch(
             (   api_apply_squash_commit(System_DB, Auth, Path, Commit_Info,
