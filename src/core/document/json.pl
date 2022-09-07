@@ -8,6 +8,7 @@
               json_schema_triple/3,
               json_schema_elaborate/3,
               get_document/3,
+              get_document/4,
               get_document/5,
               get_document_uri/3,
               get_schema_document/3,
@@ -35,6 +36,7 @@
               insert_context_document/2,
               replace_context_document/2,
               database_prefixes/2,
+              database_and_default_prefixes/2,
               database_schema_prefixes/2,
               run_insert_document/4,
               create_graph_from_json/5,
@@ -570,6 +572,10 @@ database_schema_prefixes(Schema,Context) :-
             select_dict(json{'@id' : _ }, Context_With_ID, Context)
         ;   Context = _{})
     ).
+/*
+    default_prefixes(Prefixes),
+    put_dict(Context,Prefixes,Expanded).
+*/
 
 database_prefixes(DB,Context) :-
     (   is_transaction(DB)
@@ -585,6 +591,11 @@ database_prefixes(Query_Context, Context) :-
 database_prefixes(Askable, Context) :-
     create_context(Askable, Query_Context),
     database_prefixes(Query_Context, Context).
+
+database_and_default_prefixes(Askable, Prefixes) :-
+    database_prefixes(Askable, Database_Prefixes),
+    default_prefixes(Default_Prefixes),
+    put_dict(Database_Prefixes,Default_Prefixes,Prefixes).
 
 predicate_map(P, json{ '@id' : P }).
 
@@ -2174,7 +2185,7 @@ get_document_uri_by_type(Desc, Type, Uri) :-
     open_descriptor(Desc,Transaction),
     get_document_by_type(Transaction, Type, Uri).
 get_document_uri_by_type(DB, Type, Uri) :-
-    database_prefixes(DB,Prefixes),
+    database_and_default_prefixes(DB,Prefixes),
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
@@ -2193,7 +2204,7 @@ get_document_by_type(Desc, Type, Document) :-
     open_descriptor(Desc,Transaction),
     get_document_by_type(Transaction, Type, Document).
 get_document_by_type(DB, Type, Document) :-
-    database_prefixes(DB,Prefixes),
+    database_and_default_prefixes(DB,Prefixes),
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
@@ -2834,15 +2845,12 @@ insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies
     insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
 
 % insert_document/8
-insert_document(Transaction, Pre_Document, Context, Raw_JSON, Captures, Id, [], Captures) :-
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, [], Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
-        put_dict(_{ 'sys' : "http://terminusdb.com/schema/sys#"},
-                 Context,
-                 Expanded),
         prefix_expand(String_Type,
-                      Expanded,
+                      Prefixes,
                       'http://terminusdb.com/schema/sys#JSONDocument'),
         del_dict('@type', Pre_Document, _, Document)
     ),
@@ -2854,8 +2862,8 @@ insert_document(Transaction, Pre_Document, Context, Raw_JSON, Captures, Id, [], 
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Context, false, Captures_In, ID, Dependencies, Captures_Out) :-
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, Captures_Out),
+insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, Dependencies, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2888,8 +2896,8 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Capt
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document_unsafe(Transaction, Context, Document, false, Captures_In, Id, Captures_Out) :-
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
+insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2906,10 +2914,10 @@ insert_document_unsafe(Transaction, Context, Document, false, Captures_In, Id, C
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
     database_instance(Transaction, [Instance]),
-    database_prefixes(Transaction, Context),
+    database_prefixes(Transaction, Prefixes),
     % insert
     forall(
-        json_triple_(Elaborated, Context, t(S,P,O)),
+        json_triple_(Elaborated, Prefixes, t(S,P,O)),
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
@@ -3628,6 +3636,21 @@ test(get_field_values, []) :-
                        json{'@type':'http://www.w3.org/2001/XMLSchema#date',
                             '@value':"1979-12-28"}
                      ]).
+
+test(default_prefixes,
+    [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema1,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Prefixes),
+    writeq(Prefixes).
 
 test(create_database_prefixes,
      [

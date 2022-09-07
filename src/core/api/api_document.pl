@@ -134,8 +134,7 @@ api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
     '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
-
-    database_prefixes(Transaction, Prefixes),
+    database_and_default_prefixes(Transaction,Prefixes),
     % TODO errors on unknown prefix
     prefix_expand_schema(Type, Prefixes, Type_Ex),
 
