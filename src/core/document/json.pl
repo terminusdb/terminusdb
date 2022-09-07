@@ -3022,6 +3022,16 @@ type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : Enum,
     ;   List = Enum_List
     ).
 
+oneof_descriptor_subframe(tagged_union(_, Map), DB, Prefixes, JSON, Options) :-
+    dict_pairs(Map, _, Pairs),
+    maplist({DB,Options,Prefixes}/[Prop-Val,Small-Small_Val]>>(
+                compress_schema_uri(Prop, Prefixes, Small, Options),
+                type_descriptor_sub_frame(Val, DB, Prefixes, Small_Val, Options)
+            ),
+            Pairs,
+            JSON_Pairs),
+    dict_pairs(JSON,json,JSON_Pairs).
+
 all_class_frames(Askable, Frames) :-
     all_class_frames(Askable, Frames, [compress_ids(true),expand_abstract(true)]).
 
@@ -3081,7 +3091,7 @@ class_frame(Transaction, Class, Frame, Options) :-
     % oneOf
     (   findall(JSON,
                 (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
-                    oneof_descriptor_json(OneOf_Desc,Prefixes,JSON,Options)),
+                    oneof_descriptor_subframe(OneOf_Desc,Transaction,Prefixes,JSON,Options)),
                 OneOf_JSONs),
         OneOf_JSONs \= []
     ->  Pairs5 = ['@oneOf'-OneOf_JSONs|Pairs4]
@@ -13691,3 +13701,47 @@ test(rdf_language_nonsense,
     ).
 
 :- end_tests(language_codes).
+
+:- begin_tests(class_frames).
+
+:- use_module(core(util/test_utils)).
+
+abstract_choice_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Abstract",
+  "name" : "xsd:string",
+  "@abstract" : [] }
+
+{ "@type" : "Class",
+  "@id" : "Concrete",
+  "@inherits" : "Abstract",
+  "concrete" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Alternative",
+  "alternative" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Choice",
+  "@oneOf" : { "a" : "Abstract",
+               "b" : "Alternative" }}
+
+').
+
+test(choice_with_oneof_abstract,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "Choice", Frame),
+    Frame = json{'@oneOf':[json{a:['Concrete'],b:'Alternative'}],'@type':'Class'}.
+
+
+:- end_tests(class_frames).
