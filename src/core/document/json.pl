@@ -632,6 +632,7 @@ property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Cap
 json_elaborate(DB,JSON,Elaborated) :-
     empty_assoc(Captures_In),
     json_elaborate(DB,JSON,Captures_In,Elaborated,_Dependencies,_Captures_Out).
+
 json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     database_prefixes(DB,Context),
     json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies, Captures_Out).
@@ -2821,11 +2822,11 @@ insert_document(Transaction, Document, Raw_JSON, ID) :-
     insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
 
 % insert_document/7
-insert_document(Transaction, Document, Raw_JSON, Captures, Id, Dependencies, Captures) :-
+insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
-    insert_document(Transaction, Context, Document, Raw_JSON, Captures, Id, Dependencies, Captures).
+    insert_document(Transaction, Document, Context, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
 insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
@@ -2833,7 +2834,7 @@ insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies
     insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
 
 % insert_document/8
-insert_document(Transaction, Context, Pre_Document, Raw_JSON, Captures, Id, [], Captures) :-
+insert_document(Transaction, Pre_Document, Context, Raw_JSON, Captures, Id, [], Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -2853,7 +2854,7 @@ insert_document(Transaction, Context, Pre_Document, Raw_JSON, Captures, Id, [], 
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Context, Document, false, Captures_In, ID, Dependencies, Captures_Out) :-
+insert_document(Transaction, Document, Context, false, Captures_In, ID, Dependencies, Captures_Out) :-
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
