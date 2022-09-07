@@ -1189,6 +1189,14 @@ api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
                               'api:key' : Key},
              'api:message' : Msg
             }.
+api_error_jsonld_(diff,error(not_a_valid_commit_or_branch(Ref),_), JSON) :-
+    format(string(Msg), "The specified commit or branch ~q is not valid.", [Ref]),
+    JSON = _{'@type' : 'api:DiffErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NotValidRefError',
+                              'api:ref' : Ref},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
     format(string(Msg), "There is more than one id for role ~s. Consider deleting duplicates if you want to refer to them by name rather than id.", [Name]),
     JSON = _{'@type' : 'api:RoleErrorResponse',
