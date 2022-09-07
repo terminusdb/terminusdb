@@ -2036,7 +2036,7 @@ array_type_id_predicate_value([O|T],D,C,Id,P,DB,Prefixes,Options,[V|L]) :-
     array_type_id_predicate_value(O,E,C,Id,P,DB,Prefixes,Options,V),
     array_type_id_predicate_value(T,D,C,Id,P,DB,Prefixes,Options,L).
 
-type_id_predicate_iri_value(unit,_,_,_,_,_,_,_,[]).
+type_id_predicate_iri_value(unit,_,_,_,_,_,_,[]).
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,O) :-
     enum_value(C, O, V).
 type_id_predicate_iri_value(foreign(_),_,_,Id,_,Prefixes,Options,Value) :-
@@ -2804,13 +2804,6 @@ check_existing_document_status(Transaction, Document, Status) :-
         ;   Status = not_present)
     ).
 
-insert_document(Transaction, Document, ID) :-
-    insert_document(Transaction, Document, false, ID).
-
-insert_document(Transaction, Document, Raw_JSON, ID) :-
-    empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
-
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
         (   get_dict('@base', Prefixes, Base),
@@ -2818,6 +2811,16 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
+% insert_document/3
+insert_document(Transaction, Document, ID) :-
+    insert_document(Transaction, Document, false, ID).
+
+% insert_document/4
+insert_document(Transaction, Document, Raw_JSON, ID) :-
+    empty_assoc(Captures_In),
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+
+% insert_document/7
 insert_document(Transaction, Document, Raw_JSON, Captures, Id, Dependencies, Captures) :-
     is_transaction(Transaction),
     !,
@@ -2829,11 +2832,12 @@ insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
 
+% insert_document/8
 insert_document(Transaction, Context, Pre_Document, Raw_JSON, Captures, Id, [], Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
-        put_dict(_{ 'sys' : 'http://terminusdb.com/schema/sys#JSONDocument'},
+        put_dict(_{ 'sys' : "http://terminusdb.com/schema/sys#"},
                  Context,
                  Expanded),
         prefix_expand(String_Type,
