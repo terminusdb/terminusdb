@@ -2027,7 +2027,7 @@ list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Options,[V|L]) :-
     type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Options,V),
     list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Options,L).
 
-array_type_id_predicate_value([],_,_,_,_,_,_,_,_,[]).
+array_type_id_predicate_value([],_,_,_,_,_,_,_,[]).
 array_type_id_predicate_value(In,1,C,Id,P,DB,Prefixes,Options,Out) :-
     !,
     list_type_id_predicate_value(In,C,Id,P,DB,Prefixes,Options,Out).
