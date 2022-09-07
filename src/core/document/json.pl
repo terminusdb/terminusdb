@@ -2833,16 +2833,16 @@ insert_document(Transaction, Document, Raw_JSON, ID) :-
     insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
 
 % insert_document/7
-insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
-    is_transaction(Transaction),
-    !,
-    database_prefixes(Transaction, Context),
-    insert_document(Transaction, Document, Context, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
 insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
     insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
+insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
+    is_transaction(Transaction),
+    !,
+    database_and_default_prefixes(Transaction, Prefixes),
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
 
 % insert_document/8
 insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, [], Captures) :-
@@ -2856,8 +2856,7 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, [],
     ),
     !,
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  database_prefixes(Transaction, Prefixes),
-        prefix_expand(Id_Short,Prefixes,Id),
+    ->  prefix_expand(Id_Short,Prefixes,Id),
         valid_json_id_or_die(Prefixes,Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
