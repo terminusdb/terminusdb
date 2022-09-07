@@ -70,7 +70,7 @@ describe('cli-diff', function () {
     expect(parsedJson).to.have.lengthOf(0)
   })
 
-  it('gets an error on apply', async function() {
+  it('gets an error on apply', async function () {
     const db = util.randomString()
     const r1 = await exec(`./terminusdb.sh apply admin/${db} | true`)
     expect(r1.stderr).to.match(new RegExp(`^Error: Unknown database: admin/${db}.*`))
