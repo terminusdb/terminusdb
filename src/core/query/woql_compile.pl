@@ -1652,13 +1652,13 @@ typeof(X,T) :-
     var(X),
     var(T),
     !,
-    when_predicate(nonvar(X), typeof(X,T)),
-    when_predicate(nonvar(T), typeof(X,T)).
+    when_predicate(nonvar(X), woql_compile:typeof(X,T)),
+    when_predicate(nonvar(T), woql_compile:typeof(X,T)).
 typeof(X,T) :-
     var(X),
     !,
     when_predicate(nonvar(X),
-         typeof(X,T)).
+         woql_compile:typeof(X,T)).
 typeof(_@T,S^^'http://www.w3.org/2001/XMLSchema#string') :-
     atom_string(T,S),
     !.
@@ -1666,7 +1666,7 @@ typeof(_^^T,T) :-
     !.
 typeof(A,T) :-
     atom(A),
-    T = 'http://www.w3.org/2002/07/owl#Thing'.
+    T = 'http://terminusdb.com/schema/sys#Top'.
 
 :- meta_predicate ensure_mode(0,+,+,+).
 ensure_mode(Goal,Mode,Args,Names) :-
@@ -5221,6 +5221,20 @@ test(uri_casting, [
 
     URIs = ['http://somewhere.for.now/document/Capability/server_access',
             'http://somewhere.for.now/document/Role/admin'].
+
+test(typeof, [
+         setup((setup_temp_store(State))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(system_descriptor{}, System),
+    findall(X-T,
+            ask(System,
+                (typeof(X,T), X = "asdf"^^xsd:string)
+               ),
+            XTs),
+    XTs = [(asdf^^'http://www.w3.org/2001/XMLSchema#string')-
+           'http://www.w3.org/2001/XMLSchema#string'].
 
 :- end_tests(woql).
 
