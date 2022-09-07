@@ -201,7 +201,7 @@ api_global_error_jsonld(error(remote_connection_failure(Status, Response), _), T
     ->  Opening_Msg = "Remote authentication failed"
     ;   Opening_Msg = "Remote connection failed"
     ),
-
+    % Needs more options....
     (   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response,
         _{'@type' : "api:NotALinearHistory"} :< Error
     ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
@@ -1413,6 +1413,7 @@ error_type_(log, 'api:LogErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
+error_type_(diff, 'api:DiffErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
