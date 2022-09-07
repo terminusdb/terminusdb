@@ -2203,31 +2203,45 @@ get_document_by_type(DB, Type, Document) :-
     get_document(DB, Document_Uri, Document).
 
 get_document(Resource, Id, Document) :-
-    get_document(Resource, true, true, Id, Document).
+    Options = options{
+                  compress_ids : true,
+                  unfold: true,
+                  keep_json_type: false
+              },
+    get_document(Resource, Id, Document, Options).
 
-get_document(Query_Context, Compress_Ids, Unfold, Id, Document) :-
+get_document(Query_Context, Id, Document, Options) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    get_document(TO, Compress_Ids, Unfold, Id, Document).
-get_document(Desc, Compress_Ids, Unfold, Id, Document) :-
+    get_document(TO, Id, Document, Options).
+get_document(Desc, Id, Document, Options) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc,Transaction),
-    get_document(Transaction, Compress_Ids, Unfold, Id, Document).
-get_document(DB, Compress_Ids, Unfold, Id, Document) :-
+    get_document(Transaction, Id, Document, Options).
+get_document(DB, Id, Document, Options) :-
     database_prefixes(DB,Prefixes),
-    get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document).
+    get_document(DB, Prefixes, Id, Document, Options).
 
-get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
-    Options = [compress_ids(Compress_Ids)],
+get_document(DB, Prefixes, Id, Document, Options) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
-    ->  get_json_object(DB, Id_Ex, JSON),
+    ->  get_json_object(DB, Id_Ex, JSON0),
+        (   option(keep_json_type(true), Options)
+        ->  (   option(compress_ids(true), Options)
+            ->  prefix_expand_schema(Class, Prefixes, Class_Ex)
+            ;   Class = Class_Ex
+            ),
+            put_dict(_{'@type': Class_Ex}, JSON0, JSON)
+        ;   JSON = JSON0
+        ),
         put_dict(_{'@id' : Id}, JSON, Document)
-    ;   findall(
+    ;   option(compress_ids(Compress_Ids), Options, true),
+        option(unfold(Unfold), Options, true),
+        findall(
             Prop-Value,
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
                 \+ is_built_in(P),
@@ -2806,8 +2820,16 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
-insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
+insert_document(Transaction, Pre_Document, Raw_JSON, Captures, Id, [], Captures) :-
     is_transaction(Transaction),
+    (   Raw_JSON = true,
+        Pre_Document = Document
+    ;   get_dict('@type', Pre_Document, String_Type),
+        prefix_expand(String_Type,
+                      _{ 'sys' : 'http://terminusdb.com/schema/sys#'},
+                      'http://terminusdb.com/schema/sys#JSONDocument'),
+        del_dict('@type', Pre_Document, _, Document)
+    ),
     !,
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  database_prefixes(Transaction, Prefixes),
@@ -12703,6 +12725,36 @@ test(can_not_insert_json_class,
         C1,
         insert_schema_document(C1,json{ '@id' : 'JSONDocument'})
     ).
+
+test(inserts_as_json_when_typed,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : "sys:JSONDocument",
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        % Note that we are not in raw insertion mode!
+        insert_document(C1,Document,false,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON =
+    json{'@id' : Id,
+         json:json{some:json{random:"stuff",that:2.0}},
+         name:"testing"}.
 
 test(instance_schema_check,
      [setup((setup_temp_store(State),
