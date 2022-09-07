@@ -4216,6 +4216,20 @@ test(typeof, [
     [Result] = (JSON.bindings),
     Result.'Type' = 'xsd:string'.
 
+test(typeof2, [
+         setup((setup_temp_store(State))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(system_descriptor{}, System),
+    findall(X-T,
+            ask(System,
+                (typeof(X,T), X = "asdf"^^xsd:string)
+               ),
+            XTs),
+    XTs = [ ("asdf"^^'http://www.w3.org/2001/XMLSchema#string') -
+            'http://www.w3.org/2001/XMLSchema#string'
+		  ].
 
 test(once, [
          setup(setup_temp_store(State)),
@@ -5221,20 +5235,6 @@ test(uri_casting, [
 
     URIs = ['http://somewhere.for.now/document/Capability/server_access',
             'http://somewhere.for.now/document/Role/admin'].
-
-test(typeof, [
-         setup((setup_temp_store(State))),
-         cleanup(teardown_temp_store(State))
-     ]) :-
-
-    open_descriptor(system_descriptor{}, System),
-    findall(X-T,
-            ask(System,
-                (typeof(X,T), X = "asdf"^^xsd:string)
-               ),
-            XTs),
-    XTs = [(asdf^^'http://www.w3.org/2001/XMLSchema#string')-
-           'http://www.w3.org/2001/XMLSchema#string'].
 
 :- end_tests(woql).
 
