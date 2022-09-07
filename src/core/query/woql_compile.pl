@@ -2192,17 +2192,27 @@ test(datavalue_frame, [
     test_woql_label_descriptor(Label, Descriptor),
     open_descriptor(Descriptor, DB),
     class_frame(DB, 'DataValue', Result),
-    Result = json{'@documentation':
-                  json{'@comment':"A variable or node.",
-                       '@properties':json{data:"An xsd data type value.",
-                                          list:"A list of datavalues",
-                                          variable:"A variable."}},
-                  '@key':json{'@type':"ValueHash"},
-                  '@oneOf':[json{data:'xsd:anySimpleType',
-                                 list:json{'@class':'DataValue',
-                                           '@type':'List'},
-                                 variable:'xsd:string'}],
-                  '@subdocument':[],'@type':'Class'}.
+
+    Result = json{ '@documentation':
+                   json{ '@comment':"A variable or node.",
+						 '@properties':json{ data:"An xsd data type value.",
+										     list:"A list of datavalues",
+										     variable:"A variable."
+									       }
+					   },
+				      '@key':json{'@type':"ValueHash"},
+				      '@oneOf':[ json{ data:'xsd:anySimpleType',
+						               list:json{ '@class':json{ '@class':'DataValue',
+										                         '@subdocument':[]
+									                           },
+								                  '@type':'List'
+								                },
+						               variable:'xsd:string'
+						             }
+					           ],
+				      '@subdocument':[],
+				      '@type':'Class'
+				    }.
 
 test(join, [
          setup((setup_temp_store(State),
