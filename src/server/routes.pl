@@ -2487,7 +2487,15 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
                          document_id : Doc_ID} :< Document,
                       Operation = versioned_document_document)
               ),
-              error(bad_api_document(Document, [before, after]), _)),
+              error(bad_api_document_choices(Document, [[before, after],
+                                                        [before_data_version,
+                                                         after_data_version],
+                                                        [before_data_version,
+                                                         after_data_version,
+                                                         document_id],
+                                                        [before_data_version,
+                                                         after,
+                                                         document_id]]), _)),
 
     % We could probably just feed the document in,
     % the default is dubious.
