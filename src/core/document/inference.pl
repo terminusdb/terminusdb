@@ -1020,8 +1020,23 @@ test(planet_choice,
              document:json{gas:"light",rocks:"big"},
              reason:
              json{'@type':choice_has_too_many_answers,
-                  choice:json{'terminusdb:///schema#gas':'terminusdb:///schema#Gas',
-                              'terminusdb:///schema#rocks':'terminusdb:///schema#Rocks'},
+                  choice:json{ 'terminusdb:///schema#gas':
+                               json{ '@id':'terminusdb:///schema#Gas',
+									 '@type':'http://terminusdb.com/schema/sys#Enum',
+									 '@values':[ 'terminusdb:///schema#Gas/light',
+												 'terminusdb:///schema#Gas/medium',
+												 'terminusdb:///schema#Gas/heavy'
+											   ]
+								   },
+							   'terminusdb:///schema#rocks':
+                               json{ '@id':'terminusdb:///schema#Rocks',
+									 '@type':'http://terminusdb.com/schema/sys#Enum',
+									 '@values':[ 'terminusdb:///schema#Rocks/big',
+												 'terminusdb:///schema#Rocks/medium',
+												 'terminusdb:///schema#Rocks/small'
+											   ]
+								   }
+							 },
                   document:json{'terminusdb:///schema#gas':"light",
                                 'terminusdb:///schema#rocks':"big"}}}),
 
