@@ -1739,6 +1739,11 @@ paths:
                 "scope":
                   type: string
                   example: "UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"
+                "scope_type":
+                  type: string
+                  enum:
+                    - "organization"
+                    - "database"
                 "user":
                   type: string
                   example: "User/admin"
