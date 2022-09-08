@@ -30,25 +30,29 @@ api_diff(_System_DB, _Auth, Before, After, Diff, Options) :-
     simple_diff(Before,After,Diff,Options).
 
 coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
-    (   read_data_version(Commit_Or_Version, data_version(Type, Commit_Id))
-    ->  do_or_die(
-            (   branch = Type
-            ;   commit = Type),
-            error(bad_data_version(Commit_Or_Version), _)
-        )
-    ;   resolve_relative_descriptor(Branch_Descriptor,
-                                    ["_commits"],
-                                    Ref_Descriptor)
-    ->   open_descriptor(Ref_Descriptor, T),
-        (   commit_id_uri(T,
-                          Commit_Or_Version,
-                          _)
-        ->  Commit_Id = Commit_Or_Version
-        ;   branch_head_commit(T,
-                               Commit_Or_Version,
-                               Commit_Uri),
-            commit_id_uri(T, Commit_Id, Commit_Uri))
-    ;   Commit_Id = Commit_Or_Version).
+    do_or_die(
+        (   read_data_version(Commit_Or_Version, data_version(Type, Commit_Id))
+        ->  do_or_die(
+                (   branch = Type
+                ;   commit = Type),
+                error(bad_data_version(Commit_Or_Version), _)
+            )
+        ;   resolve_relative_descriptor(Branch_Descriptor,
+                                        ["_commits"],
+                                        Ref_Descriptor)
+        ->  open_descriptor(Ref_Descriptor, T),
+            (   commit_id_uri(T,
+                              Commit_Or_Version,
+                              _)
+            ->  Commit_Id = Commit_Or_Version
+            ;   branch_head_commit(T,
+                                   Commit_Or_Version,
+                                   Commit_Uri),
+                commit_id_uri(T, Commit_Id, Commit_Uri))
+        ;   Commit_Id = Commit_Or_Version
+        ),
+        error(not_a_valid_commit_or_branch(Commit_Or_Version), _)
+    ).
 
 document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
                      Map_In, Map_Out) :-

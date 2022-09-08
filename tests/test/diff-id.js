@@ -500,6 +500,21 @@ describe('diff-id', function () {
         },
       })
       expect(r5.body).to.have.length(3)
+
+    it('gets an error on apply', async function () {
+      const id = util.randomString()
+      agent.db = id
+      const path = api.path.apply(agent)
+      const result = await agent.post(path).send(
+        {
+          before_commit: 'nonsense',
+          after_commit: 'nonsense',
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: true,
+        },
+      )
+      expect(result.body['api:error']['@type']).to.equal('api:NotValidRefError')
     })
   })
 })
