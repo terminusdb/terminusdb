@@ -572,10 +572,6 @@ database_schema_prefixes(Schema,Context) :-
             select_dict(json{'@id' : _ }, Context_With_ID, Context)
         ;   Context = _{})
     ).
-/*
-    default_prefixes(Prefixes),
-    put_dict(Context,Prefixes,Expanded).
-*/
 
 database_prefixes(DB,Context) :-
     (   is_transaction(DB)
