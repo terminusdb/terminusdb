@@ -500,6 +500,7 @@ describe('diff-id', function () {
         },
       })
       expect(r5.body).to.have.length(3)
+    })
 
     it('gets an error on apply', async function () {
       const id = util.randomString()
