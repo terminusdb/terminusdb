@@ -1568,7 +1568,7 @@ run_command(apply,[Path], Opts) :-
     option(match_final_state(Match_Final_State), Opts),
 
     api_report_errors(
-        diff,
+        apply,
         catch(
             (   atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
                 api_apply_squash_commit(System_DB, Auth, Path, commit_info{
