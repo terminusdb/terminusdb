@@ -201,7 +201,7 @@ api_global_error_jsonld(error(remote_connection_failure(Status, Response), _), T
     ->  Opening_Msg = "Remote authentication failed"
     ;   Opening_Msg = "Remote connection failed"
     ),
-
+    % Needs more options....
     (   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response,
         _{'@type' : "api:NotALinearHistory"} :< Error
     ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
@@ -308,6 +308,15 @@ api_global_error_jsonld(error(branch_does_not_exist(Descriptor), _), Type, JSON)
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
+            }.
+api_global_error_jsonld(error(not_a_valid_commit_or_branch(Ref),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The specified commit or branch ~q is not valid.", [Ref]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NotValidRefError',
+                              'api:ref' : Ref},
+             'api:message' : Msg
             }.
 
 :- multifile api_error_jsonld_/3.
@@ -1413,6 +1422,8 @@ error_type_(log, 'api:LogErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
+error_type_(diff, 'api:DiffErrorResponse').
+error_type_(apply, 'api:ApplyErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
