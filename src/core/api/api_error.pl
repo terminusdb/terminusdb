@@ -2122,6 +2122,14 @@ generic_exception_jsonld(bad_api_document(Document,Expected),JSON) :-
                              'api:expected' : Expected,
                              'api:document' : Document},
              'api:message' : Msg}.
+generic_exception_jsonld(bad_api_document_choices(Document,Expected),JSON) :-
+    format(string(Msg), "The input API document was missing required fields from one of the following lists: ~q", [Expected]),
+    JSON = _{'@type' : 'api:BadAPIDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:RequiredFieldsChoiceMissing',
+                             'api:expected' : Expected,
+                             'api:document' : Document},
+             'api:message' : Msg}.
 generic_exception_jsonld(missing_content_type(Expected), JSON) :-
     format(string(Msg), "Missing 'Content-Type' header. Expected value: ~w", [Expected]),
     JSON = _{'@type' : 'api:MissingContentTypeErrorResponse',

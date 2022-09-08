@@ -454,6 +454,27 @@ describe('diff-id', function () {
       expect(r4.status).to.equal(409)
     })
 
+    it('results in a better error on bad document', async function () {
+      const path = api.path.versionDiff(agent)
+      const r4 = await agent.post(path)
+        .send({
+          after_commit: 'foo',
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: false,
+        })
+      expect(r4.body['api:error']['api:expected']).to.deep.equal(
+        [['before', 'after'],
+          ['before_data_version',
+            'after_data_version'],
+          ['before_data_version',
+            'after_data_version',
+            'document_id'],
+          ['before_data_version',
+            'after',
+            'document_id']])
+    })
+
     it('apply squash commit on raw json', async function () {
       await document
         .insert(agent, {
