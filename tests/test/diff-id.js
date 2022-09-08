@@ -473,6 +473,7 @@ describe('diff-id', function () {
           ['before_data_version',
             'after',
             'document_id']])
+    })
 
     it('gets an error on apply', async function () {
       const id = util.randomString()
