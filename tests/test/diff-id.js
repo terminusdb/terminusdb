@@ -14,7 +14,7 @@ describe('diff-id', function () {
     })
 
     after(async function () {
-      await db.delete(agent)
+      // await db.delete(agent)
     })
 
     it('diff two_documents', async function () {
@@ -473,6 +473,54 @@ describe('diff-id', function () {
           ['before_data_version',
             'after',
             'document_id']])
+    })
+
+    it('apply squash commit on raw json', async function () {
+      await document
+        .insert(agent, {
+          instance: { name: 'Socrates' },
+          raw_json: true,
+        })
+
+      const branchName = 'new'
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const newDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      await document
+        .insert(agent, {
+          path: newDocPath,
+          instance: { name: 'Plato' },
+          raw_json: true,
+        })
+
+      await document
+        .insert(agent, {
+          path: newDocPath,
+          instance: { name: 'Aristotle' },
+          raw_json: true,
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: 'main',
+          after_commit: 'new',
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: true,
+        })
+
+      expect(r4.status).to.equal(200)
+      expect(r4.body).to.deep.equal({ '@type': 'api:ApplyResponse', 'api:status': 'api:success' })
+      const r5 = await document.get(agent, {
+        query: {
+          type: 'sys:JSONDocument',
+          as_list: true,
+        },
+      })
+      expect(r5.body).to.have.length(3)
     })
 
     it('gets an error on apply', async function () {
