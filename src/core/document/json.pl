@@ -8,6 +8,7 @@
               json_schema_triple/3,
               json_schema_elaborate/3,
               get_document/3,
+              get_document/4,
               get_document/5,
               get_document_uri/3,
               get_schema_document/3,
@@ -35,6 +36,7 @@
               insert_context_document/2,
               replace_context_document/2,
               database_prefixes/2,
+              database_and_default_prefixes/2,
               database_schema_prefixes/2,
               run_insert_document/4,
               create_graph_from_json/5,
@@ -586,6 +588,11 @@ database_prefixes(Askable, Context) :-
     create_context(Askable, Query_Context),
     database_prefixes(Query_Context, Context).
 
+database_and_default_prefixes(Askable, Prefixes) :-
+    database_prefixes(Askable, Database_Prefixes),
+    default_prefixes(Default_Prefixes),
+    put_dict(Database_Prefixes,Default_Prefixes,Prefixes).
+
 predicate_map(P, json{ '@id' : P }).
 
 type_context(_DB, "@id", _, json{}) :- !.
@@ -632,6 +639,7 @@ property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Cap
 json_elaborate(DB,JSON,Elaborated) :-
     empty_assoc(Captures_In),
     json_elaborate(DB,JSON,Captures_In,Elaborated,_Dependencies,_Captures_Out).
+
 json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     database_prefixes(DB,Context),
     json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies, Captures_Out).
@@ -2022,68 +2030,68 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
-list_type_id_predicate_value([],_,_,_,_,_,_,_,_,[]).
-list_type_id_predicate_value([O|T],C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,[V|L]) :-
-    type_id_predicate_iri_value(C,Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V),
-    list_type_id_predicate_value(T,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
+list_type_id_predicate_value([],_,_,_,_,_,_,[]).
+list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Options,[V|L]) :-
+    type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Options,V),
+    list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Options,L).
 
-array_type_id_predicate_value([],_,_,_,_,_,_,_,_,_,[]).
-array_type_id_predicate_value(In,1,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,Out) :-
+array_type_id_predicate_value([],_,_,_,_,_,_,_,[]).
+array_type_id_predicate_value(In,1,C,Id,P,DB,Prefixes,Options,Out) :-
     !,
-    list_type_id_predicate_value(In,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,Out).
-array_type_id_predicate_value([O|T],D,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,[V|L]) :-
+    list_type_id_predicate_value(In,C,Id,P,DB,Prefixes,Options,Out).
+array_type_id_predicate_value([O|T],D,C,Id,P,DB,Prefixes,Options,[V|L]) :-
     E is D - 1,
-    array_type_id_predicate_value(O,E,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,V),
-    array_type_id_predicate_value(T,D,C,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
+    array_type_id_predicate_value(O,E,C,Id,P,DB,Prefixes,Options,V),
+    array_type_id_predicate_value(T,D,C,Id,P,DB,Prefixes,Options,L).
 
-type_id_predicate_iri_value(unit,_,_,_,_,_,_,_,_,[]).
-type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,_,_,O) :-
+type_id_predicate_iri_value(unit,_,_,_,_,_,_,[]).
+type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,O) :-
     enum_value(C, O, V).
-type_id_predicate_iri_value(foreign(_),_,_,Id,_,_,Prefixes,Compress_Ids,_,Value) :-
-    (   Compress_Ids = true
+type_id_predicate_iri_value(foreign(_),_,_,Id,_,Prefixes,Options,Value) :-
+    (   option(compress_ids(true), Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
     ;   Value = Id
     ).
-type_id_predicate_iri_value(list(C),Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,L) :-
+type_id_predicate_iri_value(list(C),Id,P,O,DB,Prefixes,Options,L) :-
     % Probably need to treat enums...
     database_instance(DB,Instance),
     rdf_list_list(Instance,O,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
-type_id_predicate_iri_value(array(C,Dim),Id,P,_,Recursion,DB,Prefixes,Compress_Ids,Unfold,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
+type_id_predicate_iri_value(array(C,Dim),Id,P,_,DB,Prefixes,Options,L) :-
     array_lists(DB,Id,P,Dim,V),
     type_descriptor(DB,C,Desc),
-    array_type_id_predicate_value(V,Dim,Desc,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
-type_id_predicate_iri_value(set(C),Id,P,_,Recursion,DB,Prefixes,Compress_Ids,Unfold,L) :-
+    array_type_id_predicate_value(V,Dim,Desc,Id,P,DB,Prefixes,Options,L).
+type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
-type_id_predicate_iri_value(cardinality(C,_),Id,P,_,Recursion,DB,Prefixes,Compress_Ids,Unfold,L) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
+type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
-    list_type_id_predicate_value(V,Desc,Id,P,Recursion,DB,Prefixes,Compress_Ids,Unfold,L).
-type_id_predicate_iri_value(class(_),_,_,Id,Recursion,DB,Prefixes,Compress_Ids,Unfold,Value) :-
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
+type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Options,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C),
-        Unfold = true
-    ->  call(Recursion, DB, Prefixes, Compress_Ids, Unfold, Id, Value)
-    ;   Compress_Ids = true
+        option(unfold(true), Options)
+    ->  get_document(DB, Prefixes, Id, Value, Options)
+    ;   option(compress_ids(true), Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
     ;   Value = Id
     ).
-type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,Recursion,DB,Prefixes,Compress_Ids,Unfold,Value) :-
+type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Options,Value) :-
     (   instance_of(DB, Id, C),
         is_subdocument(DB, C),
-        Unfold = true
-    ->  call(Recursion, DB, Prefixes, Compress_Ids, Unfold, Id, Value)
-    ;   Compress_Ids = true
+        option(unfold(true), Options)
+    ->  get_document(DB, Prefixes, Id, Value, Options)
+    ;   option(compress_ids(true),Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
     ;   Value = Id
     ).
-type_id_predicate_iri_value(optional(C),Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V) :-
+type_id_predicate_iri_value(optional(C),Id,P,O,DB,Prefixes,Options,V) :-
     type_descriptor(DB,C,Desc),
-    type_id_predicate_iri_value(Desc,Id,P,O,Recursion,DB,Prefixes,Compress_Ids,Unfold,V).
-type_id_predicate_iri_value(base_class(C),_,_,Elt,_,DB,Prefixes,_Compress,_Unfold,V) :-
+    type_id_predicate_iri_value(Desc,Id,P,O,DB,Prefixes,Options,V).
+type_id_predicate_iri_value(base_class(C),_,_,Elt,DB,Prefixes,_Options,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
     (   C = 'http://terminusdb.com/schema/sys#JSON'
@@ -2173,7 +2181,7 @@ get_document_uri_by_type(Desc, Type, Uri) :-
     open_descriptor(Desc,Transaction),
     get_document_by_type(Transaction, Type, Uri).
 get_document_uri_by_type(DB, Type, Uri) :-
-    database_prefixes(DB,Prefixes),
+    database_and_default_prefixes(DB,Prefixes),
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
@@ -2192,7 +2200,7 @@ get_document_by_type(Desc, Type, Document) :-
     open_descriptor(Desc,Transaction),
     get_document_by_type(Transaction, Type, Document).
 get_document_by_type(DB, Type, Document) :-
-    database_prefixes(DB,Prefixes),
+    database_and_default_prefixes(DB,Prefixes),
     (   sub_atom(Type, _, _, _, ':')
     ->  Prefixed_Type = Type
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
@@ -2203,29 +2211,41 @@ get_document_by_type(DB, Type, Document) :-
     get_document(DB, Document_Uri, Document).
 
 get_document(Resource, Id, Document) :-
-    get_document(Resource, true, true, Id, Document).
+    Options = options{
+                  compress_ids : true,
+                  unfold: true,
+                  keep_json_type: false
+              },
+    get_document(Resource, Id, Document, Options).
 
-get_document(Query_Context, Compress_Ids, Unfold, Id, Document) :-
+get_document(Query_Context, Id, Document, Options) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    get_document(TO, Compress_Ids, Unfold, Id, Document).
-get_document(Desc, Compress_Ids, Unfold, Id, Document) :-
+    get_document(TO, Id, Document, Options).
+get_document(Desc, Id, Document, Options) :-
     is_descriptor(Desc),
     !,
     open_descriptor(Desc,Transaction),
-    get_document(Transaction, Compress_Ids, Unfold, Id, Document).
-get_document(DB, Compress_Ids, Unfold, Id, Document) :-
+    get_document(Transaction, Id, Document, Options).
+get_document(DB, Id, Document, Options) :-
     database_prefixes(DB,Prefixes),
-    get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document).
+    get_document(DB, Prefixes, Id, Document, Options).
 
-get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
-    Options = [compress_ids(Compress_Ids)],
+get_document(DB, Prefixes, Id, Document, Options) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
-    ->  get_json_object(DB, Id_Ex, JSON),
+    ->  get_json_object(DB, Id_Ex, JSON0),
+        (   option(keep_json_type(true), Options)
+        ->  (   option(compress_ids(true), Options)
+            ->  prefix_expand_schema(Class, Prefixes, Class_Ex)
+            ;   Class = Class_Ex
+            ),
+            put_dict(_{'@type': Class_Ex}, JSON0, JSON)
+        ;   JSON = JSON0
+        ),
         put_dict(_{'@id' : Id}, JSON, Document)
     ;   findall(
             Prop-Value,
@@ -2233,7 +2253,7 @@ get_document(DB, Prefixes, Compress_Ids, Unfold, Id, Document) :-
                 \+ is_built_in(P),
 
                 once(class_predicate_type(DB,Class,P,Type)),
-                type_id_predicate_iri_value(Type,Id_Ex,P,O,get_document,DB,Prefixes,Compress_Ids,Unfold,Value),
+                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Options,Value),
                 compress_schema_uri(P, Prefixes, Prop, Options)
             ),
             Data),
@@ -2792,13 +2812,6 @@ check_existing_document_status(Transaction, Document, Status) :-
         ;   Status = not_present)
     ).
 
-insert_document(Transaction, Document, ID) :-
-    insert_document(Transaction, Document, false, ID).
-
-insert_document(Transaction, Document, Raw_JSON, ID) :-
-    empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
-
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
         (   get_dict('@base', Prefixes, Base),
@@ -2806,20 +2819,46 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
-insert_document(Transaction, Document, true, Captures, Id, [], Captures) :-
+% insert_document/3
+insert_document(Transaction, Document, ID) :-
+    insert_document(Transaction, Document, false, ID).
+
+% insert_document/4
+insert_document(Transaction, Document, Raw_JSON, ID) :-
+    empty_assoc(Captures_In),
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+
+% insert_document/7
+insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
+insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
+    database_and_default_prefixes(Transaction, Prefixes),
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
+
+% insert_document/8
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, [], Captures) :-
+    (   Raw_JSON = true,
+        Pre_Document = Document
+    ;   get_dict('@type', Pre_Document, String_Type),
+        prefix_expand(String_Type,
+                      Prefixes,
+                      'http://terminusdb.com/schema/sys#JSONDocument'),
+        del_dict('@type', Pre_Document, _, Document)
+    ),
+    !,
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  database_prefixes(Transaction, Prefixes),
-        prefix_expand(Id_Short,Prefixes,Id),
+    ->  prefix_expand(Id_Short,Prefixes,Id),
         valid_json_id_or_die(Prefixes,Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, false, Captures_In, ID, Dependencies, Captures_Out) :-
-    is_transaction(Transaction),
-    !,
-    json_elaborate(Transaction, Document, Captures_In, Elaborated, Dependencies, Captures_Out),
+insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, Dependencies, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2844,11 +2883,6 @@ insert_document(Transaction, Document, false, Captures_In, ID, Dependencies, Cap
              ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
              )
          )).
-insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
@@ -2857,8 +2891,8 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Capt
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document_unsafe(Transaction, Context, Document, false, Captures_In, Id, Captures_Out) :-
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, _Dependencies, Captures_Out),
+insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, _Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2875,10 +2909,10 @@ insert_document_unsafe(Transaction, Context, Document, false, Captures_In, Id, C
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
     database_instance(Transaction, [Instance]),
-    database_prefixes(Transaction, Context),
+    database_prefixes(Transaction, Prefixes),
     % insert
     forall(
-        json_triple_(Elaborated, Context, t(S,P,O)),
+        json_triple_(Elaborated, Prefixes, t(S,P,O)),
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
@@ -3598,6 +3632,21 @@ test(get_field_values, []) :-
                             '@value':"1979-12-28"}
                      ]).
 
+test(default_prefixes,
+    [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema1,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB,Prefixes),
+    writeq(Prefixes).
+
 test(create_database_prefixes,
      [
          setup(
@@ -3845,7 +3894,6 @@ test(extract_json,
     !, % NOTE: why does rolling back over this go mental?
 
     get_document(DB,Id,JSON1),
-
     !,
     JSON1 = json{'@id':'Employee/gavin',
                  '@type':'Employee',
@@ -6907,6 +6955,7 @@ test(delete_referenced_object,
 
     create_context(Desc, _{ author : "me", message : "Have you tried bitcoin?" }, Context),
     empty_assoc(Captures_In),
+
     with_transaction(
         Context,
         (   insert_document(Context, Document0, false, Captures_In, _Id1, _, Captures_Out1),
@@ -12713,6 +12762,36 @@ test(can_not_insert_json_class,
         C1,
         insert_schema_document(C1,json{ '@id' : 'JSONDocument'})
     ).
+
+test(inserts_as_json_when_typed,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@type' : "sys:JSONDocument",
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        % Note that we are not in raw insertion mode!
+        insert_document(C1,Document,false,Id)
+    ),
+    get_document(Desc,Id,JSON),
+    JSON =
+    json{'@id' : Id,
+         json:json{some:json{random:"stuff",that:2.0}},
+         name:"testing"}.
 
 test(instance_schema_check,
      [setup((setup_temp_store(State),

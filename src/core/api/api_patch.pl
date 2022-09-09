@@ -64,7 +64,12 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
         open_descriptor(Commit_Descriptor, commit_info{}, Transaction, Map_In, Map_Out),
         error(unresolvable_collection(Commit_Descriptor),_)),
 
-    get_document(Transaction, Doc_Id, Document).
+    Options = options{
+                  compress_ids : true,
+                  unfold: true,
+                  keep_json_type: true
+              },
+    get_document(Transaction, Doc_Id, Document, Options).
 
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
