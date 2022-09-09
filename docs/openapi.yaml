@@ -605,7 +605,7 @@ paths:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
   /woql:
     post:
-      x-python-client: Client::query
+      x-python-client: not_implemented
       tags:
         - WOQL
       requestBody:
@@ -619,7 +619,7 @@ paths:
           description: Query result
   /woql/{path}:
     post:
-      x-python-client: not_implemented
+      x-python-client: Client::query
       tags:
         - WOQL
       parameters:
