@@ -354,7 +354,25 @@ opt_spec(squash,'terminusdb squash DATABASE_SPEC OPTIONS',
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `squash` command')]
+           help('print help for the `squash` command')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('output result status as JSON')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: squash'),
+           help('message to associate with the commit')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')]
          ]).
 opt_spec(rollup,'terminusdb rollup DATABASE_SPEC OPTIONS',
          'Creates an optimisation layer for queries on the given commit.',
@@ -1476,6 +1494,31 @@ run_command(rebase,[Path,From_Path],Opts) :-
     format(current_output, "Reports: ", []),
     json_write(current_output,Reports),
     format(current_output, "~n", []).
+run_command(squash,[Path],Opts) :-
+    super_user_authority(Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(author(Author),Opts),
+    option(message(Message),Opts),
+    api_report_errors(
+        squash,
+        (   (   api_squash(System_DB, Auth, Path, commit_info{ author: Author,
+                                                           message: Message},
+                           Commit, Old_Commit)
+            ->  (   option(json(true), Opts)
+                ->  json_write(current_output,_{'@type' : 'api:SquashResponse',
+                                                'api:commit' : Commit,
+                                                'api:old_commit' : Old_Commit,
+                                                'api:status' : "api:success"})
+                ;   format(current_output, "~nSquashed: ~q to ~q~n", [Old_Commit, Commit]))
+            ;   (   option(json(true), Opts)
+                ->  json_write(current_output,_{'@type' : 'api:EmptySquashResponse',
+                                                'api:empty_commit' : true,
+                                                'api:status' : "api:success"})
+                ;   format(current_output, "~nSquash is empty~n", [])
+                )
+            )
+        )
+    ).
 run_command(rollup,[Path],_Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
