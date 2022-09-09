@@ -211,6 +211,24 @@ Rebase a database with commits from FROM_DATABASE_SPEC into TO_DATABASE_SPEC.
   * `-a`, `--author`=[value]:
   The author of the rebase
 
+### squash
+
+`terminusdb squash DATABASE_SPEC OPTIONS`
+
+Squash a commit.
+
+  * `-h`, `--help`=[value]:
+  print help for the `squash` command
+
+  * `-j`, `--json`=[value]:
+  output result status as JSON
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
 ### rollup
 
 `terminusdb rollup DATABASE_SPEC OPTIONS`
