@@ -347,6 +347,15 @@ opt_spec(rebase,'terminusdb rebase TO_DATABASE_SPEC FROM_DATABASE_SPEC OPTIONS',
            default(admin),
            help('The author of the rebase')]
          ]).
+opt_spec(squash,'terminusdb squash DATABASE_SPEC OPTIONS',
+         'Squash a commit.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `squash` command')]
+         ]).
 opt_spec(rollup,'terminusdb rollup DATABASE_SPEC OPTIONS',
          'Creates an optimisation layer for queries on the given commit.',
          [[opt(help),
