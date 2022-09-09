@@ -7,10 +7,20 @@
 :- use_module(core(transaction)).
 :- use_module(library(lists)).
 
+descriptor_type_has_history(branch_descriptor).
+descriptor_type_has_history(commit_descriptor).
+
+descriptor_has_history(Descriptor) :-
+    Type{} :< Descriptor,
+    descriptor_type_has_history(Type).
+
 api_log(System_DB, Auth, Path, Log, Options) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path,Branch_Descriptor),
         error(invalid_absolute_path(Path),_)),
+
+    do_or_die(descriptor_has_history(Branch_Descriptor),
+              error(resource_has_no_history(Branch_Descriptor), _)),
 
     check_descriptor_auth(System_DB, Branch_Descriptor, '@schema':'Action/meta_read_access', Auth),
 

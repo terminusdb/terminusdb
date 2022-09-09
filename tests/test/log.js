@@ -60,4 +60,25 @@ describe('log', function () {
     // cleanup
     await agent.delete('/api/db/admin/hello')
   })
+
+  it('gets an error from _system', async function () {
+    const response = await agent.get('/api/log/_system').unverified()
+
+    expect(response.status).to.equal(400)
+    expect(result.body['api:error']['@type']).to.equal('api:ResourceHasNoHistory')
+  })
+
+  it('gets an error from somedb/_meta', async function () {
+    const response = await agent.get('/api/log/somedb/_meta').unverified()
+
+    expect(response.status).to.equal(400)
+    expect(result.body['api:error']['@type']).to.equal('api:ResourceHasNoHistory')
+  })
+
+  it('gets an error from somedb/local/_commits', async function () {
+    const response = await agent.get('/api/log/somedb/local/_commits').unverified()
+
+    expect(response.status).to.equal(400)
+    expect(result.body['api:error']['@type']).to.equal('api:ResourceHasNoHistory')
+  })
 })
