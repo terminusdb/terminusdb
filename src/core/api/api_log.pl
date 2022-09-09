@@ -7,21 +7,40 @@
 :- use_module(core(transaction)).
 :- use_module(library(lists)).
 
+descriptor_type_has_history(branch_descriptor).
+descriptor_type_has_history(commit_descriptor).
+
+descriptor_has_history(Descriptor) :-
+    Type{} :< Descriptor,
+    descriptor_type_has_history(Type).
+
+loggable_commit_uri(Descriptor, Repository_Descriptor, Commit_Uri) :-
+    branch_descriptor{repository_descriptor: Repository_Descriptor,
+                      branch_name: Branch_Name} :< Descriptor,
+    !,
+    branch_head_commit(Repository_Descriptor,
+                       Branch_Name,
+                       Commit_Uri).
+loggable_commit_uri(Descriptor, Repository_Descriptor, Commit_Uri) :-
+    commit_descriptor{commit_id: Commit_Id,
+                      repository_descriptor: Repository_Descriptor} :< Descriptor,
+    commit_id_uri(Repository_Descriptor, Commit_Id, Commit_Uri).
+
 api_log(System_DB, Auth, Path, Log, Options) :-
     do_or_die(
-        resolve_absolute_string_descriptor(Path,Branch_Descriptor),
+        resolve_absolute_string_descriptor(Path,Descriptor),
         error(invalid_absolute_path(Path),_)),
 
-    check_descriptor_auth(System_DB, Branch_Descriptor, '@schema':'Action/meta_read_access', Auth),
+    do_or_die(descriptor_has_history(Descriptor),
+              error(resource_has_no_history(Descriptor), _)),
+
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/meta_read_access', Auth),
 
     do_or_die(
-        open_descriptor(Branch_Descriptor, _Branch_Transaction),
-        error(unresolvable_absolute_descriptor(Branch_Descriptor),_)),
+        open_descriptor(Descriptor, _Branch_Transaction),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
 
-    Repository_Descriptor = (Branch_Descriptor.repository_descriptor),
-    branch_head_commit(Repository_Descriptor,
-                       (Branch_Descriptor.branch_name),
-                       Commit_Uri),
+    loggable_commit_uri(Descriptor, Repository_Descriptor, Commit_Uri),
 
     commit_uri_to_history_commit_uris(Repository_Descriptor, Commit_Uri, History_Commit_Uris, Options),
 
