@@ -545,13 +545,24 @@ paths:
       responses:
         200:
           description: Succesfully replaced documents
-  /schema:
+  /schema/{path}:
     get:
       tags:
         - Frame
       summary: Get the full class frame for a class or all classes for a schema
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - name: path
+          description: Path to a specific data product
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          description: Class type to get specific frame for
+          schema:
+            type: string
         - name: compress_ids
           in: query
           description: Compress the URLs returned using prefixes
