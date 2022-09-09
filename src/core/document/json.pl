@@ -2892,7 +2892,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Capt
     ;   insert_json_object(Transaction, Document, Id)
     ).
 insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, _Dependencies, Captures_Out),
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2904,7 +2904,8 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, 
     do_or_die(
         get_dict('@id', Elaborated, Id),
         error(missing_field('@id', Elaborated), _)),
-    insert_document_expanded(Transaction, Elaborated, Id).
+    when(ground(Dependencies),
+         insert_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),

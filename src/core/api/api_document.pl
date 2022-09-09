@@ -201,37 +201,43 @@ api_insert_document_(instance, Raw_JSON, Transaction, Document, state(Captures_I
         do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, _, Transaction, Context, Document, state(Captures), Id, Captures) :-
-    do_or_die(
-        insert_schema_document_unsafe(Transaction, Context, Document),
-        error(document_insertion_failed_unexpectedly(Document), _)),
-    do_or_die(
-        Id = (Document.get('@id')),
-        error(document_has_no_id_somehow, _)).
-api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Context, Document, state(Captures_In), Id, Captures_Out) :-
-    do_or_die(
-        insert_document_unsafe(Transaction, Context, Document, Raw_JSON, Captures_In, Id, Captures_Out),
-        error(document_insertion_failed_unexpectedly(Document), _)).
+api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, state(Captures), Id, Captures) :-
+    call_catch_document_mutation(
+        Document,
+        (   do_or_die(
+                insert_schema_document_unsafe(Transaction, Prefixes, Document),
+                error(document_insertion_failed_unexpectedly(Document), _)),
+            do_or_die(
+                Id = (Document.get('@id')),
+                error(document_has_no_id_somehow, _)))
+    ).
+api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document, state(Captures_In), Id, Captures_Out) :-
+    call_catch_document_mutation(
+        Document,
+        do_or_die(
+            insert_document_unsafe(Transaction, Prefixes, Document, Raw_JSON, Captures_In, Id, Captures_Out),
+            error(document_insertion_failed_unexpectedly(Document), _))
+    ).
 
 insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
-        json_read_required_context(Stream, Context, Tail_Stream),
+        json_read_required_context(Stream, Prefixes, Tail_Stream),
         call_catch_document_mutation(
-            Context,
-            replace_context_document(Transaction, Context)
+            Prefixes,
+            replace_context_document(Transaction, Prefixes)
         )
     ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
-        database_prefixes(Transaction, Context),
+        database_prefixes(Transaction, Prefixes),
         json_init_tail_stream(Stream, Tail_Stream)
     ),
     findall(
         Id,
         (   json_read_tail_stream(Tail_Stream, Document),
             nb_thread_var(
-                {Graph_Type, Raw_JSON, Transaction, Context, Document, Id}/[State, Captures_Out]>>(
-                    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Context, Document, State, Id, Captures_Out)
+                {Graph_Type, Raw_JSON, Transaction, Prefixes, Document, Id}/[State, Captures_Out]>>(
+                    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Prefixes, Document, State, Id, Captures_Out)
                 ),
                 Captures_Var
             )
