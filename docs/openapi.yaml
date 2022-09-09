@@ -24,7 +24,7 @@ tags:
 paths:
   /:
     get:
-      x-python-client: not_implemented
+      x-python-client: Client::get_databases
       tags:
         - Connection
       summary: Get a list of databases for the authenticated user
