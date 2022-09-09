@@ -24,6 +24,7 @@ tags:
 paths:
   /:
     get:
+      x-python-client: Client::get_databases
       tags:
         - Connection
       summary: Get a list of databases for the authenticated user
@@ -40,6 +41,7 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
   /info:
     get:
+      x-python-client: not_implemented
       tags:
         - Connection
       summary: Get information about the TerminusDB version
@@ -83,6 +85,7 @@ paths:
                     example: api:success
   /ok:
     get:
+      x-python-client: not_implemented
       tags:
         - Connection
       summary: Simple status update
@@ -91,6 +94,7 @@ paths:
           description: Succeeded
   /db:
     get:
+      x-python-client: Client::get_databases
       tags:
         - Database
       summary: List details of all databases available to the authorized user.
@@ -125,6 +129,7 @@ paths:
 
   /db/{organization}/{database}:
     get:
+      x-python-client: Client::get_database
       tags:
         - Database
       summary: List details of the database under the given organization.
@@ -162,6 +167,7 @@ paths:
               schema:
                 type: object
     head:
+      x-python-client: Client::has_database
       tags:
         - Database
       summary: Check that a db exists
@@ -183,6 +189,7 @@ paths:
                 type: object
 
     post:
+      x-python-client: Client::has_database
       tags:
         - Database
       summary: Create a database
@@ -259,6 +266,7 @@ paths:
         401:
           $ref: '#/components/responses/UnauthorizedError'
     delete:
+      x-python-client: Client::delete_database
       tags:
         - Database
       summary: Delete a database
@@ -311,6 +319,7 @@ paths:
                         type: string
                         example: admin
     put:
+      x-python-client: not_implemented
       tags:
         - Database
       summary: Change qualities of a database (label, comment, etc.)
@@ -390,6 +399,7 @@ paths:
 
   /document/{path}:
     get:
+      x-python-client: Client::get_document
       tags:
         - Document
       summary: Get a document
@@ -463,6 +473,7 @@ paths:
                 example: {"@id":"Organization/admin", "@type":"Organization", "database": ["SystemDatabase/system", "UserDatabase/60c35164e937174bbf4dd814c78153d660edc55b3d799c534c1e2d872a3d2dd6" ], "name":"admin"}
 
     post:
+      x-python-client: Client::insert_document
       tags:
         - Document
       summary: Insert a new document
@@ -495,6 +506,7 @@ paths:
                 description: Added documents
 
     delete:
+      x-python-client: Client::delete_document
       tags:
         - Document
       summary: Delete one or multiple documents
@@ -520,6 +532,7 @@ paths:
           description: Succesfully deleted document(s)
           # TODO: Need the proper JSON resposne!
     put:
+      x-python-client: Client::replace_document
       tags:
         - Document
       summary: Replace a document
@@ -545,13 +558,25 @@ paths:
       responses:
         200:
           description: Succesfully replaced documents
-  /schema:
+  /schema/{path}:
     get:
+      x-python-client: Client::get_class_frame
       tags:
         - Frame
       summary: Get the full class frame for a class or all classes for a schema
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - name: path
+          description: Path to a specific data product
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          description: Class type to get specific frame for
+          schema:
+            type: string
         - name: compress_ids
           in: query
           description: Compress the URLs returned using prefixes
@@ -580,6 +605,7 @@ paths:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
   /woql:
     post:
+      x-python-client: not_implemented
       tags:
         - WOQL
       requestBody:
@@ -593,6 +619,7 @@ paths:
           description: Query result
   /woql/{path}:
     post:
+      x-python-client: Client::query
       tags:
         - WOQL
       parameters:
@@ -614,6 +641,7 @@ paths:
           description: Query result
   /clone/{organization}/{database}:
     post:
+      x-python-client: Client::clonedb
       tags:
         - Collaboration
       parameters:
@@ -654,6 +682,7 @@ paths:
                 type: object
   /fetch/{path}:
     post:
+      x-python-client: Client::fetch
       tags:
         - Collaboration
       summary: Fetch the remote repository for the given path (default is origin)
@@ -689,6 +718,7 @@ paths:
                     example: 194822f8942286517e151817d38acca4c9ac7d01
   /push/{path}:
     post:
+      x-python-client: Client::push
       summary: Push the branch to the remote
       tags:
         - Collaboration
@@ -760,6 +790,7 @@ paths:
 
   /pull/{path}:
     post:
+      x-python-client: Client::pull
       summary: Pull to a branch from a remote
       tags:
         - Collaboration
@@ -801,6 +832,7 @@ paths:
                       - "api:success"
   /remote/{path}:
     post:
+      x-python-client: not_implemented
       summary: Create a new remote
       tags:
         - Collaboration
@@ -841,6 +873,7 @@ paths:
                     enum:
                       - "api:success"
     delete:
+      x-python-client: not_implemented
       summary: Delete a remote
       tags:
         - Collaboration
@@ -869,6 +902,7 @@ paths:
                     enum:
                       - "api:success"
     put:
+      x-python-client: not_implemented
       summary: Update a remote with a new location
       tags:
         - Collaboration
@@ -909,6 +943,7 @@ paths:
                     enum:
                       - "api:success"
     get:
+      x-python-client: not_implemented
       summary: Get the url for a given remote
       tags:
         - Collaboration
@@ -943,6 +978,7 @@ paths:
                       - "api:success"
   /branch/{path}:
     post:
+      x-python-client: Client::create_branch
       tags:
         - Branches
       parameters:
@@ -970,6 +1006,7 @@ paths:
                     enum:
                       - "api:success"
     delete:
+      x-python-client: Client::delete_branch
       tags:
         - Branches
       parameters:
@@ -992,6 +1029,7 @@ paths:
                       - "api:success"
 
   /squash/{path}:
+    x-python-client: Client::squash
     parameters:
         - $ref: '#/components/parameters/branch_path'
     get:
@@ -1023,6 +1061,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      x-python-client: Client::reset
       tags:
         - Branches
       requestBody:
@@ -1053,6 +1092,7 @@ paths:
                       - api:success
   /optimize/{path}:
     post:
+      x-python-client: Client::optimize
       tags:
         - Optimize
       parameters:
@@ -1081,6 +1121,7 @@ paths:
                       - api:success
   /prefixes/{path}:
     get:
+      x-python-client: Client::_get_prefixes
       tags:
         - Prefixes
       parameters:
@@ -1100,6 +1141,7 @@ paths:
                 type: object
   /diff:
     post:
+      x-python-client: Client::diff
       tags:
         - Change management
       requestBody:
@@ -1141,6 +1183,7 @@ paths:
 
   /patch:
     post:
+      x-python-client: Client::patch
       tags:
         - Change management
       requestBody:
@@ -1175,6 +1218,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      x-python-client: Client::apply
       tags:
         - Change management
       requestBody:
@@ -1219,6 +1263,7 @@ paths:
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /log/{organization}/{database}:
     get:
+      x-python-client: Client::log
       summary: "Get commits from a specific database or branch"
       tags:
         - Change management
@@ -1273,6 +1318,7 @@ paths:
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
   /roles:
     post:
+      x-python-client: Client::add_role
       tags:
         - Account management
       summary: Adding a new role
@@ -1308,6 +1354,7 @@ paths:
         400:
           description: Bad Request
     put:
+      x-python-client: Client::change_role
       tags:
         - Account management
       summary: Changing actions for a role
@@ -1345,6 +1392,7 @@ paths:
         400:
           description: Bad Request
     get:
+      x-python-client: Client::get_available_roles
       tags:
         - Account management
       summary: Get all roles available with the current authority
@@ -1358,6 +1406,7 @@ paths:
                 example: [{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"Admin Role"},{"@id":"Role/consumer","@type":"Role","action":["class_frame","instance_read_access","schema_read_access"],"name":"ConsumerRole"}]
   /roles/{roleName}:
     delete:
+      x-python-client: not_implemented
       tags:
         - Account management
       parameters:
@@ -1383,6 +1432,7 @@ paths:
                 type: object
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
     get:
+      x-python-client: not_implemented
       tags:
         - Account management
       summary: Get the role object by role name
@@ -1410,6 +1460,7 @@ paths:
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
   /organizations:
     get:
+      x-python-client: Client::get_organizations
       tags:
         - Account management
       summary: Get all organizations according to the capabilities of the user
@@ -1432,6 +1483,7 @@ paths:
           type: string
           example: admin
     get:
+      x-python-client: Client::get_organization
       tags:
         - Account management
       summary: Get the organization object by name
@@ -1453,6 +1505,7 @@ paths:
         403:
           description: Forbidden
     post:
+      x-python-client: Client::create_organization
       tags:
         - Account management
       summary: Add an organization with the given name
@@ -1472,6 +1525,7 @@ paths:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
     delete:
+      x-python-client: Client::delete_organization
       tags:
         - Account management
       summary: Delete the organization of the given name
@@ -1499,6 +1553,7 @@ paths:
           type: string
           example: admin
     get:
+      x-python-client: Client::get_organization_users
       tags:
         - Account management
       summary: Get all available users according to capabilities within an organization
@@ -1519,6 +1574,7 @@ paths:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}:
     get:
+      x-python-client: Client::get_organization_user
       tags:
         - Account management
       summary: Get a user record for a given organization
@@ -1549,6 +1605,7 @@ paths:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}/databases:
     get:
+      x-python-client: Client::get_organization_user_databases
       tags:
         - Account management
       summary: Get the databases available to a user which are inside an organization
@@ -1582,6 +1639,7 @@ paths:
           description: Bad Request
   /users:
     get:
+      x-python-client: Client::get_users
       tags:
         - Account Management
       summary: Get all users
@@ -1605,6 +1663,7 @@ paths:
         403:
           description: Forbidden
     put:
+      x-python-client: Client::change_user_password
       tags:
         - Account management
       summary: Update a user's password
@@ -1639,6 +1698,7 @@ paths:
               schema:
                 type: object
     post:
+      x-python-client: Client::add_user
       tags:
         - Account management
       summary: Create a new user
@@ -1680,6 +1740,7 @@ paths:
           type: string
           example: Bob
     get:
+      x-python-client: Client::get_user
       tags:
         - Account Management
       summary: Get a user by name
@@ -1701,6 +1762,7 @@ paths:
         403:
           description: Forbidden
     delete:
+      x-python-client: Client::delete_user
       tags:
         - Account Management
       summary: Delete a user
@@ -1716,6 +1778,7 @@ paths:
           description: Forbidden
   /capabilities:
     post:
+      x-python-client: Client::change_capabilities
       tags:
         - Account management
       summary: Grant or remove capabilities over a resource to a user
