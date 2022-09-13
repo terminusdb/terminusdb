@@ -40,6 +40,29 @@ describe('document-full-replace', function () {
     await document.insert(agent, option)
   })
 
+    it('handles captures correctly in a full instance replace', async function() {
+        let classId = util.randomString()
+        const schema = { '@type': 'Class', '@id': classId, 'other': classId }
+        await document.insert(agent, { schema })
+        const option = {
+            instance: [
+                { '@type': schema['@id'], '@capture': 'Ref_A', 'other': {'@ref': 'Ref_B'} },
+                { '@type': schema['@id'], '@capture': 'Ref_B', 'other': {'@ref': 'Ref_A'} },
+            ],
+            fullReplace: true,
+        }
+        await document.insert(agent, option)
+
+        let result = await document.get(agent, {query: {as_list: true}})
+        let documents = result.body
+        let id1 = documents[0]['@id']
+        let id2 = documents[1]['@id']
+        let other1 = documents[0]['other']
+        let other2 = documents[1]['other']
+        expect(id1).to.equal(other2)
+        expect(id2).to.equal(other1)
+    })
+
   describe('fails insert schema with duplicate @id (#1063)', function () {
     for (const fullReplace of [false, true]) {
       it(`full_replace=${fullReplace}`, async function () {
