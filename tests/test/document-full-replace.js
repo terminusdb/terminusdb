@@ -4,12 +4,12 @@ const { Agent, api, db, document, util } = require('../lib')
 describe('document-full-replace', function () {
   let agent
 
-  before(async function () {
+  beforeEach(async function () {
     agent = new Agent().auth()
     await db.create(agent)
   })
 
-  after(async function () {
+  afterEach(async function () {
     await db.delete(agent)
   })
 
@@ -38,6 +38,29 @@ describe('document-full-replace', function () {
     }
     await document.insert(agent, option)
     await document.insert(agent, option)
+  })
+
+  it('handles captures correctly in a full instance replace', async function () {
+    const classId = util.randomString()
+    const schema = { '@type': 'Class', '@id': classId, other: classId }
+    await document.insert(agent, { schema })
+    const option = {
+      instance: [
+        { '@type': schema['@id'], '@capture': 'Ref_A', other: { '@ref': 'Ref_B' } },
+        { '@type': schema['@id'], '@capture': 'Ref_B', other: { '@ref': 'Ref_A' } },
+      ],
+      fullReplace: true,
+    }
+    await document.insert(agent, option)
+
+    const result = await document.get(agent, { query: { as_list: true } })
+    const documents = result.body
+    const id1 = documents[0]['@id']
+    const id2 = documents[1]['@id']
+    const other1 = documents[0].other
+    const other2 = documents[1].other
+    expect(id1).to.equal(other2)
+    expect(id2).to.equal(other1)
   })
 
   describe('fails insert schema with duplicate @id (#1063)', function () {
