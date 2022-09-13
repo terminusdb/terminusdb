@@ -4,12 +4,12 @@ const { Agent, api, db, document, util } = require('../lib')
 describe('document-full-replace', function () {
   let agent
 
-  before(async function () {
+  beforeEach(async function () {
     agent = new Agent().auth()
     await db.create(agent)
   })
 
-  after(async function () {
+  afterEach(async function () {
     await db.delete(agent)
   })
 
