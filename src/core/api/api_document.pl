@@ -243,17 +243,16 @@ insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In,
     stream_to_lazy_docs(Stream, Lazy_List),
     api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, Ids).
 
-api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, []).
 api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, [Id|Ids]) :-
     api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Mid),
     api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, Ids).
+api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, []).
 
-api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, []).
 api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, [Id|New_Ids]) :-
     api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Mid),
     api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, New_Ids).
+api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, []).
 
-api_replace_document_from_lazy_list([], _, _, _, _, Captures, Captures, []).
 api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
                                     Captures_In, Captures_Out, [Id|New_Ids]) :-
     call_catch_document_mutation(
@@ -268,6 +267,7 @@ api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Trans
                               Captures_Mid)
     ),
     api_replace_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Create, Captures_Mid, Captures_Out, New_Ids).
+api_replace_document_from_lazy_list([], _, _, _, _, Captures, Captures, []).
 
 xor(true,false).
 xor(false,true).
