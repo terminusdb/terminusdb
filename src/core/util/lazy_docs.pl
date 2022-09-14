@@ -18,11 +18,11 @@ attr_unify_hook(State, Value) :-
         ;   is_list(Term)
         ->  stream_to_lazy_docs(Stream, Rest),
             append(Term,Rest,Result),
-            nb_setarg(2, State, Result),
+            nb_linkarg(2, State, Result),
             Value = Result
         ;   stream_to_lazy_docs(Stream, Rest),
             Result = [Term|Rest],
-            nb_setarg(2, State, Result),
+            nb_linkarg(2, State, Result),
             Value = Result
         )
     ;   Value = Peak
