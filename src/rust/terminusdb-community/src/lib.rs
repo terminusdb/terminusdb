@@ -10,7 +10,7 @@ pub use swipl;
 use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
 
-use rand::{Rng, thread_rng};
+use rand::{thread_rng, Rng};
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
