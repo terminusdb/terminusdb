@@ -1,9 +1,7 @@
 :- module('util/lazy_docs', [stream_to_lazy_docs/2]).
 
 :- use_module(library(http/json)).
-
-% Maybe do this?
-buffer_size(100).
+:- use_module(library(lists)).
 
 stream_to_lazy_docs(Stream, List) :-
     put_attr(List, 'util/lazy_docs', lazy_input(Stream, _)).
