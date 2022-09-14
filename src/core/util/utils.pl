@@ -53,7 +53,6 @@
               option_or_die/2,
               die_if/2,
               whole_arg/2,
-              random_string/1,
               uri_has_protocol/1,
               uri_has_prefix/1,
               choice_points/1,
@@ -84,7 +83,10 @@
               with_memory_file_stream/3,
               with_memory_file_stream/4,
               terminal_slash/2,
-              dict_field_verifier/3
+              dict_field_verifier/3,
+
+              %%% From the rust module
+              random_string/1
           ]).
 
 /** <module> Utils
@@ -784,14 +786,6 @@ whole_arg(N, Var) :-
     !.
 whole_arg(_, _) :-
     throw(error(system_error, context(utils:whole_arg/2, 'whole arg failed while trying to get its parents arity'))).
-
-/**
- * random_string(String) is det.
- */
-random_string(String) :-
-    Size is 2 ** (20 * 8),
-    random(0, Size, Num),
-    format(string(String), '~36r', [Num]).
 
 /*
  * uri_has_protocol(K) is semidet.
