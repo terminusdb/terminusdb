@@ -45,7 +45,7 @@ predicates! {
         diff.unify(vec.as_slice())
     }
 
-    #[module("$util")]
+    #[module("utils")]
     semidet fn random_string(_context, s_term) {
         let mut buf = [0_u8;31];
         let mut rng = thread_rng();
