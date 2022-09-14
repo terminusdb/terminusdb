@@ -195,7 +195,7 @@ paths:
                 type: object
 
     post:
-      x-python-client: Client::has_database
+      x-python-client: Client::create_database
       x-js-client: Client.createDatabase
       tags:
         - Database
