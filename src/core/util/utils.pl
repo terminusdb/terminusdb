@@ -789,9 +789,7 @@ whole_arg(_, _) :-
  * random_string(String) is det.
  */
 random_string(String) :-
-    Size is 2 ** (20 * 8),
-    random(0, Size, Num),
-    format(string(String), '~36r', [Num]).
+    '$util':random_string(String).
 
 /*
  * uri_has_protocol(K) is semidet.
