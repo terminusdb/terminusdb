@@ -229,7 +229,7 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
                 is_dict(Prefixes),
                 get_dict('@type', Prefixes, "@context")
             ),
-            error(no_context_fund_in_schema, _)),
+            error(no_context_found_in_schema, _)),
         call_catch_document_mutation(
             Prefixes,
             replace_context_document(Transaction, Prefixes)
