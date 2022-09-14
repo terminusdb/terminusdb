@@ -201,21 +201,21 @@ api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id,
         do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, _Dependencies, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, _, Transaction, Context, Document, Captures, Id, Captures) :-
+api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, Id, Captures) :-
     call_catch_document_mutation(
         Document,
         (   do_or_die(
-                insert_schema_document_unsafe(Transaction, Context, Document),
+                insert_schema_document_unsafe(Transaction, Prefixes, Document),
                 error(document_insertion_failed_unexpectedly(Document), _)),
             do_or_die(
                 Id = (Document.get('@id')),
                 error(document_has_no_id_somehow, _)))
     ).
-api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
+api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Out) :-
     call_catch_document_mutation(
         Document,
         do_or_die(
-            insert_document_unsafe(Transaction, Context, Document, Raw_JSON, Captures_In, Id, Captures_Out),
+            insert_document_unsafe(Transaction, Prefixes, Document, Raw_JSON, Captures_In, Id, Captures_Out),
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
@@ -225,9 +225,9 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
     ->  % For a schema full replace, read the context and replace the existing one.
         do_or_die(
             (   stream_to_lazy_docs(Stream,Result),
-                Result = [Context|Lazy_List],
-                is_dict(Context),
-                get_dict('@type', Context, "@context")
+                Result = [Prefixes|Lazy_List],
+                is_dict(Prefixes),
+                get_dict('@type', Prefixes, "@context")
             ),
             error(no_context_fund_in_schema, _)),
         call_catch_document_mutation(
@@ -235,18 +235,18 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
             replace_context_document(Transaction, Prefixes)
         )
     ;   % Otherwise, do nothing
-        database_prefixes(Transaction, Context),
-        stream_to_lazy_docs(Stream,Lazy_List)
+        database_prefixes(Transaction, Prefixes),
+        stream_to_lazy_docs(Stream, Lazy_List)
     ),
-    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Context, Captures_In, Captures_Out, Ids).
+    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, Ids).
 insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, Ids) :-
-    stream_to_lazy_docs(Stream,Lazy_List),
+    stream_to_lazy_docs(Stream, Lazy_List),
     api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, Ids).
 
 api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, []).
-api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Context, Captures_In, Captures_Out, [Id|Ids]) :-
-    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Context, Document, Captures_In, Id, Captures_Mid),
-    api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Context, Captures_Mid, Captures_Out, Ids).
+api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, [Id|Ids]) :-
+    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Mid),
+    api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, Ids).
 
 api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, []).
 api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, [Id|New_Ids]) :-
