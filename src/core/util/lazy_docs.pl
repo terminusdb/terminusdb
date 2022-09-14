@@ -6,7 +6,7 @@
 buffer_size(100).
 
 stream_to_lazy_docs(Stream, List) :-
-    put_attr(List, lazy_docs, lazy_input(Stream)).
+    put_attr(List, 'util/lazy_docs', lazy_input(Stream)).
 
 attr_unify_hook(State, Value) :-
     State = lazy_input(Stream),

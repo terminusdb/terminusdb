@@ -267,7 +267,10 @@
 
               % iana.pl
               iana/2,
-              iana/3
+              iana/3,
+
+              % lazy_docs.pl
+              stream_to_lazy_docs/2
           ]).
 
 % note: test_utils is intentionally omitted
@@ -285,3 +288,4 @@
 :- use_module(util/data_version).
 :- use_module(util/json_stream).
 :- use_module(util/iana).
+:- use_module(util/lazy_docs).

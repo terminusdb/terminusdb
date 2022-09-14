@@ -217,35 +217,35 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
-        json_read_required_context(Stream, Context, tail_stream([],Stream)),
+        do_or_die(
+            (   stream_to_lazy_docs(Stream,Result),
+                Result = [Context|Lazy_List],
+                is_dict(Context),
+                get_dict('@type', Context, "@context")
+            ),
+            error(no_context_fund_in_schema, _)),
         call_catch_document_mutation(
             Context,
             replace_context_document(Transaction, Context)
         )
-    ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
-        database_prefixes(Transaction, Context)
+    ;   % Otherwise, do nothing
+        database_prefixes(Transaction, Context),
+        stream_to_lazy_docs(Stream,Lazy_List)
     ),
-    api_insert_document_from_stream_unsafe(Stream, Graph_Type, Raw_JSON, Transaction, Context, Captures_In, Captures_Out, Ids).
+    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Context, Captures_In, Captures_Out, Ids).
 insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, Ids) :-
-    api_insert_document_from_stream(Stream, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, Ids).
+    stream_to_lazy_docs(Stream,Lazy_List),
+    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, Ids).
 
-api_insert_document_from_stream_unsafe(Stream, Graph_Type, Raw_JSON, Transaction, Context, Captures_In, Captures_Out, Ids) :-
-    (   json_read_term_stream(Stream, Document)
-    ->  api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Context, Document, Captures_In, Id, Captures_Mid),
-        Ids = [Id|New_Ids],
-        api_insert_document_from_stream_unsafe(Stream, Graph_Type, Raw_JSON, Transaction, Context, Captures_Mid, Captures_Out, New_Ids)
-    ;   Captures_In = Captures_Out,
-        Ids = []
-    ).
+api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, []).
+api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Context, Captures_In, Captures_Out, [Id|Ids]) :-
+    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Context, Document, Captures_In, Id, Captures_Mid),
+    api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Context, Captures_Mid, Captures_Out, Ids).
 
-api_insert_document_from_stream(Stream, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, Ids) :-
-    (   json_read_term_stream(Stream, Document)
-    ->  api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Mid),
-        Ids = [Id|New_Ids],
-        api_insert_document_from_stream(Stream, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, New_Ids)
-    ;   Captures_In = Captures_Out,
-        Ids = []
-    ).
+api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, []).
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, [Id|New_Ids]) :-
+    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Mid),
+    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, New_Ids).
 
 xor(true,false).
 xor(false,true).
