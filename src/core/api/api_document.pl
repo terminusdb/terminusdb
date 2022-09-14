@@ -202,16 +202,22 @@ api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id,
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 api_insert_document_unsafe_(schema, _, Transaction, Context, Document, Captures, Id, Captures) :-
-    do_or_die(
-        insert_schema_document_unsafe(Transaction, Context, Document),
-        error(document_insertion_failed_unexpectedly(Document), _)),
-    do_or_die(
-        Id = (Document.get('@id')),
-        error(document_has_no_id_somehow, _)).
+    call_catch_document_mutation(
+        Document,
+        (   do_or_die(
+                insert_schema_document_unsafe(Transaction, Context, Document),
+                error(document_insertion_failed_unexpectedly(Document), _)),
+            do_or_die(
+                Id = (Document.get('@id')),
+                error(document_has_no_id_somehow, _)))
+    ).
 api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Context, Document, Captures_In, Id, Captures_Out) :-
-    do_or_die(
-        insert_document_unsafe(Transaction, Context, Document, Raw_JSON, Captures_In, Id, Captures_Out),
-        error(document_insertion_failed_unexpectedly(Document), _)).
+    call_catch_document_mutation(
+        Document,
+        do_or_die(
+            insert_document_unsafe(Transaction, Context, Document, Raw_JSON, Captures_In, Id, Captures_Out),
+            error(document_insertion_failed_unexpectedly(Document), _))
+    ).
 
 insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
@@ -225,8 +231,8 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
             ),
             error(no_context_fund_in_schema, _)),
         call_catch_document_mutation(
-            Context,
-            replace_context_document(Transaction, Context)
+            Prefixes,
+            replace_context_document(Transaction, Prefixes)
         )
     ;   % Otherwise, do nothing
         database_prefixes(Transaction, Context),
