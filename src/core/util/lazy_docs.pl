@@ -7,8 +7,8 @@ stream_to_lazy_docs(Stream, List) :-
     put_attr(List, 'util/lazy_docs', lazy_input(Stream, _)).
 
 attr_unify_hook(State, Value) :-
-    State = lazy_input(Stream, Peak),
-    (   var(Peak)
+    State = lazy_input(Stream, Peek),
+    (   var(Peek)
     ->  json_read_dict(Stream, Term, [default_tag(json), end_of_file(eof)]),
         (   Term = eof
         ->  nb_setarg(2, State, []),
@@ -23,5 +23,5 @@ attr_unify_hook(State, Value) :-
             nb_linkarg(2, State, Result),
             Value = Result
         )
-    ;   Value = Peak
+    ;   Value = Peek
     ).
