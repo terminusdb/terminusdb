@@ -3646,7 +3646,7 @@ test(default_prefixes,
      ]) :-
     open_descriptor(Desc, DB),
     database_prefixes(DB,Prefixes),
-    writeq(Prefixes).
+    Prefixes = json{'@base':"http://i/",'@schema':"http://s/",'@type':'Context'}.
 
 test(create_database_prefixes,
      [
