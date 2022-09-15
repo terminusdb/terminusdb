@@ -25,6 +25,7 @@ paths:
   /:
     get:
       x-python-client: Client::get_databases
+      x-js-client: Client.getDatabases
       tags:
         - Connection
       summary: Get a list of databases for the authenticated user
@@ -42,6 +43,7 @@ paths:
   /info:
     get:
       x-python-client: not_implemented
+      x-js-client: Client.info
       tags:
         - Connection
       summary: Get information about the TerminusDB version
@@ -86,6 +88,7 @@ paths:
   /ok:
     get:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       tags:
         - Connection
       summary: Simple status update
@@ -95,6 +98,7 @@ paths:
   /db:
     get:
       x-python-client: Client::get_databases
+      x-js-client: Client.getDatabases
       tags:
         - Database
       summary: List details of all databases available to the authorized user.
@@ -130,6 +134,7 @@ paths:
   /db/{organization}/{database}:
     get:
       x-python-client: Client::get_database
+      x-js-client: not_implemented
       tags:
         - Database
       summary: List details of the database under the given organization.
@@ -168,6 +173,7 @@ paths:
                 type: object
     head:
       x-python-client: Client::has_database
+      x-js-client: Client.hasDatabase
       tags:
         - Database
       summary: Check that a db exists
@@ -189,7 +195,8 @@ paths:
                 type: object
 
     post:
-      x-python-client: Client::has_database
+      x-python-client: Client::create_database
+      x-js-client: Client.createDatabase
       tags:
         - Database
       summary: Create a database
@@ -267,6 +274,7 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
     delete:
       x-python-client: Client::delete_database
+      x-js-client: Client.deleteDatabase
       tags:
         - Database
       summary: Delete a database
@@ -320,6 +328,7 @@ paths:
                         example: admin
     put:
       x-python-client: not_implemented
+      x-js-client: Client.updateDatabase
       tags:
         - Database
       summary: Change qualities of a database (label, comment, etc.)
@@ -400,6 +409,7 @@ paths:
   /document/{path}:
     get:
       x-python-client: Client::get_document
+      x-js-client: Client.getDocument
       tags:
         - Document
       summary: Get a document
@@ -474,6 +484,7 @@ paths:
 
     post:
       x-python-client: Client::insert_document
+      x-js-client: Client.addDocument
       tags:
         - Document
       summary: Insert a new document
@@ -507,6 +518,7 @@ paths:
 
     delete:
       x-python-client: Client::delete_document
+      x-js-client: Client.deleteDocument
       tags:
         - Document
       summary: Delete one or multiple documents
@@ -533,6 +545,7 @@ paths:
           # TODO: Need the proper JSON resposne!
     put:
       x-python-client: Client::replace_document
+      x-js-client: Client.updateDocument
       tags:
         - Document
       summary: Replace a document
@@ -561,6 +574,7 @@ paths:
   /schema/{path}:
     get:
       x-python-client: Client::get_class_frame
+      x-js-client: Client.getSchemaFrame
       tags:
         - Frame
       summary: Get the full class frame for a class or all classes for a schema
@@ -606,6 +620,7 @@ paths:
   /woql:
     post:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       tags:
         - WOQL
       requestBody:
@@ -620,6 +635,7 @@ paths:
   /woql/{path}:
     post:
       x-python-client: Client::query
+      x-js-client: Client.query
       tags:
         - WOQL
       parameters:
@@ -642,6 +658,7 @@ paths:
   /clone/{organization}/{database}:
     post:
       x-python-client: Client::clonedb
+      x-js-client: Client.clonedb
       tags:
         - Collaboration
       parameters:
@@ -683,6 +700,7 @@ paths:
   /fetch/{path}:
     post:
       x-python-client: Client::fetch
+      x-js-client: Client.fetch
       tags:
         - Collaboration
       summary: Fetch the remote repository for the given path (default is origin)
@@ -719,6 +737,7 @@ paths:
   /push/{path}:
     post:
       x-python-client: Client::push
+      x-js-client: Client.push
       summary: Push the branch to the remote
       tags:
         - Collaboration
@@ -791,6 +810,7 @@ paths:
   /pull/{path}:
     post:
       x-python-client: Client::pull
+      x-js-client: Client.pull
       summary: Pull to a branch from a remote
       tags:
         - Collaboration
@@ -833,6 +853,7 @@ paths:
   /remote/{path}:
     post:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Create a new remote
       tags:
         - Collaboration
@@ -874,6 +895,7 @@ paths:
                       - "api:success"
     delete:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Delete a remote
       tags:
         - Collaboration
@@ -903,6 +925,7 @@ paths:
                       - "api:success"
     put:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Update a remote with a new location
       tags:
         - Collaboration
@@ -944,6 +967,7 @@ paths:
                       - "api:success"
     get:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Get the url for a given remote
       tags:
         - Collaboration
@@ -979,6 +1003,7 @@ paths:
   /branch/{path}:
     post:
       x-python-client: Client::create_branch
+      x-js-client: Client.branch
       tags:
         - Branches
       parameters:
@@ -1007,6 +1032,7 @@ paths:
                       - "api:success"
     delete:
       x-python-client: Client::delete_branch
+      x-js-client: Client.deleteBranch
       tags:
         - Branches
       parameters:
@@ -1030,6 +1056,7 @@ paths:
 
   /squash/{path}:
     x-python-client: Client::squash
+    x-js-client: Client.squashBranch
     parameters:
         - $ref: '#/components/parameters/branch_path'
     get:
@@ -1062,6 +1089,7 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       x-python-client: Client::reset
+      x-js-client: Client.resetBranch
       tags:
         - Branches
       requestBody:
@@ -1093,6 +1121,7 @@ paths:
   /optimize/{path}:
     post:
       x-python-client: Client::optimize
+      x-js-client: Client.optimizeBranch
       tags:
         - Optimize
       parameters:
@@ -1122,6 +1151,7 @@ paths:
   /prefixes/{path}:
     get:
       x-python-client: Client::_get_prefixes
+      x-js-client: Client.getPrefixes
       tags:
         - Prefixes
       parameters:
@@ -1142,6 +1172,7 @@ paths:
   /diff:
     post:
       x-python-client: Client::diff
+      x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
       tags:
         - Change management
       requestBody:
@@ -1184,6 +1215,7 @@ paths:
   /patch:
     post:
       x-python-client: Client::patch
+      x-js-client: Client.patch
       tags:
         - Change management
       requestBody:
@@ -1219,6 +1251,7 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       x-python-client: Client::apply
+      x-js-client: Client.apply
       tags:
         - Change management
       requestBody:
@@ -1264,6 +1297,7 @@ paths:
   /log/{organization}/{database}:
     get:
       x-python-client: Client::log
+      x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
       tags:
         - Change management
@@ -1319,6 +1353,7 @@ paths:
   /roles:
     post:
       x-python-client: Client::add_role
+      x-js-client: AccessControl.createRole
       tags:
         - Account management
       summary: Adding a new role
@@ -1355,6 +1390,7 @@ paths:
           description: Bad Request
     put:
       x-python-client: Client::change_role
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Changing actions for a role
@@ -1393,6 +1429,7 @@ paths:
           description: Bad Request
     get:
       x-python-client: Client::get_available_roles
+      x-js-client: AccessControl.getAccessRoles
       tags:
         - Account management
       summary: Get all roles available with the current authority
@@ -1407,6 +1444,7 @@ paths:
   /roles/{roleName}:
     delete:
       x-python-client: not_implemented
+      x-js-client: AccessControl.deleteRole
       tags:
         - Account management
       parameters:
@@ -1433,6 +1471,7 @@ paths:
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
     get:
       x-python-client: not_implemented
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get the role object by role name
@@ -1461,6 +1500,7 @@ paths:
   /organizations:
     get:
       x-python-client: Client::get_organizations
+      x-js-client: AccessControl.getAllOrganizations
       tags:
         - Account management
       summary: Get all organizations according to the capabilities of the user
@@ -1484,6 +1524,7 @@ paths:
           example: admin
     get:
       x-python-client: Client::get_organization
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get the organization object by name
@@ -1506,6 +1547,7 @@ paths:
           description: Forbidden
     post:
       x-python-client: Client::create_organization
+      x-js-client: AccessControl.createOrganization
       tags:
         - Account management
       summary: Add an organization with the given name
@@ -1526,6 +1568,7 @@ paths:
                 example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
     delete:
       x-python-client: Client::delete_organization
+      x-js-client: AccessControl.deleteOrganization
       tags:
         - Account management
       summary: Delete the organization of the given name
@@ -1554,6 +1597,7 @@ paths:
           example: admin
     get:
       x-python-client: Client::get_organization_users
+      x-js-client: AccessControl.getOrgUsers
       tags:
         - Account management
       summary: Get all available users according to capabilities within an organization
@@ -1575,6 +1619,7 @@ paths:
   /organizations/{organizationName}/users/{userName}:
     get:
       x-python-client: Client::get_organization_user
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get a user record for a given organization
@@ -1606,6 +1651,7 @@ paths:
   /organizations/{organizationName}/users/{userName}/databases:
     get:
       x-python-client: Client::get_organization_user_databases
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get the databases available to a user which are inside an organization
@@ -1640,6 +1686,7 @@ paths:
   /users:
     get:
       x-python-client: Client::get_users
+      x-js-client: AccessControl.getAllUsers
       tags:
         - Account Management
       summary: Get all users
@@ -1664,6 +1711,7 @@ paths:
           description: Forbidden
     put:
       x-python-client: Client::change_user_password
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Update a user's password
@@ -1699,6 +1747,7 @@ paths:
                 type: object
     post:
       x-python-client: Client::add_user
+      x-js-client: AccessControl.createUser
       tags:
         - Account management
       summary: Create a new user
@@ -1741,6 +1790,7 @@ paths:
           example: Bob
     get:
       x-python-client: Client::get_user
+      x-js-client: not_implemented
       tags:
         - Account Management
       summary: Get a user by name
@@ -1763,6 +1813,7 @@ paths:
           description: Forbidden
     delete:
       x-python-client: Client::delete_user
+      x-js-client: AccessControl.deleteUser
       tags:
         - Account Management
       summary: Delete a user
@@ -1779,6 +1830,7 @@ paths:
   /capabilities:
     post:
       x-python-client: Client::change_capabilities
+      x-js-client: AccessControl.manageCapability
       tags:
         - Account management
       summary: Grant or remove capabilities over a resource to a user
