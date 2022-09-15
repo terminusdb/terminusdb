@@ -13405,6 +13405,64 @@ test(bogus_multilingual_class,
      ]) :-
     write_schema(bogus_multilingual_class,Desc).
 
+
+monolingual_inheritance_schema('[
+  {
+    "@base": "terminusdb:///data/",
+    "@schema": "terminusdb:///schema#",
+    "@type": "@context"
+  },
+  {
+    "@id": "Any",
+    "@documentation": {
+      "@comment": "global root class",
+      "@properties": {
+        "label": "entity label"
+      }
+    },
+    "@type": "Class",
+    "label": { "@class": "xsd:string", "@type": "Optional" }
+  },
+  {
+    "@id": "Note",
+    "@inherits": "Any",
+    "@documentation": {
+      "@comment": "a note"
+    },
+    "@type": "Class",
+    "relates_to": { "@class": "Any", "@type": "Set" }
+  }
+]').
+
+:- use_module(schema).
+
+test(merge_documentation_different,
+     []) :-
+
+    'document/schema':merge_documentation_language_records(
+        [json{'@comment':"a note"},
+         json{'@properties':json{'terminusdb:///schema#label':"entity label"}}],
+        [Result]),
+    Result = json{'@comment':"a note",
+                  '@properties':
+                  json{'terminusdb:///schema#label':"entity label"}}.
+
+test(monolingual_inheritance,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(monolingual_inheritance_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, 'Note', Frame),
+    Frame = json{'@documentation':
+                 json{'@comment':"a note",
+                      '@properties':json{label:"entity label"}},
+                 '@type':'Class',
+                 label:json{'@class':'xsd:string','@type':'Optional'},
+                 relates_to:json{'@class':'Any','@type':'Set'}}.
+
 :- end_tests(multilingual).
 
 :- begin_tests(json_metadata).
