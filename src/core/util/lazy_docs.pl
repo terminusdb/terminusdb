@@ -2,8 +2,12 @@
 
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(utils).
 
 stream_to_lazy_docs(Stream, List) :-
+    do_or_die(
+        ground(Stream),
+        error(instantiation_error, _)),
     put_attr(List, 'util/lazy_docs', lazy_input(Stream, _)).
 
 attr_unify_hook(State, Value) :-
