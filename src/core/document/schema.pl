@@ -1118,16 +1118,25 @@ merge_documentation_language_records([],[]).
 merge_documentation_language_records([Record],[Record]) :-
     !.
 merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
-    get_dict('@language', Record, Lang),
-    partition({Lang}/[R]>>get_dict('@language',R,Lang),Rest,Same,Different),
-    foldl([R1,R2,Result]>>(
-              (   get_dict('@properties', R2, Properties2)
-              ->  (   get_dict('@properties', R1, Properties1)
-                  ->  put_dict(Properties2, Properties1, Properties),
-                      put_dict(_{'@properties' : Properties}, R2, Result)
-                  ;   put_dict(_{'@properties' : Properties2}, R2, Result)
+    (   get_dict('@language', Record, Lang)
+    ->  true
+    ;   Lang = no(lang) % out of band
+    ),
+    !,
+    partition({Lang}/[R]>>
+              (   Lang = no(lang)
+              ->  \+ get_dict('@language', R, Lang)
+              ;   get_dict('@language',R,Lang)
+              ),
+              Rest,Same,Different),
+    foldl([New,Kernel,Result]>>(
+              (   get_dict('@properties', New, Properties2)
+              ->  (   get_dict('@properties', Kernel, Properties1)
+                  ->  put_dict(Properties1, Properties2, Properties),
+                      put_dict(_{'@properties' : Properties}, Kernel, Result)
+                  ;   put_dict(_{'@properties' : Properties2}, Kernel, Result)
                   )
-              ;   R1 = R2
+              ;   Result = Kernel
               )
           ),Same,Record,MergedRecord),
     merge_documentation_language_records(Different,Merged).
