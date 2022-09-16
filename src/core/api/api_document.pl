@@ -181,7 +181,7 @@ known_document_error(language_tags_repeated(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
-    catch(Goal,
+    catch_with_backtrace(Goal,
           error(E, Context),
           (   known_document_error(E)
           ->  embed_document_in_error(E, Document, New_E),
