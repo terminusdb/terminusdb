@@ -147,6 +147,7 @@ class_subsumed(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
     schema_class_subsumed(Schema,Class,Super).
 
+:- table schema_class_subsumed/3 as private.
 schema_class_subsumed(_Schema,Class,Class).
 schema_class_subsumed(Schema,Class,Super) :-
     schema_class_super(Schema,Class,Super).
@@ -465,6 +466,7 @@ subclass_of(Validation_Object,Subclass,Class) :-
     database_schema(Validation_Object,Schema),
     schema_subclass_of(Schema,Subclass,Class).
 
+:- table schema_subclass_of/3 as private.
 schema_subclass_of(Schema,Subclass,Class) :-
     xrdf(Schema,Subclass,sys:inherits,Class).
 
