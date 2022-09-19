@@ -56,6 +56,7 @@
               enum_value/3,
               update_id_field/3,
               update_captures/3,
+              update_captures_with_id/4,
               capture_ref/4,
               schema_document_exists/2,
               document_exists/2
@@ -716,10 +717,7 @@ update_id_field(Elaborated,Context,Result) :-
         put_dict('@id', Elaborated, Id_Ex, Result)
     ).
 
-update_captures(Elaborated,In,Out) :-
-    get_dict('@id', Elaborated, Id),
-    get_dict('@capture', Elaborated, Capture_Group),
-    !,
+update_captures_with_id(Capture_Group, Id, In, Out) :-
     do_or_die(string(Capture_Group),
               error(capture_is_not_a_string(Capture_Group), _)),
     (   get_assoc(Capture_Group, In, Capture_Var)
@@ -729,6 +727,12 @@ update_captures(Elaborated,In,Out) :-
         Out = In
     ;   put_assoc(Capture_Group, In, Id, Out)
     ).
+
+update_captures(Elaborated,In,Out) :-
+    get_dict('@id', Elaborated, Id),
+    get_dict('@capture', Elaborated, Capture_Group),
+    !,
+    update_captures_with_id(Capture_Group, Id, In, Out).
 update_captures(_Elaborated,Capture,Capture).
 
 json_assign_ids(DB,Context,JSON) :-

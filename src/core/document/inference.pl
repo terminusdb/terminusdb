@@ -48,6 +48,43 @@ insert_document({name:"Gavin"})
 Error: Could not find a principal type.
 */
 
+top_check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)),
+is_dict(Value),
+get_dict('@parent', Value, Parent),
+is_subdocument(Database, Type) =>
+    get_dict('@property', Parent, Property),
+    (   get_dict('@id', Parent, Parent_Id0)
+    ->  (   is_dict(Parent_Id0)
+        ->  do_or_die(get_dict('@ref', Parent_Id0, Ref),
+                      error(wah,_)),
+            update_captures_with_id(Ref, Parent_Id, In, Mid),
+            put_dict(_{'@id': Parent_Id}, Parent, ParentMid)
+        ;   do_or_die(text(Parent_Id0),
+                      ground(Parent_Id0),
+                      error(wah,_)),
+            ParentMid = Parent,
+            Mid = In,
+            Parent_Id = Parent_Id0)
+    ;   get_dict('@ref', Parent, Ref)
+    ->  update_captures_with_id(Ref, Parent_Id, In, Mid),
+        del_dict('@ref', Parent, ParentMid0),
+        put_dict(_{'@id': Parent_Id}, ParentMid0, ParentMid)
+    ;   throw(error(wah,_))),
+
+    put_dict(_{'@parent': ParentMid}, Value, ValueMid0),
+
+    SubH=[link(Parent_Id,Property,Id)|SubM],
+
+    (   get_dict('@id', ValueMid0, Specified_Id)
+    ->  when(ground(Id),
+             do_or_die(Specified_Id = Id,
+                       error(wah,_))),
+        ValueMid = ValueMid0
+    ;   put_dict(_{'@id': Id}, ValueMid0, ValueMid)),
+
+    check_type(Database, Prefixes, ValueMid, Type, Annotated, captures(Mid, DepH-DepT, SubM-SubT, Out)).
+top_check_type(Database,Prefixes,Value,Type,Annotated,Captures) =>
+    check_type(Database, Prefixes, Value, Type, Annotated, Captures).
 
 % DB, Prefixes |- Value <= Type
 check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
@@ -669,7 +706,7 @@ get_dict('@type', Dictionary, Type) =>
         )
     ->  put_dict('@type', Dictionary, Type_Ex, New_Dictionary),
         expand_dictionary_keys(New_Dictionary,Prefixes,Dictionary_Expanded),
-        check_type(Database,Prefixes,Dictionary_Expanded,Type_Ex,Annotated,Captures),
+        top_check_type(Database,Prefixes,Dictionary_Expanded,Type_Ex,Annotated,Captures),
         Inferred_Type = Type_Ex
     ;   no_captures(Captures),
         (   (   is_simple_class(Database, Type_Ex)
