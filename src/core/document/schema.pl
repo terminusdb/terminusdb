@@ -508,8 +508,13 @@ is_built_in(P) :-
 
 is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
+    is_schema_abstract(Schema, C).
+
+:- table is_schema_abstract/2 as private.
+is_schema_abstract(Schema, C) :-
     xrdf(Schema, C, sys:abstract, rdf:nil).
 
+:- table is_direct_subdocument/2 as private.
 is_direct_subdocument(Schema, C) :-
     xrdf(Schema, C, sys:subdocument, rdf:nil).
 
@@ -522,6 +527,7 @@ schema_is_subdocument(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
 
+:- table is_direct_unfoldable/2 as private.
 is_direct_unfoldable(Schema, C) :-
     xrdf(Schema, C, sys:unfoldable, rdf:nil).
 
