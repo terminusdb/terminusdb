@@ -647,7 +647,7 @@ json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,Captures_Out) :-
 :- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out) :-
     %json_elaborate_(DB,JSON,Context,Captures_In,Elaborated,Dependencies,Captures_Out),
-    infer_type(DB,Context,JSON,_,Result,captures(Captures_In,Dependencies-[],Captures_Out)),
+    infer_type(DB,Context,JSON,_,Result,captures(Captures_In,Dependencies-[],_Subdocuments-[],Captures_Out)),
     (   Result = witness(Witness)
     ->  term_variables(Witness, Vars),
         maplist([null]>>true,Vars),
