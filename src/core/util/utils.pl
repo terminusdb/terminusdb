@@ -804,8 +804,11 @@ uri_has_protocol(K) :-
  * Tests to see if a URI has a prefix.
  */
 uri_has_prefix(K) :-
+    uri_has_prefix(K,_).
+
+uri_has_prefix(K,Match) :-
     \+ uri_has_protocol(K),
-    re_match('^[^:]*:[^:]*',K).
+    re_matchsub('(?<prefix>\\p{Xan}((\\p{Xan}|[0-9]|-|\\.)+(\\p{Xan}|[0-9]|-))?):(?<suffix>.*)',K, Match, [auto_capture(false)]).
 
 /*
  * getenv_number(+Name, +Value) is semidet.
