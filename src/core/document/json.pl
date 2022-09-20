@@ -4,7 +4,7 @@
               idgen_lexical/3,
               context_triple/2,
               json_elaborate/3,
-              json_elaborate/6,
+              json_elaborate/7,
               json_schema_triple/3,
               json_schema_elaborate/3,
               get_document/3,
@@ -19,7 +19,7 @@
               delete_document/2,
               insert_document/3,
               insert_document/7,
-              insert_document_unsafe/7,
+              insert_document_unsafe/8,
               replace_document/2,
               replace_document/3,
               replace_document/5,
@@ -643,7 +643,7 @@ json_elaborate(DB,JSON,Elaborated) :-
 
 json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,SH-ST,Captures_Out) :-
     database_prefixes(DB,Context),
-    json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies, Captures_Out).
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies,SH-ST,Captures_Out).
 
 :- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,SH-ST,Captures_Out) :-
@@ -2632,7 +2632,7 @@ insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, 
     insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
 
 % insert_document/8
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, [], T-T, Captures) :-
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -2648,7 +2648,7 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, [],
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, Dependencies, SH-ST, Captures_Out) :-
+insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, SH-ST, Captures_Out) :-
     json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -2677,15 +2677,15 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, Depende
              )
          )).
 
-insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, Captures) :-
+insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  prefix_expand(Id_Short,Prefixes,Id),
         valid_json_id_or_die(Prefixes,Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, Captures_Out),
+insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, BLH-BLT, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, BLH-BLT, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2751,7 +2751,7 @@ replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependen
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, Captures_Out),
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, _BLH-_BLT, Captures_Out),
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
     catch(delete_document(Transaction, false, Id),

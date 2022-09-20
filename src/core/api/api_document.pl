@@ -201,7 +201,7 @@ api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id,
         do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, Id, Captures) :-
+api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, Id, Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         (   do_or_die(
@@ -211,15 +211,15 @@ api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures
                 Id = (Document.get('@id')),
                 error(document_has_no_id_somehow, _)))
     ).
-api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Out) :-
+api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Out, SH-ST) :-
     call_catch_document_mutation(
         Document,
         do_or_die(
-            insert_document_unsafe(Transaction, Prefixes, Document, Raw_JSON, Captures_In, Id, Captures_Out),
+            insert_document_unsafe(Transaction, Prefixes, Document, Raw_JSON, Captures_In, Id, SH-ST, Captures_Out),
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, Backlinks, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -238,10 +238,10 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
         database_prefixes(Transaction, Prefixes),
         stream_to_lazy_docs(Stream, Lazy_List)
     ),
-    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, Backlinks-[], Ids).
-insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, Ids) :-
+    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
+insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
     stream_to_lazy_docs(Stream, Lazy_List),
-    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, Backlinks-[], Ids).
+    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
 
 api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Id|Ids]) :-
     !,
@@ -307,7 +307,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
                          database_instance(Transaction, Instance),
-                         insert_backlinks(Backlinks, Instance),
+                         insert_backlinks(BackLinks, Instance),
                          die_if(has_duplicates(Ids, Duplicates),
                                 error(same_ids_in_one_transaction(Duplicates), _))
                      ),
@@ -316,7 +316,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
 
 insert_backlinks([], _).
 insert_backlinks([link(S,P,O)|T], Instance) :-
-    insert(Instance, S, P, O),
+    insert(Instance, S, P, O, _),
     insert_backlinks(T, Instance).
 
 nonground_captures(Captures, Nonground) :-

@@ -48,11 +48,11 @@ insert_document({name:"Gavin"})
 Error: Could not find a principal type.
 */
 
-update_document_links_monadic([], [], _Context, _Id, captures(In, D-D, S-S, In)).
-update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Context, Id, captures(In, DepH-DepT, SubH-SubT, Out)) :-
+update_document_links_monadic([], [], _Prefixes, _Id, captures(In, D-D, S-S, In)).
+update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes, Id, captures(In, DepH-DepT, SubH-SubT, Out)) :-
     do_or_die(get_dict('@property', Parent, Property),
               wah),
-    prefix_expand_schema(Property, Context, Property_Ex),
+    prefix_expand_schema(Property, Prefixes, Property_Ex),
     (   get_dict('@id', Parent, Parent_Id0)
     ->  (   is_dict(Parent_Id0)
         ->  do_or_die(get_dict('@ref', Parent_Id0, Ref),
@@ -74,7 +74,7 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Context,
 
     SubH=[link(Parent_Id,Property_Ex,Id)|SubMid],
 
-    update_document_links_monadic(Parents, ParentsOut, Context, Id, captures(Mid, DepH-DepT, SubMid-SubT, Out)).
+    update_document_links_monadic(Parents, ParentsOut, Prefixes, Id, captures(Mid, DepH-DepT, SubMid-SubT, Out)).
 
 update_document_links(Value, ValueOut, Database, Prefixes, Type, Captures),
 is_dict(Value),
@@ -91,7 +91,7 @@ get_dict('@linked-by', Value, Parent) =>
                   error(wah))
     ;   true),
 
-    update_document_links_monadic(Parents, ParentsOut, Id, Captures),
+    update_document_links_monadic(Parents, ParentsOut, Prefixes, Id, Captures),
 
     put_dict(_{'@parent': ParentsOut}, ValueMid, ValueOut).
 update_document_links(Value, ValueOut, _Database, _Prefixes, _Type, captures(In, DepH-DepT, SubH-SubT, Out)) =>
