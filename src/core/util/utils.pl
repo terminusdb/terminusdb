@@ -813,7 +813,7 @@ uri_has_prefix(K,Match) :-
     uri_has_prefix_unsafe(K,Match).
 
 uri_has_prefix_unsafe(K,Match) :-
-    re_matchsub('^(?<prefix>\\p{Xan}((\\p{Xan}|[0-9]|_|-|\\.)*(\\p{Xan}|[0-9]|_|-))?):(?<suffix>.*)$',
+    re_matchsub('^(?<prefix>(\\p{L}|@)((\\p{Xwd}|-|\\.)*(\\p{Xwd}|-))?):(?<suffix>.*)$',
                 K,
                 Match, [auto_capture(false)]).
 
