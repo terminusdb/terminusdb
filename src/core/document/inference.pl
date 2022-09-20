@@ -48,54 +48,68 @@ insert_document({name:"Gavin"})
 Error: Could not find a principal type.
 */
 
-top_check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)),
-is_dict(Value),
-get_dict('@parent', Value, Parent),
-is_subdocument(Database, Type) =>
-    get_dict('@property', Parent, Property),
+update_document_links_monadic([], [],_Id, captures(In, D-D, S-S, In)).
+update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut],Id,captures(In, DepH-DepT, SubH-SubT, Out)) :-
+    do_or_die(get_dict('@property', Parent, Property),
+              wah),
     (   get_dict('@id', Parent, Parent_Id0)
     ->  (   is_dict(Parent_Id0)
         ->  do_or_die(get_dict('@ref', Parent_Id0, Ref),
                       error(wah,_)),
             update_captures_with_id(Ref, Parent_Id, In, Mid),
-            put_dict(_{'@id': Parent_Id}, Parent, ParentMid)
+            put_dict(_{'@id': Parent_Id}, Parent, ParentOut)
         ;   do_or_die(text(Parent_Id0),
                       ground(Parent_Id0),
                       error(wah,_)),
-            ParentMid = Parent,
-            Mid = In,
+            ParentOut = Parent,
+            Out = In,
             Parent_Id = Parent_Id0)
     ;   get_dict('@ref', Parent, Ref)
     ->  update_captures_with_id(Ref, Parent_Id, In, Mid),
-        del_dict('@ref', Parent, ParentMid0),
-        put_dict(_{'@id': Parent_Id}, ParentMid0, ParentMid)
+        del_dict('@ref', Parent, ParentMid),
+        put_dict(_{'@id': Parent_Id}, ParentMid, ParentOut)
     ;   throw(error(wah,_))),
 
-    put_dict(_{'@parent': ParentMid}, Value, ValueMid0),
+    SubH=[link(Parent_Id,Property,Id)|SubMid],
 
-    SubH=[link(Parent_Id,Property,Id)|SubM],
+    update_document_links_monadic(Parents, ParentsOut, captures(Mid, DepH-DepT, SubMid-SubT, Out)).
 
-    (   get_dict('@id', ValueMid0, Specified_Id)
-    ->  when(ground(Id),
-             do_or_die(Specified_Id = Id,
-                       error(wah,_))),
-        ValueMid = ValueMid0
-    ;   put_dict(_{'@id': Id}, ValueMid0, ValueMid)),
+update_document_links(Value, ValueOut, Database, Prefixes, Type, Captures)
+is_dict(Value),
+get_dict('@linked-by', Value, Parent) =>
+    update_id_field(Value, Prefixes, ValueMid),
+    Id = (ValueMid.'@id'),
 
-    check_type(Database, Prefixes, ValueMid, Type, Annotated, captures(Mid, DepH-DepT, SubM-SubT, Out)).
-top_check_type(Database,Prefixes,Value,Type,Annotated,Captures) =>
-    check_type(Database, Prefixes, Value, Type, Annotated, Captures).
+    (   is_list(Parent)
+    ->  Parents = Parent
+    ;   Parents = [Parent]),
+
+    (   is_subdocument(Database, Type)
+    ->  do_or_die(Parents = [_],
+                  error(wah)),
+    ;   true),
+
+    update_document_links_monadic(Parents, ParentsOut, Id, Captures),
+
+    put_dict(_{'@parent': ParentsOut}, ValueMid, ValueOut).
+update_document_links(Value, ValueOut, _Database, _Prefixes, _Type, captures(In, DepH-DepT, SubH-SubT, Out)) =>
+    ValueOut = Value,
+    DepH = DepT,
+    SubH = SubT,
+    In = Out.
 
 % DB, Prefixes |- Value <= Type
-check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
+check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
     \+ is_abstract(Database, Type),
+    update_document_links(Value, ValueOut, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
+    NextCaptures = captures(Mid, DepMid-DepT, SubMid-SubT, Out),
     class_frame(Database, Type, Frame, [expand_abstract(false),
                                         compress_ids(false)]),
     (   is_dict(Value),
         shape_mismatch(Database,Type,Value,Properties)
-    ->  no_captures(Captures),
+    ->  no_captures(NextCaptures),
         missing_property_witness(Value,Properties,Type,Annotated)
-    ;   check_frame(Frame,Database,Prefixes,Value,Type,Annotated,Captures)
+    ;   check_frame(Frame,Database,Prefixes,Value,Type,Annotated,NextCaptures)
     ).
 
 missing_property_witness(Dictionary,Properties,Type,witness(Result)) :-
