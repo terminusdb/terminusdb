@@ -55,6 +55,8 @@
               whole_arg/2,
               uri_has_protocol/1,
               uri_has_prefix/1,
+              uri_has_prefix/2,
+              uri_has_prefix_unsafe/2,
               choice_points/1,
               sol_set/2,
               sol_bag/2,
@@ -808,7 +810,12 @@ uri_has_prefix(K) :-
 
 uri_has_prefix(K,Match) :-
     \+ uri_has_protocol(K),
-    re_matchsub('(?<prefix>\\p{Xan}((\\p{Xan}|[0-9]|-|\\.)+(\\p{Xan}|[0-9]|-))?):(?<suffix>.*)',K, Match, [auto_capture(false)]).
+    uri_has_prefix_unsafe(K,Match).
+
+uri_has_prefix_unsafe(K,Match) :-
+    re_matchsub('^(?<prefix>\\p{Xan}((\\p{Xan}|[0-9]|_|-|\\.)*(\\p{Xan}|[0-9]|_|-))?):(?<suffix>.*)$',
+                K,
+                Match, [auto_capture(false)]).
 
 /*
  * getenv_number(+Name, +Value) is semidet.

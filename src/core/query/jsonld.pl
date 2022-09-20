@@ -171,10 +171,11 @@ context_prefix_expand(K,Context,Key) :-
     (   uri_has_protocol(K)
     ->  K = Key
     %   Prefixed URI
-    ;   re_match('^[^:]*:[^:]*',K) % uri_has_prefix(K)
-    ->  split_atom(K,':',[Prefix,Suffix]),
-        (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,Suffix,Key)
+    ;   uri_has_prefix_unsafe(K, Groups)
+    ->  atom_string(Prefix, Groups.prefix),
+        writeq(Context),
+        (   get_dict(Prefix, Context, Expanded)
+        ->  atom_concat(Expanded,(Groups.suffix),Key)
         ;   throw(error(key_has_unknown_prefix(K),_)))
     %   Keyword
     ;   is_at(K)
@@ -206,8 +207,8 @@ prefix_expand(K,Context,Key) :-
     %   Is already qualified
     (   uri_has_protocol(K)
     ->  K = Key
-    %   Is prefixed
-    ;   re_matchsub('(?<prefix>^[^:]*):(?<suffix>.*)',K, Groups, []) % uri_has_prefix(K)
+    %   Is prefixed (but does not check for protocol)
+    ;   uri_has_prefix_unsafe(K, Groups)
     ->  atom_string(Prefix, Groups.prefix),
         (   get_dict(Prefix,Context,Expanded)
         ->  atom_concat(Expanded,(Groups.suffix),Key)
