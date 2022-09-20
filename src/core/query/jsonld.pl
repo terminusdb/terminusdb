@@ -173,7 +173,6 @@ context_prefix_expand(K,Context,Key) :-
     %   Prefixed URI
     ;   uri_has_prefix_unsafe(K, Groups)
     ->  atom_string(Prefix, Groups.prefix),
-        writeq(Context),
         (   get_dict(Prefix, Context, Expanded)
         ->  atom_concat(Expanded,(Groups.suffix),Key)
         ;   throw(error(key_has_unknown_prefix(K),_)))
