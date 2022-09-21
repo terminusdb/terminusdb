@@ -756,6 +756,20 @@ In general check ∀o. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
       ⇓      ⇓
       c      d
 
+a -q-> o     a:C, range(C,q) = T, o:T
+b -p-/       b:D, range(D,p) = S, o:S
+
+Linking
+=======
+
+Suppose we insert a document by using @linked-by. We now have to check:
+
+* Type correctness of the object according to the subjects class & property.
+* Cardinality of the subjects class & property.
+
+For subdocuments we must also check:
+
+* Uniqueness of reference
 
 */
 
@@ -795,14 +809,18 @@ was_in_list(Validation_Object, L, O) :-
     was_document(Validation_Object, O),
     triple(Instance, L, Rdf_First, node(O)).
 
-% Generator for: ∃ o,p,T. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
+% Generator for: ∀ +(s,p,o). ∃ C,p,o,T. doc(o) ∧ s:C ∧ range(C,p)=T ⇒ o:T
 referential_range_candidate(Validation_Object,O,P,Type) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
+    validation_object_backlinks(Validation_Object, BackLinks),
     % Shared dictionary for predicates would be handy here!
     distinct(O-P-Type,
-             (   triple_addition(Instance, S, P, node(O)),
-                 is_document(Validation_Object, O),
+             (   (   triple_addition(Instance, S, P, node(O)),
+                     is_document(Validation_Object, O)
+                 ;   member(link(S,P,O), BackLinks),
+                     is_subdocument(Validation_Object, O)
+                 ),
                  triple(Instance, S, Rdf_Type, node(C)),
                  class_predicate_type(Validation_Object, C, P, Type)
              )).
@@ -933,18 +951,48 @@ dangling_reference_candidate(Validation_Object,S,P,O) :-
                  rdf_first(P)
              )).
 
-% Generator for: ∃ o,p,T. -(s,p,o) ∧ doc(o) ∧ s:T
+% Generator for: ∀ -(s,p,o). ∃ o,p,C. doc(o) ∧ s:C ⇒ card(s,p,C)
 referential_cardinality_candidate(Validation_Object,S,P,C) :-
     instance_layer(Validation_Object, Instance),
     rdf_type(Rdf_Type),
+    validation_object_backlinks(Validation_Object, BackLinks),
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-C,
-             (   triple_removal(Instance, S, P, node(O)),
-                 \+ atom_string(Rdf_Type,P),
-                 was_document(Validation_Object, O),
+             (   (   triple_removal(Instance, S, P, node(O)),
+                     \+ atom_string(Rdf_Type,P),
+                     was_document(Validation_Object, O)
+                 ;   distinct(
+                         S-P,
+                         (   member(link(S,P,_),BackLinks),
+                             \+ atom_string(Rdf_Type,P)
+                         ))
+                 ),
                  triple(Instance, S, Rdf_Type, node(C))
              )).
 
+referential_unique_candidate(Validation_Object, O) :-
+    validation_object_backlinks(Validation_Object, BackLinks),
+    distinct(O,
+             member(link(_,_,O), BackLinks)),
+    is_subdocument(Validation_Object, O).
+
+refute_uniqueness_of_reference(Validation_Object, O, Witness) :-
+    database_instance(Validation_Object,Instance),
+    findall(
+        json{
+            subject : S,
+            predicate : P
+        },
+        xrdf(Instance,S,P,O),
+        References),
+    \+ References = [_],
+    Witness = witness{'@type':referenced_document_is_not_unique,
+                      object: O,
+                      references: References}.
+
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_unique_candidate(Validation_Object, O),
+    refute_uniqueness_of_reference(Validation_Object, O, Witness).
 refute_referential_integrity(Validation_Object,Witness) :-
     referential_cardinality_candidate(Validation_Object, S, P, T),
     instance_layer(Validation_Object, Instance),
