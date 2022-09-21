@@ -235,7 +235,7 @@ describe('cli-doc', function () {
       {
         '@type': 'Other',
         '@linked-by': [{ '@ref': 'Thing1', '@property': 'other' },
-                       { '@ref': 'Thing2', '@property': 'other' }],
+          { '@ref': 'Thing2', '@property': 'other' }],
         name: 'My Name',
       },
       ]
@@ -247,7 +247,7 @@ describe('cli-doc', function () {
       const [other] = JSON.parse(r3.stdout)
       const otherId = other['@id']
       const r4 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Thing`)
-      const [thing1,thing2] = JSON.parse(r4.stdout)
+      const [thing1, thing2] = JSON.parse(r4.stdout)
       expect(thing1.other).to.equal(otherId)
       expect(thing2.other).to.equal(otherId)
     })
@@ -268,8 +268,8 @@ describe('cli-doc', function () {
       },
       {
         '@type': 'Class',
-        '@subdocument' : [],
-        '@key' : { '@type' : 'Random' },
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
         '@id': 'Other',
         name: 'xsd:string',
       }]
@@ -308,8 +308,8 @@ describe('cli-doc', function () {
       },
       {
         '@type': 'Class',
-        '@subdocument' : [],
-        '@key' : { '@type' : 'Random' },
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
         '@id': 'Other',
         name: 'xsd:string',
       }]
@@ -327,7 +327,7 @@ describe('cli-doc', function () {
       {
         '@type': 'Other',
         '@linked-by': [{ '@ref': 'Thing1', '@property': 'other' },
-                       { '@ref': 'Thing2', '@property': 'other' }],
+          { '@ref': 'Thing2', '@property': 'other' }],
         name: 'My Name',
       },
       ]
