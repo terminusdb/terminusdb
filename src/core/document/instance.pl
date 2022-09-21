@@ -759,6 +759,10 @@ In general check ∀o. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
 
 */
 
+validation_object_backlinks(Validation_Object, BackLinks) :-
+    database_instance(Validation_Object, [RWO]),
+    get_dict(backlinks,RWO,BackLinks).
+
 is_document(Validation_Object, I) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
