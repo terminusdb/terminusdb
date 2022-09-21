@@ -76,7 +76,7 @@ pub fn value_string_to_json(s: &str) -> Value {
         }
         LangOrType::Lang(val, lang) => {
             let s = val[1..val.len() - 1].to_string();
-            let l = lang[1..val.len() - 1].to_string();
+            let l = lang[1..lang.len() - 1].to_string();
             json!({ "@lang" : l, "@value" : s })
         }
     }
