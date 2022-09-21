@@ -118,6 +118,8 @@
               whole_arg/2,
               random_string/1,
               uri_has_prefix/1,
+              uri_has_prefix/2,
+              uri_has_prefix_unsafe/2,
               uri_has_protocol/1,
               choice_points/1,
               sol_bag/2,

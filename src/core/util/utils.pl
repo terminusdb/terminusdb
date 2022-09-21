@@ -55,6 +55,8 @@
               whole_arg/2,
               uri_has_protocol/1,
               uri_has_prefix/1,
+              uri_has_prefix/2,
+              uri_has_prefix_unsafe/2,
               choice_points/1,
               sol_set/2,
               sol_bag/2,
@@ -804,8 +806,16 @@ uri_has_protocol(K) :-
  * Tests to see if a URI has a prefix.
  */
 uri_has_prefix(K) :-
+    uri_has_prefix(K,_).
+
+uri_has_prefix(K,Match) :-
     \+ uri_has_protocol(K),
-    re_match('^[^:]*:[^:]*',K).
+    uri_has_prefix_unsafe(K,Match).
+
+uri_has_prefix_unsafe(K,Match) :-
+    re_matchsub('^(?<prefix>(\\p{L}|@)((\\p{Xwd}|-|\\.)*(\\p{Xwd}|-))?):(?<suffix>.*)$',
+                K,
+                Match, [auto_capture(false)]).
 
 /*
  * getenv_number(+Name, +Value) is semidet.
