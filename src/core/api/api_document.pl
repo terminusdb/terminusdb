@@ -314,8 +314,12 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-insert_backlinks([], _).
-insert_backlinks([link(S,P,O)|T], Instance) :-
+insert_backlinks(Links, Graph) :-
+    nb_link_dict(backlinks,Graph,Links),
+    insert_backlinks_(Links, Graph).
+
+insert_backlinks_([], _).
+insert_backlinks_([link(S,P,O)|T], Instance) :-
     insert(Instance, S, P, O, _),
     insert_backlinks(T, Instance).
 

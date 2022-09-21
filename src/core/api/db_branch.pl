@@ -34,6 +34,7 @@ create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)
                      descriptor: Schema_Descriptor,
                      triple_update: false,
                      read: _,
+                     backlinks: [],
                      write: Builder},
 
     Commit_Info = commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'},
