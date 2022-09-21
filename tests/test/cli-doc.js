@@ -156,6 +156,52 @@ describe('cli-doc', function () {
       }
     })
   })
+  describe('backlinks', function () {
+    it('is able to link document with backlinks', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'My Thing',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': { '@ref': 'My Thing', '@property': 'other' },
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      console.log(r.stdout)
+      const r2 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true`)
+      const docs = JSON.parse(r2.stdout)
+      expect(docs).has.length(2)
+      const r3 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Other`)
+      const [other] = JSON.parse(r3.stdout)
+      const other_id = other['@id']
+      const r4 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Thing`)
+      const [thing] = JSON.parse(r4.stdout)
+      expect(thing.other).to.equal(other_id)
+    })
+  })
 
   describe('schema manipulation', function () {
     it('adds a bad language', async function () {
