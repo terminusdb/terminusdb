@@ -2353,7 +2353,8 @@ validate_created_graph(schema, Layer) :-
                             schema_objects: [graph_validation_obj{
                                                  descriptor: fake{},
                                                  read: Layer,
-                                                 changed: true
+                                                 changed: true,
+                                                 backlinks: []
                                              }]
                         },
 
@@ -2367,7 +2368,8 @@ validate_created_graph(instance(Transaction), Layer) :-
                             instance_objects: [graph_validation_obj{
                                                  descriptor: fake{},
                                                  read: Layer,
-                                                 changed: true
+                                                 changed: true,
+                                                 backlinks: []
                                              }]
                         },
 
@@ -2447,7 +2449,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
 write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
     json_read_term(JSON_Stream, Dict),
     !,
-    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,New_Captures_In),
+    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,[]-[],New_Captures_In),
 
     when(ground(Dependencies),
          forall(
