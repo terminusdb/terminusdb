@@ -321,7 +321,7 @@ insert_backlinks(Links, Graph) :-
 insert_backlinks_([], _).
 insert_backlinks_([link(S,P,O)|T], Instance) :-
     insert(Instance, S, P, O, _),
-    insert_backlinks(T, Instance).
+    insert_backlinks_(T, Instance).
 
 nonground_captures(Captures, Nonground) :-
     findall(Ref,
