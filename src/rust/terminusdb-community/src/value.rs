@@ -76,17 +76,9 @@ pub fn value_string_to_json(s: &str) -> Value {
         }
         LangOrType::Lang(val, lang) => {
             let s = val[1..val.len() - 1].to_string();
-            let l = atom_without_quotes(lang);
+            let l = lang[1..lang.len() - 1].to_string();
             json!({ "@lang" : l, "@value" : s })
         }
-    }
-}
-
-fn atom_without_quotes(s: &str) -> &str {
-    if s.as_bytes()[0] == '\'' as u8 {
-        &s[1..s.len() - 1]
-    } else {
-        s
     }
 }
 

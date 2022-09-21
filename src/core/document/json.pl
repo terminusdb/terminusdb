@@ -386,9 +386,8 @@ path_strings_([node(X)|Path], Prefixes, [URI|Strings]) :-
 path_strings_([property(X)|Path], Prefixes, [URI|Strings]) :-
     % We have *very* late binding of IDs, need to do this after its done.
     compress_schema_uri(X, Prefixes, Compressed),
-    (   (   uri_has_protocol(Compressed)
-        ;   uri_has_prefix(Compressed))
-    ->  prefix_expand_schema(X, Prefixes, URI)
+    (   uri_has_protocol(Compressed)
+    ->  encode_id_fragment(Compressed,URI)
     ;   Compressed = URI
     ),
     path_strings_(Path, Prefixes, Strings).
