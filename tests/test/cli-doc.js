@@ -156,6 +156,7 @@ describe('cli-doc', function () {
       }
     })
   })
+
   describe('backlinks', function () {
     it('is able to link document with backlinks', async function () {
       const schema = [{
@@ -199,6 +200,139 @@ describe('cli-doc', function () {
       const r4 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Thing`)
       const [thing] = JSON.parse(r4.stdout)
       expect(thing.other).to.equal(otherId)
+    })
+
+    it('links back to two documents', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'Thing1',
+      },
+      {
+        '@type': 'Thing',
+        '@capture': 'Thing2',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': [{ '@ref': 'Thing1', '@property': 'other' },
+                       { '@ref': 'Thing2', '@property': 'other' }],
+        name: 'My Name',
+      },
+      ]
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      const r2 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true`)
+      const docs = JSON.parse(r2.stdout)
+      expect(docs).has.length(3)
+      const r3 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Other`)
+      const [other] = JSON.parse(r3.stdout)
+      const otherId = other['@id']
+      const r4 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Thing`)
+      const [thing1,thing2] = JSON.parse(r4.stdout)
+      expect(thing1.other).to.equal(otherId)
+      expect(thing2.other).to.equal(otherId)
+    })
+
+    it('is able to link subdocument with backlinks', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@subdocument' : [],
+        '@key' : { '@type' : 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'My Thing',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': { '@ref': 'My Thing', '@property': 'other' },
+        name: 'My Name',
+      },
+      ]
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      const r2 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true`)
+      const [doc] = JSON.parse(r2.stdout)
+      expect(doc.other.name).to.equal('My Name')
+    })
+
+    it('fails to link subdocument with backlinks twice', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@subdocument' : [],
+        '@key' : { '@type' : 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'Thing1',
+      },
+      {
+        '@type': 'Thing',
+        '@capture': 'Thing2',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': [{ '@ref': 'Thing1', '@property': 'other' },
+                       { '@ref': 'Thing2', '@property': 'other' }],
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      console.log(r.stderr)
     })
   })
 
