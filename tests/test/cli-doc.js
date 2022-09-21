@@ -212,7 +212,17 @@ describe('cli-doc', function () {
       await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(doc)}'`)
       const r = await exec(`./terminusdb.sh doc get admin/${db}`)
       const js = JSON.parse(r.stdout)
-      expect(js).to.deep.equal({})
+      const result = [
+        {
+          '@lang': 'hi',
+          '@value': 'ksajd',
+        },
+        {
+          '@lang': 'ka',
+          '@value': 'មរនមាត្តា',
+        },
+      ]
+      expect(js.noteText).to.deep.equal(result)
     })
   })
 
