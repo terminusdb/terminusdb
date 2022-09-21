@@ -57,7 +57,7 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes
     ->  (   is_dict(Parent_Id0)
         ->  do_or_die(get_dict('@ref', Parent_Id0, Ref),
                       error(wah,_)),
-            update_captures_with_id(Ref, Parent_Id, In, Mid),
+            capture_ref(In, Ref, Parent_Id, Mid),
             put_dict(_{'@id': Parent_Id}, Parent, ParentOut)
         ;   do_or_die(
                 (text(Parent_Id0),
@@ -67,7 +67,7 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes
             Out = In,
             Parent_Id = Parent_Id0)
     ;   get_dict('@ref', Parent, Ref)
-    ->  update_captures_with_id(Ref, Parent_Id, In, Mid),
+    ->  capture_ref(In, Ref, Parent_Id, Mid),
         del_dict('@ref', Parent, _, ParentMid),
         put_dict(_{'@id': Parent_Id}, ParentMid, ParentOut)
     ;   throw(error(wah,_))),
@@ -93,7 +93,7 @@ get_dict('@linked-by', Value, Parent) =>
 
     update_document_links_monadic(Parents, ParentsOut, Prefixes, Id, Captures),
 
-    put_dict(_{'@parent': ParentsOut}, ValueMid, ValueOut).
+    put_dict(_{'@linked-by': ParentsOut}, ValueMid, ValueOut).
 update_document_links(Value, ValueOut, _Database, _Prefixes, _Type, captures(In, DepH-DepT, SubH-SubT, Out)) =>
     ValueOut = Value,
     DepH = DepT,

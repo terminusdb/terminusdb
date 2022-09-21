@@ -306,7 +306,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids),
                          die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
-                         database_instance(Transaction, Instance),
+                         database_instance(Transaction, [Instance]),
                          insert_backlinks(BackLinks, Instance),
                          die_if(has_duplicates(Ids, Duplicates),
                                 error(same_ids_in_one_transaction(Duplicates), _))

@@ -1529,6 +1529,8 @@ json_triple_(JSON,Context,Triple) :-
     ;   Key = '@type', % this is a leaf
         Value = "@id"
     ->  fail
+    ;   Key = '@linked-by'
+    ->  fail
     ;   Key = '@foreign'
     ->  global_prefix_expand(sys:foreign_type, Foreign_Type),
         Triple = t(ID,Foreign_Type,Value)
@@ -2658,7 +2660,7 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, SH-ST, 
         error(missing_field('@type', Elaborated), _)),
     die_if(
         (   is_subdocument(Transaction, Type),
-            \+ get_dict('@parent', Elaborated, _)),
+            \+ get_dict('@linked-by', Elaborated, _)),
         error(inserted_subdocument_as_document, _)),
 
     % After elaboration, the Elaborated document will have an '@id'
