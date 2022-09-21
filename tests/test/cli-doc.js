@@ -189,17 +189,16 @@ describe('cli-doc', function () {
         name: 'My Name',
       },
       ]
-      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
-      console.log(r.stdout)
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
       const r2 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true`)
       const docs = JSON.parse(r2.stdout)
       expect(docs).has.length(2)
       const r3 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Other`)
       const [other] = JSON.parse(r3.stdout)
-      const other_id = other['@id']
+      const otherId = other['@id']
       const r4 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Thing`)
       const [thing] = JSON.parse(r4.stdout)
-      expect(thing.other).to.equal(other_id)
+      expect(thing.other).to.equal(otherId)
     })
   })
 
