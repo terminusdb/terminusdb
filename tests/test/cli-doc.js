@@ -176,6 +176,44 @@ describe('cli-doc', function () {
       expect(r.stderr).to.match(/^Error: value "bogus" could not be casted to a .*/)
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
+
+    it('adds a lang string', async function () {
+      const schema = [
+        {
+          '@type': '@context',
+          '@base': 'terminusdb://asdf/',
+          '@schema': 'terminusdb://schema',
+          rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+        },
+        {
+          '@id': 'Note',
+          '@type': 'Class',
+          noteText: {
+            '@class': 'rdf:langString',
+            '@type': 'Set',
+          },
+        }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const doc = {
+        noteText: [
+          {
+            '@lang': 'ka',
+            '@value': 'មរនមាត្តា',
+          },
+          {
+            '@lang': 'hi',
+            '@value': 'ksajd',
+          },
+        ],
+        '@type': 'Note',
+      }
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(doc)}'`)
+      const r = await exec(`./terminusdb.sh doc get admin/${db}`)
+      const js = JSON.parse(r.stdout)
+      expect(js).to.deep.equal({})
+    })
   })
 
   describe('checks logs', function () {
