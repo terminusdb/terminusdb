@@ -2097,6 +2097,61 @@ api_document_error_jsonld(Type,error(casting_error(Elt,Type),_), JSON) :-
                               'api:type' : Type
                             }
             }.
+api_document_error_jsonld(Type,error(no_property_specified_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no property specified.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoPropertySpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(no_ref_or_id_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no ref or id.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRefOrIdSpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(no_ref_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no ref.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRefSpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(link_id_specified_but_not_valid(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The link Id did not have a valid form.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:LinkIdNotValid",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(not_one_parent_of_subdocument(Parents,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "A sub-document has parent cardinality other than one.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NotOneParentForSubdocument",
+                              'api:parent' : Parents,
+                              'api:document' : Document
+                            }
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

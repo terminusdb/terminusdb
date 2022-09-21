@@ -51,18 +51,18 @@ Error: Could not find a principal type.
 update_document_links_monadic([], [], _Prefixes, _Id, captures(In, D-D, S-S, In)).
 update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes, Id, captures(In, DepH-DepT, SubH-SubT, Out)) :-
     do_or_die(get_dict('@property', Parent, Property),
-              wah),
+              error(no_property_specified_in_link(Parent),_)),
     prefix_expand_schema(Property, Prefixes, Property_Ex),
     (   get_dict('@id', Parent, Parent_Id0)
     ->  (   is_dict(Parent_Id0)
         ->  do_or_die(get_dict('@ref', Parent_Id0, Ref),
-                      error(wah,_)),
+                      error(no_ref_in_link(Parent),_)),
             capture_ref(In, Ref, Parent_Id, Mid),
             put_dict(_{'@id': Parent_Id}, Parent, ParentOut)
         ;   do_or_die(
                 (text(Parent_Id0),
                  ground(Parent_Id0)),
-                error(wah,_)),
+                error(link_id_specified_but_not_valid(Parent),_)),
             ParentOut = Parent,
             Out = In,
             Parent_Id = Parent_Id0)
@@ -70,7 +70,7 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes
     ->  capture_ref(In, Ref, Parent_Id, Mid),
         del_dict('@ref', Parent, _, ParentMid),
         put_dict(_{'@id': Parent_Id}, ParentMid, ParentOut)
-    ;   throw(error(wah,_))),
+    ;   throw(error(no_ref_or_id_in_link(Parent),_))),
 
     SubH=[link(Parent_Id,Property_Ex,Id)|SubMid],
 
@@ -88,7 +88,7 @@ get_dict('@linked-by', Value, Parent) =>
 
     (   is_subdocument(Database, Type)
     ->  do_or_die(Parents = [_],
-                  error(wah))
+                  error(not_one_parent_of_subdocument(Parents),_))
     ;   true),
 
     update_document_links_monadic(Parents, ParentsOut, Prefixes, Id, Captures),

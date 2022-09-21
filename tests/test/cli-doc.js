@@ -332,7 +332,7 @@ describe('cli-doc', function () {
       },
       ]
       const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
-      console.log(r.stderr)
+      expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
     })
   })
 
