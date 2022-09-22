@@ -48,8 +48,8 @@ insert_document({name:"Gavin"})
 Error: Could not find a principal type.
 */
 
-update_document_links_monadic([], [], _Prefixes, _Id, captures(In, D-D, S-S, In)).
-update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes, Id, captures(In, DepH-DepT, SubH-SubT, Out)) :-
+update_document_links_monadic([], [], _Subdoc, _Prefixes, _Id, captures(In, D-D, S-S, In)).
+update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Subdoc, Prefixes, Id, captures(In, DepH-DepT, SubH-SubT, Out)) :-
     do_or_die(get_dict('@property', Parent, Property),
               error(no_property_specified_in_link(Parent),_)),
     prefix_expand_schema(Property, Prefixes, Property_Ex),
@@ -58,6 +58,9 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes
         ->  do_or_die(get_dict('@ref', Parent_Id0, Ref),
                       error(no_ref_in_link(Parent),_)),
             capture_ref(In, Ref, Parent_Id, Mid),
+            (   Subdoc = true
+            ->  DepH = [Parent_Id|DepMid]
+            ;   DepMid = DepH),
             put_dict(_{'@id': Parent_Id}, Parent, ParentOut)
         ;   do_or_die(
                 (   \+ is_list(Parent_Id0),
@@ -66,16 +69,20 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes
                 error(link_id_specified_but_not_valid(Parent),_)),
             ParentOut = Parent,
             Out = In,
+            DepMid = DepH,
             Parent_Id = Parent_Id0)
     ;   get_dict('@ref', Parent, Ref)
     ->  capture_ref(In, Ref, Parent_Id, Mid),
+        (   Subdoc = true
+        ->  DepH = [Parent_Id|DepMid]
+        ;   DepMid = DepH),
         del_dict('@ref', Parent, _, ParentMid),
         put_dict(_{'@id': Parent_Id}, ParentMid, ParentOut)
     ;   throw(error(no_ref_or_id_in_link(Parent),_))),
 
     SubH=[link(Parent_Id,Property_Ex,Id)|SubMid],
 
-    update_document_links_monadic(Parents, ParentsOut, Prefixes, Id, captures(Mid, DepH-DepT, SubMid-SubT, Out)).
+    update_document_links_monadic(Parents, ParentsOut, Subdoc, Prefixes, Id, captures(Mid, DepMid-DepT, SubMid-SubT, Out)).
 
 update_document_links(Value, ValueOut, Database, Prefixes, Type, Captures),
 is_dict(Value),
@@ -89,10 +96,11 @@ get_dict('@linked-by', Value, Parent) =>
 
     (   is_subdocument(Database, Type)
     ->  do_or_die(Parents = [_],
-                  error(not_one_parent_of_subdocument(Parents),_))
-    ;   true),
+                  error(not_one_parent_of_subdocument(Parents),_)),
+        Subdoc = true
+    ;   Subdoc = false),
 
-    update_document_links_monadic(Parents, ParentsOut, Prefixes, Id, Captures),
+    update_document_links_monadic(Parents, ParentsOut, Subdoc, Prefixes, Id, Captures),
 
     put_dict(_{'@linked-by': ParentsOut}, ValueMid, ValueOut).
 update_document_links(Value, ValueOut, _Database, _Prefixes, _Type, captures(In, DepH-DepT, SubH-SubT, Out)) =>

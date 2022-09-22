@@ -69,11 +69,14 @@ describe('backlink inserts', function () {
 
     it('succeed on a backlinked subdocument with a future ref', async function() {
         const instance = [{"@type": "Subdoc",  "@linked-by": {"@ref": "doc", "@property": "subdoc"}},
-                          {"@type": "Doc", "@capture": "subdoc"}
+                          {"@type": "Doc", "@capture": "doc"}
                          ]
 
-        const r = await document.insert(agent, { instance }).unverified()
-        console.log(r.body)
+        const r = await document.insert(agent, { instance })
+        const subdoc_id = r.body[0]
+        const doc_id = r.body[1]
+
+        expect(subdoc_id).to.match(new RegExp(`^${doc_id}/subdoc/Subdoc/.*`))
     })
 
     it('fails on a backlinked subdocument cycle', async function() {
@@ -82,7 +85,8 @@ describe('backlink inserts', function () {
                          ]
 
         const r = await document.insert(agent, { instance }).unverified()
-        console.log(r.body)
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']['@type']).to.equal('api:NotAllCapturesFound')
     })
 
     it('succeeds on a backlinked document cycle', async function() {
