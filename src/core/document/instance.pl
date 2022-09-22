@@ -821,7 +821,8 @@ referential_range_candidate(Validation_Object,C,P,O) :-
                  ;   member(link(S,P,O), BackLinks),
                      is_subdocument(Validation_Object, O)
                  ),
-                 triple(Instance, S, Rdf_Type, node(C))
+                 triple(Instance, S, Rdf_Type, node(C_String)),
+                 atom_string(C, C_String)
              )).
 
 % Generator for: ∃ s,o,p. +(s,p,o) ∧ ¬ (∃ T. o:T)
@@ -1041,13 +1042,14 @@ refute_range(Validation_Object, C, P, O, Witness) :-
         atom_string(C,CS),
         do_or_die(extract_base_type(T,Super),
                   error(unexpected_document_type_encountered(O,P,T,C))),
+        json_log_info_formatted("weirdness check C:~q Super:~q", [C, Super]),
         (   \+ class_subsumed(Validation_Object, C, Super)
         ->  extract_base_type(T, Base),
             Witness = witness{ '@type': referential_integrity_violation,
                                instance: O,
                                actual_class: C,
-                           required_class: Base,
-                           predicate: P
+                               required_class: Base,
+                               predicate: P
                              }
         )
     ;   Witness =
