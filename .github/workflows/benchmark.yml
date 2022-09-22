@@ -35,6 +35,15 @@ jobs:
       - name: Run benchmarks
         working-directory: tests
         run: |
+          mkdir results
           npm ci
-          npm run bench
+          node bench.js --json > "results/${GITHUB_SHA}.json"
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./tests/results/
+          keep_files: true
+          destination_dir: js_benchmark_results
 
