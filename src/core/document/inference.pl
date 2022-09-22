@@ -60,8 +60,9 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Prefixes
             capture_ref(In, Ref, Parent_Id, Mid),
             put_dict(_{'@id': Parent_Id}, Parent, ParentOut)
         ;   do_or_die(
-                (text(Parent_Id0),
-                 ground(Parent_Id0)),
+                (   \+ is_list(Parent_Id0),
+                    text(Parent_Id0),
+                    ground(Parent_Id0)),
                 error(link_id_specified_but_not_valid(Parent),_)),
             ParentOut = Parent,
             Out = In,

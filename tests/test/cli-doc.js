@@ -200,6 +200,7 @@ describe('cli-doc', function () {
       const r4 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true --type=Thing`)
       const [thing] = JSON.parse(r4.stdout)
       expect(thing.other).to.equal(otherId)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
     })
 
     it('links back to two documents', async function () {
@@ -250,6 +251,7 @@ describe('cli-doc', function () {
       const [thing1, thing2] = JSON.parse(r4.stdout)
       expect(thing1.other).to.equal(otherId)
       expect(thing2.other).to.equal(otherId)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
     })
 
     it('is able to link subdocument with backlinks', async function () {
@@ -290,6 +292,7 @@ describe('cli-doc', function () {
       const r2 = await exec(`./terminusdb.sh doc get admin/${db} --as-list=true`)
       const [doc] = JSON.parse(r2.stdout)
       expect(doc.other.name).to.equal('My Name')
+      await exec(`./terminusdb.sh db delete admin/${db}`)
     })
 
     it('fails to link subdocument with backlinks twice', async function () {
@@ -333,6 +336,129 @@ describe('cli-doc', function () {
       ]
       const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
       expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+    it('fails to find property', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'Thing1',
+      },
+      {
+        '@type': 'Thing',
+        '@capture': 'Thing2',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': [{ '@ref': 'Thing1' },
+          { '@ref': 'Thing2', '@property': 'other' }],
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+    it('fails to find ref or id', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'Thing',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': [{ '@property': 'other' }],
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      expect(r.stderr).to.match(/^Error: Back links were used with no ref or id.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+    it('has malformed link id', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'Thing',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': [{ '@property': 'other', '@id': [] }],
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      expect(r.stderr).to.match(/^Error: The link Id did not have a valid form.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
     })
   })
 

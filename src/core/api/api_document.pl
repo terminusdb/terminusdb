@@ -179,6 +179,7 @@ known_document_error(unknown_language_tag(_)).
 known_document_error(no_language_tag_for_multilingual).
 known_document_error(language_tags_repeated(_)).
 known_document_error(no_property_specified_in_link(_)).
+known_document_error(no_ref_or_id_in_link(_)).
 known_document_error(no_ref_in_link(_)).
 known_document_error(link_id_specified_but_not_valid(_)).
 known_document_error(not_one_parent_of_subdocument(_)).
