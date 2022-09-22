@@ -106,22 +106,22 @@ describe('backlinks', function () {
     expect(doc2.other[0]).to.equal(doc1['@id'])
   })
 
-  it('fails to replace a document with backlinks', async function (){
+  it('fails to replace a document with backlinks', async function () {
     const instance = [{ '@type': 'CycleDoc' }]
 
     await document.insert(agent, { instance })
     const r = await document.insert(agent, { instance })
     const [id] = r.body
-    const instance2 = [{ '@type': 'CycleDoc', '@id' : id, '@linked-by': { '@id': id, '@property': 'other' } }]
-    const r2 = await document.replace(agent, { instance : instance2 }).unverified()
+    const instance2 = [{ '@type': 'CycleDoc', '@id': id, '@linked-by': { '@id': id, '@property': 'other' } }]
+    const r2 = await document.replace(agent, { instance: instance2 }).unverified()
     expect(r2.status).to.equal(400)
     expect(r2.body['api:error']['@type']).to.equal('api:LinksInReplaceError')
   })
 
   it('succeed on a backlinked subdocument with a future id', async function () {
     const instance = [{ '@type': 'Subdoc', '@linked-by': { '@id': 'Doc/doc1', '@property': 'subdoc' } },
-                      { '@type': 'Doc', '@id': 'Doc/doc1' },
-                     ]
+      { '@type': 'Doc', '@id': 'Doc/doc1' },
+    ]
 
     const r = await document.insert(agent, { instance })
     const subdocId = r.body[0]
@@ -136,17 +136,22 @@ describe('backlinks', function () {
     await document.insert(agent, { instance })
 
     const instance2 = [{ '@type': 'Subdoc', '@linked-by': { '@id': 'Doc/doc1', '@property': 'subdoc' } }]
-    const r = await document.insert(agent, { instance : instance2 })
+    const r = await document.insert(agent, { instance: instance2 })
     const subdocId = r.body[0]
 
-    expect(subdocId).to.match(new RegExp(`^terminusdb:///data/Doc/doc1/subdoc/Subdoc/.*`))
+    expect(subdocId).to.match(/^terminusdb:\/\/\/data\/Doc\/doc1\/subdoc\/Subdoc\/.*/)
   })
 
   it('succeed on a backlinked subdocument with extended ref id syntax', async function () {
-    const instance = [{ '@type': 'Subdoc', '@linked-by': { '@id' : {'@ref': 'Doc'},
-                                                           '@property': 'subdoc' } },
-                      { '@type': 'Doc', '@capture': 'Doc' },
-                     ]
+    const instance = [{
+      '@type': 'Subdoc',
+      '@linked-by': {
+        '@id': { '@ref': 'Doc' },
+        '@property': 'subdoc',
+      },
+    },
+    { '@type': 'Doc', '@capture': 'Doc' },
+    ]
 
     const r = await document.insert(agent, { instance })
     const subdocId = r.body[0]
