@@ -814,6 +814,8 @@ referential_range_candidate(Validation_Object,C,P,O) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
     validation_object_backlinks(Validation_Object, BackLinks),
+    global_prefix_expand(rdf:'List', Rdf_List),
+    global_prefix_expand(sys:'Array', Sys_Array),
     % Shared dictionary for predicates would be handy here!
     distinct(C-P-O,
              (   (   triple_addition(Instance, S, P, node(O)),
@@ -822,7 +824,8 @@ referential_range_candidate(Validation_Object,C,P,O) :-
                      is_subdocument(Validation_Object, O)
                  ),
                  triple(Instance, S, Rdf_Type, node(C_String)),
-                 atom_string(C, C_String)
+                 atom_string(C, C_String),
+                 \+ memberchk(C,[Sys_Array,Rdf_List])
              )).
 
 % Generator for: ∃ s,o,p. +(s,p,o) ∧ ¬ (∃ T. o:T)
