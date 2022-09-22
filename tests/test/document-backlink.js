@@ -118,4 +118,40 @@ describe('backlinks', function () {
     expect(r2.body['api:error']['@type']).to.equal('api:LinksInReplaceError')
   })
 
+  it('succeed on a backlinked subdocument with a future id', async function () {
+    const instance = [{ '@type': 'Subdoc', '@linked-by': { '@id': 'Doc/doc1', '@property': 'subdoc' } },
+                      { '@type': 'Doc', '@id': 'Doc/doc1' },
+                     ]
+
+    const r = await document.insert(agent, { instance })
+    const subdocId = r.body[0]
+    const docId = r.body[1]
+
+    expect(subdocId).to.match(new RegExp(`^${docId}/subdoc/Subdoc/.*`))
+  })
+
+  it('succeed on a backlinked subdocument with a future id in two phases', async function () {
+    const instance = [{ '@type': 'Doc', '@id': 'Doc/doc1' }]
+
+    await document.insert(agent, { instance })
+
+    const instance2 = [{ '@type': 'Subdoc', '@linked-by': { '@id': 'Doc/doc1', '@property': 'subdoc' } }]
+    const r = await document.insert(agent, { instance : instance2 })
+    const subdocId = r.body[0]
+
+    expect(subdocId).to.match(new RegExp(`^terminusdb:///data/Doc/doc1/subdoc/Subdoc/.*`))
+  })
+
+  it('succeed on a backlinked subdocument with extended ref id syntax', async function () {
+    const instance = [{ '@type': 'Subdoc', '@linked-by': { '@id' : {'@ref': 'Doc'},
+                                                           '@property': 'subdoc' } },
+                      { '@type': 'Doc', '@capture': 'Doc' },
+                     ]
+
+    const r = await document.insert(agent, { instance })
+    const subdocId = r.body[0]
+    const docId = r.body[1]
+
+    expect(subdocId).to.match(new RegExp(`^${docId}/subdoc/Subdoc/.*`))
+  })
 })
