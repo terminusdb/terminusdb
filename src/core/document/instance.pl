@@ -1042,7 +1042,6 @@ refute_range(Validation_Object, C, P, O, Witness) :-
         atom_string(C,CS),
         do_or_die(extract_base_type(T,Super),
                   error(unexpected_document_type_encountered(O,P,T,C))),
-        json_log_info_formatted("weirdness check C:~q Super:~q", [C, Super]),
         (   \+ class_subsumed(Validation_Object, C, Super)
         ->  extract_base_type(T, Base),
             Witness = witness{ '@type': referential_integrity_violation,
