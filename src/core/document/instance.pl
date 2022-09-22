@@ -809,20 +809,19 @@ was_in_list(Validation_Object, L, O) :-
     was_document(Validation_Object, O),
     triple(Instance, L, Rdf_First, node(O)).
 
-% Generator for: ∀ +(s,p,o). ∃ C,p,o,T. doc(o) ∧ s:C ∧ range(C,p)=T ⇒ o:T
-referential_range_candidate(Validation_Object,O,P,Type) :-
+% Generator for: ∀ +(s,p,o). ∃ C,p,o,T. doc(o) ∧ s:C ⇒ range(C,p)=T ∧ o:T
+referential_range_candidate(Validation_Object,C,P,O) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
     validation_object_backlinks(Validation_Object, BackLinks),
     % Shared dictionary for predicates would be handy here!
-    distinct(O-P-Type,
+    distinct(C-P-O,
              (   (   triple_addition(Instance, S, P, node(O)),
                      is_document(Validation_Object, O)
                  ;   member(link(S,P,O), BackLinks),
                      is_subdocument(Validation_Object, O)
                  ),
-                 triple(Instance, S, Rdf_Type, node(C)),
-                 class_predicate_type(Validation_Object, C, P, Type)
+                 triple(Instance, S, Rdf_Type, node(C))
              )).
 
 % Generator for: ∃ s,o,p. +(s,p,o) ∧ ¬ (∃ T. o:T)
@@ -1006,8 +1005,8 @@ refute_referential_integrity(Validation_Object,Witness) :-
                       predicate:P,
                       subject:S}.
 refute_referential_integrity(Validation_Object,Witness) :-
-    referential_range_candidate(Validation_Object, O, P, T),
-    refute_range(Validation_Object, O, P, T, Witness).
+    referential_range_candidate(Validation_Object, C, P, O),
+    refute_range(Validation_Object, C, P, O, Witness).
 refute_referential_integrity(Validation_Object,Witness) :-
     references_untyped_range(Validation_Object, S, P, O),
     Witness =
@@ -1034,21 +1033,27 @@ refute_referential_integrity(Validation_Object,Witness) :-
              index: Idx
            }.
 
-refute_range(Validation_Object, O, P, T, Witness) :-
-    instance_layer(Validation_Object, Instance),
-    global_prefix_expand(rdf:type, Rdf_Type),
-    triple(Instance, O, Rdf_Type, node(CS)),
-    atom_string(C,CS),
-    do_or_die(extract_base_type(T,Super),
-              error(unexpected_document_type_encountered(O,P,T,C))),
-    (   \+ class_subsumed(Validation_Object, C, Super)
-    ->  extract_base_type(T, Base),
-        Witness = witness{ '@type': referential_integrity_violation,
-                           instance: O,
-                           actual_class: C,
+refute_range(Validation_Object, C, P, O, Witness) :-
+    (   class_predicate_type(Validation_Object, C, P, T)
+    ->  instance_layer(Validation_Object, Instance),
+        global_prefix_expand(rdf:type, Rdf_Type),
+        triple(Instance, O, Rdf_Type, node(CS)),
+        atom_string(C,CS),
+        do_or_die(extract_base_type(T,Super),
+                  error(unexpected_document_type_encountered(O,P,T,C))),
+        (   \+ class_subsumed(Validation_Object, C, Super)
+        ->  extract_base_type(T, Base),
+            Witness = witness{ '@type': referential_integrity_violation,
+                               instance: O,
+                               actual_class: C,
                            required_class: Base,
                            predicate: P
-                         }
+                             }
+        )
+    ;   Witness =
+        json{ '@type' : unknown_property_for_type,
+              property : P,
+              type : C }
     ).
 
 extract_base_type(T,C) :-

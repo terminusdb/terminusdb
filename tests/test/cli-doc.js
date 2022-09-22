@@ -460,6 +460,45 @@ describe('cli-doc', function () {
       expect(r.stderr).to.match(/^Error: The link Id did not have a valid form.*/)
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
+
+    it('fails to make backlink with unknown property', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@key': { '@type': 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'My Thing',
+      },
+      {
+        '@type': 'Other',
+        '@linked-by': { '@ref': 'My Thing', '@property': 'tother' },
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'| true`)
+      expect(r.stderr).to.match(/^Error: Schema check failure(.|\n)*unknown_property_for_type.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
   })
 
   describe('schema manipulation', function () {
