@@ -352,19 +352,18 @@ describe('cli-doc', function () {
       },
       {
         '@type': 'Thing',
-        other : {
+        other: {
           '@type': 'Other',
           '@linked-by': { '@ref': 'Thing1', '@property': 'other' },
           name: 'My Name',
-        }
+        },
       }]
-      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
-      //expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      // expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
       const r2 = await exec(`./terminusdb.sh triples dump admin/${db}/local/branch/main/instance`)
       console.log(r2.stdout)
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
-
 
     it('fails to link subdocument with backlinks twice', async function () {
       const schema = [{
@@ -569,7 +568,6 @@ describe('cli-doc', function () {
       expect(r.stderr).to.match(/^Error: Schema check failure(.|\n)*unknown_property_for_type.*/)
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
-
   })
 
   describe('schema manipulation', function () {
