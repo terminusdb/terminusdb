@@ -709,7 +709,20 @@ update_captures(Elaborated,In,Out) :-
 update_captures(_Elaborated,Capture,Capture).
 
 json_assign_ids(DB,Context,JSON) :-
-    json_assign_ids(DB,Context,JSON,[]).
+    get_dict('@type',JSON,Type),
+    (   is_subdocument(DB, Type)
+    %% Great, it's a subdocument inserted at the top level
+    %% We gotta modify the path to include the parent
+    ->  do_or_die(get_dict('@linked-by', JSON, [Link]),
+                  error(inserted_subdocument_as_document,_)),
+        Path = [property(Link.'@property'), node(Link.'@id')],
+    %% since we're done with the linked-by, and we want to detect
+    %% subsequent linked-by properties while recursing as an error
+    %% case, we're removing the property here.
+        del_dict('@linked-by', JSON, _, JSON2)
+    ;   Path = [],
+        JSON2 = JSON),
+    json_assign_ids(DB,Context,JSON2,Path).
 
 json_assign_ids(_DB,_Context,JSON,_Path) :-
     \+ is_dict(JSON),
@@ -723,7 +736,9 @@ json_assign_ids(DB,Context,JSON,Path) :-
 
     get_dict('@type',JSON,Type),
     (   is_subdocument(DB, Type)
-    ->  Next_Path = Path
+    ->  Next_Path = Path,
+        die_if(get_dict('@linked-by', JSON, _),
+               error(embedded_subdocument_has_linked_by, _))
     ;   Next_Path = []),
 
     key_descriptor(DB, Context, Type, Descriptor),

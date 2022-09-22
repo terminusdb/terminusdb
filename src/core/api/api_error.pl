@@ -2030,7 +2030,7 @@ api_document_error_jsonld(Type, error(not_all_captures_found(Refs),_),JSON) :-
             }.
 api_document_error_jsonld(Type, error(inserted_subdocument_as_document(Document), _),JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Tried to insert a subdocument as a document.", []),
+    format(string(Msg), "Tried to insert a subdocument as a document without specifying backlinks.", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:InsertedSubdocumentAsDocument',
@@ -2151,6 +2151,15 @@ api_document_error_jsonld(Type,error(not_one_parent_of_subdocument(Parents,Docum
                               'api:parent' : Parents,
                               'api:document' : Document
                             }
+            }.
+api_document_error_jsonld(Type, error(embedded_subdocument_has_linked_by(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a subdocument as part of a larger document, while also specifying an '@linked-by'. A subdocument can only have one parent.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddedSubdocumentHasLinkedBy',
+                              'api:document' : Document },
+             'api:message' : Msg
             }.
 
 /**
