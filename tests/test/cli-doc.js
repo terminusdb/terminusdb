@@ -295,6 +295,77 @@ describe('cli-doc', function () {
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
 
+    it('fails to link subdocument with no backlinks', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Other',
+        '@linked-by': [],
+        name: 'My Name',
+      },
+      ]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+    it('fails to link subdocument already in document', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'foo://base/',
+        '@schema': 'foo://schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Thing',
+        other: {
+          '@type': 'Optional',
+          '@class': 'Other',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@subdocument': [],
+        '@key': { '@type': 'Random' },
+        '@id': 'Other',
+        name: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = [{
+        '@type': 'Thing',
+        '@capture': 'Thing1',
+      },
+      {
+        '@type': 'Thing',
+        other : {
+          '@type': 'Other',
+          '@linked-by': { '@ref': 'Thing1', '@property': 'other' },
+          name: 'My Name',
+        }
+      }]
+      const r = await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}' | true`)
+      //expect(r.stderr).to.match(/^Error: A sub-document has parent cardinality other than one.*/)
+      const r2 = await exec(`./terminusdb.sh triples dump admin/${db}/local/branch/main/instance`)
+      console.log(r2.stdout)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+
     it('fails to link subdocument with backlinks twice', async function () {
       const schema = [{
         '@type': '@context',
