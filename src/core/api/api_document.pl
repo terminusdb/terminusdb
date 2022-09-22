@@ -184,6 +184,7 @@ known_document_error(no_ref_in_link(_)).
 known_document_error(link_id_specified_but_not_valid(_)).
 known_document_error(not_one_parent_of_subdocument(_)).
 known_document_error(embedded_subdocument_has_linked_by).
+known_document_error(back_links_not_supported_in_replace).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-

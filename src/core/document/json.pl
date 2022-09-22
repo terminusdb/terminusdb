@@ -2769,7 +2769,10 @@ replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependen
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, _BLH-_BLT, Captures_Out),
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, BLH-[], Captures_Out),
+    die_if(
+        BLH \= [],
+        error(back_links_not_supported_in_replace, _)),
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
     catch(delete_document(Transaction, false, Id),

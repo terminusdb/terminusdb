@@ -2161,6 +2161,15 @@ api_document_error_jsonld(Type, error(embedded_subdocument_has_linked_by(Documen
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(back_links_not_supported_in_replace(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LinksInReplaceError',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

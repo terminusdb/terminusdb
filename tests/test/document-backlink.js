@@ -1,7 +1,7 @@
 const { expect } = require('chai')
 const { Agent, db, document } = require('../lib')
 
-describe('backlink inserts', function () {
+describe('backlinks', function () {
   let agent
 
   before(function () {
@@ -105,4 +105,17 @@ describe('backlink inserts', function () {
     expect(doc1.other[0]).to.equal(doc2['@id'])
     expect(doc2.other[0]).to.equal(doc1['@id'])
   })
+
+  it('fails to replace a document with backlinks', async function (){
+    const instance = [{ '@type': 'CycleDoc' }]
+
+    await document.insert(agent, { instance })
+    const r = await document.insert(agent, { instance })
+    const [id] = r.body
+    const instance2 = [{ '@type': 'CycleDoc', '@id' : id, '@linked-by': { '@id': id, '@property': 'other' } }]
+    const r2 = await document.replace(agent, { instance : instance2 }).unverified()
+    expect(r2.status).to.equal(400)
+    expect(r2.body['api:error']['@type']).to.equal('api:LinksInReplaceError')
+  })
+
 })
