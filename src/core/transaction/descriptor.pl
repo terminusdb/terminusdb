@@ -194,6 +194,7 @@ is_validation_object(VO) :-
 
 graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
                                                                 descriptor: Descriptor,
+                                                                backlinks: [],
                                                                 triple_update: false,
                                                                 read: Layer,
                                                                 write: _Layer_Builder
@@ -870,11 +871,11 @@ graph_descriptor_transaction_objects_read_write_object(Graph_Descriptor, [_|Tran
  */
 
 instance_graph_descriptor_transaction_object(Graph_Descriptor, [Transaction_Object|_Transaction_Objects], Transaction_Object) :-
-    RW_Objects = Transaction_Object.instance_objects,
-    exists({Graph_Descriptor}/[
-               read_write_obj{ descriptor : Found_Graph_Descriptor,
-                               read : _,
-                               write : _ }]>>(Graph_Descriptor :< Found_Graph_Descriptor),
+    RW_Objects = (Transaction_Object.instance_objects),
+    exists({Graph_Descriptor}/[RW_OBJ]>>(
+               get_dict(descriptor,RW_OBJ,Found_Graph_Descriptor),
+               Graph_Descriptor :< Found_Graph_Descriptor
+           ),
            RW_Objects),
     !.
 instance_graph_descriptor_transaction_object(Graph_Descriptor, [_Transaction_Object|Transaction_Objects], Transaction_Object) :-

@@ -2030,7 +2030,7 @@ api_document_error_jsonld(Type, error(not_all_captures_found(Refs),_),JSON) :-
             }.
 api_document_error_jsonld(Type, error(inserted_subdocument_as_document(Document), _),JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Tried to insert a subdocument as a document.", []),
+    format(string(Msg), "Tried to insert a subdocument as a document without specifying backlinks.", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:InsertedSubdocumentAsDocument',
@@ -2096,6 +2096,79 @@ api_document_error_jsonld(Type,error(casting_error(Elt,Type),_), JSON) :-
                               'api:value' : Elt,
                               'api:type' : Type
                             }
+            }.
+api_document_error_jsonld(Type,error(no_property_specified_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no property specified.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoPropertySpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(no_ref_or_id_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no ref or id.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRefOrIdSpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(no_ref_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no ref.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRefSpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(link_id_specified_but_not_valid(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The link Id did not have a valid form.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:LinkIdNotValid",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(not_one_parent_of_subdocument(Parents,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "A sub-document has parent cardinality other than one.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NotOneParentForSubdocument",
+                              'api:parent' : Parents,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type, error(embedded_subdocument_has_linked_by(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a subdocument as part of a larger document, while also specifying an '@linked-by'. A subdocument can only have one parent.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddedSubdocumentHasLinkedBy',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(back_links_not_supported_in_replace(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LinksInReplaceError',
+                              'api:document' : Document },
+             'api:message' : Msg
             }.
 
 /**

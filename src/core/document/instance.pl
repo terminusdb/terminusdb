@@ -756,8 +756,26 @@ In general check ∀o. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
       ⇓      ⇓
       c      d
 
+a -q-> o     a:C, range(C,q) = T, o:T
+b -p-/       b:D, range(D,p) = S, o:S
+
+Linking
+=======
+
+Suppose we insert a document by using @linked-by. We now have to check:
+
+* Type correctness of the object according to the subjects class & property.
+* Cardinality of the subjects class & property.
+
+For subdocuments we must also check:
+
+* Uniqueness of reference
 
 */
+
+validation_object_backlinks(Validation_Object, BackLinks) :-
+    database_instance(Validation_Object, [RWO]),
+    get_dict(backlinks,RWO,BackLinks).
 
 is_document(Validation_Object, I) :-
     instance_layer(Validation_Object, Instance),
@@ -791,16 +809,23 @@ was_in_list(Validation_Object, L, O) :-
     was_document(Validation_Object, O),
     triple(Instance, L, Rdf_First, node(O)).
 
-% Generator for: ∃ o,p,T. +(s,p,o) ∧ doc(o) ∧ range(p)=T ⇒ o:T
-referential_range_candidate(Validation_Object,O,P,Type) :-
+% Generator for: ∀ +(s,p,o). ∃ C,p,o,T. doc(o) ∧ s:C ⇒ range(C,p)=T ∧ o:T
+referential_range_candidate(Validation_Object,C,P,O) :-
     instance_layer(Validation_Object, Instance),
     global_prefix_expand(rdf:type, Rdf_Type),
+    validation_object_backlinks(Validation_Object, BackLinks),
+    global_prefix_expand(rdf:'List', Rdf_List),
+    global_prefix_expand(sys:'Array', Sys_Array),
     % Shared dictionary for predicates would be handy here!
-    distinct(O-P-Type,
-             (   triple_addition(Instance, S, P, node(O)),
-                 is_document(Validation_Object, O),
-                 triple(Instance, S, Rdf_Type, node(C)),
-                 class_predicate_type(Validation_Object, C, P, Type)
+    distinct(C-P-O,
+             (   (   triple_addition(Instance, S, P, node(O)),
+                     is_document(Validation_Object, O)
+                 ;   member(link(S,P,O), BackLinks),
+                     is_subdocument(Validation_Object, O)
+                 ),
+                 triple(Instance, S, Rdf_Type, node(C_String)),
+                 atom_string(C, C_String),
+                 \+ memberchk(C,[Sys_Array,Rdf_List])
              )).
 
 % Generator for: ∃ s,o,p. +(s,p,o) ∧ ¬ (∃ T. o:T)
@@ -929,18 +954,48 @@ dangling_reference_candidate(Validation_Object,S,P,O) :-
                  rdf_first(P)
              )).
 
-% Generator for: ∃ o,p,T. -(s,p,o) ∧ doc(o) ∧ s:T
+% Generator for: ∀ -(s,p,o). ∃ o,p,C. doc(o) ∧ s:C ⇒ card(s,p,C)
 referential_cardinality_candidate(Validation_Object,S,P,C) :-
     instance_layer(Validation_Object, Instance),
     rdf_type(Rdf_Type),
+    validation_object_backlinks(Validation_Object, BackLinks),
     % Shared dictionary for predicates would be handy here!
     distinct(S-P-C,
-             (   triple_removal(Instance, S, P, node(O)),
-                 \+ atom_string(Rdf_Type,P),
-                 was_document(Validation_Object, O),
+             (   (   triple_removal(Instance, S, P, node(O)),
+                     \+ atom_string(Rdf_Type,P),
+                     was_document(Validation_Object, O)
+                 ;   distinct(
+                         S-P,
+                         (   member(link(S,P,_),BackLinks),
+                             \+ atom_string(Rdf_Type,P)
+                         ))
+                 ),
                  triple(Instance, S, Rdf_Type, node(C))
              )).
 
+referential_unique_candidate(Validation_Object, O) :-
+    validation_object_backlinks(Validation_Object, BackLinks),
+    distinct(O,
+             member(link(_,_,O), BackLinks)),
+    is_subdocument(Validation_Object, O).
+
+refute_uniqueness_of_reference(Validation_Object, O, Witness) :-
+    database_instance(Validation_Object,Instance),
+    findall(
+        json{
+            subject : S,
+            predicate : P
+        },
+        xrdf(Instance,S,P,O),
+        References),
+    \+ References = [_],
+    Witness = witness{'@type':referenced_document_is_not_unique,
+                      object: O,
+                      references: References}.
+
+refute_referential_integrity(Validation_Object,Witness) :-
+    referential_unique_candidate(Validation_Object, O),
+    refute_uniqueness_of_reference(Validation_Object, O, Witness).
 refute_referential_integrity(Validation_Object,Witness) :-
     referential_cardinality_candidate(Validation_Object, S, P, T),
     instance_layer(Validation_Object, Instance),
@@ -954,8 +1009,8 @@ refute_referential_integrity(Validation_Object,Witness) :-
                       predicate:P,
                       subject:S}.
 refute_referential_integrity(Validation_Object,Witness) :-
-    referential_range_candidate(Validation_Object, O, P, T),
-    refute_range(Validation_Object, O, P, T, Witness).
+    referential_range_candidate(Validation_Object, C, P, O),
+    refute_range(Validation_Object, C, P, O, Witness).
 refute_referential_integrity(Validation_Object,Witness) :-
     references_untyped_range(Validation_Object, S, P, O),
     Witness =
@@ -982,21 +1037,27 @@ refute_referential_integrity(Validation_Object,Witness) :-
              index: Idx
            }.
 
-refute_range(Validation_Object, O, P, T, Witness) :-
-    instance_layer(Validation_Object, Instance),
-    global_prefix_expand(rdf:type, Rdf_Type),
-    triple(Instance, O, Rdf_Type, node(CS)),
-    atom_string(C,CS),
-    do_or_die(extract_base_type(T,Super),
-              error(unexpected_document_type_encountered(O,P,T,C))),
-    (   \+ class_subsumed(Validation_Object, C, Super)
-    ->  extract_base_type(T, Base),
-        Witness = witness{ '@type': referential_integrity_violation,
-                           instance: O,
-                           actual_class: C,
-                           required_class: Base,
-                           predicate: P
-                         }
+refute_range(Validation_Object, C, P, O, Witness) :-
+    (   class_predicate_type(Validation_Object, C, P, T)
+    ->  instance_layer(Validation_Object, Instance),
+        global_prefix_expand(rdf:type, Rdf_Type),
+        triple(Instance, O, Rdf_Type, node(CS)),
+        atom_string(C,CS),
+        do_or_die(extract_base_type(T,Super),
+                  error(unexpected_document_type_encountered(O,P,T,C))),
+        (   \+ class_subsumed(Validation_Object, C, Super)
+        ->  extract_base_type(T, Base),
+            Witness = witness{ '@type': referential_integrity_violation,
+                               instance: O,
+                               actual_class: C,
+                               required_class: Base,
+                               predicate: P
+                             }
+        )
+    ;   Witness =
+        json{ '@type' : unknown_property_for_type,
+              property : P,
+              type : C }
     ).
 
 extract_base_type(T,C) :-
