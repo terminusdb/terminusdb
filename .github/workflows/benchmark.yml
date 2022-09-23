@@ -35,9 +35,29 @@ jobs:
       - name: Run benchmarks
         working-directory: tests
         run: |
-          mkdir results
+          mkdir -p results/js_benchmark_results
           npm ci
-          node bench.js --json > "results/${GITHUB_SHA}.json"
+          node bench.js --json > "results/js_benchmark_results/${GITHUB_SHA}.json"
+
+
+      - name: Add SSH Key
+        run: |
+          mkdir -p ${HOME}/.ssh
+          ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
+          chmod 600 ${HOME}/.ssh/github_actions
+          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+          ssh-add ${HOME}/.ssh/github_actions
+
+      - name: Make k6 benchmark dir
+        working-directory: tests
+        run: mkdir -p results/k6_benchmark_results
+
+
+      - name: Run k6 benchmark
+        working-directory: tests
+        run: |
+          ssh "${{ secrets.SSH_USER }}"@"${{ secrets.SSH_HOST }}" "benchmark $GITHUB_SHA" > "results/k6_benchmark_results/${GITHUB_SHA}.json"
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
@@ -45,5 +65,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./tests/results/
           keep_files: true
-          destination_dir: js_benchmark_results
 
