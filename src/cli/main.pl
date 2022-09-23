@@ -21,8 +21,10 @@
 :- use_module(library(optparse)).
 :- use_module(core(util),
               [do_or_die/2, token_authorization/2,
+               json_log_notice/1,
                basic_authorization/3, intersperse/3,
-               with_memory_file/1, with_memory_file_stream/3]).
+               with_memory_file/1, with_memory_file_stream/3,
+               json_log_notice_formatted/2]).
 :- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
@@ -38,10 +40,20 @@
 
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
+terminate(Sig) :-
+    json_log_notice_formatted('Terminusdb halting with signal ~q~n', [Sig]),
+    halt.
+
+initialise_signals :-
+    (   current_prolog_flag(unix, true)
+    ->  on_signal(hup, _, terminate),
+        on_signal(int, _, terminate)
+    ;   true).
+
 cli_toplevel :-
+    initialise_signals,
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
-
     load_plugins,
     % Better error handling here...
     catch_with_backtrace(
