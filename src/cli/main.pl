@@ -21,7 +21,6 @@
 :- use_module(library(optparse)).
 :- use_module(core(util),
               [do_or_die/2, token_authorization/2,
-               json_log_notice/1,
                basic_authorization/3, intersperse/3,
                with_memory_file/1, with_memory_file_stream/3,
                json_log_notice_formatted/2]).
