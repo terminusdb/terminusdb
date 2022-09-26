@@ -2905,6 +2905,17 @@ graphql_handler(Method, Request, _System_DB, _Auth) :-
     memberchk(content_length(Content_Length), Request),
     '$graphql':handle_request(Method, Request, Content_Length, Input, Output).
 
+%%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
+http:location(graphiql,root(graphiql),[]).
+:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler, [add_payload(false)]),
+                [method(Method),
+                 methods([options,get])]).
+
+graphiql_handler(_Method, _Request, _System_DB, _Auth) :-
+    current_output(Output),
+    server_port(Port),
+    '$graphql':graphiql(Output, Port).
+
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).
 http:location(assets,root(assets),[]).

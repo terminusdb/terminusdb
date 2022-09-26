@@ -1,7 +1,10 @@
 use juniper::{
     tests::fixtures::starwars::schema::{Database, Query},
-    http::GraphQLRequest,
-    GraphQLType, RootNode, EmptyMutation, EmptySubscription};
+    http::{
+        graphiql::graphiql_source,
+        GraphQLRequest,
+    },
+    RootNode, EmptyMutation, EmptySubscription};
 
 use std::sync::Arc;
 use swipl::prelude::*;
@@ -18,7 +21,7 @@ predicates! {
         let request;
         match serde_json::from_slice::<GraphQLRequest>(&buf) {
             Ok(r) => {
-                log_info!(context, "request: {:?}", r)?;
+                log_debug!(context, "request: {:?}", r)?;
                 request = r;
             },
             Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
@@ -30,7 +33,7 @@ predicates! {
 
         let response = request.execute_sync(&root_node, &graphql_context);
 
-        log_info!(context, "graphql response: {:?}", response)?;
+        log_debug!(context, "graphql response: {:?}", response)?;
 
         let mut s: WritablePrologStream = output_stream_term.get_ex()?;
         context.try_or_die_generic(write!(s, "Status: 200\n\n"))?;
@@ -38,8 +41,22 @@ predicates! {
 
         Ok(())
     }
+
+    #[module("$graphql")]
+    semidet fn graphiql(context, output_term, port_term) {
+        let port: u64 = port_term.get_ex()?;
+        let full_url = format!("http://localhost:{}/api/graphql", port);
+        let source = graphiql_source(&full_url, None);
+
+        let mut stream: WritablePrologStream = output_term.get_ex()?;
+        context.try_or_die_generic(write!(stream, "Status: 200\n\n"))?;
+        context.try_or_die_generic(stream.write_all(source.as_bytes()))?;
+
+        Ok(())
+    }
 }
 
 pub fn register() {
     register_handle_request();
+    register_graphiql();
 }
