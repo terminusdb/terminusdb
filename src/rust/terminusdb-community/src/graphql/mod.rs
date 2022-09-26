@@ -1,18 +1,22 @@
 use juniper::{
-    tests::fixtures::starwars::schema::{Database, Query},
-    http::{
-        graphiql::graphiql_source,
-        GraphQLRequest,
-    },
-    RootNode, EmptyMutation, EmptySubscription};
+    //tests::fixtures::starwars::schema::{Database, Query},
+    http::{graphiql::graphiql_source, GraphQLRequest},
+    EmptyMutation,
+    EmptySubscription,
+    RootNode,
+};
 
+use std::io::{Read, Write};
 use std::sync::Arc;
 use swipl::prelude::*;
-use std::io::{Read, Write};
+
+mod top;
+
+use top::*;
 
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, _request_term, content_length_term, input_stream_term, output_stream_term) {
+    semidet fn handle_request(context, _method_term, db_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -27,8 +31,8 @@ predicates! {
             Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
         }
 
-        let root_node = RootNode::new(Query, EmptyMutation::<Database>::new(), EmptySubscription::<Database>::new());
-        let graphql_context = Arc::new(Database::new());
+        let root_node = RootNode::new(Query, EmptyMutation::<Info>::new(), EmptySubscription::<Info>::new());
+        let graphql_context = Info::new(context, db_term, auth_term)?;
 
 
         let response = request.execute_sync(&root_node, &graphql_context);

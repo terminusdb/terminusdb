@@ -2898,12 +2898,12 @@ capabilities_handler(post, Request, System_DB, Auth) :-
                 [method(Method),
                  methods([options,get,post])]).
 
-graphql_handler(Method, Request, _System_DB, _Auth) :-
+graphql_handler(Method, Request, System_DB, Auth) :-
     current_output(Output),
     memberchk(input(Input), Request),
     memberchk(content_type(_Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
-    '$graphql':handle_request(Method, Request, Content_Length, Input, Output).
+    '$graphql':handle_request(Method, System_DB, Auth, Content_Length, Input, Output).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).
