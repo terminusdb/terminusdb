@@ -2894,13 +2894,16 @@ capabilities_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(graphql), cors_handler(Method, graphql_handler),
+:- http_handler(api(graphql), cors_handler(Method, graphql_handler, [add_payload(false)]),
                 [method(Method),
                  methods([options,get,post])]).
 
 graphql_handler(Method, Request, _System_DB, _Auth) :-
     current_output(Output),
-    '$graphql':handle_request(Method, Request, Output).
+    memberchk(input(Input), Request),
+    memberchk(content_type(_Content_Type), Request),
+    memberchk(content_length(Content_Length), Request),
+    '$graphql':handle_request(Method, Request, Content_Length, Input, Output).
 
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).
@@ -3038,20 +3041,20 @@ customise_exception(error(E)) :-
                  'api:message' : EM},
                [status(500), width(0)]).
 customise_exception(error(E, CTX)) :-
-    json_log_error_formatted('~N[Exception] ~q~n',[error(E,CTX)]),
+    json_log_error_formatted('~N[Exception] ~q',[error(E,CTX)]),
     (   CTX = context(prolog_stack(Stack),_)
     ->  with_output_to(
             string(Ctx_String),
             print_prolog_backtrace(current_output,Stack))
     ;   format(string(Ctx_String), "~q", [CTX])),
-    format(atom(EM),'Error: ~q~n~s~n', [E, Ctx_String]),
+    format(atom(EM),'Error: ~q~n~s', [E, Ctx_String]),
     reply_json(_{'api:status' : 'api:server_error',
                  'api:message' : EM},
                [status(500), width(0)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
 customise_exception(E) :-
-    json_log_error_formatted('~N[Exception] ~q~n',[E]),
+    json_log_error_formatted('~N[Exception] ~q',[E]),
     throw(E).
 
 /*
