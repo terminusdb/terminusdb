@@ -2893,6 +2893,14 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(graphql), cors_handler(Method, graphql_handler),
+                [method(Method),
+                 methods([options,get,post])]).
+
+graphql_handler(Method, Request, _System_DB, _Auth) :-
+    current_output(Output),
+    '$graphql':handle_request(Method, Request, Output).
 
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).
