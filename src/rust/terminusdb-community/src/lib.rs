@@ -1,3 +1,6 @@
+#[macro_use]
+mod log;
+
 mod consts;
 mod doc;
 mod prefix;
