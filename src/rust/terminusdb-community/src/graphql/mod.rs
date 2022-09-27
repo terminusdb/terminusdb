@@ -40,7 +40,7 @@ predicates! {
         log_debug!(context, "graphql response: {:?}", response)?;
 
         let mut s: WritablePrologStream = output_stream_term.get_ex()?;
-        context.try_or_die_generic(write!(s, "Status: 200\n\n"))?;
+        context.try_or_die_generic(write!(s, "Access-Control-Allow-Credentials: true\nAccess-Control-Allow-Origin: http://127.0.0.1:6363\nStatus: 200\n\n"))?;
         context.try_or_die_generic(serde_json::to_writer(s, &response))?;
 
         Ok(())
