@@ -80,6 +80,40 @@ impl Database {
     fn name(&self, #[graphql(context)] info: &Info) -> String {
         <Self as Resource>::name(self, info)
     }
+
+    fn label(&self, #[graphql(context)] info: &Info) -> Option<String> {
+        info
+            .system
+            .predicate_id("http://terminusdb.com/schema/system#label")
+            .and_then(|p| info
+                      .system
+                      .single_triple_sp(self.get_id(), p)
+            )
+            .and_then(|t| info
+                      .system
+                      .id_object(t.object))
+            .and_then(|o| o.value())
+            .map(move |v|
+                 value_string_to_json(&v))
+            .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
+    }
+
+    fn comment(&self, #[graphql(context)] info: &Info) -> Option<String> {
+        info
+            .system
+            .predicate_id("http://terminusdb.com/schema/system#comment")
+            .and_then(|p| info
+                      .system
+                      .single_triple_sp(self.get_id(), p)
+            )
+            .and_then(|t| info
+                      .system
+                      .id_object(t.object))
+            .and_then(|o| o.value())
+            .map(move |v|
+                 value_string_to_json(&v))
+            .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
+    }
 }
 
 
@@ -103,6 +137,31 @@ impl Organization {
 
     fn name(&self, #[graphql(context)] info: &Info) -> String {
         <Self as Resource>::name(self, info)
+    }
+
+    fn database(&self, #[graphql(context)] info: &Info) -> Vec<Database> {
+        let predicate_id = info
+            .system
+            .predicate_id("http://terminusdb.com/schema/system#database")
+            .expect("can't find 'database' predicate");
+        info
+            .system
+            .triples_sp(self.id, predicate_id)
+            .map(|triple| Database{ id: triple.object })
+            .collect()
+    }
+
+    fn child(&self, #[graphql(context)] info: &Info) -> Vec<Organization> {
+        // if no children, empty.
+        let predicate_id = info
+            .system
+            .predicate_id("http://terminusdb.com/schema/system#child")
+            .expect("can't find child' predicate");
+        info
+            .system
+            .triples_sp(self.id, predicate_id)
+            .map(|triple| Organization{ id: triple.object })
+            .collect()
     }
 }
 
@@ -149,7 +208,7 @@ impl Capability {
             .object;
         let db_type_id = info
             .system
-            .subject_id("http://terminusdb.com/schema/system#Database");
+            .subject_id("http://terminusdb.com/schema/system#UserDatabase");
 
         if db_type_id == Some(type_id) {
             Database{ id : scope_id }.into()
