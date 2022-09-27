@@ -31,6 +31,45 @@ impl Info {
     }
 }
 
+fn maybe_object_string(info : &Info, id : u64, prop : &str) -> Option<String> {
+    info
+        .system
+        .predicate_id(prop)
+        .and_then(|p| info
+                  .system
+                  .single_triple_sp(id, p)
+        )
+        .and_then(|t| info
+                  .system
+                  .id_object(t.object))
+        .and_then(|o| o.value())
+        .map(move |v|
+             value_string_to_json(&v))
+        .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
+}
+
+fn required_object_string(info : &Info, id: u64, prop : &str) -> String{
+    let predicate_id = info
+        .system
+        .predicate_id(prop)
+        .expect("can't find name predicate");
+    let name_id = info
+        .system
+        .single_triple_sp(id, predicate_id)
+        .expect(&format!("can't find triple for {}", prop))
+        .object;
+    let name_unprocessed = info
+        .system
+        .id_object(name_id)
+        .expect(&format!("no object for id {}", id))
+        .value()
+        .expect("returned object was no value");
+
+    let name_json = value_string_to_json(&name_unprocessed);
+    let name = name_json.as_str().unwrap();
+
+    name.to_string()
+}
 
 #[graphql_interface(for = [Database, Organization], context = Info)]
 pub trait Resource {
@@ -43,26 +82,7 @@ pub trait Resource {
             .expect("can't make u64 into id")
     }
     fn name(&self,#[graphql(context)] info: &Info) -> String {
-        let predicate_id = info
-            .system
-            .predicate_id("http://terminusdb.com/schema/system#name")
-            .expect("can't find name predicate");
-        let name_id = info
-            .system
-            .single_triple_sp(self.get_id(), predicate_id)
-            .expect("can't find triple")
-            .object;
-        let name_unprocessed = info
-            .system
-            .id_object(name_id)
-            .expect("no object for id")
-            .value()
-            .expect("returned object was no value");
-
-        let name_json = value_string_to_json(&name_unprocessed);
-        let name = name_json.as_str().unwrap();
-
-        name.to_string()
+        required_object_string(info, self.get_id(), "http://terminusdb.com/schema/system#name")
     }
 }
 
@@ -82,37 +102,11 @@ impl Database {
     }
 
     fn label(&self, #[graphql(context)] info: &Info) -> Option<String> {
-        info
-            .system
-            .predicate_id("http://terminusdb.com/schema/system#label")
-            .and_then(|p| info
-                      .system
-                      .single_triple_sp(self.get_id(), p)
-            )
-            .and_then(|t| info
-                      .system
-                      .id_object(t.object))
-            .and_then(|o| o.value())
-            .map(move |v|
-                 value_string_to_json(&v))
-            .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
+        maybe_object_string(info, self.get_id(), "http://terminusdb.com/schema/system#label")
     }
 
     fn comment(&self, #[graphql(context)] info: &Info) -> Option<String> {
-        info
-            .system
-            .predicate_id("http://terminusdb.com/schema/system#comment")
-            .and_then(|p| info
-                      .system
-                      .single_triple_sp(self.get_id(), p)
-            )
-            .and_then(|t| info
-                      .system
-                      .id_object(t.object))
-            .and_then(|o| o.value())
-            .map(move |v|
-                 value_string_to_json(&v))
-            .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
+        maybe_object_string(info, self.get_id(), "http://terminusdb.com/schema/system#comment")
     }
 }
 
@@ -185,6 +179,19 @@ impl Capability {
             .expect("can't make u64 into id")
     }
 
+    fn role(&self, #[graphql(context)] info: &Info) -> Vec<Role> {
+        let predicate_id = info
+            .system
+            .predicate_id("http://terminusdb.com/schema/system#role")
+            .expect("can't find name predicate");
+
+        info
+            .system
+            .triples_sp(self.id, predicate_id)
+            .map(|triple| Role{ id: triple.object })
+            .collect()
+    }
+
     fn scope(&self, #[graphql(context)] info: &Info) -> ResourceValue {
         let predicate_id = info
             .system
@@ -218,6 +225,120 @@ impl Capability {
     }
 }
 
+#[derive(GraphQLEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Action {
+    #[graphql(name = "create_database")]
+    CreateDatabase,
+    #[graphql(name = "delete_database")]
+    DeleteDatabase,
+    #[graphql(name = "class_frame")]
+    ClassFrame,
+    #[graphql(name = "clone")]
+    Clone,
+    #[graphql(name = "fetch")]
+    Fetch,
+    #[graphql(name = "push")]
+    Push,
+    #[graphql(name = "branch")]
+    Branch,
+    #[graphql(name = "rebase")]
+    Rebase,
+    #[graphql(name = "instance_read_access")]
+    InstanceReadAccess,
+    #[graphql(name = "instance_write_access")]
+    InstanceWriteAccess,
+    #[graphql(name = "schema_read_access")]
+    SchemaReadAccess,
+    #[graphql(name = "schema_write_access")]
+    SchemaWriteAccess,
+    #[graphql(name = "meta_read_access")]
+    MetaReadAccess,
+    #[graphql(name = "meta_write_access")]
+    MetaWriteAccess,
+    #[graphql(name = "commit_read_access")]
+    CommitReadAccess,
+    #[graphql(name = "commit_write_access")]
+    CommitWriteAccess,
+    #[graphql(name = "manage_capabilities")]
+    ManageCapabilities
+}
+
+fn action_enum(action : &str) -> Action {
+    if action == "http://terminusdb.com/schema/system#Action/create_database" {
+        Action::CreateDatabase
+    }else if action == "http://terminusdb.com/schema/system#Action/delete_database" {
+        Action::DeleteDatabase
+    }else if action == "http://terminusdb.com/schema/system#Action/class_frame" {
+        Action::ClassFrame
+    }else if action == "http://terminusdb.com/schema/system#Action/clone"{
+        Action::Clone
+    }else if action == "http://terminusdb.com/schema/system#Action/fetch"{
+        Action::Fetch
+    }else if action == "http://terminusdb.com/schema/system#Action/push"{
+        Action::Push
+    }else if action == "http://terminusdb.com/schema/system#Action/branch"{
+        Action::Branch
+    }else if action == "http://terminusdb.com/schema/system#Action/rebase"{
+        Action::Rebase
+    }else if action == "http://terminusdb.com/schema/system#Action/instance_read_access"{
+        Action::InstanceReadAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/instance_write_access"{
+        Action::InstanceWriteAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/schema_read_access"{
+        Action::SchemaReadAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/schema_write_access"{
+        Action::SchemaWriteAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/meta_read_access"{
+        Action::MetaReadAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/meta_write_access"{
+        Action::MetaWriteAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/commit_read_access"{
+        Action::CommitReadAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/commit_write_access"{
+        Action::CommitWriteAccess
+    }else if action == "http://terminusdb.com/schema/system#Action/manage_capabilities"{
+        Action::ManageCapabilities
+    }else{
+        panic!("This is not good!")
+    }
+}
+
+pub struct Role{
+    id : u64
+}
+
+#[graphql_object(context = Info)]
+/// The user that is currently logged in.
+impl Role {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        info
+            .system
+            .id_subject(self.id)
+            .expect("can't make u64 into id")
+    }
+
+    fn name(&self,#[graphql(context)] info: &Info) -> String {
+        required_object_string(info, self.id, "http://terminusdb.com/schema/system#name")
+    }
+
+    fn action(&self,#[graphql(context)] info: &Info) -> Vec<Action> {
+        let predicate_id = info
+            .system
+            .predicate_id("http://terminusdb.com/schema/system#action")
+            .expect("can't find 'database' predicate");
+        info
+            .system
+            .triples_sp(self.id, predicate_id)
+            .map(|triple| triple.object)
+            .map(|o| info
+                 .system
+                 .id_subject(o)
+                 .expect("Invalid Action in database (corrupted)"))
+            .map(|action| action_enum(&action))
+            .collect()
+    }
+}
+
 pub struct User;
 
 #[graphql_object(context = Info)]
@@ -236,26 +357,7 @@ impl User {
                 "can't make user id from {}",
                 info.user.to_string()
             ));
-        let predicate_id = info
-            .system
-            .predicate_id("http://terminusdb.com/schema/system#name")
-            .expect("can't find name predicate");
-        let name_id = info
-            .system
-            .single_triple_sp(user_id, predicate_id)
-            .expect("can't find triple")
-            .object;
-        let name_unprocessed = info
-            .system
-            .id_object(name_id)
-            .expect("no object for id")
-            .value()
-            .expect("returned object was no value");
-
-        let name_json = value_string_to_json(&name_unprocessed);
-        let name = name_json.as_str().unwrap();
-
-        name.to_string()
+        required_object_string(info, user_id, "http://terminusdb.com/schema/system#name")
     }
 
     fn capability(#[graphql(context)] info: &Info) -> Vec<Capability> {
