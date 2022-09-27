@@ -34,32 +34,22 @@ impl Info {
 
 #[graphql_interface(for = [Database, Organization], context = Info)]
 pub trait Resource {
-    fn id(&self) -> String;
-    fn name(&self) -> String;
-}
-
-#[derive(Clone)]
-pub struct Database {
-    id : u64
-}
-
-#[graphql_object(context = Info, impl = ResourceValue)]
-impl Database {
-    pub fn id(&self, #[graphql(context)] info: &Info) -> String {
+    #[graphql(ignore)]
+    fn get_id(&self) -> u64;
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
         info
             .system
-            .id_subject(self.id)
+            .id_subject(self.get_id())
             .expect("can't make u64 into id")
     }
-
-    pub fn name(&self, #[graphql(context)] info: &Info) -> String {
+    fn name(&self,#[graphql(context)] info: &Info) -> String {
         let predicate_id = info
             .system
             .predicate_id("http://terminusdb.com/schema/system#name")
             .expect("can't find name predicate");
         let name_id = info
             .system
-            .single_triple_sp(self.id, predicate_id)
+            .single_triple_sp(self.get_id(), predicate_id)
             .expect("can't find triple")
             .object;
         let name_unprocessed = info
@@ -73,6 +63,30 @@ impl Database {
         let name = name_json.as_str().unwrap();
 
         name.to_string()
+    }
+}
+
+#[derive(Clone)]
+pub struct Database {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = ResourceValue)]
+impl Database {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Resource>::id(self, info)
+    }
+
+    fn name(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Resource>::name(self, info)
+    }
+}
+
+
+#[graphql_interface]
+impl Resource for Database {
+    fn get_id(&self) -> u64 {
+        self.id
     }
 }
 
@@ -83,34 +97,19 @@ pub struct Organization {
 
 #[graphql_object(context = Info, impl = ResourceValue)]
 impl Organization {
-    pub fn id(&self, #[graphql(context)] info: &Info) -> String {
-        info
-            .system
-            .id_subject(self.id)
-            .expect("can't make u64 into id")
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Resource>::id(self, info)
     }
 
-    pub fn name(&self, #[graphql(context)] info: &Info) -> String {
-        let predicate_id = info
-            .system
-            .predicate_id("http://terminusdb.com/schema/system#name")
-            .expect("can't find name predicate");
-        let name_id = info
-            .system
-            .single_triple_sp(self.id, predicate_id)
-            .expect("can't find triple")
-            .object;
-        let name_unprocessed = info
-            .system
-            .id_object(name_id)
-            .expect("no object for id")
-            .value()
-            .expect("returned object was no value");
+    fn name(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Resource>::name(self, info)
+    }
+}
 
-        let name_json = value_string_to_json(&name_unprocessed);
-        let name = name_json.as_str().unwrap();
-
-        name.to_string()
+#[graphql_interface]
+impl Resource for Organization {
+    fn get_id(&self) -> u64 {
+        self.id
     }
 }
 
