@@ -636,11 +636,11 @@ pub trait AbstractCommit {
     }
 
     fn author(&self,#[graphql(context)] info: &Info) -> String {
-        required_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/ref#author")
+        required_object_string(&info.commit.expect("Missing commit graph"), self.get_id(), "http://terminusdb.com/schema/ref#author")
     }
 
     fn message(&self,#[graphql(context)] info: &Info) -> String {
-        required_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/ref#message")
+        required_object_string(&info.commit.expect("Missing commit graph"), self.get_id(), "http://terminusdb.com/schema/ref#message")
     }
 }
 
@@ -831,7 +831,7 @@ impl Query {
                      .triples_o(branch_id)
                      .filter(move |t| t.predicate == predicate_id)
                      .map(|t| Branch{ id: t.subject })
-                     .collect()
+                     .collect::<Vec<Branch>>()
                 )
                 .into_iter()
                 .flatten()
