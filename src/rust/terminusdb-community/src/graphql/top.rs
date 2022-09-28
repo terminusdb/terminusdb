@@ -811,7 +811,7 @@ impl Query {
     }
 
     fn branch(#[graphql(context)] info: &Info) -> Vec<Branch> {
-        if let Some(_) = info.meta {
+        if let Some(_) = info.commit {
             // And get the type
             let predicate_id : u64 = info
                 .commit
@@ -820,12 +820,12 @@ impl Query {
                 .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
                 .expect("can't find rdf:type predicate");
             info
-                .meta
+                .commit
                 .as_ref()
                 .unwrap()
                 .subject_id("http://terminusdb.com/schema/ref#Branch")
                 .map(|branch_id| info
-                     .meta
+                     .commit
                      .as_ref()
                      .unwrap()
                      .triples_o(branch_id)
