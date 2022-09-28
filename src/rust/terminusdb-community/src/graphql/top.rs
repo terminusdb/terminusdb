@@ -636,11 +636,81 @@ pub trait AbstractCommit {
     }
 
     fn author(&self,#[graphql(context)] info: &Info) -> String {
-        required_object_string(&info.commit.expect("Missing commit graph"), self.get_id(), "http://terminusdb.com/schema/ref#author")
+        required_object_string(&info.commit.as_ref().expect("Missing commit graph"), self.get_id(), "http://terminusdb.com/schema/ref#author")
     }
 
     fn message(&self,#[graphql(context)] info: &Info) -> String {
-        required_object_string(&info.commit.expect("Missing commit graph"), self.get_id(), "http://terminusdb.com/schema/ref#message")
+        required_object_string(&info.commit.as_ref().expect("Missing commit graph"), self.get_id(), "http://terminusdb.com/schema/ref#message")
+    }
+
+    fn parent(&self,#[graphql(context)] info: &Info) -> Option<AbstractCommitValue> {
+        let predicate_id = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .predicate_id("http://terminusdb.com/schema/ref#parent")
+            .expect("can't find http://terminusdb.com/schema/ref#parent predicate");
+        let rdf_type_id = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .expect("Can't find rdf:type predicate");
+        let maybe_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#Commit");
+        let maybe_initial_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#InitialCommit");
+        let maybe_invalid_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#InvalidCommit");
+        let maybe_valid_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#ValidCommit");
+
+        // We need the correct type of commit here!
+        info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .single_triple_sp(self.get_id(), predicate_id)
+            .map(|t| {
+                let type_id = info
+                    .commit
+                    .as_ref()
+                    .expect("Missing meta graph")
+                    .single_triple_sp(t.object, rdf_type_id)
+                    .expect("No type for commit object!")
+                    .object;
+                if Some(type_id) == maybe_commit_type {
+                    Commit{
+                        id : t.object
+                    }.into()
+                } else if Some(type_id) == maybe_invalid_commit_type {
+                    InvalidCommit{
+                        id : t.object
+                    }.into()
+                } else if Some(type_id) == maybe_valid_commit_type {
+                    ValidCommit{
+                        id : t.object
+                    }.into()
+                } else if Some(type_id) == maybe_initial_commit_type {
+                    InitialCommit{
+                        id : t.object
+                    }.into()
+                } else {
+                    panic!("Unable to find a commit type!")
+                }
+            })
     }
 }
 
@@ -661,6 +731,10 @@ impl Commit {
 
     fn message(&self, #[graphql(context)] info: &Info) -> String {
         <Self as AbstractCommit>::message(self, info)
+    }
+
+    fn parent(&self, #[graphql(context)] info: &Info) -> Option<AbstractCommitValue> {
+        <Self as AbstractCommit>::parent(self, info)
     }
 }
 
@@ -689,6 +763,10 @@ impl InitialCommit {
     fn message(&self, #[graphql(context)] info: &Info) -> String {
         <Self as AbstractCommit>::message(self, info)
     }
+
+    fn parent(&self, #[graphql(context)] info: &Info) -> Option<AbstractCommitValue> {
+        <Self as AbstractCommit>::parent(self, info)
+    }
 }
 
 #[graphql_interface]
@@ -716,6 +794,10 @@ impl ValidCommit {
     fn message(&self, #[graphql(context)] info: &Info) -> String {
         <Self as AbstractCommit>::message(self, info)
     }
+
+    fn parent(&self, #[graphql(context)] info: &Info) -> Option<AbstractCommitValue> {
+        <Self as AbstractCommit>::parent(self, info)
+    }
 }
 
 #[graphql_interface]
@@ -742,6 +824,10 @@ impl InvalidCommit {
 
     fn message(&self, #[graphql(context)] info: &Info) -> String {
         <Self as AbstractCommit>::message(self, info)
+    }
+
+    fn parent(&self, #[graphql(context)] info: &Info) -> Option<AbstractCommitValue> {
+        <Self as AbstractCommit>::parent(self, info)
     }
 }
 
