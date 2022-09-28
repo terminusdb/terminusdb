@@ -2894,27 +2894,58 @@ capabilities_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(graphql), cors_handler(Method, graphql_handler, [add_payload(false)]),
+http:location(graphql,api(graphql),[]).
+:- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false)]),
                 [method(Method),
                  methods([options,get,post])]).
+:- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,get,post])]).
 
-graphql_handler(Method, Request, System_DB, Auth) :-
+graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     current_output(Output),
     memberchk(input(Input), Request),
     memberchk(content_type(_Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
-    '$graphql':handle_request(Method, System_DB, Auth, Content_Length, Input, Output).
+    atom_string(Path_Atom, Path),
+    (   resolve_absolute_string_descriptor(Path, Desc)
+    ->  true
+    ;   Desc = system_descriptor{}),
+    open_descriptor(Desc, Transaction),
+    (   branch_descriptor{} :< Desc
+    ->  Branch_DB = Transaction,
+        Commit_DB = (Transaction.parent),
+        Meta_DB = (Commit_DB.parent)
+    ;   repository_descriptor{} :< Desc
+    ->  Branch_DB = none,
+        Commit_DB = Transaction,
+        Meta_DB = (Transaction.parent)
+    ;   database_descriptor{} :< Desc
+    ->  Branch_DB = none,
+        Commit_DB = none,
+        Meta_DB = Transaction
+    ;   Branch_DB = none,
+        Commit_DB = none,
+        Meta_DB = none
+    ),
+    '$graphql':handle_request(Method, System_DB, Meta_DB, Commit_DB, Branch_DB, Auth, Content_Length, Input, Output).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).
-:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler, [add_payload(false)]),
+:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler("_system"), [add_payload(false)]),
                 [method(Method),
+                 methods([options,get,post])]).
+:- http_handler(graphiql(Path), cors_handler(Method, graphiql_handler(Path), [add_payload(false)]),
+                [method(Method),
+                 prefix,
                  methods([options,get])]).
 
-graphiql_handler(_Method, _Request, _System_DB, _Auth) :-
+graphiql_handler(_Method, Path_Atom, _Request, _System_DB, _Auth) :-
     current_output(Output),
     server_port(Port),
-    '$graphql':graphiql(Output, Port).
+    atom_string(Path_Atom, Path),
+    '$graphql':graphiql(Path, Output, Port).
 
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).

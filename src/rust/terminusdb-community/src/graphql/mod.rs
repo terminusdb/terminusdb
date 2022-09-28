@@ -1,5 +1,4 @@
 use juniper::{
-    //tests::fixtures::starwars::schema::{Database, Query},
     http::{graphiql::graphiql_source, GraphQLRequest},
     EmptyMutation,
     EmptySubscription,
@@ -16,7 +15,7 @@ use top::*;
 
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, db_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
+    semidet fn handle_request(context, _method_term, system_term, meta_term, commit_term, branch_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -32,8 +31,7 @@ predicates! {
         }
 
         let root_node = RootNode::new(Query, EmptyMutation::<Info>::new(), EmptySubscription::<Info>::new());
-        let graphql_context = Info::new(context, db_term, auth_term)?;
-
+        let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, auth_term)?;
 
         let response = request.execute_sync(&root_node, &graphql_context);
 
@@ -47,9 +45,10 @@ predicates! {
     }
 
     #[module("$graphql")]
-    semidet fn graphiql(context, output_term, port_term) {
+    semidet fn graphiql(context, path_term, output_term, port_term) {
         let port: u64 = port_term.get_ex()?;
-        let full_url = format!("http://localhost:{}/api/graphql", port);
+        let path: String = path_term.get_ex()?;
+        let full_url: String = format!("http://localhost:{}/api/graphql/{}", port, path);
         let source = graphiql_source(&full_url, None);
 
         let mut stream: WritablePrologStream = output_term.get_ex()?;

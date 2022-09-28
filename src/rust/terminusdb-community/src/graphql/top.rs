@@ -1,5 +1,5 @@
 use crate::terminus_store::store::sync::*;
-use crate::terminus_store::Layer;
+use crate::terminus_store::Layer as TSLayer;
 use crate::types::*;
 use crate::value::*;
 use juniper::{self, graphql_object, graphql_interface, GraphQLObject, GraphQLEnum};
@@ -7,6 +7,10 @@ use swipl::prelude::*;
 
 pub struct Info {
     system: SyncStoreLayer,
+    meta : Option<SyncStoreLayer>,
+    commit : Option<SyncStoreLayer>,
+    branch: Option<SyncStoreLayer>,
+    schema: Option<SyncStoreLayer>,
     user: Atom,
 }
 
@@ -15,7 +19,10 @@ impl juniper::Context for Info {}
 impl Info {
     pub fn new<C: QueryableContextType>(
         context: &Context<C>,
-        db_term: &Term,
+        system_term: &Term,
+        meta_term: &Term,
+        commit_term: &Term,
+        branch_term: &Term,
         auth_term: &Term,
     ) -> PrologResult<Info> {
         let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
@@ -25,22 +32,33 @@ impl Info {
         } else {
             user = user_;
         }
-        let system = transaction_instance_layer(context, db_term)?.expect("system layer not found");
-
-        Ok(Info { system, user })
+        let system = transaction_instance_layer(context, system_term)?.expect("system layer not found");
+        let meta = if meta_term.unify(atomable("none")).is_ok() {
+            None
+        }else{
+            transaction_instance_layer(context, meta_term).expect("Missing meta layer")
+        };
+        let commit = if commit_term.unify(atomable("none")).is_ok() {
+            None
+        }else{
+            transaction_instance_layer(context, commit_term).expect("Missing commit layer")
+        };
+        let branch = if branch_term.unify(atomable("none")).is_ok() {
+            None
+        }else{
+            transaction_instance_layer(context, branch_term).expect("Missing branch layer")
+        };
+        Ok(Info { system, meta, commit, branch, schema: None, user })
     }
 }
 
-fn maybe_object_string(info : &Info, id : u64, prop : &str) -> Option<String> {
-    info
-        .system
+fn maybe_object_string(db : &SyncStoreLayer, id : u64, prop : &str) -> Option<String> {
+    db
         .predicate_id(prop)
-        .and_then(|p| info
-                  .system
+        .and_then(|p| db
                   .single_triple_sp(id, p)
         )
-        .and_then(|t| info
-                  .system
+        .and_then(|t| db
                   .id_object(t.object))
         .and_then(|o| o.value())
         .map(move |v|
@@ -48,18 +66,15 @@ fn maybe_object_string(info : &Info, id : u64, prop : &str) -> Option<String> {
         .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
 }
 
-fn required_object_string(info : &Info, id: u64, prop : &str) -> String{
-    let predicate_id = info
-        .system
+fn required_object_string(db : &SyncStoreLayer, id: u64, prop : &str) -> String{
+    let predicate_id = db
         .predicate_id(prop)
-        .expect("can't find name predicate");
-    let name_id = info
-        .system
+        .expect(&format!("can't find {} predicate", prop));
+    let name_id = db
         .single_triple_sp(id, predicate_id)
         .expect(&format!("can't find triple for {}", prop))
         .object;
-    let name_unprocessed = info
-        .system
+    let name_unprocessed = db
         .id_object(name_id)
         .expect(&format!("no object for id {}", id))
         .value()
@@ -82,7 +97,7 @@ pub trait Resource {
             .expect("can't make u64 into id")
     }
     fn name(&self,#[graphql(context)] info: &Info) -> String {
-        required_object_string(info, self.get_id(), "http://terminusdb.com/schema/system#name")
+        required_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/system#name")
     }
 }
 
@@ -102,11 +117,11 @@ impl Database {
     }
 
     fn label(&self, #[graphql(context)] info: &Info) -> Option<String> {
-        maybe_object_string(info, self.get_id(), "http://terminusdb.com/schema/system#label")
+        maybe_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/system#label")
     }
 
     fn comment(&self, #[graphql(context)] info: &Info) -> Option<String> {
-        maybe_object_string(info, self.get_id(), "http://terminusdb.com/schema/system#comment")
+        maybe_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/system#comment")
     }
 }
 
@@ -318,7 +333,7 @@ impl Role {
     }
 
     fn name(&self,#[graphql(context)] info: &Info) -> String {
-        required_object_string(info, self.id, "http://terminusdb.com/schema/system#name")
+        required_object_string(&info.system, self.id, "http://terminusdb.com/schema/system#name")
     }
 
     fn action(&self,#[graphql(context)] info: &Info) -> Vec<Action> {
@@ -357,7 +372,7 @@ impl User {
                 "can't make user id from {}",
                 info.user.to_string()
             ));
-        required_object_string(info, user_id, "http://terminusdb.com/schema/system#name")
+        required_object_string(&info.system, user_id, "http://terminusdb.com/schema/system#name")
     }
 
     fn capability(#[graphql(context)] info: &Info) -> Vec<Capability> {
@@ -381,6 +396,362 @@ impl User {
     }
 }
 
+#[graphql_interface(for = [Local, Remote], context = Info)]
+pub trait Repository {
+    #[graphql(ignore)]
+    fn get_id(&self) -> u64;
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        info
+            .meta
+            .as_ref()
+            .expect("No meta graph availble")
+            .id_subject(self.get_id())
+            .expect("can't make u64 into id")
+    }
+    fn name(&self,#[graphql(context)] info: &Info) -> String {
+        required_object_string(&info.meta.as_ref().expect("Missing meta graph"), self.get_id(), "http://terminusdb.com/schema/repository#name")
+    }
+
+    fn head(&self,#[graphql(context)] info: &Info) -> Layer {
+        let predicate_id = info
+            .meta
+            .as_ref()
+            .expect("Missing meta graph")
+            .predicate_id("http://terminusdb.com/schema/repository#head")
+            .expect("can't find http://terminusdb.com/schema/repository#head predicate");
+        let head_id = info
+            .meta
+            .as_ref()
+            .expect("Missing meta graph")
+            .single_triple_sp(self.get_id(), predicate_id)
+            .expect("Repo has no head: broken repo graph")
+            .object;
+        Layer{
+            layer_type : LayerType::Meta,
+            id : head_id
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Local {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = RepositoryValue)]
+impl Local {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Repository>::id(self, info)
+    }
+
+    fn name(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Repository>::name(self, info)
+    }
+
+    fn head(&self, #[graphql(context)] info: &Info) -> Layer {
+        <Self as Repository>::head(self, info)
+    }
+}
+
+#[graphql_interface]
+impl Repository for Local {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+}
+
+#[derive(Clone)]
+pub struct Remote {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = RepositoryValue)]
+impl Remote {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Repository>::id(self, info)
+    }
+
+    fn name(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as Repository>::name(self, info)
+    }
+
+    fn head(&self, #[graphql(context)] info: &Info) -> Layer {
+        <Self as Repository>::head(self, info)
+    }
+}
+
+#[graphql_interface]
+impl Repository for Remote {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+}
+
+pub enum LayerType {
+    Commit,
+    Meta,
+}
+
+pub struct Layer {
+    layer_type : LayerType,
+    id : u64,
+}
+
+#[graphql_object(context = Info)]
+/// The user that is currently logged in.
+impl Layer {
+    fn id(#[graphql(context)] info: &Info) -> String {
+        match self.layer_type {
+            LayerType::Commit => {
+                info
+                    .commit
+                    .as_ref()
+                    .expect("We have no commit graph")
+                    .id_subject(self.id)
+                    .expect("can't make u64 into id")
+            }
+            LayerType::Meta => {
+                info
+                    .meta
+                    .as_ref()
+                    .expect("We have no commit graph")
+                    .id_subject(self.id)
+                    .expect("can't make u64 into id")
+            }
+        }
+    }
+    fn identifier(#[graphql(context)] info: &Info) -> String {
+        match self.layer_type {
+            LayerType::Commit => {
+                required_object_string(&info.commit.as_ref().expect("We have no commit graph"), self.id, "http://terminusdb.com/schema/layer#identifier")
+            }
+            LayerType::Meta => {
+                required_object_string(&info.meta.as_ref().expect("We have no commit graph"), self.id, "http://terminusdb.com/schema/layer#identifier")
+            }
+        }
+    }
+}
+
+pub struct Branch {
+    id : u64
+}
+
+#[graphql_object(context = Info)]
+impl Branch {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        info
+            .commit
+            .as_ref()
+            .expect("No meta graph availble")
+            .id_subject(self.id)
+            .expect("can't make u64 into id")
+    }
+
+    fn name(&self,#[graphql(context)] info: &Info) -> String {
+        required_object_string(&info.commit.as_ref().expect("Missing meta graph"), self.id, "http://terminusdb.com/schema/ref#name")
+    }
+
+    fn head(&self,#[graphql(context)] info: &Info) -> Option<AbstractCommitValue> {
+        let predicate_id = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .predicate_id("http://terminusdb.com/schema/ref#head")
+            .expect("can't find http://terminusdb.com/schema/ref#head predicate");
+        let rdf_type_id = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .expect("Can't find rdf:type predicate");
+        let maybe_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#Commit");
+        let maybe_initial_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#InitialCommit");
+        let maybe_invalid_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#InvalidCommit");
+        let maybe_valid_commit_type = info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .subject_id("http://terminusdb.com/schema/ref#ValidCommit");
+
+        // We need the correct type of commit here!
+        info
+            .commit
+            .as_ref()
+            .expect("Missing meta graph")
+            .single_triple_sp(self.id, predicate_id)
+            .map(|t| {
+                let type_id = info
+                    .commit
+                    .as_ref()
+                    .expect("Missing meta graph")
+                    .single_triple_sp(t.object, rdf_type_id)
+                    .expect("No type for commit object!")
+                    .object;
+                if Some(type_id) == maybe_commit_type {
+                    Commit{
+                        id : t.object
+                    }.into()
+                } else if Some(type_id) == maybe_invalid_commit_type {
+                    InvalidCommit{
+                        id : t.object
+                    }.into()
+                } else if Some(type_id) == maybe_valid_commit_type {
+                    ValidCommit{
+                        id : t.object
+                    }.into()
+                } else if Some(type_id) == maybe_initial_commit_type {
+                    InitialCommit{
+                        id : t.object
+                    }.into()
+                } else {
+                    panic!("Unable to find a commit type!")
+                }
+            })
+    }
+}
+
+#[graphql_interface(for = [Commit, InitialCommit, ValidCommit, InvalidCommit], context = Info)]
+pub trait AbstractCommit {
+    #[graphql(ignore)]
+    fn get_id(&self) -> u64;
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        info
+            .commit
+            .as_ref()
+            .expect("No commit graph")
+            .id_subject(self.get_id())
+            .expect("can't make u64 into id")
+    }
+
+    fn author(&self,#[graphql(context)] info: &Info) -> String {
+        required_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/ref#author")
+    }
+
+    fn message(&self,#[graphql(context)] info: &Info) -> String {
+        required_object_string(&info.system, self.get_id(), "http://terminusdb.com/schema/ref#message")
+    }
+}
+
+#[derive(Clone)]
+pub struct Commit {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = AbstractCommitValue)]
+impl Commit {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::id(self, info)
+    }
+
+    fn author(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::author(self, info)
+    }
+
+    fn message(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::message(self, info)
+    }
+}
+
+#[graphql_interface]
+impl AbstractCommit for Commit {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+}
+
+#[derive(Clone)]
+pub struct InitialCommit {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = AbstractCommitValue)]
+impl InitialCommit {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::id(self, info)
+    }
+
+    fn author(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::author(self, info)
+    }
+
+    fn message(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::message(self, info)
+    }
+}
+
+#[graphql_interface]
+impl AbstractCommit for InitialCommit {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+}
+
+#[derive(Clone)]
+pub struct ValidCommit {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = AbstractCommitValue)]
+impl ValidCommit {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::id(self, info)
+    }
+
+    fn author(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::author(self, info)
+    }
+
+    fn message(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::message(self, info)
+    }
+}
+
+#[graphql_interface]
+impl AbstractCommit for ValidCommit {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+}
+
+#[derive(Clone)]
+pub struct InvalidCommit {
+    id : u64
+}
+
+#[graphql_object(context = Info, impl = AbstractCommitValue)]
+impl InvalidCommit {
+    fn id(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::id(self, info)
+    }
+
+    fn author(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::author(self, info)
+    }
+
+    fn message(&self, #[graphql(context)] info: &Info) -> String {
+        <Self as AbstractCommit>::message(self, info)
+    }
+}
+
+#[graphql_interface]
+impl AbstractCommit for InvalidCommit {
+    fn get_id(&self) -> u64 {
+        self.id
+    }
+}
+
 pub struct Query;
 
 #[graphql_object(context = Info)]
@@ -388,5 +759,85 @@ impl Query {
     /// Get the user that is currently logged in.
     fn user(#[graphql(context)] _info: &Info) -> User {
         User
+    }
+    fn repository(#[graphql(context)] info: &Info) -> Vec<RepositoryValue> {
+        if let Some(_) = info.meta {
+            // And get the type
+            let predicate_id : u64 = info
+                .meta
+                .as_ref()
+                .unwrap()
+                .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                .expect("can't find rdf:type predicate");
+            let mut local_objs : Vec<RepositoryValue> = info
+                .meta
+                .as_ref()
+                .unwrap()
+                .subject_id("http://terminusdb.com/schema/repository#Local")
+                .map(|local_id| info
+                     .meta
+                     .as_ref()
+                     .unwrap()
+                     .triples_o(local_id)
+                     .filter(move |t| t.predicate == predicate_id)
+                     .map(|t| Local{ id: t.subject }.into())
+                     .collect::<Vec<RepositoryValue>>()
+                )
+                .into_iter()
+                .flatten()
+                .collect();
+            let mut remote_objs : Vec<RepositoryValue> = info
+                .meta
+                .as_ref()
+                .unwrap()
+                .subject_id("http://terminusdb.com/schema/repository#Remote")
+                .map(|remote_id| info
+                     .meta
+                     .as_ref()
+                     .unwrap()
+                     .triples_o(remote_id)
+                     .filter(move |t| t.predicate == predicate_id)
+                     .map(|t| Local{ id: t.subject }.into())
+                     .collect::<Vec<RepositoryValue>>()
+                )
+                .into_iter()
+                .flatten()
+                .collect();
+            local_objs.append(&mut remote_objs);
+            local_objs
+        }else{
+            Vec::new()
+        }
+    }
+
+    fn branch(#[graphql(context)] info: &Info) -> Vec<Branch> {
+        if let Some(_) = info.meta {
+            // And get the type
+            let predicate_id : u64 = info
+                .commit
+                .as_ref()
+                .unwrap()
+                .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                .expect("can't find rdf:type predicate");
+            info
+                .meta
+                .as_ref()
+                .unwrap()
+                .subject_id("http://terminusdb.com/schema/ref#Branch")
+                .map(|branch_id| info
+                     .meta
+                     .as_ref()
+                     .unwrap()
+                     .triples_o(branch_id)
+                     .filter(move |t| t.predicate == predicate_id)
+                     .map(|t| Branch{ id: t.subject })
+                     .collect()
+                )
+                .into_iter()
+                .flatten()
+                .collect()
+        }else{
+            Vec::new()
+        }
     }
 }
