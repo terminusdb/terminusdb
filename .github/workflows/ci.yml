@@ -107,7 +107,7 @@ jobs:
 
   benchmark:
     name: Benchmark
-    needs: build
+#    needs: build
     uses: ./.github/workflows/benchmark.yml
 
 
