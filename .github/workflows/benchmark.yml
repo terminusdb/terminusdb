@@ -15,31 +15,31 @@ jobs:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
-      - name: Download Docker image
-        uses: actions/download-artifact@v2
-        with:
-          name: terminusdb-server-docker-image
-
-      - name: Run server
-        run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
-            --detach \
-            --net=host \
-            terminusdb/terminusdb-server:local
-
-      - uses: actions/setup-node@v2
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - uses: actions/checkout@v2
-
-      - name: Run benchmarks
-        working-directory: tests
-        run: |
-          mkdir -p results/js_benchmark_results
-          npm ci
-          node bench.js --json > "results/js_benchmark_results/${GITHUB_SHA}.json"
+#      - name: Download Docker image
+#        uses: actions/download-artifact@v2
+#        with:
+#          name: terminusdb-server-docker-image
+#
+#      - name: Run server
+#        run: |
+#          docker load < terminusdb-server-docker-image.tar.gz
+#          docker run \
+#            --detach \
+#            --net=host \
+#            terminusdb/terminusdb-server:local
+#
+#      - uses: actions/setup-node@v2
+#        with:
+#          node-version: ${{ env.NODE_VERSION }}
+#
+#      - uses: actions/checkout@v2
+#
+#      - name: Run benchmarks
+#        working-directory: tests
+#        run: |
+#          mkdir -p results/js_benchmark_results
+#          npm ci
+#          node bench.js --json > "results/js_benchmark_results/${GITHUB_SHA}.json"
 
 
       - name: Add SSH Key
@@ -73,10 +73,10 @@ jobs:
         run: |
           ssh "$SSH_USER"@"$SSH_HOST" "benchmark $GITHUB_SHA" > "results/k6_benchmark_results/${GITHUB_SHA}.json"
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./tests/results/
-          keep_files: true
+#      - name: Deploy
+#        uses: peaceiris/actions-gh-pages@v3
+#        with:
+#          github_token: ${{ secrets.GITHUB_TOKEN }}
+#          publish_dir: ./tests/results/
+#          keep_files: true
 
