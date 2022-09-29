@@ -57,7 +57,7 @@ jobs:
           echo "Add known hosts"
           ssh-agent -a $SSH_AUTH_SOCK > /dev/null
           echo "Started ssh agent"
-          ssh-add - <<< "${SSH_PRIVATE_KEY}"
+          ssh-add - <<< "${SSH_PRIVATE_KEY}\n"
           echo "Add SSH key"
 
       - name: Make k6 benchmark dir
