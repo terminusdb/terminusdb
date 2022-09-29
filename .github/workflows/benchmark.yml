@@ -46,19 +46,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install libssl1.1
 
-      - name: Add SSH Key
-        env:
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ${HOME}/.ssh
-          echo "Created SSH DIR"
-          echo "$SSH_KNOWN_HOSTS" >> ${HOME}/.ssh/known_hosts
-          echo "Add known hosts"
-          eval $(ssh-agent -s)
-          echo "Started ssh agent"
-          ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY }}"
-          echo "Add SSH key"
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Make k6 benchmark dir
         working-directory: tests
