@@ -10,7 +10,7 @@ jobs:
 
   benchmark:
     name: Run
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
