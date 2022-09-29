@@ -19,3 +19,4 @@ rayon = "1.5"
 lazy-init = "0.5"
 rand = "0.8.5"
 juniper = {version="0.15", features = ["expose-test-schema"]}
+serde = {version="1.0", features=["derive"]}

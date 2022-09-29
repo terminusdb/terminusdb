@@ -10,6 +10,7 @@ use std::sync::Arc;
 use swipl::prelude::*;
 
 mod top;
+mod frame;
 
 use top::*;
 
