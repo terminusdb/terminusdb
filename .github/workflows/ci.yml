@@ -92,18 +92,18 @@ jobs:
             src/config/terminus_config.pl
             distribution/snap/snapcraft.yaml
 
-  build:
-    name: Build
-    needs: versions
-    uses: ./.github/workflows/build.yml
-
-  check:
-    name: Check
-    needs: build
-    uses: ./.github/workflows/check.yml
-    with:
-      test_repository: ${{ github.repository }}
-      test_ref: ${{ github.sha }}
+#  build:
+#    name: Build
+#    needs: versions
+#    uses: ./.github/workflows/build.yml
+#
+#  check:
+#    name: Check
+#    needs: build
+#    uses: ./.github/workflows/check.yml
+#    with:
+#      test_repository: ${{ github.repository }}
+#      test_ref: ${{ github.sha }}
 
   benchmark:
     name: Benchmark
