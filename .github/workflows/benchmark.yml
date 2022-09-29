@@ -41,6 +41,10 @@ jobs:
 #          npm ci
 #          node bench.js --json > "results/js_benchmark_results/${GITHUB_SHA}.json"
 
+      - name: Install libssl1.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install libssl1.1
 
       - name: Add SSH Key
         env:
