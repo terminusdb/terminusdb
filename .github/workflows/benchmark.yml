@@ -46,7 +46,7 @@ jobs:
         run: |
           mkdir -p ${HOME}/.ssh
           echo "Created SSH DIR"
-          ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ${HOME}/.ssh/known_hosts
           echo "Add known hosts"
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
           echo "Add SSH private key"
