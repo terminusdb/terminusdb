@@ -141,7 +141,13 @@ impl From<StructuralFieldDefinition> for FieldDefinition {
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
-struct KeyDefinition;    
+#[serde(tag = "@type")]
+enum KeyDefinition {
+    Random,
+    Lexical{#[serde(rename = "@fields")] fields: Vec<String>},
+    Hash{#[serde(rename = "@fields")] fields: Vec<String>},
+    ValueHash
+}
 
 #[derive(Deserialize, PartialEq, Debug)]
 struct ClassDefinition {
@@ -224,5 +230,21 @@ _{'@type': "Array", '@class': _{'@class': 'asdfads', '@subdocument': []}}
         let typedef: FieldDefinition = context.deserialize_from_term(&term).unwrap();
 
         panic!("{:?}", typedef);
+    }
+
+    #[test]
+    fn deserialize_key_definition() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+_{'@type': "Lexical", '@fields': ["foo", "bar"]}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: KeyDefinition = context.deserialize_from_term(&term).unwrap();
+
+        panic!("{:?}", typedef);
+
     }
 }
