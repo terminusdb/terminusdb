@@ -45,11 +45,17 @@ jobs:
       - name: Add SSH Key
         run: |
           mkdir -p ${HOME}/.ssh
+          echo "Created SSH DIR"
           ssh-keyscan "${{ secrets.SSH_HOST }}" >> ${HOME}/.ssh/known_hosts
+          echo "Add known hosts"
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
+          echo "Add SSH private key"
           chmod 600 ${HOME}/.ssh/github_actions
+          echo "Change SSH permissions"
           ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+          echo "Started ssh agent"
           ssh-add ${HOME}/.ssh/github_actions
+          echo "Add SSH key"
 
       - name: Make k6 benchmark dir
         working-directory: tests
