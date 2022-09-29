@@ -43,12 +43,15 @@ jobs:
 
 
       - name: Add SSH Key
+        env:
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY
         run: |
           mkdir -p ${HOME}/.ssh
           echo "Created SSH DIR"
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" >> ${HOME}/.ssh/known_hosts
+          echo "$SSH_KNOWN_HOSTS" >> ${HOME}/.ssh/known_hosts
           echo "Add known hosts"
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${HOME}/.ssh/github_actions
+          echo "$SSH_PRIVATE_KEY" > ${HOME}/.ssh/github_actions
           echo "Add SSH private key"
           chmod 600 ${HOME}/.ssh/github_actions
           echo "Change SSH permissions"
@@ -63,9 +66,12 @@ jobs:
 
 
       - name: Run k6 benchmark
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
         working-directory: tests
         run: |
-          ssh "${{ secrets.SSH_USER }}"@"${{ secrets.SSH_HOST }}" "benchmark $GITHUB_SHA" > "results/k6_benchmark_results/${GITHUB_SHA}.json"
+          ssh "$SSH_USER"@"$SSH_HOST" "benchmark $GITHUB_SHA" > "results/k6_benchmark_results/${GITHUB_SHA}.json"
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
