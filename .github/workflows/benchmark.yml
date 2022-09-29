@@ -55,13 +55,11 @@ jobs:
           echo "Created SSH DIR"
           echo "$SSH_KNOWN_HOSTS" >> ${HOME}/.ssh/known_hosts
           echo "Add known hosts"
-          echo "$SSH_PRIVATE_KEY" > ${HOME}/.ssh/github_actions
-          echo "Add SSH private key"
           chmod 600 ${HOME}/.ssh/github_actions
           echo "Change SSH permissions"
           ssh-agent -a $SSH_AUTH_SOCK > /dev/null
           echo "Started ssh agent"
-          ssh-add ${HOME}/.ssh/github_actions
+          ssh-add - <<< "${SSH_PRIVATE_KEY}"
           echo "Add SSH key"
 
       - name: Make k6 benchmark dir
