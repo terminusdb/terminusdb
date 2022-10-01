@@ -48,7 +48,19 @@ impl GraphQLType for TerminusType {
         let frame = &frames.frames[name];
         if let TypeDefinition::Class(d) = frame {
             let fields: Vec<_> = d.fields.iter()
-                .map(|(field_name, _field_definition)| registry.field::<&String>(field_name, &()))
+                .map(|(field_name, field_definition)| {
+                    if let Some(document_type) = field_definition.document_type() {
+                        match field_definition.kind() {
+                            FieldKind::Required => registry.field::<TerminusType>(field_name, &(document_type.to_owned(), frames.clone())),
+                            FieldKind::Optional => registry.field::<Option<TerminusType>>(field_name, &(document_type.to_owned(), frames.clone())),
+                            FieldKind::Array => registry.field::<Vec<Option<TerminusType>>>(field_name, &(document_type.to_owned(), frames.clone())),
+                            _ => registry.field::<Vec<TerminusType>>(field_name, &(document_type.to_owned(), frames.clone())),
+                        }
+                    }
+                    else {
+                        registry.field::<&String>(field_name, &())
+                    }
+                })
                 .collect();
 
             registry.build_object_type::<TerminusType>(info, &fields).into_meta()

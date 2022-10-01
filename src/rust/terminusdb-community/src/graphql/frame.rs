@@ -87,6 +87,16 @@ pub enum SimpleFieldDefinition {
     Enum{name: String, values: Vec<String>},
 }
 
+impl SimpleFieldDefinition {
+    pub fn document_type(&self) -> Option<&str> {
+        match self {
+            Self::BaseType(s) => None,
+            Self::Document{typ: s, ..} => Some(s),
+            Self::Enum{..} => None
+        }
+    }
+}
+
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(from = "StructuralFieldDefinition")]
 pub enum FieldDefinition {
@@ -99,12 +109,48 @@ pub enum FieldDefinition {
     Cardinality{field: SimpleFieldDefinition, min: Option<usize>, max: Option<usize>},
 }
 
-fn is_base_type(_s: &str) -> bool { true }
+pub enum FieldKind {
+    Required,
+    Optional,
+    Set,
+    List,
+    Array,
+    Cardinality
+}
+
+impl FieldDefinition {
+    pub fn document_type(&self) -> Option<&str> {
+        match self {
+            Self::Required(f) => f.document_type(),
+            Self::Optional(f) => f.document_type(),
+            Self::Set(f) => f.document_type(),
+            Self::List(f) => f.document_type(),
+            Self::Array{field: f, ..} => f.document_type(),
+            Self::Cardinality{field: f, ..} => f.document_type(),
+        }
+    }
+
+    pub fn kind(&self) -> FieldKind {
+        match self {
+            Self::Required(_) => FieldKind::Required,
+            Self::Optional(_) => FieldKind::Optional,
+            Self::Set(_) => FieldKind::Set,
+            Self::List(_) => FieldKind::List,
+            Self::Array{..} => FieldKind::Array,
+            Self::Cardinality{..} => FieldKind::Cardinality,
+        }
+    }
+}
+
+fn is_base_type(s: &str) -> bool {
+    // TODO this is not good enough
+    s.starts_with("xsd:")
+}
 
 impl From<StructuralFieldDefinition> for FieldDefinition {
     fn from(f: StructuralFieldDefinition) -> Self {
         match f {
-            StructuralFieldDefinition::SimpleField(s) => {
+             StructuralFieldDefinition::SimpleField(s) => {
                 if is_base_type(&s) {
                     FieldDefinition::Required(SimpleFieldDefinition::BaseType(s))
                 }

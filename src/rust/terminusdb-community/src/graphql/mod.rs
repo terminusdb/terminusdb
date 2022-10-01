@@ -35,6 +35,7 @@ predicates! {
         }
 
         let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("aaa");
+        log_info!(context, "parsed frames: {:?}", frames)?;
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection, EmptyMutation::<Info>::new(), EmptySubscription::<Info>::new(), Arc::new(frames), (), ());
         let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, auth_term)?;
