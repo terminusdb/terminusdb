@@ -3,33 +3,18 @@ use swipl::prelude::Atom;
 use std::collections::BTreeMap;
 
 #[derive(Deserialize, PartialEq, Debug)]
-struct Prefixes {
+pub struct Prefixes {
     #[serde(rename = "@base")]
-    base: String,
+    pub base: String,
     #[serde(rename = "@schema")]
-    schema: String,
+    pub schema: String,
     #[serde(flatten)]
-    extra_prefixes: BTreeMap<String, String>
+    pub extra_prefixes: BTreeMap<String, String>
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
-struct ClassDocumentationDefinition {
+pub struct ClassDocumentationDefinition {
 }
-
-/*
-#[derive(PartialEq, Debug)]
-enum FieldContentDefinition {
-    Direct(String),
-    Subdocument(String),
-    Indirect(TypeDefinition)
-}
-
-#[derive(Deserialize, PartialEq, Debug)]
-struct ArrayDefinition {
-    field: FieldContentDefinition,
-    dimensions: usize
-}
-*/
 
 #[inline]
 fn default_dimensionality() -> usize { 1 }
@@ -96,7 +81,7 @@ enum StructuralFieldDefinition {
 }
 
 #[derive(PartialEq, Debug)]
-enum SimpleFieldDefinition {
+pub enum SimpleFieldDefinition {
     BaseType(String),
     Document{typ: String, is_subdocument: bool},
     Enum{name: String, values: Vec<String>},
@@ -104,7 +89,7 @@ enum SimpleFieldDefinition {
 
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(from = "StructuralFieldDefinition")]
-enum FieldDefinition {
+pub enum FieldDefinition {
     Required(SimpleFieldDefinition),
     Optional(SimpleFieldDefinition),
     Set(SimpleFieldDefinition),
@@ -142,7 +127,7 @@ impl From<StructuralFieldDefinition> for FieldDefinition {
 
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(tag = "@type")]
-enum KeyDefinition {
+pub enum KeyDefinition {
     Random,
     Lexical{#[serde(rename = "@fields")] fields: Vec<String>},
     Hash{#[serde(rename = "@fields")] fields: Vec<String>},
@@ -150,40 +135,45 @@ enum KeyDefinition {
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
-struct ClassDefinition {
-    documentation: Option<ClassDocumentationDefinition>,
-    key: Option<KeyDefinition>,
+pub struct ClassDefinition {
+    pub documentation: Option<ClassDocumentationDefinition>,
+    pub key: Option<KeyDefinition>,
     #[serde(flatten)]
-    fields: BTreeMap<String, StructuralFieldDefinition>
+    pub fields: BTreeMap<String, FieldDefinition>
 }
 #[derive(Deserialize, PartialEq, Debug)]
-struct TaggedUnionDefinition;
+pub struct TaggedUnionDefinition;
 
 #[derive(Deserialize, PartialEq, Debug)]
-struct EnumDocumentationDefinition {
+pub struct EnumDocumentationDefinition {
 }
 
 
 #[derive(Deserialize, PartialEq, Debug)]
-struct EnumDefinition {
-    documentation: Option<EnumDocumentationDefinition>,
+pub struct EnumDefinition {
+    pub documentation: Option<EnumDocumentationDefinition>,
     #[serde(rename = "@value")]
-    value: Vec<String>
+    pub value: Vec<String>
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(tag="@type")]
-enum TypeDefinition {
+pub enum TypeDefinition {
     Class(ClassDefinition),
     TaggedUnion(TaggedUnionDefinition),
     Enum(EnumDefinition)
 }
 
 #[derive(Deserialize)]
-struct Frame {
-    context: Prefixes,
+pub struct Frame {
+    pub context: Prefixes,
     #[serde(flatten)]
-    stuff: BTreeMap<String, TypeDefinition>
+    pub fields: BTreeMap<String, TypeDefinition>
+}
+
+#[derive(Deserialize)]
+pub struct AllFames {
+    pub frames: BTreeMap<String, Frame>
 }
 
 #[cfg(test)]
