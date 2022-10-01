@@ -164,16 +164,12 @@ pub enum TypeDefinition {
     Enum(EnumDefinition)
 }
 
-#[derive(Deserialize)]
-pub struct Frame {
+#[derive(Deserialize, Debug)]
+pub struct AllFrames {
+    #[serde(rename = "@context")]
     pub context: Prefixes,
     #[serde(flatten)]
-    pub fields: BTreeMap<String, TypeDefinition>
-}
-
-#[derive(Deserialize)]
-pub struct AllFames {
-    pub frames: BTreeMap<String, Frame>
+    pub frames: BTreeMap<String, TypeDefinition>
 }
 
 #[cfg(test)]
@@ -237,4 +233,187 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
         panic!("{:?}", typedef);
 
     }
+
+    #[test]
+    fn deserialize_all_frames() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"json{'@context':_27018{'@base':"terminusdb:///data/",'@schema':"terminusdb:///schema#",'@type':'Context'},'Test':json{'@type':'Class',bar:'xsd:string',foo:'xsd:integer'}}"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let frames: AllFrames  = context.deserialize_from_term(&term).unwrap();
+
+        panic!("{:?}", frames);
+    }
+
+    #[test]
+    fn deserialize_system_frame() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{ '@context':_{ '@base':"terminusdb://system/data/",
+		    '@documentation':json{ '@authors':[ "Gavin Mendel-Gleason",
+							"Matthijs van Otterdijk"
+						      ],
+					   '@description':"This is the System schema in which resides all information regarding capabilities, users, organizations, databases and available actions.",
+					   '@title':"The System schema"
+					 },
+		    '@schema':"http://terminusdb.com/schema/system#",
+		    '@type':'Context',
+		    xsd:"http://www.w3.org/2001/XMLSchema#"
+		  },
+      'Action':json{ '@documentation':json{ '@comment':"The exhaustive list of actions which are available to roles."
+					  },
+		     '@type':'Enum',
+		     '@values':[ create_database,
+				 delete_database,
+				 class_frame,
+				 clone,
+				 fetch,
+				 push,
+				 branch,
+				 rebase,
+				 instance_read_access,
+				 instance_write_access,
+				 schema_read_access,
+				 schema_write_access,
+				 meta_read_access,
+				 meta_write_access,
+				 commit_read_access,
+				 commit_write_access,
+				 manage_capabilities
+			       ]
+		   },
+      'Capability':json{ '@documentation':json{ '@comment':"A capability is a set of roles combined with a rescource over which those roles hold.",
+						'@properties':json{ role:"The set of roles the capability has access to.",
+								    scope:"The resource over which the role holds."
+								  }
+					      },
+			 '@key':json{'@type':"Random"},
+			 '@type':'Class',
+			 role:json{'@class':'Role','@type':'Set'},
+			 scope:'Resource'
+		       },
+      'Database':json{ '@documentation':json{ '@comment':"A database.",
+					      '@properties':json{ name:"The name of the resource."
+								}
+					    },
+		       '@type':'Class',
+		       name:'xsd:string'
+		     },
+      'DatabaseState':json{ '@documentation':json{ '@comment':"The current system transaction state of a database. Only the 'finalized' state is a consistent state, all others indicate that database construction failed."
+						 },
+			    '@type':'Enum',
+			    '@values':[creating,deleting,finalized]
+			  },
+      'Organization':json{ '@documentation':json{ '@comment':"An organisation.",
+						  '@properties':json{ child:"The set of organizations which are children of the current organization.",
+								      database:"The set of databases controlled by the organization.",
+								      name:"The name of the organization."
+								    }
+						},
+			   '@key':json{ '@fields':[name],
+					'@type':"Lexical"
+				      },
+			   '@type':'Class',
+			   child:json{ '@class':'Organization',
+				       '@type':'Set'
+				     },
+			   database:json{ '@class':'Database',
+					  '@type':'Set'
+					},
+			   name:'xsd:string'
+			 },
+      'Resource':json{ '@documentation':json{ '@comment':"A named resource.",
+					      '@properties':json{ name:"The name of the resource."
+								}
+					    },
+		       '@type':'Class',
+		       name:'xsd:string'
+		     },
+      'Role':json{ '@documentation':json{ '@comment':"Roles are named collections of actions which can be provided to a capability.",
+					  '@properties':json{ action:"The set of actions associated with the role.",
+							      name:"The name of the role."
+							    }
+					},
+		   '@type':'Class',
+		   action:json{ '@class':json{ '@id':'Action',
+					       '@type':'Enum',
+					       '@values':[ create_database,
+							   delete_database,
+							   class_frame,
+							   clone,
+							   fetch,
+							   push,
+							   branch,
+							   rebase,
+							   instance_read_access,
+							   instance_write_access,
+							   schema_read_access,
+							   schema_write_access,
+							   meta_read_access,
+							   meta_write_access,
+							   commit_read_access,
+							   commit_write_access,
+							   manage_capabilities
+							 ]
+					     },
+				'@type':'Set'
+			      },
+		   name:'xsd:string'
+		 },
+      'SystemDatabase':json{ '@documentation':json{ '@comment':"The special system database.",
+						    '@properties':json{ name:"The name of the resource."
+								      }
+						  },
+			     '@type':'Class',
+			     name:'xsd:string'
+			   },
+      'User':json{ '@documentation':json{ '@comment':"A database user.",
+					  '@properties':json{ capability:"A set of capabilities which the user has access to.",
+							      key_hash:"An optional key hash for authentication.",
+							      name:"The users name."
+							    }
+					},
+		   '@key':json{'@fields':[name],'@type':"Lexical"},
+		   '@type':'Class',
+		   capability:json{'@class':'Capability','@type':'Set'},
+		   key_hash:json{ '@class':'xsd:string',
+				  '@type':'Optional'
+				},
+		   name:'xsd:string'
+		 },
+      'UserDatabase':json{ '@documentation':json{ '@comment':"A normal user database.",
+						  '@properties':json{ comment:"A comment associated with the database.",
+								      creation_date:"The time of creation of the database.",
+								      label:"The label name of the database.",
+								      name:"The name of the resource.",
+								      state:"The system transaction state of the database."
+								    }
+						},
+			   '@key':json{'@type':"Random"},
+			   '@type':'Class',
+			   comment:'xsd:string',
+			   creation_date:'xsd:dateTime',
+			   label:'xsd:string',
+			   name:'xsd:string',
+			   state:json{ '@id':'DatabaseState',
+				       '@type':'Enum',
+				       '@values':[ creating,
+						   deleting,
+						   finalized
+						 ]
+				     }
+			 }
+    }"#;
+
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let frames: AllFrames  = context.deserialize_from_term(&term).unwrap();
+
+        panic!("{:?}", frames);
+    }
+
 }

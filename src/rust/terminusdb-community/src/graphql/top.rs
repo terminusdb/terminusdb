@@ -1,9 +1,12 @@
+use crate::graphql::schema::TerminusType;
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::Layer as TSLayer;
 use crate::types::*;
 use crate::value::*;
 use juniper::{self, graphql_object, graphql_interface, GraphQLObject, GraphQLEnum};
 use swipl::prelude::*;
+
+use super::frame::AllFrames;
 
 pub struct Info {
     system: SyncStoreLayer,
@@ -12,6 +15,7 @@ pub struct Info {
     branch: Option<SyncStoreLayer>,
     schema: Option<SyncStoreLayer>,
     user: Atom,
+    frames: Option<AllFrames>
 }
 
 impl juniper::Context for Info {}
@@ -48,7 +52,7 @@ impl Info {
         }else{
             transaction_instance_layer(context, branch_term).expect("Missing branch layer")
         };
-        Ok(Info { system, meta, commit, branch, schema: None, user })
+        Ok(Info { system, meta, commit, branch, schema: None, user, frames: None })
     }
 }
 
@@ -841,6 +845,7 @@ impl AbstractCommit for InvalidCommit {
 pub struct Query;
 
 #[graphql_object(context = Info)]
+#[no_async]
 impl Query {
     /// Get the user that is currently logged in.
     fn user(#[graphql(context)] _info: &Info) -> User {

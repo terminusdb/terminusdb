@@ -18,6 +18,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(core(account)).
+:- use_module(core(document)).
 
 :- use_module(config(terminus_config)).
 
@@ -2929,7 +2930,9 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
         Commit_DB = none,
         Meta_DB = none
     ),
-    '$graphql':handle_request(Method, System_DB, Meta_DB, Commit_DB, Branch_DB, Auth, Content_Length, Input, Output).
+    all_class_frames(Transaction, Frames),
+    json_log_info_formatted("frames: ~q", [Frames]),
+    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Branch_DB, Auth, Content_Length, Input, Output).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).

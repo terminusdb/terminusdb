@@ -11,12 +11,15 @@ use swipl::prelude::*;
 
 mod top;
 mod frame;
+mod schema;
 
 use top::*;
 
+use self::{frame::AllFrames, schema::{TerminusType, TerminusTypeCollection}};
+
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, system_term, meta_term, commit_term, branch_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
+    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, branch_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -31,7 +34,9 @@ predicates! {
             Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
         }
 
-        let root_node = RootNode::new(Query, EmptyMutation::<Info>::new(), EmptySubscription::<Info>::new());
+        let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("aaa");
+
+        let root_node = RootNode::new_with_info(TerminusTypeCollection, EmptyMutation::<Info>::new(), EmptySubscription::<Info>::new(), Arc::new(frames), (), ());
         let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, auth_term)?;
 
         let response = request.execute_sync(&root_node, &graphql_context);
