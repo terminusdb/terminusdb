@@ -109,6 +109,7 @@ pub enum FieldDefinition {
     Cardinality{field: SimpleFieldDefinition, min: Option<usize>, max: Option<usize>},
 }
 
+#[derive(PartialEq)]
 pub enum FieldKind {
     Required,
     Optional,
@@ -198,8 +199,8 @@ pub struct EnumDocumentationDefinition {
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct EnumDefinition {
     pub documentation: Option<EnumDocumentationDefinition>,
-    #[serde(rename = "@value")]
-    pub value: Vec<String>
+    #[serde(rename = "@values")]
+    pub values: Vec<String>
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -208,6 +209,23 @@ pub enum TypeDefinition {
     Class(ClassDefinition),
     TaggedUnion(TaggedUnionDefinition),
     Enum(EnumDefinition)
+}
+
+#[derive(PartialEq)]
+pub enum TypeKind {
+    Class,
+    TaggedUnion,
+    Enum
+}
+
+impl TypeDefinition {
+    pub fn kind(&self) -> TypeKind {
+        match self {
+            Self::Class(_) => TypeKind::Class,
+            Self::TaggedUnion(_) => TypeKind::TaggedUnion,
+            Self::Enum(_) => TypeKind::Enum
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
