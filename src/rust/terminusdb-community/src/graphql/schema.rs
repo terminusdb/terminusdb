@@ -9,6 +9,7 @@ use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::consts::RDF_TYPE;
 use crate::types::{transaction_schema_layer, transaction_instance_layer};
+use crate::value::value_string_to_graphql;
 
 use super::frame::*;
 use super::top::Info;
@@ -168,6 +169,30 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
 
         registry.build_object_type::<TerminusType<'a,C>>(info, &fields).into_meta()
     }
+
+    /*
+    fn resolve_class_field(definition: &ClassDefinition,
+                           field_name: &str,
+                           instance: &SyncStoreLayer,
+                           info: &(String, Arc<AllFrames>),
+                           executor: &juniper::Executor<TerminusContext<'a,C>, DefaultScalarValue>) -> juniper::ExecutionResult {
+        let field = &definition.fields[field_name];
+        match field.kind() {
+            FieldKind::Required => {
+                let object_id = dbg!(instance.single_triple_sp(self.id, field_id))?.object;
+                if let Some(doc_type) = field.document_type() {
+                    executor.resolve(&(doc_type.to_string(), info.1.clone()), &TerminusType::new(object_id))
+                }
+                else {
+                    let instance = executor.context().instance.as_ref().unwrap();
+                    let val = instance.id_object_value(object_id).unwrap();
+                    Ok(value_string_to_graphql(&val))
+                }
+            },
+            _ => todo!()
+        }
+    }
+    */
 }
 
 pub struct TerminusEnum {
@@ -259,26 +284,49 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
 
             let frame = dbg!(&info.1.frames[&info.0]);
             let doc_type;
+            let kind;
             match frame {
                 TypeDefinition::Class(c) => {
                     let field = &c.fields[field_name];
                     doc_type = field.document_type();
+                    kind = field.kind();
+                    //self.resolve_class_field(c, field_id )
                 },
-                _ => {doc_type = None}
+                _ => panic!("expected only a class at this level")
             }
 
-            let object_id = dbg!(instance.single_triple_sp(self.id, field_id))?.object;
-
-            Some((doc_type, object_id))
+            match kind {
+                FieldKind::Required => {
+                    let object_id = dbg!(instance.single_triple_sp(self.id, field_id))?.object;
+                    if let Some(doc_type) = doc_type {
+                        Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &TerminusType::new(object_id)))
+                    }
+                    else {
+                        let val = instance.id_object_value(object_id).unwrap();
+                        Some(Ok(value_string_to_graphql(&val)))
+                    }
+                },
+                FieldKind::Set => {
+                    let object_ids = instance.triples_sp(self.id, field_id).map(|t|t.object);
+                    if let Some(doc_type) = doc_type {
+                        let subdocs: Vec<_> = object_ids.map(TerminusType::new).collect();
+                        Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &subdocs))
+                    }
+                    else {
+                        let vals: Vec<_> = object_ids.map(|o|{
+                            let val = instance.id_object_value(o).unwrap();
+                            value_string_to_graphql(&val)
+                        }).collect();
+                        Some(Ok(Value::List(vals)))
+                    }
+                }
+                _ => todo!()
+            }
         };
         let x = get_info();
-        eprintln!("x: {:?}", x);
         match x {
-           Some((Some(doc_type), id)) => {
-               executor.resolve(&(doc_type.to_string(), info.1.clone()), &TerminusType::new(id))
-            },
-            Some((None, id)) => Ok(Value::Scalar(DefaultScalarValue::String(format!("{:?}", id)))),
-           None => Ok(Value::Null)
+            Some(r) => r,
+            None => Ok(Value::Null)
         }
         //Ok(Value::List(vec![Value::Scalar(DefaultScalarValue::String("cow!".to_string())),
         //                    Value::Scalar(DefaultScalarValue::String("duck!".to_string()))]))

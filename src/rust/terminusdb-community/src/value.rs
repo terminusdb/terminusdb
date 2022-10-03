@@ -1,3 +1,4 @@
+use juniper::DefaultScalarValue;
 use lazy_static::*;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -52,10 +53,42 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
+    static ref FLOAT_TYPES: HashSet<&'static str> = [
+        "decimal",
+        "double",
+        "float",
+    ]
+    .into_iter()
+    .collect();
+    static ref INTEGER_TYPES: HashSet<&'static str> = [
+        "byte",
+        "short",
+        "int",
+        "long",
+        "unsignedByte",
+        "unsignedShort",
+        "unsignedInt",
+        "unsignedLong",
+        "integer",
+        "positiveInteger",
+        "nonNegativeInteger",
+        "negativeInteger",
+        "nonPositiveInteger"
+    ]
+    .into_iter()
+    .collect();
 }
 
 fn type_is_numeric(s: &str) -> bool {
     NUMERIC_TYPES.contains(s)
+}
+
+fn type_is_integer(s: &str) -> bool {
+    INTEGER_TYPES.contains(s)
+}
+
+fn type_is_float(s: &str) -> bool {
+    FLOAT_TYPES.contains(s)
 }
 
 pub fn value_string_to_json(s: &str) -> Value {
@@ -78,6 +111,31 @@ pub fn value_string_to_json(s: &str) -> Value {
             let s = val[1..val.len() - 1].to_string();
             let l = lang[1..lang.len() - 1].to_string();
             json!({ "@lang" : l, "@value" : s })
+        }
+    }
+}
+
+pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
+    match value_string_to_slices(s) {
+        LangOrType::Type(val, typ) => {
+            if typ == "boolean" {
+                juniper::Value::Scalar(DefaultScalarValue::Boolean(val == "\"true\""))
+            } else if typ == "token" && val == "\"null\"" {
+                juniper::Value::Null
+            } else if type_is_integer(typ) {
+                juniper::Value::Scalar(DefaultScalarValue::Int(i32::from_str(val).unwrap()))
+            } else if type_is_float(typ) {
+                juniper::Value::Scalar(DefaultScalarValue::Float(f64::from_str(val).unwrap()))
+            } else {
+                // it will be something quoted, which we're gonna return as a string
+                juniper::Value::Scalar(DefaultScalarValue::String(val[1..val.len() - 1].to_string()))
+            }
+        }
+        LangOrType::Lang(val, lang) => {
+            // TODO: we need to include language tag here somehow
+            let s = val[1..val.len() - 1].to_string();
+            let _l = lang[1..lang.len() - 1].to_string();
+            juniper::Value::Scalar(DefaultScalarValue::String(s))
         }
     }
 }
