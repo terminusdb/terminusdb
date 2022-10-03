@@ -162,7 +162,12 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
                     }
                 }
                 else {
-                    registry.field::<&String>(field_name, &())
+                    match field_definition.kind() {
+                        FieldKind::Required => registry.field::<&String>(field_name, &()),
+                        FieldKind::Optional => registry.field::<Option<&String>>(field_name, &()),
+                        FieldKind::Array => registry.field::<Vec<Option<&String>>>(field_name, &()),
+                        _ => registry.field::<Vec<&String>>(field_name, &())
+                    }
                 }
             })
             .collect();
@@ -304,6 +309,21 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
                     else {
                         let val = instance.id_object_value(object_id).unwrap();
                         Some(Ok(value_string_to_graphql(&val)))
+                    }
+                },
+                FieldKind::Optional => {
+                    let object_id = dbg!(instance.single_triple_sp(self.id, field_id)).map(|t|t.object);
+                    match object_id {
+                        Some(object_id) => {
+                            if let Some(doc_type) = doc_type {
+                                Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &TerminusType::new(object_id)))
+                            }
+                            else {
+                                let val = instance.id_object_value(object_id).unwrap();
+                                Some(Ok(value_string_to_graphql(&val)))
+                            }
+                        },
+                        None => Some(Ok(Value::Null))
                     }
                 },
                 FieldKind::Set => {
