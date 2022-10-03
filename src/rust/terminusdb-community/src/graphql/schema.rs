@@ -2,13 +2,68 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue};
-use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue};
+use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError};
+use swipl::prelude::*;
+use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
+
+use crate::types::{transaction_schema_layer, transaction_instance_layer};
 
 use super::frame::*;
 use super::top::Info;
 
-pub struct TerminusTypeCollection;
-impl GraphQLType for TerminusTypeCollection {
+macro_rules! execute_prolog {
+    ($context:ident, $body:block) => {
+        {
+            let result: PrologResult<()> = {
+                $body
+            };
+
+            result_to_string_result($context, result)
+                .map_err(|e| match e {
+                    PrologStringError::Failure => FieldError::new(
+                        "prolog call failed",
+                        Value::Null),
+                    PrologStringError::Exception(e) => FieldError::new(
+                        e,
+                        Value::Null)
+                })
+        }
+    }
+}
+    
+
+pub struct TerminusContext<'a, C: QueryableContextType> {
+    pub schema: SyncStoreLayer,
+    pub instance: Option<SyncStoreLayer>,
+    pub context: &'a Context<'a, C>
+}
+
+
+impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
+    pub fn new(
+        context: &'a Context<'a, C>,
+        transaction_term: &Term
+    ) -> PrologResult<TerminusContext<'a,C>> {
+        let schema = transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
+        let instance = transaction_instance_layer(context, transaction_term)?;
+
+        Ok(TerminusContext { context, schema, instance})
+    }
+}
+
+pub struct TerminusTypeCollection<'a,C:QueryableContextType> {
+    _c: std::marker::PhantomData<&'a Context<'a, C>>
+}
+
+impl<'a, C:QueryableContextType> TerminusTypeCollection<'a, C> {
+    pub fn new() -> Self {
+        Self {
+            _c: Default::default()
+        }
+    }
+}
+
+impl<'a,C:QueryableContextType+'a> GraphQLType for TerminusTypeCollection<'a,C> {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
     }
@@ -22,25 +77,53 @@ impl GraphQLType for TerminusTypeCollection {
                 registry.field::<TerminusEnum>(name, &(name.to_owned(), info.clone()))
             }
             else{
-                registry.field::<TerminusType>(name, &(name.to_owned(), info.clone()))
+                registry.field::<Vec<TerminusType>>(name, &(name.to_owned(), info.clone()))
             }
         }).collect();
         
-        registry.build_object_type::<TerminusTypeCollection>(info, &fields).into_meta()
+        registry.build_object_type::<TerminusTypeCollection<'a,C>>(info, &fields).into_meta()
     }
 }
 
-impl GraphQLValue for TerminusTypeCollection {
-    type Context = Info;
+impl<'a, C:QueryableContextType> GraphQLValue for TerminusTypeCollection<'a,C> {
+    type Context = TerminusContext<'a, C>;
 
     type TypeInfo = Arc<AllFrames>;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        todo!()
+        Some("TerminusTypeCollection")
+    }
+
+    fn resolve_field(
+        &self,
+        info: &Self::TypeInfo,
+        field_name: &str,
+        _arguments: &juniper::Arguments<DefaultScalarValue>,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        //let instance = executor.context().instance;
+        //let field_id = 
+        //executor.resolve(&(field_name.to_string(), info.clone()), &vec![TerminusType,TerminusType])
+        let context = executor.context().context;
+        let result;
+        execute_prolog!(context, {
+            let frame = context.open_frame();
+            let x_term = frame.new_term_ref();
+            let term = term!{frame: format(string(#&x_term), "hello, ~q, ~q", [world])}?;
+            frame.call_term_once(&term)?;
+            result = x_term.get::<String>()?;
+
+            Ok(())
+        })?;
+
+        Ok(Value::Scalar(DefaultScalarValue::String(result)))
     }
 }
 
-pub struct TerminusType; 
+pub struct TerminusType;
+//{
+//    id: u64
+//} 
 impl TerminusType {
     fn generate_class_type<'r>(d: &ClassDefinition, info: &<Self as GraphQLValue>::TypeInfo, registry: &mut juniper::Registry<'r, DefaultScalarValue>) -> juniper::meta::MetaType<'r, DefaultScalarValue>
     where
@@ -66,7 +149,7 @@ impl TerminusType {
     }
 }
 
-struct TerminusEnum {
+pub struct TerminusEnum {
     value: String
 }
 
@@ -138,7 +221,7 @@ impl GraphQLValue for TerminusType {
     type TypeInfo = (String, Arc<AllFrames>);
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        todo!()
+        Some(&info.0)
     }
 
     fn resolve_field(
@@ -148,6 +231,8 @@ impl GraphQLValue for TerminusType {
         _arguments: &juniper::Arguments,
         _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult {
-        panic!("GraphQLValue::resolve_field() must be implemented by objects and interfaces");
+        //Ok(Value::Scalar(DefaultScalarValue::String("duck!".to_string())))
+        Ok(Value::List(vec![Value::Scalar(DefaultScalarValue::String("cow!".to_string())),
+                            Value::Scalar(DefaultScalarValue::String("duck!".to_string()))]))
     }
 }

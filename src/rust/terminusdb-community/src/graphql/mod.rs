@@ -15,11 +15,11 @@ mod schema;
 
 use top::*;
 
-use self::{frame::AllFrames, schema::{TerminusType, TerminusTypeCollection}};
+use self::{frame::AllFrames, schema::{TerminusType, TerminusTypeCollection, TerminusContext}};
 
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, branch_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
+    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, branch_term, transaction_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -37,8 +37,10 @@ predicates! {
         let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("aaa");
         log_info!(context, "parsed frames: {:?}", frames)?;
 
-        let root_node = RootNode::new_with_info(TerminusTypeCollection, EmptyMutation::<Info>::new(), EmptySubscription::<Info>::new(), Arc::new(frames), (), ());
-        let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, auth_term)?;
+        let root_node = RootNode::new_with_info(TerminusTypeCollection::new(), EmptyMutation::<TerminusContext<'a, C>>::new(), EmptySubscription::<TerminusContext<'a,C>>::new(), Arc::new(frames), (), ());
+
+        let graphql_context = TerminusContext::new(context, transaction_term)?;
+        //let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, transaction_term, auth_term)?;
 
         let response = request.execute_sync(&root_node, &graphql_context);
 

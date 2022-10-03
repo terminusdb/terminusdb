@@ -2932,7 +2932,7 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     ),
     all_class_frames(Transaction, Frames),
     json_log_info_formatted("frames: ~q", [Frames]),
-    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Branch_DB, Auth, Content_Length, Input, Output).
+    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Branch_DB, Transaction, Auth, Content_Length, Input, Output).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).

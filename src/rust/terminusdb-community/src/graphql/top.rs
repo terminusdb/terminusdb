@@ -9,13 +9,14 @@ use swipl::prelude::*;
 use super::frame::AllFrames;
 
 pub struct Info {
-    system: SyncStoreLayer,
-    meta : Option<SyncStoreLayer>,
-    commit : Option<SyncStoreLayer>,
-    branch: Option<SyncStoreLayer>,
-    schema: Option<SyncStoreLayer>,
-    user: Atom,
-    frames: Option<AllFrames>
+    pub system: SyncStoreLayer,
+    pub meta : Option<SyncStoreLayer>,
+    pub commit : Option<SyncStoreLayer>,
+    pub branch: Option<SyncStoreLayer>,
+    pub schema: SyncStoreLayer,
+    pub instance: Option<SyncStoreLayer>,
+    pub user: Atom,
+    pub frames: Option<AllFrames>,
 }
 
 impl juniper::Context for Info {}
@@ -27,6 +28,7 @@ impl Info {
         meta_term: &Term,
         commit_term: &Term,
         branch_term: &Term,
+        transaction_term: &Term,
         auth_term: &Term,
     ) -> PrologResult<Info> {
         let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
@@ -52,7 +54,11 @@ impl Info {
         }else{
             transaction_instance_layer(context, branch_term).expect("Missing branch layer")
         };
-        Ok(Info { system, meta, commit, branch, schema: None, user, frames: None })
+
+        let schema = transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
+        let instance = transaction_instance_layer(context, transaction_term)?;
+
+        Ok(Info { system, meta, commit, branch, schema, instance, user, frames: None })
     }
 }
 
