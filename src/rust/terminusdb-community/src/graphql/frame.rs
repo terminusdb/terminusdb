@@ -12,6 +12,17 @@ pub struct Prefixes {
     pub extra_prefixes: BTreeMap<String, String>
 }
 
+impl Prefixes {
+    pub fn expand(&self, s: &str) -> String {
+        // this is dumb but will work for now
+        format!("{}{}", self.base, s)
+    }
+    pub fn expand_schema(&self, s: &str) -> String {
+        // this is dumb but will work for now
+        format!("{}{}", self.schema, s)
+    }
+}
+
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct ClassDocumentationDefinition {
 }

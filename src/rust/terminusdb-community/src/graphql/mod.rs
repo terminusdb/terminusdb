@@ -15,7 +15,7 @@ mod schema;
 
 use top::*;
 
-use self::{frame::AllFrames, schema::{TerminusType, TerminusTypeCollection, TerminusContext}};
+use self::{frame::{AllFrames, Prefixes}, schema::{TerminusType, TerminusTypeCollection, TerminusContext}};
 
 predicates! {
     #[module("$graphql")]
@@ -36,6 +36,7 @@ predicates! {
 
         let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("aaa");
         log_info!(context, "parsed frames: {:?}", frames)?;
+        //let prefixes: Arc<Prefixes> = Arc::new(frames.context);
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(), EmptyMutation::<TerminusContext<'a, C>>::new(), EmptySubscription::<TerminusContext<'a,C>>::new(), Arc::new(frames), (), ());
 
