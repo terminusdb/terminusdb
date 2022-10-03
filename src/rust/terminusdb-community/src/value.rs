@@ -83,11 +83,15 @@ fn type_is_numeric(s: &str) -> bool {
     NUMERIC_TYPES.contains(s)
 }
 
-fn type_is_integer(s: &str) -> bool {
+pub fn type_is_bool(s: &str) -> bool {
+    s == "boolean"
+}
+
+pub fn type_is_integer(s: &str) -> bool {
     INTEGER_TYPES.contains(s)
 }
 
-fn type_is_float(s: &str) -> bool {
+pub fn type_is_float(s: &str) -> bool {
     FLOAT_TYPES.contains(s)
 }
 

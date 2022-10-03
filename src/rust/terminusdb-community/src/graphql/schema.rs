@@ -1,15 +1,15 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use juniper::meta::{DeprecationStatus, EnumValue};
-use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError};
+use juniper::meta::{DeprecationStatus, EnumValue, Field};
+use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError, Registry};
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::{Layer, ObjectType};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::consts::RDF_TYPE;
 use crate::types::{transaction_schema_layer, transaction_instance_layer};
-use crate::value::value_string_to_graphql;
+use crate::value::{value_string_to_graphql, type_is_bool, type_is_integer, type_is_float};
 
 use super::frame::*;
 use super::top::Info;
@@ -147,6 +147,15 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
         Self { id, _x: Default::default() }
     }
 
+    fn register_field<'r, T:GraphQLType>(registry: &mut Registry<'r, DefaultScalarValue>, field_name: &str, type_info: &T::TypeInfo, kind: FieldKind) -> Field<'r, DefaultScalarValue> {
+        match kind {
+            FieldKind::Required => registry.field::<T>(field_name, type_info),
+            FieldKind::Optional => registry.field::<Option<T>>(field_name, type_info),
+            FieldKind::Array => registry.field::<Vec<Option<T>>>(field_name, type_info),
+            _ => registry.field::<Vec<T>>(field_name, type_info),
+        }
+    }
+
     fn generate_class_type<'r>(d: &ClassDefinition, info: &<Self as GraphQLValue>::TypeInfo, registry: &mut juniper::Registry<'r, DefaultScalarValue>) -> juniper::meta::MetaType<'r, DefaultScalarValue>
     where
         DefaultScalarValue: 'r {
@@ -154,20 +163,25 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
         let fields: Vec<_> = d.fields.iter()
             .map(|(field_name, field_definition)| {
                 if let Some(document_type) = field_definition.document_type() {
-                    match field_definition.kind() {
-                        FieldKind::Required => registry.field::<TerminusType<'a,C>>(field_name, &(document_type.to_owned(), frames.clone())),
-                        FieldKind::Optional => registry.field::<Option<TerminusType<'a,C>>>(field_name, &(document_type.to_owned(), frames.clone())),
-                        FieldKind::Array => registry.field::<Vec<Option<TerminusType<'a,C>>>>(field_name, &(document_type.to_owned(), frames.clone())),
-                        _ => registry.field::<Vec<TerminusType<'a,C>>>(field_name, &(document_type.to_owned(), frames.clone())),
+                    Self::register_field::<TerminusType<'a,C>>(registry, field_name, &(document_type.to_owned(), frames.clone()), field_definition.kind())
+                }
+                else if let Some(base_type) = field_definition.base_type() {
+                    if type_is_bool(base_type) {
+                        Self::register_field::<bool>(registry, field_name, &(), field_definition.kind())
+                    }
+                    else if type_is_integer(base_type) {
+                        Self::register_field::<i32>(registry, field_name, &(), field_definition.kind())
+                    }
+                    else if type_is_float(base_type) {
+                        Self::register_field::<f64>(registry, field_name, &(), field_definition.kind())
+                    }
+                    else {
+                        // asssume stringy
+                        Self::register_field::<String>(registry, field_name, &(), field_definition.kind())
                     }
                 }
                 else {
-                    match field_definition.kind() {
-                        FieldKind::Required => registry.field::<&String>(field_name, &()),
-                        FieldKind::Optional => registry.field::<Option<&String>>(field_name, &()),
-                        FieldKind::Array => registry.field::<Vec<Option<&String>>>(field_name, &()),
-                        _ => registry.field::<Vec<&String>>(field_name, &())
-                    }
+                    todo!();
                 }
             })
             .collect();

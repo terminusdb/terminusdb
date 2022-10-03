@@ -106,6 +106,17 @@ impl SimpleFieldDefinition {
             Self::Enum{..} => None
         }
     }
+
+    pub fn base_type(&self) -> Option<&str> {
+        match self {
+            Self::BaseType(s) => {
+                let pos = s.find(':')?;
+                Some(&s[pos+1..])
+            },
+            Self::Document{typ: s, ..} => None,
+            Self::Enum{..} => None
+        }
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -139,6 +150,17 @@ impl FieldDefinition {
             Self::List(f) => f.document_type(),
             Self::Array{field: f, ..} => f.document_type(),
             Self::Cardinality{field: f, ..} => f.document_type(),
+        }
+    }
+
+    pub fn base_type(&self) -> Option<&str> {
+        match self {
+            Self::Required(f) => f.base_type(),
+            Self::Optional(f) => f.base_type(),
+            Self::Set(f) => f.base_type(),
+            Self::List(f) => f.base_type(),
+            Self::Array{field: f, ..} => f.base_type(),
+            Self::Cardinality{field: f, ..} => f.base_type(),
         }
     }
 
