@@ -1,19 +1,24 @@
+use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
+
+use crate::terminus_store::*;
+
 pub fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object_type: &ObjectType,
+    object_type: &NodeOrValue,
     object: &'a str,
-) -> Box<dyn Iterator<Item = IdTriple> + 'a> {
+) -> Box<dyn Iterator<Item = u64> + 'a> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object_type {
-            ObjectType::Value => g.object_value_id(object),
-            ObjectType::Node => g.object_node_id(object),
+            NodeOrValue::Value => g.object_value_id(object),
+            NodeOrValue::Node => g.object_node_id(object),
         };
         if let Some(object_id) = maybe_object_id {
             Box::new(
                 g.triples_o(object_id)
-                    .filter(move |t| t.predicate == property_id),
+                    .filter(move |t| t.predicate == property_id)
+                    .map(|t|t.subject),
             )
         } else {
             Box::new(std::iter::empty())
@@ -25,19 +30,19 @@ pub fn predicate_value_iter<'a>(
 
 pub fn predicate_value_filter<'a>(
     g: &'a SyncStoreLayer,
-    iter: Box<dyn Iterator<Item = IdTriple> + 'a>,
+    iter: Box<dyn Iterator<Item = u64> + 'a>,
     property: &str,
-    object_type: &ObjectType,
+    object_type: &NodeOrValue,
     object: &str,
-) -> Box<dyn Iterator<Item = IdTriple> + 'a> {
+) -> Box<dyn Iterator<Item = u64> + 'a> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object_type {
-            ObjectType::Value(ty) => g.object_value_id(object),
-            ObjectType::Node => g.object_node_id(object),
+            NodeOrValue::Value => g.object_value_id(object),
+            NodeOrValue::Node => g.object_node_id(object),
         };
         if let Some(object_id) = maybe_object_id {
-            Box::new(iter.filter(move |t| g.triple_exists(t.subject, property_id, object_id)))
+            Box::new(iter.filter(move |s| g.triple_exists(*s, property_id, object_id)))
         } else {
             Box::new(std::iter::empty())
         }
@@ -46,16 +51,16 @@ pub fn predicate_value_filter<'a>(
     }
 }
 
-enum ObjectType {
+pub enum NodeOrValue {
     Node,
     Value,
 }
 
 pub fn lookup_field_requests(
     g: &SyncStoreLayer,
-    fields: Vec<(String, ObjectType, Option<String>)>,
+    fields: Vec<(String, NodeOrValue, Option<String>)>,
 ) -> Vec<u64> {
-    let constraints: Vec<(String, ObjectType, String)> = fields
+    let constraints: Vec<(String, NodeOrValue, String)> = fields
         .into_iter()
         .map(|(p, oty, mv)| match mv {
             Option::Some(v) => Some((p, oty, v)),

@@ -12,6 +12,7 @@ use swipl::prelude::*;
 mod top;
 mod frame;
 mod schema;
+mod query;
 
 use top::*;
 
