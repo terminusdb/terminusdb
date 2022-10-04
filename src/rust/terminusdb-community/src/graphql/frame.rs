@@ -521,3 +521,14 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
     }
 
 }
+impl FieldKind {
+    pub fn is_collection(&self) -> bool {
+        match self {
+            Self::Set => true,
+            Self::Array => true,
+            Self::List => true,
+            Self::Cardinality => true,
+            _ => false
+        }
+    }
+}

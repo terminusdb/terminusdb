@@ -58,31 +58,41 @@ pub enum NodeOrValue {
     Value,
 }
 
-pub fn lookup_field_requests(
-    g: &SyncStoreLayer,
+pub fn lookup_field_requests<'a>(
+    g: &'a SyncStoreLayer,
     constraints: Vec<(String, NodeOrValue, String)>,
+    zero_iter: Option<Box<dyn Iterator<Item=u64>+'a>>
 ) -> Vec<u64> {
     if constraints.len() == 0 {
         panic!("Somehow there are no constraints on the triples")
     } else {
-        let (p, oty, o) = &constraints[0];
-        let zero_iter = predicate_value_iter(g, &p, &oty, &o);
-        constraints[1..]
+        let start;
+        let zi;
+        if let Some(zero_iter) = zero_iter {
+            start = 0;
+            zi = zero_iter;
+        }
+        else {
+            let (p, oty, o) = &constraints[0];
+            zi = predicate_value_iter(g, &p, &oty, &o);
+            start = 1;
+        }
+        constraints[start..]
             .iter()
-            .fold(zero_iter, |iter, (p, oty, o)| {
+            .fold(zi, |iter, (p, oty, o)| {
                 predicate_value_filter(g, iter, &p, &oty, &o)
             })
             .collect()
     }
 }
 
-pub fn run_filter_query(
-    g: &SyncStoreLayer,
+pub fn run_filter_query<'a>(
+    g: &'a SyncStoreLayer,
     prefixes: &Prefixes,
     arguments: &juniper::Arguments,
     class_name: &str,
-    class_definition: &ClassDefinition) -> Vec<u64> {
-
+    class_definition: &ClassDefinition,
+    zero_iter: Option<Box<dyn Iterator<Item=u64>+'a>>) -> Vec<u64> {
     let mut constraints : Vec<(String,NodeOrValue,String)> = class_definition.fields.iter()
         .filter_map(|(field_name,field_definition)| {
             if let Some(base_type) = field_definition.base_type() {
@@ -104,5 +114,5 @@ pub fn run_filter_query(
         .collect();
     let expanded_class_name = prefixes.expand_schema(class_name);
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
-    lookup_field_requests(g, constraints)
+    lookup_field_requests(g, constraints, zero_iter)
 }

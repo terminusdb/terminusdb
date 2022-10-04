@@ -152,7 +152,8 @@ impl<'a, C:QueryableContextType> GraphQLValue for TerminusTypeCollection<'a,C> {
                                                &info.context,
                                                arguments,
                                                field_name,
-                                               info.frames[field_name].as_class_definition())
+                                               info.frames[field_name].as_class_definition(),
+                                               None)
                 .into_iter()
                 .map(|id| TerminusType::new(id))
                 .collect(),
@@ -192,8 +193,13 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
                 if let Some(document_type) = field_definition.document_type() {
                     let field = Self::register_field::<TerminusType<'a,C>>(registry, field_name, &(document_type.to_owned(), frames.clone()), field_definition.kind());
 
-                    let class_definition = info.1.frames[document_type].as_class_definition();
-                    add_arguments(registry, field, class_definition)
+                    if field_definition.kind().is_collection() {
+                        let class_definition = info.1.frames[document_type].as_class_definition();
+                        add_arguments(registry, field, class_definition)
+                    }
+                    else {
+                        field
+                    }
                 }
                 else if let Some(base_type) = field_definition.base_type() {
                     if type_is_bool(base_type) {
@@ -323,7 +329,7 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
         &self,
         info: &Self::TypeInfo,
         field_name: &str,
-        _arguments: &juniper::Arguments,
+        arguments: &juniper::Arguments,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult {
         let get_info = || {
@@ -373,7 +379,16 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
                 FieldKind::Set => {
                     let object_ids = instance.triples_sp(self.id, field_id).map(|t|t.object);
                     if let Some(doc_type) = doc_type {
-                        let subdocs: Vec<_> = object_ids.map(TerminusType::new).collect();
+                        let object_ids = match executor.context().instance.as_ref() {
+                            Some(instance) => run_filter_query(instance,
+                                                               &info.1.context,
+                                                               arguments,
+                                                               doc_type,
+                                                               info.1.frames[doc_type].as_class_definition(),
+                                                               Some(Box::new(object_ids))),
+                            None => vec![]
+                        };
+                        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
                         Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &subdocs))
                     }
                     else {
