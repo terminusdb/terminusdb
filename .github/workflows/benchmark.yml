@@ -16,6 +16,7 @@ env:
 jobs:
 
   benchmark:
+    concurrency: benchmark
     name: Run
     runs-on: ubuntu-latest
     env:
@@ -71,6 +72,9 @@ jobs:
         working-directory: tests
         run: mkdir -p results/k6_benchmark_results
 
+      - name: Make k6 benchmark dir
+        working-directory: tests
+        run: mkdir -p results/lego_benchmark_results
 
       - name: Run k6 benchmark
         env:
@@ -78,12 +82,14 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         working-directory: tests
         run: |
-          ssh "$SSH_USER"@"$SSH_HOST" "benchmark $GITHUB_SHA" > "results/k6_benchmark_results/${GITHUB_SHA}.json"
+          ssh "$SSH_USER"@"$SSH_HOST" "benchmark $GITHUB_SHA all"
+          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/lego_terminusdb_${GITHUB_SHA}.json results/lego_benchmark_results/
+          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/k6_output.json results/k6_benchmark_results/${GITHUB_SHA}.json
 
-#      - name: Deploy
-#        uses: peaceiris/actions-gh-pages@v3
-#        with:
-#          github_token: ${{ secrets.GITHUB_TOKEN }}
-#          publish_dir: ./tests/results/
-#          keep_files: true
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./tests/results/
+          keep_files: true
 
