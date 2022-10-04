@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
-use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError, Registry};
+use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError, Registry, GraphQLEnum};
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::{Layer, ObjectType};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
@@ -67,9 +67,10 @@ impl<'a, C:QueryableContextType> TerminusTypeCollection<'a, C> {
     }
 }
 
-fn add_arguments<'r>(registry: &mut juniper::Registry<'r, DefaultScalarValue>, mut field: Field<'r, DefaultScalarValue>, class_definition: &ClassDefinition) -> Field<'r, DefaultScalarValue> {
+fn add_arguments<'r>(info: &(String, Arc<AllFrames>), registry: &mut juniper::Registry<'r, DefaultScalarValue>, mut field: Field<'r, DefaultScalarValue>, class_definition: &ClassDefinition) -> Field<'r, DefaultScalarValue> {
     field = field.argument(registry.arg::<Option<i32>>("offset", &()).description("skip N elements"));
     field = field.argument(registry.arg::<Option<i32>>("limit", &()).description("limit results to N elements"));
+    field = field.argument(registry.arg::<Option<TerminusOrderBy>>("orderBy", &(format!("{}_Ordering", info.0), info.0.to_string(), info.1.clone())).description("order by the given fields"));
     for (name, f) in class_definition.fields.iter() {
         if name == "offset" || name == "limit" || name == "orderBy" {
             // these are special. we're generating them differently
@@ -110,14 +111,15 @@ impl<'a,C:QueryableContextType+'a> GraphQLType for TerminusTypeCollection<'a,C> 
             else if let TypeDefinition::Class(c) = typedef {
                 let field = registry.field::<Vec<TerminusType<'a,C>>>(name, &(name.to_owned(), info.clone()));
 
-                add_arguments(registry, field, c)
+                add_arguments(&(name.to_owned(), info.clone()), registry, field, c)
             }
             else {
                 panic!("unexpected type kind");
             }
         }).collect();
         
-        registry.build_object_type::<TerminusTypeCollection<'a,C>>(info, &fields).into_meta()
+        registry.build_object_type::<TerminusTypeCollection<'a,C>>(info, &fields)
+            .into_meta()
     }
 }
 
@@ -201,7 +203,7 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
 
                     if field_definition.kind().is_collection() {
                         let class_definition = info.1.frames[document_type].as_class_definition();
-                        add_arguments(registry, field, class_definition)
+                        add_arguments(info, registry, field, class_definition)
                     }
                     else {
                         field
@@ -415,5 +417,69 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
         }
         //Ok(Value::List(vec![Value::Scalar(DefaultScalarValue::String("cow!".to_string())),
         //                    Value::Scalar(DefaultScalarValue::String("duck!".to_string()))]))
+    }
+}
+
+#[derive(GraphQLEnum)]
+enum TerminusOrdering {
+    Asc,Desc
+}
+
+struct TerminusOrderBy {
+    fields: Vec<(String, TerminusOrdering)>
+}
+
+impl FromInputValue for TerminusOrderBy {
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        todo!()
+    }
+}
+
+impl GraphQLType for TerminusOrderBy {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(&info.0)
+    }
+
+    fn meta<'r>(info: &Self::TypeInfo, registry: &mut Registry<'r, DefaultScalarValue>) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r {
+        let frames = &info.2;
+        if let TypeDefinition::Class(d) = &frames.frames[&info.1] {
+            let arguments: Vec<_> = d.fields.iter()
+                .filter_map(|(field_name, field_definition)| {
+                    if let Some(_) = field_definition.base_type() {
+                        Some(registry.arg::<Option<TerminusOrdering>>(field_name, &()))
+                    }
+                    else {
+                        None
+                    }
+                })
+                .collect();
+
+            registry.build_input_object_type::<TerminusOrderBy>(info, &arguments).into_meta()
+        }
+        else {
+            panic!("shouldn't be here");
+        }
+    }
+}
+
+impl GraphQLValue for TerminusOrderBy {
+    type Context = ();
+
+    type TypeInfo = (String, String, Arc<AllFrames>);
+
+    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some(&info.0)
+    }
+
+    fn resolve_field(
+        &self,
+        _info: &Self::TypeInfo,
+        _field_name: &str,
+        _arguments: &juniper::Arguments<DefaultScalarValue>,
+        _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        panic!("GraphQLValue::resolve_field() must be implemented by objects and interfaces");
     }
 }
