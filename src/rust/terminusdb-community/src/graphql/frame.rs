@@ -259,6 +259,13 @@ impl TypeDefinition {
             Self::Enum(_) => TypeKind::Enum
         }
     }
+
+    pub(crate) fn as_class_definition(&self) -> &ClassDefinition {
+        match self {
+            Self::Class(c) => &c,
+            _ => panic!("tried to unwrap non-class definition as class definition")
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]

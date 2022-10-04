@@ -66,6 +66,16 @@ impl<'a, C:QueryableContextType> TerminusTypeCollection<'a, C> {
     }
 }
 
+fn add_arguments<'r>(registry: &mut juniper::Registry<'r, DefaultScalarValue>, mut field: Field<'r, DefaultScalarValue>, class_definition: &ClassDefinition) -> Field<'r, DefaultScalarValue> {
+    for (name, f) in class_definition.fields.iter() {
+        if let Some(_t) = f.base_type() {
+            field = field.argument(registry.arg::<Option<String>>(name, &()));
+        }
+    }
+
+    field
+}
+
 impl<'a,C:QueryableContextType+'a> GraphQLType for TerminusTypeCollection<'a,C> {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
@@ -79,8 +89,13 @@ impl<'a,C:QueryableContextType+'a> GraphQLType for TerminusTypeCollection<'a,C> 
             if typedef.kind() == TypeKind::Enum {
                 registry.field::<TerminusEnum>(name, &(name.to_owned(), info.clone()))
             }
-            else{
-                registry.field::<Vec<TerminusType<'a,C>>>(name, &(name.to_owned(), info.clone()))
+            else if let TypeDefinition::Class(c) = typedef {
+                let field = registry.field::<Vec<TerminusType<'a,C>>>(name, &(name.to_owned(), info.clone()));
+
+                add_arguments(registry, field, c)
+            }
+            else {
+                panic!("unexpected type kind");
             }
         }).collect();
         
@@ -163,7 +178,10 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
         let fields: Vec<_> = d.fields.iter()
             .map(|(field_name, field_definition)| {
                 if let Some(document_type) = field_definition.document_type() {
-                    Self::register_field::<TerminusType<'a,C>>(registry, field_name, &(document_type.to_owned(), frames.clone()), field_definition.kind())
+                    let field = Self::register_field::<TerminusType<'a,C>>(registry, field_name, &(document_type.to_owned(), frames.clone()), field_definition.kind());
+
+                    let class_definition = info.1.frames[document_type].as_class_definition();
+                    add_arguments(registry, field, class_definition)
                 }
                 else if let Some(base_type) = field_definition.base_type() {
                     if type_is_bool(base_type) {
