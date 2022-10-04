@@ -83,8 +83,8 @@ jobs:
         working-directory: tests
         run: |
           ssh "$SSH_USER"@"$SSH_HOST" "benchmark $GITHUB_SHA all"
-          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/lego_terminusdb_${GITHUB_SHA}.json results/lego_benchmark_results/
-          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/k6_output.json results/k6_benchmark_results/${GITHUB_SHA}.json
+          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/lego_terminusdb_${GITHUB_SHA}.json" results/lego_benchmark_results/
+          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/k6_output.json" "results/k6_benchmark_results/${GITHUB_SHA}.json"
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
