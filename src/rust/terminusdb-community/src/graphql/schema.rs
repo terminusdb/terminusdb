@@ -69,8 +69,19 @@ impl<'a, C:QueryableContextType> TerminusTypeCollection<'a, C> {
 
 fn add_arguments<'r>(registry: &mut juniper::Registry<'r, DefaultScalarValue>, mut field: Field<'r, DefaultScalarValue>, class_definition: &ClassDefinition) -> Field<'r, DefaultScalarValue> {
     for (name, f) in class_definition.fields.iter() {
-        if let Some(_t) = f.base_type() {
-            field = field.argument(registry.arg::<Option<String>>(name, &()));
+        if let Some(t) = f.base_type() {
+            if type_is_bool(t) {
+                field = field.argument(registry.arg::<Option<bool>>(name, &()));
+            }
+            else if type_is_integer(t) {
+                field = field.argument(registry.arg::<Option<i32>>(name, &()));
+            }
+            else if type_is_float(t) {
+                field = field.argument(registry.arg::<Option<f64>>(name, &()));
+            }
+            else {
+                field = field.argument(registry.arg::<Option<String>>(name, &()));
+            }
         }
     }
 
