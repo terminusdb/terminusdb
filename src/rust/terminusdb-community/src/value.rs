@@ -1,11 +1,13 @@
-use juniper::DefaultScalarValue;
+use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use std::collections::HashSet;
 use std::str::FromStr;
 
 use serde_json::*;
 
-const TYPE_PREFIX_LEN: usize = "http://www.w3.org/2001/XMLSchema#".len();
+use crate::consts::XSD_PREFIX;
+
+const TYPE_PREFIX_LEN: usize = XSD_PREFIX.len();
 // funnily, this type prefix works for both the xsd types, and our own custom terminusdb xdd types, as the prefix is the same length!
 // for terminusdb xdd this is   http://terminusdb.com/schema/xdd#
 
@@ -140,6 +142,47 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
             let s = val[1..val.len() - 1].to_string();
             let _l = lang[1..lang.len() - 1].to_string();
             juniper::Value::Scalar(DefaultScalarValue::String(s))
+        }
+    }
+}
+
+pub enum ScalarInputValue {
+    Boolean(bool),
+    Int(i32),
+    Float(f64),
+    String(String),
+}
+
+impl FromInputValue for ScalarInputValue {
+    fn from_input_value(v: &juniper::InputValue<DefaultScalarValue>) -> Option<Self> {
+        match v {
+            juniper::InputValue::Scalar(s) => Some(match s {
+                DefaultScalarValue::Int(i) => Self::Int(*i),
+                DefaultScalarValue::Float(f) => Self::Float(*f),
+                DefaultScalarValue::String(s) => Self::String(s.to_owned()),
+                DefaultScalarValue::Boolean(b) => Self::Boolean(*b)
+            }),
+            _ => None
+        }
+    }
+}
+
+pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> String {
+    match v {
+        ScalarInputValue::Boolean(b) => {
+            assert!(type_is_bool(base_type));
+            format!("{}^^'{}{}'", b, XSD_PREFIX, base_type)
+        },
+        ScalarInputValue::Int(i) => {
+            assert!(type_is_integer(base_type));
+            format!("{}^^'{}{}'", i, XSD_PREFIX, base_type)
+        }
+        ScalarInputValue::Float(f) => {
+            assert!(type_is_float(base_type));
+            format!("{}^^'{}{}'", f, XSD_PREFIX, base_type)
+        }
+        ScalarInputValue::String(s) => {
+            format!("\"{}\"^^'{}{}'", s, XSD_PREFIX, base_type)
         }
     }
 }

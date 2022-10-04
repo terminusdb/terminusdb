@@ -12,6 +12,7 @@ use crate::types::{transaction_schema_layer, transaction_instance_layer};
 use crate::value::{value_string_to_graphql, type_is_bool, type_is_integer, type_is_float};
 
 use super::frame::*;
+use super::query::run_filter_query;
 use super::top::Info;
 
 macro_rules! execute_prolog {
@@ -116,10 +117,11 @@ impl<'a, C:QueryableContextType> GraphQLValue for TerminusTypeCollection<'a,C> {
         &self,
         info: &Self::TypeInfo,
         field_name: &str,
-        _arguments: &juniper::Arguments<DefaultScalarValue>,
+        arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
-        let get_type_iterator = || {
+        /*
+        let get_object_iterator = || {
             let instance = executor.context().instance.as_ref()?;
             let rdf_type_id = instance.predicate_id(RDF_TYPE)?;
             let type_name_expanded = info.context.expand_schema(field_name);
@@ -130,25 +132,24 @@ impl<'a, C:QueryableContextType> GraphQLValue for TerminusTypeCollection<'a,C> {
                  .map(|t|TerminusType::new(t.subject)))
         };
 
-        let types: Vec<_> = get_type_iterator().into_iter()
+        let objects: Vec<_> = get_object_iterator().into_iter()
             .flatten().collect();
-        executor.resolve(&(field_name.to_owned(), info.clone()),
-                         &types)
+        */
 
-        /*
-        //let instance = executor.context().instance;
-        //let field_id = 
-        //executor.resolve(&(field_name.to_string(), info.clone()), &vec![TerminusType,TerminusType])
-        let context = executor.context();
-        let _: Option<()> = {
-            let instance = context.instance?;
-            let type_name_expanded = context.prefixes.expand_schema(field_name);
-            let type_name_i = context.instance.predicate_id(&RDF_TYPE)?;
-            context.instance.
+        let objects = match executor.context().instance.as_ref() {
+            Some(instance) => run_filter_query(instance,
+                                               &info.context,
+                                               arguments,
+                                               field_name,
+                                               info.frames[field_name].as_class_definition())
+                .into_iter()
+                .map(|id| TerminusType::new(id))
+                .collect(),
+            None => vec![]
         };
 
-        Ok(Value::Scalar(DefaultScalarValue::String(result)))
-         */
+        executor.resolve(&(field_name.to_owned(), info.clone()),
+                         &objects)
     }
 }
 

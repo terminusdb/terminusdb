@@ -1,8 +1,10 @@
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::terminus_store::*;
+use crate::{terminus_store::*, value::graphql_scalar_to_value_string, consts::RDF_TYPE};
 
-pub fn predicate_value_iter<'a>(
+use super::frame::{Prefixes, ClassDefinition};
+
+fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
     object_type: &NodeOrValue,
@@ -28,7 +30,7 @@ pub fn predicate_value_iter<'a>(
     }
 }
 
-pub fn predicate_value_filter<'a>(
+fn predicate_value_filter<'a>(
     g: &'a SyncStoreLayer,
     iter: Box<dyn Iterator<Item = u64> + 'a>,
     property: &str,
@@ -58,16 +60,8 @@ pub enum NodeOrValue {
 
 pub fn lookup_field_requests(
     g: &SyncStoreLayer,
-    fields: Vec<(String, NodeOrValue, Option<String>)>,
+    constraints: Vec<(String, NodeOrValue, String)>,
 ) -> Vec<u64> {
-    let constraints: Vec<(String, NodeOrValue, String)> = fields
-        .into_iter()
-        .map(|(p, oty, mv)| match mv {
-            Option::Some(v) => Some((p, oty, v)),
-            Option::None => None,
-        })
-        .flatten()
-        .collect();
     if constraints.len() == 0 {
         panic!("Somehow there are no constraints on the triples")
     } else {
@@ -80,4 +74,35 @@ pub fn lookup_field_requests(
             })
             .collect()
     }
+}
+
+pub fn run_filter_query(
+    g: &SyncStoreLayer,
+    prefixes: &Prefixes,
+    arguments: &juniper::Arguments,
+    class_name: &str,
+    class_definition: &ClassDefinition) -> Vec<u64> {
+
+    let mut constraints : Vec<(String,NodeOrValue,String)> = class_definition.fields.iter()
+        .filter_map(|(field_name,field_definition)| {
+            if let Some(base_type) = field_definition.base_type() {
+                if let Some(value) = arguments.get(field_name) {
+                    let field_name_expanded =
+                        prefixes.expand_schema(field_name);
+                    let expanded_object_value =
+                        graphql_scalar_to_value_string(value,base_type);
+                    Some((field_name_expanded,
+                          NodeOrValue::Value,
+                          expanded_object_value))
+                }else{
+                    None
+                }
+            }else{
+                None
+            }
+        })
+        .collect();
+    let expanded_class_name = prefixes.expand_schema(class_name);
+    constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
+    lookup_field_requests(g, constraints)
 }
