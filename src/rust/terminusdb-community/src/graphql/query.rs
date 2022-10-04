@@ -1,8 +1,10 @@
-use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
+use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::{terminus_store::*, value::graphql_scalar_to_value_string, consts::RDF_TYPE};
 
 use super::frame::{Prefixes, ClassDefinition};
+
+use std::convert::TryInto;
 
 fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
@@ -60,9 +62,9 @@ pub enum NodeOrValue {
 
 pub fn lookup_field_requests<'a>(
     g: &'a SyncStoreLayer,
-    constraints: Vec<(String, NodeOrValue, String)>,
+    constraints: &'a [(String, NodeOrValue, String)],
     zero_iter: Option<Box<dyn Iterator<Item=u64>+'a>>
-) -> Vec<u64> {
+) -> impl Iterator<Item=u64>+'a {
     if constraints.len() == 0 {
         panic!("Somehow there are no constraints on the triples")
     } else {
@@ -82,7 +84,6 @@ pub fn lookup_field_requests<'a>(
             .fold(zi, |iter, (p, oty, o)| {
                 predicate_value_filter(g, iter, &p, &oty, &o)
             })
-            .collect()
     }
 }
 
@@ -93,8 +94,14 @@ pub fn run_filter_query<'a>(
     class_name: &str,
     class_definition: &ClassDefinition,
     zero_iter: Option<Box<dyn Iterator<Item=u64>+'a>>) -> Vec<u64> {
+    let offset: i32 = arguments.get("offset").unwrap_or(0);
+    let limit: Option<i32> = arguments.get("limit");
     let mut constraints : Vec<(String,NodeOrValue,String)> = class_definition.fields.iter()
         .filter_map(|(field_name,field_definition)| {
+            if field_name == "offset" || field_name == "limit" {
+                return None;
+            }
+
             if let Some(base_type) = field_definition.base_type() {
                 if let Some(value) = arguments.get(field_name) {
                     let field_name_expanded =
@@ -114,5 +121,13 @@ pub fn run_filter_query<'a>(
         .collect();
     let expanded_class_name = prefixes.expand_schema(class_name);
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
-    lookup_field_requests(g, constraints, zero_iter)
+    let it = lookup_field_requests(g, &constraints, zero_iter)
+        .skip(usize::try_from(offset).unwrap_or(0));
+
+    if let Some(limit) = limit {
+        it.take(usize::try_from(limit).unwrap_or(0)).collect()
+    }
+    else {
+        it.collect()
+    }
 }

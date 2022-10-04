@@ -68,7 +68,13 @@ impl<'a, C:QueryableContextType> TerminusTypeCollection<'a, C> {
 }
 
 fn add_arguments<'r>(registry: &mut juniper::Registry<'r, DefaultScalarValue>, mut field: Field<'r, DefaultScalarValue>, class_definition: &ClassDefinition) -> Field<'r, DefaultScalarValue> {
+    field = field.argument(registry.arg::<Option<i32>>("offset", &()).description("skip N elements"));
+    field = field.argument(registry.arg::<Option<i32>>("limit", &()).description("limit results to N elements"));
     for (name, f) in class_definition.fields.iter() {
+        if name == "offset" || name == "limit" || name == "orderBy" {
+            // these are special. we're generating them differently
+            continue;
+        }
         if let Some(t) = f.base_type() {
             if type_is_bool(t) {
                 field = field.argument(registry.arg::<Option<bool>>(name, &()));
