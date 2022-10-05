@@ -366,6 +366,8 @@ pub struct ClassDefinition {
     pub documentation: Option<ClassDocumentationDefinition>,
     #[serde(rename = "@key")]
     pub key: Option<KeyDefinition>,
+    #[serde(rename = "@subdocument")]
+    pub subdocument: Option<Vec<()>>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
 }
@@ -563,6 +565,22 @@ json{ '@key':json{'@fields':[part_number],'@type':"Lexical"},
         let frames: AllFrames = context.deserialize_from_term(&term).unwrap();
 
         panic!("{:?}", frames);
+    }
+
+    #[test]
+    fn deserialize_lego() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{'@subdocument':[],'@type':'Class',inventory_minifig_id:'xsd:string',minifig:'Minifig',quantity:'xsd:positiveInteger'}
+
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: TypeDefinition = dbg!(context.deserialize_from_term(&term)).unwrap();
+
+        panic!("{:?}", typedef);
     }
 
     #[test]
