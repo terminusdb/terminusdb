@@ -442,7 +442,7 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
 }
 
 #[derive(GraphQLEnum)]
-enum TerminusOrdering {
+pub enum TerminusOrdering {
     Asc,Desc
 }
 
