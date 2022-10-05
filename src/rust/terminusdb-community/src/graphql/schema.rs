@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
-use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError, Registry, GraphQLEnum};
+use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ScalarValue, FromInputValue, InputValue, Value, FieldError, Registry, GraphQLEnum, ID};
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::{Layer, ObjectType};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
@@ -67,12 +67,14 @@ impl<'a, C:QueryableContextType> TerminusTypeCollection<'a, C> {
     }
 }
 
+
 fn add_arguments<'r>(info: &(String, Arc<AllFrames>), registry: &mut juniper::Registry<'r, DefaultScalarValue>, mut field: Field<'r, DefaultScalarValue>, class_definition: &ClassDefinition) -> Field<'r, DefaultScalarValue> {
+    field = field.argument(registry.arg::<Option<ID>>("id", &()));
     field = field.argument(registry.arg::<Option<i32>>("offset", &()).description("skip N elements"));
     field = field.argument(registry.arg::<Option<i32>>("limit", &()).description("limit results to N elements"));
     field = field.argument(registry.arg::<Option<TerminusOrderBy>>("orderBy", &(format!("{}_Ordering", info.0), info.0.to_string(), info.1.clone())).description("order by the given fields"));
     for (name, f) in class_definition.fields.iter() {
-        if name == "offset" || name == "limit" || name == "orderBy" {
+        if is_reserved_argument_name(name) {
             // these are special. we're generating them differently
             continue;
         }
@@ -93,6 +95,14 @@ fn add_arguments<'r>(info: &(String, Arc<AllFrames>), registry: &mut juniper::Re
     }
 
     field
+}
+
+pub fn is_reserved_argument_name(name: &String) -> bool {
+    name == "offset" || name == "limit" || name == "orderBy" || is_reserved_field_name(name)
+}
+
+pub fn is_reserved_field_name(name: &String) -> bool {
+    name == "id"
 }
 
 impl<'a,C:QueryableContextType+'a> GraphQLType for TerminusTypeCollection<'a,C> {
@@ -196,9 +206,12 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
     where
         DefaultScalarValue: 'r {
         let frames = &info.1;
-        let fields: Vec<_> = d.fields.iter()
-            .map(|(field_name, field_definition)| {
-                if let Some(document_type) = field_definition.document_type() {
+        let mut fields: Vec<_> = d.fields.iter()
+            .filter_map(|(field_name, field_definition)| {
+                if is_reserved_field_name(field_name) {
+                    return None;
+                }
+                Some(if let Some(document_type) = field_definition.document_type() {
                     let field = Self::register_field::<TerminusType<'a,C>>(registry, field_name, &(document_type.to_owned(), frames.clone()), field_definition.kind());
 
                     if field_definition.kind().is_collection() {
@@ -226,9 +239,10 @@ impl<'a, C:QueryableContextType+'a> TerminusType<'a, C> {
                 }
                 else {
                     todo!();
-                }
+                })
             })
             .collect();
+        fields.push(registry.field::<ID>("id", &()));
 
         registry.build_object_type::<TerminusType<'a,C>>(info, &fields).into_meta()
     }
@@ -341,7 +355,14 @@ impl<'a,C:QueryableContextType+'a> GraphQLValue for TerminusType<'a,C> {
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult {
         let get_info = || {
+            // TODO: should this really be with a `?`? having an id,
+            // we should always have had this instance layer at some
+            // point. not having it here would be a weird bug.
             let instance = executor.context().instance.as_ref()?;
+            if field_name == "id" {
+                return Some(Ok(Value::Scalar(DefaultScalarValue::String(instance.id_subject(self.id)?))));
+            }
+
             let field_name_expanded = dbg!(info.1.context.expand_schema(field_name));
             let field_id = dbg!(instance.predicate_id(&field_name_expanded))?;
 

@@ -1,8 +1,11 @@
+use juniper::ID;
+
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::{terminus_store::*, value::graphql_scalar_to_value_string, consts::RDF_TYPE};
 
 use super::frame::{Prefixes, ClassDefinition};
+use super::schema::is_reserved_argument_name;
 
 use std::convert::TryInto;
 
@@ -94,11 +97,26 @@ pub fn run_filter_query<'a>(
     class_name: &str,
     class_definition: &ClassDefinition,
     zero_iter: Option<Box<dyn Iterator<Item=u64>+'a>>) -> Vec<u64> {
+    let new_zero_iter: Option<Box<dyn Iterator<Item=u64>+'a>> =
+        match arguments.get::<ID>("id") {
+            Some(id_string) => Some({
+                if let Some(id) = g.subject_id(&*id_string) {
+                    match zero_iter {
+                        None => Box::new(vec![id].into_iter()),
+                        Some(zi) => Box::new(zi.filter(move |i| *i == id))
+                    }
+                }
+                else {
+                    Box::new(std::iter::empty())
+                }
+            }),
+            None => zero_iter
+        };
     let offset: i32 = arguments.get("offset").unwrap_or(0);
     let limit: Option<i32> = arguments.get("limit");
     let mut constraints : Vec<(String,NodeOrValue,String)> = class_definition.fields.iter()
         .filter_map(|(field_name,field_definition)| {
-            if field_name == "offset" || field_name == "limit" {
+            if is_reserved_argument_name(field_name) {
                 return None;
             }
 
@@ -121,7 +139,7 @@ pub fn run_filter_query<'a>(
         .collect();
     let expanded_class_name = prefixes.expand_schema(class_name);
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
-    let it = lookup_field_requests(g, &constraints, zero_iter)
+    let it = lookup_field_requests(g, &constraints, new_zero_iter)
         .skip(usize::try_from(offset).unwrap_or(0));
 
     if let Some(limit) = limit {
