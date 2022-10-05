@@ -449,10 +449,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 ))));
             }
 
-            let field_name_expanded = dbg!(info.1.context.expand_schema(field_name));
-            let field_id = dbg!(instance.predicate_id(&field_name_expanded))?;
+            let field_name_expanded = info.1.context.expand_schema(field_name);
+            let field_id = instance.predicate_id(&field_name_expanded)?;
 
-            let frame = dbg!(&info.1.frames[&info.0]);
+            let frame = &info.1.frames[&info.0];
             let doc_type;
             let kind;
             match frame {
@@ -467,7 +467,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
             match kind {
                 FieldKind::Required => {
-                    let object_id = dbg!(instance.single_triple_sp(self.id, field_id))?.object;
+                    let object_id = instance.single_triple_sp(self.id, field_id)?.object;
                     if let Some(doc_type) = doc_type {
                         Some(executor.resolve(
                             &(doc_type.to_string(), info.1.clone()),
@@ -479,8 +479,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     }
                 }
                 FieldKind::Optional => {
-                    let object_id =
-                        dbg!(instance.single_triple_sp(self.id, field_id)).map(|t| t.object);
+                    let object_id = instance
+                        .single_triple_sp(self.id, field_id)
+                        .map(|t| t.object);
                     match object_id {
                         Some(object_id) => {
                             if let Some(doc_type) = doc_type {
