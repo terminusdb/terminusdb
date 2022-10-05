@@ -23,31 +23,7 @@ jobs:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
-#      - name: Download Docker image
-#        uses: actions/download-artifact@v2
-#        with:
-#          name: terminusdb-server-docker-image
-#
-#      - name: Run server
-#        run: |
-#          docker load < terminusdb-server-docker-image.tar.gz
-#          docker run \
-#            --detach \
-#            --net=host \
-#            terminusdb/terminusdb-server:local
-#
-#      - uses: actions/setup-node@v2
-#        with:
-#          node-version: ${{ env.NODE_VERSION }}
-#
       - uses: actions/checkout@v2
-#
-#      - name: Run benchmarks
-#        working-directory: tests
-#        run: |
-#          mkdir -p results/js_benchmark_results
-#          npm ci
-#          node bench.js --json > "results/js_benchmark_results/${GITHUB_SHA}.json"
 
       - name: Install libssl1.1
         run: |
@@ -68,13 +44,12 @@ jobs:
           ssh-add - <<< "${SSH_PRIVATE_KEY}"
           echo "Add SSH key"
 
-      - name: Make k6 benchmark dir
+      - name: Make benchmark dirs
         working-directory: tests
-        run: mkdir -p results/k6_benchmark_results
-
-      - name: Make k6 benchmark dir
-        working-directory: tests
-        run: mkdir -p results/lego_benchmark_results
+        run: |
+          mkdir -p results/k6_benchmark_results
+          mkdir results/lego_benchmark_results
+          mkdir results/js_benchmark_results
 
       - name: Run k6 benchmark
         env:
@@ -85,6 +60,7 @@ jobs:
           ssh "$SSH_USER"@"$SSH_HOST" "benchmark $GITHUB_SHA all"
           scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/lego_terminusdb_${GITHUB_SHA}.json" results/lego_benchmark_results/
           scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/k6_output.json" "results/k6_benchmark_results/${GITHUB_SHA}.json"
+          scp "$SSH_USER"@"$SSH_HOST":"/home/${SSH_USER}/benchmark_data/js_benchmark_terminusdb_${GITHUB_SHA}.json" "results/js_benchmark_results/${GITHUB_SHA}.json"
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
@@ -92,4 +68,3 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./tests/results/
           keep_files: true
-
