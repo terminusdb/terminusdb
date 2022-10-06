@@ -28,6 +28,7 @@ impl Prefixes {
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
+#[serde(untagged)]
 pub enum StructuralPropertyDocumentationRecord {
     OnlyPropertyLabel(String),
     PropertyCommentLabel {
