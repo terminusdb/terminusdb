@@ -12,7 +12,9 @@ use terminusdb_store_prolog::terminus_store::{Layer, ObjectType};
 
 use crate::consts::RDF_TYPE;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
-use crate::value::{type_is_bool, type_is_float, type_is_integer, value_string_to_graphql};
+use crate::value::{
+    enum_node_to_value, type_is_bool, type_is_float, type_is_integer, value_string_to_graphql,
+};
 
 use super::frame::*;
 use super::query::run_filter_query;
@@ -396,7 +398,7 @@ impl GraphQLValue for TerminusEnum {
     type TypeInfo = (String, Arc<AllFrames>);
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        todo!()
+        Some("TerminusEnum")
     }
 }
 
@@ -454,11 +456,13 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
             let frame = &info.1.frames[&info.0];
             let doc_type;
+            let enum_type;
             let kind;
             match frame {
                 TypeDefinition::Class(c) => {
                     let field = &c.fields[field_name];
                     doc_type = field.document_type();
+                    enum_type = field.enum_type();
                     kind = field.kind();
                     //self.resolve_class_field(c, field_id )
                 }
@@ -473,6 +477,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             &(doc_type.to_string(), info.1.clone()),
                             &TerminusType::new(object_id),
                         ))
+                    } else if let Some(enum_type) = enum_type {
+                        let enum_uri = instance.id_object_node(object_id).unwrap();
+                        Some(Ok(enum_node_to_value(&enum_type, &enum_uri)))
                     } else {
                         let val = instance.id_object_value(object_id).unwrap();
                         Some(Ok(value_string_to_graphql(&val)))

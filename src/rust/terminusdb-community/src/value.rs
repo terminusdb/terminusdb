@@ -55,13 +55,8 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
-    static ref FLOAT_TYPES: HashSet<&'static str> = [
-        "decimal",
-        "double",
-        "float",
-    ]
-    .into_iter()
-    .collect();
+    static ref FLOAT_TYPES: HashSet<&'static str> =
+        ["decimal", "double", "float",].into_iter().collect();
     static ref INTEGER_TYPES: HashSet<&'static str> = [
         "byte",
         "short",
@@ -134,7 +129,9 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
                 juniper::Value::Scalar(DefaultScalarValue::Float(f64::from_str(val).unwrap()))
             } else {
                 // it will be something quoted, which we're gonna return as a string
-                juniper::Value::Scalar(DefaultScalarValue::String(val[1..val.len() - 1].to_string()))
+                juniper::Value::Scalar(DefaultScalarValue::String(
+                    val[1..val.len() - 1].to_string(),
+                ))
             }
         }
         LangOrType::Lang(val, lang) => {
@@ -144,6 +141,13 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
             juniper::Value::Scalar(DefaultScalarValue::String(s))
         }
     }
+}
+
+pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> juniper::Value<DefaultScalarValue> {
+    let enum_list: Vec<&str> = enum_uri.split(enum_type).collect();
+    // 1.. is from slash on
+    let enum_value = &(enum_list[1])[1..];
+    juniper::Value::Scalar(DefaultScalarValue::String(enum_value.to_string()))
 }
 
 pub enum ScalarInputValue {
@@ -160,9 +164,9 @@ impl FromInputValue for ScalarInputValue {
                 DefaultScalarValue::Int(i) => Self::Int(*i),
                 DefaultScalarValue::Float(f) => Self::Float(*f),
                 DefaultScalarValue::String(s) => Self::String(s.to_owned()),
-                DefaultScalarValue::Boolean(b) => Self::Boolean(*b)
+                DefaultScalarValue::Boolean(b) => Self::Boolean(*b),
             }),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -172,7 +176,7 @@ pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> S
         ScalarInputValue::Boolean(b) => {
             assert!(type_is_bool(base_type));
             format!("{}^^'{}{}'", b, XSD_PREFIX, base_type)
-        },
+        }
         ScalarInputValue::Int(i) => {
             assert!(type_is_integer(base_type));
             format!("{}^^'{}{}'", i, XSD_PREFIX, base_type)
