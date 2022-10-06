@@ -1249,6 +1249,7 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 [[package]]
 name = "swipl"
 version = "0.3.10"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
 dependencies = [
  "convert_case",
  "lazy_static",
@@ -1261,6 +1262,7 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.4"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -1269,6 +1271,7 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
 dependencies = [
  "regex",
 ]
@@ -1276,6 +1279,7 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.7"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
