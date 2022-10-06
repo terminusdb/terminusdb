@@ -107,11 +107,12 @@ jobs:
 
   benchmark:
     name: Benchmark
-    needs: build
+    if: github.repository == 'terminusdb/terminusdb' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/benchmark.yml
+    secrets: inherit
 
 
-  # This is required for status checks.
+ # This is required for status checks.
   all_checks_pass_with_build:
     name: All checks pass
     runs-on: ubuntu-latest
