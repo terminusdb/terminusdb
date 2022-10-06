@@ -147,18 +147,31 @@ pub fn run_filter_query<'a>(
         .collect();
     let expanded_class_name = prefixes.expand_schema(class_name);
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
-    let it = lookup_field_requests(g, &constraints, new_zero_iter)
-        .skip(usize::try_from(offset).unwrap_or(0));
 
-    let mut results: Vec<_> = if let Some(limit) = limit {
+    let it: Box<dyn Iterator<Item = u64>> = if let Some(QueryOrderByDesc(vec)) =
+        arguments.get::<QueryOrderByDesc>("orderBy")
+    {
+        let mut results: Vec<u64> = lookup_field_requests(g, &constraints, new_zero_iter).collect();
+        results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &vec));
+        // Probs should not be into_iter(), done to satisfy both arms of let symmetry
+        // better to borrow in the other branch?
+        Box::new(
+            results
+                .into_iter()
+                .skip(usize::try_from(offset).unwrap_or(0)),
+        )
+    } else {
+        Box::new(
+            lookup_field_requests(g, &constraints, new_zero_iter)
+                .skip(usize::try_from(offset).unwrap_or(0)),
+        )
+    };
+
+    if let Some(limit) = limit {
         it.take(usize::try_from(limit).unwrap_or(0)).collect()
     } else {
         it.collect()
-    };
-    if let Some(QueryOrderByDesc(vec)) = arguments.get::<QueryOrderByDesc>("orderBy") {
-        results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &vec));
     }
-    results
 }
 
 struct QueryOrderByDesc(Vec<(Spanning<String>, Spanning<InputValue<DefaultScalarValue>>)>);
