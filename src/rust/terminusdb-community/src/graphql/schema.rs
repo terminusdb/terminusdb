@@ -18,7 +18,7 @@ use crate::value::{
 
 use super::frame::*;
 use super::query::run_filter_query;
-use super::top::Info;
+use super::top::System;
 
 macro_rules! execute_prolog {
     ($context:ident, $body:block) => {{
@@ -31,22 +31,60 @@ macro_rules! execute_prolog {
     }};
 }
 
+pub struct SystemInfo {
+    pub user: Atom,
+    pub system: SyncStoreLayer,
+    pub commit: Option<SyncStoreLayer>,
+    pub meta: Option<SyncStoreLayer>,
+}
+
 pub struct TerminusContext<'a, C: QueryableContextType> {
+    pub context: &'a Context<'a, C>,
+    pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
-    pub context: &'a Context<'a, C>,
 }
 
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
     pub fn new(
         context: &'a Context<'a, C>,
+        auth_term: &Term,
+        system_term: &Term,
+        meta_term: &Term,
+        commit_term: &Term,
         transaction_term: &Term,
     ) -> PrologResult<TerminusContext<'a, C>> {
+        let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
+        let user;
+        if user_ == atom!("anonymous") {
+            user = atom!("terminusdb://system/data/User/anonymous");
+        } else {
+            user = user_;
+        }
+        let system =
+            transaction_instance_layer(context, system_term)?.expect("system layer not found");
+        let meta = if meta_term.unify(atomable("none")).is_ok() {
+            None
+        } else {
+            transaction_instance_layer(context, meta_term).expect("Missing meta layer")
+        };
+        let commit = if commit_term.unify(atomable("none")).is_ok() {
+            None
+        } else {
+            transaction_instance_layer(context, commit_term).expect("Missing commit layer")
+        };
+
         let schema =
             transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
         let instance = transaction_instance_layer(context, transaction_term)?;
 
         Ok(TerminusContext {
+            system_info: SystemInfo {
+                user,
+                system,
+                meta,
+                commit,
+            },
             context,
             schema,
             instance,
@@ -139,7 +177,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     where
         DefaultScalarValue: 'r,
     {
-        let fields: Vec<_> = info
+        let mut fields: Vec<_> = info
             .frames
             .iter()
             .map(|(name, typedef)| {
@@ -156,6 +194,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
             })
             .collect();
 
+        fields.push(registry.field::<System>("_system", &()));
         registry
             .build_object_type::<TerminusTypeCollection<'a, C>>(info, &fields)
             .into_meta()
@@ -193,23 +232,26 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         let objects: Vec<_> = get_object_iterator().into_iter()
             .flatten().collect();
         */
+        if field_name == "_system" {
+            executor.resolve_with_ctx(&(), &System {})
+        } else {
+            let objects = match executor.context().instance.as_ref() {
+                Some(instance) => run_filter_query(
+                    instance,
+                    &info.context,
+                    arguments,
+                    field_name,
+                    info.frames[field_name].as_class_definition(),
+                    None,
+                )
+                .into_iter()
+                .map(|id| TerminusType::new(id))
+                .collect(),
+                None => vec![],
+            };
 
-        let objects = match executor.context().instance.as_ref() {
-            Some(instance) => run_filter_query(
-                instance,
-                &info.context,
-                arguments,
-                field_name,
-                info.frames[field_name].as_class_definition(),
-                None,
-            )
-            .into_iter()
-            .map(|id| TerminusType::new(id))
-            .collect(),
-            None => vec![],
-        };
-
-        executor.resolve(&(field_name.to_owned(), info.clone()), &objects)
+            executor.resolve(&(field_name.to_owned(), info.clone()), &objects)
+        }
     }
 }
 
@@ -368,10 +410,12 @@ impl GraphQLType for TerminusEnum {
             let values: Vec<_> = e
                 .values
                 .iter()
-                .map(|v| EnumValue {
-                    name: v.to_string(),
-                    description: None,
-                    deprecation_status: DeprecationStatus::Current,
+                .map(|v| -> EnumValue {
+                    EnumValue {
+                        name: v.to_string(),
+                        description: None,
+                        deprecation_status: DeprecationStatus::Current,
+                    }
                 })
                 .collect();
 
