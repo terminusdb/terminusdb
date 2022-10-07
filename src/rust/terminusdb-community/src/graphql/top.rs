@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::consts::XSD_PREFIX;
 use crate::graphql::schema::TerminusType;
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::Layer as TSLayer;
@@ -42,12 +43,22 @@ fn required_object_string(db: &SyncStoreLayer, id: u64, prop: &str) -> String {
         .id_object(name_id)
         .expect(&format!("no object for id {}", id))
         .value()
-        .expect("returned object was no value");
+        .expect("returned object was not a value");
 
     let name_json = value_string_to_json(&name_unprocessed);
     let name = name_json.as_str().unwrap();
 
     name.to_string()
+}
+
+fn has_string_value(db: &SyncStoreLayer, id: u64, prop: &str, obj: &str) -> bool {
+    let res = (|| {
+        let predicate_id = db.predicate_id(prop)?;
+        let object = format!("\"{}\"^^'{}{}'", obj, XSD_PREFIX, "string");
+        let object_id = db.object_value_id(&object)?;
+        db.triple_exists(id, predicate_id, object_id).then(|| ())
+    })();
+    res.is_some()
 }
 
 #[graphql_interface(for = [Database, Organization], context = SystemInfo)]
@@ -868,7 +879,7 @@ impl System {
         }
     }
 
-    fn branch(#[graphql(context)] info: &SystemInfo) -> Vec<Branch> {
+    fn branch(name_arg: Option<String>, #[graphql(context)] info: &SystemInfo) -> Vec<Branch> {
         if let Some(_) = info.commit {
             // And get the type
             let predicate_id: u64 = info
@@ -887,6 +898,15 @@ impl System {
                         .unwrap()
                         .triples_o(branch_id)
                         .filter(move |t| t.predicate == predicate_id)
+                        .filter(|t| {
+                            name_arg.is_none()
+                                || has_string_value(
+                                    info.commit.as_ref().unwrap(),
+                                    t.subject,
+                                    "http://terminusdb.com/schema/ref#name",
+                                    name_arg.as_ref().unwrap(),
+                                )
+                        })
                         .map(|t| Branch { id: t.subject })
                         .collect::<Vec<Branch>>()
                 })
