@@ -140,6 +140,8 @@ pub fn run_filter_query<'a>(
                 } else {
                     None
                 }
+            } else if let Some(enum_type) = field_definition.enum_type() {
+                todo!("This is not implemented")
             } else {
                 None
             }

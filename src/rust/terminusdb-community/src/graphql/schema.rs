@@ -148,10 +148,11 @@ fn add_arguments<'r>(
             } else {
                 field = field.argument(registry.arg::<Option<String>>(name, &()));
             }
-        } /* What goes here?  We need an input object, but it isn't clear to me how to build it.
-             else if let Some(t) = f.enum_type() {
-              field = field.argument(registry.arg::<Option<TerminusEnum>>(name, &()));
-          }*/
+        } else if let Some(t) = f.enum_type() {
+            field = field.argument(
+                registry.arg::<Option<TerminusEnum>>(name, &(t.to_string(), info.1.clone())),
+            );
+        }
     }
 
     field
