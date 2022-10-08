@@ -2,11 +2,23 @@ use serde::{self, Deserialize};
 use std::collections::BTreeMap;
 
 #[derive(Deserialize, PartialEq, Debug)]
+pub struct SchemaDocumentation {
+    #[serde(rename = "@title")]
+    pub title: Option<String>,
+    #[serde(rename = "@description")]
+    pub description: Option<String>,
+    #[serde(rename = "@authors")]
+    pub authors: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
 pub struct Prefixes {
     #[serde(rename = "@base")]
     pub base: String,
     #[serde(rename = "@schema")]
     pub schema: String,
+    #[serde(rename = "@documentation")]
+    pub documentation: Option<SchemaDocumentation>,
     #[serde(flatten)]
     pub extra_prefixes: BTreeMap<String, String>,
 }
@@ -455,6 +467,7 @@ _{'@base': "http://some_base/",
 
         assert_eq!(
             Prefixes {
+                documentation: None,
                 base: "http://some_base/".to_string(),
                 schema: "http://some_schema#".to_string(),
                 extra_prefixes: BTreeMap::from([
@@ -570,9 +583,65 @@ json{ '@key':json{'@fields':[part_number],'@type':"Lexical"},
         let context: Context<_> = activation.into();
 
         let term = r#"
-json{'@subdocument':[],'@type':'Class',inventory_minifig_id:'xsd:string',minifig:'Minifig',quantity:'xsd:positiveInteger'}
+json{ '@documentation':json{ '@comment':"The exhaustive list of actions which are available to roles."
+					  },
+		     '@type':'Enum',
+		     '@values':[ create_database,
+				 delete_database,
+				 class_frame,
+				 clone,
+				 fetch,
+				 push,
+				 branch,
+				 rebase,
+				 instance_read_access,
+				 instance_write_access,
+				 schema_read_access,
+				 schema_write_access,
+				 meta_read_access,
+				 meta_write_access,
+				 commit_read_access,
+				 commit_write_access,
+				 manage_capabilities
+			       ]
+		   }
 
 "#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: TypeDefinition = dbg!(context.deserialize_from_term(&term)).unwrap();
+
+        panic!("{:?}", typedef);
+    }
+
+    #[test]
+    fn deserialize_action_frame() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{ '@documentation':json{ '@comment':"The exhaustive list of actions which are available to roles."
+					  },
+		     '@type':'Enum',
+		     '@values':[ create_database,
+				 delete_database,
+				 class_frame,
+				 clone,
+				 fetch,
+				 push,
+				 branch,
+				 rebase,
+				 instance_read_access,
+				 instance_write_access,
+				 schema_read_access,
+				 schema_write_access,
+				 meta_read_access,
+				 meta_write_access,
+				 commit_read_access,
+				 commit_write_access,
+				 manage_capabilities
+			       ]
+		   }"#;
         let term = unwrap_result(&context, context.term_from_string(term));
         let typedef: TypeDefinition = dbg!(context.deserialize_from_term(&term)).unwrap();
 
