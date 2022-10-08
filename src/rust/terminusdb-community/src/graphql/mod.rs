@@ -12,16 +12,14 @@ mod query;
 mod schema;
 mod top;
 
-use top::*;
-
 use self::{
-    frame::{AllFrames, Prefixes},
-    schema::{TerminusContext, TerminusType, TerminusTypeCollection},
+    frame::AllFrames,
+    schema::{TerminusContext, TerminusTypeCollection},
 };
 
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, branch_term, transaction_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
+    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];

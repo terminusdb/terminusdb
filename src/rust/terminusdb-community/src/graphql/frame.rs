@@ -1,10 +1,5 @@
-use serde::{
-    self,
-    de::{MapAccess, Visitor},
-    Deserialize,
-};
+use serde::{self, Deserialize};
 use std::collections::BTreeMap;
-use swipl::prelude::Atom;
 
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct Prefixes {
@@ -188,7 +183,7 @@ pub enum SimpleFieldDefinition {
 impl SimpleFieldDefinition {
     pub fn document_type(&self) -> Option<&str> {
         match self {
-            Self::BaseType(s) => None,
+            Self::BaseType(_) => None,
             Self::Document { typ: s, .. } => Some(s),
             Self::Enum { .. } => None,
         }

@@ -2915,24 +2915,20 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     ;   Desc = system_descriptor{}),
     open_descriptor(Desc, Transaction),
     (   branch_descriptor{} :< Desc
-    ->  Branch_DB = Transaction,
-        Commit_DB = (Transaction.parent),
+    ->  Commit_DB = (Transaction.parent),
         Meta_DB = (Commit_DB.parent)
     ;   repository_descriptor{} :< Desc
-    ->  Branch_DB = none,
-        Commit_DB = Transaction,
+    ->  Commit_DB = Transaction,
         Meta_DB = (Transaction.parent)
     ;   database_descriptor{} :< Desc
-    ->  Branch_DB = none,
-        Commit_DB = none,
+    ->  Commit_DB = none,
         Meta_DB = Transaction
-    ;   Branch_DB = none,
-        Commit_DB = none,
+    ;   Commit_DB = none,
         Meta_DB = none
     ),
     all_class_frames(Transaction, Frames),
     json_log_info_formatted("frames: ~q", [Frames]),
-    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Branch_DB, Transaction, Auth, Content_Length, Input, Output).
+    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input, Output).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).

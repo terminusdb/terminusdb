@@ -16,7 +16,6 @@ use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrdering};
 use float_ord::FloatOrd;
 
 use std::cmp::*;
-use std::convert::TryInto;
 
 fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
@@ -316,7 +315,7 @@ impl PartialOrd for QueryOrderKey {
 impl PartialEq for QueryOrderKey {
     fn eq(&self, other: &QueryOrderKey) -> bool {
         for i in 0..self.vec.len() {
-            let (option_value, order) = &self.vec[i];
+            let (option_value, _) = &self.vec[i];
             let (other_value, _) = &other.vec[i];
             let res = match option_value {
                 Some(DefaultScalarValue::Float(f)) => {

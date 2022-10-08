@@ -1,16 +1,14 @@
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
 use juniper::{
-    DefaultScalarValue, FieldError, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue,
-    InputValue, Registry, ScalarValue, Value, ID,
+    DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue, InputValue,
+    Registry, Value, ID,
 };
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
-use terminusdb_store_prolog::terminus_store::{Layer, ObjectType};
+use terminusdb_store_prolog::terminus_store::Layer;
 
-use crate::consts::RDF_TYPE;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_bool, type_is_float, type_is_integer, value_string_to_graphql,
@@ -48,7 +46,7 @@ pub struct TerminusContext<'a, C: QueryableContextType> {
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
     pub fn new(
         context: &'a Context<'a, C>,
-        auth_term: &Term,
+        _auth_term: &Term,
         system_term: &Term,
         meta_term: &Term,
         commit_term: &Term,
@@ -167,7 +165,7 @@ pub fn is_reserved_field_name(name: &String) -> bool {
 }
 
 impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a, C> {
-    fn name(info: &Self::TypeInfo) -> Option<&str> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
     }
 
@@ -445,7 +443,7 @@ impl GraphQLValue for TerminusEnum {
 
     type TypeInfo = (String, Arc<AllFrames>);
 
-    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some("TerminusEnum")
     }
 }
@@ -466,7 +464,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
         let frame = &frames.frames[name];
         match frame {
             TypeDefinition::Class(d) => Self::generate_class_type(d, info, registry),
-            TypeDefinition::Enum(e) => panic!("no enum expected here"),
+            TypeDefinition::Enum(_) => panic!("no enum expected here"),
             _ => todo!(),
         }
     }
@@ -603,7 +601,7 @@ struct TerminusOrderBy {
 }
 
 impl FromInputValue for TerminusOrderBy {
-    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+    fn from_input_value(_v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         todo!()
     }
 }

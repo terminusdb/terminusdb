@@ -1,16 +1,11 @@
-use std::sync::Arc;
-
 use crate::consts::XSD_PREFIX;
-use crate::graphql::schema::TerminusType;
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::Layer as TSLayer;
-use crate::types::*;
 use crate::value::*;
 use juniper::FromContext;
-use juniper::{self, graphql_interface, graphql_object, GraphQLEnum, GraphQLObject};
+use juniper::{self, graphql_interface, graphql_object, GraphQLEnum};
 use swipl::prelude::*;
 
-use super::frame::AllFrames;
 use super::schema::SystemInfo;
 use super::schema::TerminusContext;
 
@@ -643,12 +638,17 @@ impl Branch {
         };
         let mut maybe_commit = head(self.id, info);
         let mut i = 0;
-        while i == count || maybe_commit.is_some() {
+        let mut j = 0;
+        while j != count && maybe_commit.is_some() {
             let commit = maybe_commit.unwrap();
             let id = commit.get_id();
-            vec.push(commit);
             i += 1;
-            maybe_commit = (move || {
+            if i > start {
+                // Need to do author filter here..
+                j += 1;
+                vec.push(commit);
+            }
+            maybe_commit = (|| {
                 let predicate_id = info
                     .commit
                     .as_ref()
