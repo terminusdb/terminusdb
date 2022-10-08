@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::frame::{ClassDefinition, Prefixes};
-use super::schema::{is_reserved_argument_name, TerminusOrdering};
+use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrdering};
 
 use float_ord::FloatOrd;
 
@@ -141,7 +141,15 @@ pub fn run_filter_query<'a>(
                     None
                 }
             } else if let Some(enum_type) = field_definition.enum_type() {
-                todo!("This is not implemented")
+                if let Some(terminus_enum) = arguments.get::<TerminusEnum>(field_name) {
+                    let field_name_expanded = prefixes.expand_schema(field_name);
+                    let enum_type_expanded = prefixes.expand_schema(enum_type);
+                    let expanded_object_node =
+                        format!("{}/{}", enum_type_expanded, terminus_enum.value);
+                    Some((field_name_expanded, NodeOrValue::Node, expanded_object_node))
+                } else {
+                    None
+                }
             } else {
                 None
             }

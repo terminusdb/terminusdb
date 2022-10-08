@@ -1,4 +1,4 @@
-use juniper::{DefaultScalarValue, FromInputValue};
+use juniper::{DefaultScalarValue, FromInputValue, InputValue};
 use lazy_static::*;
 use std::collections::HashSet;
 use std::str::FromStr;

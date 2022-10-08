@@ -392,7 +392,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
 }
 
 pub struct TerminusEnum {
-    value: String,
+    pub value: String,
 }
 
 impl GraphQLType for TerminusEnum {
