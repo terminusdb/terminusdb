@@ -51,6 +51,24 @@ fn required_object_string(db: &SyncStoreLayer, id: u64, prop: &str) -> String {
     name.to_string()
 }
 
+fn required_object_float(db: &SyncStoreLayer, id: u64, prop: &str) -> f64 {
+    let predicate_id = db
+        .predicate_id(prop)
+        .expect(&format!("can't find {} predicate", prop));
+    let name_id = db
+        .single_triple_sp(id, predicate_id)
+        .expect(&format!("can't find triple for {}", prop))
+        .object;
+    let name_unprocessed = db
+        .id_object(name_id)
+        .expect(&format!("no object for id {}", id))
+        .value()
+        .expect("returned object was not a value");
+
+    let f_json = value_string_to_json(&name_unprocessed);
+    f_json.as_f64().unwrap()
+}
+
 fn has_string_value(db: &SyncStoreLayer, id: u64, prop: &str, obj: &str) -> bool {
     let res = (|| {
         let predicate_id = db.predicate_id(prop)?;
@@ -522,6 +540,71 @@ impl Layer {
     }
 }
 
+fn id_to_commit(id: u64, info: &SystemInfo) -> AbstractCommitValue {
+    let rdf_type_id = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .expect("Can't find rdf:type predicate");
+    let maybe_commit_type = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .subject_id("http://terminusdb.com/schema/ref#Commit");
+    let maybe_initial_commit_type = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .subject_id("http://terminusdb.com/schema/ref#InitialCommit");
+    let maybe_invalid_commit_type = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .subject_id("http://terminusdb.com/schema/ref#InvalidCommit");
+    let maybe_valid_commit_type = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .subject_id("http://terminusdb.com/schema/ref#ValidCommit");
+
+    let type_id = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .single_triple_sp(id, rdf_type_id)
+        .expect("No type for commit object!")
+        .object;
+
+    if Some(type_id) == maybe_commit_type {
+        Commit { id }.into()
+    } else if Some(type_id) == maybe_invalid_commit_type {
+        InvalidCommit { id }.into()
+    } else if Some(type_id) == maybe_valid_commit_type {
+        ValidCommit { id }.into()
+    } else if Some(type_id) == maybe_initial_commit_type {
+        InitialCommit { id }.into()
+    } else {
+        panic!("Unable to find a commit type!")
+    }
+}
+
+fn head<'a>(id: u64, info: &'a SystemInfo) -> Option<AbstractCommitValue> {
+    let predicate_id = info
+        .commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .predicate_id("http://terminusdb.com/schema/ref#head")
+        .expect("can't find http://terminusdb.com/schema/ref#head predicate");
+
+    // We need the correct type of commit here!
+    info.commit
+        .as_ref()
+        .expect("Missing meta graph")
+        .single_triple_sp(id, predicate_id)
+        .map(|t| id_to_commit(t.object, info))
+}
+
 pub struct Branch {
     id: u64,
 }
@@ -544,65 +627,45 @@ impl Branch {
         )
     }
 
-    fn head(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
-        let predicate_id = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .predicate_id("http://terminusdb.com/schema/ref#head")
-            .expect("can't find http://terminusdb.com/schema/ref#head predicate");
-        let rdf_type_id = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-            .expect("Can't find rdf:type predicate");
-        let maybe_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#Commit");
-        let maybe_initial_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#InitialCommit");
-        let maybe_invalid_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#InvalidCommit");
-        let maybe_valid_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#ValidCommit");
-
-        // We need the correct type of commit here!
-        info.commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .single_triple_sp(self.id, predicate_id)
-            .map(|t| {
-                let type_id = info
+    fn log(
+        &self,
+        offset: Option<i32>,
+        limit: Option<i32>,
+        author: Option<String>,
+        #[graphql(context)] info: &SystemInfo,
+    ) -> Vec<AbstractCommitValue> {
+        let start = offset.unwrap_or(0);
+        let count = limit.unwrap_or(-1);
+        let mut vec = if limit.is_some() {
+            Vec::with_capacity(count as usize)
+        } else {
+            Vec::new()
+        };
+        let mut maybe_commit = head(self.id, info);
+        let mut i = 0;
+        while i == count || maybe_commit.is_some() {
+            let commit = maybe_commit.unwrap();
+            let id = commit.get_id();
+            vec.push(commit);
+            i += 1;
+            maybe_commit = (move || {
+                let predicate_id = info
                     .commit
                     .as_ref()
-                    .expect("Missing meta graph")
-                    .single_triple_sp(t.object, rdf_type_id)
-                    .expect("No type for commit object!")
-                    .object;
-                if Some(type_id) == maybe_commit_type {
-                    Commit { id: t.object }.into()
-                } else if Some(type_id) == maybe_invalid_commit_type {
-                    InvalidCommit { id: t.object }.into()
-                } else if Some(type_id) == maybe_valid_commit_type {
-                    ValidCommit { id: t.object }.into()
-                } else if Some(type_id) == maybe_initial_commit_type {
-                    InitialCommit { id: t.object }.into()
-                } else {
-                    panic!("Unable to find a commit type!")
-                }
-            })
+                    .expect("Missing commit graph")
+                    .predicate_id("http://terminusdb.com/schema/ref#parent")?;
+                info.commit
+                    .as_ref()
+                    .expect("Missing commit graph")
+                    .single_triple_sp(id, predicate_id)
+                    .map(|t| id_to_commit(t.object, info))
+            })();
+        }
+        vec
+    }
+
+    fn head(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
+        head(self.id, info)
     }
 }
 
@@ -634,6 +697,14 @@ pub trait AbstractCommit {
         )
     }
 
+    fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
+        required_object_float(
+            &info.commit.as_ref().expect("Missing commit graph"),
+            self.get_id(),
+            "http://terminusdb.com/schema/ref#timestamp",
+        )
+    }
+
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
         let predicate_id = info
             .commit
@@ -641,58 +712,13 @@ pub trait AbstractCommit {
             .expect("Missing meta graph")
             .predicate_id("http://terminusdb.com/schema/ref#parent")
             .expect("can't find http://terminusdb.com/schema/ref#parent predicate");
-        let rdf_type_id = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .predicate_id("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-            .expect("Can't find rdf:type predicate");
-        let maybe_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#Commit");
-        let maybe_initial_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#InitialCommit");
-        let maybe_invalid_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#InvalidCommit");
-        let maybe_valid_commit_type = info
-            .commit
-            .as_ref()
-            .expect("Missing meta graph")
-            .subject_id("http://terminusdb.com/schema/ref#ValidCommit");
 
         // We need the correct type of commit here!
         info.commit
             .as_ref()
             .expect("Missing meta graph")
             .single_triple_sp(self.get_id(), predicate_id)
-            .map(|t| {
-                let type_id = info
-                    .commit
-                    .as_ref()
-                    .expect("Missing meta graph")
-                    .single_triple_sp(t.object, rdf_type_id)
-                    .expect("No type for commit object!")
-                    .object;
-                if Some(type_id) == maybe_commit_type {
-                    Commit { id: t.object }.into()
-                } else if Some(type_id) == maybe_invalid_commit_type {
-                    InvalidCommit { id: t.object }.into()
-                } else if Some(type_id) == maybe_valid_commit_type {
-                    ValidCommit { id: t.object }.into()
-                } else if Some(type_id) == maybe_initial_commit_type {
-                    InitialCommit { id: t.object }.into()
-                } else {
-                    panic!("Unable to find a commit type!")
-                }
-            })
+            .map(|t| id_to_commit(t.object, info))
     }
 }
 
@@ -713,6 +739,10 @@ impl Commit {
 
     fn message(&self, #[graphql(context)] info: &SystemInfo) -> String {
         <Self as AbstractCommit>::message(self, info)
+    }
+
+    fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
+        <Self as AbstractCommit>::timestamp(self, info)
     }
 
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
@@ -746,6 +776,10 @@ impl InitialCommit {
         <Self as AbstractCommit>::message(self, info)
     }
 
+    fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
+        <Self as AbstractCommit>::timestamp(self, info)
+    }
+
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
         <Self as AbstractCommit>::parent(self, info)
     }
@@ -775,6 +809,10 @@ impl ValidCommit {
 
     fn message(&self, #[graphql(context)] info: &SystemInfo) -> String {
         <Self as AbstractCommit>::message(self, info)
+    }
+
+    fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
+        <Self as AbstractCommit>::timestamp(self, info)
     }
 
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
@@ -808,6 +846,10 @@ impl InvalidCommit {
         <Self as AbstractCommit>::message(self, info)
     }
 
+    fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
+        <Self as AbstractCommit>::timestamp(self, info)
+    }
+
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
         <Self as AbstractCommit>::parent(self, info)
     }
@@ -829,7 +871,10 @@ impl System {
     fn user(#[graphql(context)] _info: &SystemInfo) -> User {
         User
     }
-    fn repository(#[graphql(context)] info: &SystemInfo) -> Vec<RepositoryValue> {
+    fn repository(
+        name: Option<String>,
+        #[graphql(context)] info: &SystemInfo,
+    ) -> Vec<RepositoryValue> {
         if let Some(_) = info.meta {
             // And get the type
             let predicate_id: u64 = info
@@ -849,6 +894,15 @@ impl System {
                         .unwrap()
                         .triples_o(local_id)
                         .filter(move |t| t.predicate == predicate_id)
+                        .filter(|t| {
+                            name.is_none()
+                                || has_string_value(
+                                    info.meta.as_ref().unwrap(),
+                                    t.subject,
+                                    "http://terminusdb.com/schema/repository#name",
+                                    name.as_ref().unwrap(),
+                                )
+                        })
                         .map(|t| Local { id: t.subject }.into())
                         .collect::<Vec<RepositoryValue>>()
                 })
@@ -866,6 +920,15 @@ impl System {
                         .unwrap()
                         .triples_o(remote_id)
                         .filter(move |t| t.predicate == predicate_id)
+                        .filter(|t| {
+                            name.is_none()
+                                || has_string_value(
+                                    info.meta.as_ref().unwrap(),
+                                    t.subject,
+                                    "http://terminusdb.com/schema/repository#name",
+                                    name.as_ref().unwrap(),
+                                )
+                        })
                         .map(|t| Local { id: t.subject }.into())
                         .collect::<Vec<RepositoryValue>>()
                 })
@@ -879,7 +942,7 @@ impl System {
         }
     }
 
-    fn branch(name_arg: Option<String>, #[graphql(context)] info: &SystemInfo) -> Vec<Branch> {
+    fn branch(name: Option<String>, #[graphql(context)] info: &SystemInfo) -> Vec<Branch> {
         if let Some(_) = info.commit {
             // And get the type
             let predicate_id: u64 = info
@@ -899,12 +962,12 @@ impl System {
                         .triples_o(branch_id)
                         .filter(move |t| t.predicate == predicate_id)
                         .filter(|t| {
-                            name_arg.is_none()
+                            name.is_none()
                                 || has_string_value(
                                     info.commit.as_ref().unwrap(),
                                     t.subject,
                                     "http://terminusdb.com/schema/ref#name",
-                                    name_arg.as_ref().unwrap(),
+                                    name.as_ref().unwrap(),
                                 )
                         })
                         .map(|t| Branch { id: t.subject })
