@@ -62,6 +62,7 @@
               class_frame/3,
               class_frame/4,
               all_class_frames/2,
+              all_class_frames/3,
               is_schemaless/1,
 
               % query.pl

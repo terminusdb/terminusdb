@@ -2926,7 +2926,7 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     ;   Commit_DB = none,
         Meta_DB = none
     ),
-    all_class_frames(Transaction, Frames),
+    all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
     json_log_info_formatted("frames: ~q", [Frames]),
     '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input, Output).
 

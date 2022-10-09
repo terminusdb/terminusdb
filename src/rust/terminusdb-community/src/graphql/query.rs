@@ -10,7 +10,7 @@ use crate::{
     value::{graphql_scalar_to_value_string, value_string_to_graphql},
 };
 
-use super::frame::{ClassDefinition, Prefixes};
+use super::frame::{AllFrames, ClassDefinition, Prefixes};
 use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrdering};
 
 use float_ord::FloatOrd;
@@ -100,9 +100,10 @@ pub fn run_filter_query<'a>(
     prefixes: &Prefixes,
     arguments: &juniper::Arguments,
     class_name: &str,
-    class_definition: &ClassDefinition,
+    all_frames: &AllFrames,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
 ) -> Vec<u64> {
+    let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
     let new_zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>> = match arguments.get::<ID>("id")
     {
         Some(id_string) => Some({
@@ -139,7 +140,7 @@ pub fn run_filter_query<'a>(
                 } else {
                     None
                 }
-            } else if let Some(enum_type) = field_definition.enum_type() {
+            } else if let Some(enum_type) = field_definition.enum_type(all_frames) {
                 if let Some(terminus_enum) = arguments.get::<TerminusEnum>(field_name) {
                     let field_name_expanded = prefixes.expand_schema(field_name);
                     let enum_type_expanded = prefixes.expand_schema(enum_type);

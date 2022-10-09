@@ -107,6 +107,7 @@ fn add_arguments<'r>(
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
     mut field: Field<'r, DefaultScalarValue>,
     class_definition: &ClassDefinition,
+    all_frames: &AllFrames,
 ) -> Field<'r, DefaultScalarValue> {
     field = field.argument(registry.arg::<Option<ID>>("id", &()));
     field = field.argument(
@@ -146,7 +147,7 @@ fn add_arguments<'r>(
             } else {
                 field = field.argument(registry.arg::<Option<String>>(name, &()));
             }
-        } else if let Some(t) = f.enum_type() {
+        } else if let Some(t) = f.enum_type(all_frames) {
             field = field.argument(
                 registry.arg::<Option<TerminusEnum>>(name, &(t.to_string(), info.1.clone())),
             );
@@ -186,7 +187,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                     let field = registry
                         .field::<Vec<TerminusType<'a, C>>>(name, &(name.to_owned(), info.clone()));
 
-                    add_arguments(&(name.to_owned(), info.clone()), registry, field, c)
+                    add_arguments(&(name.to_owned(), info.clone()), registry, field, c, info)
                 } else {
                     panic!("unexpected type kind");
                 }
@@ -235,17 +236,12 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
             executor.resolve_with_ctx(&(), &System {})
         } else {
             let objects = match executor.context().instance.as_ref() {
-                Some(instance) => run_filter_query(
-                    instance,
-                    &info.context,
-                    arguments,
-                    field_name,
-                    info.frames[field_name].as_class_definition(),
-                    None,
-                )
-                .into_iter()
-                .map(|id| TerminusType::new(id))
-                .collect(),
+                Some(instance) => {
+                    run_filter_query(instance, &info.context, arguments, field_name, info, None)
+                        .into_iter()
+                        .map(|id| TerminusType::new(id))
+                        .collect()
+                }
                 None => vec![],
             };
 
@@ -298,7 +294,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                     return None;
                 }
                 Some(
-                    if let Some(document_type) = field_definition.document_type() {
+                    if let Some(document_type) = field_definition.document_type(frames) {
                         let field = Self::register_field::<TerminusType<'a, C>>(
                             registry,
                             field_name,
@@ -309,7 +305,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                         if field_definition.kind().is_collection() {
                             let class_definition =
                                 info.1.frames[document_type].as_class_definition();
-                            add_arguments(info, registry, field, class_definition)
+                            add_arguments(info, registry, field, class_definition, &info.1)
                         } else {
                             field
                         }
@@ -344,7 +340,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                                 field_definition.kind(),
                             )
                         }
-                    } else if let Some(enum_type) = field_definition.enum_type() {
+                    } else if let Some(enum_type) = field_definition.enum_type(frames) {
                         Self::register_field::<TerminusEnum>(
                             registry,
                             field_name,
@@ -352,7 +348,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             field_definition.kind(),
                         )
                     } else {
-                        panic!("No known range for field")
+                        panic!("No known range for field {:?}", field_definition)
                     },
                 )
             })
@@ -500,15 +496,16 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             let field_name_expanded = info.1.context.expand_schema(field_name);
             let field_id = instance.predicate_id(&field_name_expanded)?;
 
-            let frame = &info.1.frames[&info.0];
+            let allframes = &info.1;
+            let frame = &allframes.frames[&info.0];
             let doc_type;
             let enum_type;
             let kind;
             match frame {
                 TypeDefinition::Class(c) => {
                     let field = &c.fields[field_name];
-                    doc_type = field.document_type();
-                    enum_type = field.enum_type();
+                    doc_type = field.document_type(allframes);
+                    enum_type = field.enum_type(allframes);
                     kind = field.kind();
                     //self.resolve_class_field(c, field_id )
                 }
@@ -559,7 +556,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                 &info.1.context,
                                 arguments,
                                 doc_type,
-                                info.1.frames[doc_type].as_class_definition(),
+                                &info.1,
                                 Some(Box::new(object_ids)),
                             ),
                             None => vec![],
