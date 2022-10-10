@@ -3,6 +3,7 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
+:- use_module(core(account)).
 
 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Output_Stream, _Content_Type, Content_Length) :-
     atom_string(Path_Atom, Path),
@@ -22,6 +23,7 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Output_
     ;   Commit_DB = none,
         Meta_DB = none
     ),
+    assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
     all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
     json_log_info_formatted("frames: ~q", [Frames]),
     '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Output_Stream).

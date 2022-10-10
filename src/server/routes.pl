@@ -2897,10 +2897,10 @@ capabilities_handler(post, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
-:- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false)]),
+:- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),
                 [method(Method),
                  methods([options,get,post])]).
-:- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false)]),
+:- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
                 [method(Method),
                  prefix,
                  methods([options,get,post])]).
@@ -2911,7 +2911,27 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     memberchk(content_type(Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
 
-    handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Output, Content_Type, Content_Length).
+    catch((authenticate(System_DB, Request, Auth),
+           handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Output, Content_Type, Content_Length)),
+          E,
+          handle_graphql_error(E, Request)).
+
+handle_graphql_error(error(authentication_incorrect(_Auth), _), Request) :-
+    cors_reply_json(Request,
+                    json{'errors': [json{message: "Authentication incorrect"}]},
+                    [status(401)]).
+handle_graphql_error(error(access_not_authorised(Auth, Action, Scope), _), Request) :-
+    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
+           [Scope,Action,Auth]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
+handle_graphql_error(E, Request) :-
+    format(string(Msg), "Unexpected error in graphql: ~q",
+           [E]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(500)]).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).
@@ -2984,7 +3004,9 @@ cors_handler(Method, Goal, Options, R) :-
             ;   Request = R),
 
             open_descriptor(system_descriptor{}, System_Database),
-            catch((   authenticate(System_Database, Request, Auth),
+            catch((   (   option(skip_authentication(true), Options)
+                      ->  true
+                      ;   authenticate(System_Database, Request, Auth)),
                       call_http_handler(Method, Goal, Request, System_Database, Auth)),
 
                   error(authentication_incorrect(Reason),_),
