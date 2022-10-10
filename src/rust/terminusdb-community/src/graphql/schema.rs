@@ -7,9 +7,9 @@ use juniper::{
 };
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
-use terminusdb_store_prolog::terminus_store::{Layer, IdTriple};
+use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
-use crate::consts::{RDF_FIRST, RDF_REST, RDF_NIL, SYS_VALUE};
+use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
@@ -552,27 +552,36 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 }
                 FieldKind::Set => {
                     let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
-                    collect_into_graphql_list(doc_type, executor, info, arguments, object_ids, instance)
-                },
+                    collect_into_graphql_list(
+                        doc_type, executor, info, arguments, object_ids, instance,
+                    )
+                }
                 FieldKind::Cardinality => {
                     // pretty much a set actually
                     let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
-                    collect_into_graphql_list(doc_type, executor, info, arguments, object_ids, instance)
-                },
+                    collect_into_graphql_list(
+                        doc_type, executor, info, arguments, object_ids, instance,
+                    )
+                }
                 FieldKind::List => {
-                    let list_id = instance.single_triple_sp(self.id, field_id).expect("list element expected but not found").object;
+                    let list_id = instance
+                        .single_triple_sp(self.id, field_id)
+                        .expect("list element expected but not found")
+                        .object;
                     let object_ids = RdfListIterator {
                         layer: instance,
                         cur: list_id,
                         rdf_first_id: instance.predicate_id(RDF_FIRST),
                         rdf_rest_id: instance.predicate_id(RDF_REST),
-                        rdf_nil_id: instance.subject_id(RDF_NIL)
+                        rdf_nil_id: instance.subject_id(RDF_NIL),
                     };
-                    collect_into_graphql_list(doc_type, executor, info, arguments, object_ids, instance)
-
-                },
+                    collect_into_graphql_list(
+                        doc_type, executor, info, arguments, object_ids, instance,
+                    )
+                }
                 FieldKind::Array => {
-                    let array_element_ids: Box<dyn Iterator<Item=IdTriple> + Send> = Box::new(instance.triples_sp(self.id, field_id));
+                    let array_element_ids: Box<dyn Iterator<Item = IdTriple> + Send> =
+                        Box::new(instance.triples_sp(self.id, field_id));
                     let sys_index_ids = retrieve_all_index_ids(instance);
                     let array_iterator = SimpleArrayIterator(ArrayIterator {
                         layer: instance,
@@ -581,14 +590,20 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         predicate: field_id,
                         last_index: None,
                         sys_index_ids: &sys_index_ids,
-                        sys_value_id: instance.predicate_id(SYS_VALUE)
+                        sys_value_id: instance.predicate_id(SYS_VALUE),
                     });
 
                     let mut elements: Vec<_> = array_iterator.collect();
                     elements.sort();
-                    let elements_iterator = elements.into_iter()
-                        .map(|(_, elt)| elt);
-                    collect_into_graphql_list(doc_type, executor, info, arguments, elements_iterator, instance)
+                    let elements_iterator = elements.into_iter().map(|(_, elt)| elt);
+                    collect_into_graphql_list(
+                        doc_type,
+                        executor,
+                        info,
+                        arguments,
+                        elements_iterator,
+                        instance,
+                    )
                 }
             }
         };
@@ -602,9 +617,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
     }
 }
 
-struct SimpleArrayIterator<'a, L:Layer>(ArrayIterator<'a, L>);
+struct SimpleArrayIterator<'a, L: Layer>(ArrayIterator<'a, L>);
 
-impl<'a, L:Layer> Iterator for SimpleArrayIterator<'a, L> {
+impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     type Item = (Vec<usize>, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -621,8 +636,14 @@ impl<'a, L:Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-
-fn collect_into_graphql_list<C:QueryableContextType>(doc_type: Option<&String>, executor: &juniper::Executor<TerminusContext<C>>, info: &(String, Arc<AllFrames>), arguments: &juniper::Arguments, object_ids: impl Iterator<Item=u64>, instance: &SyncStoreLayer) -> Option<Result<Value, juniper::FieldError>> {
+fn collect_into_graphql_list<C: QueryableContextType>(
+    doc_type: Option<&String>,
+    executor: &juniper::Executor<TerminusContext<C>>,
+    info: &(String, Arc<AllFrames>),
+    arguments: &juniper::Arguments,
+    object_ids: impl Iterator<Item = u64>,
+    instance: &SyncStoreLayer,
+) -> Option<Result<Value, juniper::FieldError>> {
     if let Some(doc_type) = doc_type {
         let object_ids = match executor.context().instance.as_ref() {
             Some(instance) => run_filter_query(
@@ -635,8 +656,7 @@ fn collect_into_graphql_list<C:QueryableContextType>(doc_type: Option<&String>, 
             ),
             None => vec![],
         };
-        let subdocs: Vec<_> =
-            object_ids.into_iter().map(TerminusType::new).collect();
+        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
         Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &subdocs))
     } else {
         let vals: Vec<_> = object_ids

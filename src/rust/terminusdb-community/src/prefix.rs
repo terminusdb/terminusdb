@@ -66,10 +66,13 @@ struct PrefixContracterTree {
 
 impl std::fmt::Debug for PrefixContracterTree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PrefixContracterTree {{ prefix: {:?}, part: {:?}, children: {:?} }}",
-               self.prefix,
-               String::from_utf8_lossy(&self.part),
-               self.children)
+        write!(
+            f,
+            "PrefixContracterTree {{ prefix: {:?}, part: {:?}, children: {:?} }}",
+            self.prefix,
+            String::from_utf8_lossy(&self.part),
+            self.children
+        )
     }
 }
 
@@ -372,7 +375,6 @@ mod tests {
                             prefix: Some(Prefix::other("c", "http://quux/moo")),
                             children: vec![],
                         },
-
                         // this is the default json prefix
                         PrefixContracterTree {
                             part: b"terminusdb.com/schema/json#".to_vec(),
