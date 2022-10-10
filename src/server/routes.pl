@@ -19,6 +19,7 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 :- use_module(core(document)).
+:- use_module(core(api/api_init)).
 
 :- use_module(config(terminus_config)).
 
@@ -2941,10 +2942,12 @@ http:location(graphiql,root(graphiql),[]).
                  methods([options,get])]).
 
 graphiql_handler(_Method, Path_Atom, _Request, _System_DB, _Auth) :-
-    current_output(Output),
     server_port(Port),
     atom_string(Path_Atom, Path),
-    '$graphql':graphiql(Path, Output, Port).
+    format(string(Full_Path), "http://localhost:~d/api/graphql/~s", [Port, Path]),
+    graphiql_template(Template),
+    format(string(Result), Template, [Full_Path]),
+    throw(http_reply(bytes('text/html', Result))).
 
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).
