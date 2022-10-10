@@ -123,18 +123,20 @@ fn add_arguments<'r>(
             .arg::<Option<i32>>("limit", &())
             .description("limit results to N elements"),
     );
-    field = field.argument(
-        registry
-            .arg::<Option<TerminusOrderBy>>(
-                "orderBy",
-                &(
-                    format!("{}_Ordering", info.0),
-                    info.0.to_string(),
-                    info.1.clone(),
-                ),
-            )
-            .description("order by the given fields"),
-    );
+    if must_generate_ordering(class_definition) {
+        field = field.argument(
+            registry
+                .arg::<Option<TerminusOrderBy>>(
+                    "orderBy",
+                    &(
+                        format!("{}_Ordering", info.0),
+                        info.0.to_string(),
+                        info.1.clone(),
+                    ),
+                )
+                .description("order by the given fields"),
+        );
+    }
     for (name, f) in class_definition.fields().iter() {
         if is_reserved_argument_name(name) {
             // these are special. we're generating them differently
@@ -158,6 +160,16 @@ fn add_arguments<'r>(
     }
 
     field
+}
+
+fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
+    for (_,field) in class_definition.fields.iter() {
+        if field.base_type().is_some() {
+            return true;
+        }
+    }
+
+    false
 }
 
 pub fn is_reserved_argument_name(name: &String) -> bool {
@@ -308,7 +320,8 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                         if field_definition.kind().is_collection() {
                             let class_definition =
                                 info.1.frames[document_type].as_class_definition();
-                            add_arguments(info, registry, field, class_definition, &info.1)
+                            let new_info = (document_type.to_owned(), info.1.clone());
+                            add_arguments(&new_info, registry, field, class_definition, &info.1)
                         } else {
                             field
                         }
