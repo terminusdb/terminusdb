@@ -249,7 +249,7 @@ pub enum KeyDefinition {
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct OneOf {
     #[serde(flatten)]
-    choices: BTreeMap<String, FieldDefinition>,
+    pub choices: BTreeMap<String, FieldDefinition>,
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -266,6 +266,44 @@ pub struct ClassDefinition {
     pub one_of: Option<Vec<OneOf>>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
+}
+
+impl ClassDefinition {
+    pub fn resolve_field(&self, field_name: &String) -> &FieldDefinition {
+        let maybe_field: Option<&FieldDefinition> = self.one_of.as_ref().and_then(|oneofs| {
+            oneofs.iter().find_map(|o| {
+                o.choices
+                    .iter()
+                    .find_map(|(s, f)| if s == field_name { Some(f) } else { None })
+            })
+        });
+        if maybe_field.is_some() {
+            maybe_field.unwrap()
+        } else {
+            &self.fields[field_name]
+        }
+    }
+
+    pub fn fields(&self) -> Vec<(&String, &FieldDefinition)> {
+        let mut one_ofs: Vec<(&String, &FieldDefinition)> = self
+            .one_of
+            .as_ref()
+            .map(|s| {
+                s.into_iter()
+                    .map(move |c| c.choices.iter().collect::<Vec<_>>())
+                    .flatten()
+            })
+            .into_iter()
+            .flatten()
+            .collect();
+        one_ofs.dedup();
+        let mut fields: Vec<(&String, &FieldDefinition)> = self
+            .fields
+            .iter()
+            .collect::<Vec<(&String, &FieldDefinition)>>();
+        fields.append(&mut one_ofs);
+        fields
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]

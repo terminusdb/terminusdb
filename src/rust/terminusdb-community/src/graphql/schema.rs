@@ -132,7 +132,7 @@ fn add_arguments<'r>(
             )
             .description("order by the given fields"),
     );
-    for (name, f) in class_definition.fields.iter() {
+    for (name, f) in class_definition.fields().iter() {
         if is_reserved_argument_name(name) {
             // these are special. we're generating them differently
             continue;
@@ -287,7 +287,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
     {
         let frames = &info.1;
         let mut fields: Vec<_> = d
-            .fields
+            .fields()
             .iter()
             .filter_map(|(field_name, field_definition)| {
                 if is_reserved_field_name(field_name) {
@@ -503,7 +503,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             let kind;
             match frame {
                 TypeDefinition::Class(c) => {
-                    let field = &c.fields[field_name];
+                    let field = &c.resolve_field(&field_name.to_string()); //fields[field_name];
                     doc_type = field.document_type(allframes);
                     enum_type = field.enum_type(allframes);
                     kind = field.kind();
