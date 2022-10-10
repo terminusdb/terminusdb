@@ -9,6 +9,8 @@ use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::Layer;
 
+use crate::consts::{RDF_FIRST, RDF_REST, RDF_NIL};
+use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_bool, type_is_float, type_is_integer, value_string_to_graphql,
@@ -549,30 +551,19 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 }
                 FieldKind::Set => {
                     let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
-                    if let Some(doc_type) = doc_type {
-                        let object_ids = match executor.context().instance.as_ref() {
-                            Some(instance) => run_filter_query(
-                                instance,
-                                &info.1.context,
-                                arguments,
-                                doc_type,
-                                &info.1,
-                                Some(Box::new(object_ids)),
-                            ),
-                            None => vec![],
-                        };
-                        let subdocs: Vec<_> =
-                            object_ids.into_iter().map(TerminusType::new).collect();
-                        Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &subdocs))
-                    } else {
-                        let vals: Vec<_> = object_ids
-                            .map(|o| {
-                                let val = instance.id_object_value(o).unwrap();
-                                value_string_to_graphql(&val)
-                            })
-                            .collect();
-                        Some(Ok(Value::List(vals)))
-                    }
+                    collect_into_graphql_list(doc_type, executor, info, arguments, object_ids, instance)
+                },
+                FieldKind::List => {
+                    let list_id = instance.single_triple_sp(self.id, field_id).expect("list element expected but not found").object;
+                    let object_ids = RdfListIterator {
+                        layer: instance,
+                        cur: list_id,
+                        rdf_first_id: instance.predicate_id(RDF_FIRST),
+                        rdf_rest_id: instance.predicate_id(RDF_REST),
+                        rdf_nil_id: instance.subject_id(RDF_NIL)
+                    };
+                    collect_into_graphql_list(doc_type, executor, info, arguments, object_ids, instance)
+
                 }
                 _ => todo!(),
             }
@@ -584,6 +575,33 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
         }
         //Ok(Value::List(vec![Value::Scalar(DefaultScalarValue::String("cow!".to_string())),
         //                    Value::Scalar(DefaultScalarValue::String("duck!".to_string()))]))
+    }
+}
+
+fn collect_into_graphql_list<C:QueryableContextType>(doc_type: Option<&String>, executor: &juniper::Executor<TerminusContext<C>>, info: &(String, Arc<AllFrames>), arguments: &juniper::Arguments, object_ids: impl Iterator<Item=u64>, instance: &SyncStoreLayer) -> Option<Result<Value, juniper::FieldError>> {
+    if let Some(doc_type) = doc_type {
+        let object_ids = match executor.context().instance.as_ref() {
+            Some(instance) => run_filter_query(
+                instance,
+                &info.1.context,
+                arguments,
+                doc_type,
+                &info.1,
+                Some(Box::new(object_ids)),
+            ),
+            None => vec![],
+        };
+        let subdocs: Vec<_> =
+            object_ids.into_iter().map(TerminusType::new).collect();
+        Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &subdocs))
+    } else {
+        let vals: Vec<_> = object_ids
+            .map(|o| {
+                let val = instance.id_object_value(o).unwrap();
+                value_string_to_graphql(&val)
+            })
+            .collect();
+        Some(Ok(Value::List(vals)))
     }
 }
 
