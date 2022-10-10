@@ -47,6 +47,20 @@ macro_rules! log_warning {
     }
 }
 
+pub fn log_notice<C: FrameableContextType>(context: &Context<C>, msg: &str) -> PrologResult<()> {
+    let severity = atom!("NOTICE");
+    log(context, severity, msg)
+}
+
+macro_rules! log_notice {
+    ($context:ident, $msg:expr) => {
+        crate::log::log_notice($context, &format!("{}", $msg))
+    };
+    ($context:ident, $format:expr, $($args:tt),*) => {
+        crate::log::log_notice($context, &format!($format, $($args),*))
+    }
+}
+
 pub fn log_info<C: FrameableContextType>(context: &Context<C>, msg: &str) -> PrologResult<()> {
     let severity = atom!("INFO");
     log(context, severity, msg)
