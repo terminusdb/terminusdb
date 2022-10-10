@@ -1,3 +1,27 @@
+# TerminusDB Server v10.1.5 Release Notes
+
+## Enhancements
++ Trig files can now be loaded directly
++ Improved speed of document retrieval through new rust backend
++ Json responses are now a single line
++ Triple endpoint will now return turtle files if the right Accept header is specified
++ Grant endpoint improved to take names rather than IRIs
++ Squash added to CLI
++ Improve performance of forward references during document insert
++ Document interface can now handle 'reverse links' where subdocuments specify how they link back to their document, rather than the other way around
+
+## Bug fixes
++ Fixed inheritance of multi-language documentation
++ Fixed handling of literals with language tags
++ Db name length is now validated properly before database creation is attempted
++ Document interface errors from woql are now properly reported
++ Frame endpoint now reports oneof properties properly
++ Fix woql typeof
++ Prefixes are now more properly recognized, allowing use of colons in contracted IRIs
++ Proper error reporting on diff
++ Better error handling for log
++ Captures didn't work in full replace
+
 # TerminusDB Server v10.1.4 Release Notes
 
 ## Enhancements
