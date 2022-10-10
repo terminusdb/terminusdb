@@ -2908,28 +2908,10 @@ http:location(graphql,api(graphql),[]).
 graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     current_output(Output),
     memberchk(input(Input), Request),
-    memberchk(content_type(_Content_Type), Request),
+    memberchk(content_type(Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
-    atom_string(Path_Atom, Path),
-    (   resolve_absolute_string_descriptor(Path, Desc)
-    ->  true
-    ;   Desc = system_descriptor{}),
-    open_descriptor(Desc, Transaction),
-    (   branch_descriptor{} :< Desc
-    ->  Commit_DB = (Transaction.parent),
-        Meta_DB = (Commit_DB.parent)
-    ;   repository_descriptor{} :< Desc
-    ->  Commit_DB = Transaction,
-        Meta_DB = (Transaction.parent)
-    ;   database_descriptor{} :< Desc
-    ->  Commit_DB = none,
-        Meta_DB = Transaction
-    ;   Commit_DB = none,
-        Meta_DB = none
-    ),
-    all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-    json_log_info_formatted("frames: ~q", [Frames]),
-    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input, Output).
+
+    handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Output, Content_Type, Content_Length).
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).
