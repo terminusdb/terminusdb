@@ -130,7 +130,8 @@ pub fn run_filter_query<'a>(
 
             if let Some(base_type) = field_definition.base_type() {
                 if let Some(value) = arguments.get(field_name) {
-                    let field_name_expanded = prefixes.expand_schema(field_name);
+                    let field_name_expanded =
+                        class_definition.fully_qualified_property_name(prefixes, field_name);
                     let expanded_object_value = graphql_scalar_to_value_string(value, base_type);
                     Some((
                         field_name_expanded,
@@ -142,8 +143,9 @@ pub fn run_filter_query<'a>(
                 }
             } else if let Some(enum_type) = field_definition.enum_type(all_frames) {
                 if let Some(terminus_enum) = arguments.get::<TerminusEnum>(field_name) {
-                    let field_name_expanded = prefixes.expand_schema(field_name);
-                    let enum_type_expanded = prefixes.expand_schema(enum_type);
+                    let field_name_expanded =
+                        class_definition.fully_qualified_property_name(prefixes, field_name);
+                    let enum_type_expanded = all_frames.fully_qualified_class_name(enum_type);
                     let expanded_object_node =
                         format!("{}/{}", enum_type_expanded, terminus_enum.value);
                     Some((field_name_expanded, NodeOrValue::Node, expanded_object_node))
@@ -155,7 +157,7 @@ pub fn run_filter_query<'a>(
             }
         })
         .collect();
-    let expanded_class_name = prefixes.expand_schema(class_name);
+    let expanded_class_name = all_frames.fully_qualified_class_name(&class_name.to_string());
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
 
     let it: Box<dyn Iterator<Item = u64>> = if let Some(QueryOrderByDesc(vec)) =

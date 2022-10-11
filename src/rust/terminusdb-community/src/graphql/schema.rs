@@ -232,21 +232,6 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
-        /*
-        let get_object_iterator = || {
-            let instance = executor.context().instance.as_ref()?;
-            let rdf_type_id = instance.predicate_id(RDF_TYPE)?;
-            let type_name_expanded = info.context.expand_schema(field_name);
-            let type_name_id = instance.subject_id(&type_name_expanded)?;
-
-            Some(instance.triples_o(type_name_id)
-                 .filter(move |t|t.predicate == rdf_type_id)
-                 .map(|t|TerminusType::new(t.subject)))
-        };
-
-        let objects: Vec<_> = get_object_iterator().into_iter()
-            .flatten().collect();
-        */
         if field_name == "_system" {
             executor.resolve_with_ctx(&(), &System {})
         } else {
@@ -509,6 +494,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 ))));
             }
 
+            // TODO: Replace with method?
             let field_name_expanded = info.1.context.expand_schema(field_name);
             let field_id = instance.predicate_id(&field_name_expanded)?;
 

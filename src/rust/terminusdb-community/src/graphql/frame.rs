@@ -202,6 +202,14 @@ pub fn is_base_type(s: &str) -> bool {
     s.starts_with("xsd:")
 }
 
+pub fn sanitize_class(s: &String) -> String {
+    if is_base_type(s) {
+        s.to_string()
+    } else {
+        graphql_sanitize(s)
+    }
+}
+
 impl FieldDefinition {
     fn range(&self) -> &String {
         match self {
@@ -254,16 +262,16 @@ impl FieldDefinition {
 
     pub fn sanitize(&self) -> FieldDefinition {
         match self {
-            Self::Required(c) => Self::Required(graphql_sanitize(c)),
-            Self::Optional(c) => Self::Optional(graphql_sanitize(c)),
-            Self::Set(c) => Self::Set(graphql_sanitize(c)),
-            Self::List(c) => Self::List(graphql_sanitize(c)),
+            Self::Required(c) => Self::Required(sanitize_class(c)),
+            Self::Optional(c) => Self::Optional(sanitize_class(c)),
+            Self::Set(c) => Self::Set(sanitize_class(c)),
+            Self::List(c) => Self::List(sanitize_class(c)),
             Self::Array { class, dimensions } => Self::Array {
-                class: graphql_sanitize(class),
+                class: sanitize_class(class),
                 dimensions: dimensions.clone(),
             },
             Self::Cardinality { class, min, max } => Self::Cardinality {
-                class: graphql_sanitize(class),
+                class: sanitize_class(class),
                 min: min.clone(),
                 max: max.clone(),
             },
@@ -403,6 +411,18 @@ impl ClassDefinition {
         fields.append(&mut one_ofs);
         fields
     }
+
+    pub fn fully_qualified_property_name(&self, prefixes: &Prefixes, property: &String) -> String {
+        self.field_renaming
+            .as_ref()
+            .map(|map| {
+                let db_name = map
+                    .get(property)
+                    .expect("This fully qualified property name *should* exist");
+                prefixes.expand_schema(db_name)
+            })
+            .expect("This fully qualified property name *should* exist")
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -432,15 +452,24 @@ pub struct EnumDefinition {
     pub documentation: Option<EnumDocumentationDefinition>,
     #[serde(rename = "@values")]
     pub values: Vec<String>,
+    #[serde(skip_serializing)]
+    pub values_renaming: Option<HashMap<String, String>>,
 }
 
 impl EnumDefinition {
     pub fn sanitize(&self) -> EnumDefinition {
-        let values = self.values.iter().map(|v| graphql_sanitize(v)).collect();
+        let mut values_renaming: HashMap<String, String> = HashMap::new();
+        let values = self.values.iter().map(|v| {
+            let sanitized = graphql_sanitize(v);
+            values_renaming.insert(v.to_string(),sanitized.to_string())
+                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following duplicate: {dup:?}"));
+            sanitized
+        }).collect();
         let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
         EnumDefinition {
             documentation,
             values,
+            values_renaming: Some(values_renaming),
         }
     }
 }
@@ -510,7 +539,7 @@ pub struct AllFrames {
 }
 
 impl AllFrames {
-    fn sanitize(&self) -> AllFrames {
+    pub fn sanitize(&self) -> AllFrames {
         let mut class_renaming: HashMap<String, String> = HashMap::new();
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
         for (class_name, typedef) in self.frames.iter() {
@@ -532,6 +561,7 @@ impl AllFrames {
     }
 
     fn document_type<'a>(&self, s: &'a String) -> Option<&'a String> {
+        eprintln!("Looking up {s:?}");
         if self.frames[s].is_document_type() {
             Some(s)
         } else {
@@ -545,6 +575,18 @@ impl AllFrames {
         } else {
             None
         }
+    }
+
+    pub fn fully_qualified_class_name(&self, class_name: &String) -> String {
+        self.class_renaming
+            .as_ref()
+            .map(|map| {
+                let db_name = map
+                    .get(class_name)
+                    .expect("This fully qualified class name *should* exist");
+                self.context.expand_schema(db_name)
+            })
+            .expect("No renaming was built")
     }
 }
 
@@ -638,8 +680,10 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
 
         let term = unwrap_result(&context, context.term_from_string(term));
         let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
+        panic!("{typedef:?}");
         assert_eq!(
             TypeDefinition::Class(ClassDefinition {
+                field_renaming: None,
                 documentation: None,
                 key: None,
                 is_subdocument: None,
@@ -730,7 +774,12 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
 
         assert_eq!(
             TypeDefinition::Enum(EnumDefinition {
-                documentation: Some(EnumDocumentationDefinition {}),
+                values_renaming: None,
+                documentation: Some(EnumDocumentationDefinition {
+                    label: None,
+                    values: None,
+                    comment: None,
+                }),
                 values: vec![
                     "create_database".to_string(),
                     "delete_database".to_string(),
