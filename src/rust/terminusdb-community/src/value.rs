@@ -172,6 +172,7 @@ impl FromInputValue for ScalarInputValue {
 }
 
 pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> String {
+    let base_type = &base_type[4..];
     match v {
         ScalarInputValue::Boolean(b) => {
             assert!(type_is_bool(base_type));

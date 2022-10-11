@@ -416,12 +416,12 @@ impl ClassDefinition {
         self.field_renaming
             .as_ref()
             .map(|map| {
-                let db_name = map
-                    .get(property)
-                    .expect("This fully qualified property name *should* exist");
+                let db_name = map.get(property).expect(&format!(
+                    "The fully qualified property name for {property:?} *should* exist"
+                ));
                 prefixes.expand_schema(db_name)
             })
-            .expect("This fully qualified property name *should* exist")
+            .expect("The field renaming was never built!")
     }
 }
 
@@ -461,7 +461,7 @@ impl EnumDefinition {
         let mut values_renaming: HashMap<String, String> = HashMap::new();
         let values = self.values.iter().map(|v| {
             let sanitized = graphql_sanitize(v);
-            values_renaming.insert(v.to_string(),sanitized.to_string())
+            values_renaming.insert(sanitized.to_string(), v.to_string())
                 .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following duplicate: {dup:?}"));
             sanitized
         }).collect();
@@ -471,6 +471,19 @@ impl EnumDefinition {
             values,
             values_renaming: Some(values_renaming),
         }
+    }
+
+    pub fn value_name(&self, value: &String) -> String {
+        self.values_renaming
+            .as_ref()
+            .map(|map| {
+                urlencoding::encode(
+                    map.get(value)
+                        .expect(&format!("The value name for {value:?} *should* exist")),
+                )
+                .into_owned()
+            })
+            .expect("No values renaming was generated")
     }
 }
 
@@ -512,6 +525,13 @@ impl TypeDefinition {
         match self {
             Self::Class(c) => &c,
             _ => panic!("tried to unwrap non-class definition as class definition"),
+        }
+    }
+
+    pub(crate) fn as_enum_definition(&self) -> &EnumDefinition {
+        match self {
+            Self::Enum(e) => &e,
+            _ => panic!("tried to unwrap non-enum definition as enum definition"),
         }
     }
 }
