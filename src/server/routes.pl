@@ -2906,13 +2906,18 @@ http:location(graphql,api(graphql),[]).
                  methods([options,get,post])]).
 
 graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
-    current_output(Output),
     memberchk(input(Input), Request),
     memberchk(content_type(Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
 
-    catch((authenticate(System_DB, Request, Auth),
-           handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Output, Content_Type, Content_Length)),
+    catch((      authenticate(System_DB, Request, Auth),
+                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length),
+                 write_cors_headers(Request),
+                 write('Status: 200'),nl,
+                 write('Content-Type: application/json'),nl,
+                 nl,
+                 write(Response)
+          ),
           E,
           handle_graphql_error(E, Request)).
 

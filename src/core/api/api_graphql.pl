@@ -5,6 +5,7 @@
 :- use_module(core(document)).
 :- use_module(core(account)).
 :- use_module(core(transaction)).
+:- use_module(core(query)).
 
 descriptor_db_uri(System_DB, Desc, Database_Uri) :-
     (   branch_descriptor{} :< Desc
@@ -25,7 +26,7 @@ maybe_show_database(System_DB, Auth, Desc, Action, DB, Maybe_DB) :-
     ;   Maybe_DB = none
     ).
 
-handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Output_Stream, _Content_Type, Content_Length) :-
+handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length) :-
     atom_string(Path_Atom, Path),
     (   resolve_absolute_string_descriptor(Path, Desc)
     ->  open_descriptor(Desc, Transaction)
@@ -61,4 +62,4 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Output_
     ),
     assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
     all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Output_Stream).
+    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response).

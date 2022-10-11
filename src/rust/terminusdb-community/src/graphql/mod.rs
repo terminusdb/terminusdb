@@ -19,7 +19,7 @@ use self::{
 
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, output_stream_term) {
+    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -47,11 +47,10 @@ predicates! {
 
         log_debug!(context, "graphql response: {:?}", response)?;
 
-        let mut s: WritablePrologStream = output_stream_term.get_ex()?;
-        context.try_or_die_generic(write!(s, "Access-Control-Allow-Credentials: true\nAccess-Control-Allow-Origin: http://127.0.0.1:6363\nStatus: 200\n\n"))?;
-        context.try_or_die_generic(serde_json::to_writer(s, &response))?;
-
-        Ok(())
+        match serde_json::to_string(&response){
+            Ok(r) => response_term.unify(r),
+            Err(error) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
+        }
     }
 
     #[module("$graphql")]
