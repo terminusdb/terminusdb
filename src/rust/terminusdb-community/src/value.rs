@@ -143,11 +143,11 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
     }
 }
 
-pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> juniper::Value<DefaultScalarValue> {
+pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> String {
     let enum_list: Vec<&str> = enum_uri.split(enum_type).collect();
     // 1.. is from slash on
     let enum_value = &(enum_list[1])[1..];
-    juniper::Value::Scalar(DefaultScalarValue::String(enum_value.to_string()))
+    enum_value.to_string()
 }
 
 pub enum ScalarInputValue {

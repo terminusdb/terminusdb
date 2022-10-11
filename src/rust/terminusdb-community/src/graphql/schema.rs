@@ -427,9 +427,11 @@ impl GraphQLType for TerminusEnum {
 impl FromInputValue for TerminusEnum {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         match v {
-            InputValue::Enum(value) => Some(Self {
-                value: value.to_owned(),
-            }),
+            InputValue::Enum(value) => {
+                Some(Self {
+                    value: value.to_owned(),
+                })
+            },
             _ => None,
         }
     }
@@ -524,7 +526,11 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         ))
                     } else if let Some(enum_type) = enum_type {
                         let enum_uri = instance.id_object_node(object_id).unwrap();
-                        Some(Ok(enum_node_to_value(&enum_type, &enum_uri)))
+                        let enum_value = enum_node_to_value(&enum_type, &enum_uri);
+                        let enum_definition = allframes.frames[enum_type].as_enum_definition();
+                        let value = juniper::Value::Scalar(DefaultScalarValue::String(
+                            enum_definition.name_value(&enum_value).to_string()));
+                        Some(Ok(value))
                     } else {
                         let val = instance.id_object_value(object_id).unwrap();
                         Some(Ok(value_string_to_graphql(&val)))
