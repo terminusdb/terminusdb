@@ -195,16 +195,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
         let mut fields: Vec<_> = info
             .frames
             .iter()
-            .map(|(name, typedef)| {
-                if typedef.kind() == TypeKind::Enum {
-                    registry.field::<TerminusEnum>(name, &(name.to_owned(), info.clone()))
-                } else if let TypeDefinition::Class(c) = typedef {
+            .filter_map(|(name, typedef)| {
+                if let TypeDefinition::Class(c) = typedef {
                     let field = registry
                         .field::<Vec<TerminusType<'a, C>>>(name, &(name.to_owned(), info.clone()));
 
-                    add_arguments(&(name.to_owned(), info.clone()), registry, field, c, info)
+                    Some(add_arguments(&(name.to_owned(), info.clone()), registry, field, c, info))
                 } else {
-                    panic!("unexpected type kind");
+                    None
                 }
             })
             .collect();
