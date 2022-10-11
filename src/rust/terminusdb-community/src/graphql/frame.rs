@@ -82,12 +82,9 @@ pub struct PropertyDocumentation {
 impl PropertyDocumentation {
     pub fn sanitize(&self) -> PropertyDocumentation {
         let mut records = BTreeMap::new();
-        self.records
-            .iter()
-            .map(|(s, pdr)| {
-                records.insert(graphql_sanitize(s), pdr.clone());
-            })
-            .collect::<()>();
+        for (s, pdr) in self.records.iter() {
+            records.insert(graphql_sanitize(s), pdr.clone());
+        }
         PropertyDocumentation { records }
     }
 }
@@ -334,29 +331,22 @@ impl ClassDefinition {
     pub fn sanitize(&self) -> ClassDefinition {
         let mut field_map: HashMap<String, String> = HashMap::new();
         let mut fields: BTreeMap<String, _> = BTreeMap::new();
-        self.fields
-            .iter()
-            .map(|(field, fd)| {
-                let sanitized_field = graphql_sanitize(field);
-                field_map.insert(sanitized_field.clone(), field.clone())
-                    .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
-                fields
-                    .insert(sanitized_field, fd.sanitize());
-            })
-            .collect::<()>();
+        for (field, fd) in self.fields.iter() {
+            let sanitized_field = graphql_sanitize(field);
+            field_map.insert(sanitized_field.clone(), field.clone())
+                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+            fields.insert(sanitized_field, fd.sanitize());
+        }
         let one_of = self.one_of.as_ref().map(|o| {
             o.into_iter()
                 .map(|c| {
                     let mut choices = BTreeMap::new();
-                    c.choices
-                        .iter()
-                        .map(|(field, fd)| {
-                            let sanitized_field = graphql_sanitize(field);
-                            field_map.insert(sanitized_field.clone(), field.clone())
-                                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
-                            choices.insert(sanitized_field.clone(), fd.sanitize());
-                        })
-                        .collect::<()>();
+                    for (field,fd) in c.choices.iter() {
+                        let sanitized_field = graphql_sanitize(field);
+                        field_map.insert(sanitized_field.clone(), field.clone())
+                            .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+                        choices.insert(sanitized_field.clone(), fd.sanitize());
+                    }
                     OneOf { choices }
                 })
                 .collect()
@@ -364,12 +354,9 @@ impl ClassDefinition {
         let documentation = self.documentation.as_ref().map(|d| d.sanitize());
         let key = self.key.as_ref().map(|k| k.sanitize());
         let mut field_renaming: HashMap<String, String> = HashMap::new();
-        field_map
-            .iter()
-            .map(|(s, t)| {
-                field_renaming.insert(s.to_string(), t.to_string());
-            })
-            .collect::<()>();
+        for (s, t) in field_map.iter() {
+            field_renaming.insert(s.to_string(), t.to_string());
+        }
         ClassDefinition {
             documentation,
             key,
@@ -524,29 +511,19 @@ pub struct AllFrames {
 
 impl AllFrames {
     fn sanitize(&self) -> AllFrames {
-        let mut class_map = Vec::new();
-        let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
-        self.frames
-            .iter()
-            .map(|(class_name, typedef)| {
-                let sanitized_class = graphql_sanitize(class_name);
-                class_map.push((sanitized_class.clone(), class_name.clone()));
-                let new_typedef = match typedef {
-                    TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),
-                    TypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
-                };
-                frames.insert(sanitized_class.clone(), new_typedef)
-                    .and_then::<(),_>(|dup|
-                              panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate: {dup:?}"));
-            })
-            .collect::<()>();
         let mut class_renaming: HashMap<String, String> = HashMap::new();
-        class_map
-            .iter()
-            .map(|(s, o)| {
-                class_renaming.insert(s.to_string(), o.to_string());
-            })
-            .collect::<()>();
+        let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
+        for (class_name, typedef) in self.frames.iter() {
+            let sanitized_class = graphql_sanitize(class_name);
+            class_renaming.insert(sanitized_class.clone(), class_name.clone())
+                .and_then::<(),_>(|dup|
+                                  panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate: {dup:?}"));
+            let new_typedef = match typedef {
+                TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),
+                TypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
+            };
+            frames.insert(sanitized_class.clone(), new_typedef);
+        }
         AllFrames {
             context: self.context.clone(),
             frames,
