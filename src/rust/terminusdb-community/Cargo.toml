@@ -23,3 +23,4 @@ serde = {version="1.0", features=["derive"]}
 float-ord = "0.3"
 regex = "1"
 aho-corasick = "0.7"
+bimap = "0.6.2"

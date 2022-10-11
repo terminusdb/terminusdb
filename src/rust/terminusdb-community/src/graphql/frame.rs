@@ -1,3 +1,4 @@
+use bimap::BiMap;
 use serde::{self, Deserialize};
 use std::collections::{BTreeMap, HashMap};
 
@@ -444,6 +445,7 @@ impl EnumDocumentationDefinition {
         }
     }
 }
+
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct EnumDefinition {
     //#[serde(rename = "@type")]
@@ -452,17 +454,20 @@ pub struct EnumDefinition {
     pub documentation: Option<EnumDocumentationDefinition>,
     #[serde(rename = "@values")]
     pub values: Vec<String>,
-    #[serde(skip_serializing)]
-    pub values_renaming: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub values_renaming: Option<BiMap<String, String>>,
 }
 
 impl EnumDefinition {
     pub fn sanitize(&self) -> EnumDefinition {
-        let mut values_renaming: HashMap<String, String> = HashMap::new();
+        let mut values_renaming: BiMap<String, String> = BiMap::new();
         let values = self.values.iter().map(|v| {
             let sanitized = graphql_sanitize(v);
-            values_renaming.insert(sanitized.to_string(), v.to_string())
-                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following duplicate: {dup:?}"));
+            let res = values_renaming.insert(sanitized.to_string(), v.to_string());
+            let overwritten = res.did_overwrite();
+            if overwritten {
+                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following duplicate: {res:?}")
+            };
             sanitized
         }).collect();
         let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
@@ -478,10 +483,25 @@ impl EnumDefinition {
             .as_ref()
             .map(|map| {
                 urlencoding::encode(
-                    map.get(value)
+                    map.get_by_left(value)
                         .expect(&format!("The value name for {value:?} *should* exist")),
                 )
                 .into_owned()
+            })
+            .expect("No values renaming was generated")
+    }
+
+    pub fn name_value(&self, name: &String) -> &String {
+        self.values_renaming
+            .as_ref()
+            .map(|map| {
+                map.get_by_right(
+                    &*urlencoding::decode(name)
+                        .expect("Somehow encoding went terribly wrong in saving"),
+                )
+                .expect(&format!(
+                    "The value for {name:?} *should* exist as it is in your database"
+                ))
             })
             .expect("No values renaming was generated")
     }
