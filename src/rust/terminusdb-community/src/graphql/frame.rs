@@ -1,7 +1,9 @@
 use serde::{self, Deserialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-#[derive(Deserialize, PartialEq, Debug)]
+use super::sanitize::graphql_sanitize;
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct SchemaDocumentation {
     #[serde(rename = "@title")]
     pub title: Option<String>,
@@ -11,7 +13,7 @@ pub struct SchemaDocumentation {
     pub authors: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct Prefixes {
     #[serde(rename = "@type")]
     pub kind: String,
@@ -48,7 +50,7 @@ pub enum StructuralPropertyDocumentationRecord {
     },
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(from = "StructuralPropertyDocumentationRecord")]
 pub struct PropertyDocumentationRecord {
     pub label: Option<String>,
@@ -77,6 +79,19 @@ pub struct PropertyDocumentation {
     pub records: BTreeMap<String, PropertyDocumentationRecord>,
 }
 
+impl PropertyDocumentation {
+    pub fn sanitize(&self) -> PropertyDocumentation {
+        let mut records = BTreeMap::new();
+        self.records
+            .iter()
+            .map(|(s, pdr)| {
+                records.insert(graphql_sanitize(s), pdr.clone());
+            })
+            .collect::<()>();
+        PropertyDocumentation { records }
+    }
+}
+
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct ClassDocumentationDefinition {
     #[serde(rename = "@label")]
@@ -85,6 +100,16 @@ pub struct ClassDocumentationDefinition {
     pub comment: Option<String>,
     #[serde(rename = "@properties")]
     pub properties: Option<PropertyDocumentation>,
+}
+
+impl ClassDocumentationDefinition {
+    pub fn sanitize(&self) -> ClassDocumentationDefinition {
+        ClassDocumentationDefinition {
+            label: self.label.clone(),
+            comment: self.comment.clone(),
+            properties: self.properties.as_ref().map(|pd| pd.sanitize()),
+        }
+    }
 }
 
 #[inline]
@@ -229,6 +254,24 @@ impl FieldDefinition {
             Self::Cardinality { .. } => FieldKind::Cardinality,
         }
     }
+
+    pub fn sanitize(&self) -> FieldDefinition {
+        match self {
+            Self::Required(c) => Self::Required(graphql_sanitize(c)),
+            Self::Optional(c) => Self::Optional(graphql_sanitize(c)),
+            Self::Set(c) => Self::Set(graphql_sanitize(c)),
+            Self::List(c) => Self::List(graphql_sanitize(c)),
+            Self::Array { class, dimensions } => Self::Array {
+                class: graphql_sanitize(class),
+                dimensions: dimensions.clone(),
+            },
+            Self::Cardinality { class, min, max } => Self::Cardinality {
+                class: graphql_sanitize(class),
+                min: min.clone(),
+                max: max.clone(),
+            },
+        }
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -244,6 +287,23 @@ pub enum KeyDefinition {
         fields: Vec<String>,
     },
     ValueHash,
+}
+
+impl KeyDefinition {
+    pub fn sanitize(&self) -> KeyDefinition {
+        match self {
+            KeyDefinition::Random => KeyDefinition::Random,
+            KeyDefinition::Lexical { fields } => {
+                let fields = fields.iter().map(|f| graphql_sanitize(f)).collect();
+                KeyDefinition::Lexical { fields }
+            }
+            KeyDefinition::Hash { fields } => {
+                let fields = fields.iter().map(|f| graphql_sanitize(f)).collect();
+                KeyDefinition::Hash { fields }
+            }
+            KeyDefinition::ValueHash => KeyDefinition::ValueHash,
+        }
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -266,9 +326,61 @@ pub struct ClassDefinition {
     pub one_of: Option<Vec<OneOf>>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
+    #[serde(skip_serializing)]
+    pub field_renaming: Option<HashMap<String, String>>,
 }
 
 impl ClassDefinition {
+    pub fn sanitize(&self) -> ClassDefinition {
+        let mut field_map: HashMap<String, String> = HashMap::new();
+        let mut fields: BTreeMap<String, _> = BTreeMap::new();
+        self.fields
+            .iter()
+            .map(|(field, fd)| {
+                let sanitized_field = graphql_sanitize(field);
+                field_map.insert(sanitized_field.clone(), field.clone())
+                    .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+                fields
+                    .insert(sanitized_field, fd.sanitize());
+            })
+            .collect::<()>();
+        let one_of = self.one_of.as_ref().map(|o| {
+            o.into_iter()
+                .map(|c| {
+                    let mut choices = BTreeMap::new();
+                    c.choices
+                        .iter()
+                        .map(|(field, fd)| {
+                            let sanitized_field = graphql_sanitize(field);
+                            field_map.insert(sanitized_field.clone(), field.clone())
+                                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+                            choices.insert(sanitized_field.clone(), fd.sanitize());
+                        })
+                        .collect::<()>();
+                    OneOf { choices }
+                })
+                .collect()
+        });
+        let documentation = self.documentation.as_ref().map(|d| d.sanitize());
+        let key = self.key.as_ref().map(|k| k.sanitize());
+        let mut field_renaming: HashMap<String, String> = HashMap::new();
+        field_map
+            .iter()
+            .map(|(s, t)| {
+                field_renaming.insert(s.to_string(), t.to_string());
+            })
+            .collect::<()>();
+        ClassDefinition {
+            documentation,
+            key,
+            is_subdocument: self.is_subdocument.clone(),
+            is_abstract: self.is_abstract.clone(),
+            one_of,
+            fields,
+            field_renaming: Some(field_renaming),
+        }
+    }
+
     pub fn resolve_field(&self, field_name: &String) -> &FieldDefinition {
         let maybe_field: Option<&FieldDefinition> = self.one_of.as_ref().and_then(|oneofs| {
             oneofs.iter().find_map(|o| {
@@ -307,8 +419,24 @@ impl ClassDefinition {
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
-pub struct EnumDocumentationDefinition {}
+pub struct EnumDocumentationDefinition {
+    #[serde(rename = "@label")]
+    pub label: Option<String>,
+    #[serde(rename = "@comment")]
+    pub comment: Option<String>,
+    #[serde(rename = "@values")]
+    pub values: Option<PropertyDocumentation>,
+}
 
+impl EnumDocumentationDefinition {
+    pub fn sanitize(&self) -> EnumDocumentationDefinition {
+        EnumDocumentationDefinition {
+            label: self.label.clone(),
+            comment: self.comment.clone(),
+            values: self.values.as_ref().map(|pd| pd.sanitize()),
+        }
+    }
+}
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct EnumDefinition {
     //#[serde(rename = "@type")]
@@ -317,6 +445,17 @@ pub struct EnumDefinition {
     pub documentation: Option<EnumDocumentationDefinition>,
     #[serde(rename = "@values")]
     pub values: Vec<String>,
+}
+
+impl EnumDefinition {
+    pub fn sanitize(&self) -> EnumDefinition {
+        let values = self.values.iter().map(|v| graphql_sanitize(v)).collect();
+        let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
+        EnumDefinition {
+            documentation,
+            values,
+        }
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -379,9 +518,42 @@ pub struct AllFrames {
     pub context: Prefixes,
     #[serde(flatten)]
     pub frames: BTreeMap<String, TypeDefinition>,
+    #[serde(skip_serializing)]
+    pub class_renaming: Option<HashMap<String, String>>,
 }
 
 impl AllFrames {
+    fn sanitize(&self) -> AllFrames {
+        let mut class_map = Vec::new();
+        let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
+        self.frames
+            .iter()
+            .map(|(class_name, typedef)| {
+                let sanitized_class = graphql_sanitize(class_name);
+                class_map.push((sanitized_class.clone(), class_name.clone()));
+                let new_typedef = match typedef {
+                    TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),
+                    TypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
+                };
+                frames.insert(sanitized_class.clone(), new_typedef)
+                    .and_then::<(),_>(|dup|
+                              panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate: {dup:?}"));
+            })
+            .collect::<()>();
+        let mut class_renaming: HashMap<String, String> = HashMap::new();
+        class_map
+            .iter()
+            .map(|(s, o)| {
+                class_renaming.insert(s.to_string(), o.to_string());
+            })
+            .collect::<()>();
+        AllFrames {
+            context: self.context.clone(),
+            frames,
+            class_renaming: Some(class_renaming),
+        }
+    }
+
     fn document_type<'a>(&self, s: &'a String) -> Option<&'a String> {
         if self.frames[s].is_document_type() {
             Some(s)

@@ -1344,6 +1344,7 @@ dependencies = [
 name = "terminusdb-community"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "float-ord",
  "itertools",
  "juniper",
@@ -1352,6 +1353,7 @@ dependencies = [
  "lcs",
  "rand 0.8.5",
  "rayon",
+ "regex",
  "serde",
  "serde_json",
  "swipl",
