@@ -571,6 +571,26 @@ describe('cli-doc', function () {
   })
 
   describe('schema manipulation', function () {
+    it('adds a broken context', async function () {
+      const schema = [
+        {
+          "@base": "terminusdb:///data/",
+          "@schema": "terminusdb:///schema#",
+          "@type": "@context",
+          "pfx": "abfab"
+        },
+        {
+          "@id": "pfx:somethign",
+          "@type": "Class"
+        }
+      ];
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      const r = await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}' | true`)
+      expect(r.stderr).to.match(/^Error: The prefix pfx used in the context does not resolve to a URI.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
     it('adds a bad language', async function () {
       const schema = {
         '@base': 'terminusdb:///data/',
