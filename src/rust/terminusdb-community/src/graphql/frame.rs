@@ -223,10 +223,10 @@ impl FieldDefinition {
         }
     }
 
-    pub fn base_type(&self) -> Option<&String> {
+    pub fn base_type(&self) -> Option<&str> {
         let range = self.range();
         if is_base_type(range) {
-            Some(range)
+            Some(&range[4..])
         } else {
             None
         }

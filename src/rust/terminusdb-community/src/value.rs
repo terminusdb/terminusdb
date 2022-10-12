@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use std::collections::HashSet;
@@ -57,7 +58,7 @@ lazy_static! {
     .collect();
     static ref FLOAT_TYPES: HashSet<&'static str> =
         ["decimal", "double", "float",].into_iter().collect();
-    static ref INTEGER_TYPES: HashSet<&'static str> = [
+    static ref SMALL_INTEGER_TYPES: HashSet<&'static str> = [
         "byte",
         "short",
         "int",
@@ -65,6 +66,10 @@ lazy_static! {
         "unsignedByte",
         "unsignedShort",
         "unsignedInt",
+    ]
+    .into_iter()
+    .collect();
+    static ref BIG_INTEGER_TYPES: HashSet<&'static str> = [
         "unsignedLong",
         "integer",
         "positiveInteger",
@@ -74,6 +79,7 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
+    static ref INTEGER_TYPES: HashSet<&'static str> = SMALL_INTEGER_TYPES.iter().chain(BIG_INTEGER_TYPES.iter()).map(|x|*x).collect();
 }
 
 fn type_is_numeric(s: &str) -> bool {
@@ -82,6 +88,15 @@ fn type_is_numeric(s: &str) -> bool {
 
 pub fn type_is_bool(s: &str) -> bool {
     s == "boolean"
+}
+
+pub fn type_is_small_integer(s: &str) -> bool {
+    SMALL_INTEGER_TYPES.contains(s)
+}
+
+pub fn type_is_big_integer(s: &str) -> bool {
+    eprintln!("big int? {s}");
+    BIG_INTEGER_TYPES.contains(s)
 }
 
 pub fn type_is_integer(s: &str) -> bool {
@@ -123,8 +138,10 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
                 juniper::Value::Scalar(DefaultScalarValue::Boolean(val == "\"true\""))
             } else if typ == "token" && val == "\"null\"" {
                 juniper::Value::Null
-            } else if type_is_integer(typ) {
+            } else if type_is_small_integer(typ) {
                 juniper::Value::Scalar(DefaultScalarValue::Int(i32::from_str(val).unwrap()))
+            } else if type_is_big_integer(typ) {
+                juniper::Value::Scalar(DefaultScalarValue::String(val.to_owned()))
             } else if type_is_float(typ) {
                 juniper::Value::Scalar(DefaultScalarValue::Float(f64::from_str(val).unwrap()))
             } else {
@@ -179,7 +196,7 @@ pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> S
             format!("{}^^'{}{}'", b, XSD_PREFIX, base_type)
         }
         ScalarInputValue::Int(i) => {
-            assert!(type_is_integer(base_type));
+            assert!(type_is_small_integer(base_type));
             format!("{}^^'{}{}'", i, XSD_PREFIX, base_type)
         }
         ScalarInputValue::Float(f) => {
@@ -187,7 +204,12 @@ pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> S
             format!("{}^^'{}{}'", f, XSD_PREFIX, base_type)
         }
         ScalarInputValue::String(s) => {
-            format!("\"{}\"^^'{}{}'", s, XSD_PREFIX, base_type)
+            if type_is_big_integer(base_type) {
+                format!("{}^^'{}{}'", s, XSD_PREFIX, base_type)
+            }
+            else {
+                format!("\"{}\"^^'{}{}'", s, XSD_PREFIX, base_type)
+            }
         }
     }
 }

@@ -14,7 +14,7 @@ use crate::doc::{retrieve_all_index_ids, ArrayIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
-    enum_node_to_value, type_is_bool, type_is_float, type_is_integer, value_string_to_graphql,
+    enum_node_to_value, type_is_bool, type_is_float, type_is_integer, value_string_to_graphql, type_is_big_integer, type_is_small_integer,
 };
 
 use super::frame::*;
@@ -145,8 +145,10 @@ fn add_arguments<'r>(
         if let Some(t) = f.base_type() {
             if type_is_bool(t) {
                 field = field.argument(registry.arg::<Option<bool>>(name, &()));
-            } else if type_is_integer(t) {
+            } else if type_is_small_integer(t) {
                 field = field.argument(registry.arg::<Option<i32>>(name, &()));
+            } else if type_is_big_integer(t) {
+                field = field.argument(registry.arg::<Option<BigInt>>(name, &()));
             } else if type_is_float(t) {
                 field = field.argument(registry.arg::<Option<f64>>(name, &()));
             } else {
@@ -309,6 +311,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             field
                         }
                     } else if let Some(base_type) = field_definition.base_type() {
+                        eprintln!("time to register field {field_name} of type {base_type}");
                         if type_is_bool(base_type) {
                             Self::register_field::<bool>(
                                 registry,
@@ -316,8 +319,16 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                                 &(),
                                 field_definition.kind(),
                             )
-                        } else if type_is_integer(base_type) {
+                        } else if type_is_small_integer(base_type) {
                             Self::register_field::<i32>(
+                                registry,
+                                field_name,
+                                &(),
+                                field_definition.kind(),
+                            )
+                        } else if type_is_big_integer(base_type) {
+                            eprintln!("Here i am registering a BigInt field");
+                            Self::register_field::<BigInt>(
                                 registry,
                                 field_name,
                                 &(),
@@ -331,7 +342,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                                 field_definition.kind(),
                             )
                         } else {
-                            // asssume stringy
+                            // assume stringy
                             Self::register_field::<String>(
                                 registry,
                                 field_name,
@@ -740,5 +751,26 @@ impl GraphQLValue for TerminusOrderBy {
         _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
         panic!("GraphQLValue::resolve_field() must be implemented by objects and interfaces");
+    }
+}
+
+
+struct BigInt(String);
+
+#[juniper::graphql_scalar(
+    name = "BigInt",
+    description = "The `BigInt` scalar type represents non-fractional signed whole numeric values.")]
+impl<S> GraphQLScalar for BigInt
+where S: juniper::ScalarValue{
+    fn resolve(&self) -> juniper::Value {
+        juniper::Value::scalar(self.0.to_owned())
+    }
+
+    fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
+        value.as_string_value().map(|s| Self(s.to_owned()))
+    }
+
+    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        <String as juniper::ParseScalarValue<S>>::from_str(value)
     }
 }
