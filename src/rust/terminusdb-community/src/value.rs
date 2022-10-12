@@ -71,11 +71,11 @@ pub fn value_string_to_json(s: &str) -> Value {
                 Value::Number(Number::from_str(val).unwrap())
             } else {
                 // it will be something quoted, which we're gonna return as a string
-                Value::String(val[1..val.len() - 1].to_string())
+                Value::String(prolog_string_to_string(val))
             }
         }
         LangOrType::Lang(val, lang) => {
-            let s = val[1..val.len() - 1].to_string();
+            let s = prolog_string_to_string(val);
             let l = lang[1..lang.len() - 1].to_string();
             json!({ "@lang" : l, "@value" : s })
         }
@@ -92,4 +92,10 @@ pub fn value_string_to_usize(s: &str) -> usize {
     } else {
         panic!("unexpected lang string");
     }
+}
+
+/// We put escaped prolog strings into the pfc dict. These need to be unescaped.
+fn prolog_string_to_string(s: &str) -> String {
+    let result = snailquote::unescape(s).expect("prolog string in pfc dict cannot be unescaped");
+    result
 }
