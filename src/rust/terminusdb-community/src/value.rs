@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::str::FromStr;
 
@@ -147,13 +148,13 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
             } else {
                 // it will be something quoted, which we're gonna return as a string
                 juniper::Value::Scalar(DefaultScalarValue::String(
-                    val[1..val.len() - 1].to_string(),
+                    prolog_string_to_string(val)
                 ))
             }
         }
         LangOrType::Lang(val, lang) => {
             // TODO: we need to include language tag here somehow
-            let s = val[1..val.len() - 1].to_string();
+            let s = prolog_string_to_string(val);
             let _l = lang[1..lang.len() - 1].to_string();
             juniper::Value::Scalar(DefaultScalarValue::String(s))
         }
@@ -189,7 +190,6 @@ impl FromInputValue for ScalarInputValue {
 }
 
 pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> String {
-    let base_type = &base_type[4..];
     match v {
         ScalarInputValue::Boolean(b) => {
             assert!(type_is_bool(base_type));
@@ -208,7 +208,8 @@ pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> S
                 format!("{}^^'{}{}'", s, XSD_PREFIX, base_type)
             }
             else {
-                format!("\"{}\"^^'{}{}'", s, XSD_PREFIX, base_type)
+                let prolog_string = string_to_prolog_string(&s);
+                format!("{}^^'{}{}'", prolog_string, XSD_PREFIX, base_type)
             }
         }
     }
@@ -230,4 +231,9 @@ pub fn value_string_to_usize(s: &str) -> usize {
 fn prolog_string_to_string(s: &str) -> String {
     let result = snailquote::unescape(s).expect("prolog string in pfc dict cannot be unescaped");
     result
+}
+
+/// We put escaped prolog strings into the pfc dict. These need to be unescaped.
+fn string_to_prolog_string(s: &str) -> Cow<str> {
+    snailquote::escape(s)
 }
