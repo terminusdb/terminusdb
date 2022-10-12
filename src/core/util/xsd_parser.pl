@@ -41,7 +41,7 @@
                        normalizedString//0,
                        nmtoken//0,
                        ncname//0,
-                       name//01
+                       name//0
                        ]).
 
 /** <module> XSD Parser
