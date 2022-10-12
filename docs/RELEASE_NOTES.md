@@ -1,3 +1,8 @@
+# TerminusDB Server v10.1.6 Release Notes
+
+## Bug fixes
++ Escaped characters in json documents were escaped twice
+
 # TerminusDB Server v10.1.5 Release Notes
 
 ## Enhancements
