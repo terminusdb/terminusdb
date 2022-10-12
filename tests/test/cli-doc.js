@@ -574,16 +574,16 @@ describe('cli-doc', function () {
     it('adds a broken context', async function () {
       const schema = [
         {
-          "@base": "terminusdb:///data/",
-          "@schema": "terminusdb:///schema#",
-          "@type": "@context",
-          "pfx": "abfab"
+          '@base': 'terminusdb:///data/',
+          '@schema': 'terminusdb:///schema#',
+          '@type': '@context',
+          pfx: 'abfab',
         },
         {
-          "@id": "pfx:somethign",
-          "@type": "Class"
-        }
-      ];
+          '@id': 'pfx:somethign',
+          '@type': 'Class',
+        },
+      ]
       const db = util.randomString()
       await exec(`./terminusdb.sh db create admin/${db}`)
       const r = await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}' | true`)
