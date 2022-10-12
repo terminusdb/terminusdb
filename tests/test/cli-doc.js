@@ -659,6 +659,30 @@ describe('cli-doc', function () {
     })
   })
 
+  describe('escape works ok', function () {
+    it('double escape', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Test',
+        test: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = { test: 'hello\n world' }
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      const r2 = await exec(`./terminusdb.sh doc get admin/${db}`)
+      const res = JSON.parse(r2.stdout)
+      expect(res.test).to.equal('hello\n world')
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+  })
+
   describe('checks logs', function () {
     const schema = { '@type': 'Class', negativeInteger: 'xsd:negativeInteger' }
 
