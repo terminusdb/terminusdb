@@ -200,6 +200,7 @@
               point//2,
               url//0,
               ncname//0,
+              name//0,
               nmtoken//0,
               normalizedString//0,
 
