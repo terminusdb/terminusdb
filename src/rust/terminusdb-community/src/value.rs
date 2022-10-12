@@ -121,7 +121,7 @@ pub fn value_string_to_json(s: &str) -> Value {
                 Value::Number(Number::from_str(val).unwrap())
             } else {
                 // it will be something quoted, which we're gonna return as a string
-                Value::String(prolog_string_to_string(val))
+                Value::String(prolog_string_to_string(val).into_owned())
             }
         }
         LangOrType::Lang(val, lang) => {
@@ -148,7 +148,7 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
             } else {
                 // it will be something quoted, which we're gonna return as a string
                 juniper::Value::Scalar(DefaultScalarValue::String(
-                    prolog_string_to_string(val)
+                    prolog_string_to_string(val).into_owned()
                 ))
             }
         }
@@ -156,7 +156,7 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
             // TODO: we need to include language tag here somehow
             let s = prolog_string_to_string(val);
             let _l = lang[1..lang.len() - 1].to_string();
-            juniper::Value::Scalar(DefaultScalarValue::String(s))
+            juniper::Value::Scalar(DefaultScalarValue::String(s.into_owned()))
         }
     }
 }
@@ -227,13 +227,108 @@ pub fn value_string_to_usize(s: &str) -> usize {
     }
 }
 
-/// We put escaped prolog strings into the pfc dict. These need to be unescaped.
-fn prolog_string_to_string(s: &str) -> String {
-    let result = snailquote::unescape(s).expect("prolog string in pfc dict cannot be unescaped");
+const SWIPL_CONTROL_CHAR_A: char = 7 as char;
+const SWIPL_CONTROL_CHAR_B: char = 8 as char;
+const SWIPL_CONTROL_CHAR_E: char = 27 as char;
+const SWIPL_CONTROL_CHAR_F: char = 12 as char;
+const SWIPL_CONTROL_CHAR_V: char = 11 as char;
+
+fn prolog_string_to_string(s: &str) -> Cow<str> {
+    let mut result: Option<String> = None;
+    let mut escaping = false;
+    let mut characters = s.chars().enumerate().skip(1).take(s.len()-2);
+    while let Some((ix, c)) = characters.next() {
+        if escaping {
+            let result = result.as_mut().unwrap();
+            match c {
+                '\\' => result.push('\\'),
+                '\"' => result.push('\"'),
+                'x' => {
+                    let mut digits: String = String::new();
+                    loop {
+                        let (_,digit) = characters.next().unwrap();
+                        if digit == '\\' {
+                            let hex = u32::from_str_radix(&digits, 16).unwrap();
+                            result.push(char::from_u32(hex).unwrap());
+                            break;
+                        }
+                        else {
+                            digits.push(digit);
+                        }
+                    }
+                },
+                'a' => result.push(SWIPL_CONTROL_CHAR_A),
+                'b' => result.push(SWIPL_CONTROL_CHAR_B),
+                't' => result.push('\t'),
+                'n' => result.push('\n'),
+                'v' => result.push(SWIPL_CONTROL_CHAR_V),
+                'f' => result.push(SWIPL_CONTROL_CHAR_F),
+                'r' => result.push('\r'),
+                _ => panic!("unknown prolog escape code in string")
+            }
+
+            escaping = false;
+        }
+        else {
+            if c == '\\' {
+                escaping = true;
+                let mut r = String::with_capacity(s.len());
+                r.push_str(&s[1..ix]);
+                result = Some(r);
+            }
+            else if let Some(result) = result.as_mut(){
+                result.push(c);
+            }
+        }
+    }
+
+    match result {
+        Some(result) => Cow::Owned(result),
+        None => Cow::Borrowed(&s[1..s.len()-1])
+    }
+}
+
+fn string_to_prolog_string(s: &str) -> String {
+    // incomplete - lots of control characters gets printed weirdly by prolog.
+    let mut result = String::with_capacity(s.len() + 10);
+    result.push('"');
+
+    for c in s.chars() {
+        match c {
+            '\\' => result.push_str(r#"\\"#),
+            '\n' => result.push_str(r#"\n"#),
+            '\t' => result.push_str(r#"\t"#),
+            '\r' => result.push_str(r#"\r"#),
+            SWIPL_CONTROL_CHAR_A => result.push_str(r#"\\a"#),
+            SWIPL_CONTROL_CHAR_B => result.push_str(r#"\\b"#),
+            SWIPL_CONTROL_CHAR_E => result.push_str(r#"\u001B"#),
+            SWIPL_CONTROL_CHAR_F => result.push_str(r#"\\f"#),
+            SWIPL_CONTROL_CHAR_V => result.push_str(r#"\\v"#),
+            '\"' => result.push_str(r#"\""#),
+            _ => result.push(c)
+        }
+    }
+
+    result.push('"');
     result
 }
 
-/// We put escaped prolog strings into the pfc dict. These need to be unescaped.
-fn string_to_prolog_string(s: &str) -> Cow<str> {
-    snailquote::escape(s)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn escape_strings_to_prolog_string() {
+        assert_eq!(r#""hello there""#, string_to_prolog_string("hello there"));
+        assert_eq!(r#""hello\nthere""#, string_to_prolog_string("hello\nthere"));
+    }
+    #[test]
+    fn unescape_prolog_strings() {
+        assert_eq!("hello there", prolog_string_to_string(r#""hello there""#));
+        assert_eq!("hello\"there", prolog_string_to_string(r#""hello\"there""#));
+        assert_eq!("hello\nthere", prolog_string_to_string(r#""hello\nthere""#));
+        assert_eq!("hello\\there", prolog_string_to_string(r#""hello\\there""#));
+        assert_eq!("\"", prolog_string_to_string(r#""\"""#));
+        assert_eq!("foo\u{5555}bar", prolog_string_to_string(r#""foo\x5555\bar""#));
+    }
 }
