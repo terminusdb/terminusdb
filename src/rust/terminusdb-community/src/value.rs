@@ -243,20 +243,7 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
             match c {
                 '\\' => result.push('\\'),
                 '\"' => result.push('\"'),
-                'x' => {
-                    let mut digits: String = String::new();
-                    loop {
-                        let (_,digit) = characters.next().unwrap();
-                        if digit == '\\' {
-                            let hex = u32::from_str_radix(&digits, 16).unwrap();
-                            result.push(char::from_u32(hex).unwrap());
-                            break;
-                        }
-                        else {
-                            digits.push(digit);
-                        }
-                    }
-                },
+                'x' => result.push(unescape_legacy_prolog_escape_sequence(&mut characters)),
                 'a' => result.push(SWIPL_CONTROL_CHAR_A),
                 'b' => result.push(SWIPL_CONTROL_CHAR_B),
                 't' => result.push('\t'),
@@ -272,9 +259,11 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
         else {
             if c == '\\' {
                 escaping = true;
-                let mut r = String::with_capacity(s.len());
-                r.push_str(&s[1..ix]);
-                result = Some(r);
+                if result.is_none() {
+                    let mut r = String::with_capacity(s.len());
+                    r.push_str(&s[1..ix]);
+                    result = Some(r);
+                }
             }
             else if let Some(result) = result.as_mut(){
                 result.push(c);
@@ -285,6 +274,20 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
     match result {
         Some(result) => Cow::Owned(result),
         None => Cow::Borrowed(&s[1..s.len()-1])
+    }
+}
+
+fn unescape_legacy_prolog_escape_sequence(characters: &mut impl Iterator<Item=(usize, char)>) -> char {
+    let mut digits: String = String::new();
+    loop {
+        let (_,digit) = characters.next().unwrap();
+        if digit == '\\' {
+            let hex = u32::from_str_radix(&digits, 16).unwrap();
+            return char::from_u32(hex).unwrap();
+        }
+        else {
+            digits.push(digit);
+        }
     }
 }
 
@@ -313,7 +316,6 @@ fn string_to_prolog_string(s: &str) -> String {
     result
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,5 +332,6 @@ mod tests {
         assert_eq!("hello\\there", prolog_string_to_string(r#""hello\\there""#));
         assert_eq!("\"", prolog_string_to_string(r#""\"""#));
         assert_eq!("foo\u{5555}bar", prolog_string_to_string(r#""foo\x5555\bar""#));
+        assert_eq!("foo\u{5555}bar\u{6666}baz", prolog_string_to_string(r#""foo\x5555\bar\x6666\baz""#));
     }
 }
