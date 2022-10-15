@@ -49,7 +49,8 @@ is_rdf_list(Validation_Object, Type) :-
 
 is_instance(_Validation_Object, Literal, T) :-
     nonvar(Literal),
-    Literal = _^^T,
+    Literal = _^^S,
+    basetype_subsumption_of(S,T),
     !.
 is_instance(_Validation_Object, Literal, T) :-
     ground(T),
@@ -66,6 +67,11 @@ is_instance(_Validation_Object, Literal, T) :-
     global_prefix_expand(rdf:literal,T),
     Literal = _@_,
     !.
+is_instance(_, Literal, _) :-
+    (   Literal = _^^_
+    ;   Literal = _@_),
+    !,
+    fail.
 is_instance(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X, rdf:type, Class),

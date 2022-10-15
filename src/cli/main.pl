@@ -2330,7 +2330,7 @@ api_error_cli(API, Error) :-
     json_cli_code(JSON,Status),
     Msg = (JSON.'api:message'),
     format(user_error,"Error: ~s~n",[Msg]),
-    json_write_dict(user_error,JSON, []),
+    json_write_dict(user_error,JSON, [serialize_unknown(true)]),
     halt(Status).
 
 initialise_hup :-
