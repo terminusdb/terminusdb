@@ -53,21 +53,13 @@ is_instance(_Validation_Object, Literal, T) :-
     basetype_subsumption_of(S,T),
     !.
 is_instance(_Validation_Object, Literal, T) :-
-    ground(T),
-    is_base_type(T),
-    Literal = _^^T,
-    !.
-is_instance(_Validation_Object, Literal, T) :-
     nonvar(Literal),
     Literal = _@_,
-    global_prefix_expand(rdf:literal,T),
-    !.
-is_instance(_Validation_Object, Literal, T) :-
-    ground(T),
-    global_prefix_expand(rdf:literal,T),
-    Literal = _@_,
+    global_prefix_expand(rdf:langString,S),
+    basetype_subsumption_of(S,T),
     !.
 is_instance(_, Literal, _) :-
+    nonvar(Literal),
     (   Literal = _^^_
     ;   Literal = _@_),
     !,
