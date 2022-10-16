@@ -162,11 +162,9 @@ describe('cli-doc', function () {
   })
 
   describe('backlinks', function () {
-
     beforeEach(async function () {
       await exec(`./terminusdb.sh doc delete ${dbSpec} --nuke`)
     })
-
 
     it('is able to link document with backlinks', async function () {
       const schema = [{
@@ -197,7 +195,7 @@ describe('cli-doc', function () {
         '@linked-by': { '@ref': 'My Thing', '@property': 'other' },
         name: 'My Name',
       },
-                       ]
+      ]
       await exec(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance)}'`)
       const r2 = await exec(`./terminusdb.sh doc get ${dbSpec} --as-list=true`)
       const docs = JSON.parse(r2.stdout)
@@ -229,7 +227,6 @@ describe('cli-doc', function () {
         '@id': 'Other',
         name: 'xsd:string',
       }]
-      const db = util.randomString()
       await exec(`./terminusdb.sh doc insert -g schema ${dbSpec} --full-replace --data='${JSON.stringify(schema)}'`)
       const instance = [{
         '@type': 'Thing',
@@ -280,7 +277,6 @@ describe('cli-doc', function () {
         '@id': 'Other',
         name: 'xsd:string',
       }]
-      const db = util.randomString()
       await exec(`./terminusdb.sh doc insert -g schema ${dbSpec} --full-replace --data='${JSON.stringify(schema)}'`)
       const instance = [{
         '@type': 'Thing',
@@ -311,7 +307,6 @@ describe('cli-doc', function () {
         '@id': 'Other',
         name: 'xsd:string',
       }]
-      const db = util.randomString()
       await exec(`./terminusdb.sh doc insert -g schema ${dbSpec} --full-replace --data='${JSON.stringify(schema)}'`)
       const instance = [{
         '@type': 'Other',
