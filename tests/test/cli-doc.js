@@ -553,35 +553,6 @@ describe('cli-doc', function () {
   })
 
   describe('schema manipulation', function () {
-    it('turns on a schema for failure', async function () {
-      const schema = [{
-        '@base': 'terminusdb:///data/',
-        '@schema': 'terminusdb:///schema#',
-        '@type': '@context',
-      },{
-        '@type' : 'Class',
-        '@id' : 'This',
-        this : 'xsd:string',
-      }]
-      const db = `admin/${util.randomString()}`
-      await exec(`./terminusdb.sh db create ${db}`)
-      await exec(`./terminusdb.sh doc insert -g schema ${db} --full-replace --data='${JSON.stringify(schema)}'`)
-      const instance = { this : "testing" }
-      await exec(`./terminusdb.sh doc insert ${db} --data='${JSON.stringify(instance)}'`)
-      const schema2 = [{
-        '@base': 'terminusdb:///data/',
-        '@schema': 'terminusdb:///schema#',
-        '@type': '@context',
-      },{
-        '@type' : 'Class',
-        '@id' : 'This',
-        this : 'xsd:integer',
-      }]
-      const r = await exec(`./terminusdb.sh db update ${db} --schema=false | true`)
-      console.log(r)
-      await exec(`./terminusdb.sh db delete ${db}`)
-    })
-
     it('adds a bad language', async function () {
       const schema = {
         '@base': 'terminusdb:///data/',
