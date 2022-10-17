@@ -2,11 +2,11 @@
 
 ## Bug fixes
 + Better serialization/deserialization of Prolog strings, prevents
-  crashes on unexpected characters.
+  crashes on unexpected characters
 + Fix group\_by query in dashboard
 + Fix time travel in dashboard
-+ Fix bad parsing of xsd:Name (https://github.com/terminusdb/terminusdb/pull/1512)
-+ Fix corrupted data products on wrong prefixes (https://github.com/terminusdb/terminusdb/pull/1520)
++ Fix bad parsing of xsd:Name
++ Fix corrupted data products on wrong prefixes
 
 ## Enhancements
 + Add new Dashboard version
