@@ -571,6 +571,27 @@ describe('cli-doc', function () {
   })
 
   describe('schema manipulation', function () {
+    it('adds an xsd:Name', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Test',
+        name: 'xsd:Name',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = { name: 'Test' }
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      const r = await exec(`./terminusdb.sh doc get admin/${db}`)
+      const js = JSON.parse(r.stdout)
+      expect(js.name).to.equal('Test')
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
     it('adds a broken context', async function () {
       const schema = [
         {
