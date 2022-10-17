@@ -8,7 +8,7 @@
 
 ## Enhancements
 + Add new Dashboard version
-+ Add xsd:Name and xsd:anyUri property type support in dashboard
++ Add xsd:name and xsd:anyUri property type support in dashboard
 + Use new terminusdb-client version in dashboard
 
 # TerminusDB Server v10.1.6 Release Notes
