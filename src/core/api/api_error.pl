@@ -2170,6 +2170,16 @@ api_document_error_jsonld(Type, error(back_links_not_supported_in_replace(Docume
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(prefix_does_not_resolve(Prefix,Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The prefix ~q used in the context does not resolve to a URI.", [Prefix]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:PrefixDoesNotResolveError',
+                              'api:prefix' : Prefix,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

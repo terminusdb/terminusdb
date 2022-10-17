@@ -571,6 +571,47 @@ describe('cli-doc', function () {
   })
 
   describe('schema manipulation', function () {
+    it('adds an xsd:Name', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Test',
+        name: 'xsd:Name',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = { name: 'Test' }
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      const r = await exec(`./terminusdb.sh doc get admin/${db}`)
+      const js = JSON.parse(r.stdout)
+      expect(js.name).to.equal('Test')
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+    it('adds a broken context', async function () {
+      const schema = [
+        {
+          '@base': 'terminusdb:///data/',
+          '@schema': 'terminusdb:///schema#',
+          '@type': '@context',
+          pfx: 'abfab',
+        },
+        {
+          '@id': 'pfx:somethign',
+          '@type': 'Class',
+        },
+      ]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      const r = await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}' | true`)
+      expect(r.stderr).to.match(/^Error: The prefix pfx used in the context does not resolve to a URI.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
     it('adds a bad language', async function () {
       const schema = {
         '@base': 'terminusdb:///data/',
@@ -636,6 +677,30 @@ describe('cli-doc', function () {
         },
       ]
       expect(js.noteText).to.deep.equal(result)
+    })
+  })
+
+  describe('escape works ok', function () {
+    it('double escape', async function () {
+      const schema = [{
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Test',
+        test: 'xsd:string',
+      }]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      const instance = { test: 'hello\n world' }
+      await exec(`./terminusdb.sh doc insert admin/${db} --data='${JSON.stringify(instance)}'`)
+      const r2 = await exec(`./terminusdb.sh doc get admin/${db}`)
+      const res = JSON.parse(r2.stdout)
+      expect(res.test).to.equal('hello\n world')
+      await exec(`./terminusdb.sh db delete admin/${db}`)
     })
   })
 
