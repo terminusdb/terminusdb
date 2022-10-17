@@ -1,3 +1,16 @@
+# TerminusDB Server v10.1.7 Release Notes
+
+## Bug fixes
++ Better serialization/deserialization of Prolog strings, prevents
+  crashes on unexpected characters.
++ Fix group\_by query in dashboard
++ Fix time travel in dashboard
+
+## Enhancements
++ Add new Dashboard version
++ Add xsd:Name and xsd:anyUri property type support in dashboard
++ Use new terminusdb-client version in dashboard
+
 # TerminusDB Server v10.1.6 Release Notes
 
 ## Bug fixes
