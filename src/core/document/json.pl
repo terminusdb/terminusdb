@@ -1024,7 +1024,8 @@ context_elaborate(JSON,Elaborated) :-
 
     findall(
         Prefix_Pair,
-        (   member(Prop-Value, Prop_Values),
+        (   member(Prop-_, Prop_Values),
+            uri_resolves(Prop,Prop_Values,Value),
             idgen_hash('terminusdb://Prefix_Pair/',[json{'@value' : Prop},
                                                     json{'@value' : Value}], HashURI),
             Prefix_Pair = json{'@type' : 'sys:Prefix',
@@ -1042,6 +1043,14 @@ context_elaborate(JSON,Elaborated) :-
                                                         '@type' : "sys:Prefix",
                                                         '@value' : Prefix_Pair_List }
                                 |PVs]).
+
+uri_resolves(Prop,Prop_Values,Value) :-
+    memberchk(Prop-Value,Prop_Values),
+    uri_has_protocol(Value),
+    !.
+uri_resolves(Prop,_Prop_Values,_Value) :-
+    throw(error(prefix_does_not_resolve(Prop),_)).
+
 
 wrap_id(ID, json{'@type' : "@id",
                  '@id' : ID}) :-
