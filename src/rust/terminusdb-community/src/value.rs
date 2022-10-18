@@ -96,7 +96,6 @@ pub fn type_is_small_integer(s: &str) -> bool {
 }
 
 pub fn type_is_big_integer(s: &str) -> bool {
-    eprintln!("big int? {s}");
     BIG_INTEGER_TYPES.contains(s)
 }
 

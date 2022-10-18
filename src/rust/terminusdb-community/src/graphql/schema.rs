@@ -311,7 +311,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             field
                         }
                     } else if let Some(base_type) = field_definition.base_type() {
-                        eprintln!("time to register field {field_name} of type {base_type}");
                         if type_is_bool(base_type) {
                             Self::register_field::<bool>(
                                 registry,
@@ -327,7 +326,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                                 field_definition.kind(),
                             )
                         } else if type_is_big_integer(base_type) {
-                            eprintln!("Here i am registering a BigInt field");
                             Self::register_field::<BigInt>(
                                 registry,
                                 field_name,

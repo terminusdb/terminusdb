@@ -133,7 +133,6 @@ pub fn run_filter_query<'a>(
                     let field_name_expanded =
                         class_definition.fully_qualified_property_name(prefixes, field_name);
                     let expanded_object_value = graphql_scalar_to_value_string(value, base_type);
-                    eprintln!("{expanded_object_value:?}");
                     Some((
                         field_name_expanded,
                         NodeOrValue::Value,
@@ -150,7 +149,6 @@ pub fn run_filter_query<'a>(
                     let enum_type_definition = all_frames.frames[enum_type].as_enum_definition();
                     let value = enum_type_definition.value_name(&terminus_enum.value);
                     let expanded_object_node = format!("{}/{}", enum_type_expanded, value);
-                    eprintln!("{expanded_object_node:?}");
                     Some((field_name_expanded, NodeOrValue::Node, expanded_object_node))
                 } else {
                     None
