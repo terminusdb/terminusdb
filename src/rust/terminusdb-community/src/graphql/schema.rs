@@ -683,19 +683,28 @@ fn collect_into_graphql_list<C: QueryableContextType>(
     }
 }
 
-#[derive(GraphQLEnum)]
+#[derive(GraphQLEnum, Clone, Copy)]
 pub enum TerminusOrdering {
     Asc,
     Desc,
 }
 
-struct TerminusOrderBy {
-    fields: Vec<(String, TerminusOrdering)>,
+pub struct TerminusOrderBy {
+    pub fields: Vec<(String, TerminusOrdering)>,
 }
 
 impl FromInputValue for TerminusOrderBy {
-    fn from_input_value(_v: &InputValue<DefaultScalarValue>) -> Option<Self> {
-        todo!()
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        if let InputValue::Object(o) = v {
+            let fields: Vec<_> = o.iter().map(|(k,v)| {
+                (k.item.to_owned(), TerminusOrdering::from_input_value(&v.item).unwrap())
+            }).collect();
+
+            Some(Self { fields })
+        }
+        else {
+            None
+        }
     }
 }
 

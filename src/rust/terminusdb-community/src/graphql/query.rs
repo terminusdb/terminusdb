@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::frame::{AllFrames, ClassDefinition, Prefixes};
-use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrdering};
+use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrdering, TerminusOrderBy};
 
 use float_ord::FloatOrd;
 
@@ -163,11 +163,11 @@ pub fn run_filter_query<'a>(
     let expanded_class_name = all_frames.fully_qualified_class_name(&class_name.to_string());
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
 
-    let it: Box<dyn Iterator<Item = u64>> = if let Some(QueryOrderByDesc(vec)) =
-        arguments.get::<QueryOrderByDesc>("orderBy")
+    let it: Box<dyn Iterator<Item = u64>> = if let Some(TerminusOrderBy{fields}) =
+        arguments.get::<TerminusOrderBy>("orderBy")
     {
         let mut results: Vec<u64> = lookup_field_requests(g, &constraints, new_zero_iter).collect();
-        results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &vec));
+        results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
         // Probs should not be into_iter(), done to satisfy both arms of let symmetry
         // better to borrow in the other branch?
         Box::new(
@@ -189,40 +189,16 @@ pub fn run_filter_query<'a>(
     }
 }
 
-struct QueryOrderByDesc(Vec<(Spanning<String>, Spanning<InputValue<DefaultScalarValue>>)>);
-
-impl FromInputValue for QueryOrderByDesc {
-    fn from_input_value(input_value: &InputValue<DefaultScalarValue>) -> Option<Self> {
-        match input_value {
-            InputValue::Object(vec) => Some(QueryOrderByDesc(vec.clone())),
-            InputValue::Null => None,
-            _ => panic!("Order by descriptor can not have a non orderby object"),
-        }
-    }
-}
-
 fn create_query_order_key(
     g: &SyncStoreLayer,
     p: &Prefixes,
     id: u64,
-    order_desc: &[(Spanning<String>, Spanning<InputValue<DefaultScalarValue>>)],
+    order_desc: &[(String, TerminusOrdering)],
 ) -> QueryOrderKey {
     let vec: Vec<_> = order_desc
         .iter()
-        .filter_map(|(property, value)| {
-            let property_string = &property.item;
-            let value_input = &value.item;
-            let ordering = match value_input {
-                InputValue::Enum(s) => {
-                    if s == "ASC" {
-                        TerminusOrdering::Asc
-                    } else {
-                        TerminusOrdering::Desc
-                    }
-                }
-                _ => panic!("This ordering parameter must be an enum!"),
-            };
-            let predicate = p.expand_schema(property_string);
+        .filter_map(|(property, ordering)| {
+            let predicate = p.expand_schema(property);
             let predicate_id = g.predicate_id(&predicate)?;
             let res = g.single_triple_sp(id, predicate_id).and_then(move |t| {
                 let db_value = g
@@ -236,7 +212,7 @@ fn create_query_order_key(
                     _ => panic!("Scalar value or null expected"),
                 }
             });
-            Some((res, ordering))
+            Some((res, *ordering))
         })
         .collect();
 
