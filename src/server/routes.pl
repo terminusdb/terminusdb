@@ -3182,7 +3182,8 @@ authenticate(System_Askable, Request, Auth) :-
                        authResult: success,
                        user: Username
                    }).
-authenticate(_, _, anonymous) :-
+authenticate(_, _, Auth) :-
+    Auth = 'terminusdb://system/data/User/anonymous',
     json_log_debug(_{
                        message: "User 'anonymous' authenticated as no authentication information was submitted",
                        authMethod: anonymous,
