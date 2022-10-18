@@ -23,14 +23,14 @@ RUN set -eux; \
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 # Initialize the crates.io index git repo to cache it.
-RUN cargo install lazy_static 2> /dev/null || true
+RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swipl || true)
 WORKDIR /app/rust
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
-RUN make DIST=community
+RUN make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
 FROM rust_builder_base AS rust_builder_enterprise
