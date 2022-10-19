@@ -14,7 +14,8 @@ use crate::doc::{retrieve_all_index_ids, ArrayIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
-    enum_node_to_value, type_is_bool, type_is_float, type_is_integer, value_string_to_graphql, type_is_big_integer, type_is_small_integer,
+    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_float, type_is_integer,
+    type_is_small_integer, value_string_to_graphql,
 };
 
 use super::frame::*;
@@ -165,7 +166,7 @@ fn add_arguments<'r>(
 }
 
 fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
-    for (_,field) in class_definition.fields.iter() {
+    for (_, field) in class_definition.fields.iter() {
         if field.base_type().is_some() {
             return true;
         }
@@ -202,7 +203,13 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                     let field = registry
                         .field::<Vec<TerminusType<'a, C>>>(name, &(name.to_owned(), info.clone()));
 
-                    Some(add_arguments(&(name.to_owned(), info.clone()), registry, field, c, info))
+                    Some(add_arguments(
+                        &(name.to_owned(), info.clone()),
+                        registry,
+                        field,
+                        c,
+                        info,
+                    ))
                 } else {
                     None
                 }
@@ -434,11 +441,9 @@ impl GraphQLType for TerminusEnum {
 impl FromInputValue for TerminusEnum {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         match v {
-            InputValue::Enum(value) => {
-                Some(Self {
-                    value: value.to_owned(),
-                })
-            },
+            InputValue::Enum(value) => Some(Self {
+                value: value.to_owned(),
+            }),
             _ => None,
         }
     }
@@ -536,7 +541,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         let enum_value = enum_node_to_value(&enum_type, &enum_uri);
                         let enum_definition = allframes.frames[enum_type].as_enum_definition();
                         let value = juniper::Value::Scalar(DefaultScalarValue::String(
-                            enum_definition.name_value(&enum_value).to_string()));
+                            enum_definition.name_value(&enum_value).to_string(),
+                        ));
                         Some(Ok(value))
                     } else {
                         let val = instance.id_object_value(object_id).unwrap();
@@ -694,13 +700,18 @@ pub struct TerminusOrderBy {
 impl FromInputValue for TerminusOrderBy {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         if let InputValue::Object(o) = v {
-            let fields: Vec<_> = o.iter().map(|(k,v)| {
-                (k.item.to_owned(), TerminusOrdering::from_input_value(&v.item).unwrap())
-            }).collect();
+            let fields: Vec<_> = o
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.item.to_owned(),
+                        TerminusOrdering::from_input_value(&v.item).unwrap(),
+                    )
+                })
+                .collect();
 
             Some(Self { fields })
-        }
-        else {
+        } else {
             None
         }
     }
@@ -761,14 +772,16 @@ impl GraphQLValue for TerminusOrderBy {
     }
 }
 
-
 struct BigInt(String);
 
 #[juniper::graphql_scalar(
     name = "BigInt",
-    description = "The `BigInt` scalar type represents non-fractional signed whole numeric values.")]
+    description = "The `BigInt` scalar type represents non-fractional signed whole numeric values."
+)]
 impl<S> GraphQLScalar for BigInt
-where S: juniper::ScalarValue{
+where
+    S: juniper::ScalarValue,
+{
     fn resolve(&self) -> juniper::Value {
         juniper::Value::scalar(self.0.to_owned())
     }

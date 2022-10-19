@@ -80,7 +80,11 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
-    static ref INTEGER_TYPES: HashSet<&'static str> = SMALL_INTEGER_TYPES.iter().chain(BIG_INTEGER_TYPES.iter()).map(|x|*x).collect();
+    static ref INTEGER_TYPES: HashSet<&'static str> = SMALL_INTEGER_TYPES
+        .iter()
+        .chain(BIG_INTEGER_TYPES.iter())
+        .map(|x| *x)
+        .collect();
 }
 
 fn type_is_numeric(s: &str) -> bool {
@@ -147,7 +151,7 @@ pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
             } else {
                 // it will be something quoted, which we're gonna return as a string
                 juniper::Value::Scalar(DefaultScalarValue::String(
-                    prolog_string_to_string(val).into_owned()
+                    prolog_string_to_string(val).into_owned(),
                 ))
             }
         }
@@ -205,8 +209,7 @@ pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> S
         ScalarInputValue::String(s) => {
             if type_is_big_integer(base_type) {
                 format!("{}^^'{}{}'", s, XSD_PREFIX, base_type)
-            }
-            else {
+            } else {
                 let prolog_string = string_to_prolog_string(&s);
                 format!("{}^^'{}{}'", prolog_string, XSD_PREFIX, base_type)
             }
@@ -235,7 +238,7 @@ const SWIPL_CONTROL_CHAR_V: char = 11 as char;
 fn prolog_string_to_string(s: &str) -> Cow<str> {
     let mut result: Option<String> = None;
     let mut escaping = false;
-    let mut characters = s.chars().enumerate().skip(1).take(s.len()-2);
+    let mut characters = s.chars().enumerate().skip(1).take(s.len() - 2);
     while let Some((ix, c)) = characters.next() {
         if escaping {
             let result = result.as_mut().unwrap();
@@ -250,12 +253,11 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
                 'v' => result.push(SWIPL_CONTROL_CHAR_V),
                 'f' => result.push(SWIPL_CONTROL_CHAR_F),
                 'r' => result.push('\r'),
-                _ => panic!("unknown prolog escape code in string")
+                _ => panic!("unknown prolog escape code in string"),
             }
 
             escaping = false;
-        }
-        else {
+        } else {
             if c == '\\' {
                 escaping = true;
                 if result.is_none() {
@@ -263,8 +265,7 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
                     r.push_str(&s[1..ix]);
                     result = Some(r);
                 }
-            }
-            else if let Some(result) = result.as_mut(){
+            } else if let Some(result) = result.as_mut() {
                 result.push(c);
             }
         }
@@ -272,19 +273,20 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
 
     match result {
         Some(result) => Cow::Owned(result),
-        None => Cow::Borrowed(&s[1..s.len()-1])
+        None => Cow::Borrowed(&s[1..s.len() - 1]),
     }
 }
 
-fn unescape_legacy_prolog_escape_sequence(characters: &mut impl Iterator<Item=(usize, char)>) -> char {
+fn unescape_legacy_prolog_escape_sequence(
+    characters: &mut impl Iterator<Item = (usize, char)>,
+) -> char {
     let mut digits: String = String::new();
     loop {
-        let (_,digit) = characters.next().unwrap();
+        let (_, digit) = characters.next().unwrap();
         if digit == '\\' {
             let hex = u32::from_str_radix(&digits, 16).unwrap();
             return char::from_u32(hex).unwrap();
-        }
-        else {
+        } else {
             digits.push(digit);
         }
     }
@@ -307,7 +309,7 @@ fn string_to_prolog_string(s: &str) -> String {
             SWIPL_CONTROL_CHAR_F => result.push_str(r#"\\f"#),
             SWIPL_CONTROL_CHAR_V => result.push_str(r#"\\v"#),
             '\"' => result.push_str(r#"\""#),
-            _ => result.push(c)
+            _ => result.push(c),
         }
     }
 
@@ -330,7 +332,13 @@ mod tests {
         assert_eq!("hello\nthere", prolog_string_to_string(r#""hello\nthere""#));
         assert_eq!("hello\\there", prolog_string_to_string(r#""hello\\there""#));
         assert_eq!("\"", prolog_string_to_string(r#""\"""#));
-        assert_eq!("foo\u{5555}bar", prolog_string_to_string(r#""foo\x5555\bar""#));
-        assert_eq!("foo\u{5555}bar\u{6666}baz", prolog_string_to_string(r#""foo\x5555\bar\x6666\baz""#));
+        assert_eq!(
+            "foo\u{5555}bar",
+            prolog_string_to_string(r#""foo\x5555\bar""#)
+        );
+        assert_eq!(
+            "foo\u{5555}bar\u{6666}baz",
+            prolog_string_to_string(r#""foo\x5555\bar\x6666\baz""#)
+        );
     }
 }

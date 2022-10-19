@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::frame::{AllFrames, ClassDefinition, Prefixes};
-use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrdering, TerminusOrderBy};
+use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrderBy, TerminusOrdering};
 
 use float_ord::FloatOrd;
 
@@ -161,7 +161,7 @@ pub fn run_filter_query<'a>(
     let expanded_class_name = all_frames.fully_qualified_class_name(&class_name.to_string());
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
 
-    let it: Box<dyn Iterator<Item = u64>> = if let Some(TerminusOrderBy{fields}) =
+    let it: Box<dyn Iterator<Item = u64>> = if let Some(TerminusOrderBy { fields }) =
         arguments.get::<TerminusOrderBy>("orderBy")
     {
         let mut results: Vec<u64> = lookup_field_requests(g, &constraints, new_zero_iter).collect();
