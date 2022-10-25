@@ -12,7 +12,7 @@ externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.com/docs/
 servers:
-- url: http://localhost:6363/api/
+- url: http://localhost:6363/api
 security:
 - basicAuth: []
 tags:
@@ -1445,6 +1445,7 @@ paths:
     delete:
       x-python-client: not_implemented
       x-js-client: AccessControl.deleteRole
+      summary: Delete a role
       tags:
         - Account management
       parameters:

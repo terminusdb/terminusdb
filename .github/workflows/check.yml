@@ -38,9 +38,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: nwestfall/openapi-action@v1.0.2
-        with:
-          file: docs/openapi.yaml
+      - run: npx @redocly/cli lint docs/openapi.yaml
 
   python_client:
     name: Python client tests
