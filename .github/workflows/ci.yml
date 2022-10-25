@@ -10,6 +10,14 @@ env:
   CURRENT_REPO_VERSION: 10.1.8
 
 jobs:
+  openapi_lint:
+    name: OpenAPI linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - run: npx @redocly/cli lint docs/openapi.yaml
+
 
   is_duplicate_run:
     name: Duplicate run?

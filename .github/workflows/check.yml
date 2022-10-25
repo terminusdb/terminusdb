@@ -32,14 +32,6 @@ jobs:
             terminusdb/terminusdb-server:local \
             make test
 
-  openapi_lint:
-    name: OpenAPI linting
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - run: npx @redocly/cli lint docs/openapi.yaml
-
   python_client:
     name: Python client tests
     runs-on: ubuntu-latest
