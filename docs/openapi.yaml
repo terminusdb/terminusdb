@@ -1944,7 +1944,7 @@ components:
       examples:
         default_branch:
           value: admin/foo
-          summary: 'main' branch of admin/foo (autocompleted to admin/foo/local/branch/main)
+          summary: branch 'main' of admin/foo (autocompleted to admin/foo/local/branch/main)
         branch:
           value: admin/foo/local/branch/bar
           summary: branch 'bar' of data product 'admin/foo'
