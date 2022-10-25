@@ -414,7 +414,7 @@ paths:
         - Document
       summary: Get a document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
         - name: skip
           in: query
@@ -425,7 +425,7 @@ paths:
             default: 0
         - name: count
           in: query
-          description: Number of entries to show
+          description: Number of documents to retrieve
           required: false
           schema:
             type: integer
@@ -439,7 +439,7 @@ paths:
             default: true
         - name: as_list
           in: query
-          description: Return the JSONs as list instead of concatenated json
+          description: Return the JSONs as list instead of as a json stream
           required: false
           schema:
             type: boolean
@@ -456,7 +456,7 @@ paths:
           description: Specific document ID to look for
           schema:
             type: string
-            example: Person_Robin_1991-02-01
+            example: Person/Robin_1991-02-01
         - name: type
           in: query
           required: false
@@ -474,7 +474,7 @@ paths:
 
       responses:
         200:
-          description: List of documents
+          description: List or stream of documents
           content:
             application/json:
               schema:
@@ -489,14 +489,14 @@ paths:
         - Document
       summary: Insert a new document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
         - name: full_replace
           in: query
           required: false
-          description: Fully replace a document
+          description: Replace the existing data in the graph with the submitted documents. All existing data will be deleted.
           schema:
             type: boolean
             default: false
@@ -523,22 +523,22 @@ paths:
         - Document
       summary: Delete one or multiple documents
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
         - name: nuke
           in: query
-          description: Totally nuke the document(s)
+          description: Remove all data from the graph
           schema:
             type: boolean
             default: false
         - name: id
           in: query
-          description: ID of document(s)
+          description: ID of document
           schema:
             type: string
-            example: admin/SomeDocument
+            example: Person/Bert
       responses:
         200:
           description: Succesfully deleted document(s)
@@ -550,7 +550,7 @@ paths:
         - Document
       summary: Replace a document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
@@ -1934,14 +1934,38 @@ components:
       schema:
         type: string
         example: admin/test/local/branch/foo
-    document_path:
+    resource_path:
       name: path
       in: path
-      description: Path for document
+      description: Path for a resource (a branch, a commit, one of the metadata graphs, or the _system graph)
       required: true
       schema:
         type: string
-        example: admin/foo
+      examples:
+        default_branch:
+          value: admin/foo
+          summary: branch 'main' of admin/foo (autocompleted to admin/foo/local/branch/main)
+        branch:
+          value: admin/foo/local/branch/bar
+          summary: branch 'bar' of data product 'admin/foo'
+        remote_branch:
+          value: admin/foo/upstream/branch/bar
+          summary: branch 'bar' of the data product 'admin/foo' as it is in the 'upstream' remote
+        commit:
+          value: admin/foo/local/commit/66smtj9j45bho1vpztzwpi4fbbj8bwa
+          summary: a specific commit in data product 'admin/foo'
+        local_commits:
+          value: admin/foo/local/_commits
+          summary: the local commit graph for data product 'admin/foo'
+        remote_commits:
+          value: admin/foo/upstream/_commits
+          summary: the commit graph that of the 'upstream' remote for data product 'admin/foo'
+        meta:
+          value: admin/foo/_meta
+          summary: the metadata graph of data product 'admin/foo'
+        system:
+          value: _system
+          summary: the system graph
     organization:
       name: organization
       in: path
