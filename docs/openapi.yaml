@@ -1928,31 +1928,31 @@ components:
       required: true
       schema:
         type: string
-        examples:
-          default_branch:
-            value: admin/foo
-            summary: autocompleted to admin/foo/local/branch/main
-          branch:
-            value: admin/foo/local/branch/bar
-            summary: branch 'bar' of data product 'admin/foo'
-          remote_branch:
-            value: admin/foo/upstream/branch/bar
-            summary: branch 'bar' of the data product 'admin/foo' as it is in the 'upstream' remote
-          commit:
-            value: admin/foo/local/commit/66smtj9j45bho1vpztzwpi4fbbj8bwa
-            summary: a specific commit in data product 'admin/foo'
-          local_commits:
-            value: admin/foo/local/_commits
-            summary: the local commit graph for data product 'admin/foo'
-          remote_commits:
-            value: admin/foo/upstream/_commits
-            summary: the commits that are part of the 'upstream' remote for data product 'admin/foo'
-          meta:
-            value: admin/foo/_meta
-            summary: the metadata graph of data product 'admin/foo'
-          system:
-            value: _system
-            summary: the system graph
+      examples:
+        default_branch:
+          value: admin/foo
+          summary: 'main' branch of admin/foo (autocompleted to admin/foo/local/branch/main)
+        branch:
+          value: admin/foo/local/branch/bar
+          summary: branch 'bar' of data product 'admin/foo'
+        remote_branch:
+          value: admin/foo/upstream/branch/bar
+          summary: branch 'bar' of the data product 'admin/foo' as it is in the 'upstream' remote
+        commit:
+          value: admin/foo/local/commit/66smtj9j45bho1vpztzwpi4fbbj8bwa
+          summary: a specific commit in data product 'admin/foo'
+        local_commits:
+          value: admin/foo/local/_commits
+          summary: the local commit graph for data product 'admin/foo'
+        remote_commits:
+          value: admin/foo/upstream/_commits
+          summary: the commits that are part of the 'upstream' remote for data product 'admin/foo'
+        meta:
+          value: admin/foo/_meta
+          summary: the metadata graph of data product 'admin/foo'
+        system:
+          value: _system
+          summary: the system graph
     organization:
       name: organization
       in: path
