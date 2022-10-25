@@ -383,6 +383,13 @@ api_error_jsonld_(delete_db,error(database_files_do_not_exist(Organization,Datab
                              'api:database_name' : Database,
                              'api:organization_name' : Organization},
              'api:message' : Msg}.
+api_error_jsonld_(update_db,error(schema_check_failure([Witness|_]), _), JSON) :-
+    format(string(Msg), "Schema did not validate after turning schema checking on", []),
+    JSON = _{'@type' : 'api:UpdateDBErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:SchemaValidationError',
+                             'api:witness' : Witness},
+             'api:message' : Msg}.
 % CSV
 api_error_jsonld_(csv,error(unknown_encoding(Enc), _), JSON) :-
     format(string(Msg), "Unrecognized encoding (try utf-8): ~q", [Enc]),
