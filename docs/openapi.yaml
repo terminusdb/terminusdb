@@ -1946,7 +1946,7 @@ components:
           summary: the local commit graph for data product 'admin/foo'
         remote_commits:
           value: admin/foo/upstream/_commits
-          summary: the commits that are part of the 'upstream' remote for data product 'admin/foo'
+          summary: the commit graph that of the 'upstream' remote for data product 'admin/foo'
         meta:
           value: admin/foo/_meta
           summary: the metadata graph of data product 'admin/foo'
