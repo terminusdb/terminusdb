@@ -1127,7 +1127,7 @@ paths:
                       - api:success
   /optimize/{path}:
     post:
-      summarize: Optimize a specific graph
+      summary: Optimize a specific graph
       x-python-client: Client::optimize
       x-js-client: Client.optimizeBranch
       tags:
