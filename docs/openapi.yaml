@@ -12,7 +12,7 @@ externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.com/docs/
 servers:
-- url: http://localhost:6363/api/
+- url: http://localhost:6363/api
 security:
 - basicAuth: []
 tags:
@@ -619,6 +619,7 @@ paths:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
   /woql:
     post:
+      summary: Execute a WOQL query
       x-python-client: not_implemented
       x-js-client: not_implemented
       tags:
@@ -634,6 +635,7 @@ paths:
           description: Query result
   /woql/{path}:
     post:
+      summary: Execute a WOQL query on a specific path
       x-python-client: Client::query
       x-js-client: Client.query
       tags:
@@ -657,6 +659,7 @@ paths:
           description: Query result
   /clone/{organization}/{database}:
     post:
+      summary: Clone a database
       x-python-client: Client::clonedb
       x-js-client: Client.clonedb
       tags:
@@ -1002,6 +1005,7 @@ paths:
                       - "api:success"
   /branch/{path}:
     post:
+      summary: Create a new branch
       x-python-client: Client::create_branch
       x-js-client: Client.branch
       tags:
@@ -1031,6 +1035,7 @@ paths:
                     enum:
                       - "api:success"
     delete:
+      summary: Delete a branch
       x-python-client: Client::delete_branch
       x-js-client: Client.deleteBranch
       tags:
@@ -1060,6 +1065,7 @@ paths:
     parameters:
         - $ref: '#/components/parameters/branch_path'
     get:
+      summary: Squash a specific commit
       tags:
         - Branches
       responses:
@@ -1088,6 +1094,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      summary: Reset branch to a specific commit
       x-python-client: Client::reset
       x-js-client: Client.resetBranch
       tags:
@@ -1120,6 +1127,7 @@ paths:
                       - api:success
   /optimize/{path}:
     post:
+      summary: Optimize a specific graph
       x-python-client: Client::optimize
       x-js-client: Client.optimizeBranch
       tags:
@@ -1150,6 +1158,7 @@ paths:
                       - api:success
   /prefixes/{path}:
     get:
+      summary: Get prefixes
       x-python-client: Client::_get_prefixes
       x-js-client: Client.getPrefixes
       tags:
@@ -1171,6 +1180,7 @@ paths:
                 type: object
   /diff:
     post:
+      summary: Diff a specific object or data version
       x-python-client: Client::diff
       x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
       tags:
@@ -1214,6 +1224,7 @@ paths:
 
   /patch:
     post:
+      summary: Apply a patch object to another object
       x-python-client: Client::patch
       x-js-client: Client.patch
       tags:
@@ -1250,6 +1261,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      summary: Apply a specific diff
       x-python-client: Client::apply
       x-js-client: Client.apply
       tags:
@@ -1445,6 +1457,7 @@ paths:
     delete:
       x-python-client: not_implemented
       x-js-client: AccessControl.deleteRole
+      summary: Delete a role
       tags:
         - Account management
       parameters:
