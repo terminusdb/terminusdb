@@ -156,7 +156,7 @@ describe('document', function () {
           name: userName,
           password: userName,
         })
-      const agentNewUser = new Agent().auth({ user: userName, password: userName })
+      const agentNewUser = new Agent().auth({ user: userName, password: userName, skipJwt: true })
       const response = await agentNewUser.head(systemPath).send()
       expect(response.statusCode).to.equal(403)
     })

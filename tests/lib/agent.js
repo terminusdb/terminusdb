@@ -30,12 +30,13 @@ class Agent {
     params = new Params(params)
     this.user = params.string('user', process.env.TERMINUSDB_USER || 'admin')
     this.password = params.string('password', process.env.TERMINUSDB_PASSWORD || 'root')
+    const skipJwt = params.boolean('skipJwt', false)
     params.assertEmpty()
 
     const token = process.env.TERMINUSDB_ACCESS_TOKEN
     const insecureUserHeader = process.env.TERMINUSDB_INSECURE_USER_HEADER
 
-    if (token) {
+    if (token && !skipJwt) {
       this.agent.use((request) => {
         request.auth(token, { type: 'bearer' })
       })
