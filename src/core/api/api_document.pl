@@ -1,4 +1,5 @@
 :- module(api_document, [
+              api_can_read_document/6,
               api_insert_documents/8,
               api_delete_documents/8,
               api_delete_document/7,
@@ -453,6 +454,11 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                      ),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, _).
+
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-

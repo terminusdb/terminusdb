@@ -1377,6 +1377,8 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
             }.
 api_error_jsonld_(woql, Error, JSON) :-
     api_document_error_jsonld(woql, Error, JSON).
+api_error_jsonld_(access_documents, Error, JSON) :-
+    api_document_error_jsonld(access_documents, Error, JSON).
 api_error_jsonld_(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).
 api_error_jsonld_(insert_documents, Error, JSON) :-
@@ -1415,6 +1417,7 @@ error_type_(delete_documents, 'api:DeleteDocumentErrorResponse').
 error_type_(delete_organization, 'api:DeleteOrganizationErrorResponse').
 error_type_(fetch, 'api:FetchErrorResponse').
 error_type_(frame, 'api:FrameErrorResponse').
+error_type_(access_documents, 'api:AccessDocumentErrorResponse').
 error_type_(get_documents, 'api:GetDocumentErrorResponse').
 error_type_(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type_(optimize, 'api:OptimizeErrorResponse').
@@ -1488,6 +1491,7 @@ api_error_jsonld(graph,error(graph_already_exists(Descriptor,Graph_Name), _), Ty
                               'api:absolute_descriptor' : Path}
             }.
 
+document_error_type(access_documents, 'api:AccessDocumentErrorResponse').
 document_error_type(get_documents, 'api:GetDocumentErrorResponse').
 document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
