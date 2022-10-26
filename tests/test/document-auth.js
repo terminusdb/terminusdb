@@ -116,6 +116,54 @@ describe('document', function () {
       await document.insert(agent, { instance })
     })
 
+    it('passes HEAD call on existing db and with permissions', async function () {
+      const systemPath = api.path.documentSystem()
+      const response = await agent.head(systemPath).send()
+      expect(response['headers']['terminusdb-data-version']).to.match(/^system:/)
+      expect(response.statusCode).to.equal(200)
+    })
+
+
+    it('returns 404 on HEAD call on non-existing db', async function () {
+      const path = api.path.document({orgName: 'admin', dbName: 'nonExistingDb'})
+      const response = await agent.head(path).send()
+      expect(response.statusCode).to.equal(404)
+    })
+
+
+    it('returns 400 on HEAD call with wrong data-version', async function () {
+      const path = api.path.documentSystem()
+      const response = await agent.head(path)
+            .set('Terminusdb-Data-Version', 'system:nonMatchingDataVersion')
+            .send()
+      expect(response.statusCode).to.equal(400)
+    })
+
+
+    it('returns 200 on HEAD call with proper data-version', async function () {
+      const systemPath = api.path.documentSystem()
+      const response = await agent.head(systemPath).send()
+      const dataVersion = response['headers']['terminusdb-data-version']
+      const responseWithDataVersion = await agent.head(systemPath)
+            .set('Terminusdb-Data-Version', dataVersion)
+            .send()
+      expect(response.statusCode).to.equal(200)
+    })
+
+    it('returns 403 forbidden on HEAD call with user that does not have DB access', async function () {
+      const systemPath = api.path.documentSystem()
+      const userName = util.randomString()
+      await agent
+        .post('/api/users')
+        .send({
+          name: userName,
+          password: userName,
+        })
+      const agentNewUser = new Agent().auth({user: userName, password: userName})
+      const response = await agentNewUser.head(systemPath).send()
+      expect(response.statusCode).to.equal(403)
+    })
+
     it('fails on subdocument @key checks (#566)', async function () {
       const schema = { '@type': 'Class', '@subdocument': [] }
       schema['@id'] = util.randomString()
