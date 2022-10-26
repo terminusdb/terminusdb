@@ -119,35 +119,32 @@ describe('document', function () {
     it('passes HEAD call on existing db and with permissions', async function () {
       const systemPath = api.path.documentSystem()
       const response = await agent.head(systemPath).send()
-      expect(response['headers']['terminusdb-data-version']).to.match(/^system:/)
+      expect(response.headers['terminusdb-data-version']).to.match(/^system:/)
       expect(response.statusCode).to.equal(200)
     })
 
-
     it('returns 404 on HEAD call on non-existing db', async function () {
-      const path = api.path.document({orgName: 'admin', dbName: 'nonExistingDb'})
+      const path = api.path.document({ orgName: 'admin', dbName: 'nonExistingDb' })
       const response = await agent.head(path).send()
       expect(response.statusCode).to.equal(404)
     })
 
-
     it('returns 400 on HEAD call with wrong data-version', async function () {
       const path = api.path.documentSystem()
       const response = await agent.head(path)
-            .set('Terminusdb-Data-Version', 'system:nonMatchingDataVersion')
-            .send()
+        .set('Terminusdb-Data-Version', 'system:nonMatchingDataVersion')
+        .send()
       expect(response.statusCode).to.equal(400)
     })
-
 
     it('returns 200 on HEAD call with proper data-version', async function () {
       const systemPath = api.path.documentSystem()
       const response = await agent.head(systemPath).send()
-      const dataVersion = response['headers']['terminusdb-data-version']
+      const dataVersion = response.headers['terminusdb-data-version']
       const responseWithDataVersion = await agent.head(systemPath)
-            .set('Terminusdb-Data-Version', dataVersion)
-            .send()
-      expect(response.statusCode).to.equal(200)
+        .set('Terminusdb-Data-Version', dataVersion)
+        .send()
+      expect(responseWithDataVersion.statusCode).to.equal(200)
     })
 
     it('returns 403 forbidden on HEAD call with user that does not have DB access', async function () {
@@ -159,7 +156,7 @@ describe('document', function () {
           name: userName,
           password: userName,
         })
-      const agentNewUser = new Agent().auth({user: userName, password: userName})
+      const agentNewUser = new Agent().auth({ user: userName, password: userName })
       const response = await agentNewUser.head(systemPath).send()
       expect(response.statusCode).to.equal(403)
     })
