@@ -1338,8 +1338,9 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "swipl"
-version = "0.3.10"
-source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5639a3a013464e790befa04d95f051c5715e8d01c35f8424896912187630b72f"
 dependencies = [
  "convert_case",
  "lazy_static",
@@ -1352,7 +1353,8 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.4"
-source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "436033d15af81f9975d70f9b82a08e57bc4dc5c0c9e02abe2b4b4741185884c1"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -1361,7 +1363,8 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
-source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3c24ee13ef4f59cce23ccaff3006a861c7f8b02984c2a7821e7f1ced54b6c1a"
 dependencies = [
  "regex",
 ]
@@ -1369,7 +1372,8 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.7"
-source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=serde_dicts#12ea434815ab2410f91ecdedf904c5eb45b63c8a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "866890e8ba6f9110d351e6c64eeca9af29565bfdf686d80871c7f3e26cb6afb0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
