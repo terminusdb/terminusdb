@@ -2442,8 +2442,11 @@ format_help_markdown_opt(Opt) :-
 
 format_doc_id_list(Ids) :-
     length(Ids, Id_Count),
-    Column_Width is floor(log10(Id_Count)) + 2,
-    forall(
-        nth1(Count, Ids, Id),
-        format(current_output, "~|~t~d~*+: ~w~n", [Count, Column_Width, Id])
+    (   Id_Count > 0
+    ->  Column_Width is floor(log10(Id_Count)) + 2,
+        forall(
+            nth1(Count, Ids, Id),
+            format(current_output, "~|~t~d~*+: ~w~n", [Count, Column_Width, Id])
+        )
+    ;   true
     ).
