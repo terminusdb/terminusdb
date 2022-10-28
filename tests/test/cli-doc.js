@@ -569,6 +569,7 @@ describe('cli-doc', function () {
       expect(js.name).to.equal('Test')
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
+
     it('adds a broken context', async function () {
       const schema = [
         {
@@ -586,6 +587,22 @@ describe('cli-doc', function () {
       await exec(`./terminusdb.sh db create admin/${db}`)
       const r = await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}' | true`)
       expect(r.stderr).to.match(/^Error: The prefix pfx used in the context does not resolve to a URI.*/)
+      await exec(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+    it('uses schema metadata', async function () {
+      const schema = [
+        {
+          '@base': 'terminusdb:///data/',
+          '@schema': 'terminusdb:///schema#',
+          '@type': '@context',
+          '@metadata': { some_meta_key: 'some_meta_value' },
+        },
+      ]
+      const db = util.randomString()
+      await exec(`./terminusdb.sh db create admin/${db}`)
+      await exec(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
+      await exec(`./terminusdb.sh doc get -g schema admin/${db}`)
       await exec(`./terminusdb.sh db delete admin/${db}`)
     })
 
