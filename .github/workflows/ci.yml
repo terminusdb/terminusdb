@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - run: npx @redocly/cli lint docs/openapi.yaml
 
 
@@ -54,7 +54,7 @@ jobs:
         }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: dorny/paths-filter@v2
         id: filter
@@ -78,7 +78,7 @@ jobs:
       )
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Run Cog to update versions in files
         run: |
@@ -134,7 +134,7 @@ jobs:
     needs: all_checks_pass_with_build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Download Docker image
         uses: actions/download-artifact@v2
