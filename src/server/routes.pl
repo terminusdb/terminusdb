@@ -431,8 +431,29 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
                  prefix,
                  chunked,
                  time_limit(infinite),
-                 methods([options,post,delete,get,put])]).
+                 methods([head,options,post,delete,get,put])]).
 
+
+document_handler(head, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        access_documents,
+        Request,
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = json{}),
+
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+
+            param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
+            read_data_version_header(Request, Requested_Data_Version),
+
+            api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version),
+            write_data_version_header(Actual_Data_Version),
+            format('Status: 200 OK~n~n', [])
+        )).
 document_handler(get, Path, Request, System_DB, Auth) :-
     api_report_errors(
         get_documents,

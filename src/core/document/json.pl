@@ -2297,7 +2297,8 @@ get_schema_document_uri(Desc, ID) :-
     get_schema_document_uri(Transaction, ID).
 get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
-    is_simple_class(DB, Uri).
+    is_simple_class(DB, Uri),
+    \+ is_json_class(DB, Uri).
 
 get_schema_document(Query_Context, Id, Document) :-
     is_query_context(Query_Context),
