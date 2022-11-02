@@ -106,6 +106,22 @@ impl<'a, C: QueryableContextType> TerminusTypeCollection<'a, C> {
     }
 }
 
+pub struct TerminusOrderingInfo {
+    ordering_name: String,
+    type_name: String,
+    frames: Arc<AllFrames>
+}
+
+impl TerminusOrderingInfo {
+    fn new(type_name: &str, frames: &Arc<AllFrames>) -> Self {
+        Self {
+            ordering_name: format!("{}_Ordering", type_name),
+            type_name: type_name.to_string(),
+            frames: frames.clone()
+        }
+    }
+}
+
 fn add_arguments<'r>(
     info: &(String, Arc<AllFrames>),
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
@@ -129,11 +145,7 @@ fn add_arguments<'r>(
             registry
                 .arg::<Option<TerminusOrderBy>>(
                     "orderBy",
-                    &(
-                        format!("{}_Ordering", info.0),
-                        info.0.to_string(),
-                        info.1.clone(),
-                    ),
+                    &TerminusOrderingInfo::new(&info.0, &info.1)
                 )
                 .description("order by the given fields"),
         );
@@ -176,7 +188,7 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
 }
 
 pub fn is_reserved_argument_name(name: &String) -> bool {
-    name == "offset" || name == "limit" || name == "orderBy" || is_reserved_field_name(name)
+    name == "filter" || name == "offset" || name == "limit" || name == "orderBy" || is_reserved_field_name(name)
 }
 
 pub fn is_reserved_field_name(name: &String) -> bool {
@@ -719,7 +731,7 @@ impl FromInputValue for TerminusOrderBy {
 
 impl GraphQLType for TerminusOrderBy {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.0)
+        Some(&info.ordering_name)
     }
 
     fn meta<'r>(
@@ -729,8 +741,8 @@ impl GraphQLType for TerminusOrderBy {
     where
         DefaultScalarValue: 'r,
     {
-        let frames = &info.2;
-        if let TypeDefinition::Class(d) = &frames.frames[&info.1] {
+        let frames = &info.frames;
+        if let TypeDefinition::Class(d) = &frames.frames[&info.type_name] {
             let arguments: Vec<_> = d
                 .fields
                 .iter()
@@ -755,10 +767,10 @@ impl GraphQLType for TerminusOrderBy {
 impl GraphQLValue for TerminusOrderBy {
     type Context = ();
 
-    type TypeInfo = (String, String, Arc<AllFrames>);
+    type TypeInfo = TerminusOrderingInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.0)
+        Some(&info.ordering_name)
     }
 
     fn resolve_field(
