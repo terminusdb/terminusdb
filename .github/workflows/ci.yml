@@ -6,10 +6,18 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 10.1.6
-  CURRENT_REPO_VERSION: 10.1.7
+  LAST_RELEASED_VERSION: 10.1.7
+  CURRENT_REPO_VERSION: 10.1.8
 
 jobs:
+  openapi_lint:
+    name: OpenAPI linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - run: npx @redocly/cli lint docs/openapi.yaml
+
 
   is_duplicate_run:
     name: Duplicate run?
@@ -47,7 +55,7 @@ jobs:
         }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: dorny/paths-filter@v2
         id: filter
@@ -71,7 +79,7 @@ jobs:
       )
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Run Cog to update versions in files
         run: |
@@ -127,7 +135,7 @@ jobs:
     needs: all_checks_pass_with_build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Download Docker image
         uses: actions/download-artifact@v2

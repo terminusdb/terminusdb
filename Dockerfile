@@ -3,7 +3,7 @@
 ARG DIST=community
 
 # Install the SWI-Prolog pack dependencies.
-FROM terminusdb/swipl:v8.4.2 AS pack_installer
+FROM terminusdb/swipl:v8.4.3-patched-1 AS pack_installer
 RUN set -eux; \
     BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
     apt-get update; \
@@ -14,7 +14,7 @@ COPY distribution/Makefile.deps Makefile
 RUN make
 
 # Install Rust. Prepare to build the Rust code.
-FROM terminusdb/swipl:v8.4.2 AS rust_builder_base
+FROM terminusdb/swipl:v8.4.3-patched-1 AS rust_builder_base
 RUN set -eux; \
     BUILD_DEPS="git build-essential curl clang ca-certificates"; \
     apt-get update; \
@@ -23,14 +23,14 @@ RUN set -eux; \
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 # Initialize the crates.io index git repo to cache it.
-RUN cargo install lazy_static 2> /dev/null || true
+RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swipl || true)
 WORKDIR /app/rust
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
-RUN make DIST=community
+RUN make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
 FROM rust_builder_base AS rust_builder_enterprise
@@ -41,7 +41,7 @@ RUN make DIST=enterprise
 FROM rust_builder_${DIST} AS rust_builder
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
-FROM terminusdb/swipl:v8.4.2 AS base
+FROM terminusdb/swipl:v8.4.3-patched-1 AS base
 RUN set -eux; \
     RUNTIME_DEPS="libjwt0 make openssl"; \
     apt-get update; \

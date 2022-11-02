@@ -117,6 +117,7 @@
               unbundle/4,
 
               % api_document.pl
+              api_can_read_document/6,
               api_insert_documents/8,
               api_delete_documents/8,
               api_delete_document/7,

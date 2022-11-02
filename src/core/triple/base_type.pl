@@ -145,6 +145,7 @@ base_type_parent('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString','http:/
 base_type_parent('http://www.w3.org/2000/01/rdf-schema#XMLLiteral','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2001/XMLSchema#anySimpleType','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2001/XMLSchema#string','http://www.w3.org/2001/XMLSchema#anySimpleType').
+ base_type_parent('http://www.w3.org/2001/XMLSchema#anyURI','http://www.w3.org/2001/XMLSchema#string').
  base_type_parent('http://terminusdb.com/schema/xdd#url','http://www.w3.org/2001/XMLSchema#string').
  base_type_parent('http://terminusdb.com/schema/xdd#email','http://www.w3.org/2001/XMLSchema#string').
  base_type_parent('http://terminusdb.com/schema/xdd#json','http://www.w3.org/2001/XMLSchema#string').

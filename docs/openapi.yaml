@@ -12,7 +12,7 @@ externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.com/docs/
 servers:
-- url: http://localhost:6363/api/
+- url: http://localhost:6363/api
 security:
 - basicAuth: []
 tags:
@@ -414,7 +414,7 @@ paths:
         - Document
       summary: Get a document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
         - name: skip
           in: query
@@ -425,7 +425,7 @@ paths:
             default: 0
         - name: count
           in: query
-          description: Number of entries to show
+          description: Number of documents to retrieve
           required: false
           schema:
             type: integer
@@ -439,7 +439,7 @@ paths:
             default: true
         - name: as_list
           in: query
-          description: Return the JSONs as list instead of concatenated json
+          description: Return the JSONs as list instead of as a json stream
           required: false
           schema:
             type: boolean
@@ -456,7 +456,7 @@ paths:
           description: Specific document ID to look for
           schema:
             type: string
-            example: Person_Robin_1991-02-01
+            example: Person/Robin_1991-02-01
         - name: type
           in: query
           required: false
@@ -474,7 +474,7 @@ paths:
 
       responses:
         200:
-          description: List of documents
+          description: List or stream of documents
           content:
             application/json:
               schema:
@@ -489,14 +489,14 @@ paths:
         - Document
       summary: Insert a new document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
         - name: full_replace
           in: query
           required: false
-          description: Fully replace a document
+          description: Replace the existing data in the graph with the submitted documents. All existing data will be deleted.
           schema:
             type: boolean
             default: false
@@ -523,22 +523,22 @@ paths:
         - Document
       summary: Delete one or multiple documents
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
         - name: nuke
           in: query
-          description: Totally nuke the document(s)
+          description: Remove all data from the graph
           schema:
             type: boolean
             default: false
         - name: id
           in: query
-          description: ID of document(s)
+          description: ID of document
           schema:
             type: string
-            example: admin/SomeDocument
+            example: Person/Bert
       responses:
         200:
           description: Succesfully deleted document(s)
@@ -550,7 +550,7 @@ paths:
         - Document
       summary: Replace a document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
@@ -619,6 +619,7 @@ paths:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
   /woql:
     post:
+      summary: Execute a WOQL query
       x-python-client: not_implemented
       x-js-client: not_implemented
       tags:
@@ -634,6 +635,7 @@ paths:
           description: Query result
   /woql/{path}:
     post:
+      summary: Execute a WOQL query on a specific path
       x-python-client: Client::query
       x-js-client: Client.query
       tags:
@@ -657,6 +659,7 @@ paths:
           description: Query result
   /clone/{organization}/{database}:
     post:
+      summary: Clone a database
       x-python-client: Client::clonedb
       x-js-client: Client.clonedb
       tags:
@@ -1002,6 +1005,7 @@ paths:
                       - "api:success"
   /branch/{path}:
     post:
+      summary: Create a new branch
       x-python-client: Client::create_branch
       x-js-client: Client.branch
       tags:
@@ -1031,6 +1035,7 @@ paths:
                     enum:
                       - "api:success"
     delete:
+      summary: Delete a branch
       x-python-client: Client::delete_branch
       x-js-client: Client.deleteBranch
       tags:
@@ -1060,6 +1065,7 @@ paths:
     parameters:
         - $ref: '#/components/parameters/branch_path'
     get:
+      summary: Squash a specific commit
       tags:
         - Branches
       responses:
@@ -1088,6 +1094,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      summary: Reset branch to a specific commit
       x-python-client: Client::reset
       x-js-client: Client.resetBranch
       tags:
@@ -1120,6 +1127,7 @@ paths:
                       - api:success
   /optimize/{path}:
     post:
+      summary: Optimize a specific graph
       x-python-client: Client::optimize
       x-js-client: Client.optimizeBranch
       tags:
@@ -1150,6 +1158,7 @@ paths:
                       - api:success
   /prefixes/{path}:
     get:
+      summary: Get prefixes
       x-python-client: Client::_get_prefixes
       x-js-client: Client.getPrefixes
       tags:
@@ -1171,6 +1180,7 @@ paths:
                 type: object
   /diff:
     post:
+      summary: Diff a specific object or data version
       x-python-client: Client::diff
       x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
       tags:
@@ -1214,6 +1224,7 @@ paths:
 
   /patch:
     post:
+      summary: Apply a patch object to another object
       x-python-client: Client::patch
       x-js-client: Client.patch
       tags:
@@ -1250,6 +1261,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      summary: Apply a specific diff
       x-python-client: Client::apply
       x-js-client: Client.apply
       tags:
@@ -1445,6 +1457,7 @@ paths:
     delete:
       x-python-client: not_implemented
       x-js-client: AccessControl.deleteRole
+      summary: Delete a role
       tags:
         - Account management
       parameters:
@@ -1921,14 +1934,38 @@ components:
       schema:
         type: string
         example: admin/test/local/branch/foo
-    document_path:
+    resource_path:
       name: path
       in: path
-      description: Path for document
+      description: Path for a resource (a branch, a commit, one of the metadata graphs, or the _system graph)
       required: true
       schema:
         type: string
-        example: admin/foo
+      examples:
+        default_branch:
+          value: admin/foo
+          summary: branch 'main' of admin/foo (autocompleted to admin/foo/local/branch/main)
+        branch:
+          value: admin/foo/local/branch/bar
+          summary: branch 'bar' of data product 'admin/foo'
+        remote_branch:
+          value: admin/foo/upstream/branch/bar
+          summary: branch 'bar' of the data product 'admin/foo' as it is in the 'upstream' remote
+        commit:
+          value: admin/foo/local/commit/66smtj9j45bho1vpztzwpi4fbbj8bwa
+          summary: a specific commit in data product 'admin/foo'
+        local_commits:
+          value: admin/foo/local/_commits
+          summary: the local commit graph for data product 'admin/foo'
+        remote_commits:
+          value: admin/foo/upstream/_commits
+          summary: the commit graph that of the 'upstream' remote for data product 'admin/foo'
+        meta:
+          value: admin/foo/_meta
+          summary: the metadata graph of data product 'admin/foo'
+        system:
+          value: _system
+          summary: the system graph
     organization:
       name: organization
       in: path
