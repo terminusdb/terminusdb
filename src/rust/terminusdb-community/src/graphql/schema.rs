@@ -456,6 +456,9 @@ impl FromInputValue for TerminusEnum {
             InputValue::Enum(value) => Some(Self {
                 value: value.to_owned(),
             }),
+            InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
+                value: value.to_owned()
+            }),
             _ => None,
         }
     }
