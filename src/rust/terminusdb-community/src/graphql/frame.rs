@@ -200,7 +200,7 @@ pub enum FieldKind {
 
 pub fn is_base_type(s: &str) -> bool {
     // TODO this is not good enough
-    s.starts_with("xsd:")
+    s.starts_with("xsd:") || s.starts_with("sys:")
 }
 
 pub fn sanitize_class(s: &String) -> String {
