@@ -532,7 +532,8 @@ test(simple_diff, []) :-
                  name:"Ludo"
                 },
     simple_diff(Before,After,Patch,[keep(json{})]),
-    Patch = json{name:json{'@after':"Ludo",
+    Patch = json{'@id':"Person/Ludwig",
+                 name:json{'@after':"Ludo",
                            '@before':"Ludwig",
                            '@op':"SwapValue"}
                 }.
@@ -577,7 +578,8 @@ test(simple_diff_deep_value, []) :-
                                  country : "Austria"}
                 },
     simple_diff(Before,After,Patch,[keep(json{address : json{ city: true }})]),
-    Patch = json{ name:json{'@after':"Ludo",
+    Patch = json{ '@id':"Person/Ludwig",
+                  name:json{'@after':"Ludo",
                             '@before':"Ludwig",
                             '@op':"SwapValue"},
                   address: json{ city : "Vienna" }
@@ -679,7 +681,8 @@ test(deep_list_diff_append, []) :-
 
     simple_diff(Before,After,Patch,[keep(json{})]),
 
-    Patch = json{addresses:
+    Patch = json{'@id' : "Person/Ludwig",
+                 addresses:
                  json{'@op':"CopyList",
                       '@to':1,
                       '@rest':
