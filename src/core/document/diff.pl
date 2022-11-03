@@ -119,11 +119,13 @@ simple_key_diff(['@id'|Keys],Before,After,Keep,Output_Keys,State,Cost,New_Cost,O
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,Keep,true),
     !,
-    % If we are a subdocument, we should just fail on bad id comparisons
-    get_dict(Key,Before,Before_Value),
-    string_normalise(Before_Value, Value),
-    get_dict(Key,After,After_Value),
-    string_normalise(After_Value, Value),
+    do_or_die(
+        (   get_dict(Key,Before,Before_Value),
+            string_normalise(Before_Value, Value),
+            get_dict(Key,After,After_Value),
+            string_normalise(After_Value, Value)
+        ),
+        error(explicitly_copied_key_has_changed(Key,Before,After),_)),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Options) :-
     get_dict(Key,Before,Sub_Before),
