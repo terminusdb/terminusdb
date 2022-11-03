@@ -854,27 +854,8 @@ test(subdocument_patch, []) :-
          b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
                 '@type':de28157020c151124517685fdeaa108f,
                 c:4}},
-    print_term(Result, []),
     simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
-    Result = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
-                  a:"pickles and eggs",
-                  b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
-                         '@type':de28157020c151124517685fdeaa108f,
-                         c:4}}.
+    Result = json{'@id':"1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244", b:json{c:json{'@after':3, '@before':4, '@op':"SwapValue"}}}.
 
-test(subdocument_patch, []) :-
-    Old = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/3',
-                '@type':de28157020c151124517685fdeaa108f,
-                c:3},
-    New = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
-               '@type':de28157020c151124517685fdeaa108f,
-               c:4},
-    print_term(Result, []),
-    simple_diff(New, Old, Result, [keep(json{'@id':true}), subdocument(true)]),
-    Result = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
-                  a:"pickles and eggs",
-                  b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
-                         '@type':de28157020c151124517685fdeaa108f,
-                         c:4}}.
 
 :- end_tests(simple_diff).
