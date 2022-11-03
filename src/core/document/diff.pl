@@ -101,11 +101,7 @@ simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost,_Options).
 simple_key_diff(['@id'|Keys],Before,After,Keep,Output_Keys,State,Cost,New_Cost,Options) :-
     !, % Ids must be treated specially
     (   option(subdocument(true), Options)
-    ->  get_dict('@id',Before,Before_Value),
-        string_normalise(Before_Value, Value),
-        get_dict('@id',After,After_Value),
-        string_normalise(After_Value, Value),
-        Output_Keys = Rest
+    ->  Output_Keys = Rest
     ;   do_or_die(
             (   get_dict('@id',Before,Before_Value),
                 string_normalise(Before_Value, Value),
@@ -845,5 +841,40 @@ test(deep_list_id_patch, []) :-
 				  }
 		  }
         }.
+
+test(subdocument_patch, []) :-
+    Old = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244',
+         '@type':'1d43d0276b25d0bf77843843c407f8ec',
+         a:"pickles and eggs",
+         b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/3',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:3}},
+    New = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
+         a:"pickles and eggs",
+         b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:4}},
+    print_term(Result, []),
+    simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
+    Result = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
+                  a:"pickles and eggs",
+                  b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
+                         '@type':de28157020c151124517685fdeaa108f,
+                         c:4}}.
+
+test(subdocument_patch, []) :-
+    Old = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/3',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:3},
+    New = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
+               '@type':de28157020c151124517685fdeaa108f,
+               c:4},
+    print_term(Result, []),
+    simple_diff(New, Old, Result, [keep(json{'@id':true}), subdocument(true)]),
+    Result = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
+                  a:"pickles and eggs",
+                  b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
+                         '@type':de28157020c151124517685fdeaa108f,
+                         c:4}}.
 
 :- end_tests(simple_diff).

@@ -251,6 +251,7 @@ describe('diff-id', function () {
           before_data_version: dv1,
           after_data_version: dv2,
         })
+      console.log(r3.body)
       expect(r3.status).to.equal(200)
       expect(r3.body[0].b.c).to.deep.equal({ '@after': 4, '@before': 3, '@op': 'SwapValue' })
     })
