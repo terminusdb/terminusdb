@@ -812,35 +812,23 @@ test(deep_list_id_patch, []) :-
     atom_json_dict(OldAtom, Old, []),
     atom_json_dict(NewAtom, New, []),
     simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
-    Result =
-    json{ '@id':"TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
-          lives_at:
-          json{
-              '@after':[ _{ '@id':"Person/4444bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
-				            '@type':"Address",
-				            'AddressLine1':"same to test",
-				            'City':"Somwhere",
-				            'Country':"New Zeeland",
-				            postalCode:"99"
-				          }
-			           ],
-		      '@before':[],
-		      '@op':"SwapList",
-		      '@rest':
-              json{ '@after':[],
-				    '@before':[ _{ '@id':"Person/9addd78bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
-						           '@type':"Address",
-						           'AddressLine1':"original second address",
-						           'City':"Same",
-						           'Country':"New Zeeland",
-						           postalCode:"PGD"
-						         }
-					          ],
-				    '@op':"SwapList",
-				    '@rest':json{'@op':"KeepList"}
-				  }
-		  }
-        }.
+
+    Result = json{ '@id':"TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+				   lives_at:[ json{ 'AddressLine1':json{ '@after':"same to test",
+										                 '@before':"original second address",
+										                 '@op':"SwapValue"
+									                   },
+							        'City':json{ '@after':"Somwhere",
+									             '@before':"Same",
+									             '@op':"SwapValue"
+								               },
+							        postalCode:json{ '@after':"99",
+									                 '@before':"PGD",
+									                 '@op':"SwapValue"
+									               }
+							      }
+						    ]
+				 }.
 
 test(subdocument_patch, []) :-
     Old = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244',
