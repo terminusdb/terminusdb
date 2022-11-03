@@ -78,7 +78,11 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     is_list(Before),
     !,
     is_list(After),
-    simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options).
+    % Bail on sub elements copying to try another approach.
+    catch(
+        simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options),
+        error(explicitly_copied_key_has_changed(_),_),
+        fail).
 simple_diff(Before,After,_,_,_,_,_,_) :-
     % Copy is implicit
     string_normalise(Before, Value),
@@ -115,7 +119,7 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     !,
     (   get_dict(Key,Keep,Sub_Keep)
     ->  true
-    ;   Sub_Keep = json{}),
+    ;   Sub_Keep = json{'@id': true}),
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
@@ -765,5 +769,64 @@ test(deep_list_patch, []) :-
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
     simple_diff(Before,After,Diff,[keep(json{})]),
     simple_patch(Diff,Before,success(After),[]).
+
+:- use_module(library(http/json)).
+
+test(deep_list_id_patch, []) :-
+    OldAtom = '{
+  "@id": "TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+  "@type": "TEST",
+  "lives_at": [{
+      "@id": "Person/4444bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+      "@type": "Address",
+      "AddressLine1": "same to test",
+      "City": "Somwhere",
+      "Country": "New Zeeland",
+      "postalCode": "99"
+    }]}',
+    NewAtom = '{
+  "@id": "TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+  "@type": "TEST",
+  "lives_at": [{
+      "@id": "Person/9addd78bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+      "@type": "Address",
+      "AddressLine1": "original second address",
+      "City": "Same",
+      "Country": "New Zeeland",
+      "postalCode": "PGD"
+    }]}',
+    atom_json_dict(OldAtom, Old, []),
+    atom_json_dict(NewAtom, New, []),
+    simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
+    Result =
+    json{ '@id':"TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+          lives_at:
+          json{
+              '@after':[ _{ '@id':"Person/4444bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+				            '@type':"Address",
+				            'AddressLine1':"same to test",
+				            'City':"Somwhere",
+				            'Country':"New Zeeland",
+				            postalCode:"99"
+				          }
+			           ],
+		      '@before':[],
+		      '@op':"SwapList",
+		      '@rest':
+              json{ '@after':[],
+				    '@before':[ _{ '@id':"Person/9addd78bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+						           '@type':"Address",
+						           'AddressLine1':"original second address",
+						           'City':"Same",
+						           'Country':"New Zeeland",
+						           postalCode:"PGD"
+						         }
+					          ],
+				    '@op':"SwapList",
+				    '@rest':json{'@op':"KeepList"}
+				  }
+		  }
+        }.
+
 
 :- end_tests(simple_diff).
