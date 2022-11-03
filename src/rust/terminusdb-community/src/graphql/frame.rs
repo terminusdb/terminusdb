@@ -720,7 +720,6 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
 
         let term = unwrap_result(&context, context.term_from_string(term));
         let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
-        panic!("{typedef:?}");
         assert_eq!(
             TypeDefinition::Class(ClassDefinition {
                 field_renaming: None,
@@ -775,7 +774,7 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
         let term = unwrap_result(&context, context.term_from_string(term));
         let frames: AllFrames = context.deserialize_from_term(&term).unwrap();
 
-        panic!("{:?}", frames);
+        // TODO actually test something here
     }
 
     #[test]
@@ -818,7 +817,7 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
                 documentation: Some(EnumDocumentationDefinition {
                     label: None,
                     values: None,
-                    comment: None,
+                    comment: Some("The exhaustive list of actions which are available to roles.".to_string()),
                 }),
                 values: vec![
                     "create_database".to_string(),
@@ -994,7 +993,7 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
 'ArithmeticExpression':json{'@abstract':[],'@documentation':json{'@comment':"An abstract class specifying the AST super-class of all arithemtic expressions."},'@key':json{'@type':"ValueHash"},'@subdocument':[],'@type':'Class'}}"#;
         let term = unwrap_result(&context, context.term_from_string(term));
         let frames: AllFrames = context.deserialize_from_term(&term).unwrap();
-        panic!("{frames:?}")
         // at least it parses!
+        // TODO test something here
     }
 }
