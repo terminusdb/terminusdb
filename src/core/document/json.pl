@@ -13452,6 +13452,22 @@ test(class_metadata,
          '@type':'Class',
          name:'xsd:string'}.
 
+test(class_metadata_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(metadata_class,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    class_frame(Desc, 'Example', Frame),
+    Frame = json{ '@metadata':json{ over:json{the:["r","a"]},
+								    some:3,
+								    where:[null,true]
+								  },
+				  '@type':'Class',
+				  name:'xsd:string'
+                }.
+
 test(elaborate_enum_metadata,
      []) :-
     Class = json{'@id':"Choice",
