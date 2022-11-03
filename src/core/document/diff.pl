@@ -101,19 +101,19 @@ simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost,_Options).
 simple_key_diff(['@id'|Keys],Before,After,Keep,Output_Keys,State,Cost,New_Cost,Options) :-
     !, % Ids must be treated specially
     (   option(subdocument(true), Options)
-    ->  get_dict(Key,Before,Before_Value),
+    ->  get_dict('@id',Before,Before_Value),
         string_normalise(Before_Value, Value),
-        get_dict(Key,After,After_Value),
+        get_dict('@id',After,After_Value),
         string_normalise(After_Value, Value),
         Output_Keys = Rest
     ;   do_or_die(
-            (   get_dict(Key,Before,Before_Value),
+            (   get_dict('@id',Before,Before_Value),
                 string_normalise(Before_Value, Value),
-                get_dict(Key,After,After_Value),
+                get_dict('@id',After,After_Value),
                 string_normalise(After_Value, Value)
             ),
-            error(explicitly_copied_key_has_changed(Key,Before,After),_)),
-        Output_Keys = [Key-Value|Rest]
+            error(explicitly_copied_key_has_changed('@id',Before,After),_)),
+        Output_Keys = ['@id'-Value|Rest]
     ),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost,Options) :-
