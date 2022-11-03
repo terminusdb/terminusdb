@@ -78,11 +78,7 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     is_list(Before),
     !,
     is_list(After),
-    % Bail on sub elements copying to try another approach.
-    catch(
-        simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options),
-        error(explicitly_copied_key_has_changed(_),_),
-        fail).
+    simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options).
 simple_diff(Before,After,_,_,_,_,_,_) :-
     % Copy is implicit
     string_normalise(Before, Value),
@@ -102,16 +98,32 @@ string_normalise(Value, Norm) :-
     ).
 
 simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost,_Options).
+simple_key_diff(['@id'|Keys],Before,After,Keep,Output_Keys,State,Cost,New_Cost,Options) :-
+    !, % Ids must be treated specially
+    (   option(subdocument(true), Options)
+    ->  get_dict(Key,Before,Before_Value),
+        string_normalise(Before_Value, Value),
+        get_dict(Key,After,After_Value),
+        string_normalise(After_Value, Value),
+        Output_Keys = Rest
+    ;   do_or_die(
+            (   get_dict(Key,Before,Before_Value),
+                string_normalise(Before_Value, Value),
+                get_dict(Key,After,After_Value),
+                string_normalise(After_Value, Value)
+            ),
+            error(explicitly_copied_key_has_changed(Key,Before,After),_)),
+        Output_Keys = [Key-Value|Rest]
+    ),
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,Keep,true),
     !,
-    do_or_die(
-        (   get_dict(Key,Before,Before_Value),
-            string_normalise(Before_Value, Value),
-            get_dict(Key,After,After_Value),
-            string_normalise(After_Value, Value)
-        ),
-        error(explicitly_copied_key_has_changed(Key),_)),
+    % If we are a subdocument, we should just fail on bad id comparisons
+    get_dict(Key,Before,Before_Value),
+    string_normalise(Before_Value, Value),
+    get_dict(Key,After,After_Value),
+    string_normalise(After_Value, Value),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Options) :-
     get_dict(Key,Before,Sub_Before),
@@ -119,11 +131,12 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     !,
     (   get_dict(Key,Keep,Sub_Keep)
     ->  true
-    ;   Sub_Keep = json{'@id': true}),
+    ;   Sub_Keep = json{}),
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
-    (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,Options)
+    (   merge_options(_{subdocument:true}, Options, New_Options),
+        simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,New_Options)
     *-> (   \+ (is_dict(Sub_Diff),
                 get_dict('@op', Sub_Diff, "KeepList"))
         ->  New_Keys = [Key-Sub_Diff|Rest]
@@ -569,7 +582,7 @@ test(simple_diff_deep_value, []) :-
                 }.
 
 test(simple_diff_error, [
-         error(explicitly_copied_key_has_changed('@id'),
+         error(explicitly_copied_key_has_changed('@id',_,_),
                _)
      ]) :-
 
@@ -827,6 +840,5 @@ test(deep_list_id_patch, []) :-
 				  }
 		  }
         }.
-
 
 :- end_tests(simple_diff).
