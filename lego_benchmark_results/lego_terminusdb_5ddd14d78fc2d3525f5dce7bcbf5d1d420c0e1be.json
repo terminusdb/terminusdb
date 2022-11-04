@@ -1,0 +1,17 @@
+{
+   "involuntary_context_switches": 59108,
+   "real_time_formatted": "12:05.77",
+   "real_time_seconds": 725.77,
+   "major_page_faults": 0,
+   "avg_total_memory_use_kb": 0,
+   "max_resident_set_kb": 44928,
+   "cpu_percentage": "0%",
+   "minor_page_faults": 2070,
+   "system_time_seconds": 4.90,
+   "user_time_seconds": 2.11,
+   "voluntary_context_switches": 380748,
+   "file_system_outputs": 0,
+   "average_resident_set_kb": 0,
+   "file_system_inputs": 0,
+   "exit_status": 0
+}
