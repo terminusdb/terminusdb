@@ -606,6 +606,11 @@ get_dict('@ref', Value, Ref) =>
 check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
     infer_type(Database, Prefixes, Type, Value, _, Annotated, Captures).
+check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+Type = 'http://terminusdb.com/schema/sys#Unit',
+is_list(Value) =>
+    no_captures(Captures),
+    Annotated = success([]).
 check_value_type(_Database,_Prefixes,Value,Type,_Annotated,_Captures),
 is_list(Value) =>
     throw(error(schema_check_failure([witness{ '@type' : unexpected_list,
