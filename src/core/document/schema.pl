@@ -500,7 +500,8 @@ is_built_in(P) :-
             sys:class,
             sys:abstract,
             sys:subdocument,
-            sys:unfoldable
+            sys:unfoldable,
+            sys:metadata
         ],
         List),
     memberchk(P,List).

@@ -11744,6 +11744,11 @@ schema_class_with_unit_property('
   "@id": "Foo",
   "field": "sys:Unit"
 }
+
+{ "@type" : "Class",
+  "@id" : "Bar",
+  "unit_option" : { "@type" : "Optional", "@class" : "sys:Unit"}
+}
 ').
 
 test(class_with_unit_property,
@@ -11807,6 +11812,41 @@ test(class_with_unit_property_missing_field,
                                           _{'@type': "Foo"},
                                           _Id)
                          ).
+
+test(class_with_optional_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    write_schema(schema_class_with_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Bar",
+                                            'unit_option': []},
+                                          Id)
+                         ),
+
+    get_document(Desc, Id, Document),
+
+    _{'@type': 'Bar',
+      'unit_option': []} :< Document,
+
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2,
+                                          _{'@type': "Bar"},
+                                          Id2)
+                         ),
+
+    get_document(Desc, Id2, Document2),
+
+    get_dict('@type', Document2, 'Bar'),
+    \+ get_dict('unit_option', Document2, _).
+
 
 schema_class_with_oneof_unit_property('
 { "@base": "terminusdb:///data/",
@@ -13520,6 +13560,22 @@ test(class_metadata,
          '@metadata':json{over:json{the:["r","a"]},some:3,where:[null,true]},
          '@type':'Class',
          name:'xsd:string'}.
+
+test(class_metadata_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(metadata_class,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    class_frame(Desc, 'Example', Frame),
+    Frame = json{ '@metadata':json{ over:json{the:["r","a"]},
+								    some:3,
+								    where:[null,true]
+								  },
+				  '@type':'Class',
+				  name:'xsd:string'
+                }.
 
 test(elaborate_enum_metadata,
      []) :-
