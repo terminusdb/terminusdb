@@ -98,6 +98,20 @@ string_normalise(Value, Norm) :-
     ).
 
 simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost,_Options).
+simple_key_diff(['@id'|Keys],Before,After,Keep,Output_Keys,State,Cost,New_Cost,Options) :-
+    !, % Ids must be treated specially
+    (   option(subdocument(true), Options)
+    ->  Output_Keys = Rest
+    ;   do_or_die(
+            (   get_dict('@id',Before,Before_Value),
+                string_normalise(Before_Value, Value),
+                get_dict('@id',After,After_Value),
+                string_normalise(After_Value, Value)
+            ),
+            error(explicitly_copied_key_has_changed('@id',Before,After),_)),
+        Output_Keys = ['@id'-Value|Rest]
+    ),
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,Keep,true),
     !,
@@ -107,7 +121,7 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cos
             get_dict(Key,After,After_Value),
             string_normalise(After_Value, Value)
         ),
-        error(explicitly_copied_key_has_changed(Key),_)),
+        error(explicitly_copied_key_has_changed(Key,Before,After),_)),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Options) :-
     get_dict(Key,Before,Sub_Before),
@@ -119,7 +133,8 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
-    (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,Options)
+    (   merge_options(_{subdocument:true}, Options, New_Options),
+        simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,New_Options)
     *-> (   \+ (is_dict(Sub_Diff),
                 get_dict('@op', Sub_Diff, "KeepList"))
         ->  New_Keys = [Key-Sub_Diff|Rest]
@@ -513,7 +528,8 @@ test(simple_diff, []) :-
                  name:"Ludo"
                 },
     simple_diff(Before,After,Patch,[keep(json{})]),
-    Patch = json{name:json{'@after':"Ludo",
+    Patch = json{'@id':"Person/Ludwig",
+                 name:json{'@after':"Ludo",
                            '@before':"Ludwig",
                            '@op':"SwapValue"}
                 }.
@@ -558,14 +574,15 @@ test(simple_diff_deep_value, []) :-
                                  country : "Austria"}
                 },
     simple_diff(Before,After,Patch,[keep(json{address : json{ city: true }})]),
-    Patch = json{ name:json{'@after':"Ludo",
+    Patch = json{ '@id':"Person/Ludwig",
+                  name:json{'@after':"Ludo",
                             '@before':"Ludwig",
                             '@op':"SwapValue"},
                   address: json{ city : "Vienna" }
                 }.
 
 test(simple_diff_error, [
-         error(explicitly_copied_key_has_changed('@id'),
+         error(explicitly_copied_key_has_changed('@id',_,_),
                _)
      ]) :-
 
@@ -660,7 +677,8 @@ test(deep_list_diff_append, []) :-
 
     simple_diff(Before,After,Patch,[keep(json{})]),
 
-    Patch = json{addresses:
+    Patch = json{'@id' : "Person/Ludwig",
+                 addresses:
                  json{'@op':"CopyList",
                       '@to':1,
                       '@rest':
@@ -765,5 +783,67 @@ test(deep_list_patch, []) :-
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
     simple_diff(Before,After,Diff,[keep(json{})]),
     simple_patch(Diff,Before,success(After),[]).
+
+:- use_module(library(http/json)).
+
+test(deep_list_id_patch, []) :-
+    OldAtom = '{
+  "@id": "TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+  "@type": "TEST",
+  "lives_at": [{
+      "@id": "Person/4444bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+      "@type": "Address",
+      "AddressLine1": "same to test",
+      "City": "Somwhere",
+      "Country": "New Zeeland",
+      "postalCode": "99"
+    }]}',
+    NewAtom = '{
+  "@id": "TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+  "@type": "TEST",
+  "lives_at": [{
+      "@id": "Person/9addd78bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+      "@type": "Address",
+      "AddressLine1": "original second address",
+      "City": "Same",
+      "Country": "New Zeeland",
+      "postalCode": "PGD"
+    }]}',
+    atom_json_dict(OldAtom, Old, []),
+    atom_json_dict(NewAtom, New, []),
+    simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
+
+    Result = json{ '@id':"TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+				   lives_at:[ json{ 'AddressLine1':json{ '@after':"same to test",
+										                 '@before':"original second address",
+										                 '@op':"SwapValue"
+									                   },
+							        'City':json{ '@after':"Somwhere",
+									             '@before':"Same",
+									             '@op':"SwapValue"
+								               },
+							        postalCode:json{ '@after':"99",
+									                 '@before':"PGD",
+									                 '@op':"SwapValue"
+									               }
+							      }
+						    ]
+				 }.
+
+test(subdocument_patch, []) :-
+    Old = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244',
+         '@type':'1d43d0276b25d0bf77843843c407f8ec',
+         a:"pickles and eggs",
+         b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/3',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:3}},
+    New = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
+         a:"pickles and eggs",
+         b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:4}},
+    simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
+    Result = json{'@id':"1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244", b:json{c:json{'@after':3, '@before':4, '@op':"SwapValue"}}}.
+
 
 :- end_tests(simple_diff).
