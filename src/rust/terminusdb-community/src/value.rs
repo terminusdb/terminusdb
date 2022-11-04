@@ -87,6 +87,29 @@ lazy_static! {
         .collect();
 }
 
+#[derive(PartialEq, Eq)]
+pub enum BaseTypeKind {
+    String,
+    SmallInteger,
+    BigIntger,
+    Boolean,
+    Float,
+}
+
+pub fn base_type_kind(s: &str) -> BaseTypeKind {
+    if type_is_small_integer(s) {
+        BaseTypeKind::SmallInteger
+    } else if type_is_big_integer(s) {
+        BaseTypeKind::BigIntger
+    } else if type_is_bool(s) {
+        BaseTypeKind::Boolean
+    } else if type_is_float(s) {
+        BaseTypeKind::Float
+    } else {
+        BaseTypeKind::String
+    }
+}
+
 fn type_is_numeric(s: &str) -> bool {
     NUMERIC_TYPES.contains(s)
 }

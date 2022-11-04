@@ -18,6 +18,7 @@ use crate::value::{
     type_is_small_integer, value_string_to_graphql,
 };
 
+use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::query::run_filter_query;
 use super::top::System;
@@ -109,7 +110,7 @@ impl<'a, C: QueryableContextType> TerminusTypeCollection<'a, C> {
 pub struct TerminusOrderingInfo {
     ordering_name: String,
     type_name: String,
-    frames: Arc<AllFrames>
+    frames: Arc<AllFrames>,
 }
 
 impl TerminusOrderingInfo {
@@ -117,7 +118,7 @@ impl TerminusOrderingInfo {
         Self {
             ordering_name: format!("{}_Ordering", type_name),
             type_name: type_name.to_string(),
-            frames: frames.clone()
+            frames: frames.clone(),
         }
     }
 }
@@ -140,12 +141,16 @@ fn add_arguments<'r>(
             .arg::<Option<i32>>("limit", &())
             .description("limit results to N elements"),
     );
+    field = field.argument(registry.arg::<Option<FilterInputObject>>(
+        "filter",
+        &FilterInputObjectTypeInfo::new(&info.0, &info.1),
+    ));
     if must_generate_ordering(class_definition) {
         field = field.argument(
             registry
                 .arg::<Option<TerminusOrderBy>>(
                     "orderBy",
-                    &TerminusOrderingInfo::new(&info.0, &info.1)
+                    &TerminusOrderingInfo::new(&info.0, &info.1),
                 )
                 .description("order by the given fields"),
         );
@@ -188,7 +193,11 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
 }
 
 pub fn is_reserved_argument_name(name: &String) -> bool {
-    name == "filter" || name == "offset" || name == "limit" || name == "orderBy" || is_reserved_field_name(name)
+    name == "filter"
+        || name == "offset"
+        || name == "limit"
+        || name == "orderBy"
+        || is_reserved_field_name(name)
 }
 
 pub fn is_reserved_field_name(name: &String) -> bool {
@@ -457,7 +466,7 @@ impl FromInputValue for TerminusEnum {
                 value: value.to_owned(),
             }),
             InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
-                value: value.to_owned()
+                value: value.to_owned(),
             }),
             _ => None,
         }
