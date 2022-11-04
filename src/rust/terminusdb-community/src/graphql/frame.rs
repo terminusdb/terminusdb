@@ -212,7 +212,7 @@ pub fn sanitize_class(s: &String) -> String {
 }
 
 impl FieldDefinition {
-    fn range(&self) -> &String {
+    pub fn range(&self) -> &String {
         match self {
             Self::Required(c) => c,
             Self::Optional(c) => c,
@@ -817,7 +817,9 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
                 documentation: Some(EnumDocumentationDefinition {
                     label: None,
                     values: None,
-                    comment: Some("The exhaustive list of actions which are available to roles.".to_string()),
+                    comment: Some(
+                        "The exhaustive list of actions which are available to roles.".to_string()
+                    ),
                 }),
                 values: vec![
                     "create_database".to_string(),

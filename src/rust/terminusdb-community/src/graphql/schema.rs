@@ -796,13 +796,36 @@ impl GraphQLValue for TerminusOrderBy {
     }
 }
 
-struct BigInt(String);
+pub struct BigInt(String);
 
 #[juniper::graphql_scalar(
     name = "BigInt",
     description = "The `BigInt` scalar type represents non-fractional signed whole numeric values."
 )]
 impl<S> GraphQLScalar for BigInt
+where
+    S: juniper::ScalarValue,
+{
+    fn resolve(&self) -> juniper::Value {
+        juniper::Value::scalar(self.0.to_owned())
+    }
+
+    fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
+        value.as_string_value().map(|s| Self(s.to_owned()))
+    }
+
+    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    }
+}
+
+pub struct DateTime(String);
+
+#[juniper::graphql_scalar(
+    name = "DateTime",
+    description = "The `DateTime` scalar type represents a date encoded as a string using the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar."
+)]
+impl<S> GraphQLScalar for DateTime
 where
     S: juniper::ScalarValue,
 {

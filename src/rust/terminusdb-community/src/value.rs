@@ -85,6 +85,8 @@ lazy_static! {
         .chain(BIG_INTEGER_TYPES.iter())
         .map(|x| *x)
         .collect();
+    static ref DATETIME_TYPES: HashSet<&'static str> =
+        ["dateTime", "dateTimeStamp",].into_iter().collect();
 }
 
 #[derive(PartialEq, Eq)]
@@ -93,6 +95,7 @@ pub enum BaseTypeKind {
     SmallInteger,
     BigIntger,
     Boolean,
+    DateTime,
     Float,
 }
 
@@ -105,6 +108,8 @@ pub fn base_type_kind(s: &str) -> BaseTypeKind {
         BaseTypeKind::Boolean
     } else if type_is_float(s) {
         BaseTypeKind::Float
+    } else if type_is_datetime(s) {
+        BaseTypeKind::DateTime
     } else {
         BaseTypeKind::String
     }
@@ -132,6 +137,10 @@ pub fn type_is_integer(s: &str) -> bool {
 
 pub fn type_is_float(s: &str) -> bool {
     FLOAT_TYPES.contains(s)
+}
+
+pub fn type_is_datetime(s: &str) -> bool {
+    DATETIME_TYPES.contains(s)
 }
 
 pub fn value_string_to_json(s: &str) -> Value {
