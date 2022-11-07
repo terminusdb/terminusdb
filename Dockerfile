@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1.3
 
 ARG DIST=community
-ARG CARGO_NET_GIT_FETCH_WITH_CLI=false
 
 # Install the SWI-Prolog pack dependencies.
 FROM terminusdb/swipl:v8.4.3-patched-1-buildx AS pack_installer
@@ -31,6 +30,7 @@ COPY src/rust src/rust/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=false
 RUN make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
