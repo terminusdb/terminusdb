@@ -4,18 +4,71 @@ use juniper::{
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
+use crate::value::base_type_kind;
 use crate::{
     consts::RDF_TYPE,
     terminus_store::*,
     value::{graphql_scalar_to_value_string, value_string_to_graphql},
 };
 
+use super::filter::FilterInputObject;
 use super::frame::{AllFrames, ClassDefinition, Prefixes};
 use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrderBy, TerminusOrdering};
 
 use float_ord::FloatOrd;
 
 use std::cmp::*;
+
+fn predicate_value_filter<'a>(
+    g: &'a SyncStoreLayer,
+    iter: Box<dyn Iterator<Item = u64> + 'a>,
+    property: &str,
+    base_type: &str,
+    filter: InputValue,
+    object: &str,
+) -> Box<dyn Iterator<Item = u64> + 'a> {
+    let maybe_property_id = g.predicate_id(property);
+    if let Some(property_id) = maybe_property_id {
+        let maybe_object_id = match filter {
+            InputValue::Object(o) => {
+                if let Some((spanning_opname,spanning_value)) = o.pop(){
+                    let op = spanning_opname.item;
+                    if let InputValue::Scalar(s) = spanning_value {
+                        match base_type_kind(base_type) {
+                            crate::value::BaseTypeKind::String => {
+                                if "eq" == op {
+                                }else if "lt" == op {
+                                }else if "le" == op {
+                                }
+                            },
+                            crate::value::BaseTypeKind::SmallInteger => todo!(),
+                            crate::value::BaseTypeKind::BigIntger => todo!(),
+                            crate::value::BaseTypeKind::Boolean => todo!(),
+                            crate::value::BaseTypeKind::DateTime => todo!(),
+                            crate::value::BaseTypeKind::Float => todo!(),
+                        }
+                    }else{
+                        panic!()
+                    }
+                }else{
+                    panic!("There is no comparison to the value at this point")
+                }
+            },
+            _ => panic!("We should have a valid GraphQL input object here"),
+            /*
+            NodeOrValue::Value => g.object_value_id(object),
+            NodeOrValue::Node => g.object_node_id(object),
+             */
+        };
+        if let Some(object_id) = maybe_object_id {
+            Box::new(iter.filter(move |s| g.triple_exists(*s, property_id, object_id)))
+        } else {
+            Box::new(std::iter::empty())
+        }
+    } else {
+        Box::new(std::iter::empty())
+    }
+}
 
 fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
@@ -43,56 +96,125 @@ fn predicate_value_iter<'a>(
     }
 }
 
-fn predicate_value_filter<'a>(
-    g: &'a SyncStoreLayer,
-    iter: Box<dyn Iterator<Item = u64> + 'a>,
-    property: &str,
-    object_type: &NodeOrValue,
-    object: &str,
-) -> Box<dyn Iterator<Item = u64> + 'a> {
-    let maybe_property_id = g.predicate_id(property);
-    if let Some(property_id) = maybe_property_id {
-        let maybe_object_id = match object_type {
-            NodeOrValue::Value => g.object_value_id(object),
-            NodeOrValue::Node => g.object_node_id(object),
-        };
-        if let Some(object_id) = maybe_object_id {
-            Box::new(iter.filter(move |s| g.triple_exists(*s, property_id, object_id)))
-        } else {
-            Box::new(std::iter::empty())
-        }
-    } else {
-        Box::new(std::iter::empty())
-    }
-}
-
 pub enum NodeOrValue {
     Node,
     Value,
 }
 
-pub fn lookup_field_requests<'a>(
+/*
+Supposing we have a filter query of the following form:
+
+{ ty1_edge1 : { startsWith : "blah"},
+  ty1_edge2 : { allHave : { ty2_edge1 : { eq : "Test" }}}}
+  ty1_edge3 : { ty3_edge1 : {le : 12 }}
+  or : [{ ty1_edge4 : { eq : "left"}},
+        { ty2_edge5 : { eq : "right"}}]}
+
+
+let iter = zi;
+let stack = Vec<FilterInputObject>
+for edge in ty1_edge1.
+
+ */
+
+fn compile_query_step<'a>(
     g: &'a SyncStoreLayer,
-    constraints: &'a [(String, NodeOrValue, String)],
+    class_name: &str,
+    class_definition: &ClassDefinition,
+    all_frames: &AllFrames,
+    filter_opt: Option<FilterInputObject>,
+    zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
+) -> (
+    Option<FilterInputObject>,
+    Box<dyn Iterator<Item = u64> + 'a>,
+) {
+    let filter_opt = if let Some(FilterInputObject { edges }) = filter_opt {
+        if edges.is_empty() {
+            None
+        } else {
+            filter_opt
+        }
+    } else {
+        filter_opt
+    };
+    match filter_opt {
+        Some(FilterInputObject { edges }) => {
+            let (spanning_string, spanning_input_value) = edges.pop().unwrap();
+            let field_name = spanning_string.item;
+            let field = class_definition.resolve_field(field_name.to_string());
+            let kind = field.kind();
+            let new_iterator = match kind {
+                super::frame::FieldKind::Required => {
+                    let range = field.range();
+                    if range.is_base_type(){
+                        predicate_value_iter(
+                            g,
+                            field_name,
+                            NodeOrValue::Value,
+                            ,
+                        )   
+                    }else{
+                        
+                    }
+                },
+                super::frame::FieldKind::Optional => todo!(),
+                super::frame::FieldKind::Set => todo!(),
+                super::frame::FieldKind::List => todo!(),
+                super::frame::FieldKind::Array => todo!(),
+                super::frame::FieldKind::Cardinality => todo!(),
+            };
+            let new_filter_object = if edges.is_empty() {
+                None
+            } else {
+                Some(FilterInputObject { edges })
+            };
+            (new_filter_object, new_iterator)
+        };
+        None => match zero_iter {
+            Some(zi) => (None, Box::new(zi)),
+            None => {
+                let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+                (
+                    None,
+                    predicate_value_iter(
+                        g,
+                        RDF_TYPE.to_owned(),
+                        NodeOrValue::Node,
+                        expanded_type_name,
+                    ),
+                )
+            }
+        },
+    }
+}
+
+fn lookup_by_filter<'a>(
+    g: &'a SyncStoreLayer,
+    class_name: &str,
+    class_definition: &ClassDefinition,
+    all_frames: &AllFrames,
+    filter_opt: Option<FilterInputObject>,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
 ) -> impl Iterator<Item = u64> + 'a {
-    if constraints.len() == 0 {
-        panic!("Somehow there are no constraints on the triples")
-    } else {
-        let start;
-        let zi;
-        if let Some(zero_iter) = zero_iter {
-            start = 0;
-            zi = zero_iter;
-        } else {
-            let (p, oty, o) = &constraints[0];
-            zi = predicate_value_iter(g, &p, &oty, &o);
-            start = 1;
-        }
-        constraints[start..].iter().fold(zi, |iter, (p, oty, o)| {
-            predicate_value_filter(g, iter, &p, &oty, &o)
-        })
+    let (mut continuation_filter_opt, mut iterator) = compile_query_step(
+        g,
+        class_name,
+        class_definition,
+        all_frames,
+        filter_opt,
+        zero_iter,
+    );
+    while continuation_filter_opt.is_some() {
+        (continuation_filter_opt, iterator) = compile_query_step(
+            g,
+            class_name,
+            class_definition,
+            all_frames,
+            continuation_filter_opt,
+            zero_iter,
+        );
     }
+    iterator
 }
 
 pub fn run_filter_query<'a>(
@@ -120,6 +242,55 @@ pub fn run_filter_query<'a>(
     };
     let offset: i32 = arguments.get("offset").unwrap_or(0);
     let limit: Option<i32> = arguments.get("limit");
+    let filter: Option<FilterInputObject> = arguments.get("filter");
+
+    let it: Box<dyn Iterator<Item = u64>> =
+        if let Some(TerminusOrderBy { fields }) = arguments.get::<TerminusOrderBy>("orderBy") {
+            let mut results: Vec<u64> = lookup_by_filter(
+                g,
+                class_name,
+                class_definition,
+                all_frames,
+                filter,
+                new_zero_iter,
+            )
+            .collect();
+            results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
+            // Probs should not be into_iter(), done to satisfy both arms of let symmetry
+            // better to borrow in the other branch?
+            Box::new(
+                results
+                    .into_iter()
+                    .skip(usize::try_from(offset).unwrap_or(0)),
+            )
+        } else {
+            Box::new(
+                lookup_by_filter(
+                    g,
+                    class_name,
+                    class_definition,
+                    all_frames,
+                    filter,
+                    new_zero_iter,
+                )
+                .skip(usize::try_from(offset).unwrap_or(0)),
+            )
+        };
+
+    if let Some(limit) = limit {
+        it.take(usize::try_from(limit).unwrap_or(0)).collect()
+    } else {
+        it.collect()
+    }
+}
+
+fn constraint_builder_example(
+    class_definition: &ClassDefinition,
+    arguments: &juniper::Arguments,
+    prefixes: &Prefixes,
+    all_frames: &AllFrames,
+    class_name: &str,
+) -> Vec<(String, NodeOrValue, String)> {
     let mut constraints: Vec<(String, NodeOrValue, String)> = class_definition
         .fields
         .iter()
@@ -160,31 +331,7 @@ pub fn run_filter_query<'a>(
         .collect();
     let expanded_class_name = all_frames.fully_qualified_class_name(&class_name.to_string());
     constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
-
-    let it: Box<dyn Iterator<Item = u64>> = if let Some(TerminusOrderBy { fields }) =
-        arguments.get::<TerminusOrderBy>("orderBy")
-    {
-        let mut results: Vec<u64> = lookup_field_requests(g, &constraints, new_zero_iter).collect();
-        results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
-        // Probs should not be into_iter(), done to satisfy both arms of let symmetry
-        // better to borrow in the other branch?
-        Box::new(
-            results
-                .into_iter()
-                .skip(usize::try_from(offset).unwrap_or(0)),
-        )
-    } else {
-        Box::new(
-            lookup_field_requests(g, &constraints, new_zero_iter)
-                .skip(usize::try_from(offset).unwrap_or(0)),
-        )
-    };
-
-    if let Some(limit) = limit {
-        it.take(usize::try_from(limit).unwrap_or(0)).collect()
-    } else {
-        it.collect()
-    }
+    constraints
 }
 
 fn create_query_order_key(
