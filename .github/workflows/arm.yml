@@ -8,7 +8,7 @@ on:
   workflow_call:
 
 jobs:
-  snap:
+  arm64_docker:
     runs-on: ubuntu-latest
 
     steps:
