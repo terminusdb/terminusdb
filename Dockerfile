@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 ARG DIST=community
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=false
 
 # Install the SWI-Prolog pack dependencies.
 FROM terminusdb/swipl:v8.4.3-patched-1-buildx AS pack_installer

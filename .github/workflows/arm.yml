@@ -29,6 +29,9 @@ jobs:
           context: .
           tags: terminusdb/terminusdb-server:local
           platforms: linux/arm64
+          outputs: type=docker,dest=terminusdb-server-docker-image.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
+          build-args:
+            - TERMINUSDB_GIT_HASH=${{ github.sha }}
+            - CARGO_NET_GIT_FETCH_WITH_CLI=true
