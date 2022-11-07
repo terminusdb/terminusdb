@@ -5,6 +5,7 @@ on:
   schedule:
     - cron:  '45 2 * * *'
   workflow_dispatch:
+  push:
   workflow_call:
 
 jobs:
