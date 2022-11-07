@@ -9,6 +9,9 @@ on:
       test_ref:
         required: true
         type: string
+      image_artifact:
+        type: string
+        default: "terminusdb-server-docker-image.tar.gz"
 
 env:
   NODE_VERSION: '16'
