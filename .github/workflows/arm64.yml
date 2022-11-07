@@ -1,0 +1,33 @@
+# Build and run tests every night on non-Docker systems.
+name: ARM64 docker build
+
+on:
+  schedule:
+    - cron:  '45 2 * * *'
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build and export
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          tags: terminusdb/terminusdb-server:local
+          platforms: linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
