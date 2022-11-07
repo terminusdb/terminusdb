@@ -4,7 +4,7 @@ use juniper::{
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::value::{base_type_kind, value_string_to_untyped_value};
+use crate::value::{base_type_kind, value_string_to_untyped_value, BaseTypeKind};
 use crate::{
     consts::RDF_TYPE,
     terminus_store::*,
@@ -12,12 +12,116 @@ use crate::{
 };
 
 use super::filter::FilterInputObject;
-use super::frame::{AllFrames, ClassDefinition, Prefixes};
+use super::frame::{AllFrames, ClassDefinition, FieldKind, Prefixes};
 use super::schema::{is_reserved_argument_name, TerminusEnum, TerminusOrderBy, TerminusOrdering};
 
 use float_ord::FloatOrd;
 
 use std::cmp::*;
+
+#[derive(Debug)]
+enum GenericOperation {
+    Eq,
+    Ge,
+    Gt,
+    Lt,
+    Le,
+}
+
+#[derive(Debug)]
+enum TextOperation {
+    StartsWith(String),
+    AllOfTerms(Vec<String>),
+    AnyOfTerms(Vec<String>),
+}
+
+#[derive(Debug)]
+enum CollectionOperation {
+    SomeHave,
+    AllHave,
+}
+
+#[derive(Debug)]
+enum FilterValue {
+    TextFilter(TextOperation),
+    StringFilter(GenericOperation, String),
+    BigIntFilter(GenericOperation, String),
+    DateTimeFilter(GenericOperation, String),
+    Collection(CollectionOperation, FilterObject),
+}
+
+#[derive(Debug)]
+struct FilterObject {
+    pairs: Vec<(String, FilterValue)>,
+}
+
+impl From<StringFieldInputObject> for FilterValue {
+    fn from(value: StringFieldInputObject) -> Self {
+        if let Some(val) = value.eq {
+            FilterValue::StringFilter(GenericOperation::Eq, val)
+        } else if let Some(val) = value.lt {
+            FilterValue::StringFilter(GenericOperation::Lt, val)
+        } else if let Some(val) = value.le {
+            FilterValue::StringFilter(GenericOperation::Lt, val)
+        } else if let Some(val) = value.gt {
+            FilterValue::StringFilter(GenericOperation::Gt, val)
+        } else if let Some(val) = value.ge {
+            FilterValue::StringFilter(GenericOperation::Ge, val)
+        } else if let Some(val) = value.startsWith {
+            FilterValue::TextFilter(TextOperation::StartsWith(val))
+        } else if let some(val) = value.allOfTerms {
+            FilterValue::TextFilter(TextOperation::AllOfTerms(val))
+        } else if let some(val) = value.anyOfTerms {
+            FilterValue::TextFilter(TextOperation::AnyOfTerms(val))
+        }
+    }
+}
+
+fn compile_input_object(
+    class_name: &str,
+    all_frames: &AllFrames,
+    class_definition: &ClassDefinition,
+    filter_input: &[(juniper::Spanning<String>, juniper::spanning<InputValue>)],
+) -> FilterObject {
+    let mut result: Vec<(String, FilterValue)> = Vec::with_capacity(filter_input.len());
+    for (spanning_string, spanning_input_value) in filter_input.iter() {
+        let field_name = spanning_string.item;
+        let field = class_definition.resolve_field(field_name);
+        let kind = field.kind();
+        match kind {
+            FieldKind::Required | FieldKind::Optional => {
+                let ty = field.range();
+                if is_base_type(ty) {
+                    match base_type_kind(ty) {
+                        BaseTypeKind::String => {
+                            let value: Option<StringFilterInputValue> =
+                                spanning_input_value.item.from_input_value();
+                            let (operation, value) = compile_string_input_operation(value);
+                            result.push((field_name, FilterValue::StringFilter(operation, value)))
+                        }
+                        BaseTypeKind::SmallInteger => todo!(),
+                        BaseTypeKind::BigIntger => todo!(),
+                        BaseTypeKind::Boolean => todo!(),
+                        BaseTypeKind::DateTime => todo!(),
+                        BaseTypeKind::Float => todo!(),
+                    }
+                } else {
+                }
+            }
+            FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => todo!(),
+        }
+    }
+}
+
+fn compile_filter_object(
+    class_name: &str,
+    all_frames: &AllFrames,
+    filter_input: &FilterInputObject,
+) -> FilterObject {
+    let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
+    let FilterInputObject { pairs } = &filter_input;
+    compile_input_object(class_name, all_frames, class_definition, pairs)
+}
 
 fn predicate_value_filter<'a>(
     g: &'a SyncStoreLayer,
@@ -30,23 +134,24 @@ fn predicate_value_filter<'a>(
     if let Some(property_id) = maybe_property_id {
         match filter {
             InputValue::Object(o) => {
-                if let Some((spanning_opname,spanning_value)) = o.pop(){
+                if let Some((spanning_opname, spanning_value)) = o.pop() {
                     let op = spanning_opname.item;
                     if let InputValue::Scalar(scalar) = spanning_value.item {
                         Box::new(iter.filter(|subject| {
                             let objects = g.triples_sp(*subject, property_id);
                             objects.any(|t| {
-                                let object = g.id_object_value(t.object).expect("should have existed");
+                                let object =
+                                    g.id_object_value(t.object).expect("should have existed");
                                 let ord = match base_type_kind(base_type) {
                                     crate::value::BaseTypeKind::String => {
                                         if let DefaultScalarValue::String(scalar) = scalar {
-                                            let object_string = value_string_to_untyped_value(&object);
+                                            let object_string =
+                                                value_string_to_untyped_value(&object);
                                             object_string.cmp(&scalar)
-                                        }
-                                        else {
+                                        } else {
                                             panic!("asdfasdf");
                                         }
-                                    },
+                                    }
                                     crate::value::BaseTypeKind::SmallInteger => todo!(),
                                     crate::value::BaseTypeKind::BigIntger => todo!(),
                                     crate::value::BaseTypeKind::Boolean => todo!(),
@@ -64,13 +169,13 @@ fn predicate_value_filter<'a>(
                                 }
                             })
                         }))
-                    }else{
+                    } else {
                         panic!();
                     }
-                }else{
+                } else {
                     panic!("There is no comparison to the value at this point");
                 }
-            },
+            }
             _ => panic!("We should have a valid GraphQL input object here"),
         }
     } else {
@@ -131,7 +236,7 @@ fn compile_query_step<'a>(
     class_definition: &ClassDefinition,
     all_frames: &AllFrames,
     filter_opt: Option<FilterInputObject>,
-    zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
+    iter: Box<dyn Iterator<Item = u64> + 'a>,
 ) -> (
     Option<FilterInputObject>,
     Box<dyn Iterator<Item = u64> + 'a>,
@@ -149,22 +254,23 @@ fn compile_query_step<'a>(
         Some(FilterInputObject { edges }) => {
             let (spanning_string, spanning_input_value) = edges.pop().unwrap();
             let field_name = spanning_string.item;
-            let field = class_definition.resolve_field(field_name.to_string());
+            let field = class_definition.resolve_field(&field_name.to_string());
             let kind = field.kind();
             let new_iterator = match kind {
                 super::frame::FieldKind::Required => {
                     let range = field.range();
-                    if range.is_base_type(){
-                        predicate_value_iter(
+                    if range.is_base_type() {
+                        predicate_value_filter(
                             g,
-                            field_name,
-                            NodeOrValue::Value,
-                            ,
-                        )   
-                    }else{
-                        
+                            zero_iter,
+                            &field_name,
+                            range,
+                            spanning_input_value.item,
+                        )
+                    } else {
+                        todo!();
                     }
-                },
+                }
                 super::frame::FieldKind::Optional => todo!(),
                 super::frame::FieldKind::Set => todo!(),
                 super::frame::FieldKind::List => todo!(),
@@ -177,22 +283,36 @@ fn compile_query_step<'a>(
                 Some(FilterInputObject { edges })
             };
             (new_filter_object, new_iterator)
-        };
-        None => match zero_iter {
-            Some(zi) => (None, Box::new(zi)),
-            None => {
-                let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
-                (
-                    None,
-                    predicate_value_iter(
-                        g,
-                        RDF_TYPE.to_owned(),
-                        NodeOrValue::Node,
-                        expanded_type_name,
-                    ),
-                )
-            }
-        },
+        }
+        None => (None, Box::new(zi)),
+    }
+}
+
+fn compile_query_iter<'a>(
+    g: &'a SyncStoreLayer,
+    class_name: &str,
+    class_definition: &ClassDefinition,
+    all_frames: &AllFrames,
+    filter_opt: Option<FilterInputObject>,
+    zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
+) -> (
+    Option<FilterInputObject>,
+    Box<dyn Iterator<Item = u64> + 'a>,
+) {
+    match zero_iter {
+        None => {
+            let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+            (
+                None,
+                predicate_value_iter(
+                    g,
+                    RDF_TYPE.to_owned(),
+                    NodeOrValue::Node,
+                    expanded_type_name,
+                ),
+            )
+        }
+        Some(zi) => (filter_opt, zi),
     }
 }
 
@@ -204,7 +324,7 @@ fn lookup_by_filter<'a>(
     filter_opt: Option<FilterInputObject>,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
 ) -> impl Iterator<Item = u64> + 'a {
-    let (mut continuation_filter_opt, mut iterator) = compile_query_step(
+    let (mut continuation_filter_opt, mut iterator) = compile_query_iter(
         g,
         class_name,
         class_definition,
@@ -219,7 +339,7 @@ fn lookup_by_filter<'a>(
             class_definition,
             all_frames,
             continuation_filter_opt,
-            zero_iter,
+            iterator,
         );
     }
     iterator
