@@ -4,7 +4,7 @@ use juniper::{
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::value::base_type_kind;
+use crate::value::{base_type_kind, value_string_to_untyped_value};
 use crate::{
     consts::RDF_TYPE,
     terminus_store::*,
@@ -25,45 +25,53 @@ fn predicate_value_filter<'a>(
     property: &str,
     base_type: &str,
     filter: InputValue,
-    object: &str,
 ) -> Box<dyn Iterator<Item = u64> + 'a> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
-        let maybe_object_id = match filter {
+        match filter {
             InputValue::Object(o) => {
                 if let Some((spanning_opname,spanning_value)) = o.pop(){
                     let op = spanning_opname.item;
-                    if let InputValue::Scalar(s) = spanning_value {
-                        match base_type_kind(base_type) {
-                            crate::value::BaseTypeKind::String => {
-                                if "eq" == op {
-                                }else if "lt" == op {
-                                }else if "le" == op {
+                    if let InputValue::Scalar(scalar) = spanning_value.item {
+                        Box::new(iter.filter(|subject| {
+                            let objects = g.triples_sp(*subject, property_id);
+                            objects.any(|t| {
+                                let object = g.id_object_value(t.object).expect("should have existed");
+                                let ord = match base_type_kind(base_type) {
+                                    crate::value::BaseTypeKind::String => {
+                                        if let DefaultScalarValue::String(scalar) = scalar {
+                                            let object_string = value_string_to_untyped_value(&object);
+                                            object_string.cmp(&scalar)
+                                        }
+                                        else {
+                                            panic!("asdfasdf");
+                                        }
+                                    },
+                                    crate::value::BaseTypeKind::SmallInteger => todo!(),
+                                    crate::value::BaseTypeKind::BigIntger => todo!(),
+                                    crate::value::BaseTypeKind::Boolean => todo!(),
+                                    crate::value::BaseTypeKind::DateTime => todo!(),
+                                    crate::value::BaseTypeKind::Float => todo!(),
+                                };
+
+                                match op.as_str() {
+                                    "eq" => ord == Ordering::Equal,
+                                    "ne" => ord != Ordering::Equal,
+                                    "lt" => ord == Ordering::Less,
+                                    "gt" => ord == Ordering::Greater,
+                                    "le" => ord == Ordering::Equal || ord == Ordering::Less,
+                                    "ge" => ord == Ordering::Equal || ord == Ordering::Greater,
                                 }
-                            },
-                            crate::value::BaseTypeKind::SmallInteger => todo!(),
-                            crate::value::BaseTypeKind::BigIntger => todo!(),
-                            crate::value::BaseTypeKind::Boolean => todo!(),
-                            crate::value::BaseTypeKind::DateTime => todo!(),
-                            crate::value::BaseTypeKind::Float => todo!(),
-                        }
+                            })
+                        }))
                     }else{
-                        panic!()
+                        panic!();
                     }
                 }else{
-                    panic!("There is no comparison to the value at this point")
+                    panic!("There is no comparison to the value at this point");
                 }
             },
             _ => panic!("We should have a valid GraphQL input object here"),
-            /*
-            NodeOrValue::Value => g.object_value_id(object),
-            NodeOrValue::Node => g.object_node_id(object),
-             */
-        };
-        if let Some(object_id) = maybe_object_id {
-            Box::new(iter.filter(move |s| g.triple_exists(*s, property_id, object_id)))
-        } else {
-            Box::new(std::iter::empty())
         }
     } else {
         Box::new(std::iter::empty())

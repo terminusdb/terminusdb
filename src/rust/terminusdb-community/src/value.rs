@@ -36,6 +36,13 @@ fn value_string_to_slices(s: &str) -> LangOrType {
     }
 }
 
+pub fn value_string_to_untyped_value(s: &str) -> &str {
+    match value_string_to_slices(s) {
+        LangOrType::Lang(s, _) => s,
+        LangOrType::Type(s, _) => s
+    }
+}
+
 lazy_static! {
     static ref NUMERIC_TYPES: HashSet<&'static str> = [
         "decimal",
