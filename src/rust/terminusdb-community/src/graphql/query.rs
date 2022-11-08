@@ -273,18 +273,20 @@ fn compile_edges_to_filter(
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = &spanning_string.item;
         let field = class_definition.resolve_field(&field_name);
+        let prefixes = &all_frames.context;
+        let property = class_definition.fully_qualified_property_name(&prefixes, field_name);
         let range = field.range();
         let kind = field.kind();
         match kind {
             FieldKind::Required | FieldKind::Optional => {
                 let res = compile_typed_filter(range, all_frames, &spanning_input_value);
-                result.push((field_name.to_string(), res));
+                result.push((property.to_string(), res));
             }
             FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
                 let value =
                     CollectionFilterInputObject::from_input_value(&spanning_input_value.item);
                 let filter_value = compile_collection_filter(value.unwrap(), all_frames, range);
-                result.push((field_name.to_string(), filter_value))
+                result.push((property.to_string(), filter_value))
             }
         }
     }
@@ -298,7 +300,6 @@ fn compile_filter_object(
 ) -> FilterObject {
     let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
     let edges = &filter_input.edges;
-    let FilterInputObject { edges } = &filter_input;
     compile_edges_to_filter(class_name, all_frames, class_definition, &edges)
 }
 
@@ -368,7 +369,11 @@ fn compile_query<'a>(
                             let object_value = g
                                 .id_object_value(t.object)
                                 .expect("Object value must exist");
-                            let object_string = value_string_to_untyped_value(&object_value);
+                            let object_string =
+                                value_string_to_untyped_value(&object_value).to_string();
+                            println!("op: {op:?}");
+                            println!("object: {object_string}");
+                            println!("value: {val}");
                             let cmp = object_string.cmp(&val);
                             ordering_matches_op(cmp, op)
                         })
@@ -386,7 +391,9 @@ fn compile_query<'a>(
                     iter = Box::new(iter.filter(move |subject| {
                         let objects =
                             Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
-                        compile_query(g, sub_filter.clone(), objects).next().is_some()
+                        compile_query(g, sub_filter.clone(), objects)
+                            .next()
+                            .is_some()
                     }))
                 }
             }
@@ -434,6 +441,7 @@ fn lookup_by_filter<'a>(
         filter_opt,
         zero_iter,
     );
+    println!("Generated initial iterator with filter: {continuation_filter_opt:?}");
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
         compile_query(g, continuation_filter, iterator)

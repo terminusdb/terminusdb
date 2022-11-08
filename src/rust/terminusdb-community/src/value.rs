@@ -36,10 +36,10 @@ fn value_string_to_slices(s: &str) -> LangOrType {
     }
 }
 
-pub fn value_string_to_untyped_value(s: &str) -> &str {
+pub fn value_string_to_untyped_value(s: &str) -> Cow<str> {
     match value_string_to_slices(s) {
-        LangOrType::Lang(s, _) => s,
-        LangOrType::Type(s, _) => s
+        LangOrType::Lang(s, _) => prolog_string_to_string(s),
+        LangOrType::Type(s, _) => prolog_string_to_string(s),
     }
 }
 

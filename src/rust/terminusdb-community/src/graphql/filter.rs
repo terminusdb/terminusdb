@@ -60,7 +60,7 @@ impl GraphQLType for FilterInputObject {
                     let kind = field_definition.kind();
                     if kind.is_collection() {
                         let c = field_definition.range();
-                        Some(registry.arg::<CollectionFilterInputObject>(
+                        Some(registry.arg::<Option<CollectionFilterInputObject>>(
                             name,
                             &CollectionFilterInputObjectTypeInfo::new(&c, &info.frames),
                         ))
@@ -68,26 +68,32 @@ impl GraphQLType for FilterInputObject {
                         let kind = base_type_kind(base_type);
                         match kind {
                             BaseTypeKind::String => {
-                                Some(registry.arg::<StringFilterInputObject>(name, &()))
+                                Some(registry.arg::<Option<StringFilterInputObject>>(name, &()))
                             }
-                            BaseTypeKind::SmallInteger => {
-                                Some(registry.arg::<SmallIntegerFilterInputObject>(name, &()))
-                            }
+                            BaseTypeKind::SmallInteger => Some(registry.arg::<Option<
+                                SmallIntegerFilterInputObject,
+                            >>(
+                                name, &()
+                            )),
                             BaseTypeKind::BigIntger => {
-                                Some(registry.arg::<BigIntFilterInputObject>(name, &()))
+                                Some(registry.arg::<Option<BigIntFilterInputObject>>(name, &()))
                             }
                             BaseTypeKind::Boolean => {
-                                Some(registry.arg::<BooleanFilterInputObject>(name, &()))
+                                Some(registry.arg::<Option<BooleanFilterInputObject>>(name, &()))
                             }
                             BaseTypeKind::Float => {
-                                Some(registry.arg::<FloatFilterInputObject>(name, &()))
+                                Some(registry.arg::<Option<FloatFilterInputObject>>(name, &()))
                             }
                             BaseTypeKind::DateTime => {
-                                Some(registry.arg::<DateTimeFilterInputObject>(name, &()))
+                                Some(registry.arg::<Option<DateTimeFilterInputObject>>(name, &()))
                             }
                         }
                     } else {
-                        None
+                        let c = field_definition.range();
+                        Some(registry.arg::<Option<FilterInputObject>>(
+                            name,
+                            &FilterInputObjectTypeInfo::new(&c, &info.frames),
+                        ))
                     }
                 })
                 .collect();
