@@ -796,6 +796,7 @@ impl GraphQLValue for TerminusOrderBy {
     }
 }
 
+#[derive(Debug)]
 pub struct BigInt(String);
 
 #[juniper::graphql_scalar(
@@ -819,6 +820,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct DateTime(String);
 
 #[juniper::graphql_scalar(

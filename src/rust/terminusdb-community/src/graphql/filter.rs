@@ -120,7 +120,7 @@ impl GraphQLValue for FilterInputObject {
 }
 
 pub struct CollectionFilterInputObject {
-    filter: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
+    pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 }
 
 pub struct CollectionFilterInputObjectTypeInfo {
@@ -169,7 +169,7 @@ impl GraphQLType for CollectionFilterInputObject {
 impl FromInputValue for CollectionFilterInputObject {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         match v {
-            InputValue::Object(o) => Some(Self { filter: o.clone() }),
+            InputValue::Object(o) => Some(Self { edges: o.clone() }),
             _ => None,
         }
     }
@@ -187,118 +187,60 @@ impl GraphQLValue for CollectionFilterInputObject {
 
 #[derive(GraphQLInputObject)]
 #[allow(non_snake_case)]
-struct StringFilterInputObject {
-    eq: Option<String>,
-    lt: Option<String>,
-    le: Option<String>,
-    gt: Option<String>,
-    ge: Option<String>,
-    startsWith: Option<String>,
-    allOfTerms: Option<Vec<String>>,
-    anyOfTerms: Option<Vec<String>>,
+pub struct StringFilterInputObject {
+    pub eq: Option<String>,
+    pub ne: Option<String>,
+    pub lt: Option<String>,
+    pub le: Option<String>,
+    pub gt: Option<String>,
+    pub ge: Option<String>,
+    pub startsWith: Option<String>,
+    pub allOfTerms: Option<Vec<String>>,
+    pub anyOfTerms: Option<Vec<String>>,
 }
 
 #[derive(GraphQLInputObject)]
-struct BigIntFilterInputObject {
-    eq: Option<BigInt>,
-    lt: Option<BigInt>,
-    le: Option<BigInt>,
-    gt: Option<BigInt>,
-    ge: Option<BigInt>,
+pub struct BigIntFilterInputObject {
+    pub eq: Option<BigInt>,
+    pub ne: Option<BigInt>,
+    pub lt: Option<BigInt>,
+    pub le: Option<BigInt>,
+    pub gt: Option<BigInt>,
+    pub ge: Option<BigInt>,
 }
 
 #[derive(GraphQLInputObject)]
-struct SmallIntegerFilterInputObject {
-    eq: Option<i32>,
-    lt: Option<i32>,
-    le: Option<i32>,
-    gt: Option<i32>,
-    ge: Option<i32>,
+pub struct SmallIntegerFilterInputObject {
+    pub eq: Option<i32>,
+    pub ne: Option<i32>,
+    pub lt: Option<i32>,
+    pub le: Option<i32>,
+    pub gt: Option<i32>,
+    pub ge: Option<i32>,
 }
 
 #[derive(GraphQLInputObject)]
-struct FloatFilterInputObject {
-    eq: Option<f64>,
-    lt: Option<f64>,
-    le: Option<f64>,
-    gt: Option<f64>,
-    ge: Option<f64>,
+pub struct FloatFilterInputObject {
+    pub eq: Option<f64>,
+    pub ne: Option<f64>,
+    pub lt: Option<f64>,
+    pub le: Option<f64>,
+    pub gt: Option<f64>,
+    pub ge: Option<f64>,
 }
 
 #[derive(GraphQLInputObject)]
-struct BooleanFilterInputObject {
-    #[allow(non_snake_case)]
-    eq: Option<bool>,
+pub struct BooleanFilterInputObject {
+    pub eq: Option<bool>,
+    pub ne: Option<bool>,
 }
 
 #[derive(GraphQLInputObject)]
-struct DateTimeFilterInputObject {
-    eq: Option<DateTime>,
-    lt: Option<DateTime>,
-    le: Option<DateTime>,
-    gt: Option<DateTime>,
-    ge: Option<DateTime>,
+pub struct DateTimeFilterInputObject {
+    pub eq: Option<DateTime>,
+    pub ne: Option<DateTime>,
+    pub lt: Option<DateTime>,
+    pub le: Option<DateTime>,
+    pub gt: Option<DateTime>,
+    pub ge: Option<DateTime>,
 }
-
-/*
-
-struct FilterLexicalBaseFieldInputObject;
-
-impl FilterLexicalBaseFieldInputObject {
-    fn comparator_fields<'r, T>(
-        registry: &mut Registry<'r, DefaultScalarValue>,
-    ) -> Vec<Field<'r, T>> {
-        todo!();
-    }
-}
-
-impl GraphQLType for FilterLexicalBaseFieldInputObject {
-    fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.input_object_type_name)
-    }
-
-    fn meta<'r>(
-        info: &Self::TypeInfo,
-        registry: &mut Registry<'r, DefaultScalarValue>,
-    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
-    where
-        DefaultScalarValue: 'r,
-    {
-        let base_type = info.type_name;
-        let kind = base_type_kind(base_type);
-        let mut arguments : Vec<_> =
-            match kind {
-                BaseTypeKind::String => {
-                    registry.arg::<Option<
-                }
-                _ => todo!();
-            }
-        registry.build_input_object_type::<FilterLexicalBaseFieldInputObject>(info.filter_type_name, &arguments)
-        todo!()
-    }
-}
-
-impl GraphQLValue for FilterLexicalBaseFieldInputObject {
-    type Context = ();
-
-    type TypeInfo = FilterLexicalBaseFieldInputObjectTypeInfo;
-
-    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.input_object_type_name)
-    }
-}
-
-struct FilterLexicalBaseFieldInputObjectTypeInfo {
-    input_object_type_name: String,
-    base_type_name: String,
-}
-
-impl FilterLexicalBaseFieldInputObjectTypeInfo {
-    fn new(base_type_name: &str) -> Self {
-        Self {
-            input_object_type_name: format!("{}_BasetypeFilter", base_type_name),
-            base_type_name: base_type_name.to_string(),
-        }
-    }
-}
-*/
