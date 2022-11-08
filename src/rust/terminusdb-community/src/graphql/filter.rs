@@ -9,7 +9,7 @@ use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
     frame::{AllFrames, ClassDefinition, KeyDefinition, TypeDefinition},
-    schema::{BigInt, DateTime},
+    schema::{BigInt, DateTime, TerminusEnum}, query::EnumOperation,
 };
 
 fn generate_filter_argument<'r, T: GraphQLType>(
@@ -88,10 +88,10 @@ impl GraphQLType for FilterInputObject {
                                 Some(registry.arg::<Option<DateTimeFilterInputObject>>(name, &()))
                             }
                         }
-                    } else if let Some(enum_type) = field_definition.enum_type() {
+                    } else if let Some(enum_type) = field_definition.enum_type(&info.frames) {
                         Some(registry.arg::<Option<EnumFilterInputObject>>(
                             name,
-                            &FilterInputObjectTypeInfo::new(&enum_type, &info.frames),
+                            &EnumFilterInputObjectTypeInfo::new(&enum_type, &info.frames),
                         ))
                     } else {
                         let c = field_definition.range();
@@ -197,7 +197,8 @@ impl GraphQLValue for CollectionFilterInputObject {
 }
 
 pub struct EnumFilterInputObject {
-    pub enum_value: String,
+    pub op: EnumOperation,
+    pub enum_value: TerminusEnum,
 }
 
 pub struct EnumFilterInputObjectTypeInfo {
@@ -222,21 +223,22 @@ impl GraphQLType for EnumFilterInputObject {
     }
 
     fn meta<'r>(
-        info: &Self::TypeInfo,
+       info: &Self::TypeInfo,
         registry: &mut Registry<'r, DefaultScalarValue>,
     ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
     where
         DefaultScalarValue: 'r,
     {
         let mut args: Vec<_> = Vec::with_capacity(2);
-        args.push(registry.arg::<Option<FilterInputObject>>(
-            "someHave",
-            &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
-        ));
-        args.push(registry.arg::<Option<FilterInputObject>>(
-            "allHave",
-            &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
-        ));
+        let type_info = (info.type_name.clone(), info.frames.clone());
+        args.push(registry.arg::<Option<TerminusEnum>>(
+            "eq",
+            &type_info)
+        );
+        args.push(registry.arg::<Option<TerminusEnum>>(
+            "ne",
+            &type_info)
+        );
         registry
             .build_input_object_type::<EnumFilterInputObject>(info, &args)
             .into_meta()
@@ -246,7 +248,25 @@ impl GraphQLType for EnumFilterInputObject {
 impl FromInputValue for EnumFilterInputObject {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         match v {
-            InputValue::Object(o) => Some(Self { edges: o.clone() }),
+            InputValue::Object(o) => {
+                if let Some((key, val)) = o.first() {
+                    let op = match key.item.as_ref() {
+                        "eq" => EnumOperation::Eq,
+                        "ne" => EnumOperation::Ne,
+                        unknown => panic!("unknown enum operation {unknown}")
+                    };
+
+                    let enum_value = TerminusEnum::from_input_value(&val.item);
+                    enum_value.map(|e|
+                                   Self {
+                                       op,
+                                       enum_value: e
+                                   })
+                }
+                else {
+                    None
+                }
+            }
             _ => None,
         }
     }

@@ -4,7 +4,7 @@ use juniper::{
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::value::{base_type_kind, value_string_to_untyped_value, BaseTypeKind};
+use crate::value::{base_type_kind, value_string_to_string, BaseTypeKind};
 use crate::{
     consts::RDF_TYPE,
     terminus_store::*,
@@ -27,13 +27,19 @@ use std::cmp::*;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-enum GenericOperation {
+pub enum GenericOperation {
     Ne,
     Eq,
     Ge,
     Gt,
     Lt,
     Le,
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum EnumOperation {
+    Ne,
+    Eq,
 }
 
 #[derive(Debug)]
