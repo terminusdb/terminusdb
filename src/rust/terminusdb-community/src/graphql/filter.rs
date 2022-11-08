@@ -21,7 +21,7 @@ fn generate_filter_argument<'r, T: GraphQLType>(
 }
 
 pub struct FilterInputObject {
-    edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
+    pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 }
 
 pub struct FilterInputObjectTypeInfo {

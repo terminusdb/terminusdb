@@ -24,6 +24,7 @@ use super::schema::{
 use float_ord::FloatOrd;
 
 use std::cmp::*;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum GenericOperation {
@@ -60,9 +61,9 @@ enum FilterValue {
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
     // filter: FilterObject, type: String
-    Node(FilterObject, String),
+    Node(Rc<FilterObject>, String),
     // op : CollectionOperation,  value : String, type: String
-    Collection(CollectionOperation, FilterObject, String),
+    Collection(CollectionOperation, Rc<FilterObject>, String),
 }
 
 #[derive(Debug)]
@@ -231,7 +232,7 @@ fn compile_typed_filter(
         let class_definition: &ClassDefinition = all_frames.frames[range].as_class_definition();
         if let InputValue::Object(edges) = &spanning_input_value.item {
             let inner = compile_edges_to_filter(range, all_frames, class_definition, &edges);
-            FilterValue::Node(inner, range.to_string())
+            FilterValue::Node(Rc::new(inner), range.to_string())
         } else {
             panic!()
         }
@@ -253,7 +254,7 @@ fn compile_collection_filter(
         if let InputValue::Object(edges) = next.item {
             let class_definition: &ClassDefinition = all_frames.frames[range].as_class_definition();
             let class_filter = compile_edges_to_filter(range, all_frames, class_definition, &edges);
-            FilterValue::Collection(operation, class_filter, range.to_string())
+            FilterValue::Collection(operation, Rc::new(class_filter), range.to_string())
         } else {
             panic!("No input object for value collection filter")
         }
@@ -296,6 +297,7 @@ fn compile_filter_object(
     filter_input: &FilterInputObject,
 ) -> FilterObject {
     let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
+    let edges = &filter_input.edges;
     let FilterInputObject { edges } = &filter_input;
     compile_edges_to_filter(class_name, all_frames, class_definition, &edges)
 }
@@ -304,13 +306,13 @@ fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
     object_type: &NodeOrValue,
-    object: &'a str,
+    object: String,
 ) -> Box<dyn Iterator<Item = u64> + 'a> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object_type {
-            NodeOrValue::Value => g.object_value_id(object),
-            NodeOrValue::Node => g.object_node_id(object),
+            NodeOrValue::Value => g.object_value_id(&object),
+            NodeOrValue::Node => g.object_node_id(&object),
         };
         if let Some(object_id) = maybe_object_id {
             Box::new(
@@ -349,16 +351,17 @@ for edge in ty1_edge1.
 
 fn compile_query<'a>(
     g: &'a SyncStoreLayer,
-    filter: &'a FilterObject,
+    filter: Rc<FilterObject>,
     iter: Box<dyn Iterator<Item = u64> + 'a>,
 ) -> Box<dyn Iterator<Item = u64> + 'a> {
-    let edges = &filter.edges;
     let mut iter = iter;
-    for (predicate, filter) in edges.iter() {
+    for (predicate, filter) in filter.edges.iter() {
         let maybe_property_id = g.predicate_id(&predicate);
         if let Some(property_id) = maybe_property_id {
             match filter {
                 FilterValue::String(op, val, _) => {
+                    let op = *op;
+                    let val = val.clone();
                     iter = Box::new(iter.filter(move |subject| {
                         let mut triples = g.triples_sp(*subject, property_id);
                         triples.any(|t| {
@@ -367,7 +370,7 @@ fn compile_query<'a>(
                                 .expect("Object value must exist");
                             let object_string = value_string_to_untyped_value(&object_value);
                             let cmp = object_string.cmp(&val);
-                            ordering_matches_op(cmp, *op)
+                            ordering_matches_op(cmp, op)
                         })
                     }))
                 }
@@ -378,11 +381,12 @@ fn compile_query<'a>(
                 FilterValue::Collection(_, _, _) => todo!(),
                 FilterValue::SmallInt(_, _, _) => todo!(),
                 FilterValue::Boolean(_, _, _) => todo!(),
-                FilterValue::Node(sub_filter, obj_type) => {
+                FilterValue::Node(sub_filter, _obj_type) => {
+                    let sub_filter = sub_filter.clone();
                     iter = Box::new(iter.filter(move |subject| {
                         let objects =
                             Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
-                        compile_query(g, &sub_filter, objects).next().is_some()
+                        compile_query(g, sub_filter.clone(), objects).next().is_some()
                     }))
                 }
             }
@@ -407,7 +411,7 @@ fn generate_initial_iterator<'a>(
             let expanded_type_name = all_frames.fully_qualified_class_name(&class_name.to_string());
             (
                 filter_opt,
-                predicate_value_iter(g, &RDF_TYPE, &NodeOrValue::Node, &expanded_type_name),
+                predicate_value_iter(g, &RDF_TYPE, &NodeOrValue::Node, expanded_type_name),
             )
         }
         Some(zi) => (filter_opt, zi),
@@ -431,7 +435,8 @@ fn lookup_by_filter<'a>(
         zero_iter,
     );
     if let Some(continuation_filter) = continuation_filter_opt {
-        compile_query(g, &continuation_filter, iterator)
+        let continuation_filter = Rc::new(continuation_filter);
+        compile_query(g, continuation_filter, iterator)
     } else {
         iterator
     }
