@@ -5,7 +5,6 @@ on:
   schedule:
     - cron:  '45 2 * * *'
   workflow_dispatch:
-  push:
   workflow_call:
 
 jobs:
@@ -33,11 +32,19 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          tags: terminusdb/terminusdb-server:experimental-arm64-build
-          push: true
+          tags: terminusdb/terminusdb-server:local
+          outputs: type=docker,dest=terminusdb-server-docker-image-arm64.tar
           platforms: linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             TERMINUSDB_GIT_HASH=${{ github.sha }}
-            CARGO_NET_GIT_FETCH_WITH_CLI=true
+
+      - name: Compress image
+        run: gzip terminusdb-server-docker-image-arm64.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v2
+        with:
+            name: terminusdb-server-docker-image-arm64
+            path: terminusdb-server-docker-image-arm64.tar.gz

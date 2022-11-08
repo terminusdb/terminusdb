@@ -15,7 +15,7 @@ RUN make
 
 # Install Rust. Prepare to build the Rust code.
 FROM terminusdb/swipl:v8.4.3-patched-1-buildx AS rust_builder_base
-ARG CARGO_NET_GIT_FETCH_WITH_CLI=false
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
     BUILD_DEPS="git build-essential curl clang ca-certificates"; \
     apt-get update; \
@@ -31,7 +31,7 @@ COPY src/rust src/rust/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
-ARG CARGO_NET_GIT_FETCH_WITH_CLI=false
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
