@@ -208,6 +208,9 @@ jobs:
           username: terminusdb
           password: ${{ secrets.DOCKER_PASS }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Determine image tags to push
         run: |
           VERSION=$(echo "$GITHUB_REF" | sed -e 's,.*/\(.*\),\1,')
