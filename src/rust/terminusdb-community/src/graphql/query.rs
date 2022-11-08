@@ -401,7 +401,12 @@ fn compile_query<'a>(
                                 }
                             }))
                         },
-                        None => Box::new(std::iter::empty())
+                        None => {
+                            match op {
+                                EnumOperation::Eq => Box::new(std::iter::empty()),
+                                EnumOperation::Ne => iter
+                            }
+                        }
                     };
                 },
                 FilterValue::Text(_, _) => todo!(),
