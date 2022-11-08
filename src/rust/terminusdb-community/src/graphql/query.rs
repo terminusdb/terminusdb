@@ -343,11 +343,6 @@ Supposing we have a filter query of the following form:
   or : [{ ty1_edge4 : { eq : "left"}},
         { ty2_edge5 : { eq : "right"}}]}
 
-
-let iter = zi;
-let stack = Vec<FilterInputObject>
-for edge in ty1_edge1.
-
  */
 
 fn compile_query<'a>(
@@ -369,8 +364,7 @@ fn compile_query<'a>(
                             let object_value = g
                                 .id_object_value(t.object)
                                 .expect("Object value must exist");
-                            let object_string =
-                                value_string_to_untyped_value(&object_value).to_string();
+                            let object_string = value_string_to_string(&object_value).to_string();
                             println!("op: {op:?}");
                             println!("object: {object_string}");
                             println!("value: {val}");

@@ -88,6 +88,11 @@ impl GraphQLType for FilterInputObject {
                                 Some(registry.arg::<Option<DateTimeFilterInputObject>>(name, &()))
                             }
                         }
+                    } else if let Some(enum_type) = field_definition.enum_type() {
+                        Some(registry.arg::<Option<EnumFilterInputObject>>(
+                            name,
+                            &FilterInputObjectTypeInfo::new(&enum_type, &info.frames),
+                        ))
                     } else {
                         let c = field_definition.range();
                         Some(registry.arg::<Option<FilterInputObject>>(
@@ -185,6 +190,72 @@ impl GraphQLValue for CollectionFilterInputObject {
     type Context = ();
 
     type TypeInfo = CollectionFilterInputObjectTypeInfo;
+
+    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some(&info.filter_type_name)
+    }
+}
+
+pub struct EnumFilterInputObject {
+    pub enum_value: String,
+}
+
+pub struct EnumFilterInputObjectTypeInfo {
+    filter_type_name: String,
+    type_name: String,
+    frames: Arc<AllFrames>,
+}
+
+impl EnumFilterInputObjectTypeInfo {
+    pub fn new(type_name: &str, all_frames: &Arc<AllFrames>) -> Self {
+        Self {
+            filter_type_name: format!("{type_name}_Enum_Filter"),
+            type_name: type_name.to_string(),
+            frames: all_frames.clone(),
+        }
+    }
+}
+
+impl GraphQLType for EnumFilterInputObject {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(&info.filter_type_name)
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let mut args: Vec<_> = Vec::with_capacity(2);
+        args.push(registry.arg::<Option<FilterInputObject>>(
+            "someHave",
+            &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+        ));
+        args.push(registry.arg::<Option<FilterInputObject>>(
+            "allHave",
+            &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+        ));
+        registry
+            .build_input_object_type::<EnumFilterInputObject>(info, &args)
+            .into_meta()
+    }
+}
+
+impl FromInputValue for EnumFilterInputObject {
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        match v {
+            InputValue::Object(o) => Some(Self { edges: o.clone() }),
+            _ => None,
+        }
+    }
+}
+
+impl GraphQLValue for EnumFilterInputObject {
+    type Context = ();
+
+    type TypeInfo = EnumFilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some(&info.filter_type_name)
