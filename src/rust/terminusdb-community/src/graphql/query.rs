@@ -1,6 +1,7 @@
 use juniper::{
     self, parser::Spanning, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID,
 };
+use regex::Regex;
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
@@ -13,8 +14,8 @@ use crate::{
 
 use super::filter::{
     BigIntFilterInputObject, BooleanFilterInputObject, CollectionFilterInputObject,
-    DateTimeFilterInputObject, FilterInputObject, FloatFilterInputObject,
-    SmallIntegerFilterInputObject, StringFilterInputObject, EnumFilterInputObject,
+    DateTimeFilterInputObject, EnumFilterInputObject, FilterInputObject, FloatFilterInputObject,
+    SmallIntegerFilterInputObject, StringFilterInputObject,
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
 use super::schema::{
@@ -44,6 +45,7 @@ pub enum EnumOperation {
 
 #[derive(Debug)]
 enum TextOperation {
+    Regex(Regex),
     StartsWith(String),
     AllOfTerms(Vec<String>),
     AnyOfTerms(Vec<String>),
@@ -66,7 +68,7 @@ enum FilterValue {
     BigInt(GenericOperation, BigInt, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
-    Enum{op:EnumOperation, value: String},
+    Enum { op: EnumOperation, value: String },
     // filter: FilterObject, type: String
     Node(Rc<FilterObject>, String),
     // op : CollectionOperation,  value : String, type: String
@@ -113,6 +115,9 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
         FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.regex {
+        let regex = Regex::new(&val).expect("Could not compile regex");
+        FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
     } else if let Some(val) = value.startsWith {
         FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
     } else if let Some(val) = value.allOfTerms {
@@ -239,16 +244,21 @@ fn compile_typed_filter(
         match &all_frames.frames[range] {
             TypeDefinition::Class(class_definition) => {
                 if let InputValue::Object(edges) = &spanning_input_value.item {
-                    let inner = compile_edges_to_filter(range, all_frames, class_definition, &edges);
+                    let inner =
+                        compile_edges_to_filter(range, all_frames, class_definition, &edges);
                     FilterValue::Node(Rc::new(inner), range.to_string())
                 } else {
                     panic!()
                 }
             }
             TypeDefinition::Enum(enum_definition) => {
-                let value = EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
+                let value =
+                    EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
                 let encoded = all_frames.fully_qualified_enum_value(range, &value.enum_value.value);
-                FilterValue::Enum{op: value.op, value: encoded}
+                FilterValue::Enum {
+                    op: value.op,
+                    value: encoded,
+                }
             }
         }
     }
@@ -388,32 +398,64 @@ fn compile_query<'a>(
                         })
                     }))
                 }
-                FilterValue::Enum{op, value} => {
+                FilterValue::Enum { op, value } => {
                     let op = *op;
                     iter = match g.object_node_id(value) {
-                        Some(object_id) => {
-                            Box::new(iter.filter(move |s| {
-                                let result = g.triple_exists(*s, property_id, object_id);
+                        Some(object_id) => Box::new(iter.filter(move |s| {
+                            let result = g.triple_exists(*s, property_id, object_id);
 
-                                match op {
-                                    EnumOperation::Eq => result,
-                                    EnumOperation::Ne => !result,
-                                }
-                            }))
-                        },
-                        None => {
                             match op {
-                                EnumOperation::Eq => Box::new(std::iter::empty()),
-                                EnumOperation::Ne => iter
+                                EnumOperation::Eq => result,
+                                EnumOperation::Ne => !result,
                             }
-                        }
+                        })),
+                        None => match op {
+                            EnumOperation::Eq => Box::new(std::iter::empty()),
+                            EnumOperation::Ne => iter,
+                        },
                     };
+                }
+                FilterValue::Text(operation, _) => match operation {
+                    TextOperation::Regex(regex) => {
+                        let regex = regex.clone();
+                        iter = Box::new(iter.filter(move |subject| {
+                            let t = g.single_triple_sp(*subject, property_id);
+                            if let Some(t) = t {
+                                let string = g
+                                    .id_object(t.object)
+                                    .unwrap()
+                                    .value()
+                                    .expect("This object should be a value");
+                                regex.is_match(&string)
+                            } else {
+                                false
+                            }
+                        }))
+                    }
+                    TextOperation::StartsWith(_string) => todo!(),
+                    TextOperation::AllOfTerms(_vec) => todo!(),
+                    TextOperation::AnyOfTerms(_) => todo!(),
                 },
-                FilterValue::Text(_, _) => todo!(),
                 FilterValue::BigInt(_, _, _) => todo!(),
                 FilterValue::Float(_, _, _) => todo!(),
                 FilterValue::DateTime(_, _, _) => todo!(),
-                FilterValue::Collection(_, _, _) => todo!(),
+                FilterValue::Collection(operation, sub_filter, _sub_type) => {
+                    let sub_filter = sub_filter.clone();
+                    iter = match operation {
+                        CollectionOperation::SomeHave => Box::new(iter.filter(move |subject| {
+                            let objects =
+                                Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
+                            compile_query(g, sub_filter.clone(), objects)
+                                .next()
+                                .is_some()
+                        })),
+                        CollectionOperation::AllHave => Box::new(iter.filter(move |subject| {
+                            let objects =
+                                Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
+                            compile_query(g, sub_filter.clone(), objects).all(|_| true)
+                        })),
+                    };
+                }
                 FilterValue::SmallInt(_, _, _) => todo!(),
                 FilterValue::Boolean(_, _, _) => todo!(),
                 FilterValue::Node(sub_filter, _obj_type) => {

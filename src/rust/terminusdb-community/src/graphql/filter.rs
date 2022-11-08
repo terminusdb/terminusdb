@@ -9,7 +9,8 @@ use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
     frame::{AllFrames, ClassDefinition, KeyDefinition, TypeDefinition},
-    schema::{BigInt, DateTime, TerminusEnum}, query::EnumOperation,
+    query::EnumOperation,
+    schema::{BigInt, DateTime, TerminusEnum},
 };
 
 fn generate_filter_argument<'r, T: GraphQLType>(
@@ -223,7 +224,7 @@ impl GraphQLType for EnumFilterInputObject {
     }
 
     fn meta<'r>(
-       info: &Self::TypeInfo,
+        info: &Self::TypeInfo,
         registry: &mut Registry<'r, DefaultScalarValue>,
     ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
     where
@@ -231,14 +232,8 @@ impl GraphQLType for EnumFilterInputObject {
     {
         let mut args: Vec<_> = Vec::with_capacity(2);
         let type_info = (info.type_name.clone(), info.frames.clone());
-        args.push(registry.arg::<Option<TerminusEnum>>(
-            "eq",
-            &type_info)
-        );
-        args.push(registry.arg::<Option<TerminusEnum>>(
-            "ne",
-            &type_info)
-        );
+        args.push(registry.arg::<Option<TerminusEnum>>("eq", &type_info));
+        args.push(registry.arg::<Option<TerminusEnum>>("ne", &type_info));
         registry
             .build_input_object_type::<EnumFilterInputObject>(info, &args)
             .into_meta()
@@ -253,17 +248,12 @@ impl FromInputValue for EnumFilterInputObject {
                     let op = match key.item.as_ref() {
                         "eq" => EnumOperation::Eq,
                         "ne" => EnumOperation::Ne,
-                        unknown => panic!("unknown enum operation {unknown}")
+                        unknown => panic!("unknown enum operation {unknown}"),
                     };
 
                     let enum_value = TerminusEnum::from_input_value(&val.item);
-                    enum_value.map(|e|
-                                   Self {
-                                       op,
-                                       enum_value: e
-                                   })
-                }
-                else {
+                    enum_value.map(|e| Self { op, enum_value: e })
+                } else {
                     None
                 }
             }
@@ -291,6 +281,7 @@ pub struct StringFilterInputObject {
     pub le: Option<String>,
     pub gt: Option<String>,
     pub ge: Option<String>,
+    pub regex: Option<String>,
     pub startsWith: Option<String>,
     pub allOfTerms: Option<Vec<String>>,
     pub anyOfTerms: Option<Vec<String>>,
