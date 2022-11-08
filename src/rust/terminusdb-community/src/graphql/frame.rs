@@ -478,7 +478,7 @@ impl EnumDefinition {
         }
     }
 
-    pub fn value_name(&self, value: &String) -> String {
+    pub fn value_name(&self, value: &str) -> String {
         self.values_renaming
             .as_ref()
             .map(|map| {
@@ -491,7 +491,7 @@ impl EnumDefinition {
             .expect("No values renaming was generated")
     }
 
-    pub fn name_value(&self, name: &String) -> &String {
+    pub fn name_value(&self, name: &str) -> &str {
         self.values_renaming
             .as_ref()
             .map(|map| {
@@ -617,7 +617,7 @@ impl AllFrames {
         }
     }
 
-    pub fn fully_qualified_class_name(&self, class_name: &String) -> String {
+    pub fn fully_qualified_class_name(&self, class_name: &str) -> String {
         self.class_renaming
             .as_ref()
             .map(|map| {
@@ -627,6 +627,15 @@ impl AllFrames {
                 self.context.expand_schema(db_name)
             })
             .expect("No renaming was built")
+    }
+
+    pub fn fully_qualified_enum_value(&self, enum_type: &str, value: &str) -> String {
+        let enum_type_expanded = self.fully_qualified_class_name(enum_type);
+        let enum_type_definition = self.frames[enum_type].as_enum_definition();
+        let value = enum_type_definition.value_name(value);
+        let expanded_object_node = format!("{}/{}", enum_type_expanded, value);
+
+        expanded_object_node
     }
 }
 

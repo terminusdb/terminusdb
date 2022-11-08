@@ -14,9 +14,9 @@ use crate::{
 use super::filter::{
     BigIntFilterInputObject, BooleanFilterInputObject, CollectionFilterInputObject,
     DateTimeFilterInputObject, FilterInputObject, FloatFilterInputObject,
-    SmallIntegerFilterInputObject, StringFilterInputObject,
+    SmallIntegerFilterInputObject, StringFilterInputObject, EnumFilterInputObject,
 };
-use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes};
+use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
 use super::schema::{
     is_reserved_argument_name, BigInt, DateTime, TerminusEnum, TerminusOrderBy, TerminusOrdering,
 };
@@ -66,6 +66,7 @@ enum FilterValue {
     BigInt(GenericOperation, BigInt, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
+    Enum{op:EnumOperation, value: String},
     // filter: FilterObject, type: String
     Node(Rc<FilterObject>, String),
     // op : CollectionOperation,  value : String, type: String
@@ -235,12 +236,20 @@ fn compile_typed_filter(
             }
         }
     } else {
-        let class_definition: &ClassDefinition = all_frames.frames[range].as_class_definition();
-        if let InputValue::Object(edges) = &spanning_input_value.item {
-            let inner = compile_edges_to_filter(range, all_frames, class_definition, &edges);
-            FilterValue::Node(Rc::new(inner), range.to_string())
-        } else {
-            panic!()
+        match &all_frames.frames[range] {
+            TypeDefinition::Class(class_definition) => {
+                if let InputValue::Object(edges) = &spanning_input_value.item {
+                    let inner = compile_edges_to_filter(range, all_frames, class_definition, &edges);
+                    FilterValue::Node(Rc::new(inner), range.to_string())
+                } else {
+                    panic!()
+                }
+            }
+            TypeDefinition::Enum(enum_definition) => {
+                let value = EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
+                let encoded = all_frames.fully_qualified_enum_value(range, &value.enum_value.value);
+                FilterValue::Enum{op: value.op, value: encoded}
+            }
         }
     }
 }
@@ -379,6 +388,22 @@ fn compile_query<'a>(
                         })
                     }))
                 }
+                FilterValue::Enum{op, value} => {
+                    let op = *op;
+                    iter = match g.object_node_id(value) {
+                        Some(object_id) => {
+                            Box::new(iter.filter(move |s| {
+                                let result = g.triple_exists(*s, property_id, object_id);
+
+                                match op {
+                                    EnumOperation::Eq => result,
+                                    EnumOperation::Ne => !result,
+                                }
+                            }))
+                        },
+                        None => Box::new(std::iter::empty())
+                    };
+                },
                 FilterValue::Text(_, _) => todo!(),
                 FilterValue::BigInt(_, _, _) => todo!(),
                 FilterValue::Float(_, _, _) => todo!(),
