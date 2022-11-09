@@ -41,7 +41,7 @@ describe('cli-clone-push-pull', function () {
   })
 
   it('fails push to unknown remote database', async function () {
-    this.timeout(20000)
+    this.timeout(60000)
     const agent = new Agent().auth()
     const dbSpec = agent.orgName + '/' + agent.dbName
     const url = agent.baseUrl + '/' + dbSpec
@@ -71,7 +71,7 @@ describe('cli-clone-push-pull', function () {
   })
 
   it('fails push if remote history has diverged', async function () {
-    this.timeout(20000)
+    this.timeout(60000)
     const agent = new Agent().auth()
     const dbSpec = agent.orgName + '/' + agent.dbName
     const url = agent.baseUrl + '/' + dbSpec
@@ -104,7 +104,7 @@ describe('cli-clone-push-pull', function () {
   })
 
   it('passes push twice', async function () {
-    this.timeout(20000)
+    this.timeout(60000)
     const agent = new Agent().auth()
     const dbSpec = agent.orgName + '/' + agent.dbName
     const url = agent.baseUrl + '/' + dbSpec
