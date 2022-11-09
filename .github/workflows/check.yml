@@ -113,6 +113,7 @@ jobs:
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
             --name=terminusdb \
             --detach \
             --net=host \
@@ -163,6 +164,7 @@ jobs:
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
             --name=terminusdb \
             --detach \
             --net=host \
@@ -214,6 +216,7 @@ jobs:
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
             --detach \
             --net=host \
             --name=terminusdb \
@@ -265,6 +268,7 @@ jobs:
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
             --detach \
             --net=host \
             --name=terminusdb \
