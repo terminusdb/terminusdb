@@ -6,6 +6,8 @@ on:
     - cron:  '45 2 * * *'
   workflow_dispatch:
   workflow_call:
+  # REMOVE THIS BEFORE MERGING TO MAIN
+  push:
 
 jobs:
   arm64_docker:
@@ -46,7 +48,8 @@ jobs:
   arm64_docker_tests:
     # Only run the tests when the cron is triggered or the job
     # is triggered manually, otherwise it takes way too long
-    if: ${{ github.event.schedule || github.event.workflow_dispatch }}
+    # TODO: REMOVE THE PUSH EVENT BEFORE MERGE TO MAIN
+    if: ${{ github.event.schedule || github.event.workflow_dispatch || github.event.push }}
     needs: arm64_docker
     uses: ./.github/workflows/check.yml
     with:
