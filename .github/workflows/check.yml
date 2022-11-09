@@ -121,6 +121,7 @@ jobs:
         working-directory: tests
         env:
           TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_EXTRA_DOCKER_PARAMS: --platform ${{ inputs.image_platform }}
         run: |
           npm install-ci-test
 
@@ -163,6 +164,7 @@ jobs:
         env:
           TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
           TERMINUSDB_PARALLELIZE_ENABLED: false
+          TERMINUSDB_EXTRA_DOCKER_PARAMS: --platform ${{ inputs.image_platform }}
         run: |
           npm install-ci-test
 
@@ -207,6 +209,7 @@ jobs:
         env:
           TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
           TERMINUSDB_INSECURE_USER_HEADER: X-Forwarded-User
+          TERMINUSDB_EXTRA_DOCKER_PARAMS: --platform ${{ inputs.image_platform }}
         run: npm install-ci-test
 
   integration_tests_jwt:
@@ -250,6 +253,7 @@ jobs:
         env:
           TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
           TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
+          TERMINUSDB_EXTRA_DOCKER_PARAMS: --platform ${{ inputs.image_platform }}
         run: npm install-ci-test
 
   lint:
