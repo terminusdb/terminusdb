@@ -56,3 +56,4 @@ jobs:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}
       image_artifact: terminusdb-server-docker-image-arm64
+      image_platform: linux/arm64

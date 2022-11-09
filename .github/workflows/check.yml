@@ -12,6 +12,9 @@ on:
       image_artifact:
         type: string
         default: "terminusdb-server-docker-image"
+      image_platform:
+        type: string
+        default: "linux/amd64"
 
 env:
   NODE_VERSION: '16'
@@ -31,7 +34,7 @@ jobs:
       - name: Run tests
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run \
+          docker run --platform ${{ inputs.image_platform }} \
             terminusdb/terminusdb-server:local \
             make test
 
@@ -82,7 +85,7 @@ jobs:
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run \
+          docker run --platform ${{ inputs.image_platform }} \
             --detach \
             --net=host \
             terminusdb/terminusdb-server:local
@@ -117,7 +120,7 @@ jobs:
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run \
+          docker run --platform ${{ inputs.image_platform }} \
             --detach \
             --net=host \
             terminusdb/terminusdb-server:local
@@ -152,7 +155,7 @@ jobs:
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run \
+          docker run --platform ${{ inputs.image_platform }} \
             --detach \
             --net=host \
             -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
@@ -188,7 +191,7 @@ jobs:
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run \
+          docker run --platform ${{ inputs.image_platform }} \
             --detach \
             --net=host \
             -e TERMINUSDB_JWT_ENABLED=true \
@@ -232,7 +235,7 @@ jobs:
       - name: Run lint
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run \
+          docker run --platform ${{ inputs.image_platform }} \
             -v $(pwd):/app/terminusdb \
             terminusdb/terminusdb-server:local \
             make lint
