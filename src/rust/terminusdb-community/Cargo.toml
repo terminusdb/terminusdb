@@ -23,3 +23,5 @@ float-ord = "0.3"
 regex = "1"
 aho-corasick = "0.7"
 bimap = "0.6.2"
+ordered-float = "3.0"
+

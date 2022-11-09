@@ -43,6 +43,20 @@ pub fn value_string_to_string(s: &str) -> Cow<str> {
     }
 }
 
+pub fn value_string_to_bool(s: &str) -> bool {
+    match value_string_to_slices(s) {
+        LangOrType::Type(s, _) => s == "\"true\"",
+        _ => panic!("This should not be a string, but a bool"),
+    }
+}
+
+pub fn value_string_to_number(s: &str) -> Number {
+    match value_string_to_slices(s) {
+        LangOrType::Type(s, _) => Number::from_str(s).unwrap(),
+        _ => panic!("This should not be a string, but a bool"),
+    }
+}
+
 lazy_static! {
     static ref NUMERIC_TYPES: HashSet<&'static str> = [
         "decimal",
@@ -96,7 +110,7 @@ lazy_static! {
         ["dateTime", "dateTimeStamp",].into_iter().collect();
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum BaseTypeKind {
     String,
     SmallInteger,

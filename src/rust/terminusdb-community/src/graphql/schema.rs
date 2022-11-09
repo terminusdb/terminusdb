@@ -14,8 +14,8 @@ use crate::doc::{retrieve_all_index_ids, ArrayIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
-    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_float, type_is_integer,
-    type_is_small_integer, value_string_to_graphql,
+    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_float,
+    type_is_integer, type_is_small_integer, value_string_to_graphql,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
@@ -362,6 +362,13 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             )
                         } else if type_is_float(base_type) {
                             Self::register_field::<f64>(
+                                registry,
+                                field_name,
+                                &(),
+                                field_definition.kind(),
+                            )
+                        } else if type_is_datetime(base_type) {
+                            Self::register_field::<DateTime>(
                                 registry,
                                 field_name,
                                 &(),
@@ -797,7 +804,7 @@ impl GraphQLValue for TerminusOrderBy {
 }
 
 #[derive(Debug, Clone)]
-pub struct BigInt(String);
+pub struct BigInt(pub String);
 
 #[juniper::graphql_scalar(
     name = "BigInt",
@@ -821,7 +828,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct DateTime(String);
+pub struct DateTime(pub String);
 
 #[juniper::graphql_scalar(
     name = "DateTime",

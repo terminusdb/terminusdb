@@ -1,11 +1,15 @@
 use juniper::{
     self, parser::Spanning, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID,
 };
+use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::value::{base_type_kind, value_string_to_string, BaseTypeKind};
+use crate::value::{
+    base_type_kind, value_string_to_bool, value_string_to_number, value_string_to_string,
+    BaseTypeKind,
+};
 use crate::{
     consts::RDF_TYPE,
     terminus_store::*,
@@ -225,7 +229,7 @@ fn compile_typed_filter(
     spanning_input_value: &juniper::Spanning<InputValue>,
 ) -> ObjectType {
     if is_base_type(range) {
-        match base_type_kind(range) {
+        match base_type_kind(&range[4..]) {
             BaseTypeKind::String => {
                 let value = StringFilterInputObject::from_input_value(&spanning_input_value.item);
                 ObjectType::Value(compile_string_input_value(range, value.unwrap()))
@@ -379,7 +383,7 @@ Supposing we have a filter query of the following form:
 
 fn object_type_filter<'a>(
     g: &'a SyncStoreLayer,
-    filter_type: &FilterType,
+    filter_type: &'a FilterType,
     iter: Box<dyn Iterator<Item = u64> + 'a>,
 ) -> Box<dyn Iterator<Item = u64> + 'a> {
     match filter_type {
@@ -437,11 +441,59 @@ fn object_type_filter<'a>(
                 }))
             }
         },
-        FilterType::SmallInt(_, _, _) => todo!(),
-        FilterType::Float(_, _, _) => todo!(),
-        FilterType::Boolean(_, _, _) => todo!(),
-        FilterType::BigInt(_, _, _) => todo!(),
-        FilterType::DateTime(_, _, _) => todo!(),
+        FilterType::SmallInt(op, i, _) => {
+            let op = *op;
+            Box::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_int = value_string_to_number(&object_value)
+                    .as_i64()
+                    .expect("How did it even get in to the database as a small int")
+                    as i32;
+                let cmp = i.cmp(&object_int);
+                ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterType::Float(op, f, _) => {
+            let op = *op;
+            Box::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_float = value_string_to_number(&object_value)
+                    .as_f64()
+                    .expect("How did this get into the database bigger than f64?");
+                let cmp = OrderedFloat(*f).cmp(&OrderedFloat(object_float));
+                ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterType::Boolean(op, b, _) => {
+            let op = *op;
+            Box::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_bool = value_string_to_bool(&object_value);
+                let cmp = b.cmp(&object_bool);
+                ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterType::BigInt(op, BigInt(bigint), _) => {
+            let op = *op;
+            let val = bigint.clone();
+            Box::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_string = value_string_to_string(&object_value).to_string();
+                let cmp = val.cmp(&object_string);
+                ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterType::DateTime(op, DateTime(val), _) => {
+            let op = *op;
+            let val = val.clone();
+            Box::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_string = value_string_to_string(&object_value).to_string();
+                // Datetimes are reverse order: newer is bigger, but less!
+                let cmp = val.cmp(&object_string);
+                ordering_matches_op(cmp, op)
+            }))
+        }
         FilterType::String(op, val, _) => {
             let op = *op;
             let val = val.clone();
