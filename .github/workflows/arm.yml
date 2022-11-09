@@ -43,14 +43,14 @@ jobs:
             name: terminusdb-server-docker-image-arm64
             path: terminusdb-server-docker-image-arm64.tar.gz
 
-    arm64_docker_tests:
-      runs-on: ubuntu-latest
-      # Only run the tests when the cron is triggered or the job
-      # is triggered manually, otherwise it takes way too long
-      if: ${{ github.event.schedule || github.event.workflow_dispatch }}
-      needs: arm64_docker
-      uses: ./.github/workflows/check.yml
-      with:
-        test_repository: ${{ github.repository }}
-        test_ref: ${{ github.sha }}
-        image_artifact: terminusdb-server-docker-image-arm64
+  arm64_docker_tests:
+    runs-on: ubuntu-latest
+    # Only run the tests when the cron is triggered or the job
+    # is triggered manually, otherwise it takes way too long
+    if: ${{ github.event.schedule || github.event.workflow_dispatch }}
+    needs: arm64_docker
+    uses: ./.github/workflows/check.yml
+    with:
+      test_repository: ${{ github.repository }}
+      test_ref: ${{ github.sha }}
+      image_artifact: terminusdb-server-docker-image-arm64
