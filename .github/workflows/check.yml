@@ -108,6 +108,11 @@ jobs:
             --net=host \
             terminusdb/terminusdb-server:local
 
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+
       - uses: actions/setup-node@v2
         with:
           node-version: '16'
@@ -149,6 +154,11 @@ jobs:
             --detach \
             --net=host \
             terminusdb/terminusdb-server:local
+
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
 
       - uses: actions/setup-node@v2
         with:
@@ -195,6 +205,11 @@ jobs:
             -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
             terminusdb/terminusdb-server:local
 
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+
       - uses: actions/setup-node@v2
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -238,6 +253,11 @@ jobs:
             -e TERMINUSDB_JWT_AGENT_NAME_PROPERTY='http://terminusdb.com/schema/system#agent_name' \
             -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
             terminusdb/terminusdb-server:local
+
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
 
       - uses: actions/setup-node@v2
         with:
