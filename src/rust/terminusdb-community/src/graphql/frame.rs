@@ -232,7 +232,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a String> {
+    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a str> {
         if self.base_type().is_some() {
             None
         } else {
@@ -241,7 +241,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a String> {
+    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a str> {
         if self.base_type().is_some() {
             None
         } else {
@@ -600,8 +600,7 @@ impl AllFrames {
         }
     }
 
-    fn document_type<'a>(&self, s: &'a String) -> Option<&'a String> {
-        eprintln!("Looking up {s:?}");
+    pub fn document_type<'a>(&self, s: &'a str) -> Option<&'a str> {
         if self.frames[s].is_document_type() {
             Some(s)
         } else {
@@ -609,7 +608,7 @@ impl AllFrames {
         }
     }
 
-    fn enum_type<'a>(&self, s: &'a String) -> Option<&'a String> {
+    pub fn enum_type<'a>(&self, s: &'a str) -> Option<&'a str> {
         if self.frames[s].is_enum_type() {
             Some(s)
         } else {

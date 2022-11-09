@@ -679,7 +679,7 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
 }
 
 fn collect_into_graphql_list<C: QueryableContextType>(
-    doc_type: Option<&String>,
+    doc_type: Option<&str>,
     executor: &juniper::Executor<TerminusContext<C>>,
     info: &(String, Arc<AllFrames>),
     arguments: &juniper::Arguments,
@@ -796,7 +796,7 @@ impl GraphQLValue for TerminusOrderBy {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BigInt(String);
 
 #[juniper::graphql_scalar(
@@ -820,7 +820,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DateTime(String);
 
 #[juniper::graphql_scalar(

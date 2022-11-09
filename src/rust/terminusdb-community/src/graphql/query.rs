@@ -1,7 +1,7 @@
 use juniper::{
     self, parser::Spanning, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID,
 };
-use regex::Regex;
+use regex::{Regex, RegexSet};
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
@@ -43,7 +43,7 @@ pub enum EnumOperation {
     Eq,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TextOperation {
     Regex(Regex),
     StartsWith(String),
@@ -52,13 +52,25 @@ enum TextOperation {
 }
 
 #[derive(Debug)]
+enum OptionalOperation {
+    IsEmpty,
+    Has(ObjectType),
+}
+
+#[derive(Debug)]
 enum CollectionOperation {
     SomeHave,
     AllHave,
 }
 
-#[derive(Debug)]
-enum FilterValue {
+#[derive(Debug, Clone)]
+enum ObjectType {
+    Node(Rc<FilterObject>, String),
+    Value(FilterType),
+}
+
+#[derive(Debug, Clone)]
+enum FilterType {
     // op : TextOperation, type: String
     Text(TextOperation, String),
     // op : GenericOperation,  value : String, type: String
@@ -69,10 +81,13 @@ enum FilterValue {
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
     Enum { op: EnumOperation, value: String },
-    // filter: FilterObject, type: String
-    Node(Rc<FilterObject>, String),
-    // op : CollectionOperation,  value : String, type: String
-    Collection(CollectionOperation, Rc<FilterObject>, String),
+}
+
+#[derive(Debug)]
+enum FilterValue {
+    Required(ObjectType),
+    // Optional(OptionalOperation),
+    Collection(CollectionOperation, ObjectType),
 }
 
 #[derive(Debug)]
@@ -104,77 +119,74 @@ FilterObject{ edges:
 }
 */
 
-fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterValue {
+fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
-        FilterValue::String(GenericOperation::Eq, val, string_type.to_string())
+        FilterType::String(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.lt {
-        FilterValue::String(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::String(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::String(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::String(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.gt {
-        FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
+        FilterType::String(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
-        FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
+        FilterType::String(GenericOperation::Ge, val, string_type.to_string())
     } else if let Some(val) = value.regex {
         let regex = Regex::new(&val).expect("Could not compile regex");
-        FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
+        FilterType::Text(TextOperation::Regex(regex), string_type.to_string())
     } else if let Some(val) = value.startsWith {
-        FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
+        FilterType::Text(TextOperation::StartsWith(val), string_type.to_string())
     } else if let Some(val) = value.allOfTerms {
-        FilterValue::Text(TextOperation::AllOfTerms(val), string_type.to_string())
+        FilterType::Text(TextOperation::AllOfTerms(val), string_type.to_string())
     } else if let Some(val) = value.anyOfTerms {
-        FilterValue::Text(TextOperation::AnyOfTerms(val), string_type.to_string())
+        FilterType::Text(TextOperation::AnyOfTerms(val), string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
 }
 
-fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject) -> FilterValue {
+fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
-        FilterValue::BigInt(GenericOperation::Eq, val, string_type.to_string())
+        FilterType::BigInt(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.lt {
-        FilterValue::BigInt(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::BigInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::BigInt(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::BigInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.gt {
-        FilterValue::BigInt(GenericOperation::Gt, val, string_type.to_string())
+        FilterType::BigInt(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
-        FilterValue::BigInt(GenericOperation::Ge, val, string_type.to_string())
+        FilterType::BigInt(GenericOperation::Ge, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
 }
 
-fn compile_datetime_input_value(
-    string_type: &str,
-    value: DateTimeFilterInputObject,
-) -> FilterValue {
+fn compile_datetime_input_value(string_type: &str, value: DateTimeFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
-        FilterValue::DateTime(GenericOperation::Eq, val, string_type.to_string())
+        FilterType::DateTime(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.lt {
-        FilterValue::DateTime(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::DateTime(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::DateTime(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::DateTime(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.gt {
-        FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
+        FilterType::DateTime(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
-        FilterValue::DateTime(GenericOperation::Ge, val, string_type.to_string())
+        FilterType::DateTime(GenericOperation::Ge, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
 }
 
-fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -> FilterValue {
+fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
-        FilterValue::Float(GenericOperation::Eq, val, string_type.to_string())
+        FilterType::Float(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.lt {
-        FilterValue::Float(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::Float(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::Float(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::Float(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.gt {
-        FilterValue::Float(GenericOperation::Gt, val, string_type.to_string())
+        FilterType::Float(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
-        FilterValue::Float(GenericOperation::Ge, val, string_type.to_string())
+        FilterType::Float(GenericOperation::Ge, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
@@ -183,25 +195,25 @@ fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -
 fn compile_small_integer_input_value(
     string_type: &str,
     value: SmallIntegerFilterInputObject,
-) -> FilterValue {
+) -> FilterType {
     if let Some(val) = value.eq {
-        FilterValue::SmallInt(GenericOperation::Eq, val, string_type.to_string())
+        FilterType::SmallInt(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.lt {
-        FilterValue::SmallInt(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::SmallInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::SmallInt(GenericOperation::Lt, val, string_type.to_string())
+        FilterType::SmallInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.gt {
-        FilterValue::SmallInt(GenericOperation::Gt, val, string_type.to_string())
+        FilterType::SmallInt(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
-        FilterValue::SmallInt(GenericOperation::Ge, val, string_type.to_string())
+        FilterType::SmallInt(GenericOperation::Ge, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
 }
 
-fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObject) -> FilterValue {
+fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
-        FilterValue::Boolean(GenericOperation::Eq, val, string_type.to_string())
+        FilterType::Boolean(GenericOperation::Eq, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
@@ -211,33 +223,33 @@ fn compile_typed_filter(
     range: &str,
     all_frames: &AllFrames,
     spanning_input_value: &juniper::Spanning<InputValue>,
-) -> FilterValue {
+) -> ObjectType {
     if is_base_type(range) {
         match base_type_kind(range) {
             BaseTypeKind::String => {
                 let value = StringFilterInputObject::from_input_value(&spanning_input_value.item);
-                compile_string_input_value(range, value.unwrap())
+                ObjectType::Value(compile_string_input_value(range, value.unwrap()))
             }
             BaseTypeKind::SmallInteger => {
                 let value =
                     SmallIntegerFilterInputObject::from_input_value(&spanning_input_value.item);
-                compile_small_integer_input_value(range, value.unwrap())
+                ObjectType::Value(compile_small_integer_input_value(range, value.unwrap()))
             }
             BaseTypeKind::BigIntger => {
                 let value = BigIntFilterInputObject::from_input_value(&spanning_input_value.item);
-                compile_big_int_input_value(range, value.unwrap())
+                ObjectType::Value(compile_big_int_input_value(range, value.unwrap()))
             }
             BaseTypeKind::Boolean => {
                 let value = BooleanFilterInputObject::from_input_value(&spanning_input_value.item);
-                compile_boolean_input_value(range, value.unwrap())
+                ObjectType::Value(compile_boolean_input_value(range, value.unwrap()))
             }
             BaseTypeKind::DateTime => {
                 let value = DateTimeFilterInputObject::from_input_value(&spanning_input_value.item);
-                compile_datetime_input_value(range, value.unwrap())
+                ObjectType::Value(compile_datetime_input_value(range, value.unwrap()))
             }
             BaseTypeKind::Float => {
                 let value = FloatFilterInputObject::from_input_value(&spanning_input_value.item);
-                compile_float_input_value(range, value.unwrap())
+                ObjectType::Value(compile_float_input_value(range, value.unwrap()))
             }
         }
     } else {
@@ -246,7 +258,7 @@ fn compile_typed_filter(
                 if let InputValue::Object(edges) = &spanning_input_value.item {
                     let inner =
                         compile_edges_to_filter(range, all_frames, class_definition, &edges);
-                    FilterValue::Node(Rc::new(inner), range.to_string())
+                    ObjectType::Node(Rc::new(inner), range.to_string())
                 } else {
                     panic!()
                 }
@@ -255,10 +267,10 @@ fn compile_typed_filter(
                 let value =
                     EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
                 let encoded = all_frames.fully_qualified_enum_value(range, &value.enum_value.value);
-                FilterValue::Enum {
+                ObjectType::Value(FilterType::Enum {
                     op: value.op,
                     value: encoded,
-                }
+                })
             }
         }
     }
@@ -276,13 +288,8 @@ fn compile_collection_filter(
             "allHave" => CollectionOperation::AllHave,
             _ => panic!("Unknown collection filter"),
         };
-        if let InputValue::Object(edges) = next.item {
-            let class_definition: &ClassDefinition = all_frames.frames[range].as_class_definition();
-            let class_filter = compile_edges_to_filter(range, all_frames, class_definition, &edges);
-            FilterValue::Collection(operation, Rc::new(class_filter), range.to_string())
-        } else {
-            panic!("No input object for value collection filter")
-        }
+        let object_type = compile_typed_filter(range, all_frames, &next);
+        FilterValue::Collection(operation, object_type)
     } else {
         panic!("No operation for compiling collection filter")
     }
@@ -305,7 +312,7 @@ fn compile_edges_to_filter(
         match kind {
             FieldKind::Required | FieldKind::Optional => {
                 let res = compile_typed_filter(range, all_frames, &spanning_input_value);
-                result.push((property.to_string(), res));
+                result.push((property.to_string(), FilterValue::Required(res)));
             }
             FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
                 let value =
@@ -370,6 +377,97 @@ Supposing we have a filter query of the following form:
 
  */
 
+fn object_type_filter<'a>(
+    g: &'a SyncStoreLayer,
+    filter_type: &FilterType,
+    iter: Box<dyn Iterator<Item = u64> + 'a>,
+) -> Box<dyn Iterator<Item = u64> + 'a> {
+    match filter_type {
+        FilterType::Text(operation, _) => match operation {
+            TextOperation::Regex(regex) => {
+                let regex = regex.clone();
+                Box::new(iter.filter(move |object| {
+                    let string = g
+                        .id_object(*object)
+                        .unwrap()
+                        .value()
+                        .expect("This object should be a value");
+                    regex.is_match(&string)
+                }))
+            }
+            TextOperation::StartsWith(string) => {
+                let escaped = &regex::escape(string);
+                let regex = Regex::new(&format!("^{escaped}"))
+                    .expect("Regex should always be valid due to escaping");
+                Box::new(iter.filter(move |object| {
+                    let string = g
+                        .id_object(*object)
+                        .unwrap()
+                        .value()
+                        .expect("This object should be a value");
+                    regex.is_match(&string)
+                }))
+            }
+            TextOperation::AllOfTerms(vec) => {
+                let regexs: Vec<_> = vec.iter().map(|s| regex::escape(s)).collect();
+                let regexset =
+                    RegexSet::new(&regexs).expect("Regex should always be valid due to escaping");
+                let length = regexs.len();
+                Box::new(iter.filter(move |object| {
+                    let string = g
+                        .id_object(*object)
+                        .unwrap()
+                        .value()
+                        .expect("This object should be a value");
+                    length == regexset.matches(&string).into_iter().count()
+                }))
+            }
+            TextOperation::AnyOfTerms(vec) => {
+                let regexs: Vec<_> = vec.iter().map(|s| regex::escape(s)).collect();
+                let regexset =
+                    RegexSet::new(&regexs).expect("Regex should always be valid due to escaping");
+                let length = regexs.len();
+                Box::new(iter.filter(move |object| {
+                    let string = g
+                        .id_object(*object)
+                        .unwrap()
+                        .value()
+                        .expect("This object should be a value");
+                    regexset.is_match(&string)
+                }))
+            }
+        },
+        FilterType::SmallInt(_, _, _) => todo!(),
+        FilterType::Float(_, _, _) => todo!(),
+        FilterType::Boolean(_, _, _) => todo!(),
+        FilterType::BigInt(_, _, _) => todo!(),
+        FilterType::DateTime(_, _, _) => todo!(),
+        FilterType::String(op, val, _) => {
+            let op = *op;
+            let val = val.clone();
+            Box::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_string = value_string_to_string(&object_value).to_string();
+                let cmp = object_string.cmp(&val);
+                ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterType::Enum { op, value } => {
+            let op = *op;
+            match g.object_node_id(value) {
+                Some(object_id) => Box::new(iter.filter(move |object| match op {
+                    EnumOperation::Eq => *object == object_id,
+                    EnumOperation::Ne => *object != object_id,
+                })),
+                None => match op {
+                    EnumOperation::Eq => Box::new(std::iter::empty()),
+                    EnumOperation::Ne => iter,
+                },
+            }
+        }
+    }
+}
+
 fn compile_query<'a>(
     g: &'a SyncStoreLayer,
     filter: Rc<FilterObject>,
@@ -378,99 +476,93 @@ fn compile_query<'a>(
     let mut iter = iter;
     for (predicate, filter) in filter.edges.iter() {
         let maybe_property_id = g.predicate_id(&predicate);
-        if let Some(property_id) = maybe_property_id {
-            match filter {
-                FilterValue::String(op, val, _) => {
-                    let op = *op;
-                    let val = val.clone();
-                    iter = Box::new(iter.filter(move |subject| {
-                        let mut triples = g.triples_sp(*subject, property_id);
-                        triples.any(|t| {
-                            let object_value = g
-                                .id_object_value(t.object)
-                                .expect("Object value must exist");
-                            let object_string = value_string_to_string(&object_value).to_string();
-                            println!("op: {op:?}");
-                            println!("object: {object_string}");
-                            println!("value: {val}");
-                            let cmp = object_string.cmp(&val);
-                            ordering_matches_op(cmp, op)
-                        })
-                    }))
-                }
-                FilterValue::Enum { op, value } => {
-                    let op = *op;
-                    iter = match g.object_node_id(value) {
-                        Some(object_id) => Box::new(iter.filter(move |s| {
-                            let result = g.triple_exists(*s, property_id, object_id);
-
-                            match op {
-                                EnumOperation::Eq => result,
-                                EnumOperation::Ne => !result,
-                            }
-                        })),
-                        None => match op {
-                            EnumOperation::Eq => Box::new(std::iter::empty()),
-                            EnumOperation::Ne => iter,
-                        },
-                    };
-                }
-                FilterValue::Text(operation, _) => match operation {
-                    TextOperation::Regex(regex) => {
-                        let regex = regex.clone();
-                        iter = Box::new(iter.filter(move |subject| {
-                            let t = g.single_triple_sp(*subject, property_id);
-                            if let Some(t) = t {
-                                let string = g
-                                    .id_object(t.object)
-                                    .unwrap()
-                                    .value()
-                                    .expect("This object should be a value");
-                                regex.is_match(&string)
-                            } else {
-                                false
-                            }
-                        }))
+        match filter {
+            FilterValue::Required(object_type) => {
+                if let Some(property_id) = maybe_property_id {
+                    match object_type {
+                        ObjectType::Node(sub_filter, _) => {
+                            let sub_filter = sub_filter.clone();
+                            iter = Box::new(iter.filter(move |subject| {
+                                let objects = Box::new(
+                                    g.single_triple_sp(*subject, property_id)
+                                        .map(|t| t.object)
+                                        .into_iter(),
+                                );
+                                compile_query(g, sub_filter.clone(), objects)
+                                    .next()
+                                    .is_some()
+                            }))
+                        }
+                        ObjectType::Value(filter_type) => {
+                            let filter_type = filter_type.clone();
+                            iter = Box::new(iter.filter(move |subject| {
+                                let object_iter = Box::new(
+                                    g.single_triple_sp(*subject, property_id)
+                                        .map(|t| t.object)
+                                        .into_iter(),
+                                );
+                                object_type_filter(g, &filter_type, object_iter)
+                                    .next()
+                                    .is_some()
+                            }))
+                        }
                     }
-                    TextOperation::StartsWith(_string) => todo!(),
-                    TextOperation::AllOfTerms(_vec) => todo!(),
-                    TextOperation::AnyOfTerms(_) => todo!(),
-                },
-                FilterValue::BigInt(_, _, _) => todo!(),
-                FilterValue::Float(_, _, _) => todo!(),
-                FilterValue::DateTime(_, _, _) => todo!(),
-                FilterValue::Collection(operation, sub_filter, _sub_type) => {
-                    let sub_filter = sub_filter.clone();
-                    iter = match operation {
-                        CollectionOperation::SomeHave => Box::new(iter.filter(move |subject| {
-                            let objects =
-                                Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
-                            compile_query(g, sub_filter.clone(), objects)
-                                .next()
-                                .is_some()
-                        })),
-                        CollectionOperation::AllHave => Box::new(iter.filter(move |subject| {
-                            let objects =
-                                Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
-                            compile_query(g, sub_filter.clone(), objects).all(|_| true)
-                        })),
-                    };
-                }
-                FilterValue::SmallInt(_, _, _) => todo!(),
-                FilterValue::Boolean(_, _, _) => todo!(),
-                FilterValue::Node(sub_filter, _obj_type) => {
-                    let sub_filter = sub_filter.clone();
-                    iter = Box::new(iter.filter(move |subject| {
-                        let objects =
-                            Box::new(g.triples_sp(*subject, property_id).map(|t| t.object));
-                        compile_query(g, sub_filter.clone(), objects)
-                            .next()
-                            .is_some()
-                    }))
+                } else {
+                    return Box::new(std::iter::empty());
                 }
             }
-        } else {
-            return Box::new(std::iter::empty());
+            FilterValue::Collection(op, o) => {
+                if let Some(property_id) = maybe_property_id {
+                    match op {
+                        CollectionOperation::SomeHave => match o {
+                            ObjectType::Node(sub_filter, _) => {
+                                let sub_filter = sub_filter.clone();
+                                iter = Box::new(iter.filter(move |subject| {
+                                    let objects = Box::new(
+                                        g.triples_sp(*subject, property_id).map(|t| t.object),
+                                    );
+                                    compile_query(g, sub_filter.clone(), objects)
+                                        .next()
+                                        .is_some()
+                                }));
+                            }
+                            ObjectType::Value(filter_type) => {
+                                let filter_type = filter_type.clone();
+                                iter = Box::new(iter.filter(move |subject| {
+                                    let objects = Box::new(
+                                        g.triples_sp(*subject, property_id).map(|t| t.object),
+                                    );
+                                    object_type_filter(g, &filter_type, objects)
+                                        .next()
+                                        .is_some()
+                                }));
+                            }
+                        },
+                        CollectionOperation::AllHave => match o {
+                            ObjectType::Node(sub_filter, _) => {
+                                let sub_filter = sub_filter.clone();
+                                iter = Box::new(iter.filter(move |subject| {
+                                    let objects = Box::new(
+                                        g.triples_sp(*subject, property_id).map(|t| t.object),
+                                    );
+                                    compile_query(g, sub_filter.clone(), objects).all(|_| true)
+                                }));
+                            }
+                            ObjectType::Value(filter_type) => {
+                                let filter_type = filter_type.clone();
+                                iter = Box::new(iter.filter(move |subject| {
+                                    let objects = Box::new(
+                                        g.triples_sp(*subject, property_id).map(|t| t.object),
+                                    );
+                                    object_type_filter(g, &filter_type, objects).all(|_| true)
+                                }));
+                            }
+                        },
+                    }
+                } else {
+                    return Box::new(std::iter::empty());
+                }
+            }
         }
     }
     iter
