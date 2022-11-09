@@ -26,14 +26,14 @@ if [[ $use_docker -eq 0 ]]; then
     if [ -t 1 ]; then
       set -x
     fi
-    docker run \
+    docker run "$TERMINUSDB_EXTRA_DOCKER_PARAMS" \
       --rm \
       --user $user \
       --network host \
       --volume "$PWD:/app/terminusdb/tests" \
       --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
       --workdir /app/terminusdb/tests \
-      "$TERMINUSDB_EXTRA_DOCKER_PARAMS" "$TERMINUSDB_DOCKER_IMAGE_TAG" \
+      "$TERMINUSDB_DOCKER_IMAGE_TAG" \
       /app/terminusdb/terminusdb \
       "$@"
   else
