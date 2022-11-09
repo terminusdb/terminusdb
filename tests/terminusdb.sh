@@ -12,7 +12,6 @@
 [[ "${TERMINUSDB_DOCKER_CONTAINER:-x}" == "x" ]] && use_docker=1 || use_docker=0
 [[ -x "${TERMINUSDB_EXEC_PATH:="../terminusdb"}" ]] && use_exec=0 || use_exec=1
 
-echo "$TERMINUSDB_DOCKER_CONTAINER"
 # If neither Docker nor executable, error.
 if [[ $use_docker -ne 0 && $use_exec -ne 0 ]]; then
   echo "Error! Missing \$TERMINUSDB_DOCKER_CONTAINER or executable ($TERMINUSDB_EXEC_PATH)."
