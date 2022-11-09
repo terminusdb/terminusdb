@@ -26,11 +26,11 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - name: Run tests
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run \
             terminusdb/terminusdb-server:local \
             make test
@@ -43,11 +43,11 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - name: Load Docker image
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           # Tag a dev image because the docker-compose.yml uses
           # a dev tag. We want it to fetch it locally instead of
           # remotely from Docker Hub
@@ -77,11 +77,11 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - name: Run server
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run \
             --detach \
             --net=host \
@@ -112,11 +112,11 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - name: Run server
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run \
             --detach \
             --net=host \
@@ -147,11 +147,11 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - name: Run server
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run \
             --detach \
             --net=host \
@@ -183,11 +183,11 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - name: Run server
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run \
             --detach \
             --net=host \
@@ -225,13 +225,13 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: {{ inputs.image_artifact }}
+          name: ${{ inputs.image_artifact }}
 
       - run: make download-lint
 
       - name: Run lint
         run: |
-          docker load < {{ inputs.image_artifact }}.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run \
             -v $(pwd):/app/terminusdb \
             terminusdb/terminusdb-server:local \
