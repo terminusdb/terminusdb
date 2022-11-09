@@ -95,6 +95,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -127,11 +132,6 @@ jobs:
       - uses: actions/setup-node@v2
         with:
           node-version: '16'
-
-      - uses: actions/checkout@v3
-        with:
-          repository: ${{ inputs.test_repository }}
-          ref: ${{ inputs.test_ref }}
 
       - name: Run tests
         working-directory: tests
@@ -146,6 +146,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -179,11 +184,6 @@ jobs:
         with:
           node-version: '16'
 
-      - uses: actions/checkout@v3
-        with:
-          repository: ${{ inputs.test_repository }}
-          ref: ${{ inputs.test_ref }}
-
       - name: Run tests
         working-directory: tests
         env:
@@ -197,6 +197,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -233,11 +238,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - uses: actions/checkout@v3
-        with:
-          repository: ${{ inputs.test_repository }}
-          ref: ${{ inputs.test_ref }}
-
       - name: Run tests
         working-directory: tests
         env:
@@ -250,6 +250,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.test_repository }}
+          ref: ${{ inputs.test_ref }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -285,11 +290,6 @@ jobs:
       - uses: actions/setup-node@v2
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - uses: actions/checkout@v3
-        with:
-          repository: ${{ inputs.test_repository }}
-          ref: ${{ inputs.test_ref }}
 
       - name: Run tests
         working-directory: tests
