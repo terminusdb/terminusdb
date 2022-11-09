@@ -26,7 +26,7 @@ if [[ $use_docker -eq 0 ]]; then
     if [ -t 1 ]; then
       set -x
     fi
-    docker run "$TERMINUSDB_EXTRA_DOCKER_PARAMS" \
+    docker run $TERMINUSDB_EXTRA_DOCKER_PARAMS \
       --rm \
       --user $user \
       --network host \
