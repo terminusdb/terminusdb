@@ -204,6 +204,11 @@ jobs:
           username: terminusdb
           password: ${{ secrets.DOCKER_PASS }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -247,7 +252,7 @@ jobs:
           tags: ${{ env.docker_tags }}
           push: true
           platforms: linux/amd64,linux/arm64
-          cache-from: terminusdb/terminusdb-server:local
+          cache-from: type=gha
           build-args: |
             TERMINUSDB_GIT_HASH=${{ github.sha }}
 
