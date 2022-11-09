@@ -155,6 +155,7 @@ fn add_arguments<'r>(
                 .description("order by the given fields"),
         );
     }
+    /*
     for (name, f) in class_definition.fields().iter() {
         if is_reserved_argument_name(name) {
             // these are special. we're generating them differently
@@ -178,6 +179,7 @@ fn add_arguments<'r>(
             );
         }
     }
+    */
 
     field
 }
