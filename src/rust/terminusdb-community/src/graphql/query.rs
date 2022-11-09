@@ -450,7 +450,7 @@ fn object_type_filter<'a>(
                     .as_i64()
                     .expect("How did it even get in to the database as a small int")
                     as i32;
-                let cmp = i.cmp(&object_int);
+                let cmp = object_int.cmp(i);
                 ordering_matches_op(cmp, op)
             }))
         }
@@ -461,7 +461,7 @@ fn object_type_filter<'a>(
                 let object_float = value_string_to_number(&object_value)
                     .as_f64()
                     .expect("How did this get into the database bigger than f64?");
-                let cmp = OrderedFloat(*f).cmp(&OrderedFloat(object_float));
+                let cmp = OrderedFloat(object_float).cmp(&OrderedFloat(*f));
                 ordering_matches_op(cmp, op)
             }))
         }
@@ -470,7 +470,7 @@ fn object_type_filter<'a>(
             Box::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
                 let object_bool = value_string_to_bool(&object_value);
-                let cmp = b.cmp(&object_bool);
+                let cmp = object_bool.cmp(b);
                 ordering_matches_op(cmp, op)
             }))
         }
@@ -479,8 +479,8 @@ fn object_type_filter<'a>(
             let val = bigint.parse::<Integer>().unwrap();
             Box::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_string_to_bigint(&object_value);
-                let cmp = val.cmp(&object_string);
+                let object_int = value_string_to_bigint(&object_value);
+                let cmp = object_int.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
         }
