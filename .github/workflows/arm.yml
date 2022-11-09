@@ -44,7 +44,6 @@ jobs:
             path: terminusdb-server-docker-image-arm64.tar.gz
 
   arm64_docker_tests:
-    runs-on: ubuntu-latest
     # Only run the tests when the cron is triggered or the job
     # is triggered manually, otherwise it takes way too long
     if: ${{ github.event.schedule || github.event.workflow_dispatch }}
