@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
+use rug::Integer;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -53,6 +54,13 @@ pub fn value_string_to_bool(s: &str) -> bool {
 pub fn value_string_to_number(s: &str) -> Number {
     match value_string_to_slices(s) {
         LangOrType::Type(s, _) => Number::from_str(s).unwrap(),
+        _ => panic!("This should not be a string, but a bool"),
+    }
+}
+
+pub fn value_string_to_bigint(s: &str) -> Integer {
+    match value_string_to_slices(s) {
+        LangOrType::Type(s, _) => s.parse::<Integer>().unwrap(),
         _ => panic!("This should not be a string, but a bool"),
     }
 }

@@ -3,12 +3,13 @@ use juniper::{
 };
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
+use rug::Integer;
 
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::value::{
-    base_type_kind, value_string_to_bool, value_string_to_number, value_string_to_string,
-    BaseTypeKind,
+    base_type_kind, value_string_to_bigint, value_string_to_bool, value_string_to_number,
+    value_string_to_string, BaseTypeKind,
 };
 use crate::{
     consts::RDF_TYPE,
@@ -475,10 +476,10 @@ fn object_type_filter<'a>(
         }
         FilterType::BigInt(op, BigInt(bigint), _) => {
             let op = *op;
-            let val = bigint.clone();
+            let val = bigint.parse::<Integer>().unwrap();
             Box::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_string_to_string(&object_value).to_string();
+                let object_string = value_string_to_bigint(&object_value);
                 let cmp = val.cmp(&object_string);
                 ordering_matches_op(cmp, op)
             }))
