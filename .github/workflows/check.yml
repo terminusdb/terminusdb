@@ -31,6 +31,12 @@ jobs:
         with:
           name: ${{ inputs.image_artifact }}
 
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
       - name: Run tests
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
@@ -47,6 +53,12 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
 
       - name: Load Docker image
         run: |
@@ -81,6 +93,12 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
 
       - name: Run server
         run: |
@@ -117,6 +135,12 @@ jobs:
         with:
           name: ${{ inputs.image_artifact }}
 
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
@@ -151,6 +175,13 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: ${{ inputs.image_artifact }}
+
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
 
       - name: Run server
         run: |
@@ -188,6 +219,12 @@ jobs:
         with:
           name: ${{ inputs.image_artifact }}
 
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
@@ -224,6 +261,12 @@ jobs:
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
 
       - name: Download Docker image
         uses: actions/download-artifact@v2
