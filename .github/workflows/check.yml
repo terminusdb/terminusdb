@@ -9,6 +9,12 @@ on:
       test_ref:
         required: true
         type: string
+      image_artifact:
+        type: string
+        default: "terminusdb-server-docker-image"
+      image_platform:
+        type: string
+        default: "linux/amd64"
 
 env:
   NODE_VERSION: '16'
@@ -20,15 +26,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: terminusdb-server-docker-image
+          name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
 
       - name: Run tests
         run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
+          docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker run --platform ${{ inputs.image_platform }} \
             terminusdb/terminusdb-server:local \
             make test
 
@@ -37,14 +52,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: terminusdb-server-docker-image
+          name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
 
       - name: Load Docker image
         run: |
-          docker load < terminusdb-server-docker-image.tar.gz
+          docker load < ${{ inputs.image_artifact }}.tar.gz
           # Tag a dev image because the docker-compose.yml uses
           # a dev tag. We want it to fetch it locally instead of
           # remotely from Docker Hub
@@ -71,32 +95,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Docker image
-        uses: actions/download-artifact@v2
-        with:
-          name: terminusdb-server-docker-image
-
-      - name: Run server
-        run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
-            --detach \
-            --net=host \
-            terminusdb/terminusdb-server:local
-
-      - uses: actions/setup-node@v2
-        with:
-          node-version: '16'
-
       - uses: actions/checkout@v3
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
+      - name: Run server
+        run: |
+          docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
+            --name=terminusdb \
+            --detach \
+            --net=host \
+            terminusdb/terminusdb-server:local
+
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
       - name: Run tests
         working-directory: tests
         env:
-          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_DOCKER_CONTAINER: terminusdb
         run: |
           npm install-ci-test
 
@@ -106,32 +146,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Docker image
-        uses: actions/download-artifact@v2
-        with:
-          name: terminusdb-server-docker-image
-
-      - name: Run server
-        run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
-            --detach \
-            --net=host \
-            terminusdb/terminusdb-server:local
-
-      - uses: actions/setup-node@v2
-        with:
-          node-version: '16'
-
       - uses: actions/checkout@v3
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
+      - name: Run server
+        run: |
+          docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
+            --name=terminusdb \
+            --detach \
+            --net=host \
+            terminusdb/terminusdb-server:local
+
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
       - name: Run tests
         working-directory: tests
         env:
-          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_DOCKER_CONTAINER: terminusdb
           TERMINUSDB_PARALLELIZE_ENABLED: false
         run: |
           npm install-ci-test
@@ -141,34 +197,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Docker image
-        uses: actions/download-artifact@v2
-        with:
-          name: terminusdb-server-docker-image
-
-      - name: Run server
-        run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
-            --detach \
-            --net=host \
-            -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
-            -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
-            terminusdb/terminusdb-server:local
-
-      - uses: actions/setup-node@v2
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
       - uses: actions/checkout@v3
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ inputs.image_artifact }}
+
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
+      - name: Run server
+        run: |
+          docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
+            --detach \
+            --net=host \
+            --name=terminusdb \
+            -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
+            -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
+            terminusdb/terminusdb-server:local
+
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Run tests
         working-directory: tests
         env:
-          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_DOCKER_CONTAINER: terminusdb
           TERMINUSDB_INSECURE_USER_HEADER: X-Forwarded-User
         run: npm install-ci-test
 
@@ -177,35 +250,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Docker image
-        uses: actions/download-artifact@v2
-        with:
-          name: terminusdb-server-docker-image
-
-      - name: Run server
-        run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
-            --detach \
-            --net=host \
-            -e TERMINUSDB_JWT_ENABLED=true \
-            -e TERMINUSDB_JWT_AGENT_NAME_PROPERTY='http://terminusdb.com/schema/system#agent_name' \
-            -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
-            terminusdb/terminusdb-server:local
-
-      - uses: actions/setup-node@v2
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
       - uses: actions/checkout@v3
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ inputs.image_artifact }}
+
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
+      - name: Run server
+        run: |
+          docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker run --platform ${{ inputs.image_platform }} \
+            --volume "${PWD}/tests:/app/terminusdb/tests" \
+            --detach \
+            --net=host \
+            --name=terminusdb \
+            -e TERMINUSDB_JWT_ENABLED=true \
+            -e TERMINUSDB_JWT_AGENT_NAME_PROPERTY='http://terminusdb.com/schema/system#agent_name' \
+            -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
+            terminusdb/terminusdb-server:local
+
+      # Give the server some time to start up
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Run tests
         working-directory: tests
         env:
-          TERMINUSDB_DOCKER_IMAGE_TAG: terminusdb/terminusdb-server:local
+          TERMINUSDB_DOCKER_CONTAINER: terminusdb
           TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
         run: npm install-ci-test
 
@@ -214,22 +303,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - uses: actions/checkout@v3
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Set up QEMU
+        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
       - name: Download Docker image
         uses: actions/download-artifact@v2
         with:
-          name: terminusdb-server-docker-image
+          name: ${{ inputs.image_artifact }}
 
       - run: make download-lint
 
       - name: Run lint
         run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker run \
+          docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker run --platform ${{ inputs.image_platform }} \
             -v $(pwd):/app/terminusdb \
             terminusdb/terminusdb-server:local \
             make lint

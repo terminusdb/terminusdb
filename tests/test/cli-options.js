@@ -6,7 +6,7 @@ const { util } = require('../lib')
 describe('cli-options', function () {
   let dbSpec
   before(async function () {
-    this.timeout(30000)
+    this.timeout(200000)
     process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
     {
       const r = await exec('./terminusdb.sh store init --force')

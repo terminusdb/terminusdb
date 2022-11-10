@@ -1374,9 +1374,9 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "swipl"
-version = "0.3.11"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5639a3a013464e790befa04d95f051c5715e8d01c35f8424896912187630b72f"
+checksum = "a04c192a0389127f06c0b92366d42cc9ac1e8ba3b9dd3b7a036866bb5c20e463"
 dependencies = [
  "convert_case",
  "lazy_static",
