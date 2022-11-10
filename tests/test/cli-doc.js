@@ -7,7 +7,7 @@ describe('cli-doc', function () {
   let dbSpec
 
   before(async function () {
-    this.timeout(90000)
+    this.timeout(200000)
     process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
     {
       const r = await exec('./terminusdb.sh store init --force')
@@ -31,7 +31,7 @@ describe('cli-doc', function () {
     const schema = { '@type': 'Class', negativeInteger: 'xsd:negativeInteger' }
 
     before(async function () {
-      this.timeout(150000)
+      this.timeout(1000000)
       schema['@id'] = util.randomString()
       {
         const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
@@ -697,7 +697,7 @@ describe('cli-doc', function () {
     const schema = { '@type': 'Class', negativeInteger: 'xsd:negativeInteger' }
 
     before(async function () {
-      this.timeout(150000)
+      this.timeout(1000000)
       schema['@id'] = util.randomString()
       {
         const r = await exec(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)

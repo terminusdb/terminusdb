@@ -5,7 +5,7 @@ const { util } = require('../lib')
 
 describe('cli-triples', function () {
   before(async function () {
-    this.timeout(90000)
+    this.timeout(200000)
     process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
     {
       const r = await exec('./terminusdb.sh store init --force')
