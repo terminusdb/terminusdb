@@ -16,7 +16,7 @@ RUN make
 # Install Rust. Prepare to build the Rust code.
 FROM terminusdb/swipl:v8.4.3-patched-1 AS rust_builder_base
 RUN set -eux; \
-    BUILD_DEPS="git build-essential curl clang ca-certificates"; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates m4"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
