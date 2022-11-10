@@ -1,0 +1,56 @@
+# Build and run tests every night on non-Docker systems.
+name: ARM64 docker build
+
+on:
+  schedule:
+    - cron:  '45 2 * * *'
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  arm64_docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: 'arm64'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          tags: terminusdb/terminusdb-server:local
+          outputs: type=docker,dest=terminusdb-server-docker-image-arm64.tar
+          platforms: linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            TERMINUSDB_GIT_HASH=${{ github.sha }}
+
+      - name: Compress image
+        run: gzip terminusdb-server-docker-image-arm64.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v2
+        with:
+            name: terminusdb-server-docker-image-arm64
+            path: terminusdb-server-docker-image-arm64.tar.gz
+
+  arm64_docker_tests:
+    # Only run the tests when the cron is triggered or the job
+    # is triggered manually, otherwise it takes way too long
+    if: ${{ github.event_name == 'schedule' }}
+    needs: arm64_docker
+    uses: ./.github/workflows/check.yml
+    with:
+      test_repository: ${{ github.repository }}
+      test_ref: ${{ github.sha }}
+      image_artifact: terminusdb-server-docker-image-arm64
+      image_platform: linux/arm64

@@ -3,7 +3,7 @@
 ARG DIST=community
 
 # Install the SWI-Prolog pack dependencies.
-FROM terminusdb/swipl:v8.4.3-patched-1 AS pack_installer
+FROM terminusdb/swipl:v8.4.3-patched-1-buildx AS pack_installer
 RUN set -eux; \
     BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
     apt-get update; \
@@ -14,7 +14,8 @@ COPY distribution/Makefile.deps Makefile
 RUN make
 
 # Install Rust. Prepare to build the Rust code.
-FROM terminusdb/swipl:v8.4.3-patched-1 AS rust_builder_base
+FROM terminusdb/swipl:v8.4.3-patched-1-buildx AS rust_builder_base
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
     BUILD_DEPS="git build-essential curl clang ca-certificates m4"; \
     apt-get update; \
@@ -30,6 +31,7 @@ COPY src/rust src/rust/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
@@ -41,7 +43,7 @@ RUN make DIST=enterprise
 FROM rust_builder_${DIST} AS rust_builder
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
-FROM terminusdb/swipl:v8.4.3-patched-1 AS base
+FROM terminusdb/swipl:v8.4.3-patched-1-buildx AS base
 RUN set -eux; \
     RUNTIME_DEPS="libjwt0 make openssl"; \
     apt-get update; \
