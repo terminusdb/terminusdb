@@ -5,6 +5,7 @@
 + GraphQL automatic loading of Schema in GraphQL schema
 + GraphQL search and retrieval
 + New HEAD call for document endpoint, which makes it easy to check for existence
++ Add ARM64 support
 
 ## Bug fixes
 + Anonymous users now results in an auth with an explicit URI in the systemDB
@@ -12,7 +13,6 @@
 + `@metadata` bugs on ingest / exgest fixed for classes.
 + Diff no longer returns explicit IDs for subdocuments, and does not compare IDs
 + sys:Unit now interacts correctly with Option
-+ fix ARM64 build issues
 
 # TerminusDB Server v10.1.7 Release Notes
 
