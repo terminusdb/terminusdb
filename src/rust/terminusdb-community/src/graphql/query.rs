@@ -93,6 +93,9 @@ enum FilterValue {
     Required(ObjectType),
     // Optional(OptionalOperation),
     Collection(CollectionOperation, ObjectType),
+    And(Vec<Rc<FilterObject>>),
+    Or(Vec<Rc<FilterObject>>),
+    Not(Rc<FilterObject>),
 }
 
 #[derive(Debug)]
@@ -309,21 +312,83 @@ fn compile_edges_to_filter(
     let mut result: Vec<(String, FilterValue)> = Vec::with_capacity(edges.len());
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = &spanning_string.item;
-        let field = class_definition.resolve_field(&field_name);
-        let prefixes = &all_frames.context;
-        let property = class_definition.fully_qualified_property_name(&prefixes, field_name);
-        let range = field.range();
-        let kind = field.kind();
-        match kind {
-            FieldKind::Required | FieldKind::Optional => {
-                let res = compile_typed_filter(range, all_frames, &spanning_input_value);
-                result.push((property.to_string(), FilterValue::Required(res)));
+        if field_name == "_and" {
+            let input_value = &spanning_input_value.item;
+            match input_value {
+                InputValue::List(lst) => {
+                    let mut result_vector = Vec::with_capacity(lst.len());
+                    for spanning_elt in lst.iter() {
+                        let elt = &spanning_elt.item;
+                        match elt {
+                            InputValue::Object(o) => {
+                                result_vector.push(Rc::new(compile_edges_to_filter(
+                                    class_name,
+                                    all_frames,
+                                    class_definition,
+                                    &o,
+                                )))
+                            }
+                            _ => panic!("We should not have a non object in And-clause"),
+                        };
+                    }
+                    result.push(("_and".to_string(), FilterValue::And(result_vector)))
+                }
+                _ => panic!("Invalid operand to and "),
             }
-            FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
-                let value =
-                    CollectionFilterInputObject::from_input_value(&spanning_input_value.item);
-                let filter_value = compile_collection_filter(value.unwrap(), all_frames, range);
-                result.push((property.to_string(), filter_value))
+        } else if field_name == "_or" {
+            let input_value = &spanning_input_value.item;
+            match input_value {
+                InputValue::List(lst) => {
+                    let mut result_vector = Vec::with_capacity(lst.len());
+                    for spanning_elt in lst.iter() {
+                        let elt = &spanning_elt.item;
+                        match elt {
+                            InputValue::Object(o) => {
+                                result_vector.push(Rc::new(compile_edges_to_filter(
+                                    class_name,
+                                    all_frames,
+                                    class_definition,
+                                    &o,
+                                )))
+                            }
+                            _ => panic!("We should not have a non object in And-clause"),
+                        };
+                    }
+                    result.push(("_or".to_string(), FilterValue::Or(result_vector)))
+                }
+                _ => panic!("Invalid operand to and "),
+            }
+        } else if field_name == "_not" {
+            let elt = &spanning_input_value.item;
+            match elt {
+                InputValue::Object(o) => result.push((
+                    "_not".to_string(),
+                    FilterValue::Not(Rc::new(compile_edges_to_filter(
+                        class_name,
+                        all_frames,
+                        class_definition,
+                        &o,
+                    ))),
+                )),
+                _ => panic!("We should not have a non object in And-clause"),
+            }
+        } else {
+            let field = class_definition.resolve_field(&field_name);
+            let prefixes = &all_frames.context;
+            let property = class_definition.fully_qualified_property_name(&prefixes, field_name);
+            let range = field.range();
+            let kind = field.kind();
+            match kind {
+                FieldKind::Required | FieldKind::Optional => {
+                    let res = compile_typed_filter(range, all_frames, &spanning_input_value);
+                    result.push((property.to_string(), FilterValue::Required(res)));
+                }
+                FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
+                    let value =
+                        CollectionFilterInputObject::from_input_value(&spanning_input_value.item);
+                    let filter_value = compile_collection_filter(value.unwrap(), all_frames, range);
+                    result.push((property.to_string(), filter_value))
+                }
             }
         }
     }
@@ -528,9 +593,38 @@ fn compile_query<'a>(
 ) -> Box<dyn Iterator<Item = u64> + 'a> {
     let mut iter = iter;
     for (predicate, filter) in filter.edges.iter() {
-        let maybe_property_id = g.predicate_id(&predicate);
         match filter {
+            FilterValue::And(vec) => {
+                for filter in vec.iter() {
+                    iter = compile_query(g, filter.clone(), iter)
+                }
+            }
+            FilterValue::Or(vec) => {
+                // iter - iter1 +
+                //     \ - iter2 +
+                //      \ - iter3
+                //
+                let initial_vector = iter.collect::<Vec<u64>>();
+                //or_iter = Box::new(std::iter::empty());
+                iter = Box::new(vec.clone().into_iter().flat_map(move |filter| {
+                    let iter_copy = Box::new(initial_vector.clone().into_iter());
+                    compile_query(g, filter.clone(), iter_copy)
+                }));
+            }
+            FilterValue::Not(filter) => {
+                //  A = iter.collect()
+                //  B = sub_iter
+                //  C = A \ B
+                let initial_vector = iter.collect::<Vec<u64>>();
+                let initial_iter = Box::new(initial_vector.clone().into_iter());
+                let next_iter = Box::new(initial_vector.clone().into_iter());
+                let mut sub_iter = compile_query(g, filter.clone(), initial_iter);
+                iter = Box::new(
+                    next_iter.filter(move |subject| sub_iter.any(|subject2| *subject != subject2)),
+                );
+            }
             FilterValue::Required(object_type) => {
+                let maybe_property_id = g.predicate_id(&predicate);
                 if let Some(property_id) = maybe_property_id {
                     match object_type {
                         ObjectType::Node(sub_filter, _) => {
@@ -565,6 +659,7 @@ fn compile_query<'a>(
                 }
             }
             FilterValue::Collection(op, o) => {
+                let maybe_property_id = g.predicate_id(&predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
                         CollectionOperation::SomeHave => match o {

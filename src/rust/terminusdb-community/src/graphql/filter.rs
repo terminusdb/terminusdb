@@ -54,7 +54,7 @@ impl GraphQLType for FilterInputObject {
         DefaultScalarValue: 'r,
     {
         if let TypeDefinition::Class(d) = &info.frames.frames[&info.type_name] {
-            let args: Vec<_> = d
+            let mut args: Vec<_> = d
                 .fields()
                 .iter()
                 .filter_map(|(name, field_definition)| {
@@ -103,6 +103,22 @@ impl GraphQLType for FilterInputObject {
                     }
                 })
                 .collect();
+
+            args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
+                "_and",
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+            ));
+
+            args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
+                "_or",
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+            ));
+
+            args.push(registry.arg::<Option<FilterInputObject>>(
+                "_not",
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+            ));
+
             registry
                 .build_input_object_type::<FilterInputObject>(info, &args)
                 .into_meta()
