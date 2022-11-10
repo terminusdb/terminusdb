@@ -15,24 +15,13 @@ use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_float,
-    type_is_integer, type_is_small_integer, value_string_to_graphql,
+    type_is_small_integer, value_string_to_graphql,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::query::run_filter_query;
 use super::top::System;
-
-macro_rules! execute_prolog {
-    ($context:ident, $body:block) => {{
-        let result: PrologResult<_> = { $body };
-
-        result_to_string_result($context, result).map_err(|e| match e {
-            PrologStringError::Failure => FieldError::new("prolog call failed", Value::Null),
-            PrologStringError::Exception(e) => FieldError::new(e, Value::Null),
-        })
-    }};
-}
 
 pub struct SystemInfo {
     pub user: Atom,
@@ -128,7 +117,6 @@ fn add_arguments<'r>(
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
     mut field: Field<'r, DefaultScalarValue>,
     class_definition: &ClassDefinition,
-    all_frames: &AllFrames,
 ) -> Field<'r, DefaultScalarValue> {
     field = field.argument(registry.arg::<Option<ID>>("id", &()));
     field = field.argument(
@@ -194,14 +182,6 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
     false
 }
 
-pub fn is_reserved_argument_name(name: &String) -> bool {
-    name == "filter"
-        || name == "offset"
-        || name == "limit"
-        || name == "orderBy"
-        || is_reserved_field_name(name)
-}
-
 pub fn is_reserved_field_name(name: &String) -> bool {
     name == "id"
 }
@@ -231,7 +211,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                         registry,
                         field,
                         c,
-                        info,
                     ))
                 } else {
                     None
@@ -336,7 +315,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             let class_definition =
                                 info.1.frames[document_type].as_class_definition();
                             let new_info = (document_type.to_owned(), info.1.clone());
-                            add_arguments(&new_info, registry, field, class_definition, &info.1)
+                            add_arguments(&new_info, registry, field, class_definition)
                         } else {
                             field
                         }
@@ -509,7 +488,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
         match frame {
             TypeDefinition::Class(d) => Self::generate_class_type(d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
-            _ => todo!(),
         }
     }
 }

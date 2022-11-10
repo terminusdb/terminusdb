@@ -71,7 +71,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let unfoldables: HashSet<u64>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
-        let mut sys_index_ids: Vec<u64>;
+        let sys_index_ids: Vec<u64>;
         let mut sys_array_id = None;
         let mut sys_value_id = None;
 

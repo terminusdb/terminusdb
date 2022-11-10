@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
@@ -109,11 +108,6 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
-    static ref INTEGER_TYPES: HashSet<&'static str> = SMALL_INTEGER_TYPES
-        .iter()
-        .chain(BIG_INTEGER_TYPES.iter())
-        .map(|x| *x)
-        .collect();
     static ref DATETIME_TYPES: HashSet<&'static str> =
         ["dateTime", "dateTimeStamp",].into_iter().collect();
 }
@@ -158,10 +152,6 @@ pub fn type_is_small_integer(s: &str) -> bool {
 
 pub fn type_is_big_integer(s: &str) -> bool {
     BIG_INTEGER_TYPES.contains(s)
-}
-
-pub fn type_is_integer(s: &str) -> bool {
-    INTEGER_TYPES.contains(s)
 }
 
 pub fn type_is_float(s: &str) -> bool {
@@ -253,31 +243,6 @@ impl FromInputValue for ScalarInputValue {
     }
 }
 
-pub fn graphql_scalar_to_value_string(v: ScalarInputValue, base_type: &str) -> String {
-    match v {
-        ScalarInputValue::Boolean(b) => {
-            assert!(type_is_bool(base_type));
-            format!("{}^^'{}{}'", b, XSD_PREFIX, base_type)
-        }
-        ScalarInputValue::Int(i) => {
-            assert!(type_is_small_integer(base_type));
-            format!("{}^^'{}{}'", i, XSD_PREFIX, base_type)
-        }
-        ScalarInputValue::Float(f) => {
-            assert!(type_is_float(base_type));
-            format!("{}^^'{}{}'", f, XSD_PREFIX, base_type)
-        }
-        ScalarInputValue::String(s) => {
-            if type_is_big_integer(base_type) {
-                format!("{}^^'{}{}'", s, XSD_PREFIX, base_type)
-            } else {
-                let prolog_string = string_to_prolog_string(&s);
-                format!("{}^^'{}{}'", prolog_string, XSD_PREFIX, base_type)
-            }
-        }
-    }
-}
-
 pub fn value_string_to_usize(s: &str) -> usize {
     if let LangOrType::Type(val, typ) = value_string_to_slices(s) {
         if !type_is_numeric(typ) {
@@ -353,6 +318,7 @@ fn unescape_legacy_prolog_escape_sequence(
     }
 }
 
+#[allow(unused)]
 fn string_to_prolog_string(s: &str) -> String {
     // incomplete - lots of control characters gets printed weirdly by prolog.
     let mut result = String::with_capacity(s.len() + 10);

@@ -491,6 +491,7 @@ impl Repository for Remote {
 }
 
 pub enum LayerType {
+    #[allow(unused)]
     Commit,
     Meta,
 }
@@ -626,7 +627,6 @@ impl Branch {
         &self,
         offset: Option<i32>,
         limit: Option<i32>,
-        author: Option<String>,
         #[graphql(context)] info: &SystemInfo,
     ) -> Vec<AbstractCommitValue> {
         let start = offset.unwrap_or(0);

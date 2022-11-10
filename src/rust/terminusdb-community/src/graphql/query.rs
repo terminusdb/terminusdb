@@ -1,7 +1,5 @@
 use itertools::Itertools;
-use juniper::{
-    self, parser::Spanning, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID,
-};
+use juniper::{self, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID};
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
@@ -12,11 +10,7 @@ use crate::value::{
     base_type_kind, value_string_to_bigint, value_string_to_bool, value_string_to_number,
     value_string_to_string, BaseTypeKind,
 };
-use crate::{
-    consts::RDF_TYPE,
-    terminus_store::*,
-    value::{graphql_scalar_to_value_string, value_string_to_graphql},
-};
+use crate::{consts::RDF_TYPE, terminus_store::*, value::value_string_to_graphql};
 
 use super::filter::{
     BigIntFilterInputObject, BooleanFilterInputObject, CollectionFilterInputObject,
@@ -24,9 +18,7 @@ use super::filter::{
     SmallIntegerFilterInputObject, StringFilterInputObject,
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
-use super::schema::{
-    is_reserved_argument_name, BigInt, DateTime, TerminusEnum, TerminusOrderBy, TerminusOrdering,
-};
+use super::schema::{BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
 
 use float_ord::FloatOrd;
 
@@ -56,12 +48,6 @@ enum TextOperation {
     StartsWith(String),
     AllOfTerms(Vec<String>),
     AnyOfTerms(Vec<String>),
-}
-
-#[derive(Debug)]
-enum OptionalOperation {
-    IsEmpty,
-    Has(ObjectType),
 }
 
 #[derive(Debug)]
@@ -273,7 +259,7 @@ fn compile_typed_filter(
                     panic!()
                 }
             }
-            TypeDefinition::Enum(enum_definition) => {
+            TypeDefinition::Enum(_) => {
                 let value =
                     EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
                 let encoded = all_frames.fully_qualified_enum_value(range, &value.enum_value.value);
@@ -435,6 +421,7 @@ fn predicate_value_iter<'a>(
 
 pub enum NodeOrValue {
     Node,
+    #[allow(unused)]
     Value,
 }
 
@@ -498,7 +485,6 @@ fn object_type_filter<'a>(
                 let regexs: Vec<_> = vec.iter().map(|s| regex::escape(s)).collect();
                 let regexset =
                     RegexSet::new(&regexs).expect("Regex should always be valid due to escaping");
-                let length = regexs.len();
                 Box::new(iter.filter(move |object| {
                     let string = g
                         .id_object(*object)
@@ -721,7 +707,6 @@ fn compile_query<'a>(
 fn generate_initial_iterator<'a>(
     g: &'a SyncStoreLayer,
     class_name: &'a str,
-    class_definition: &ClassDefinition,
     all_frames: &AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
@@ -742,19 +727,12 @@ fn generate_initial_iterator<'a>(
 fn lookup_by_filter<'a>(
     g: &'a SyncStoreLayer,
     class_name: &'a str,
-    class_definition: &ClassDefinition,
     all_frames: &AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
 ) -> impl Iterator<Item = u64> + 'a {
-    let (continuation_filter_opt, iterator) = generate_initial_iterator(
-        g,
-        class_name,
-        class_definition,
-        all_frames,
-        filter_opt,
-        zero_iter,
-    );
+    let (continuation_filter_opt, iterator) =
+        generate_initial_iterator(g, class_name, all_frames, filter_opt, zero_iter);
     println!("Generated initial iterator with filter: {continuation_filter_opt:?}");
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
@@ -772,7 +750,6 @@ pub fn run_filter_query<'a>(
     all_frames: &AllFrames,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
 ) -> Vec<u64> {
-    let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
     let new_zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>> = match arguments.get::<ID>("id")
     {
         Some(id_string) => Some({
@@ -794,16 +771,10 @@ pub fn run_filter_query<'a>(
         .map(|filter_input| compile_filter_object(class_name, all_frames, &filter_input));
     let it: Box<dyn Iterator<Item = u64>> =
         if let Some(TerminusOrderBy { fields }) = arguments.get::<TerminusOrderBy>("orderBy") {
-            let mut results: Vec<u64> = lookup_by_filter(
-                g,
-                class_name,
-                class_definition,
-                all_frames,
-                filter,
-                new_zero_iter,
-            )
-            .unique()
-            .collect();
+            let mut results: Vec<u64> =
+                lookup_by_filter(g, class_name, all_frames, filter, new_zero_iter)
+                    .unique()
+                    .collect();
             results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
             // better to borrow in the other branch?
@@ -814,15 +785,8 @@ pub fn run_filter_query<'a>(
             )
         } else {
             Box::new(
-                lookup_by_filter(
-                    g,
-                    class_name,
-                    class_definition,
-                    all_frames,
-                    filter,
-                    new_zero_iter,
-                )
-                .skip(usize::try_from(offset).unwrap_or(0)),
+                lookup_by_filter(g, class_name, all_frames, filter, new_zero_iter)
+                    .skip(usize::try_from(offset).unwrap_or(0)),
             )
         };
 
@@ -831,56 +795,6 @@ pub fn run_filter_query<'a>(
     } else {
         it.collect()
     }
-}
-
-fn constraint_builder_example(
-    class_definition: &ClassDefinition,
-    arguments: &juniper::Arguments,
-    prefixes: &Prefixes,
-    all_frames: &AllFrames,
-    class_name: &str,
-) -> Vec<(String, NodeOrValue, String)> {
-    let mut constraints: Vec<(String, NodeOrValue, String)> = class_definition
-        .fields
-        .iter()
-        .filter_map(|(field_name, field_definition)| {
-            if is_reserved_argument_name(field_name) {
-                return None;
-            }
-
-            if let Some(base_type) = field_definition.base_type() {
-                if let Some(value) = arguments.get(field_name) {
-                    let field_name_expanded =
-                        class_definition.fully_qualified_property_name(prefixes, field_name);
-                    let expanded_object_value = graphql_scalar_to_value_string(value, base_type);
-                    Some((
-                        field_name_expanded,
-                        NodeOrValue::Value,
-                        expanded_object_value,
-                    ))
-                } else {
-                    None
-                }
-            } else if let Some(enum_type) = field_definition.enum_type(all_frames) {
-                if let Some(terminus_enum) = arguments.get::<TerminusEnum>(field_name) {
-                    let field_name_expanded =
-                        class_definition.fully_qualified_property_name(prefixes, field_name);
-                    let enum_type_expanded = all_frames.fully_qualified_class_name(enum_type);
-                    let enum_type_definition = all_frames.frames[enum_type].as_enum_definition();
-                    let value = enum_type_definition.value_name(&terminus_enum.value);
-                    let expanded_object_node = format!("{}/{}", enum_type_expanded, value);
-                    Some((field_name_expanded, NodeOrValue::Node, expanded_object_node))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        })
-        .collect();
-    let expanded_class_name = all_frames.fully_qualified_class_name(&class_name.to_string());
-    constraints.push((RDF_TYPE.to_owned(), NodeOrValue::Node, expanded_class_name));
-    constraints
 }
 
 fn create_query_order_key(

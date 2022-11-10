@@ -1,25 +1,17 @@
 use std::sync::Arc;
 
 use juniper::{
-    meta::Field, DefaultScalarValue, FromInputValue, GraphQLInputObject, GraphQLType, GraphQLValue,
-    InputValue, Registry,
+    DefaultScalarValue, FromInputValue, GraphQLInputObject, GraphQLType, GraphQLValue, InputValue,
+    Registry,
 };
 
 use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
-    frame::{AllFrames, ClassDefinition, KeyDefinition, TypeDefinition},
+    frame::{AllFrames, TypeDefinition},
     query::EnumOperation,
     schema::{BigInt, DateTime, TerminusEnum},
 };
-
-fn generate_filter_argument<'r, T: GraphQLType>(
-    registry: &mut Registry<'r, DefaultScalarValue>,
-    definition: &ClassDefinition,
-    all_frames: &AllFrames,
-) {
-    todo!()
-}
 
 pub struct FilterInputObject {
     pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,

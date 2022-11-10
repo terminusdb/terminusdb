@@ -7,9 +7,9 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use swipl::prelude::*;
 
+mod filter;
 mod frame;
 mod query;
-mod filter;
 mod sanitize;
 mod schema;
 mod top;
@@ -52,7 +52,7 @@ predicates! {
 
         match serde_json::to_string(&response){
             Ok(r) => response_term.unify(r),
-            Err(error) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
+            Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
 

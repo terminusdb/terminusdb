@@ -29,10 +29,6 @@ pub struct Prefixes {
 }
 
 impl Prefixes {
-    pub fn expand(&self, s: &str) -> String {
-        // this is dumb but will work for now
-        format!("{}{}", self.base, s)
-    }
     pub fn expand_schema(&self, s: &str) -> String {
         // this is dumb but will work for now
         format!("{}{}", self.schema, s)
@@ -514,12 +510,6 @@ pub enum TypeDefinition {
     Enum(EnumDefinition),
 }
 
-#[derive(PartialEq)]
-pub enum TypeKind {
-    Class,
-    Enum,
-}
-
 impl TypeDefinition {
     pub fn is_document_type(&self) -> bool {
         match self {
@@ -531,13 +521,6 @@ impl TypeDefinition {
         match self {
             Self::Enum(_) => true,
             _ => false,
-        }
-    }
-
-    pub fn kind(&self) -> TypeKind {
-        match self {
-            Self::Class(_) => TypeKind::Class,
-            Self::Enum(_) => TypeKind::Enum,
         }
     }
 
@@ -780,7 +763,7 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
       'Test':json{'@type':'Class',bar:'xsd:string',foo:'xsd:integer'}}
 "#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let frames: AllFrames = context.deserialize_from_term(&term).unwrap();
+        let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
 
         // TODO actually test something here
     }
@@ -982,7 +965,7 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
 "#;
 
         let term = unwrap_result(&context, context.term_from_string(term));
-        let frames: AllFrames = context.deserialize_from_term(&term).unwrap();
+        let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
         // at least it parses!
     }
 
@@ -1002,7 +985,7 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
 'And':json{'@documentation':json{'@comment':"A conjunction of queries which must all have a solution.",'@properties':json{and:"List of queries which must hold."}},'@key':json{'@type':"ValueHash"},'@subdocument':[],'@type':'Class',and:json{'@class':'Query','@type':'List'}},
 'ArithmeticExpression':json{'@abstract':[],'@documentation':json{'@comment':"An abstract class specifying the AST super-class of all arithemtic expressions."},'@key':json{'@type':"ValueHash"},'@subdocument':[],'@type':'Class'}}"#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let frames: AllFrames = context.deserialize_from_term(&term).unwrap();
+        let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
         // at least it parses!
         // TODO test something here
     }
