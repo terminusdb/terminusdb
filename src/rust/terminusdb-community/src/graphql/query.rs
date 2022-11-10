@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use juniper::{
     self, parser::Spanning, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID,
 };
@@ -30,6 +31,7 @@ use super::schema::{
 use float_ord::FloatOrd;
 
 use std::cmp::*;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -615,13 +617,12 @@ fn compile_query<'a>(
                 //  A = iter.collect()
                 //  B = sub_iter
                 //  C = A \ B
-                let initial_vector = iter.collect::<Vec<u64>>();
-                let initial_iter = Box::new(initial_vector.clone().into_iter());
-                let next_iter = Box::new(initial_vector.clone().into_iter());
-                let mut sub_iter = compile_query(g, filter.clone(), initial_iter);
-                iter = Box::new(
-                    next_iter.filter(move |subject| sub_iter.any(|subject2| *subject != subject2)),
-                );
+                let initial_set: HashSet<u64> = iter.collect();
+                let initial_iter = Box::new(initial_set.iter().cloned());
+                let sub_iter: HashSet<u64> = compile_query(g, filter.clone(), initial_iter).collect();
+
+                let result = &initial_set - &sub_iter;
+                iter = Box::new(result.into_iter());
             }
             FilterValue::Required(object_type) => {
                 let maybe_property_id = g.predicate_id(&predicate);
@@ -800,6 +801,7 @@ pub fn run_filter_query<'a>(
                 filter,
                 new_zero_iter,
             )
+            .unique()
             .collect();
             results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
