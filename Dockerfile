@@ -32,7 +32,8 @@ COPY src/rust src/rust/
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
-RUN make DIST=community && cd src/rust && cargo swipl test --release
+RUN --mount=type=cache,target=src/rust/target \
+    make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
 FROM rust_builder_base AS rust_builder_enterprise
