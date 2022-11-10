@@ -2,5 +2,5 @@
 
 module.exports = {
   recursive: true,
-  timeout: '30000',
+  timeout: '200000',
 }
