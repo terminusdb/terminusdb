@@ -619,7 +619,8 @@ fn compile_query<'a>(
                 //  C = A \ B
                 let initial_set: HashSet<u64> = iter.collect();
                 let initial_iter = Box::new(initial_set.iter().cloned());
-                let sub_iter: HashSet<u64> = compile_query(g, filter.clone(), initial_iter).collect();
+                let sub_iter: HashSet<u64> =
+                    compile_query(g, filter.clone(), initial_iter).collect();
 
                 let result = &initial_set - &sub_iter;
                 iter = Box::new(result.into_iter());
