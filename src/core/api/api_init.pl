@@ -4,7 +4,8 @@
               initialize_database/2,
               initialize_database_with_store/2,
               index_template/1,
-              world_ontology_json/1
+              world_ontology_json/1,
+              graphiql_template/1
           ]).
 
 :- use_module(core(triple)).
@@ -70,6 +71,7 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 :- dynamic woql_schema/1.
 :- dynamic index_template/1.
 :- dynamic world_ontology_json/1.
+:- dynamic graphiql_template/1.
 bootstrap_files :-
     template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
@@ -84,7 +86,9 @@ bootstrap_files :-
     index_template_path(IndexTemplatePath),
     file_to_predicate(IndexTemplatePath, index_template),
     world_ontology_json_path(OntJsonPath),
-    file_to_predicate(OntJsonPath, world_ontology_json).
+    file_to_predicate(OntJsonPath, world_ontology_json),
+    graphiql_template_path(GraphIQLTemplatePath),
+    file_to_predicate(GraphIQLTemplatePath, graphiql_template).
 
 template_system_instance_json(Path) :-
     once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
@@ -106,6 +110,9 @@ index_template_path(Path) :-
 
 world_ontology_json_path(Path) :-
     once(expand_file_search_path(test('worldOnt.json'), Path)).
+
+graphiql_template_path(Path) :-
+    once(expand_file_search_path(server('templates/graphiql.tpl'), Path)).
 
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).

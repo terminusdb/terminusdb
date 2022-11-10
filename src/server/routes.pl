@@ -18,6 +18,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(core(account)).
+:- use_module(core(document)).
+:- use_module(core(api/api_init)).
 
 :- use_module(config(terminus_config)).
 
@@ -2914,6 +2916,66 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
+http:location(graphql,api(graphql),[]).
+:- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),
+                [method(Method),
+                 methods([options,get,post])]).
+:- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
+                [method(Method),
+                 prefix,
+                 methods([options,get,post])]).
+
+graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
+    memberchk(input(Input), Request),
+    memberchk(content_type(Content_Type), Request),
+    memberchk(content_length(Content_Length), Request),
+
+    catch((      authenticate(System_DB, Request, Auth),
+                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length),
+                 write_cors_headers(Request),
+                 write('Status: 200'),nl,
+                 write('Content-Type: application/json'),nl,
+                 nl,
+                 write(Response)
+          ),
+          E,
+          handle_graphql_error(E, Request)).
+
+handle_graphql_error(error(authentication_incorrect(_Auth), _), Request) :-
+    cors_reply_json(Request,
+                    json{'errors': [json{message: "Authentication incorrect"}]},
+                    [status(401)]).
+handle_graphql_error(error(access_not_authorised(Auth, Action, Scope), _), Request) :-
+    format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
+           [Scope,Action,Auth]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
+handle_graphql_error(E, Request) :-
+    format(string(Msg), "Unexpected error in graphql: ~q",
+           [E]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(500)]).
+
+%%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
+http:location(graphiql,root(graphiql),[]).
+:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler("_system"), [add_payload(false)]),
+                [method(Method),
+                 methods([options,get,post])]).
+:- http_handler(graphiql(Path), cors_handler(Method, graphiql_handler(Path), [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+graphiql_handler(_Method, Path_Atom, _Request, _System_DB, _Auth) :-
+    server_port(Port),
+    atom_string(Path_Atom, Path),
+    format(string(Full_Path), "http://localhost:~d/api/graphql/~s", [Port, Path]),
+    graphiql_template(Template),
+    format(string(Result), Template, [Full_Path]),
+    throw(http_reply(bytes('text/html', Result))).
 
 %%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(dashboard,root(dashboard),[]).
@@ -2968,7 +3030,9 @@ cors_handler(Method, Goal, Options, R) :-
             ;   Request = R),
 
             open_descriptor(system_descriptor{}, System_Database),
-            catch((   authenticate(System_Database, Request, Auth),
+            catch((   (   option(skip_authentication(true), Options)
+                      ->  true
+                      ;   authenticate(System_Database, Request, Auth)),
                       call_http_handler(Method, Goal, Request, System_Database, Auth)),
 
                   error(authentication_incorrect(Reason),_),
@@ -3051,20 +3115,20 @@ customise_exception(error(E)) :-
                  'api:message' : EM},
                [status(500), width(0)]).
 customise_exception(error(E, CTX)) :-
-    json_log_error_formatted('~N[Exception] ~q~n',[error(E,CTX)]),
+    json_log_error_formatted('~N[Exception] ~q',[error(E,CTX)]),
     (   CTX = context(prolog_stack(Stack),_)
     ->  with_output_to(
             string(Ctx_String),
             print_prolog_backtrace(current_output,Stack))
     ;   format(string(Ctx_String), "~q", [CTX])),
-    format(atom(EM),'Error: ~q~n~s~n', [E, Ctx_String]),
+    format(atom(EM),'Error: ~q~n~s', [E, Ctx_String]),
     reply_json(_{'api:status' : 'api:server_error',
                  'api:message' : EM},
                [status(500), width(0)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
 customise_exception(E) :-
-    json_log_error_formatted('~N[Exception] ~q~n',[E]),
+    json_log_error_formatted('~N[Exception] ~q',[E]),
     throw(E).
 
 /*

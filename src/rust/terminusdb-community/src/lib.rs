@@ -8,6 +8,8 @@ mod schema;
 mod types;
 mod value;
 
+mod graphql;
+
 use lcs;
 pub use swipl;
 use swipl::prelude::*;
@@ -73,4 +75,5 @@ pub fn install() {
     register_list_diff();
     register_random_string();
     doc::register();
+    graphql::register();
 }

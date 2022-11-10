@@ -24,3 +24,5 @@ pub const SYS_JSON: &str = "http://terminusdb.com/schema/sys#JSON";
 pub const SYS_JSON_DOCUMENT: &str = "http://terminusdb.com/schema/sys#JSONDocument";
 
 pub const SYS_JSON_PREFIX: &str = "http://terminusdb.com/schema/json#";
+
+pub const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
