@@ -71,7 +71,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let unfoldables: HashSet<u64>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
-        let mut sys_index_ids: Vec<u64>;
+        let sys_index_ids: Vec<u64>;
         let mut sys_array_id = None;
         let mut sys_value_id = None;
 
@@ -147,22 +147,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 document_types.insert(sys_json_document_type_id);
             }
 
-            sys_index_ids = Vec::new();
-            let mut index_str = SYS_INDEX.to_string();
-            let orig_len = index_str.len();
-            let mut ix = 1;
-
-            loop {
-                if let Some(index_id) = instance.predicate_id(&index_str) {
-                    sys_index_ids.push(index_id);
-                    ix += 1;
-                    let ix_s = ix.to_string();
-                    index_str.truncate(orig_len);
-                    index_str.push_str(&ix_s);
-                } else {
-                    break;
-                }
-            }
+            sys_index_ids = retrieve_all_index_ids(instance);
 
             sys_array_id = instance.object_node_id(SYS_ARRAY);
             sys_value_id = instance.predicate_id(SYS_VALUE);
@@ -449,6 +434,26 @@ impl<L: Layer> GetDocumentContext<L> {
     }
 }
 
+pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
+    let mut sys_index_ids = Vec::new();
+    let mut index_str = SYS_INDEX.to_string();
+    let orig_len = index_str.len();
+    let mut ix = 1;
+    loop {
+        if let Some(index_id) = instance.predicate_id(&index_str) {
+            sys_index_ids.push(index_id);
+            ix += 1;
+            let ix_s = ix.to_string();
+            index_str.truncate(orig_len);
+            index_str.push_str(&ix_s);
+        } else {
+            break;
+        }
+    }
+
+    sys_index_ids
+}
+
 enum StackEntry<'a, L: Layer> {
     Document {
         doc: Map<String, Value>,
@@ -486,14 +491,14 @@ struct ArrayStackEntry<'a, L: Layer> {
     entries: ArrayIterator<'a, L>,
 }
 
-struct ArrayIterator<'a, L: Layer> {
-    layer: &'a L,
-    it: Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
-    subject: u64,
-    predicate: u64,
-    last_index: Option<Vec<usize>>,
-    sys_index_ids: &'a [u64],
-    sys_value_id: Option<u64>,
+pub struct ArrayIterator<'a, L: Layer> {
+    pub layer: &'a L,
+    pub it: Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
+    pub subject: u64,
+    pub predicate: u64,
+    pub last_index: Option<Vec<usize>>,
+    pub sys_index_ids: &'a [u64],
+    pub sys_value_id: Option<u64>,
 }
 
 impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {

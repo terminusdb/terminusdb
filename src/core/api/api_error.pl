@@ -1197,12 +1197,15 @@ api_error_jsonld_(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
-api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
-    format(string(Msg), "The explicitly copied key ~q is not the same in both documents.", [Key]),
+api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key,Before,After),_), JSON) :-
+    format(string(Msg), "The explicitly copied key ~q is not the same in both documents. Before: ~q, After~q", [Key,Before,After]),
     JSON = _{'@type' : 'api:DiffErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:ExplicitlyCopiedKeyError',
-                              'api:key' : Key},
+                              'api:key' : Key,
+                              'api:before' : Before,
+                              'api:after' : After
+                            },
              'api:message' : Msg
             }.
 api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-

@@ -49,6 +49,7 @@
               class_frame/3,
               class_frame/4,
               all_class_frames/2,
+              all_class_frames/3,
               class_property_dictionary/3,
               class_property_dictionary/4,
               prefix_expand_schema/3,
@@ -2819,19 +2820,23 @@ type_descriptor_sub_frame(unit, _DB, _Prefix, Unit, Options) :-
     ;   global_prefix_expand(sys:'Unit', Unit)
     ).
 type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
-    (   is_abstract(DB, C),
-        option(expand_abstract(true), Options)
-    ->  findall(F,
-                (   concrete_subclass(DB,C,Class),
-                    type_descriptor(DB, Class, Desc),
-                    type_descriptor_sub_frame(Desc,DB,Prefixes,F,Options)
-                ),
-                Frame)
-    ;   is_subdocument(DB,C)
+    (   option(simple(true),Options)
     ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
-        Frame = json{ '@class' : Class_Comp,
-                      '@subdocument' : []}
-    ;   compress_schema_uri(C, Prefixes, Frame, Options)
+        Frame = Class_Comp
+    ;   (   is_abstract(DB, C),
+            option(expand_abstract(true), Options)
+        ->  findall(F,
+                    (   concrete_subclass(DB,C,Class),
+                        type_descriptor(DB, Class, Desc),
+                        type_descriptor_sub_frame(Desc,DB,Prefixes,F,Options)
+                    ),
+                    Frame)
+        ;   is_subdocument(DB,C)
+        ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
+            Frame = json{ '@class' : Class_Comp,
+                          '@subdocument' : []}
+        ;   compress_schema_uri(C, Prefixes, Frame, Options)
+        )
     ).
 type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
@@ -2869,16 +2874,21 @@ type_descriptor_sub_frame(cardinality(C,Min,Max), DB, Prefixes, json{ '@type' : 
     expand_system_uri(sys:'Cardinality', Card, Options),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, json{ '@type' : Enum,
-                                                             '@id' : Class_Comp,
-                                                             '@values' : Enum_List}, Options) :-
-    expand_system_uri(sys:'Enum', Enum, Options),
-    compress_schema_uri(C, Prefixes, Class_Comp, Options),
-    (   option(compress_ids(true), Options)
-    ->  maplist({C}/[V,Enum]>>(
-                    enum_value(C,Enum,V)
-                ), List, Enum_List)
-    ;   List = Enum_List
+type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, SubFrame, Options) :-
+    (   option(simple(true),Options)
+    ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
+        SubFrame = Class_Comp
+    ;   expand_system_uri(sys:'Enum', Enum, Options),
+        compress_schema_uri(C, Prefixes, Class_Comp, Options),
+        (   option(compress_ids(true), Options)
+        ->  maplist({C}/[V,Enum]>>(
+                        enum_value(C,Enum,V)
+                    ), List, Enum_List)
+        ;   List = Enum_List
+        ),
+        SubFrame = json{ '@type' : Enum,
+                         '@id' : Class_Comp,
+                         '@values' : Enum_List}
     ).
 
 oneof_descriptor_subframe(tagged_union(_, Map), DB, Prefixes, JSON, Options) :-
@@ -2892,7 +2902,7 @@ oneof_descriptor_subframe(tagged_union(_, Map), DB, Prefixes, JSON, Options) :-
     dict_pairs(JSON,json,JSON_Pairs).
 
 all_class_frames(Askable, Frames) :-
-    all_class_frames(Askable, Frames, [compress_ids(true),expand_abstract(true)]).
+    all_class_frames(Askable, Frames, [compress_ids(true),expand_abstract(true),simple(false)]).
 
 all_class_frames(Transaction, Frames, Options) :-
     (   is_transaction(Transaction)
@@ -2915,7 +2925,7 @@ all_class_frames(Query_Context, Frames, Options) :-
     all_class_frames(TO, Frames, Options).
 
 class_frame(Askable, Class, Frame) :-
-    class_frame(Askable, Class, Frame, [compress_ids(true),expand_abstract(true)]).
+    class_frame(Askable, Class, Frame, [compress_ids(true),expand_abstract(true),simple(false)]).
 
 :- table class_frame/4 as private.
 class_frame(Transaction, Class, Frame, Options) :-
@@ -9829,6 +9839,65 @@ test(all_class_frames, [
 							  }
 				 }.
 
+
+test(all_class_frames_simple, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema6,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )]) :-
+
+    open_descriptor(Desc, DB),
+    all_class_frames(DB,  Frames, [compress_ids(true),simple(true)]),
+    Frames = json{ '@context':_{'@base':"http://i/",'@schema':"http://s/",'@type':'Context'},
+      'Address':json{ '@documentation':json{'@comment':"This is address"},
+		      '@key':json{'@type':"Random"},
+		      '@subdocument':[],
+		      '@type':'Class',
+		      country:'Country',
+		      postal_code:'xsd:string',
+		      street:'xsd:string'
+		    },
+      'Coordinate':json{ '@key':json{'@type':"Random"},
+			 '@type':'Class',
+			 x:'xsd:decimal',
+			 y:'xsd:decimal'
+		       },
+      'Country':json{ '@key':json{'@type':"ValueHash"},
+		      '@type':'Class',
+		      name:'xsd:string',
+		      perimeter:json{'@class':'Coordinate','@type':'List'}
+		    },
+      'Employee':json{ '@documentation':json{ '@properties':json{ age:"Age of the person.",
+								  name:"Name of the person."
+								}
+					    },
+		       '@key':json{'@type':"Random"},
+		       '@type':'Class',
+		       address_of:'Address',
+		       age:'xsd:integer',
+		       contact_number:json{'@class':'xsd:string','@type':'Optional'},
+		       friend_of:json{'@class':'Person','@type':'Set'},
+		       managed_by:'Employee',
+		       name:'xsd:string'
+		     },
+      'Person':json{ '@documentation':json{ '@comment':"This is a person",
+					    '@properties':json{ age:"Age of the person.",
+								name:"Name of the person."
+							      }
+					  },
+		     '@key':json{'@type':"Random"},
+		     '@type':'Class',
+		     age:'xsd:integer',
+		     friend_of:json{'@class':'Person','@type':'Set'},
+		     name:'xsd:string'
+		   },
+      'Team':json{'@type':'Enum','@values':['IT','Marketing']}
+    }.
+
 test(doc_frame, [
          setup(
              (   setup_temp_store(State),
@@ -11675,6 +11744,11 @@ schema_class_with_unit_property('
   "@id": "Foo",
   "field": "sys:Unit"
 }
+
+{ "@type" : "Class",
+  "@id" : "Bar",
+  "unit_option" : { "@type" : "Optional", "@class" : "sys:Unit"}
+}
 ').
 
 test(class_with_unit_property,
@@ -11738,6 +11812,41 @@ test(class_with_unit_property_missing_field,
                                           _{'@type': "Foo"},
                                           _Id)
                          ).
+
+test(class_with_optional_unit_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    write_schema(schema_class_with_unit_property,Desc),
+
+    with_test_transaction(Desc,
+                          C,
+                          insert_document(C,
+                                          _{'@type': "Bar",
+                                            'unit_option': []},
+                                          Id)
+                         ),
+
+    get_document(Desc, Id, Document),
+
+    _{'@type': 'Bar',
+      'unit_option': []} :< Document,
+
+    with_test_transaction(Desc,
+                          C2,
+                          insert_document(C2,
+                                          _{'@type': "Bar"},
+                                          Id2)
+                         ),
+
+    get_document(Desc, Id2, Document2),
+
+    get_dict('@type', Document2, 'Bar'),
+    \+ get_dict('unit_option', Document2, _).
+
 
 schema_class_with_oneof_unit_property('
 { "@base": "terminusdb:///data/",
@@ -13451,6 +13560,22 @@ test(class_metadata,
          '@metadata':json{over:json{the:["r","a"]},some:3,where:[null,true]},
          '@type':'Class',
          name:'xsd:string'}.
+
+test(class_metadata_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(metadata_class,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    class_frame(Desc, 'Example', Frame),
+    Frame = json{ '@metadata':json{ over:json{the:["r","a"]},
+								    some:3,
+								    where:[null,true]
+								  },
+				  '@type':'Class',
+				  name:'xsd:string'
+                }.
 
 test(elaborate_enum_metadata,
      []) :-
