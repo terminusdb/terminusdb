@@ -1,3 +1,21 @@
+# TerminusDB Server v10.1.8 Release Notes
+
+## Enhancements
++ GraphQL endpoint at localhost:6363/api/graphql/ORG/DB
++ GraphiQL endpoint for testing available at localhost:6363/graphiql/ORG/DB
++ GraphQL automatic loading of Schema in GraphQL schema
++ GraphQL search and retrieval
++ New HEAD call for document endpoint, which makes it easy to check for existence
++ Add ARM64 support
++ New dashboard version: 0.0.10
+
+## Bug fixes
++ Anonymous users now results in an auth with an explicit URI in the systemDB
++ Triple load interface now has better error reporting and is more robust
++ `@metadata` bugs on ingest / exgest fixed for classes.
++ Diff no longer returns explicit IDs for subdocuments, and does not compare IDs
++ sys:Unit now interacts correctly with Option
+
 # TerminusDB Server v10.1.7 Release Notes
 
 ## Bug fixes
