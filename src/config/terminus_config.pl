@@ -86,6 +86,7 @@ default_database_path(Path) :-
  * db_path(-Path) is det.
  *
  * Database storage path.
+ *
  */
 :- table db_path/1 as shared.
 db_path(Path) :-
