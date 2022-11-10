@@ -43,7 +43,7 @@
 :- use_module(library(yall)).
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('10.1.8').
+terminusdb_version('10.1.9').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -86,6 +86,7 @@ default_database_path(Path) :-
  * db_path(-Path) is det.
  *
  * Database storage path.
+ *
  */
 :- table db_path/1 as shared.
 db_path(Path) :-
