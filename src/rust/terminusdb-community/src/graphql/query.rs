@@ -733,7 +733,6 @@ fn lookup_by_filter<'a>(
 ) -> impl Iterator<Item = u64> + 'a {
     let (continuation_filter_opt, iterator) =
         generate_initial_iterator(g, class_name, all_frames, filter_opt, zero_iter);
-    println!("Generated initial iterator with filter: {continuation_filter_opt:?}");
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
         compile_query(g, continuation_filter, iterator)
