@@ -4,6 +4,7 @@
 + Graphiql endpoint for testing available at localhost:6363/graphiql/ORG/DB
 + GraphQL automatic loading of Schema in GraphQL schema
 + GraphQL search and retrieval
++ New HEAD call for document endpoint, which makes it easy to check for existence
 
 ## Bug fixes
 + Anonymous users now results in an auth with an explicit URI in the systemDB
