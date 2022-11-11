@@ -17,7 +17,7 @@ contact: team@terminusdb.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
 confinement: strict
-base: core20
+base: core22
 grade: stable
 package-repositories:
  - type: apt
@@ -45,6 +45,9 @@ parts:
       - curl
       - clang
       - m4
+      - build-essential
+      - file
+      - diffutils
     stage-packages:
       - swi-prolog-nox
     override-build: |
