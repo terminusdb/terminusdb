@@ -44,6 +44,8 @@ parts:
       - swi-prolog-nox
       - curl
       - clang
+      - m4
+      - diffutils
     stage-packages:
       - swi-prolog-nox
     override-build: |
