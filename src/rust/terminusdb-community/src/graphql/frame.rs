@@ -184,7 +184,7 @@ pub enum FieldDefinition {
     },
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum FieldKind {
     Required,
     Optional,
@@ -631,23 +631,23 @@ impl AllFrames {
 
 #[derive(Debug)]
 pub struct AllInvertedFrames {
-    inverted: BTreeMap<String, InvertedTypeDefinition>,
+    pub classes: BTreeMap<String, InvertedTypeDefinition>,
 }
 
 #[derive(Debug)]
 pub struct InvertedFieldDefinition {
-    kind: FieldKind,
-    class: String,
+    pub kind: FieldKind,
+    pub class: String,
 }
 
 #[derive(Debug)]
 pub struct InvertedTypeDefinition {
-    inverted_type: BTreeMap<String, InvertedFieldDefinition>,
+    pub domain: BTreeMap<String, InvertedFieldDefinition>,
 }
 
 pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrames {
     let frames = &allframes.frames;
-    let mut inverted: BTreeMap<String, InvertedTypeDefinition> = BTreeMap::new();
+    let mut classes: BTreeMap<String, InvertedTypeDefinition> = BTreeMap::new();
     for (class, record) in frames.iter() {
         match record {
             TypeDefinition::Class(classdefinition) => {
@@ -656,8 +656,8 @@ pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrame
                     let kind = fieldrecord.kind();
                     let range = fieldrecord.range();
                     if !is_base_type(range) & allframes.document_type(range).is_some() {
-                        if let Some(inverted_type_definition) = inverted.get_mut(range) {
-                            let inverted_type = &mut inverted_type_definition.inverted_type;
+                        if let Some(inverted_type_definition) = classes.get_mut(range) {
+                            let inverted_type = &mut inverted_type_definition.domain;
                             inverted_type.insert(
                                 property.to_string(),
                                 InvertedFieldDefinition {
@@ -674,10 +674,10 @@ pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrame
                                     class: class.to_string(),
                                 },
                             );
-                            inverted.insert(
+                            classes.insert(
                                 range.to_string(),
                                 InvertedTypeDefinition {
-                                    inverted_type: range_properties,
+                                    domain: range_properties,
                                 },
                             );
                         }
@@ -687,7 +687,7 @@ pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrame
             TypeDefinition::Enum(_) => (),
         };
     }
-    AllInvertedFrames { inverted }
+    AllInvertedFrames { classes }
 }
 
 #[cfg(test)]
@@ -1073,27 +1073,27 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
         let mut allframes: AllFrames = context.deserialize_from_term(&term).unwrap();
         allframes.invert();
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().inverted["Bar"].inverted_type["a"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().inverted["Bar"].inverted_type["a"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].kind,
             FieldKind::Required
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().inverted["Bar"].inverted_type["b"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().inverted["Bar"].inverted_type["b"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].kind,
             FieldKind::Optional
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().inverted["Bar"].inverted_type["c"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().inverted["Bar"].inverted_type["c"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].kind,
             FieldKind::Set
         )
     }

@@ -8,7 +8,7 @@ use juniper::{
 use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
-    frame::{AllFrames, TypeDefinition},
+    frame::{is_base_type, AllFrames, TypeDefinition},
     query::EnumOperation,
     schema::{BigInt, DateTime, TerminusEnum},
 };
@@ -45,7 +45,8 @@ impl GraphQLType for FilterInputObject {
     where
         DefaultScalarValue: 'r,
     {
-        if let TypeDefinition::Class(d) = &info.frames.frames[&info.type_name] {
+        print!("{}", &info.type_name);
+        if let Some(TypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
             let mut args: Vec<_> = d
                 .fields()
                 .iter()
@@ -151,6 +152,11 @@ pub struct CollectionFilterInputObjectTypeInfo {
 
 impl CollectionFilterInputObjectTypeInfo {
     pub fn new(type_name: &str, all_frames: &Arc<AllFrames>) -> Self {
+        let type_name = if is_base_type(type_name) {
+            &type_name[4..]
+        } else {
+            type_name
+        };
         Self {
             filter_type_name: format!("{type_name}_Collection_Filter"),
             type_name: type_name.to_string(),
