@@ -8,7 +8,7 @@ use juniper::{
 use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
-    frame::{is_base_type, AllFrames, TypeDefinition},
+    frame::{AllFrames, TypeDefinition},
     query::EnumOperation,
     schema::{BigInt, DateTime, TerminusEnum},
 };
@@ -45,7 +45,6 @@ impl GraphQLType for FilterInputObject {
     where
         DefaultScalarValue: 'r,
     {
-        print!("{}", &info.type_name);
         if let Some(TypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
             let mut args: Vec<_> = d
                 .fields()
@@ -53,22 +52,56 @@ impl GraphQLType for FilterInputObject {
                 .filter_map(|(name, field_definition)| {
                     let kind = field_definition.kind();
                     if kind.is_collection() {
-                        let c = field_definition.range();
-                        Some(registry.arg::<Option<CollectionFilterInputObject>>(
-                            name,
-                            &CollectionFilterInputObjectTypeInfo::new(&c, &info.frames),
-                        ))
+                        if let Some(base_type) = field_definition.base_type() {
+                            let kind = base_type_kind(base_type);
+                            match kind {
+                                BaseTypeKind::String => Some(registry.arg::<Option<
+                                    CollectionStringFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
+                                BaseTypeKind::SmallInteger => Some(registry.arg::<Option<
+                                    CollectionIntFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
+                                BaseTypeKind::BigIntger => Some(registry.arg::<Option<
+                                    CollectionBigIntFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
+                                BaseTypeKind::Boolean => Some(registry.arg::<Option<
+                                    CollectionBooleanFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
+                                BaseTypeKind::Float => Some(registry.arg::<Option<
+                                    CollectionFloatFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
+                                BaseTypeKind::DateTime => Some(registry.arg::<Option<
+                                    CollectionDateTimeFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
+                            }
+                        } else {
+                            let c = field_definition.range();
+                            Some(registry.arg::<Option<CollectionFilterInputObject>>(
+                                name,
+                                &CollectionFilterInputObjectTypeInfo::new(&c, &info.frames),
+                            ))
+                        }
                     } else if let Some(base_type) = field_definition.base_type() {
                         let kind = base_type_kind(base_type);
                         match kind {
                             BaseTypeKind::String => {
                                 Some(registry.arg::<Option<StringFilterInputObject>>(name, &()))
                             }
-                            BaseTypeKind::SmallInteger => Some(registry.arg::<Option<
-                                SmallIntegerFilterInputObject,
-                            >>(
-                                name, &()
-                            )),
+                            BaseTypeKind::SmallInteger => {
+                                Some(registry.arg::<Option<IntFilterInputObject>>(name, &()))
+                            }
                             BaseTypeKind::BigIntger => {
                                 Some(registry.arg::<Option<BigIntFilterInputObject>>(name, &()))
                             }
@@ -152,11 +185,6 @@ pub struct CollectionFilterInputObjectTypeInfo {
 
 impl CollectionFilterInputObjectTypeInfo {
     pub fn new(type_name: &str, all_frames: &Arc<AllFrames>) -> Self {
-        let type_name = if is_base_type(type_name) {
-            &type_name[4..]
-        } else {
-            type_name
-        };
         Self {
             filter_type_name: format!("{type_name}_Collection_Filter"),
             type_name: type_name.to_string(),
@@ -178,17 +206,35 @@ impl GraphQLType for CollectionFilterInputObject {
         DefaultScalarValue: 'r,
     {
         let mut args: Vec<_> = Vec::with_capacity(2);
-        args.push(registry.arg::<Option<FilterInputObject>>(
-            "someHave",
-            &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
-        ));
-        args.push(registry.arg::<Option<FilterInputObject>>(
-            "allHave",
-            &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
-        ));
-        registry
-            .build_input_object_type::<CollectionFilterInputObject>(info, &args)
-            .into_meta()
+        let type_definition = &info.frames.frames[&info.type_name];
+        match type_definition {
+            TypeDefinition::Class(_) => {
+                args.push(registry.arg::<Option<FilterInputObject>>(
+                    "someHave",
+                    &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                ));
+                args.push(registry.arg::<Option<FilterInputObject>>(
+                    "allHave",
+                    &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                ));
+                registry
+                    .build_input_object_type::<CollectionFilterInputObject>(info, &args)
+                    .into_meta()
+            }
+            TypeDefinition::Enum(_) => {
+                args.push(registry.arg::<Option<EnumFilterInputObject>>(
+                    "someHave",
+                    &EnumFilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                ));
+                args.push(registry.arg::<Option<EnumFilterInputObject>>(
+                    "allHave",
+                    &EnumFilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                ));
+                registry
+                    .build_input_object_type::<CollectionFilterInputObject>(info, &args)
+                    .into_meta()
+            }
+        }
     }
 }
 
@@ -287,7 +333,16 @@ impl GraphQLValue for EnumFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionStringFilter")]
 #[allow(non_snake_case)]
+pub struct CollectionStringFilterInputObject {
+    pub someHave: Option<StringFilterInputObject>,
+    pub allHave: Option<StringFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[allow(non_snake_case)]
+#[graphql(name = "StringFilter")]
 pub struct StringFilterInputObject {
     pub eq: Option<String>,
     pub ne: Option<String>,
@@ -302,6 +357,15 @@ pub struct StringFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionBigIntFilter")]
+#[allow(non_snake_case)]
+pub struct CollectionBigIntFilterInputObject {
+    pub someHave: Option<BigIntFilterInputObject>,
+    pub allHave: Option<BigIntFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "BigIntFilter")]
 pub struct BigIntFilterInputObject {
     pub eq: Option<BigInt>,
     pub ne: Option<BigInt>,
@@ -312,7 +376,16 @@ pub struct BigIntFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
-pub struct SmallIntegerFilterInputObject {
+#[graphql(name = "CollectionIntFilter")]
+#[allow(non_snake_case)]
+pub struct CollectionIntFilterInputObject {
+    pub someHave: Option<IntFilterInputObject>,
+    pub allHave: Option<IntFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "IntFilter")]
+pub struct IntFilterInputObject {
     pub eq: Option<i32>,
     pub ne: Option<i32>,
     pub lt: Option<i32>,
@@ -322,6 +395,15 @@ pub struct SmallIntegerFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionFloatFilter")]
+#[allow(non_snake_case)]
+pub struct CollectionFloatFilterInputObject {
+    pub someHave: Option<FloatFilterInputObject>,
+    pub allHave: Option<FloatFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "FloatFilter")]
 pub struct FloatFilterInputObject {
     pub eq: Option<f64>,
     pub ne: Option<f64>,
@@ -332,12 +414,30 @@ pub struct FloatFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionBooleanFilter")]
+#[allow(non_snake_case)]
+pub struct CollectionBooleanFilterInputObject {
+    pub someHave: Option<BooleanFilterInputObject>,
+    pub allHave: Option<BooleanFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "BooleanFilter")]
 pub struct BooleanFilterInputObject {
     pub eq: Option<bool>,
     pub ne: Option<bool>,
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionDateTimeFilter")]
+#[allow(non_snake_case)]
+pub struct CollectionDateTimeFilterInputObject {
+    pub someHave: Option<DateTimeFilterInputObject>,
+    pub allHave: Option<DateTimeFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "DateTimeFilter")]
 pub struct DateTimeFilterInputObject {
     pub eq: Option<DateTime>,
     pub ne: Option<DateTime>,
