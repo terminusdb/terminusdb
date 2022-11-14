@@ -1097,27 +1097,27 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
         let mut allframes: AllFrames = context.deserialize_from_term(&term).unwrap();
         allframes.invert();
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a_of_Foo"].kind,
             FieldKind::Required
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b_of_Foo"].kind,
             FieldKind::Optional
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c_of_Foo"].kind,
             FieldKind::Set
         )
     }

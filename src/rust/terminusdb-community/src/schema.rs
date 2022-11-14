@@ -311,7 +311,7 @@ impl<'a, L: Layer> Iterator for RdfListIterator<'a, L> {
                 .expect("expected cons cell to have a first but id not found");
             let rdf_rest_id = self
                 .rdf_rest_id
-                .expect("expected cons cell to have a first but id not found");
+                .expect("expected cons cell to have a rest but id not found");
             let first_id = self
                 .layer
                 .single_triple_sp(self.cur, rdf_first_id)

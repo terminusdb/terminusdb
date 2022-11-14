@@ -491,6 +491,47 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
     }
 }
 
+fn rewind_rdf_list<'a>(instance: &'a dyn Layer, item: u64) -> Option<u64> {
+    if let Some(rdf_first) = instance.predicate_id(RDF_FIRST) {
+        if let Some(rdf_rest) = instance.predicate_id(RDF_REST) {
+            let mut cons = instance
+                .triples_o(item)
+                .filter(|t| t.predicate == rdf_first)
+                .map(|t| t.subject)
+                .next();
+            while let Some(id) = cons {
+                let res = instance
+                    .triples_o(id)
+                    .filter(|t| t.predicate == rdf_rest)
+                    .map(|t| t.subject)
+                    .next();
+                if res == None {
+                    return cons;
+                } else {
+                    cons = res
+                }
+            }
+            cons
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn rewind_array<'a>(instance: &'a dyn Layer, item: u64) -> Option<u64> {
+    if let Some(sys_value) = instance.predicate_id(SYS_VALUE) {
+        instance
+            .triples_o(item)
+            .filter(|t| t.predicate == sys_value)
+            .map(|t| t.subject)
+            .next()
+    } else {
+        None
+    }
+}
+
 impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
     type Context = TerminusContext<'a, C>;
 
@@ -529,8 +570,46 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 let field_id = instance.predicate_id(&property_expanded)?;
                 // List and array are special since they are *deep* objects
                 match kind {
-                    FieldKind::List => todo!(),
-                    FieldKind::Array => todo!(),
+                    FieldKind::List => {
+                        let object_ids = instance
+                            .triples_o(self.id)
+                            .flat_map(|t| rewind_rdf_list(instance, t.subject))
+                            .filter(|o| {
+                                instance
+                                    .triples_o(*o)
+                                    .filter(move |t| t.predicate == field_id)
+                                    .next()
+                                    .is_some()
+                            });
+                        collect_into_graphql_list(
+                            Some(&domain),
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
+                            instance,
+                        )
+                    }
+                    FieldKind::Array => {
+                        let object_ids = instance
+                            .triples_o(self.id)
+                            .flat_map(|t| rewind_array(instance, t.subject))
+                            .filter(|o| {
+                                instance
+                                    .triples_o(*o)
+                                    .filter(move |t| t.predicate == field_id)
+                                    .next()
+                                    .is_some()
+                            });
+                        collect_into_graphql_list(
+                            Some(&domain),
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
+                            instance,
+                        )
+                    }
                     _ => {
                         let object_ids = instance
                             .triples_o(self.id)
