@@ -36,10 +36,10 @@ predicates! {
             Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
         }
 
-        let mut frames: AllFrames = context.deserialize_from_term(&frame_term).expect("Unable to parse frames into rust struct");
-        let sanitized_frames: AllFrames = frames.sanitize();
-        frames.invert();
-        log_debug!(context, "frames: {:?}", frames)?;
+        let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("Unable to parse frames into rust struct");
+        let mut sanitized_frames: AllFrames = frames.sanitize();
+        sanitized_frames.invert();
+        println!("frames: {:?}", sanitized_frames);
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(), EmptyMutation::<TerminusContext<'a, C>>::new(), EmptySubscription::<TerminusContext<'a,C>>::new(), Arc::new(sanitized_frames), (), ());
 
