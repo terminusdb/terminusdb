@@ -465,7 +465,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             // we should always have had this instance layer at some
             // point. not having it here would be a weird bug.
             let instance = executor.context().instance.as_ref()?;
-            if field_name == "id" {
+            if field_name == "_id" {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
                 ))));
