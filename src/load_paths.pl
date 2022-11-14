@@ -65,7 +65,6 @@ add_config_path :-
     directory_file_path(Dir,'config',Config),
     asserta(user:file_search_path(config, Config)).
 
-
 :- add_config_path.
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
