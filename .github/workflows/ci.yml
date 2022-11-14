@@ -254,7 +254,7 @@ jobs:
           TAGS="${{ env.docker_tags }}"
           for TAG in ${TAGS//,/ }
           do
-              docker buildx imagetools create -t $TAG -f terminusdb/terminusdb-server:local-amd64 -f terminusdb/terminusdb-server:local-arm64
+              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:local-amd64 terminusdb/terminusdb-server:local-arm64
           done
 
   trigger_enterprise_build:
