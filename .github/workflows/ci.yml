@@ -106,6 +106,13 @@ jobs:
     needs: versions
     uses: ./.github/workflows/build.yml
 
+  arm64_docker:
+    name: Trigger arm64 build
+    needs:
+      - is_build_required
+    uses: ./.github/workflows/arm.yml
+    if: needs.is_build_required.outputs.push_docker_required == 'true'
+
   check:
     name: Check
     needs: build
@@ -167,14 +174,6 @@ jobs:
       needs.is_build_required.outputs.push_docker_required == 'false'
     steps:
       - run: echo "Nothing to be done. 😌"
-
-  arm64_docker:
-    name: Trigger arm64 build
-    needs:
-      - is_build_required
-      - all_checks_pass_with_build
-    uses: ./.github/workflows/arm.yml
-    if: needs.is_build_required.outputs.push_docker_required == 'true'
 
   push_docker:
     name: Push Docker image
