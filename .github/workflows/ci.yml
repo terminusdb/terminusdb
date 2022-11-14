@@ -49,6 +49,7 @@ jobs:
           github.repository == 'terminusdb/terminusdb' &&
           github.event_name == 'push' && (
             github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/dockerfile_speedups' ||
             startsWith(github.ref, 'refs/tags/v')
           )
         }}
@@ -214,7 +215,11 @@ jobs:
       - name: Load images
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
+          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:local-amd64
+          docker rmi terminusdb/terminusdb-server:local
           docker load < terminusdb-server-docker-image-arm64.tar.gz
+          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:local-arm64
+          docker rmi terminusdb/terminusdb-server:local
 
       - name: Determine image tags to push
         run: |
@@ -222,6 +227,8 @@ jobs:
 
           # Use Docker `dev` tag convention for main branch
           [ "$VERSION" == "main" ] && VERSION=dev
+
+          [ "$VERSION" == "dockerfile_speedups" ] && VERSION=dev-experimental-arm64-manifest
 
           # Image identifiers
           LOCAL_IMAGE=terminusdb/terminusdb-server:local
@@ -242,16 +249,13 @@ jobs:
 
           echo "docker_tags=${TAGS}" >> $GITHUB_ENV
 
-      - name: Push image to Docker Container Registry
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          tags: ${{ env.docker_tags }}
-          push: true
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          build-args: |
-            TERMINUSDB_GIT_HASH=${{ github.sha }}
+      - name: Create new image manifest
+        run: |
+          TAGS="${{ env.docker_tags }}"
+          for TAG in ${TAGS//,/ }
+          do
+              docker buildx imagetools create -t $TAG -f terminusdb/terminusdb-server:local-amd64 -f terminusdb/terminusdb-server:local-arm64
+          done
 
   trigger_enterprise_build:
     name: Trigger enterprise build
