@@ -2,7 +2,6 @@
 :- multifile user:file_search_path/2.
 
 :- use_module(library(filesex)).
-
 :- set_prolog_flag(terminusdb_monolithic_module, true).
 
 
@@ -66,6 +65,7 @@ add_config_path :-
     directory_file_path(Dir,'config',Config),
     asserta(user:file_search_path(config, Config)).
 
+
 :- add_config_path.
 pack_dir(Value) :-
     getenv('TERMINUSDB_SERVER_PACK_DIR', Value).
@@ -122,12 +122,18 @@ add_enterprise_test_path :-
     directory_file_path(Dir, 'terminusdb-enterprise/test', Enterprise),
     asserta(user:file_search_path(enterprise_test, Enterprise)).
 
+assert_dashboard_path(Dir) :-
+    directory_file_path(Dir, 'assets', Assets),
+    asserta(user:file_search_path(dashboard, Dir)),
+    asserta(user:file_search_path(assets, Assets)).
+
+add_dashboard_path :-
+    getenv('TERMINUSDB_DASHBOARD_PATH', Dir),
+    assert_dashboard_path(Dir).
 add_dashboard_path :-
     top_level_directory(Dir),
     directory_file_path(Dir, 'dashboard', Dashboard),
-    directory_file_path(Dir, 'dashboard/assets', Assets),
-    asserta(user:file_search_path(dashboard, Dashboard)),
-    asserta(user:file_search_path(assets, Assets)).
+    assert_dashboard_path(Dashboard).
 
 :- add_dashboard_path.
 
