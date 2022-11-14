@@ -353,25 +353,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             })
             .collect();
 
-        let mut inverted_fields: Vec<_> = Vec::new();
-        if let Some(inverted_frames) = &frames.inverted {
-            if let Some(inverted_type) = inverted_frames.classes.get(&info.0) {
-                for (property, ifd) in inverted_type.domain.iter() {
-                    let class = &ifd.class;
-                    let kind = &ifd.kind;
-                    let field_name = format!("{property}_of_{class}");
-                    let field = Self::register_field::<TerminusType<'a, C>>(
-                        registry,
-                        &field_name,
-                        &(class.to_string(), frames.clone()),
-                        kind.clone(),
-                    );
-                    inverted_fields.push(field);
-                }
-            }
-        }
-        fields.append(&mut inverted_fields);
-
         fields.push(registry.field::<ID>("_id", &()));
 
         registry
