@@ -16,7 +16,7 @@ mod top;
 
 use self::{
     frame::AllFrames,
-    schema::{TerminusContext, TerminusTypeCollection},
+    schema::{TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
 };
 
 predicates! {
@@ -40,7 +40,10 @@ predicates! {
         let mut sanitized_frames: AllFrames = frames.sanitize();
         sanitized_frames.invert();
 
-        let root_node = RootNode::new_with_info(TerminusTypeCollection::new(), EmptyMutation::<TerminusContext<'a, C>>::new(), EmptySubscription::<TerminusContext<'a,C>>::new(), Arc::new(sanitized_frames), (), ());
+        let root_node = RootNode::new_with_info(TerminusTypeCollection::new(),
+                                                EmptyMutation::<TerminusContext<'a, C>>::new(),
+                                                EmptySubscription::<TerminusContext<'a,C>>::new(),
+                                                TerminusTypeCollectionInfo{ allframes: Arc::new(sanitized_frames)}, (), ());
 
         let graphql_context = TerminusContext::new(context, auth_term, system_term, meta_term, commit_term,transaction_term)?;
         //let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, transaction_term, auth_term)?;
