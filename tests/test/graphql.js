@@ -94,5 +94,78 @@ describe('GraphQL', function () {
         { name: 'Socrates', age: 71, order: '1' },
       ])
     })
+
+    it('filter query', async function () {
+      const FILTER_QUERY = gql`
+ query PersonQuery {
+    Person(filter: {name: {ge : "K"}, age: {ge : 30}}, orderBy : {order : ASC}){
+        name
+        age
+        order
+    }
+}`
+      const result = await client.query({ query: FILTER_QUERY })
+      expect(result.data.Person).to.deep.equal([
+        { name: 'Socrates', age: 71, order: '1' },
+        { name: 'Plato', age: 80, order: '2' },
+        { name: 'Karl Popper', age: 92, order: '5' },
+        { name: 'Kurt Gödel', age: 71, order: '5' },
+      ])
+    })
+
+    it('back-link query', async function () {
+      const BACKLINK_QUERY = gql`
+ query PersonQuery {
+    Person(orderBy : {order : ASC}){
+        name
+        age
+        order
+        _friend_of_Person{
+           name
+        }
+    }
+}`
+      const result = await client.query({ query: BACKLINK_QUERY })
+      expect(result.data.Person).to.deep.equal([
+        { name: 'Socrates', age: 71, order: '1', _friend_of_Person: [] },
+        {
+          name: 'Plato',
+          age: 80,
+          order: '2',
+          _friend_of_Person: [
+            {
+              name: 'Aristotle',
+            },
+            {
+              name: 'Socrates',
+            },
+          ],
+        },
+        {
+          name: 'Aristotle',
+          age: 61,
+          order: '3',
+          _friend_of_Person: [
+            {
+              name: 'Plato',
+            },
+          ],
+        },
+        {
+          name: 'Immanuel Kant',
+          age: 79,
+          order: '3',
+          _friend_of_Person: [{
+            name: 'Immanuel Kant',
+          },
+          {
+            name: 'Kurt Gödel',
+          },
+          ],
+        },
+        { name: 'Karl Popper', age: 92, order: '5', _friend_of_Person: [] },
+        { name: 'Kurt Gödel', age: 71, order: '5', _friend_of_Person: [] },
+      ])
+    })
   })
 })
