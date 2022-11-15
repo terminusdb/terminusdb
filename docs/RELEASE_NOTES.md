@@ -1,3 +1,9 @@
+# TerminusDB Server v10.1.9 Release Notes
+
+## Bug fixes
++ Fix crash when using some special unicode characters because
+  the length of those characters were wrongly calculated.
+
 # TerminusDB Server v10.1.8 Release Notes
 
 ## Enhancements
