@@ -21,7 +21,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 # Initialize the crates.io index git repo to cache it.
 RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swipl || true)
