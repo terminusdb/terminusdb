@@ -1,5 +1,9 @@
 # TerminusDB Server v10.1.9 Release Notes
 
+## Enhancements
++ Add new ENV variable called `TERMINUSDB_DASHBOARD_PATH` to set
+  the dashboard path at compile time.
+
 ## Bug fixes
 + Fix crash when using some special unicode characters because
   the length of those characters were wrongly calculated.
