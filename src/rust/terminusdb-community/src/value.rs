@@ -272,7 +272,7 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
             match c {
                 '\\' => result.push('\\'),
                 '\"' => result.push('\"'),
-                'x' => result.push(unescape_legacy_prolog_escape_sequence(&mut characters, &mut tally)),
+                'x' => result.push(unescape_legacy_prolog_escape_sequence(&mut characters)),
                 'a' => result.push(SWIPL_CONTROL_CHAR_A),
                 'b' => result.push(SWIPL_CONTROL_CHAR_B),
                 't' => result.push('\t'),
@@ -295,8 +295,10 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
             } else if let Some(result) = result.as_mut() {
                 result.push(c);
             }
+            else {
+                tally += c.len_utf8();
+            }
         }
-        tally += c.len_utf8();
     }
 
     match result {
@@ -309,12 +311,10 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
 
 fn unescape_legacy_prolog_escape_sequence(
     characters: &mut impl Iterator<Item = char>,
-    tally: &mut usize,
 ) -> char {
     let mut digits: String = String::new();
     loop {
         let digit = characters.next().unwrap();
-        *tally += digit.len_utf8();
         if digit == '\\' {
             let hex = u32::from_str_radix(&digits, 16).unwrap();
             return char::from_u32(hex).unwrap();
