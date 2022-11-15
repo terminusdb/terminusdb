@@ -264,9 +264,8 @@ const SWIPL_CONTROL_CHAR_V: char = 11 as char;
 fn prolog_string_to_string(s: &str) -> Cow<str> {
     let mut result: Option<String> = None;
     let mut escaping = false;
-    let mut characters = s.chars().skip(1);
-    let mut tally = 1;
-    while let Some(c) = characters.next() {
+    let mut characters = s.char_indices().skip(1);
+    while let Some((ix,c)) = characters.next() {
         if escaping {
             let result = result.as_mut().unwrap();
             match c {
@@ -289,14 +288,11 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
                 escaping = true;
                 if result.is_none() {
                     let mut r = String::with_capacity(s.len());
-                    r.push_str(&s[1..tally]);
+                    r.push_str(&s[1..ix]);
                     result = Some(r);
                 }
             } else if let Some(result) = result.as_mut() {
                 result.push(c);
-            }
-            else {
-                tally += c.len_utf8();
             }
         }
     }
@@ -310,11 +306,11 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
 }
 
 fn unescape_legacy_prolog_escape_sequence(
-    characters: &mut impl Iterator<Item = char>,
+    characters: &mut impl Iterator<Item = (usize,char)>,
 ) -> char {
     let mut digits: String = String::new();
     loop {
-        let digit = characters.next().unwrap();
+        let (_,digit) = characters.next().unwrap();
         if digit == '\\' {
             let hex = u32::from_str_radix(&digits, 16).unwrap();
             return char::from_u32(hex).unwrap();
