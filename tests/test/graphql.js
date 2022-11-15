@@ -4,7 +4,7 @@ const fetch = require('cross-fetch')
 const {
   ApolloClient, ApolloLink, concat, InMemoryCache,
   gql, HttpLink,
-} = require('@apollo/client')
+} = require('@apollo/client/core')
 
 describe('GraphQL', function () {
   let agent
