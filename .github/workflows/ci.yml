@@ -105,6 +105,13 @@ jobs:
     needs: versions
     uses: ./.github/workflows/build.yml
 
+  arm64_docker:
+    name: Trigger arm64 build
+    needs:
+      - is_build_required
+    uses: ./.github/workflows/arm.yml
+    if: needs.is_build_required.outputs.push_docker_required == 'true'
+
   check:
     name: Check
     needs: build
@@ -167,14 +174,6 @@ jobs:
     steps:
       - run: echo "Nothing to be done. 😌"
 
-  arm64_docker:
-    name: Trigger arm64 build
-    needs:
-      - is_build_required
-      - all_checks_pass_with_build
-    uses: ./.github/workflows/arm.yml
-    if: needs.is_build_required.outputs.push_docker_required == 'true'
-
   push_docker:
     name: Push Docker image
     runs-on: ubuntu-latest
@@ -203,18 +202,19 @@ jobs:
           username: terminusdb
           password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: 'arm64'
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
       - name: Load images
         run: |
           docker load < terminusdb-server-docker-image.tar.gz
+          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
+          docker push terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
+          docker rmi terminusdb/terminusdb-server:local
           docker load < terminusdb-server-docker-image-arm64.tar.gz
+          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          docker rmi terminusdb/terminusdb-server:local
 
       - name: Determine image tags to push
         run: |
@@ -242,16 +242,13 @@ jobs:
 
           echo "docker_tags=${TAGS}" >> $GITHUB_ENV
 
-      - name: Push image to Docker Container Registry
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          tags: ${{ env.docker_tags }}
-          push: true
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          build-args: |
-            TERMINUSDB_GIT_HASH=${{ github.sha }}
+      - name: Create new image manifest
+        run: |
+          TAGS="${{ env.docker_tags }}"
+          for TAG in ${TAGS//,/ }
+          do
+              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          done
 
   trigger_enterprise_build:
     name: Trigger enterprise build
