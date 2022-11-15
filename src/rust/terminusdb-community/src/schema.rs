@@ -121,7 +121,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         }
         let rdf_type_id = rdf_type_id.unwrap();
 
-        let inheritance_graph = self.get_inheritance_graph();
+        let inheritance_graph = self.get_reverse_inheritance_graph();
         itertools::Either::Right(
             self.layer
                 .triples_o(sys_set_id)
