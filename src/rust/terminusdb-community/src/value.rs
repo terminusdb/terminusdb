@@ -265,7 +265,7 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
     let mut result: Option<String> = None;
     let mut escaping = false;
     let mut characters = s.char_indices().skip(1);
-    while let Some((ix,c)) = characters.next() {
+    while let Some((ix, c)) = characters.next() {
         if escaping {
             let result = result.as_mut().unwrap();
             match c {
@@ -300,17 +300,18 @@ fn prolog_string_to_string(s: &str) -> Cow<str> {
     match result {
         Some(mut result) => {
             assert_eq!(Some('\"'), result.pop());
-            Cow::Owned(result)},
+            Cow::Owned(result)
+        }
         None => Cow::Borrowed(&s[1..s.len() - 1]),
     }
 }
 
 fn unescape_legacy_prolog_escape_sequence(
-    characters: &mut impl Iterator<Item = (usize,char)>,
+    characters: &mut impl Iterator<Item = (usize, char)>,
 ) -> char {
     let mut digits: String = String::new();
     loop {
-        let (_,digit) = characters.next().unwrap();
+        let (_, digit) = characters.next().unwrap();
         if digit == '\\' {
             let hex = u32::from_str_radix(&digits, 16).unwrap();
             return char::from_u32(hex).unwrap();
