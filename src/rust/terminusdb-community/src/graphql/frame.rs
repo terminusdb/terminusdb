@@ -661,7 +661,7 @@ pub struct InvertedTypeDefinition {
 }
 
 pub fn inverse_field_name(property: &str, class: &str) -> String {
-    format!("{property}_of_{class}")
+    format!("_{property}_of_{class}")
 }
 
 pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrames {
@@ -1095,27 +1095,27 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
         let mut allframes: AllFrames = context.deserialize_from_term(&term).unwrap();
         allframes.invert();
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a_of_Foo"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_a_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a_of_Foo"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_a_of_Foo"].kind,
             FieldKind::Required
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b_of_Foo"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_b_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b_of_Foo"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_b_of_Foo"].kind,
             FieldKind::Optional
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c_of_Foo"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_c_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c_of_Foo"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_c_of_Foo"].kind,
             FieldKind::Set
         )
     }
