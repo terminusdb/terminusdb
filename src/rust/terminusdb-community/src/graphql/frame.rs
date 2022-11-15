@@ -631,7 +631,7 @@ impl AllFrames {
     pub fn reverse_link(&self, class: &str, field: &str) -> Option<&InvertedFieldDefinition> {
         if let Some(inverted) = &self.inverted {
             if inverted.classes.contains_key(class)
-                & inverted.classes[class].domain.contains_key(field)
+                && inverted.classes[class].domain.contains_key(field)
             {
                 Some(&inverted.classes[class].domain[field])
             } else {
