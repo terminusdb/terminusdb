@@ -9,7 +9,7 @@ use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
-use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
+use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
@@ -532,6 +532,18 @@ fn rewind_array<'a>(instance: &'a dyn Layer, item: u64) -> Option<u64> {
     }
 }
 
+fn subject_has_type<'a>(instance: &'a dyn Layer, subject_id: u64, class: &str) -> bool {
+    if let Some(rdf_type_id) = instance.predicate_id(RDF_TYPE) {
+        if let Some(class_id) = instance.object_node_id(class) {
+            instance.triple_exists(subject_id, rdf_type_id, class_id)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
 impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
     type Context = TerminusContext<'a, C>;
 
@@ -567,6 +579,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 let domain = &reverse_link.class;
                 let kind = &reverse_link.kind;
                 let property_expanded = allframes.context.expand_schema(&property);
+                let domain_uri = allframes.fully_qualified_class_name(domain);
                 let field_id = instance.predicate_id(&property_expanded)?;
                 // List and array are special since they are *deep* objects
                 match kind {
@@ -577,7 +590,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             .filter(|o| {
                                 instance
                                     .triples_o(*o)
-                                    .filter(move |t| t.predicate == field_id)
+                                    .filter(|t| {
+                                        t.predicate == field_id
+                                            && subject_has_type(instance, t.subject, &domain_uri)
+                                    })
                                     .next()
                                     .is_some()
                             });
@@ -597,7 +613,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             .filter(|o| {
                                 instance
                                     .triples_o(*o)
-                                    .filter(move |t| t.predicate == field_id)
+                                    .filter(|t| {
+                                        t.predicate == field_id
+                                            && subject_has_type(instance, t.subject, &domain_uri)
+                                    })
                                     .next()
                                     .is_some()
                             });
@@ -613,7 +632,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     _ => {
                         let object_ids = instance
                             .triples_o(self.id)
-                            .filter(move |t| t.predicate == field_id)
+                            .filter(move |t| {
+                                t.predicate == field_id
+                                    && subject_has_type(instance, t.subject, &domain_uri)
+                            })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
                             Some(&domain),
@@ -747,7 +769,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 }
             }
         };
-        println!("I am about to get info...");
+
         let x = get_info();
         match x {
             Some(r) => r,
