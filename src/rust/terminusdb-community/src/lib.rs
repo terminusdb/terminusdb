@@ -3,12 +3,12 @@ mod log;
 
 mod consts;
 mod doc;
+mod graphql;
+mod path;
 mod prefix;
 mod schema;
 mod types;
 mod value;
-
-mod graphql;
 
 use lcs;
 pub use swipl;
