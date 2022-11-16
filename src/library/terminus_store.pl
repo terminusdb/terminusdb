@@ -541,7 +541,7 @@ object_id(Layer, value(Object), Id) :-
     ground(Object),
     !,
     object_to_id(Layer, value(Object), Id).
-object_id(Layer, Object, Id) :-
+object_id(_Layer, Object, _Id) :-
     nonvar(Object),
     (   functor(Object, F, A),
         memberchk(F, [node, value]),
