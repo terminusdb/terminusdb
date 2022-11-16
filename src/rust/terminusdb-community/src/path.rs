@@ -1,13 +1,11 @@
-use lazy_static::*;
-use nom::bytes::complete::take_while;
-use nom::complete::tag;
-use nom::Err;
+use nom::bytes::complete::{tag, take_while, take_while1};
+use nom::multi::separated_list1;
+use nom::sequence::preceded;
 use nom::{
     branch::alt,
-    character::{is_alphanumeric, is_digit},
     combinator::{map, map_res},
     error::ErrorKind,
-    sequence::{delimited, pair, separated_pair, terminated, tuple},
+    sequence::{delimited, pair, separated_pair, terminated},
     IResult,
 };
 use std::rc::Rc;
@@ -19,16 +17,16 @@ Q,R := P> | <P | Q,R | Q;R | plus(Q) | star(Q) | times(Q,N,M)
 
  */
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Pred {
     Any,
     Named(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Path {
-    Seq(Rc<Path>, Rc<Path>),
-    Choice(Rc<Path>, Rc<Path>),
+    Seq(Vec<Path>),
+    Choice(Vec<Path>),
     Positive(Pred),
     Negative(Pred),
     Plus(Rc<Path>),
@@ -36,42 +34,12 @@ enum Path {
     Times(Rc<Path>, u32, u32),
 }
 
-/*
-fn take_while<F>(f: F) -> impl Fn(&str) -> IResult<&str, &str>
-where
-    F: Fn(&char) -> bool,
-{
-    move |s: &str| {
-        let mut characters = s.chars().enumerate();
-        while let Some((idx, c)) = characters.next() {
-            if !f(&c) {
-                return Ok((&s[0..idx], &s[idx..s.len()]));
-            }
-        }
-        Ok((s, &s[s.len()..s.len()]))
-    }
-}
-
-fn tag<'a>(s: &'a str) -> impl Fn(&str) -> IResult<&str, &str> + 'a {
-    let length = s.len();
-    move |t: &str| {
-        if t[0..length] == *s {
-            Ok((&t[0..length], &t[length..t.len()]))
-        } else {
-            Err(Err::Error(nom::error::Error {
-                input: "",
-                code: ErrorKind::Tag,
-            }))
-        }
-    }
-}*/
-
 fn is_property_char(c: char) -> bool {
     c.is_alphanumeric() || c == ':' || c == '/' || c == '_' || c == '-'
 }
 
 fn named(input: &str) -> IResult<&str, &str> {
-    take_while(is_property_char)(input)
+    take_while1(is_property_char)(input)
 }
 
 fn num(input: &str) -> IResult<&str, u32> {
@@ -83,33 +51,33 @@ fn num(input: &str) -> IResult<&str, u32> {
 
 fn pred(input: &str) -> IResult<&str, Pred> {
     alt((
-        map_res(tag("."), |s: _| Pred::Any),
-        map_res(named, |string| Pred::Named(string.to_string())),
+        map(tag("."), |_| Pred::Any),
+        map(named, |string| Pred::Named(string.to_string())),
     ))(input)
 }
 
 fn positive(input: &str) -> IResult<&str, Pred> {
-    terminated(pred, tag(">"))(input)
+    alt((terminated(pred, tag(">")), pred))(input)
 }
 
 fn negative(input: &str) -> IResult<&str, Pred> {
-    terminated(pred, tag("<"))(input)
+    preceded(tag("<"), pred)(input)
 }
 
 fn patterns(input: &str) -> IResult<&str, Path> {
     alt((
-        map(positive, |elt| Path::Positive(elt)),
+        delimited(tag("("), ands, tag(")")),
         map(negative, |elt| Path::Negative(elt)),
-        delimited(tag("(", 8), ands, tag(")", 8)),
+        map(positive, |elt| Path::Positive(elt)),
     ))(input)
 }
 
 fn plus(input: &str) -> IResult<&str, Path> {
-    terminated(patterns, tag("+", 8))(input)
+    terminated(patterns, tag("+"))(input)
 }
 
 fn star(input: &str) -> IResult<&str, Path> {
-    terminated(patterns, tag("*", 8))(input)
+    terminated(patterns, tag("*"))(input)
 }
 
 fn size_bracket(input: &str) -> IResult<&str, (u32, u32)> {
@@ -134,8 +102,15 @@ fn repeat_patterns(input: &str) -> IResult<&str, Path> {
 fn ors(input: &str) -> IResult<&str, Path> {
     alt((
         map(
-            separated_pair(repeat_patterns, tag("|"), repeat_patterns),
-            |(left, right)| Path::Choice(Rc::new(left), Rc::new(right)),
+            pair(
+                terminated(repeat_patterns, tag("|")),
+                separated_list1(tag("|"), repeat_patterns),
+            ),
+            |(first, paths)| {
+                let mut result = paths;
+                result.insert(0, first);
+                Path::Choice(result)
+            },
         ),
         repeat_patterns,
     ))(input)
@@ -143,15 +118,20 @@ fn ors(input: &str) -> IResult<&str, Path> {
 
 fn ands(input: &str) -> IResult<&str, Path> {
     alt((
-        map(separated_pair(ors, tag(","), ors), |(left, right)| {
-            Path::Seq(Rc::new(left), Rc::new(right))
-        }),
+        map(
+            pair(terminated(ors, tag(",")), separated_list1(tag(","), ors)),
+            |(first, paths)| {
+                let mut result = paths;
+                result.insert(0, first);
+                Path::Seq(result)
+            },
+        ),
         ors,
     ))(input)
 }
 
-fn path(input: &str) -> Path {
-    ands(input).expect("Should have been ok").1
+fn path(input: &str) -> IResult<&str, Path> {
+    ands(input)
 }
 
 #[cfg(test)]
@@ -159,10 +139,82 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_test() {
+    fn parse_pred() {
+        let source = "rdf:first";
+        let results = pred(source);
+        assert_eq!(results, Ok(("", Pred::Named("rdf:first".to_string()))))
+    }
+
+    #[test]
+    fn parse_cons_chaser() {
+        let source = "p,rdf:rest*,rdf:first";
+        let results = path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Positive(Pred::Named("p".to_string())),
+                    Path::Star(Rc::new(Path::Positive(Pred::Named("rdf:rest".to_string())))),
+                    Path::Positive(Pred::Named("rdf:first".to_string()))
+                ])
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_backward_repeat_group() {
         let source = "(<effect,cause)+";
         let results = path(source);
-        eprintln!("{results:?}");
-        panic!("Test")
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Plus(Rc::new(Path::Seq(vec![
+                    Path::Negative(Pred::Named("effect".to_string())),
+                    Path::Positive(Pred::Named("cause".to_string()))
+                ])))
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_any() {
+        let source = ".";
+        let results = path(source);
+        assert_eq!(results, Ok(("", Path::Positive(Pred::Any))))
+    }
+
+    #[test]
+    fn parse_something() {
+        let source = "(forward,.,<backward)+";
+        let results = path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Plus(Rc::new(Path::Seq(vec![
+                    Path::Positive(Pred::Named("forward".to_string())),
+                    Path::Positive(Pred::Any),
+                    Path::Negative(Pred::Named("backward".to_string()))
+                ])))
+            ))
+        )
+    }
+
+    #[test]
+    fn repeated_choice() {
+        let source = "(child|database)*";
+        let results = path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Star(Rc::new(Path::Choice(vec![
+                    Path::Positive(Pred::Named("child".to_string())),
+                    Path::Positive(Pred::Named("database".to_string()))
+                ])))
+            ))
+        )
     }
 }
