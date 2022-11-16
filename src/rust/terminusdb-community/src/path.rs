@@ -1,12 +1,15 @@
 use lazy_static::*;
+use nom::bytes::complete::take_while;
+use nom::complete::tag;
+use nom::Err;
 use nom::{
     branch::alt,
     character::{is_alphanumeric, is_digit},
     combinator::{map, map_res},
+    error::ErrorKind,
     sequence::{delimited, pair, separated_pair, terminated, tuple},
     IResult,
 };
-use regex::Regex;
 use std::rc::Rc;
 
 /*
@@ -33,24 +36,37 @@ enum Path {
     Times(Rc<Path>, u32, u32),
 }
 
-lazy_static! {
-    static ref PROPERTY: Regex =
-        Regex::new(r"[A-Za-z]+[A-Za-z0-9:/_]").expect("This is built lazy static");
-}
-
-fn take_while(f: Fn(&char) -> bool) -> impl Fn(&str) -> IResult<&str, &str> {
+/*
+fn take_while<F>(f: F) -> impl Fn(&str) -> IResult<&str, &str>
+where
+    F: Fn(&char) -> bool,
+{
     move |s: &str| {
-        let characters = s.chars().enumerate();
+        let mut characters = s.chars().enumerate();
         while let Some((idx, c)) = characters.next() {
             if !f(&c) {
-                return OK(s[0..idx]);
+                return Ok((&s[0..idx], &s[idx..s.len()]));
             }
         }
-        OK(s)
+        Ok((s, &s[s.len()..s.len()]))
     }
 }
 
-fn is_property_char(c: &char) -> bool {
+fn tag<'a>(s: &'a str) -> impl Fn(&str) -> IResult<&str, &str> + 'a {
+    let length = s.len();
+    move |t: &str| {
+        if t[0..length] == *s {
+            Ok((&t[0..length], &t[length..t.len()]))
+        } else {
+            Err(Err::Error(nom::error::Error {
+                input: "",
+                code: ErrorKind::Tag,
+            }))
+        }
+    }
+}*/
+
+fn is_property_char(c: char) -> bool {
     c.is_alphanumeric() || c == ':' || c == '/' || c == '_' || c == '-'
 }
 
@@ -59,40 +75,41 @@ fn named(input: &str) -> IResult<&str, &str> {
 }
 
 fn num(input: &str) -> IResult<&str, u32> {
-    map_res(take_while(is_digit), |digits| {
-        digits.parse::<i32>().unwrap()
-    })(input)
+    map_res(
+        take_while(|c: char| c.is_digit(10)),
+        |digits: &str| -> Result<u32, _> { Ok::<u32, ErrorKind>(digits.parse::<u32>().unwrap()) },
+    )(input)
 }
 
-fn pred(input: &str) -> IResult<&str, Path> {
+fn pred(input: &str) -> IResult<&str, Pred> {
     alt((
-        map(tag("."), |_| Path::Any),
-        map(named, |string| Path::Named(string)),
+        map_res(tag("."), |s: _| Pred::Any),
+        map_res(named, |string| Pred::Named(string.to_string())),
     ))(input)
 }
 
 fn positive(input: &str) -> IResult<&str, Pred> {
-    teriminated(pred, tag(">"))(input)
+    terminated(pred, tag(">"))(input)
 }
 
 fn negative(input: &str) -> IResult<&str, Pred> {
-    teriminated(pred, tag("<"))(input)
+    terminated(pred, tag("<"))(input)
 }
 
 fn patterns(input: &str) -> IResult<&str, Path> {
     alt((
         map(positive, |elt| Path::Positive(elt)),
         map(negative, |elt| Path::Negative(elt)),
-        delimited(tag("("), ands, tag(")")),
+        delimited(tag("(", 8), ands, tag(")", 8)),
     ))(input)
 }
 
 fn plus(input: &str) -> IResult<&str, Path> {
-    terminated(patterns, '+')(input)
+    terminated(patterns, tag("+", 8))(input)
 }
 
 fn star(input: &str) -> IResult<&str, Path> {
-    terminated(patterns, '*')(input)
+    terminated(patterns, tag("*", 8))(input)
 }
 
 fn size_bracket(input: &str) -> IResult<&str, (u32, u32)> {
@@ -100,7 +117,7 @@ fn size_bracket(input: &str) -> IResult<&str, (u32, u32)> {
 }
 
 fn times(input: &str) -> IResult<&str, Path> {
-    map(pair(patterns(input), size_bracket), |(p, (n, m))| {
+    map(pair(patterns, size_bracket), |(p, (n, m))| {
         Path::Times(Rc::new(p), n, m)
     })(input)
 }
@@ -109,10 +126,7 @@ fn repeat_patterns(input: &str) -> IResult<&str, Path> {
     alt((
         map(plus, |elt| Path::Plus(Rc::new(elt))),
         map(star, |elt| Path::Star(Rc::new(elt))),
-        map(times, |elt| {
-            let (p, n, m) = elt;
-            Path::Times(Rc::new(p), n, m)
-        }),
+        times,
         patterns,
     ))(input)
 }
@@ -121,7 +135,7 @@ fn ors(input: &str) -> IResult<&str, Path> {
     alt((
         map(
             separated_pair(repeat_patterns, tag("|"), repeat_patterns),
-            (|left, right| Path::Choice(left, right)),
+            |(left, right)| Path::Choice(Rc::new(left), Rc::new(right)),
         ),
         repeat_patterns,
     ))(input)
@@ -129,10 +143,9 @@ fn ors(input: &str) -> IResult<&str, Path> {
 
 fn ands(input: &str) -> IResult<&str, Path> {
     alt((
-        map(
-            separated_pair(ors, tag(","), ors),
-            (|left, right| Path::Seq(left, right)),
-        ),
+        map(separated_pair(ors, tag(","), ors), |(left, right)| {
+            Path::Seq(Rc::new(left), Rc::new(right))
+        }),
         ors,
     ))(input)
 }
