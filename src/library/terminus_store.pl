@@ -533,17 +533,21 @@ object_id(Layer, Object, Id) :-
     ground(Id),
     !,
     id_to_object(Layer, Id, Object).
-
 object_id(Layer, node(Object), Id) :-
     ground(Object),
     !,
     object_to_id(Layer, node(Object), Id).
-
 object_id(Layer, value(Object), Id) :-
     ground(Object),
     !,
     object_to_id(Layer, value(Object), Id).
-
+object_id(Layer, Object, Id) :-
+    nonvar(Object),
+    (   functor(Object, F, A),
+        memberchk(F, [node, value]),
+        A = 1
+    ->  fail
+    ;   throw(error(object_id_called_with_invalid_nonvar_object(Object)),_)).
 object_id(Layer, Object, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
