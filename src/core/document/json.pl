@@ -6725,7 +6725,7 @@ test(delete_list_element,
                    [
                        _{'@type':deleted_object_still_referenced,
                          object:"http://i/Task/task3",
-                         predicate:'http://www.w3.org/1999/02/22-rdf-syntax-ns#first',subject:_}]),
+                         predicate:"http://www.w3.org/1999/02/22-rdf-syntax-ns#first",subject:_}]),
                _)
      ]) :-
     Document = _{ '@id' : "TaskList/my_task_list",
