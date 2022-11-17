@@ -106,6 +106,8 @@ impl Iterator for ManySearchIterator {
                 if self.current >= self.start {
                     return Some(idtriple);
                 }
+            } else if self.openset.is_empty() {
+                return None;
             }else{
                 self.current += 1;
                 let mut openset = Vec::new();
@@ -144,6 +146,8 @@ fn compile_many(
 
 #[cfg(test)]
 mod tests {
+    use terminusdb_store_prolog::terminus_store::{open_memory_store, open_sync_memory_store};
+
     use super::*;
 
     #[test]
@@ -181,5 +185,31 @@ mod tests {
 
         let res: Vec<_> = my_iter.collect();
         assert_eq!(vec![1, 2, 1, 3, 2, 1, 4, 3, 2, 1, 5, 4, 3, 2, 1], res);
+    }
+
+    #[test]
+    fn asdfasd() {
+        let store = open_sync_memory_store();
+        let builder = store.create_base_layer().unwrap();
+        builder.add_string_triple(StringTriple::new_node("http://base/a", "http://schema#b", "http://base/c")).unwrap();
+        builder.add_string_triple(StringTriple::new_node("http://base/c", "http://schema#b", "http://base/d")).unwrap();
+
+
+        let layer = builder.commit().unwrap();
+        let prefixes = Prefixes {
+            kind: "@context".to_string(),
+            base: "http://base/".to_string(),
+            schema: "http://schema#".to_string(),
+            documentation: None,
+            extra_prefixes: Default::default()
+        };
+
+        let p = path("b*").unwrap().1;
+        let id = IdTriple::new(0,0,layer.object_node_id("http://base/a").unwrap());
+        let path_iter = compile_path(&layer, prefixes, p, ClonableIterator::from(vec![id].into_iter()));
+
+        let result: Vec<_> = path_iter.collect();
+
+        panic!("{result:?}");
     }
 }
