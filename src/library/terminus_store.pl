@@ -543,9 +543,8 @@ object_id(Layer, value(Object), Id) :-
     object_to_id(Layer, value(Object), Id).
 object_id(_Layer, Object, _Id) :-
     nonvar(Object),
-    (   functor(Object, F, A),
-        memberchk(F, [node, value]),
-        A = 1
+    (   functor(Object, F, 1),
+        memberchk(F, [node, value])
     ->  fail
     ;   throw(error(object_id_called_with_invalid_nonvar_object(Object),_))).
 object_id(Layer, Object, Id) :-
