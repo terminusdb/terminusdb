@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::iterator::*;
 use super::parse::*;
 
@@ -7,50 +9,128 @@ use crate::terminus_store::store::sync::SyncStoreLayer;
 
 fn compile_path(
     g: &SyncStoreLayer,
-    prefixes: &Prefixes,
+    prefixes: Prefixes,
     path: Path,
-    iter: ClonableIterator<IdTriple>,
+    mut iter: ClonableIterator<IdTriple>,
 ) -> ClonableIterator<IdTriple> {
-    let mut iter = iter;
     match path {
         Path::Seq(vec) => {
             for sub_path in vec {
-                iter = compile_path(g, prefixes, sub_path, iter)
+                iter = compile_path(g, prefixes.clone(), sub_path, iter)
             }
             iter
         }
         Path::Choice(vec) => {
             let branch = iter.clone();
+            let g = g.clone();
             let result = vec
                 .into_iter()
-                .map(move |sub_path| compile_path(g, prefixes, sub_path, branch.clone()));
+                .map(move |sub_path| compile_path(&g, prefixes.clone(), sub_path, branch.clone()));
             ClonableIterator::from(result.flatten())
         }
         Path::Positive(p) => match p {
-            Pred::Any => ClonableIterator::from(iter.flat_map(|t| g.triples_s(t.object))),
+            Pred::Any => {
+                let g = g.clone();
+                ClonableIterator::from(
+                    iter.flat_map(move |t| CachedClonableIterator::new(g.triples_s(t.object))),
+                )
+            }
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&pred);
                 if let Some(p_id) = g.predicate_id(&pred) {
-                    ClonableIterator::from(iter.flat_map(|t| g.triples_sp(t.object, p_id)))
+                    let g = g.clone();
+                    ClonableIterator::from(iter.flat_map(move |t| {
+                        CachedClonableIterator::new(g.triples_sp(t.object, p_id))
+                    }))
                 } else {
                     ClonableIterator::from(std::iter::empty())
                 }
             }
         },
         Path::Negative(p) => match p {
-            Pred::Any => iter.flat_map(|t| g.triples_o(t.object)),
+            Pred::Any => {
+                let g = g.clone();
+                ClonableIterator::from(
+                    iter.flat_map(move |t| CachedClonableIterator::new(g.triples_o(t.object))),
+                )
+            }
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&pred);
                 if let Some(p_id) = g.predicate_id(&pred) {
-                    iter.flat_map(|t| g.triples_o(t.object).filter(|t| t.p == p_id))
+                    let g = g.clone();
+                    ClonableIterator::from(iter.flat_map(move |t| {
+                        CachedClonableIterator::new(
+                            g.triples_o(t.object).filter(move |t| t.predicate == p_id),
+                        )
+                    }))
                 } else {
                     ClonableIterator::from(std::iter::empty())
                 }
             }
         },
-        Path::Plus(_) => todo!(),
-        Path::Star(_) => todo!(),
-        Path::Times(_, _, _) => todo!(),
+        Path::Plus(sub_path) => compile_many(g, prefixes, sub_path, iter, 1, None),
+        Path::Star(sub_path) => compile_many(g, prefixes, sub_path, iter, 0, None),
+        Path::Times(sub_path, n, m) => compile_many(g, prefixes, sub_path, iter, n, Some(m)),
+    }
+}
+
+struct ManySearchIterator {
+    start: usize,
+    stop: Option<usize>,
+    iterator: ClonableIterator<IdTriple>,
+    current: usize,
+    visited: HashSet<IdTriple>,
+    openset: Vec<IdTriple>,
+    pattern: Rc<Path>,
+}
+
+impl Iterator for ManySearchIterator {
+    type Item = IdTriple;
+
+    fn next(&mut self) -> Option<IdTriple> {
+        loop {
+            if self.stop.map_or(false, |x| current >= x) {
+                return None;
+            }
+            let result = self.iterator.next();
+            if let Some(idtriple) = result {
+                visited.insert(idtriple);
+                opnset.push(idtriple);
+                if current >= start {
+                    return Some(idtriple);
+                }
+            }else{
+                self.current += 1;
+                swap(self.openset,
+                self.iterator = 
+                                    self.openset = Vec::new();
+
+                compile
+            }
+        }
+    }
+}
+
+fn compile_many(
+    g: &SyncStoreLayer,
+    prefixes: Prefixes,
+    path: Rc<Path>,
+    iterator: ClonableIterator<IdTriple>,
+    start: usize,
+    stop: Option<usize>,
+) -> ClonableIterator<IdTriple> {
+    if Some(0) == m {
+        return iterator;
+    } else {
+        CLonableIterator::new(ManySearchIterator {
+            start,
+            stop,
+            current: 0,
+            iterator,
+            visited: HashSet::new(),
+            openset: Vec::new(),
+            pattern: path,
+        })
     }
 }
 
@@ -82,16 +162,16 @@ mod tests {
         let b: ClonableIterator<usize> = ClonableIterator::from(i);
 
         let my_iter = b.flat_map(|x| {
-            let vec = Vec::new();
+            let mut vec = Vec::new();
             let mut i = x;
             while i > 0 {
                 vec.push(i);
-                i = -1;
+                i -= 1;
             }
-            vec.iter()
+            vec.into_iter()
         });
 
         let res: Vec<_> = my_iter.collect();
-        eprintln!("{res:?}");
+        assert_eq!(vec![1, 2, 1, 3, 2, 1, 4, 3, 2, 1, 5, 4, 3, 2, 1], res);
     }
 }

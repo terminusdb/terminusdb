@@ -31,7 +31,7 @@ pub enum Path {
     Negative(Pred),
     Plus(Rc<Path>),
     Star(Rc<Path>),
-    Times(Rc<Path>, u32, u32),
+    Times(Rc<Path>, usize, usize),
 }
 
 fn is_property_char(c: char) -> bool {
@@ -42,10 +42,12 @@ fn named(input: &str) -> IResult<&str, &str> {
     take_while1(is_property_char)(input)
 }
 
-fn num(input: &str) -> IResult<&str, u32> {
+fn num(input: &str) -> IResult<&str, usize> {
     map_res(
         take_while(|c: char| c.is_digit(10)),
-        |digits: &str| -> Result<u32, _> { Ok::<u32, ErrorKind>(digits.parse::<u32>().unwrap()) },
+        |digits: &str| -> Result<usize, _> {
+            Ok::<usize, ErrorKind>(digits.parse::<usize>().unwrap())
+        },
     )(input)
 }
 
@@ -80,7 +82,7 @@ fn star(input: &str) -> IResult<&str, Path> {
     terminated(patterns, tag("*"))(input)
 }
 
-fn size_bracket(input: &str) -> IResult<&str, (u32, u32)> {
+fn size_bracket(input: &str) -> IResult<&str, (usize, usize)> {
     delimited(tag("{"), separated_pair(num, tag(","), num), tag("}"))(input)
 }
 
