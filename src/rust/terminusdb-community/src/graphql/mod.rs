@@ -8,7 +8,7 @@ use std::sync::Arc;
 use swipl::prelude::*;
 
 mod filter;
-mod frame;
+pub mod frame;
 mod query;
 mod sanitize;
 mod schema;
