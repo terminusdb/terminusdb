@@ -52,7 +52,7 @@ fn compile_path(
             Pred::Any => {
                 let g = g.clone();
                 ClonableIterator::from(iter.flat_map(move |object| {
-                    CachedClonableIterator::new(g.triples_o(object).map(|t| t.object))
+                    CachedClonableIterator::new(g.triples_o(object).map(|t| t.subject))
                 }))
             }
             Pred::Named(pred) => {
@@ -63,7 +63,7 @@ fn compile_path(
                         CachedClonableIterator::new(
                             g.triples_o(object)
                                 .filter(move |t| t.predicate == p_id)
-                                .map(|t| t.object),
+                                .map(|t| t.subject),
                         )
                     }))
                 } else {
