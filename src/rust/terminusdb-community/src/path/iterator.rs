@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 trait InnerClonableIterator {
     type Item;
 
@@ -85,6 +88,74 @@ impl<T> Iterator for ClonableIterator<T> {
     }
 }
 
+struct CachedClonableIteratorState<T:Clone> {
+    i: Box<dyn Iterator<Item=T>>,
+    cache: Vec<T>,
+    done: bool
+}
+
+impl<T:Clone> CachedClonableIteratorState<T> {
+    fn next(&mut self, current_pos: usize) -> Option<T> {
+        if self.done {
+            return None;
+        }
+
+        if current_pos < self.cache.len() {
+            println!("getting from cache");
+            Some(self.cache[current_pos].clone())
+        }
+        else {
+            if let Some(next) = self.i.next() {
+                println!("getting fresh value");
+                self.cache.push(next.clone());
+
+                Some(next)
+            }
+            else {
+                println!("done");
+                self.done = true;
+                None
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct CachedClonableIterator<T:Clone> {
+    pos: usize,
+    state: Rc<RefCell<CachedClonableIteratorState<T>>>
+}
+
+impl<T:Clone> CachedClonableIterator<T> {
+    fn from(i: impl Iterator<Item=T>+'static) -> Self {
+        let state = CachedClonableIteratorState {
+            i: Box::new(i),
+            cache: Vec::new(),
+            done: false
+        };
+
+        Self {
+            pos: 0,
+            state: Rc::new(RefCell::new(state))
+        }
+    }
+}
+
+impl<T:Clone> Iterator for CachedClonableIterator<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        let mut borrow = self.state.borrow_mut();
+        if let Some(result) = borrow.next(self.pos) {
+            self.pos += 1;
+            Some(result)
+        }
+        else {
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +204,19 @@ mod tests {
         let ci5 = ci4.clone();
         let r5: Vec<_> = ci5.collect();
         assert_eq!(r5, vec![0, 5, 1, 8, 6]);
+    }
+
+    #[test]
+    fn cached_iterator() {
+        let i = (0..5000).into_iter();
+
+        let mut cached = CachedClonableIterator::from(i);
+        assert_eq!(vec![0,1,2,3,4], cached.clone().take(5).collect::<Vec<_>>());
+        assert_eq!(0, cached.next().unwrap());
+
+        let mut cached2 = cached.clone();
+        let mut cached3 = cached.clone();
+        assert_eq!(1, cached2.next().unwrap());
+        assert_eq!(1, cached3.next().unwrap());
     }
 }
