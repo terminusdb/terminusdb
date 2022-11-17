@@ -542,11 +542,24 @@ object_id(Layer, value(Object), Id) :-
     !,
     object_to_id(Layer, value(Object), Id).
 object_id(_Layer, Object, _Id) :-
-    nonvar(Object),
-    (   functor(Object, F, 1),
-        memberchk(F, [node, value])
+    % This clause is a final check before we fall through to a very expensive case.
+    % It never succeeds, and can only fail or throw.
+    % It will fail if we do intend to fall through, and throw if we are here due to
+    % an error in the call.
+    %
+    % The intention is to prevent callers from accidentally and
+    % erroneously reaching the final clause due to having called this
+    % predicate wrongly (namely, with an Object which is not of the
+    % form _, node(_) or value(_).
+    (   var(Object)
     ->  fail
-    ;   throw(error(object_id_called_with_invalid_nonvar_object(Object),_))).
+    ;   nonvar(Object),
+        (   functor(Object, F, 1, compound),
+            memberchk(F, [node, value]),
+            arg(1, Object, Arg),
+            var(Arg)
+        ->  fail
+        ;   throw(error(object_id_called_with_invalid_object(Object),_)))).
 object_id(Layer, Object, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
@@ -1478,5 +1491,69 @@ test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     predicate_id(Layer, "B", B_Id),
     sp_card(Layer, A_Id, B_Id, Count),
     Count = 2.
+
+setup_object_id_test_layer(TestDir, Layer) :-
+    open_directory_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "A", "B", node("C")),
+    nb_add_triple(Builder, "A", "B", node("D")),
+    nb_add_triple(Builder, "A", "B", value("E")),
+    nb_add_triple(Builder, "A", "B", value("F")),
+    nb_commit(Builder, Layer).
+
+test(object_id_throws_when_called_with_wrong_functor,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(not_a_functor), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, not_a_functor, _Id).
+
+test(object_id_throws_when_called_with_wrong_functor,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(wrong_functor(_)), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, wrong_functor(_), _Id).
+
+test(object_id_throws_when_called_with_functor_with_wrong_arity,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(node(_,_)), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, node(_,_), _Id).
+
+test(object_id_throws_when_called_with_functor_with_weird_nonground_arg,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(node(weirdness(_))), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, node(weirdness(_)), _Id).
+
+test(object_id_iterates_when_called_with_correct_functor,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    findall(true,
+            object_id(Layer, node(_), _Id1),
+            L1),
+    length(L1, 3),
+    findall(true,
+            object_id(Layer, value(_), _Id2),
+            L2),
+    length(L2, 2),
+    findall(true,
+            object_id(Layer, _Object, _Id3),
+            L3),
+    length(L3, 5).
 
 :- end_tests(terminus_store).
