@@ -17,14 +17,14 @@ Q,R := P> | <P | Q,R | Q;R | plus(Q) | star(Q) | times(Q,N,M)
 
  */
 
-#[derive(Debug, PartialEq)]
-enum Pred {
+#[derive(Debug, PartialEq, Clone)]
+pub enum Pred {
     Any,
     Named(String),
 }
 
-#[derive(Debug, PartialEq)]
-enum Path {
+#[derive(Debug, PartialEq, Clone)]
+pub enum Path {
     Seq(Vec<Path>),
     Choice(Vec<Path>),
     Positive(Pred),
@@ -130,47 +130,9 @@ fn ands(input: &str) -> IResult<&str, Path> {
     ))(input)
 }
 
-fn path(input: &str) -> IResult<&str, Path> {
+pub fn path(input: &str) -> IResult<&str, Path> {
     ands(input)
 }
-
-// Composition of Kleisli arrows (>=>)
-fn kleisli_compose<'a, R, S, T>(
-    f: dyn Fn(R) -> dyn Iterator<Item = S>,
-    g: dyn Fn(S) -> dyn Iterator<Item = T>,
-) -> impl Fn(R) -> dyn Iterator<Item = T> {
-    |x| f(x).flatmap(g)
-}
-
-/*
-fn compile_path(
-    path: Path,
-) -> Box<Fn(IdTriple) -> dyn Iterator<Item = IdTriple> + 'a> {
-    match path {
-        Path::Seq(vec) => {
-            if let Some(first) = vec.pop() {
-                let iterfun = compile_path(first);
-                for sub_path in vec {
-                    iter = compile_path(sub_path)
-                }
-            }
-        }
-        Path::Choice(vec) => {
-            let branch = iter.clone();
-            let or_iter = Box::new(std::iter::empty());
-            for sub_path in vec {
-                or_iter = or_iter.chain(compile_path(branch, sub_path))
-            }
-            or_iter
-        }
-        Path::Positive(_) => todo!(),
-        Path::Negative(_) => todo!(),
-        Path::Plus(_) => todo!(),
-        Path::Star(_) => todo!(),
-        Path::Times(_, _, _) => todo!(),
-    }
-}
- */
 
 #[cfg(test)]
 mod tests {
