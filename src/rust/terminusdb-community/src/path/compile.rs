@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use super::iterator::*;
@@ -74,7 +75,10 @@ fn compile_path(
     }
 }
 
+#[derive(Clone)]
 struct ManySearchIterator {
+    graph: SyncStoreLayer,
+    prefixes: Prefixes,
     start: usize,
     stop: Option<usize>,
     iterator: ClonableIterator<IdTriple>,
@@ -89,23 +93,25 @@ impl Iterator for ManySearchIterator {
 
     fn next(&mut self) -> Option<IdTriple> {
         loop {
-            if self.stop.map_or(false, |x| current >= x) {
+            if self.stop.map_or(false, |x| self.current >= x) {
                 return None;
             }
             let result = self.iterator.next();
             if let Some(idtriple) = result {
-                visited.insert(idtriple);
-                opnset.push(idtriple);
-                if current >= start {
+                if !self.visited.insert(idtriple) {
+                    continue;
+                }
+
+                self.openset.push(idtriple);
+                if self.current >= self.start {
                     return Some(idtriple);
                 }
             }else{
                 self.current += 1;
-                swap(self.openset,
-                self.iterator = 
-                                    self.openset = Vec::new();
-
-                compile
+                let mut openset = Vec::new();
+                std::mem::swap(&mut openset, &mut self.openset);
+                let next_elements = ClonableIterator::from(openset.into_iter());
+                self.iterator = compile_path(&self.graph, self.prefixes.clone(), (*self.pattern).clone(), next_elements);
             }
         }
     }
@@ -119,10 +125,12 @@ fn compile_many(
     start: usize,
     stop: Option<usize>,
 ) -> ClonableIterator<IdTriple> {
-    if Some(0) == m {
+    if Some(0) == stop {
         return iterator;
     } else {
-        CLonableIterator::new(ManySearchIterator {
+        ClonableIterator::from(ManySearchIterator {
+            graph: g.clone(),
+            prefixes: prefixes.clone(),
             start,
             stop,
             current: 0,
