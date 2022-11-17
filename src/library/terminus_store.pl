@@ -547,7 +547,7 @@ object_id(_Layer, Object, _Id) :-
         memberchk(F, [node, value]),
         A = 1
     ->  fail
-    ;   throw(error(object_id_called_with_invalid_nonvar_object(Object)),_)).
+    ;   throw(error(object_id_called_with_invalid_nonvar_object(Object),_))).
 object_id(Layer, Object, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
