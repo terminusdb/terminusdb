@@ -134,6 +134,44 @@ fn path(input: &str) -> IResult<&str, Path> {
     ands(input)
 }
 
+// Composition of Kleisli arrows (>=>)
+fn kleisli_compose<'a, R, S, T>(
+    f: dyn Fn(R) -> dyn Iterator<Item = S>,
+    g: dyn Fn(S) -> dyn Iterator<Item = T>,
+) -> impl Fn(R) -> dyn Iterator<Item = T> {
+    |x| f(x).flatmap(g)
+}
+
+/*
+fn compile_path(
+    path: Path,
+) -> Box<Fn(IdTriple) -> dyn Iterator<Item = IdTriple> + 'a> {
+    match path {
+        Path::Seq(vec) => {
+            if let Some(first) = vec.pop() {
+                let iterfun = compile_path(first);
+                for sub_path in vec {
+                    iter = compile_path(sub_path)
+                }
+            }
+        }
+        Path::Choice(vec) => {
+            let branch = iter.clone();
+            let or_iter = Box::new(std::iter::empty());
+            for sub_path in vec {
+                or_iter = or_iter.chain(compile_path(branch, sub_path))
+            }
+            or_iter
+        }
+        Path::Positive(_) => todo!(),
+        Path::Negative(_) => todo!(),
+        Path::Plus(_) => todo!(),
+        Path::Star(_) => todo!(),
+        Path::Times(_, _, _) => todo!(),
+    }
+}
+ */
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +252,29 @@ mod tests {
                     Path::Positive(Pred::Named("child".to_string())),
                     Path::Positive(Pred::Named("database".to_string()))
                 ])))
+            ))
+        )
+    }
+
+    #[test]
+    fn and_then_n_m() {
+        let source = "first,(second,third){1,4}";
+        let results = path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Positive(Pred::Named("first".to_string())),
+                    Path::Times(
+                        Rc::new(Path::Seq(vec![
+                            Path::Positive(Pred::Named("second".to_string())),
+                            Path::Positive(Pred::Named("third".to_string()))
+                        ])),
+                        1,
+                        4
+                    )
+                ])
             ))
         )
     }
