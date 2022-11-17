@@ -12,12 +12,12 @@ fn compile_path(
     g: &SyncStoreLayer,
     prefixes: Prefixes,
     path: Path,
-    mut iter: ClonableIterator<IdTriple>,
-) -> ClonableIterator<IdTriple> {
+    mut iter: ClonableIterator<u64>,
+) -> ClonableIterator<u64> {
     match path {
         Path::Seq(vec) => {
             for sub_path in vec {
-                iter = compile_path(g, prefixes.clone(), sub_path, iter)
+                iter = compile_path(g, prefixes.clone(), sub_path, iter);
             }
             iter
         }
@@ -32,16 +32,16 @@ fn compile_path(
         Path::Positive(p) => match p {
             Pred::Any => {
                 let g = g.clone();
-                ClonableIterator::from(
-                    iter.flat_map(move |t| CachedClonableIterator::new(g.triples_s(t.object))),
-                )
+                ClonableIterator::from(iter.flat_map(move |object| {
+                    CachedClonableIterator::new(g.triples_s(object).map(|t| t.object))
+                }))
             }
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&pred);
                 if let Some(p_id) = g.predicate_id(&pred) {
                     let g = g.clone();
-                    ClonableIterator::from(iter.flat_map(move |t| {
-                        CachedClonableIterator::new(g.triples_sp(t.object, p_id))
+                    ClonableIterator::from(iter.flat_map(move |object| {
+                        CachedClonableIterator::new(g.triples_sp(object, p_id).map(|t| t.object))
                     }))
                 } else {
                     ClonableIterator::from(std::iter::empty())
@@ -51,17 +51,19 @@ fn compile_path(
         Path::Negative(p) => match p {
             Pred::Any => {
                 let g = g.clone();
-                ClonableIterator::from(
-                    iter.flat_map(move |t| CachedClonableIterator::new(g.triples_o(t.object))),
-                )
+                ClonableIterator::from(iter.flat_map(move |object| {
+                    CachedClonableIterator::new(g.triples_o(object).map(|t| t.object))
+                }))
             }
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&pred);
                 if let Some(p_id) = g.predicate_id(&pred) {
                     let g = g.clone();
-                    ClonableIterator::from(iter.flat_map(move |t| {
+                    ClonableIterator::from(iter.flat_map(move |object| {
                         CachedClonableIterator::new(
-                            g.triples_o(t.object).filter(move |t| t.predicate == p_id),
+                            g.triples_o(object)
+                                .filter(move |t| t.predicate == p_id)
+                                .map(|t| t.object),
                         )
                     }))
                 } else {
@@ -81,39 +83,44 @@ struct ManySearchIterator {
     prefixes: Prefixes,
     start: usize,
     stop: Option<usize>,
-    iterator: ClonableIterator<IdTriple>,
+    iterator: ClonableIterator<u64>,
     current: usize,
-    visited: HashSet<IdTriple>,
-    openset: Vec<IdTriple>,
+    visited: HashSet<u64>,
+    openset: Vec<u64>,
     pattern: Rc<Path>,
 }
 
 impl Iterator for ManySearchIterator {
-    type Item = IdTriple;
+    type Item = u64;
 
-    fn next(&mut self) -> Option<IdTriple> {
+    fn next(&mut self) -> Option<u64> {
         loop {
             if self.stop.map_or(false, |x| self.current >= x) {
                 return None;
             }
             let result = self.iterator.next();
-            if let Some(idtriple) = result {
-                if !self.visited.insert(idtriple) {
+            if let Some(id) = result {
+                if !self.visited.insert(id) {
                     continue;
                 }
 
-                self.openset.push(idtriple);
+                self.openset.push(id);
                 if self.current >= self.start {
-                    return Some(idtriple);
+                    return Some(id);
                 }
             } else if self.openset.is_empty() {
                 return None;
-            }else{
+            } else {
                 self.current += 1;
                 let mut openset = Vec::new();
                 std::mem::swap(&mut openset, &mut self.openset);
                 let next_elements = ClonableIterator::from(openset.into_iter());
-                self.iterator = compile_path(&self.graph, self.prefixes.clone(), (*self.pattern).clone(), next_elements);
+                self.iterator = compile_path(
+                    &self.graph,
+                    self.prefixes.clone(),
+                    (*self.pattern).clone(),
+                    next_elements,
+                );
             }
         }
     }
@@ -123,10 +130,10 @@ fn compile_many(
     g: &SyncStoreLayer,
     prefixes: Prefixes,
     path: Rc<Path>,
-    iterator: ClonableIterator<IdTriple>,
+    iterator: ClonableIterator<u64>,
     start: usize,
     stop: Option<usize>,
-) -> ClonableIterator<IdTriple> {
+) -> ClonableIterator<u64> {
     if Some(0) == stop {
         return iterator;
     } else {
@@ -191,9 +198,20 @@ mod tests {
     fn asdfasd() {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
-        builder.add_string_triple(StringTriple::new_node("http://base/a", "http://schema#b", "http://base/c")).unwrap();
-        builder.add_string_triple(StringTriple::new_node("http://base/c", "http://schema#b", "http://base/d")).unwrap();
-
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/a",
+                "http://schema#b",
+                "http://base/c",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/c",
+                "http://schema#b",
+                "http://base/d",
+            ))
+            .unwrap();
 
         let layer = builder.commit().unwrap();
         let prefixes = Prefixes {
@@ -201,12 +219,17 @@ mod tests {
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
             documentation: None,
-            extra_prefixes: Default::default()
+            extra_prefixes: Default::default(),
         };
 
         let p = path("b*").unwrap().1;
-        let id = IdTriple::new(0,0,layer.object_node_id("http://base/a").unwrap());
-        let path_iter = compile_path(&layer, prefixes, p, ClonableIterator::from(vec![id].into_iter()));
+        let id = layer.object_node_id("http://base/a").unwrap();
+        let path_iter = compile_path(
+            &layer,
+            prefixes,
+            p,
+            ClonableIterator::from(vec![id].into_iter()),
+        );
 
         let result: Vec<_> = path_iter.collect();
 
