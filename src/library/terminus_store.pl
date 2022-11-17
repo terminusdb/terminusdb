@@ -542,15 +542,15 @@ object_id(Layer, value(Object), Id) :-
     !,
     object_to_id(Layer, value(Object), Id).
 object_id(_Layer, Object, _Id) :-
-    % This clause is a final check before we fall through to a very expensive case.
-    % It never succeeds, and can only fail or throw.
-    % It will fail if we do intend to fall through, and throw if we are here due to
-    % an error in the call.
+    % This clause is a final check before we fall through to a very
+    % expensive case.  It never succeeds, and can only fail or throw.
+    % It will fail if we do intend to fall through, and throw if we
+    % are here due to an error in the call.
     %
     % The intention is to prevent callers from accidentally and
     % erroneously reaching the final clause due to having called this
     % predicate wrongly (namely, with an Object which is not of the
-    % form _, node(_) or value(_).
+    % form _, node(_) or value(_)).
     (   var(Object)
     ->  fail
     ;   nonvar(Object),
