@@ -1,5 +1,5 @@
-mod compile;
+pub mod compile;
+pub mod iterator;
 mod parse;
-mod iterator;
 
 pub use parse::*;

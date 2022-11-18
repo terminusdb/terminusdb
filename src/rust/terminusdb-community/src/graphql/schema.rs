@@ -11,6 +11,7 @@ use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator};
+use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
@@ -118,6 +119,9 @@ fn add_arguments<'r>(
     mut field: Field<'r, DefaultScalarValue>,
     class_definition: &ClassDefinition,
 ) -> Field<'r, DefaultScalarValue> {
+    if info.is_path {
+        field = field.argument(registry.arg::<Option<String>>("path", &()));
+    }
     field = field.argument(registry.arg::<Option<ID>>("id", &()));
     field = field.argument(
         registry
@@ -180,6 +184,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
             .filter_map(|(name, typedef)| {
                 if let TypeDefinition::Class(c) = typedef {
                     let newinfo = TerminusTypeInfo {
+                        is_path: false,
                         class: name.to_owned(),
                         allframes: info.allframes.clone(),
                     };
@@ -239,6 +244,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
 
             executor.resolve(
                 &TerminusTypeInfo {
+                    is_path: false,
                     class: field_name.to_owned(),
                     allframes: info.allframes.clone(),
                 },
@@ -249,6 +255,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
 }
 
 pub struct TerminusTypeInfo {
+    is_path: bool,
     class: String,
     allframes: Arc<AllFrames>,
 }
@@ -302,6 +309,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             registry,
                             field_name,
                             &TerminusTypeInfo {
+                                is_path: false,
                                 class: document_type.to_owned(),
                                 allframes: frames.clone(),
                             },
@@ -312,6 +320,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             let class_definition =
                                 info.allframes.frames[document_type].as_class_definition();
                             let new_info = TerminusTypeInfo {
+                                is_path: false,
                                 class: document_type.to_owned(),
                                 allframes: info.allframes.clone(),
                             };
@@ -388,6 +397,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                         registry,
                         &field_name,
                         &TerminusTypeInfo {
+                            is_path: false,
                             class: class.to_string(),
                             allframes: frames.clone(),
                         },
@@ -399,73 +409,29 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         }
         fields.append(&mut inverted_fields);
 
+        let mut path_fields: Vec<_> = Vec::new();
+        for (class, _) in &frames.frames {
+            let field_name = format!("_path_to_{class}");
+            let field = Self::register_field::<Vec<TerminusType<'a, C>>>(
+                registry,
+                &field_name,
+                &TerminusTypeInfo {
+                    is_path: true,
+                    class: class.to_string(),
+                    allframes: frames.clone(),
+                },
+                FieldKind::Set,
+            );
+            path_fields.push(field);
+        }
+
+        fields.append(&mut path_fields);
+
         fields.push(registry.field::<ID>("_id", &()));
 
         registry
             .build_object_type::<TerminusType<'a, C>>(info, &fields)
             .into_meta()
-    }
-}
-
-pub struct TerminusEnum {
-    pub value: String,
-}
-
-impl GraphQLType for TerminusEnum {
-    fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.0)
-    }
-
-    fn meta<'r>(
-        info: &Self::TypeInfo,
-        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
-    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
-    where
-        DefaultScalarValue: 'r,
-    {
-        if let TypeDefinition::Enum(e) = &info.1.frames[&info.0] {
-            let values: Vec<_> = e
-                .values
-                .iter()
-                .map(|v| -> EnumValue {
-                    EnumValue {
-                        name: v.to_string(),
-                        description: None,
-                        deprecation_status: DeprecationStatus::Current,
-                    }
-                })
-                .collect();
-
-            registry
-                .build_enum_type::<TerminusEnum>(info, &values)
-                .into_meta()
-        } else {
-            panic!("tried to build meta for enum but this is not an enum");
-        }
-    }
-}
-
-impl FromInputValue for TerminusEnum {
-    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
-        match v {
-            InputValue::Enum(value) => Some(Self {
-                value: value.to_owned(),
-            }),
-            InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
-                value: value.to_owned(),
-            }),
-            _ => None,
-        }
-    }
-}
-
-impl GraphQLValue for TerminusEnum {
-    type Context = ();
-
-    type TypeInfo = (String, Arc<AllFrames>);
-
-    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some("TerminusEnum")
     }
 }
 
@@ -564,21 +530,24 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 // List and array are special since they are *deep* objects
                 match kind {
                     FieldKind::List => {
+                        let instance1 = instance.clone();
+                        let instance2 = instance.clone();
+                        let instance3 = instance.clone();
                         let object_ids = instance
                             .triples_o(self.id)
-                            .flat_map(|t| {
-                                instance
+                            .flat_map(move |t| {
+                                instance1
                                     .predicate_id(RDF_FIRST)
                                     .filter(|rdf_first| t.predicate == *rdf_first)
                                     .map(|_| t.subject)
                             })
-                            .flat_map(|cons| rewind_rdf_list(instance, cons))
-                            .flat_map(|o| {
-                                instance
+                            .flat_map(move |cons| rewind_rdf_list(&instance2, cons))
+                            .flat_map(move |o| {
+                                instance3
                                     .triples_o(o)
                                     .filter(|t| {
                                         t.predicate == field_id
-                                            && subject_has_type(instance, t.subject, &domain_uri)
+                                            && subject_has_type(&instance3, t.subject, &domain_uri)
                                     })
                                     .map(|t| t.subject)
                                     .next()
@@ -588,25 +557,28 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             executor,
                             info,
                             arguments,
-                            object_ids,
-                            instance,
+                            ClonableIterator::new(CachedClonableIterator::new(object_ids)),
+                            &instance,
                         )
                     }
                     FieldKind::Array => {
+                        let instance1 = instance.clone();
+                        let instance2 = instance.clone();
+                        let instance3 = instance.clone();
                         let object_ids = instance
                             .triples_o(self.id)
-                            .flat_map(|t| {
-                                instance
+                            .flat_map(move |t| {
+                                instance1
                                     .predicate_id(SYS_VALUE)
                                     .filter(|sys_value| t.predicate == *sys_value)
                                     .map(|_| t.subject)
                             })
-                            .flat_map(|o| {
-                                instance
+                            .flat_map(move |o| {
+                                instance2
                                     .triples_o(o)
                                     .filter(|t| {
                                         t.predicate == field_id
-                                            && subject_has_type(instance, t.subject, &domain_uri)
+                                            && subject_has_type(&instance3, t.subject, &domain_uri)
                                     })
                                     .map(|t| t.subject)
                                     .next()
@@ -616,16 +588,17 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             executor,
                             info,
                             arguments,
-                            object_ids,
-                            instance,
+                            ClonableIterator::new(CachedClonableIterator::new(object_ids)),
+                            &instance,
                         )
                     }
                     _ => {
+                        let instance1 = instance.clone();
                         let object_ids = instance
                             .triples_o(self.id)
                             .filter(move |t| {
                                 t.predicate == field_id
-                                    && subject_has_type(instance, t.subject, &domain_uri)
+                                    && subject_has_type(&instance1, t.subject, &domain_uri)
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
@@ -633,7 +606,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             executor,
                             info,
                             arguments,
-                            object_ids,
+                            ClonableIterator::new(CachedClonableIterator::new(object_ids)),
                             instance,
                         )
                     }
@@ -662,6 +635,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         if let Some(doc_type) = doc_type {
                             Some(executor.resolve(
                                 &TerminusTypeInfo {
+                                    is_path: false,
                                     class: doc_type.to_string(),
                                     allframes: allframes.clone(),
                                 },
@@ -689,6 +663,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                 if let Some(doc_type) = doc_type {
                                     Some(executor.resolve(
                                         &TerminusTypeInfo {
+                                            is_path: false,
                                             class: doc_type.to_string(),
                                             allframes: info.allframes.clone(),
                                         },
@@ -703,14 +678,18 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         }
                     }
                     FieldKind::Set => {
-                        let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
+                        let object_ids = ClonableIterator::new(CachedClonableIterator::new(
+                            instance.triples_sp(self.id, field_id).map(|t| t.object),
+                        ));
                         collect_into_graphql_list(
                             doc_type, executor, info, arguments, object_ids, instance,
                         )
                     }
                     FieldKind::Cardinality => {
                         // pretty much a set actually
-                        let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
+                        let object_ids = ClonableIterator::new(CachedClonableIterator::new(
+                            instance.triples_sp(self.id, field_id).map(|t| t.object),
+                        ));
                         collect_into_graphql_list(
                             doc_type, executor, info, arguments, object_ids, instance,
                         )
@@ -720,13 +699,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             .single_triple_sp(self.id, field_id)
                             .expect("list element expected but not found")
                             .object;
-                        let object_ids = RdfListIterator {
-                            layer: instance,
-                            cur: list_id,
-                            rdf_first_id: instance.predicate_id(RDF_FIRST),
-                            rdf_rest_id: instance.predicate_id(RDF_REST),
-                            rdf_nil_id: instance.subject_id(RDF_NIL),
-                        };
+                        let object_ids =
+                            ClonableIterator::new(CachedClonableIterator::new(RdfListIterator {
+                                layer: instance,
+                                cur: list_id,
+                                rdf_first_id: instance.predicate_id(RDF_FIRST),
+                                rdf_rest_id: instance.predicate_id(RDF_REST),
+                                rdf_nil_id: instance.subject_id(RDF_NIL),
+                            }));
                         collect_into_graphql_list(
                             doc_type, executor, info, arguments, object_ids, instance,
                         )
@@ -747,7 +727,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
                         let mut elements: Vec<_> = array_iterator.collect();
                         elements.sort();
-                        let elements_iterator = elements.into_iter().map(|(_, elt)| elt);
+                        let elements_iterator = ClonableIterator::new(CachedClonableIterator::new(
+                            elements.into_iter().map(|(_, elt)| elt),
+                        ));
                         collect_into_graphql_list(
                             doc_type,
                             executor,
@@ -766,8 +748,68 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             Some(r) => r,
             None => Ok(Value::Null),
         }
-        //Ok(Value::List(vec![Value::Scalar(DefaultScalarValue::String("cow!".to_string())),
-        //                    Value::Scalar(DefaultScalarValue::String("duck!".to_string()))]))
+    }
+}
+
+pub struct TerminusEnum {
+    pub value: String,
+}
+
+impl GraphQLType for TerminusEnum {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(&info.0)
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        if let TypeDefinition::Enum(e) = &info.1.frames[&info.0] {
+            let values: Vec<_> = e
+                .values
+                .iter()
+                .map(|v| -> EnumValue {
+                    EnumValue {
+                        name: v.to_string(),
+                        description: None,
+                        deprecation_status: DeprecationStatus::Current,
+                    }
+                })
+                .collect();
+
+            registry
+                .build_enum_type::<TerminusEnum>(info, &values)
+                .into_meta()
+        } else {
+            panic!("tried to build meta for enum but this is not an enum");
+        }
+    }
+}
+
+impl FromInputValue for TerminusEnum {
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        match v {
+            InputValue::Enum(value) => Some(Self {
+                value: value.to_owned(),
+            }),
+            InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
+                value: value.to_owned(),
+            }),
+            _ => None,
+        }
+    }
+}
+
+impl GraphQLValue for TerminusEnum {
+    type Context = ();
+
+    type TypeInfo = (String, Arc<AllFrames>);
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("TerminusEnum")
     }
 }
 
@@ -790,13 +832,13 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-fn collect_into_graphql_list<C: QueryableContextType>(
-    doc_type: Option<&str>,
-    executor: &juniper::Executor<TerminusContext<C>>,
-    info: &TerminusTypeInfo,
-    arguments: &juniper::Arguments,
-    object_ids: impl Iterator<Item = u64>,
-    instance: &SyncStoreLayer,
+fn collect_into_graphql_list<'a, C: QueryableContextType>(
+    doc_type: Option<&'a str>,
+    executor: &'a juniper::Executor<TerminusContext<C>>,
+    info: &'a TerminusTypeInfo,
+    arguments: &'a juniper::Arguments,
+    object_ids: ClonableIterator<'a, u64>,
+    instance: &'a SyncStoreLayer,
 ) -> Option<Result<Value, juniper::FieldError>> {
     if let Some(doc_type) = doc_type {
         let object_ids = match executor.context().instance.as_ref() {
@@ -806,13 +848,14 @@ fn collect_into_graphql_list<C: QueryableContextType>(
                 arguments,
                 doc_type,
                 &info.allframes,
-                Some(Box::new(object_ids)),
+                Some(object_ids),
             ),
             None => vec![],
         };
         let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
         Some(executor.resolve(
             &TerminusTypeInfo {
+                is_path: false,
                 class: doc_type.to_string(),
                 allframes: info.allframes.clone(),
             },

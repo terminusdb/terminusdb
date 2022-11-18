@@ -9,7 +9,7 @@ use swipl::prelude::*;
 
 mod filter;
 pub mod frame;
-mod query;
+pub mod query;
 mod sanitize;
 mod schema;
 mod top;

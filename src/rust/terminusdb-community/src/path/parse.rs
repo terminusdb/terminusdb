@@ -132,7 +132,7 @@ fn ands(input: &str) -> IResult<&str, Path> {
     ))(input)
 }
 
-pub fn path(input: &str) -> IResult<&str, Path> {
+pub fn parse_path(input: &str) -> IResult<&str, Path> {
     ands(input)
 }
 
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn parse_cons_chaser() {
         let source = "p,rdf:rest*,rdf:first";
-        let results = path(source);
+        let results = parse_path(source);
         assert_eq!(
             results,
             Ok((
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn parse_backward_repeat_group() {
         let source = "(<effect,cause)+";
-        let results = path(source);
+        let results = parse_path(source);
         assert_eq!(
             results,
             Ok((
@@ -183,14 +183,14 @@ mod tests {
     #[test]
     fn parse_any() {
         let source = ".";
-        let results = path(source);
+        let results = parse_path(source);
         assert_eq!(results, Ok(("", Path::Positive(Pred::Any))))
     }
 
     #[test]
     fn parse_something() {
         let source = "(forward,.,<backward)+";
-        let results = path(source);
+        let results = parse_path(source);
         assert_eq!(
             results,
             Ok((
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn repeated_choice() {
         let source = "(child|database)*";
-        let results = path(source);
+        let results = parse_path(source);
         assert_eq!(
             results,
             Ok((
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn and_then_n_m() {
         let source = "first,(second,third){1,4}";
-        let results = path(source);
+        let results = parse_path(source);
         assert_eq!(
             results,
             Ok((

@@ -4,16 +4,43 @@ use std::rc::Rc;
 use super::iterator::*;
 use super::parse::*;
 
-use crate::graphql::frame::Prefixes;
+use crate::consts::RDF_TYPE;
+use crate::graphql::frame::{AllFrames, Prefixes};
+use crate::graphql::query::{predicate_value_iter, NodeOrValue};
 use crate::terminus_store::layer::*;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-fn compile_path(
-    g: &SyncStoreLayer,
+pub fn path_for_type<'a, 'b>(
+    path_string: &'b str,
+    g: &'a SyncStoreLayer,
+    class_name: &'a str,
+    all_frames: &'a AllFrames,
+    zero_iter_opt: Option<ClonableIterator<'a, u64>>,
+) -> ClonableIterator<'a, u64> {
+    let zero_iter = match zero_iter_opt {
+        Some(zero_iter) => zero_iter,
+        None => {
+            let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+            ClonableIterator::new(predicate_value_iter(
+                g,
+                &RDF_TYPE,
+                &NodeOrValue::Node,
+                expanded_type_name,
+            ))
+        }
+    };
+    let path = parse_path(path_string)
+        .expect("Did not give a valid path")
+        .1;
+    compile_path(&g, all_frames.context.clone(), path, zero_iter)
+}
+
+fn compile_path<'a>(
+    g: &'a SyncStoreLayer,
     prefixes: Prefixes,
     path: Path,
-    mut iter: ClonableIterator<u64>,
-) -> ClonableIterator<u64> {
+    mut iter: ClonableIterator<'a, u64>,
+) -> ClonableIterator<'a, u64> {
     match path {
         Path::Seq(vec) => {
             for sub_path in vec {
@@ -23,43 +50,34 @@ fn compile_path(
         }
         Path::Choice(vec) => {
             let branch = iter.clone();
-            let g = g.clone();
             let result = vec
                 .into_iter()
                 .map(move |sub_path| compile_path(&g, prefixes.clone(), sub_path, branch.clone()));
-            ClonableIterator::from(result.flatten())
+            ClonableIterator::new(result.flatten())
         }
         Path::Positive(p) => match p {
-            Pred::Any => {
-                let g = g.clone();
-                ClonableIterator::from(iter.flat_map(move |object| {
-                    CachedClonableIterator::new(g.triples_s(object).map(|t| t.object))
-                }))
-            }
+            Pred::Any => ClonableIterator::new(iter.flat_map(move |object| {
+                CachedClonableIterator::new(g.triples_s(object).map(|t| t.object))
+            })),
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&pred);
                 if let Some(p_id) = g.predicate_id(&pred) {
-                    let g = g.clone();
-                    ClonableIterator::from(iter.flat_map(move |object| {
+                    ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(g.triples_sp(object, p_id).map(|t| t.object))
                     }))
                 } else {
-                    ClonableIterator::from(std::iter::empty())
+                    ClonableIterator::new(std::iter::empty())
                 }
             }
         },
         Path::Negative(p) => match p {
-            Pred::Any => {
-                let g = g.clone();
-                ClonableIterator::from(iter.flat_map(move |object| {
-                    CachedClonableIterator::new(g.triples_o(object).map(|t| t.subject))
-                }))
-            }
+            Pred::Any => ClonableIterator::new(iter.flat_map(move |object| {
+                CachedClonableIterator::new(g.triples_o(object).map(|t| t.subject))
+            })),
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&pred);
                 if let Some(p_id) = g.predicate_id(&pred) {
-                    let g = g.clone();
-                    ClonableIterator::from(iter.flat_map(move |object| {
+                    ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(
                             g.triples_o(object)
                                 .filter(move |t| t.predicate == p_id)
@@ -67,7 +85,7 @@ fn compile_path(
                         )
                     }))
                 } else {
-                    ClonableIterator::from(std::iter::empty())
+                    ClonableIterator::new(std::iter::empty())
                 }
             }
         },
@@ -78,19 +96,19 @@ fn compile_path(
 }
 
 #[derive(Clone)]
-struct ManySearchIterator {
-    graph: SyncStoreLayer,
+struct ManySearchIterator<'a> {
+    graph: &'a SyncStoreLayer,
     prefixes: Prefixes,
     start: usize,
     stop: Option<usize>,
-    iterator: ClonableIterator<u64>,
+    iterator: ClonableIterator<'a, u64>,
     current: usize,
     visited: HashSet<u64>,
     openset: Vec<u64>,
     pattern: Rc<Path>,
 }
 
-impl Iterator for ManySearchIterator {
+impl<'a> Iterator for ManySearchIterator<'a> {
     type Item = u64;
 
     fn next(&mut self) -> Option<u64> {
@@ -114,7 +132,7 @@ impl Iterator for ManySearchIterator {
                 self.current += 1;
                 let mut openset = Vec::new();
                 std::mem::swap(&mut openset, &mut self.openset);
-                let next_elements = ClonableIterator::from(openset.into_iter());
+                let next_elements = ClonableIterator::new(openset.into_iter());
                 self.iterator = compile_path(
                     &self.graph,
                     self.prefixes.clone(),
@@ -126,19 +144,19 @@ impl Iterator for ManySearchIterator {
     }
 }
 
-fn compile_many(
-    g: &SyncStoreLayer,
+fn compile_many<'a>(
+    g: &'a SyncStoreLayer,
     prefixes: Prefixes,
     path: Rc<Path>,
-    iterator: ClonableIterator<u64>,
+    iterator: ClonableIterator<'a, u64>,
     start: usize,
     stop: Option<usize>,
-) -> ClonableIterator<u64> {
+) -> ClonableIterator<'a, u64> {
     if Some(0) == stop {
         return iterator;
     } else {
-        ClonableIterator::from(ManySearchIterator {
-            graph: g.clone(),
+        ClonableIterator::new(ManySearchIterator {
+            graph: g,
             prefixes: prefixes.clone(),
             start,
             stop,
@@ -161,7 +179,7 @@ mod tests {
     fn clonable() {
         let v = vec![1, 2, 3, 4, 5];
         let i = v.into_iter();
-        let b: ClonableIterator<usize> = ClonableIterator::from(i);
+        let b: ClonableIterator<usize> = ClonableIterator::new(i);
 
         let b2 = b.clone();
         let b3 = b2.clone();
@@ -178,7 +196,7 @@ mod tests {
     fn flatten() {
         let v = vec![1, 2, 3, 4, 5];
         let i = v.into_iter();
-        let b: ClonableIterator<usize> = ClonableIterator::from(i);
+        let b: ClonableIterator<usize> = ClonableIterator::new(i);
 
         let my_iter = b.flat_map(|x| {
             let mut vec = Vec::new();
@@ -222,13 +240,13 @@ mod tests {
             extra_prefixes: Default::default(),
         };
 
-        let p = path("b*").unwrap().1;
+        let p = parse_path("b*").unwrap().1;
         let id = layer.object_node_id("http://base/a").unwrap();
         let path_iter = compile_path(
             &layer,
             prefixes,
             p,
-            ClonableIterator::from(vec![id].into_iter()),
+            ClonableIterator::new(vec![id].into_iter()),
         );
 
         let result: Vec<_> = path_iter
@@ -284,13 +302,13 @@ mod tests {
             extra_prefixes: Default::default(),
         };
 
-        let p = path("b*,e").unwrap().1;
+        let p = parse_path("b*,e").unwrap().1;
         let id = layer.object_node_id("http://base/a").unwrap();
         let path_iter = compile_path(
             &layer,
             prefixes,
             p,
-            ClonableIterator::from(vec![id].into_iter()),
+            ClonableIterator::new(vec![id].into_iter()),
         );
 
         let result: Vec<_> = path_iter
@@ -343,13 +361,13 @@ mod tests {
             extra_prefixes: Default::default(),
         };
 
-        let p = path("b,<e,b*").unwrap().1;
+        let p = parse_path("b,<e,b*").unwrap().1;
         let id = layer.object_node_id("http://base/a").unwrap();
         let path_iter = compile_path(
             &layer,
             prefixes,
             p,
-            ClonableIterator::from(vec![id].into_iter()),
+            ClonableIterator::new(vec![id].into_iter()),
         );
 
         let result: Vec<_> = path_iter

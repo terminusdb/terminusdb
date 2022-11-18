@@ -1,30 +1,32 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-trait InnerClonableIterator {
+trait InnerClonableIterator<'a> {
     type Item;
 
-    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<Item = Self::Item>>;
-    fn iter(&self) -> Box<dyn Iterator<Item = Self::Item>>;
+    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item>>;
+    fn iter(&self) -> Box<dyn Iterator<Item = Self::Item> + 'a>;
     fn next_impl(&mut self) -> Option<Self::Item>;
 }
 
-pub struct ConcreteClonableIterator<T: 'static, I: Iterator<Item = T> + Clone + 'static> {
+pub struct ConcreteClonableIterator<'a, T, I: Iterator<Item = T> + Clone + 'a> {
+    _a: std::marker::PhantomData<&'a bool>,
     iterator: I,
 }
 
-impl<T: 'static, I: Iterator<Item = T> + Clone + 'static> InnerClonableIterator
-    for ConcreteClonableIterator<T, I>
+impl<'a, T: 'a, I: Iterator<Item = T> + Clone + 'a> InnerClonableIterator<'a>
+    for ConcreteClonableIterator<'a, T, I>
 {
     type Item = T;
 
-    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<Item = Self::Item>> {
+    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item>> {
         Box::new(Self {
+            _a: Default::default(),
             iterator: self.iterator.clone(),
         })
     }
 
-    fn iter(&self) -> Box<dyn Iterator<Item = Self::Item>> {
+    fn iter(&self) -> Box<dyn Iterator<Item = Self::Item> + 'a> {
         Box::new(self.iterator.clone())
     }
 
@@ -33,38 +35,43 @@ impl<T: 'static, I: Iterator<Item = T> + Clone + 'static> InnerClonableIterator
     }
 }
 
-impl<T: 'static, I: Iterator<Item = T> + Clone + 'static> From<I>
-    for ConcreteClonableIterator<T, I>
-{
+impl<'a, T: 'a, I: Iterator<Item = T> + Clone + 'a> From<I> for ConcreteClonableIterator<'a, T, I> {
     fn from(iterator: I) -> Self {
-        ConcreteClonableIterator { iterator }
+        ConcreteClonableIterator {
+            _a: Default::default(),
+            iterator,
+        }
     }
 }
 
-impl<'a, T: 'static, I: Iterator<Item = T> + Clone + 'static> From<&'a I>
-    for ConcreteClonableIterator<T, I>
+impl<'a, T: 'a, I: Iterator<Item = T> + Clone + 'a> From<&'a I>
+    for ConcreteClonableIterator<'a, T, I>
 {
     fn from(iterator: &'a I) -> Self {
         ConcreteClonableIterator {
+            _a: Default::default(),
             iterator: iterator.clone(),
         }
     }
 }
 
-impl<T, I: Iterator<Item = T> + Clone> Iterator for ConcreteClonableIterator<T, I> {
+impl<'a, T: 'a, I: Iterator<Item = T> + Clone> Iterator for ConcreteClonableIterator<'a, T, I> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.iterator.next()
     }
 }
 
-pub struct ClonableIterator<T> {
-    i: Box<dyn InnerClonableIterator<Item = T>>,
+pub struct ClonableIterator<'a, T> {
+    i: Box<dyn InnerClonableIterator<'a, Item = T>>,
 }
 
-impl<T: 'static> ClonableIterator<T> {
-    pub fn from<I: Iterator<Item = T> + Clone + 'static>(iterator: I) -> Self {
-        let concrete = ConcreteClonableIterator { iterator };
+impl<'a, T: 'a> ClonableIterator<'a, T> {
+    pub fn new<I: Iterator<Item = T> + Clone + 'a>(iterator: I) -> Self {
+        let concrete = ConcreteClonableIterator {
+            _a: Default::default(),
+            iterator,
+        };
 
         Self {
             i: Box::new(concrete),
@@ -72,7 +79,7 @@ impl<T: 'static> ClonableIterator<T> {
     }
 }
 
-impl<T> Clone for ClonableIterator<T> {
+impl<'a, T> Clone for ClonableIterator<'a, T> {
     fn clone(&self) -> Self {
         Self {
             i: self.i.clone_boxed(),
@@ -80,7 +87,7 @@ impl<T> Clone for ClonableIterator<T> {
     }
 }
 
-impl<T> Iterator for ClonableIterator<T> {
+impl<'a, T> Iterator for ClonableIterator<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
@@ -88,13 +95,13 @@ impl<T> Iterator for ClonableIterator<T> {
     }
 }
 
-struct CachedClonableIteratorState<T: Clone> {
-    i: Box<dyn Iterator<Item = T>>,
+struct CachedClonableIteratorState<'a, T: Clone> {
+    i: Box<dyn Iterator<Item = T> + 'a>,
     cache: Vec<T>,
     done: bool,
 }
 
-impl<T: Clone> CachedClonableIteratorState<T> {
+impl<'a, T: Clone> CachedClonableIteratorState<'a, T> {
     fn next(&mut self, current_pos: usize) -> Option<T> {
         if self.done {
             return None;
@@ -119,13 +126,13 @@ impl<T: Clone> CachedClonableIteratorState<T> {
 }
 
 #[derive(Clone)]
-pub struct CachedClonableIterator<T: Clone> {
+pub struct CachedClonableIterator<'a, T: Clone + 'a> {
     pos: usize,
-    state: Rc<RefCell<CachedClonableIteratorState<T>>>,
+    state: Rc<RefCell<CachedClonableIteratorState<'a, T>>>,
 }
 
-impl<T: Clone> CachedClonableIterator<T> {
-    pub fn new(i: impl Iterator<Item = T> + 'static) -> Self {
+impl<'a, T: Clone + 'a> CachedClonableIterator<'a, T> {
+    pub fn new(i: impl Iterator<Item = T> + 'a) -> Self {
         let state = CachedClonableIteratorState {
             i: Box::new(i),
             cache: Vec::new(),
@@ -139,7 +146,7 @@ impl<T: Clone> CachedClonableIterator<T> {
     }
 }
 
-impl<T: Clone> Iterator for CachedClonableIterator<T> {
+impl<'a, T: Clone + 'a> Iterator for CachedClonableIterator<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
@@ -181,8 +188,8 @@ mod tests {
         let v1 = vec![3, 0, 5];
         let v2 = vec![1, 8, 6];
 
-        let i1 = ClonableIterator::from(v1.into_iter());
-        let i2 = ClonableIterator::from(v2.into_iter());
+        let i1 = ClonableIterator::new(v1.into_iter());
+        let i2 = ClonableIterator::new(v2.into_iter());
 
         let ci1 = vec![i1.clone(), i2.clone()].into_iter().flatten();
         let ci2 = vec![i1.clone(), i2.clone()].into_iter().flatten();
