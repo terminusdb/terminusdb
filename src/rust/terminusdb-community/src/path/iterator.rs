@@ -4,7 +4,7 @@ use std::rc::Rc;
 trait InnerClonableIterator<'a> {
     type Item;
 
-    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item>>;
+    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item> + 'a>;
     fn iter(&self) -> Box<dyn Iterator<Item = Self::Item> + 'a>;
     fn next_impl(&mut self) -> Option<Self::Item>;
 }
@@ -19,7 +19,7 @@ impl<'a, T: 'a, I: Iterator<Item = T> + Clone + 'a> InnerClonableIterator<'a>
 {
     type Item = T;
 
-    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item>> {
+    fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item> + 'a> {
         Box::new(Self {
             _a: Default::default(),
             iterator: self.iterator.clone(),
@@ -63,7 +63,7 @@ impl<'a, T: 'a, I: Iterator<Item = T> + Clone> Iterator for ConcreteClonableIter
 }
 
 pub struct ClonableIterator<'a, T> {
-    i: Box<dyn InnerClonableIterator<'a, Item = T>>,
+    i: Box<dyn InnerClonableIterator<'a, Item = T> + 'a>,
 }
 
 impl<'a, T: 'a> ClonableIterator<'a, T> {
