@@ -2341,10 +2341,8 @@ initialise_hup :-
 :- initialise_hup.
 
 initialise_log_settings :-
-    (   getenv('TERMINUSDB_LOG_PATH', Log_Path)
-    ->  set_setting(http:logfile, Log_Path)
-    ;   get_time(Time),
-        asserta(http_log:log_stream(user_error, Time))).
+    get_time(Time),
+    asserta(http_log:log_stream(user_error, Time)).
 
 :- multifile prolog:message//1.
 
