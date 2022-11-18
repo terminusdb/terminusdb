@@ -153,7 +153,7 @@ fn compile_many(
 
 #[cfg(test)]
 mod tests {
-    use terminusdb_store_prolog::terminus_store::{open_memory_store, open_sync_memory_store};
+    use terminusdb_store_prolog::terminus_store::open_sync_memory_store;
 
     use super::*;
 
@@ -231,8 +231,139 @@ mod tests {
             ClonableIterator::from(vec![id].into_iter()),
         );
 
-        let result: Vec<_> = path_iter.collect();
+        let result: Vec<_> = path_iter
+            .map(|object| layer.id_object_node(object))
+            .flatten()
+            .collect();
 
-        panic!("{result:?}");
+        assert_eq!(
+            result,
+            vec!["http://base/a", "http://base/c", "http://base/d"]
+        );
+    }
+
+    #[test]
+    fn cycle() {
+        let store = open_sync_memory_store();
+        let builder = store.create_base_layer().unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/a",
+                "http://schema#b",
+                "http://base/c",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/c",
+                "http://schema#b",
+                "http://base/d",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/d",
+                "http://schema#b",
+                "http://base/a",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/a",
+                "http://schema#e",
+                "http://base/z",
+            ))
+            .unwrap();
+
+        let layer = builder.commit().unwrap();
+        let prefixes = Prefixes {
+            kind: "@context".to_string(),
+            base: "http://base/".to_string(),
+            schema: "http://schema#".to_string(),
+            documentation: None,
+            extra_prefixes: Default::default(),
+        };
+
+        let p = path("b*,e").unwrap().1;
+        let id = layer.object_node_id("http://base/a").unwrap();
+        let path_iter = compile_path(
+            &layer,
+            prefixes,
+            p,
+            ClonableIterator::from(vec![id].into_iter()),
+        );
+
+        let result: Vec<_> = path_iter
+            .map(|object| layer.id_object_node(object))
+            .flatten()
+            .collect();
+
+        assert_eq!(result, vec!["http://base/z".to_string()]);
+    }
+
+    #[test]
+    fn backwards() {
+        let store = open_sync_memory_store();
+        let builder = store.create_base_layer().unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/a",
+                "http://schema#b",
+                "http://base/c",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/o",
+                "http://schema#e",
+                "http://base/c",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/o",
+                "http://schema#b",
+                "http://base/q",
+            ))
+            .unwrap();
+        builder
+            .add_string_triple(StringTriple::new_node(
+                "http://base/q",
+                "http://schema#b",
+                "http://base/r",
+            ))
+            .unwrap();
+
+        let layer = builder.commit().unwrap();
+        let prefixes = Prefixes {
+            kind: "@context".to_string(),
+            base: "http://base/".to_string(),
+            schema: "http://schema#".to_string(),
+            documentation: None,
+            extra_prefixes: Default::default(),
+        };
+
+        let p = path("b,<e,b*").unwrap().1;
+        let id = layer.object_node_id("http://base/a").unwrap();
+        let path_iter = compile_path(
+            &layer,
+            prefixes,
+            p,
+            ClonableIterator::from(vec![id].into_iter()),
+        );
+
+        let result: Vec<_> = path_iter
+            .map(|object| layer.id_object_node(object))
+            .flatten()
+            .collect();
+
+        assert_eq!(
+            result,
+            vec![
+                "http://base/o".to_string(),
+                "http://base/q".to_string(),
+                "http://base/r".to_string()
+            ]
+        );
     }
 }
