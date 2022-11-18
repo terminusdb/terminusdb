@@ -1,9 +1,9 @@
 use juniper::{
-    http::{graphiql::graphiql_source, GraphQLRequest},
+    http::{GraphQLRequest},
     EmptyMutation, EmptySubscription, RootNode,
 };
 
-use std::io::{Read, Write};
+use std::io::{Read};
 use std::sync::Arc;
 use swipl::prelude::*;
 
@@ -55,23 +55,8 @@ predicates! {
             Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
-
-    #[module("$graphql")]
-    semidet fn graphiql(context, path_term, output_term, port_term) {
-        let port: u64 = port_term.get_ex()?;
-        let path: String = path_term.get_ex()?;
-        let full_url: String = format!("http://localhost:{}/api/graphql/{}", port, path);
-        let source = graphiql_source(&full_url, None);
-
-        let mut stream: WritablePrologStream = output_term.get_ex()?;
-        context.try_or_die_generic(write!(stream, "Status: 200\n\n"))?;
-        context.try_or_die_generic(stream.write_all(source.as_bytes()))?;
-
-        Ok(())
-    }
 }
 
 pub fn register() {
     register_handle_request();
-    register_graphiql();
 }

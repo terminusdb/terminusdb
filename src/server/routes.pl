@@ -2970,9 +2970,8 @@ http:location(graphiql,root(graphiql),[]).
                  methods([options,get])]).
 
 graphiql_handler(_Method, Path_Atom, _Request, _System_DB, _Auth) :-
-    server_port(Port),
     atom_string(Path_Atom, Path),
-    format(string(Full_Path), "http://localhost:~d/api/graphql/~s", [Port, Path]),
+    format(string(Full_Path), "/api/graphql/~s", [Path]),
     graphiql_template(Template),
     format(string(Result), Template, [Full_Path]),
     throw(http_reply(bytes('text/html', Result))).

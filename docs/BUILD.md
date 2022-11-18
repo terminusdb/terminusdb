@@ -40,19 +40,19 @@ below.
 **Using `apt-get`**
 
 ```sh
-sudo apt-get install findutils make clang git
+sudo apt-get install findutils make clang git libgmp-dev
 ```
 
 **Using `dnf`**
 
 ```sh
-sudo dnf install findutils make clang git
+sudo dnf install findutils make clang git gmp-devel
 ```
 
 **Using `pacman`**
 
 ```sh
-sudo pacman -S findutils make clang git
+sudo pacman -S findutils make clang git gmp
 ```
 
 #### 1.2 Install Rust
@@ -139,6 +139,7 @@ sudo pacman -S swi-prolog
 **Using `brew`**
 
 ```sh
+brew install gmp
 brew install swi-prolog
 ```
 
