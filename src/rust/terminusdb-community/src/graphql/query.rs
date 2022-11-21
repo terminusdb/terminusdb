@@ -393,7 +393,32 @@ fn compile_filter_object(
     compile_edges_to_filter(class_name, all_frames, class_definition, &edges)
 }
 
-fn predicate_value_iter<'a>(
+pub fn predicate_value_filter<'a>(
+    g: &'a SyncStoreLayer,
+    property: &'a str,
+    object_type: &NodeOrValue,
+    object: String,
+    iter: ClonableIterator<'a, u64>,
+) -> ClonableIterator<'a, u64> {
+    let maybe_property_id = g.predicate_id(property);
+    if let Some(property_id) = maybe_property_id {
+        let maybe_object_id = match object_type {
+            NodeOrValue::Value => g.object_value_id(&object),
+            NodeOrValue::Node => g.object_node_id(&object),
+        };
+        if let Some(object_id) = maybe_object_id {
+            ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
+                g.triples_sp(*s, property_id).any(|t| t.object == object_id)
+            })))
+        } else {
+            ClonableIterator::new(std::iter::empty())
+        }
+    } else {
+        ClonableIterator::new(std::iter::empty())
+    }
+}
+
+pub fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
     object_type: &NodeOrValue,
@@ -749,13 +774,27 @@ pub fn run_filter_query<'a>(
     all_frames: &AllFrames,
     zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>>,
 ) -> Vec<u64> {
-    let new_zero_iter: Option<Box<dyn Iterator<Item = u64> + 'a>> = match arguments.get::<ID>("id")
-    {
-        Some(id_string) => Some({
-            if let Some(id) = g.subject_id(&*id_string) {
-                match zero_iter {
-                    None => Box::new(vec![id].into_iter()),
-                    Some(zi) => Box::new(zi.filter(move |i| *i == id)),
+    let new_zero_iter: Option<ClonableIterator<'a, u64>> =
+        if let Some(id_string) = arguments.get::<ID>("id") {
+            Some({
+                if let Some(id) = g.subject_id(&*id_string) {
+                    match zero_iter {
+                        None => {
+                            let zi = ClonableIterator::new(vec![id].into_iter());
+                            let expanded_type_name =
+                                all_frames.fully_qualified_class_name(&class_name.to_string());
+                            predicate_value_filter(
+                                g,
+                                &RDF_TYPE,
+                                &NodeOrValue::Node,
+                                expanded_type_name,
+                                zi,
+                            )
+                        }
+                        Some(zi) => ClonableIterator::new(zi.filter(move |i| *i == id)),
+                    }
+                } else {
+                    ClonableIterator::new(std::iter::empty())
                 }
             } else {
                 Box::new(std::iter::empty())
