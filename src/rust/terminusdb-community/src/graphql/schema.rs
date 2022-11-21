@@ -119,9 +119,6 @@ fn add_arguments<'r>(
     mut field: Field<'r, DefaultScalarValue>,
     class_definition: &ClassDefinition,
 ) -> Field<'r, DefaultScalarValue> {
-    if info.is_path {
-        field = field.argument(registry.arg::<Option<String>>("path", &()));
-    }
     field = field.argument(registry.arg::<Option<ID>>("id", &()));
     field = field.argument(
         registry
@@ -184,7 +181,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
             .filter_map(|(name, typedef)| {
                 if let TypeDefinition::Class(c) = typedef {
                     let newinfo = TerminusTypeInfo {
-                        is_path: false,
                         class: name.to_owned(),
                         allframes: info.allframes.clone(),
                     };
@@ -244,7 +240,6 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
 
             executor.resolve(
                 &TerminusTypeInfo {
-                    is_path: false,
                     class: field_name.to_owned(),
                     allframes: info.allframes.clone(),
                 },
@@ -255,7 +250,6 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
 }
 
 pub struct TerminusTypeInfo {
-    is_path: bool,
     class: String,
     allframes: Arc<AllFrames>,
 }
@@ -309,7 +303,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             registry,
                             field_name,
                             &TerminusTypeInfo {
-                                is_path: false,
                                 class: document_type.to_owned(),
                                 allframes: frames.clone(),
                             },
@@ -320,7 +313,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             let class_definition =
                                 info.allframes.frames[document_type].as_class_definition();
                             let new_info = TerminusTypeInfo {
-                                is_path: false,
                                 class: document_type.to_owned(),
                                 allframes: info.allframes.clone(),
                             };
@@ -393,16 +385,18 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                 for (field_name, ifd) in inverted_type.domain.iter() {
                     let class = &ifd.class;
                     let kind = &ifd.kind;
-                    let field = Self::register_field::<Vec<TerminusType<'a, C>>>(
+                    let class_definition = info.allframes.frames[class].as_class_definition();
+                    let new_info = TerminusTypeInfo {
+                        class: class.to_string(),
+                        allframes: frames.clone(),
+                    };
+                    let field = Self::register_field::<TerminusType<'a, C>>(
                         registry,
                         &field_name,
-                        &TerminusTypeInfo {
-                            is_path: false,
-                            class: class.to_string(),
-                            allframes: frames.clone(),
-                        },
+                        &new_info,
                         kind.clone(),
                     );
+                    let field = add_arguments(&new_info, registry, field, class_definition);
                     inverted_fields.push(field);
                 }
             }
@@ -412,16 +406,19 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         let mut path_fields: Vec<_> = Vec::new();
         for (class, _) in &frames.frames {
             let field_name = format!("_path_to_{class}");
-            let field = Self::register_field::<Vec<TerminusType<'a, C>>>(
+            let class_definition = info.allframes.frames[class].as_class_definition();
+            let new_info = TerminusTypeInfo {
+                class: class.to_string(),
+                allframes: frames.clone(),
+            };
+            let field = Self::register_field::<TerminusType<'a, C>>(
                 registry,
                 &field_name,
-                &TerminusTypeInfo {
-                    is_path: true,
-                    class: class.to_string(),
-                    allframes: frames.clone(),
-                },
+                &new_info,
                 FieldKind::Set,
             );
+            let field = add_arguments(&new_info, registry, field, class_definition);
+            let field = field.argument(registry.arg::<String>("path", &()));
             path_fields.push(field);
         }
 
@@ -447,9 +444,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
     where
         DefaultScalarValue: 'r,
     {
-        let name = &info.class;
+        let class = &info.class;
         let allframes = &info.allframes;
-        let frame = &allframes.frames[name];
+        let frame = &allframes.frames[class];
         match frame {
             TypeDefinition::Class(d) => Self::generate_class_type(d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
@@ -611,8 +608,20 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                 }
+            } else if is_path_field_name(field_name) {
+                let class = &field_name[9..field_name.len()];
+                let ids = vec![self.id].into_iter();
+                collect_into_graphql_list(
+                    Some(class),
+                    executor,
+                    info,
+                    arguments,
+                    ClonableIterator::new(CachedClonableIterator::new(ids)),
+                    instance,
+                )
             } else {
-                let field_name_expanded = allframes.context.expand_schema(field_name);
+                eprintln!("Field name: {field_name}");
+                let field_name_expanded = allframes.context.expand_schema(&field_name);
                 let field_id = instance.predicate_id(&field_name_expanded)?;
 
                 let frame = &allframes.frames[&info.class];
@@ -635,7 +644,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         if let Some(doc_type) = doc_type {
                             Some(executor.resolve(
                                 &TerminusTypeInfo {
-                                    is_path: false,
                                     class: doc_type.to_string(),
                                     allframes: allframes.clone(),
                                 },
@@ -663,7 +671,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                 if let Some(doc_type) = doc_type {
                                     Some(executor.resolve(
                                         &TerminusTypeInfo {
-                                            is_path: false,
                                             class: doc_type.to_string(),
                                             allframes: info.allframes.clone(),
                                         },
@@ -749,6 +756,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             None => Ok(Value::Null),
         }
     }
+}
+
+fn is_path_field_name(field_name: &str) -> bool {
+    field_name.starts_with("_path_to_")
 }
 
 pub struct TerminusEnum {
@@ -855,7 +866,6 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
         let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
         Some(executor.resolve(
             &TerminusTypeInfo {
-                is_path: false,
                 class: doc_type.to_string(),
                 allframes: info.allframes.clone(),
             },

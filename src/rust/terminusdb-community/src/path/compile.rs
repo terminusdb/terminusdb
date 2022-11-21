@@ -17,6 +17,7 @@ pub fn path_for_type<'a, 'b>(
     all_frames: &'a AllFrames,
     zero_iter_opt: Option<ClonableIterator<'a, u64>>,
 ) -> ClonableIterator<'a, u64> {
+    eprintln!("attempting construction of path");
     let zero_iter = match zero_iter_opt {
         Some(zero_iter) => zero_iter,
         None => {
@@ -32,6 +33,7 @@ pub fn path_for_type<'a, 'b>(
     let path = parse_path(path_string)
         .expect("Did not give a valid path")
         .1;
+    eprintln!("Parse a path: {path:?}");
     compile_path(&g, all_frames.context.clone(), path, zero_iter)
 }
 
@@ -41,6 +43,7 @@ fn compile_path<'a>(
     path: Path,
     mut iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
+    eprintln!("Compiling a path...");
     match path {
         Path::Seq(vec) => {
             for sub_path in vec {

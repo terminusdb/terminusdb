@@ -108,16 +108,13 @@ impl<'a, T: Clone> CachedClonableIteratorState<'a, T> {
         }
 
         if current_pos < self.cache.len() {
-            println!("getting from cache");
             Some(self.cache[current_pos].clone())
         } else {
             if let Some(next) = self.i.next() {
-                println!("getting fresh value");
                 self.cache.push(next.clone());
 
                 Some(next)
             } else {
-                println!("done");
                 self.done = true;
                 None
             }

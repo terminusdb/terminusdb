@@ -815,8 +815,14 @@ pub fn run_filter_query<'a>(
                     ClonableIterator::new(std::iter::empty())
                 }
             })
-        } else if let Some(path_string) = arguments.get::<String>("path") {
-            if let Some(zi) = zero_iter {
+        } else {
+            zero_iter
+        };
+    eprintln!("Arguments: {arguments:?}");
+    let new_zero_iter: Option<ClonableIterator<'a, u64>> =
+        if let Some(path_string) = arguments.get::<String>("path") {
+            eprintln!("Found a path argument");
+            if let Some(zi) = new_zero_iter {
                 Some(path_for_type(
                     &path_string,
                     g,
@@ -828,7 +834,7 @@ pub fn run_filter_query<'a>(
                 Some(path_for_type(&path_string, g, class_name, all_frames, None))
             }
         } else {
-            zero_iter
+            new_zero_iter
         };
     let offset: i32 = arguments.get("offset").unwrap_or(0);
     let limit: Option<i32> = arguments.get("limit");
