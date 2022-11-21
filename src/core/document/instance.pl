@@ -946,7 +946,7 @@ dangling_reference_candidate(Validation_Object,S,P,O) :-
     !,
     distinct(S-P-O,
              (   triple_removal(Instance, O, Rdf_Type, node(_)),
-                 triple(Instance, S, P, O)
+                 triple(Instance, S, P, node(O))
              ;   % check if we were dropped from a list
                  was_in_list(Validation_Object, S, O),
                  rdf_first(P)
