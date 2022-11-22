@@ -2298,8 +2298,7 @@ get_schema_document_uri(Desc, ID) :-
     get_schema_document_uri(Transaction, ID).
 get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
-    is_simple_class(DB, Uri),
-    \+ is_json_class(DB, Uri).
+    is_frame_class(DB, Uri).
 
 get_schema_document(Query_Context, Id, Document) :-
     is_query_context(Query_Context),
@@ -2912,8 +2911,7 @@ all_class_frames(Transaction, Frames, Options) :-
     database_prefixes(Transaction, Prefixes),
     findall(
         Class_Comp-Frame,
-        (   is_simple_class(Transaction, Class),
-            \+ is_json_class(Transaction, Class),
+        (   is_frame_class(Transaction, Class),
             compress_schema_uri(Class, Prefixes, Class_Comp, Options),
             class_frame(Transaction, Class, Frame, Options)),
         Data),
