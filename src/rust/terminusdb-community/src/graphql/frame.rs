@@ -184,7 +184,7 @@ pub enum FieldDefinition {
     },
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum FieldKind {
     Required,
     Optional,
@@ -559,6 +559,8 @@ pub struct AllFrames {
     pub frames: BTreeMap<String, TypeDefinition>,
     #[serde(skip_serializing)]
     pub class_renaming: Option<HashMap<String, String>>,
+    #[serde(skip_deserializing)]
+    pub inverted: Option<AllInvertedFrames>,
 }
 
 impl AllFrames {
@@ -580,11 +582,12 @@ impl AllFrames {
             context: self.context.clone(),
             frames,
             class_renaming: Some(class_renaming),
+            inverted: None,
         }
     }
 
     pub fn document_type<'a>(&self, s: &'a str) -> Option<&'a str> {
-        if self.frames[s].is_document_type() {
+        if self.frames.contains_key(s) && self.frames[s].is_document_type() {
             Some(s)
         } else {
             None
@@ -592,7 +595,7 @@ impl AllFrames {
     }
 
     pub fn enum_type<'a>(&self, s: &'a str) -> Option<&'a str> {
-        if self.frames[s].is_enum_type() {
+        if self.frames.contains_key(s) && self.frames[s].is_enum_type() {
             Some(s)
         } else {
             None
@@ -619,6 +622,72 @@ impl AllFrames {
 
         expanded_object_node
     }
+
+    pub fn invert(&mut self) -> () {
+        let inverted = allframes_to_allinvertedframes(self);
+        self.inverted = Some(inverted);
+    }
+}
+
+#[derive(Debug)]
+pub struct AllInvertedFrames {
+    pub classes: BTreeMap<String, InvertedTypeDefinition>,
+}
+
+#[derive(Debug)]
+pub struct InvertedFieldDefinition {
+    pub kind: FieldKind,
+    pub class: String,
+}
+
+#[derive(Debug)]
+pub struct InvertedTypeDefinition {
+    pub domain: BTreeMap<String, InvertedFieldDefinition>,
+}
+
+pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrames {
+    let frames = &allframes.frames;
+    let mut classes: BTreeMap<String, InvertedTypeDefinition> = BTreeMap::new();
+    for (class, record) in frames.iter() {
+        match record {
+            TypeDefinition::Class(classdefinition) => {
+                let fields = &classdefinition.fields;
+                for (property, fieldrecord) in fields.iter() {
+                    let kind = fieldrecord.kind();
+                    let range = fieldrecord.range();
+                    if !is_base_type(range) & allframes.document_type(range).is_some() {
+                        if let Some(inverted_type_definition) = classes.get_mut(range) {
+                            let inverted_type = &mut inverted_type_definition.domain;
+                            inverted_type.insert(
+                                property.to_string(),
+                                InvertedFieldDefinition {
+                                    kind,
+                                    class: class.to_string(),
+                                },
+                            );
+                        } else {
+                            let mut range_properties = BTreeMap::new();
+                            range_properties.insert(
+                                property.to_string(),
+                                InvertedFieldDefinition {
+                                    kind,
+                                    class: class.to_string(),
+                                },
+                            );
+                            classes.insert(
+                                range.to_string(),
+                                InvertedTypeDefinition {
+                                    domain: range_properties,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+            TypeDefinition::Enum(_) => (),
+        };
+    }
+    AllInvertedFrames { classes }
 }
 
 #[cfg(test)]
@@ -988,5 +1057,44 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
         let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
         // at least it parses!
         // TODO test something here
+    }
+
+    #[test]
+    fn invert_frames() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"json{
+                   '@context': json{'@base':"terminusdb://woql/data/",'@schema':"http://terminusdb.com/schema/woql#",'@type':'Context'},
+                   'Bar' : json{ '@type' : "Class", elt : "xsd:string" },
+                   'Foo' : json{ '@type' : "Class", a : "Bar", b: json{ '@type' : "Optional", '@class' : "Bar"}, c: json{ '@type' : "Set", '@class' : "Bar"}}}"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let mut allframes: AllFrames = context.deserialize_from_term(&term).unwrap();
+        allframes.invert();
+        assert_eq!(
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].class,
+            "Foo"
+        );
+        assert_eq!(
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].kind,
+            FieldKind::Required
+        );
+        assert_eq!(
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].class,
+            "Foo"
+        );
+        assert_eq!(
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].kind,
+            FieldKind::Optional
+        );
+        assert_eq!(
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].class,
+            "Foo"
+        );
+        assert_eq!(
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].kind,
+            FieldKind::Set
+        )
     }
 }
