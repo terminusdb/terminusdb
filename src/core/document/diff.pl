@@ -373,13 +373,18 @@ create_patch([deleted|Operations],[Head|List1],List2,Patch,Options) :-
     create_patch(Operations,List1,List2,deleted,[Head],Patch,Options).
 
 lcs_list_diff(Before,After,_Keep,Patch,State,Cost,New_Cost,Options) :-
-    hash_terms(Before,Before_Hash),
-    hash_terms(After,After_Hash),
-    '$lcs':list_diff(Before_Hash,After_Hash,Changed),
-    create_patch(Changed,Before,After,Patch,Options),
-    patch_cost(Patch,Patch_Cost),
-    New_Cost is Cost + Patch_Cost,
-    cost_bounded(State,New_Cost).
+    length(Before, N),
+    length(After, M),
+    (   N * M > 1000000
+    ->  fail
+    ;   hash_terms(Before,Before_Hash),
+        hash_terms(After,After_Hash),
+        '$lcs':list_diff(Before_Hash,After_Hash,Changed),
+        create_patch(Changed,Before,After,Patch,Options),
+        patch_cost(Patch,Patch_Cost),
+        New_Cost is Cost + Patch_Cost,
+        cost_bounded(State,New_Cost)
+    ).
 
 % Attempts to estimate a cost for a patch
 patch_cost(Patch,Cost) :-
