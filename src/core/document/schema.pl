@@ -5,6 +5,7 @@
               refute_schema/2,
               is_enum/2,
               is_simple_class/2,
+              is_frame_class/2,
               is_json_class/2,
               is_tagged_union/2,
               is_base_type/1,
@@ -118,6 +119,19 @@ is_system_class(Class) :-
         ], List),
     memberchk(Class,List).
 
+system_class(Class) :-
+    prefix_list(
+        [
+            sys:'Foreign',
+            sys:'Class',
+            sys:'TaggedUnion',
+            sys:'Enum',
+            sys:'Unit',
+            sys:'JSON',
+            sys:'JSONDocument'
+        ], List),
+    member(Class,List).
+
 is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_simple_class(Schema, Class).
@@ -130,12 +144,39 @@ is_schema_json_class(Schema,Class) :-
     global_prefix_expand(sys:'JSON',JSON),
     xrdf(Schema,Class,rdf:type,JSON).
 
+is_system_frame_class(Class) :-
+    prefix_list(
+        [
+            sys:'Class',
+            sys:'TaggedUnion',
+            sys:'Enum'
+        ], List),
+    memberchk(Class,List).
+
+system_frame_class(Class) :-
+    prefix_list(
+        [
+            sys:'Class',
+            sys:'TaggedUnion',
+            sys:'Enum'
+        ], List),
+    member(Class,List).
+
+is_frame_class(Validation_Object,Class) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_frame_class(Schema, Class).
+
+:- table is_schema_frame_class/2 as private.
+is_schema_frame_class(Schema, Class) :-
+    system_frame_class(C),
+    xrdf(Schema,Class, rdf:type, C).
+
 % NOTE
 % This generator is no longer stable under ordering!
 :- table is_schema_simple_class/2 as private.
 is_schema_simple_class(Schema, Class) :-
-    xrdf(Schema,Class, rdf:type, C),
-    is_system_class(C).
+    system_class(C),
+    xrdf(Schema,Class, rdf:type, C).
 
 is_base_type(Type) :-
     base_type(Type).
