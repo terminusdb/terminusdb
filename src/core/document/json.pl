@@ -2298,8 +2298,7 @@ get_schema_document_uri(Desc, ID) :-
     get_schema_document_uri(Transaction, ID).
 get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
-    is_simple_class(DB, Uri),
-    \+ is_json_class(DB, Uri).
+    is_frame_class(DB, Uri).
 
 get_schema_document(Query_Context, Id, Document) :-
     is_query_context(Query_Context),
@@ -2912,7 +2911,7 @@ all_class_frames(Transaction, Frames, Options) :-
     database_prefixes(Transaction, Prefixes),
     findall(
         Class_Comp-Frame,
-        (   is_simple_class(Transaction, Class),
+        (   is_frame_class(Transaction, Class),
             compress_schema_uri(Class, Prefixes, Class_Comp, Options),
             class_frame(Transaction, Class, Frame, Options)),
         Data),
@@ -13637,6 +13636,50 @@ test(garbage_metadata_enum,
                      '@type':"Enum"}), _)
      ]) :-
     write_schema(garbage_metadata_enum,Desc).
+
+
+deep_metadata_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"
+}
+
+{ "@id" : "Deep",
+  "@type" : "Enum",
+  "@metadata" : { "blah" : { "blah" : { "blah" : [{ "blah" : 1}, 3, 4, "asdf"]}}},
+  "@value" : ["asdf", "fdsa"]
+}
+').
+
+test(deep_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    write_schema(deep_metadata_schema,Desc),
+
+    get_schema_document(Desc, 'Deep', Deep),
+
+    Deep = json{'@id':'Deep',
+                '@metadata':json{blah:json{blah:json{blah:[json{blah:1},3,4,"asdf"]}}},
+                '@type':'Enum',
+                '@value':[asdf,fdsa]},
+
+    open_descriptor(Desc, DB),
+    all_class_frames(DB, Frames, [compress_ids(true),simple(true)]),
+
+    Frames = json{ '@context':_{ '@base':"terminusdb:///data/",
+		                         '@schema':"terminusdb:///schema#",
+		                         '@type':'Context'
+		                       },
+                   'Deep':json{ '@metadata':json{blah:
+                                                 json{blah:json{blah:[json{blah:1},3,4,"asdf"]}}},
+		                        '@type':'Enum',
+		                        '@values':[asdf,fdsa]
+		                      }
+                 }.
 
 
 :- end_tests(json_metadata).
