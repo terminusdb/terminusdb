@@ -493,35 +493,30 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
 
 fn rewind_rdf_list<'a>(instance: &'a dyn Layer, cons_id: u64) -> Option<u64> {
     if let Some(rdf_rest) = instance.predicate_id(RDF_REST) {
-        let mut cons = Some(cons_id);
-        while let Some(id) = cons {
+        let mut cons_id = cons_id;
+        loop {
             let res = instance
-                .triples_o(id)
+                .triples_o(cons_id)
                 .filter(|t| t.predicate == rdf_rest)
                 .map(|t| t.subject)
                 .next();
-            if res == None {
-                return cons;
-            } else {
-                cons = res
+            match res {
+                None => return Some(cons_id),
+                Some(new_cons_id) => cons_id = new_cons_id,
             }
         }
-        cons
     } else {
         None
     }
 }
 
-fn subject_has_type<'a>(instance: &'a dyn Layer, subject_id: u64, class: &str) -> bool {
+fn subject_is_type<'a>(instance: &'a dyn Layer, subject_id: u64, class: &str) -> bool {
     if let Some(rdf_type_id) = instance.predicate_id(RDF_TYPE) {
         if let Some(class_id) = instance.object_node_id(class) {
-            instance.triple_exists(subject_id, rdf_type_id, class_id)
-        } else {
-            false
+            return instance.triple_exists(subject_id, rdf_type_id, class_id);
         }
-    } else {
-        false
     }
+    false
 }
 
 impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
@@ -564,25 +559,31 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 // List and array are special since they are *deep* objects
                 match kind {
                     FieldKind::List => {
-                        let object_ids = instance
-                            .triples_o(self.id)
-                            .flat_map(|t| {
-                                instance
-                                    .predicate_id(RDF_FIRST)
-                                    .filter(|rdf_first| t.predicate == *rdf_first)
-                                    .map(|_| t.subject)
-                            })
-                            .flat_map(|cons| rewind_rdf_list(instance, cons))
-                            .flat_map(|o| {
-                                instance
-                                    .triples_o(o)
-                                    .filter(|t| {
-                                        t.predicate == field_id
-                                            && subject_has_type(instance, t.subject, &domain_uri)
-                                    })
-                                    .map(|t| t.subject)
-                                    .next()
-                            });
+                        let object_ids =
+                            instance
+                                .predicate_id(RDF_FIRST)
+                                .into_iter()
+                                .flat_map(|rdf_first| {
+                                    instance
+                                        .triples_o(self.id)
+                                        .filter(move |t| t.predicate == rdf_first)
+                                        .map(|t| t.subject)
+                                        .flat_map(|cons| rewind_rdf_list(instance, cons))
+                                        .flat_map(|o| {
+                                            instance
+                                                .triples_o(o)
+                                                .filter(|t| {
+                                                    t.predicate == field_id
+                                                        && subject_is_type(
+                                                            instance,
+                                                            t.subject,
+                                                            &domain_uri,
+                                                        )
+                                                })
+                                                .map(|t| t.subject)
+                                                .next()
+                                        })
+                                });
                         collect_into_graphql_list(
                             Some(&domain),
                             executor,
@@ -593,24 +594,30 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     FieldKind::Array => {
-                        let object_ids = instance
-                            .triples_o(self.id)
-                            .flat_map(|t| {
-                                instance
-                                    .predicate_id(SYS_VALUE)
-                                    .filter(|sys_value| t.predicate == *sys_value)
-                                    .map(|_| t.subject)
-                            })
-                            .flat_map(|o| {
-                                instance
-                                    .triples_o(o)
-                                    .filter(|t| {
-                                        t.predicate == field_id
-                                            && subject_has_type(instance, t.subject, &domain_uri)
-                                    })
-                                    .map(|t| t.subject)
-                                    .next()
-                            });
+                        let object_ids =
+                            instance
+                                .predicate_id(SYS_VALUE)
+                                .into_iter()
+                                .flat_map(|sys_value| {
+                                    instance
+                                        .triples_o(self.id)
+                                        .filter(move |t| t.predicate == sys_value)
+                                        .map(|t| t.subject)
+                                        .flat_map(|o| {
+                                            instance
+                                                .triples_o(o)
+                                                .filter(|t| {
+                                                    t.predicate == field_id
+                                                        && subject_is_type(
+                                                            instance,
+                                                            t.subject,
+                                                            &domain_uri,
+                                                        )
+                                                })
+                                                .map(|t| t.subject)
+                                                .next()
+                                        })
+                                });
                         collect_into_graphql_list(
                             Some(&domain),
                             executor,
@@ -625,7 +632,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             .triples_o(self.id)
                             .filter(move |t| {
                                 t.predicate == field_id
-                                    && subject_has_type(instance, t.subject, &domain_uri)
+                                    && subject_is_type(instance, t.subject, &domain_uri)
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
