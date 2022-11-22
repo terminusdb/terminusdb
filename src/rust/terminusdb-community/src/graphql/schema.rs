@@ -143,31 +143,6 @@ fn add_arguments<'r>(
                 .description("order by the given fields"),
         );
     }
-    /*
-    for (name, f) in class_definition.fields().iter() {
-        if is_reserved_argument_name(name) {
-            // these are special. we're generating them differently
-            continue;
-        }
-        if let Some(t) = f.base_type() {
-            if type_is_bool(t) {
-                field = field.argument(registry.arg::<Option<bool>>(name, &()));
-            } else if type_is_small_integer(t) {
-                field = field.argument(registry.arg::<Option<i32>>(name, &()));
-            } else if type_is_big_integer(t) {
-                field = field.argument(registry.arg::<Option<BigInt>>(name, &()));
-            } else if type_is_float(t) {
-                field = field.argument(registry.arg::<Option<f64>>(name, &()));
-            } else {
-                field = field.argument(registry.arg::<Option<String>>(name, &()));
-            }
-        } else if let Some(t) = f.enum_type(all_frames) {
-            field = field.argument(
-                registry.arg::<Option<TerminusEnum>>(name, &(t.to_string(), info.1.clone())),
-            );
-        }
-    }
-    */
 
     field
 }
@@ -377,36 +352,13 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                 )
             })
             .collect();
-        fields.push(registry.field::<ID>("id", &()));
+
+        fields.push(registry.field::<ID>("_id", &()));
 
         registry
             .build_object_type::<TerminusType<'a, C>>(info, &fields)
             .into_meta()
     }
-
-    /*
-    fn resolve_class_field(definition: &ClassDefinition,
-                           field_name: &str,
-                           instance: &SyncStoreLayer,
-                           info: &(String, Arc<AllFrames>),
-                           executor: &juniper::Executor<TerminusContext<'a,C>, DefaultScalarValue>) -> juniper::ExecutionResult {
-        let field = &definition.fields[field_name];
-        match field.kind() {
-            FieldKind::Required => {
-                let object_id = dbg!(instance.single_triple_sp(self.id, field_id))?.object;
-                if let Some(doc_type) = field.document_type() {
-                    executor.resolve(&(doc_type.to_string(), info.1.clone()), &TerminusType::new(object_id))
-                }
-                else {
-                    let instance = executor.context().instance.as_ref().unwrap();
-                    let val = instance.id_object_value(object_id).unwrap();
-                    Ok(value_string_to_graphql(&val))
-                }
-            },
-            _ => todo!()
-        }
-    }
-    */
 }
 
 pub struct TerminusEnum {
@@ -513,7 +465,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             // we should always have had this instance layer at some
             // point. not having it here would be a weird bug.
             let instance = executor.context().instance.as_ref()?;
-            if field_name == "id" {
+            if field_name == "_id" {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
                 ))));
