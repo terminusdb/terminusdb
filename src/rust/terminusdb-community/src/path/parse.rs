@@ -12,8 +12,8 @@ use std::rc::Rc;
 
 /*
 
-P := . | p(String)
-Q,R := P> | <P | Q,R | Q;R | plus(Q) | star(Q) | times(Q,N,M)
+P := '.' | String
+Q,R := P> | <P | Q,R | Q;R | Q+ | Q* | Q{N,M} | P@T
 
  */
 
