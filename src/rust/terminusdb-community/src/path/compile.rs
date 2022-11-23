@@ -1,40 +1,34 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use itertools::Itertools;
+
 use super::iterator::*;
 use super::parse::*;
 
 use crate::consts::RDF_TYPE;
 use crate::graphql::frame::{AllFrames, Prefixes};
-use crate::graphql::query::{predicate_value_iter, NodeOrValue};
+use crate::graphql::query::{predicate_value_filter, NodeOrValue};
 use crate::terminus_store::layer::*;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-pub fn path_for_type<'a, 'b>(
+pub fn path_to_class<'a, 'b>(
     path_string: &'b str,
     g: &'a SyncStoreLayer,
-    class_name: &'a str,
+    to_class: &'a str,
     all_frames: &'a AllFrames,
-    zero_iter_opt: Option<ClonableIterator<'a, u64>>,
+    zero_iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     eprintln!("attempting construction of path");
-    let zero_iter = match zero_iter_opt {
-        Some(zero_iter) => zero_iter,
-        None => {
-            let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
-            ClonableIterator::new(predicate_value_iter(
-                g,
-                &RDF_TYPE,
-                &NodeOrValue::Node,
-                expanded_type_name,
-            ))
-        }
-    };
     let path = parse_path(path_string)
         .expect("Did not give a valid path")
         .1;
     eprintln!("Parse a path: {path:?}");
-    compile_path(&g, all_frames.context.clone(), path, zero_iter)
+    let expanded_type_name = all_frames.fully_qualified_class_name(to_class);
+    let iter = compile_path(&g, all_frames.context.clone(), path, zero_iter);
+    ClonableIterator::new(
+        predicate_value_filter(g, &RDF_TYPE, &NodeOrValue::Node, expanded_type_name, iter).dedup(),
+    )
 }
 
 fn compile_path<'a>(

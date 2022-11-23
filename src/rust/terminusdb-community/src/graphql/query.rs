@@ -21,7 +21,7 @@ use super::filter::{
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
 use super::schema::{BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
 
-use crate::path::compile::path_for_type;
+use crate::path::compile::path_to_class;
 
 use float_ord::FloatOrd;
 
@@ -823,15 +823,15 @@ pub fn run_filter_query<'a>(
         if let Some(path_string) = arguments.get::<String>("path") {
             eprintln!("Found a path argument");
             if let Some(zi) = new_zero_iter {
-                Some(path_for_type(
+                Some(path_to_class(
                     &path_string,
                     g,
                     class_name,
                     all_frames,
-                    Some(ClonableIterator::new(zi)),
+                    ClonableIterator::new(zi),
                 ))
             } else {
-                Some(path_for_type(&path_string, g, class_name, all_frames, None))
+                panic!("We need some starting id for our path");
             }
         } else {
             new_zero_iter
