@@ -37,9 +37,8 @@ predicates! {
         }
 
         let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("Unable to parse frames into rust struct");
-        let sanitized_frames: AllFrames = frames.sanitize();
-        log_info!(context, "parsed frames: {:?}", sanitized_frames)?;
-        //let prefixes: Arc<Prefixes> = Arc::new(frames.context);
+        let mut sanitized_frames: AllFrames = frames.sanitize();
+        sanitized_frames.invert();
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(), EmptyMutation::<TerminusContext<'a, C>>::new(), EmptySubscription::<TerminusContext<'a,C>>::new(), Arc::new(sanitized_frames), (), ());
 

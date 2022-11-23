@@ -15,7 +15,7 @@ use crate::{consts::RDF_TYPE, terminus_store::*, value::value_string_to_graphql}
 use super::filter::{
     BigIntFilterInputObject, BooleanFilterInputObject, CollectionFilterInputObject,
     DateTimeFilterInputObject, EnumFilterInputObject, FilterInputObject, FloatFilterInputObject,
-    SmallIntegerFilterInputObject, StringFilterInputObject,
+    IntFilterInputObject, StringFilterInputObject,
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
 use super::schema::{BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
@@ -188,10 +188,7 @@ fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -
     }
 }
 
-fn compile_small_integer_input_value(
-    string_type: &str,
-    value: SmallIntegerFilterInputObject,
-) -> FilterType {
+fn compile_small_integer_input_value(string_type: &str, value: IntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::SmallInt(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.lt {
@@ -227,8 +224,7 @@ fn compile_typed_filter(
                 ObjectType::Value(compile_string_input_value(range, value.unwrap()))
             }
             BaseTypeKind::SmallInteger => {
-                let value =
-                    SmallIntegerFilterInputObject::from_input_value(&spanning_input_value.item);
+                let value = IntFilterInputObject::from_input_value(&spanning_input_value.item);
                 ObjectType::Value(compile_small_integer_input_value(range, value.unwrap()))
             }
             BaseTypeKind::BigIntger => {
