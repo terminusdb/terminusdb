@@ -627,6 +627,20 @@ impl AllFrames {
         let inverted = allframes_to_allinvertedframes(self);
         self.inverted = Some(inverted);
     }
+
+    pub fn reverse_link(&self, class: &str, field: &str) -> Option<&InvertedFieldDefinition> {
+        if let Some(inverted) = &self.inverted {
+            if inverted.classes.contains_key(class)
+                && inverted.classes[class].domain.contains_key(field)
+            {
+                Some(&inverted.classes[class].domain[field])
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -636,6 +650,7 @@ pub struct AllInvertedFrames {
 
 #[derive(Debug)]
 pub struct InvertedFieldDefinition {
+    pub property: String,
     pub kind: FieldKind,
     pub class: String,
 }
@@ -643,6 +658,10 @@ pub struct InvertedFieldDefinition {
 #[derive(Debug)]
 pub struct InvertedTypeDefinition {
     pub domain: BTreeMap<String, InvertedFieldDefinition>,
+}
+
+pub fn inverse_field_name(property: &str, class: &str) -> String {
+    format!("_{property}_of_{class}")
 }
 
 pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrames {
@@ -655,12 +674,14 @@ pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrame
                 for (property, fieldrecord) in fields.iter() {
                     let kind = fieldrecord.kind();
                     let range = fieldrecord.range();
+                    let field_name = inverse_field_name(property, class);
                     if !is_base_type(range) & allframes.document_type(range).is_some() {
                         if let Some(inverted_type_definition) = classes.get_mut(range) {
                             let inverted_type = &mut inverted_type_definition.domain;
                             inverted_type.insert(
-                                property.to_string(),
+                                field_name.to_string(),
                                 InvertedFieldDefinition {
+                                    property: property.to_string(),
                                     kind,
                                     class: class.to_string(),
                                 },
@@ -668,8 +689,9 @@ pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrame
                         } else {
                             let mut range_properties = BTreeMap::new();
                             range_properties.insert(
-                                property.to_string(),
+                                field_name.to_string(),
                                 InvertedFieldDefinition {
+                                    property: property.to_string(),
                                     kind,
                                     class: class.to_string(),
                                 },
@@ -1073,27 +1095,27 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
         let mut allframes: AllFrames = context.deserialize_from_term(&term).unwrap();
         allframes.invert();
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_a_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["a"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_a_of_Foo"].kind,
             FieldKind::Required
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_b_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["b"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_b_of_Foo"].kind,
             FieldKind::Optional
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].class,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_c_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["c"].kind,
+            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_c_of_Foo"].kind,
             FieldKind::Set
         )
     }

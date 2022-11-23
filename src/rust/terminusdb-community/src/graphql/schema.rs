@@ -9,7 +9,7 @@ use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
-use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
+use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
@@ -99,21 +99,21 @@ impl<'a, C: QueryableContextType> TerminusTypeCollection<'a, C> {
 pub struct TerminusOrderingInfo {
     ordering_name: String,
     type_name: String,
-    frames: Arc<AllFrames>,
+    allframes: Arc<AllFrames>,
 }
 
 impl TerminusOrderingInfo {
-    fn new(type_name: &str, frames: &Arc<AllFrames>) -> Self {
+    fn new(type_name: &str, allframes: &Arc<AllFrames>) -> Self {
         Self {
             ordering_name: format!("{}_Ordering", type_name),
             type_name: type_name.to_string(),
-            frames: frames.clone(),
+            allframes: allframes.clone(),
         }
     }
 }
 
 fn add_arguments<'r>(
-    info: &(String, Arc<AllFrames>),
+    info: &TerminusTypeInfo,
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
     mut field: Field<'r, DefaultScalarValue>,
     class_definition: &ClassDefinition,
@@ -131,14 +131,14 @@ fn add_arguments<'r>(
     );
     field = field.argument(registry.arg::<Option<FilterInputObject>>(
         "filter",
-        &FilterInputObjectTypeInfo::new(&info.0, &info.1),
+        &FilterInputObjectTypeInfo::new(&info.class, &info.allframes),
     ));
     if must_generate_ordering(class_definition) {
         field = field.argument(
             registry
                 .arg::<Option<TerminusOrderBy>>(
                     "orderBy",
-                    &TerminusOrderingInfo::new(&info.0, &info.1),
+                    &TerminusOrderingInfo::new(&info.class, &info.allframes),
                 )
                 .description("order by the given fields"),
         );
@@ -174,19 +174,18 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
         DefaultScalarValue: 'r,
     {
         let mut fields: Vec<_> = info
+            .allframes
             .frames
             .iter()
             .filter_map(|(name, typedef)| {
                 if let TypeDefinition::Class(c) = typedef {
-                    let field = registry
-                        .field::<Vec<TerminusType<'a, C>>>(name, &(name.to_owned(), info.clone()));
+                    let newinfo = TerminusTypeInfo {
+                        class: name.to_owned(),
+                        allframes: info.allframes.clone(),
+                    };
+                    let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
 
-                    Some(add_arguments(
-                        &(name.to_owned(), info.clone()),
-                        registry,
-                        field,
-                        c,
-                    ))
+                    Some(add_arguments(&newinfo, registry, field, &c))
                 } else {
                     None
                 }
@@ -200,10 +199,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     }
 }
 
+pub struct TerminusTypeCollectionInfo {
+    pub allframes: Arc<AllFrames>,
+}
+
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
     type Context = TerminusContext<'a, C>;
 
-    type TypeInfo = Arc<AllFrames>;
+    type TypeInfo = TerminusTypeCollectionInfo;
 
     fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some("TerminusTypeCollection")
@@ -220,18 +223,34 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
             executor.resolve_with_ctx(&(), &System {})
         } else {
             let objects = match executor.context().instance.as_ref() {
-                Some(instance) => {
-                    run_filter_query(instance, &info.context, arguments, field_name, info, None)
-                        .into_iter()
-                        .map(|id| TerminusType::new(id))
-                        .collect()
-                }
+                Some(instance) => run_filter_query(
+                    instance,
+                    &info.allframes.context,
+                    arguments,
+                    field_name,
+                    &info.allframes,
+                    None,
+                )
+                .into_iter()
+                .map(|id| TerminusType::new(id))
+                .collect(),
                 None => vec![],
             };
 
-            executor.resolve(&(field_name.to_owned(), info.clone()), &objects)
+            executor.resolve(
+                &TerminusTypeInfo {
+                    class: field_name.to_owned(),
+                    allframes: info.allframes.clone(),
+                },
+                &objects,
+            )
         }
     }
+}
+
+pub struct TerminusTypeInfo {
+    class: String,
+    allframes: Arc<AllFrames>,
 }
 
 pub struct TerminusType<'a, C: QueryableContextType> {
@@ -269,7 +288,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
     where
         DefaultScalarValue: 'r,
     {
-        let frames = &info.1;
+        let frames = &info.allframes;
         let mut fields: Vec<_> = d
             .fields()
             .iter()
@@ -282,14 +301,20 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                         let field = Self::register_field::<TerminusType<'a, C>>(
                             registry,
                             field_name,
-                            &(document_type.to_owned(), frames.clone()),
+                            &TerminusTypeInfo {
+                                class: document_type.to_owned(),
+                                allframes: frames.clone(),
+                            },
                             field_definition.kind(),
                         );
 
                         if field_definition.kind().is_collection() {
                             let class_definition =
-                                info.1.frames[document_type].as_class_definition();
-                            let new_info = (document_type.to_owned(), info.1.clone());
+                                info.allframes.frames[document_type].as_class_definition();
+                            let new_info = TerminusTypeInfo {
+                                class: document_type.to_owned(),
+                                allframes: info.allframes.clone(),
+                            };
                             add_arguments(&new_info, registry, field, class_definition)
                         } else {
                             field
@@ -352,6 +377,27 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                 )
             })
             .collect();
+
+        let mut inverted_fields: Vec<_> = Vec::new();
+        if let Some(inverted_frames) = &frames.inverted {
+            if let Some(inverted_type) = inverted_frames.classes.get(&info.class) {
+                for (field_name, ifd) in inverted_type.domain.iter() {
+                    let class = &ifd.class;
+                    let kind = &ifd.kind;
+                    let field = Self::register_field::<Vec<TerminusType<'a, C>>>(
+                        registry,
+                        &field_name,
+                        &TerminusTypeInfo {
+                            class: class.to_string(),
+                            allframes: frames.clone(),
+                        },
+                        kind.clone(),
+                    );
+                    inverted_fields.push(field);
+                }
+            }
+        }
+        fields.append(&mut inverted_fields);
 
         fields.push(registry.field::<ID>("_id", &()));
 
@@ -425,7 +471,7 @@ impl GraphQLValue for TerminusEnum {
 
 impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.0)
+        Some(&info.class)
     }
 
     fn meta<'r>(
@@ -435,8 +481,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
     where
         DefaultScalarValue: 'r,
     {
-        let (name, frames) = info;
-        let frame = &frames.frames[name];
+        let name = &info.class;
+        let allframes = &info.allframes;
+        let frame = &allframes.frames[name];
         match frame {
             TypeDefinition::Class(d) => Self::generate_class_type(d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
@@ -444,13 +491,41 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
     }
 }
 
+fn rewind_rdf_list<'a>(instance: &'a dyn Layer, cons_id: u64) -> Option<u64> {
+    if let Some(rdf_rest) = instance.predicate_id(RDF_REST) {
+        let mut cons_id = cons_id;
+        loop {
+            let res = instance
+                .triples_o(cons_id)
+                .filter(|t| t.predicate == rdf_rest)
+                .map(|t| t.subject)
+                .next();
+            match res {
+                None => return Some(cons_id),
+                Some(new_cons_id) => cons_id = new_cons_id,
+            }
+        }
+    } else {
+        None
+    }
+}
+
+fn subject_is_type<'a>(instance: &'a dyn Layer, subject_id: u64, class: &str) -> bool {
+    if let Some(rdf_type_id) = instance.predicate_id(RDF_TYPE) {
+        if let Some(class_id) = instance.object_node_id(class) {
+            return instance.triple_exists(subject_id, rdf_type_id, class_id);
+        }
+    }
+    false
+}
+
 impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
     type Context = TerminusContext<'a, C>;
 
-    type TypeInfo = (String, Arc<AllFrames>);
+    type TypeInfo = TerminusTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.0)
+        Some(&info.class)
     }
 
     fn resolve_field(
@@ -471,123 +546,228 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 ))));
             }
 
-            // TODO: Replace with method?
-            let field_name_expanded = info.1.context.expand_schema(field_name);
-            let field_id = instance.predicate_id(&field_name_expanded)?;
+            let allframes = &info.allframes;
+            let class = &info.class;
 
-            let allframes = &info.1;
-            let frame = &allframes.frames[&info.0];
-            let doc_type;
-            let enum_type;
-            let kind;
-            match frame {
-                TypeDefinition::Class(c) => {
-                    let field = &c.resolve_field(&field_name.to_string()); //fields[field_name];
-                    doc_type = field.document_type(allframes);
-                    enum_type = field.enum_type(allframes);
-                    kind = field.kind();
-                    //self.resolve_class_field(c, field_id )
-                }
-                _ => panic!("expected only a class at this level"),
-            }
-
-            match kind {
-                FieldKind::Required => {
-                    let object_id = instance.single_triple_sp(self.id, field_id)?.object;
-                    if let Some(doc_type) = doc_type {
-                        Some(executor.resolve(
-                            &(doc_type.to_string(), info.1.clone()),
-                            &TerminusType::new(object_id),
-                        ))
-                    } else if let Some(enum_type) = enum_type {
-                        let enum_uri = instance.id_object_node(object_id).unwrap();
-                        let enum_value = enum_node_to_value(&enum_type, &enum_uri);
-                        let enum_definition = allframes.frames[enum_type].as_enum_definition();
-                        let value = juniper::Value::Scalar(DefaultScalarValue::String(
-                            enum_definition.name_value(&enum_value).to_string(),
-                        ));
-                        Some(Ok(value))
-                    } else {
-                        let val = instance.id_object_value(object_id).unwrap();
-                        Some(Ok(value_string_to_graphql(&val)))
+            if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
+                let property = &reverse_link.property;
+                let domain = &reverse_link.class;
+                let kind = &reverse_link.kind;
+                let property_expanded = allframes.context.expand_schema(&property);
+                let domain_uri = allframes.fully_qualified_class_name(domain);
+                let field_id = instance.predicate_id(&property_expanded)?;
+                // List and array are special since they are *deep* objects
+                match kind {
+                    FieldKind::List => {
+                        let object_ids =
+                            instance
+                                .predicate_id(RDF_FIRST)
+                                .into_iter()
+                                .flat_map(|rdf_first| {
+                                    instance
+                                        .triples_o(self.id)
+                                        .filter(move |t| t.predicate == rdf_first)
+                                        .map(|t| t.subject)
+                                        .flat_map(|cons| rewind_rdf_list(instance, cons))
+                                        .flat_map(|o| {
+                                            instance
+                                                .triples_o(o)
+                                                .filter(|t| {
+                                                    t.predicate == field_id
+                                                        && subject_is_type(
+                                                            instance,
+                                                            t.subject,
+                                                            &domain_uri,
+                                                        )
+                                                })
+                                                .map(|t| t.subject)
+                                                .next()
+                                        })
+                                });
+                        collect_into_graphql_list(
+                            Some(&domain),
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
+                            instance,
+                        )
+                    }
+                    FieldKind::Array => {
+                        let object_ids =
+                            instance
+                                .predicate_id(SYS_VALUE)
+                                .into_iter()
+                                .flat_map(|sys_value| {
+                                    instance
+                                        .triples_o(self.id)
+                                        .filter(move |t| t.predicate == sys_value)
+                                        .map(|t| t.subject)
+                                        .flat_map(|o| {
+                                            instance
+                                                .triples_o(o)
+                                                .filter(|t| {
+                                                    t.predicate == field_id
+                                                        && subject_is_type(
+                                                            instance,
+                                                            t.subject,
+                                                            &domain_uri,
+                                                        )
+                                                })
+                                                .map(|t| t.subject)
+                                                .next()
+                                        })
+                                });
+                        collect_into_graphql_list(
+                            Some(&domain),
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
+                            instance,
+                        )
+                    }
+                    _ => {
+                        let object_ids = instance
+                            .triples_o(self.id)
+                            .filter(move |t| {
+                                t.predicate == field_id
+                                    && subject_is_type(instance, t.subject, &domain_uri)
+                            })
+                            .map(|t| t.subject);
+                        collect_into_graphql_list(
+                            Some(&domain),
+                            executor,
+                            info,
+                            arguments,
+                            object_ids,
+                            instance,
+                        )
                     }
                 }
-                FieldKind::Optional => {
-                    let object_id = instance
-                        .single_triple_sp(self.id, field_id)
-                        .map(|t| t.object);
-                    match object_id {
-                        Some(object_id) => {
-                            if let Some(doc_type) = doc_type {
-                                Some(executor.resolve(
-                                    &(doc_type.to_string(), info.1.clone()),
-                                    &TerminusType::new(object_id),
-                                ))
-                            } else {
-                                let val = instance.id_object_value(object_id).unwrap();
-                                Some(Ok(value_string_to_graphql(&val)))
-                            }
+            } else {
+                let field_name_expanded = allframes.context.expand_schema(field_name);
+                let field_id = instance.predicate_id(&field_name_expanded)?;
+
+                let frame = &allframes.frames[&info.class];
+                let doc_type;
+                let enum_type;
+                let kind;
+                match frame {
+                    TypeDefinition::Class(c) => {
+                        let field = &c.resolve_field(&field_name.to_string());
+                        doc_type = field.document_type(allframes);
+                        enum_type = field.enum_type(allframes);
+                        kind = field.kind();
+                    }
+                    _ => panic!("expected only a class at this level"),
+                }
+
+                match kind {
+                    FieldKind::Required => {
+                        let object_id = instance.single_triple_sp(self.id, field_id)?.object;
+                        if let Some(doc_type) = doc_type {
+                            Some(executor.resolve(
+                                &TerminusTypeInfo {
+                                    class: doc_type.to_string(),
+                                    allframes: allframes.clone(),
+                                },
+                                &TerminusType::new(object_id),
+                            ))
+                        } else if let Some(enum_type) = enum_type {
+                            let enum_uri = instance.id_object_node(object_id).unwrap();
+                            let enum_value = enum_node_to_value(&enum_type, &enum_uri);
+                            let enum_definition = allframes.frames[enum_type].as_enum_definition();
+                            let value = juniper::Value::Scalar(DefaultScalarValue::String(
+                                enum_definition.name_value(&enum_value).to_string(),
+                            ));
+                            Some(Ok(value))
+                        } else {
+                            let val = instance.id_object_value(object_id).unwrap();
+                            Some(Ok(value_string_to_graphql(&val)))
                         }
-                        None => Some(Ok(Value::Null)),
                     }
-                }
-                FieldKind::Set => {
-                    let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
-                    collect_into_graphql_list(
-                        doc_type, executor, info, arguments, object_ids, instance,
-                    )
-                }
-                FieldKind::Cardinality => {
-                    // pretty much a set actually
-                    let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
-                    collect_into_graphql_list(
-                        doc_type, executor, info, arguments, object_ids, instance,
-                    )
-                }
-                FieldKind::List => {
-                    let list_id = instance
-                        .single_triple_sp(self.id, field_id)
-                        .expect("list element expected but not found")
-                        .object;
-                    let object_ids = RdfListIterator {
-                        layer: instance,
-                        cur: list_id,
-                        rdf_first_id: instance.predicate_id(RDF_FIRST),
-                        rdf_rest_id: instance.predicate_id(RDF_REST),
-                        rdf_nil_id: instance.subject_id(RDF_NIL),
-                    };
-                    collect_into_graphql_list(
-                        doc_type, executor, info, arguments, object_ids, instance,
-                    )
-                }
-                FieldKind::Array => {
-                    let array_element_ids: Box<dyn Iterator<Item = IdTriple> + Send> =
-                        Box::new(instance.triples_sp(self.id, field_id));
-                    let sys_index_ids = retrieve_all_index_ids(instance);
-                    let array_iterator = SimpleArrayIterator(ArrayIterator {
-                        layer: instance,
-                        it: array_element_ids.peekable(),
-                        subject: self.id,
-                        predicate: field_id,
-                        last_index: None,
-                        sys_index_ids: &sys_index_ids,
-                        sys_value_id: instance.predicate_id(SYS_VALUE),
-                    });
+                    FieldKind::Optional => {
+                        let object_id = instance
+                            .single_triple_sp(self.id, field_id)
+                            .map(|t| t.object);
+                        match object_id {
+                            Some(object_id) => {
+                                if let Some(doc_type) = doc_type {
+                                    Some(executor.resolve(
+                                        &TerminusTypeInfo {
+                                            class: doc_type.to_string(),
+                                            allframes: info.allframes.clone(),
+                                        },
+                                        &TerminusType::new(object_id),
+                                    ))
+                                } else {
+                                    let val = instance.id_object_value(object_id).unwrap();
+                                    Some(Ok(value_string_to_graphql(&val)))
+                                }
+                            }
+                            None => Some(Ok(Value::Null)),
+                        }
+                    }
+                    FieldKind::Set => {
+                        let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
+                        collect_into_graphql_list(
+                            doc_type, executor, info, arguments, object_ids, instance,
+                        )
+                    }
+                    FieldKind::Cardinality => {
+                        // pretty much a set actually
+                        let object_ids = instance.triples_sp(self.id, field_id).map(|t| t.object);
+                        collect_into_graphql_list(
+                            doc_type, executor, info, arguments, object_ids, instance,
+                        )
+                    }
+                    FieldKind::List => {
+                        let list_id = instance
+                            .single_triple_sp(self.id, field_id)
+                            .expect("list element expected but not found")
+                            .object;
+                        let object_ids = RdfListIterator {
+                            layer: instance,
+                            cur: list_id,
+                            rdf_first_id: instance.predicate_id(RDF_FIRST),
+                            rdf_rest_id: instance.predicate_id(RDF_REST),
+                            rdf_nil_id: instance.subject_id(RDF_NIL),
+                        };
+                        collect_into_graphql_list(
+                            doc_type, executor, info, arguments, object_ids, instance,
+                        )
+                    }
+                    FieldKind::Array => {
+                        let array_element_ids: Box<dyn Iterator<Item = IdTriple> + Send> =
+                            Box::new(instance.triples_sp(self.id, field_id));
+                        let sys_index_ids = retrieve_all_index_ids(instance);
+                        let array_iterator = SimpleArrayIterator(ArrayIterator {
+                            layer: instance,
+                            it: array_element_ids.peekable(),
+                            subject: self.id,
+                            predicate: field_id,
+                            last_index: None,
+                            sys_index_ids: &sys_index_ids,
+                            sys_value_id: instance.predicate_id(SYS_VALUE),
+                        });
 
-                    let mut elements: Vec<_> = array_iterator.collect();
-                    elements.sort();
-                    let elements_iterator = elements.into_iter().map(|(_, elt)| elt);
-                    collect_into_graphql_list(
-                        doc_type,
-                        executor,
-                        info,
-                        arguments,
-                        elements_iterator,
-                        instance,
-                    )
+                        let mut elements: Vec<_> = array_iterator.collect();
+                        elements.sort();
+                        let elements_iterator = elements.into_iter().map(|(_, elt)| elt);
+                        collect_into_graphql_list(
+                            doc_type,
+                            executor,
+                            info,
+                            arguments,
+                            elements_iterator,
+                            instance,
+                        )
+                    }
                 }
             }
         };
+
         let x = get_info();
         match x {
             Some(r) => r,
@@ -620,7 +800,7 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
 fn collect_into_graphql_list<C: QueryableContextType>(
     doc_type: Option<&str>,
     executor: &juniper::Executor<TerminusContext<C>>,
-    info: &(String, Arc<AllFrames>),
+    info: &TerminusTypeInfo,
     arguments: &juniper::Arguments,
     object_ids: impl Iterator<Item = u64>,
     instance: &SyncStoreLayer,
@@ -629,16 +809,22 @@ fn collect_into_graphql_list<C: QueryableContextType>(
         let object_ids = match executor.context().instance.as_ref() {
             Some(instance) => run_filter_query(
                 instance,
-                &info.1.context,
+                &info.allframes.context,
                 arguments,
                 doc_type,
-                &info.1,
+                &info.allframes,
                 Some(Box::new(object_ids)),
             ),
             None => vec![],
         };
         let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
-        Some(executor.resolve(&(doc_type.to_string(), info.1.clone()), &subdocs))
+        Some(executor.resolve(
+            &TerminusTypeInfo {
+                class: doc_type.to_string(),
+                allframes: info.allframes.clone(),
+            },
+            &subdocs,
+        ))
     } else {
         let vals: Vec<_> = object_ids
             .map(|o| {
@@ -692,7 +878,7 @@ impl GraphQLType for TerminusOrderBy {
     where
         DefaultScalarValue: 'r,
     {
-        let frames = &info.frames;
+        let frames = &info.allframes;
         if let TypeDefinition::Class(d) = &frames.frames[&info.type_name] {
             let arguments: Vec<_> = d
                 .fields

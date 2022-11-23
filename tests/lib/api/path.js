@@ -105,6 +105,12 @@ module.exports = {
   patch () {
     return '/api/patch'
   },
+  graphQL (params, extra) {
+    params = new Params({ ...params, ...extra })
+    const orgName = params.stringRequired('orgName')
+    const dbName = params.stringRequired('dbName')
+    return `/api/graphql/${orgName}/${dbName}`
+  },
   prefixes (params, extra) {
     params = new Params({ ...params, ...extra })
     const orgName = params.stringRequired('orgName')
