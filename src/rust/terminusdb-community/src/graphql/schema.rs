@@ -397,6 +397,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                         kind.clone(),
                     );
                     let field = add_arguments(&new_info, registry, field, class_definition);
+
                     inverted_fields.push(field);
                 }
             }
@@ -760,6 +761,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
 fn is_path_field_name(field_name: &str) -> bool {
     field_name.starts_with("_path_to_")
+
 }
 
 pub struct TerminusEnum {
