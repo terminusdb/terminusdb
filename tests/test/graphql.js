@@ -77,10 +77,9 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    await document.insert(agent, { schema });
+    await document.insert(agent, { schema })
 
     await document.insert(agent, { instance: instances })
-
   })
 
   after(async function () {
