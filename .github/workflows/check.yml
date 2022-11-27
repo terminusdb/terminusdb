@@ -338,6 +338,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+      - run: sudo apt install swi-prolog-nox
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
