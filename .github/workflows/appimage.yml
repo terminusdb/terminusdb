@@ -1,0 +1,49 @@
+name: AppImage distribution
+
+on:
+  schedule:
+    - cron:  '45 3 * * *'
+  workflow_dispatch:
+  workflow_call:
+  # TODO: REMOVE THIS BEFORE MERGING
+  push:
+
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v3
+
+    # Runs a set of commands using the runners shell
+      - name: Run a multi-line script
+        run: |
+          sudo apt-add-repository ppa:swi-prolog/stable -y
+          sudo apt-get update -y
+          sudo apt-get install swi-prolog-nox libpcre3 libgmp-dev -y
+      - name: Create appimage
+        run: |
+          cd distribution/appimage
+          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          ./build_script.sh
+          mv "TerminusDB-$(echo $GITHUB_SHA | cut -c 1-7)-x86_64.AppImage" TerminusDB-amd64.AppImage
+
+      # I want to make sure that we are not secretly relying on SWIPL
+      # and the tests will still work without SWI Prolog installed
+      - name: Remove SWI Prolog
+        run: sudo apt remove swi-prolog-nox
+
+      - name: Run AppImage tests
+        run: |
+          cd distribution/appimage && chmod +x TerminusDB-amd64.AppImage && \
+             ./TerminusDB-amd64.AppImage store init && ./TerminusDB-amd64.AppImage serve &
+          cd tests && npm i && export TERMINUSDB_EXEC_PATH=../distribution/appimage/TerminusDB-amd64.AppImage && \
+             npm run test
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: TerminusDB-amd64.AppImage
+          path: distribution/appimage/TerminusDB-amd64.AppImage
