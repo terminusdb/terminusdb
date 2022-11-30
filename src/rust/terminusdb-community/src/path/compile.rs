@@ -19,11 +19,9 @@ pub fn path_to_class<'a, 'b>(
     all_frames: &'a AllFrames,
     zero_iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
-    eprintln!("attempting construction of path");
     let path = parse_path(path_string)
         .expect("Did not give a valid path")
         .1;
-    eprintln!("Parse a path: {path:?}");
     let expanded_type_name = all_frames.fully_qualified_class_name(to_class);
     let iter = compile_path(&g, all_frames.context.clone(), path, zero_iter);
     ClonableIterator::new(
@@ -37,7 +35,6 @@ fn compile_path<'a>(
     path: Path,
     mut iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
-    eprintln!("Compiling a path...");
     match path {
         Path::Seq(vec) => {
             for sub_path in vec {

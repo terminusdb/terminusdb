@@ -621,7 +621,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     instance,
                 )
             } else {
-                eprintln!("Field name: {field_name}");
                 let field_name_expanded = allframes.context.expand_schema(&field_name);
                 let field_id = instance.predicate_id(&field_name_expanded)?;
 
@@ -761,7 +760,6 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
 fn is_path_field_name(field_name: &str) -> bool {
     field_name.starts_with("_path_to_")
-
 }
 
 pub struct TerminusEnum {
