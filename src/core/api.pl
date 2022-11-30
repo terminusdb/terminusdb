@@ -1,6 +1,7 @@
 :- module(api, [
               % init.pl
               bootstrap_files/0,
+              add_dashboard_path/0,
               index_template/1,
               initialize_flags/0,
               initialize_database/2,

@@ -1,5 +1,6 @@
 :- module(config,[
               terminusdb_version/1,
+              dashboard_path/1,
               bootstrap_config_files/0,
               server/1,
               server_name/1,
@@ -45,6 +46,9 @@
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
 terminusdb_version('10.1.10').
 /* [[[end]]] */
+
+dashboard_path(Path) :-
+    getenv('TERMINUSDB_DASHBOARD_PATH', Path).
 
 bootstrap_config_files :-
     initialize_system_ssl_certs.

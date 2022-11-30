@@ -5,7 +5,7 @@ mkdir -p app_dir/usr/share/terminusdb
 mkdir -p app_dir/usr/bin
 mkdir -p app_dir/usr/lib/x86_64-linux-gnu
 # Build TerminusDB
-cd ../../ && make install-deps && make && cd "$CURRENT_DIR"
+cd ../../ && make install-dashboard && make install-deps && make && cd "$CURRENT_DIR"
 # Copy relevant files back to appimage dir
 cp -r ../../terminusdb ../../dashboard app_dir/usr/share/terminusdb/
 cp -r /usr/lib/swi-prolog app_dir/usr/lib/

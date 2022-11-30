@@ -1,5 +1,6 @@
 :- module(api_init, [
               bootstrap_files/0,
+              add_dashboard_path/0,
               initialize_flags/0,
               initialize_database/2,
               initialize_database_with_store/2,
@@ -120,6 +121,19 @@ config_path(Path) :-
 initialize_database(Key,Force) :-
     db_path(DB_Path),
     initialize_database_with_path(Key, DB_Path, Force).
+
+assert_dashboard_path(Dir) :-
+    directory_file_path(Dir, 'assets', Assets),
+    asserta(user:file_search_path(dashboard, Dir)),
+    asserta(user:file_search_path(assets, Assets)).
+
+add_dashboard_path :-
+    config:dashboard_path(Dir),
+    assert_dashboard_path(Dir).
+add_dashboard_path :-
+    user:file_search_path(terminus_top_dir, Dir),
+    directory_file_path(Dir, 'dashboard', Dashboard),
+    assert_dashboard_path(Dashboard).
 
 /*
  * initialize_database_with_path(Key,DB_Path,Force) is det+error.

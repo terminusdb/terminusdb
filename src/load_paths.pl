@@ -11,6 +11,12 @@ top_level_directory(Path) :-
     prolog_load_context(file, File),
     relative_file_name(Path, File, '..').
 
+add_terminus_top_dir :-
+    top_level_directory(TopDir),
+    asserta(user:file_search_path(terminus_top_dir, TopDir)).
+
+:- add_terminus_top_dir.
+
 add_terminus_home_path :-
     top_level_directory(TopDir),
     directory_file_path(TopDir, 'src', SrcDir),
@@ -121,21 +127,6 @@ add_enterprise_test_path :-
     top_level_directory(Dir),
     directory_file_path(Dir, 'terminusdb-enterprise/test', Enterprise),
     asserta(user:file_search_path(enterprise_test, Enterprise)).
-
-assert_dashboard_path(Dir) :-
-    directory_file_path(Dir, 'assets', Assets),
-    asserta(user:file_search_path(dashboard, Dir)),
-    asserta(user:file_search_path(assets, Assets)).
-
-add_dashboard_path :-
-    getenv('TERMINUSDB_DASHBOARD_PATH', Dir),
-    assert_dashboard_path(Dir).
-add_dashboard_path :-
-    top_level_directory(Dir),
-    directory_file_path(Dir, 'dashboard', Dashboard),
-    assert_dashboard_path(Dashboard).
-
-:- add_dashboard_path.
 
 :- if(getenv("TERMINUSDB_ENTERPRISE", true)).
 :- add_enterprise_path.
