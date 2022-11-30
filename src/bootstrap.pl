@@ -41,6 +41,6 @@ main :-
                       foreign(save),
                       undefined(error),
                       toplevel(cli_toplevel),
-                      autoload(false),
+                      autoload(true),
                       stand_alone(true)
                   ]).
