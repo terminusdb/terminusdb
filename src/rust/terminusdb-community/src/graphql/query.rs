@@ -821,7 +821,6 @@ pub fn run_filter_query<'a>(
 
     let new_zero_iter: Option<ClonableIterator<'a, u64>> =
         if let Some(path_string) = arguments.get::<String>("path") {
-            eprintln!("Found a path argument");
             if let Some(zi) = new_zero_iter {
                 Some(path_to_class(
                     &path_string,
