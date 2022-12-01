@@ -2,7 +2,7 @@
 
 ## Enhancements
 + Add ability to filter by multiple IDs in GraphQL
-* Collections over base types by
+* Collections over base types
 * Add Graphql backlinks
 * Prevent exhaustive list comparisons in diff
 * Path queries added to GraphQL
