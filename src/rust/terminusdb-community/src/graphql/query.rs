@@ -793,30 +793,49 @@ pub fn run_filter_query<'a>(
     zero_iter: Option<ClonableIterator<'a, u64>>,
 ) -> Vec<u64> {
     let new_zero_iter: Option<ClonableIterator<'a, u64>> =
-        if let Some(id_string) = arguments.get::<ID>("id") {
-            Some({
-                if let Some(id) = g.subject_id(&*id_string) {
-                    match zero_iter {
-                        None => {
-                            let zi = ClonableIterator::new(vec![id].into_iter());
-                            let expanded_type_name =
-                                all_frames.fully_qualified_class_name(&class_name.to_string());
-                            predicate_value_filter(
-                                g,
-                                &RDF_TYPE,
-                                &NodeOrValue::Node,
-                                expanded_type_name,
-                                zi,
-                            )
-                        }
-                        Some(zi) => ClonableIterator::new(zi.filter(move |i| *i == id)),
-                    }
-                } else {
-                    ClonableIterator::new(std::iter::empty())
+        match (arguments.get::<ID>("id"), arguments.get::<Vec<ID>>("ids")) {
+            (Some(id_string), None) => match zero_iter {
+                None => {
+                    let expanded_type_name =
+                        all_frames.fully_qualified_class_name(&class_name.to_string());
+                    Some(predicate_value_filter(
+                        g,
+                        &RDF_TYPE,
+                        &NodeOrValue::Node,
+                        expanded_type_name,
+                        ClonableIterator::new(g.subject_id(&*id_string).into_iter()),
+                    ))
                 }
-            })
-        } else {
-            zero_iter
+                Some(zi) => Some(ClonableIterator::new(zi.filter(move |i| {
+                    g.subject_id(&*id_string).into_iter().any(|id| *i == id)
+                }))),
+            },
+            (None, Some(id_vec)) => match zero_iter {
+                None => {
+                    let expanded_type_name =
+                        all_frames.fully_qualified_class_name(&class_name.to_string());
+                    let id_vec = id_vec.clone();
+                    Some(predicate_value_filter(
+                        g,
+                        &RDF_TYPE,
+                        &NodeOrValue::Node,
+                        expanded_type_name,
+                        ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&*id))),
+                    ))
+                }
+                Some(zi) => {
+                    let id_vec: Vec<String> = id_vec.into_iter().map(|id| id.to_string()).collect();
+                    Some(ClonableIterator::new(zi.filter(move |i| {
+                        id_vec
+                            .clone()
+                            .into_iter()
+                            .flat_map(|id| g.subject_id(&*id))
+                            .any(|id| *i == id)
+                    })))
+                }
+            },
+            (Some(_), Some(_)) => panic!("You must not specify 'id' and 'ids' simultaneously"),
+            (None, None) => zero_iter,
         };
 
     let new_zero_iter: Option<ClonableIterator<'a, u64>> =
