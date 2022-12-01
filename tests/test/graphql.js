@@ -10,7 +10,7 @@ describe('GraphQL', function () {
   let agent
   let client
 
-  const schema = {
+  const schema = [{
     '@id': 'Person',
     '@type': 'Class',
     '@key': {
@@ -21,16 +21,28 @@ describe('GraphQL', function () {
     age: 'xsd:decimal',
     order: 'xsd:integer',
     friend: { '@type': 'Set', '@class': 'Person' },
-  }
+    cat: { '@type': 'Set', '@class': 'Cat' },
+  }, {
+    '@id': 'Cat',
+    '@type': 'Class',
+    '@key': {
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    },
+    name: 'xsd:string',
+  }]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }
   const plato = { '@type': 'Person', name: 'Plato', age: 80, order: 2, friend: ['Person/Aristotle'] }
   const socrates = { '@type': 'Person', name: 'Socrates', age: 71, order: 1, friend: ['Person/Plato'] }
-  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: 79, order: 3, friend: ['Person/Immanuel%20Kant'] }
-  const popper = { '@type': 'Person', name: 'Karl Popper', age: 92, order: 5 }
-  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5, friend: ['Person/Immanuel%20Kant'] }
+  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: 79, order: 3, friend: ['Person/Immanuel%20Kant'], cat: ['Cat/Toots'] }
+  const popper = { '@type': 'Person', name: 'Karl Popper', age: 92, order: 5, cat: ['Cat/Pickles', 'Cat/Toots'] }
+  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5, friend: ['Person/Immanuel%20Kant'], cat: ['Cat/Pickles'] }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel]
+  const pickles = { '@type': 'Cat', name: 'Pickles' }
+  const toots = { '@type': 'Cat', name: 'Toots' }
+
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -66,6 +78,7 @@ describe('GraphQL', function () {
     await db.create(agent)
 
     await document.insert(agent, { schema })
+
     await document.insert(agent, { instance: instances })
   })
 
@@ -166,6 +179,60 @@ describe('GraphQL', function () {
         { name: 'Karl Popper', age: 92, order: '5', _friend_of_Person: [] },
         { name: 'Kurt Gödel', age: 71, order: '5', _friend_of_Person: [] },
       ])
+    })
+
+    it('path query', async function () {
+      const PATH_QUERY = gql`
+ query PersonQuery {
+    Person(id: "terminusdb:///data/Person/Socrates", orderBy : {order : ASC}){
+        _id
+        name
+        age
+        order
+        _path_to_Person(path: "friend+"){
+           name
+        }
+    }
+}`
+      const result = await client.query({ query: PATH_QUERY })
+
+      expect(result.data.Person[0]._path_to_Person).to.deep.equal(
+        [
+          {
+            name: 'Plato',
+          },
+          {
+            name: 'Aristotle',
+          },
+        ],
+      )
+    })
+
+    it('path query backward and forward', async function () {
+      const PATH_QUERY = gql`
+ query PersonQuery {
+    Person(id: "terminusdb:///data/Person/Immanuel%20Kant", orderBy : {order : ASC}){
+        _id
+        name
+        age
+        order
+        _path_to_Cat(path: "(<friend)*,cat"){
+           name
+        }
+    }
+}`
+      const result = await client.query({ query: PATH_QUERY })
+
+      expect(result.data.Person[0]._path_to_Cat).to.deep.equal(
+        [
+          {
+            name: 'Toots',
+          },
+          {
+            name: 'Pickles',
+          },
+        ],
+      )
     })
   })
 })

@@ -1226,6 +1226,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
 
 [[package]]
+name = "regex-lexer"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8021102edb4210b3c3867aff05465d5a79c1d25d48859885fca7dcfc8c69f623"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "regex-syntax"
 version = "0.6.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1483,10 +1492,12 @@ dependencies = [
  "lazy-init",
  "lazy_static",
  "lcs",
+ "nom",
  "ordered-float",
  "rand 0.8.5",
  "rayon",
  "regex",
+ "regex-lexer",
  "rug",
  "serde",
  "serde_json",
