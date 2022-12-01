@@ -1,3 +1,19 @@
+# TerminusDB Server v10.1.10 Release Notes
+
+## Enhancements
++ Add ability to filter by multiple IDs in GraphQL
+* Collections over base types by
+* Add Graphql backlinks
+* Prevent exhaustive list comparisons in diff
+* Path queries added to GraphQL
+
+## Bug fixes
+
+* Fix dangling reference check, improves performance on deletion
+* Remove TERMINUSDB_LOG_PATH ENV as it caused a crash
+* Graphiql is not hardcoded to localhost:6363 anymore
+* Avoid framing json metadata
+
 # TerminusDB Server v10.1.9 Release Notes
 
 ## Enhancements
