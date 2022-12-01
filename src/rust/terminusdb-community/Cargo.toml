@@ -26,3 +26,5 @@ bimap = "0.6.2"
 ordered-float = "3.0"
 rug = {version = "1.17", default-features = false, features=["integer","rational"]}
 gmp-mpfr-sys = {version = "1.4", default-features = false, features=["use-system-libs"]}
+regex-lexer = "0.2"
+nom = "7.1"
