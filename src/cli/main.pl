@@ -2298,6 +2298,8 @@ create_authorization(Opts,Authorization) :-
     ;   token_authorization(Token,Authorization)
     ).
 
+report_parse_error(error(existence_error(procedure, optparse:existence_error/2), _), _) =>
+    format(user_error, '~NERROR: Unknown command line option~n', []).
 report_parse_error(error(existence_error(commandline_option, Opt), _), Command) =>
     intersperse(' ', Command, Command_List),
     atomic_list_concat(Command_List, Command_Atom),

@@ -30,7 +30,7 @@ describe('cli-options', function () {
     // This may depend on prolog version!
     it('nice error for bad switch', async function () {
       const r = await exec('./terminusdb.sh db create admin/bar -g foo')
-      const errorPattern = /ERROR: The command line option "g" does not exist for the command "db create".*/
+      const errorPattern = /(ERROR: The command line option "g" does not exist for the command "db create")|(ERROR: Unknown command line option).*/
       expect(r.stderr).to.match(new RegExp(errorPattern))
     })
 
