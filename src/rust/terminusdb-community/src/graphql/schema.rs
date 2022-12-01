@@ -120,6 +120,7 @@ fn add_arguments<'r>(
     class_definition: &ClassDefinition,
 ) -> Field<'r, DefaultScalarValue> {
     field = field.argument(registry.arg::<Option<ID>>("id", &()));
+    field = field.argument(registry.arg::<Option<Vec<ID>>>("ids", &()));
     field = field.argument(
         registry
             .arg::<Option<i32>>("offset", &())

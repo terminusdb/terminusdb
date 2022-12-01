@@ -234,5 +234,22 @@ describe('GraphQL', function () {
         ],
       )
     })
+
+    it('graphql ids query', async function () {
+      const PERSON_QUERY = gql`
+ query PersonQuery {
+    Person(ids : ["terminusdb:///data/Person/Immanuel%20Kant",
+                  "terminusdb:///data/Person/Socrates"
+                 ]){
+        name
+    }
+}`
+      const result = await client.query({ query: PERSON_QUERY })
+
+      expect(result.data.Person).to.deep.equal([
+        { name: 'Immanuel Kant' },
+        { name: 'Socrates' },
+      ])
+    })
   })
 })
