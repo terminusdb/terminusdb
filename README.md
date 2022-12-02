@@ -120,7 +120,7 @@ More on the [CLI here](https://terminusdb.com/blog/distributed-database-with-col
 ## Community
 
 Come visit us on [Discord](https://discord.gg/yTJKAma)
-or our [forum](https://discuss.terminusdb.com). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
+or our [community Subreddit](https://www.reddit.com/r/TerminusDB/). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
 
 ## Documentation
 
