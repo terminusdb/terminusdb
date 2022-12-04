@@ -3,15 +3,10 @@ pub mod layer;
 pub mod named_graph;
 pub mod store;
 
-mod csv;
-
 pub use swipl;
 pub use terminus_store;
 
 pub fn install(module: Option<&str>) {
-    csv::register_csv_iri_in_module(module);
-    csv::register_csv_builder_in_module(module);
-    csv::register_csv_builder_with_schema_in_module(module);
     store::register_open_memory_store_in_module(module);
     store::register_open_directory_store_in_module(module);
     named_graph::register_create_named_graph_in_module(module);
