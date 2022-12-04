@@ -633,7 +633,7 @@ fn compile_query<'a>(
                 //or_iter = ClonableIterator::new(std::iter::empty());
                 iter = ClonableIterator::new(vec.clone().into_iter().flat_map(move |filter| {
                     let iter_copy = ClonableIterator::new(initial_vector.clone().into_iter());
-                    compile_query(&g, filter.clone(), iter_copy)
+                    compile_query(&g, filter, iter_copy)
                 }));
             }
             FilterValue::Not(filter) => {
@@ -757,7 +757,7 @@ fn generate_initial_iterator<'a>(
     match zero_iter {
         None => {
             // If we have a filter here, we probably need to use it.
-            let expanded_type_name = all_frames.fully_qualified_class_name(&class_name.to_string());
+            let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
             (
                 filter_opt,
                 predicate_value_iter(g, &RDF_TYPE, &NodeOrValue::Node, expanded_type_name),
@@ -797,7 +797,7 @@ pub fn run_filter_query<'a>(
             (Some(id_string), None) => match zero_iter {
                 None => {
                     let expanded_type_name =
-                        all_frames.fully_qualified_class_name(&class_name.to_string());
+                        all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         &RDF_TYPE,
@@ -813,8 +813,7 @@ pub fn run_filter_query<'a>(
             (None, Some(id_vec)) => match zero_iter {
                 None => {
                     let expanded_type_name =
-                        all_frames.fully_qualified_class_name(&class_name.to_string());
-                    let id_vec = id_vec.clone();
+                        all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         &RDF_TYPE,
