@@ -151,7 +151,7 @@ fn compile_many<'a>(
     } else {
         ClonableIterator::new(ManySearchIterator {
             graph: g,
-            prefixes: prefixes.clone(),
+            prefixes,
             start,
             stop,
             current: 0,
