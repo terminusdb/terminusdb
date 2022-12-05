@@ -385,6 +385,9 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             if let Some(inverted_type) = inverted_frames.classes.get(&info.class) {
                 for (field_name, ifd) in inverted_type.domain.iter() {
                     let class = &ifd.class;
+                    if !info.allframes.frames[class].is_document_type() {
+                        continue;
+                    }
                     let kind = &ifd.kind;
                     let class_definition = info.allframes.frames[class].as_class_definition();
                     let new_info = TerminusTypeInfo {
@@ -393,7 +396,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                     };
                     let field = Self::register_field::<TerminusType<'a, C>>(
                         registry,
-                        &field_name,
+                        field_name,
                         &new_info,
                         kind.clone(),
                     );
@@ -406,7 +409,10 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         fields.append(&mut inverted_fields);
 
         let mut path_fields: Vec<_> = Vec::new();
-        for (class, _) in &frames.frames {
+        for class in frames.frames.keys() {
+            if !info.allframes.frames[class].is_document_type() {
+                continue;
+            }
             let field_name = format!("_path_to_{class}");
             let class_definition = info.allframes.frames[class].as_class_definition();
             let new_info = TerminusTypeInfo {
@@ -456,7 +462,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
     }
 }
 
-fn rewind_rdf_list<'a>(instance: &'a dyn Layer, cons_id: u64) -> Option<u64> {
+fn rewind_rdf_list(instance: &dyn Layer, cons_id: u64) -> Option<u64> {
     if let Some(rdf_rest) = instance.predicate_id(RDF_REST) {
         let mut cons = Some(cons_id);
         while let Some(id) = cons {
@@ -465,7 +471,7 @@ fn rewind_rdf_list<'a>(instance: &'a dyn Layer, cons_id: u64) -> Option<u64> {
                 .filter(|t| t.predicate == rdf_rest)
                 .map(|t| t.subject)
                 .next();
-            if res == None {
+            if res.is_none() {
                 return cons;
             } else {
                 cons = res
@@ -477,7 +483,7 @@ fn rewind_rdf_list<'a>(instance: &'a dyn Layer, cons_id: u64) -> Option<u64> {
     }
 }
 
-fn subject_has_type<'a>(instance: &'a dyn Layer, subject_id: u64, class: &str) -> bool {
+fn subject_has_type(instance: &dyn Layer, subject_id: u64, class: &str) -> bool {
     if let Some(rdf_type_id) = instance.predicate_id(RDF_TYPE) {
         if let Some(class_id) = instance.object_node_id(class) {
             instance.triple_exists(subject_id, rdf_type_id, class_id)
@@ -523,7 +529,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 let property = &reverse_link.property;
                 let domain = &reverse_link.class;
                 let kind = &reverse_link.kind;
-                let property_expanded = allframes.context.expand_schema(&property);
+                let property_expanded = allframes.context.expand_schema(property);
                 let domain_uri = allframes.fully_qualified_class_name(domain);
                 let field_id = instance.predicate_id(&property_expanded)?;
                 // List and array are special since they are *deep* objects
@@ -552,12 +558,12 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(&domain),
+                            Some(domain),
                             executor,
                             info,
                             arguments,
                             ClonableIterator::new(CachedClonableIterator::new(object_ids)),
-                            &instance,
+                            instance,
                         )
                     }
                     FieldKind::Array => {
@@ -583,12 +589,12 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(&domain),
+                            Some(domain),
                             executor,
                             info,
                             arguments,
                             ClonableIterator::new(CachedClonableIterator::new(object_ids)),
-                            &instance,
+                            instance,
                         )
                     }
                     _ => {
@@ -601,7 +607,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            Some(&domain),
+                            Some(domain),
                             executor,
                             info,
                             arguments,
@@ -622,7 +628,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     instance,
                 )
             } else {
-                let field_name_expanded = allframes.context.expand_schema(&field_name);
+                let field_name_expanded = allframes.context.expand_schema(field_name);
                 let field_id = instance.predicate_id(&field_name_expanded)?;
 
                 let frame = &allframes.frames[&info.class];
@@ -652,7 +658,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             ))
                         } else if let Some(enum_type) = enum_type {
                             let enum_uri = instance.id_object_node(object_id).unwrap();
-                            let enum_value = enum_node_to_value(&enum_type, &enum_uri);
+                            let enum_value = enum_node_to_value(enum_type, &enum_uri);
                             let enum_definition = allframes.frames[enum_type].as_enum_definition();
                             let value = juniper::Value::Scalar(DefaultScalarValue::String(
                                 enum_definition.name_value(&enum_value).to_string(),
