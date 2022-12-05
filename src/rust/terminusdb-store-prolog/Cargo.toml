@@ -10,7 +10,6 @@ publish = false
 [dependencies]
 swipl = {version="0.3.12", features=["serde"]}
 terminus-store = {version="=0.19.9", features=[]}
-csv = "1.1"
 sha-1 = "0.9.1"
 hex = "0.4.2"
 encoding_rs = "0.8.24"

@@ -55,11 +55,6 @@
               pack_layerids_and_parents/2,
               pack_import/3,
 
-              csv_builder/3,
-              csv_builder/4,
-              csv_builder/5,
-              csv_iri/3,
-
               count_layer_stack_size/2,
 
               rollup/1,
@@ -412,34 +407,6 @@ terminus_store_version('0.19.8').
 % @arg Layer the layer for which to do the parent lookup.
 % @arg Upto the layer at which to stop the rollup.
 
-%! csv_builder(+Name:string, +Csv:path, +Builder:builder, +Options:options) is det
-%
-% Creates a layer with the contents of a csv as triples
-%
-% @arg Name Name of the CSV object
-% @arg Csv The path to the csv to be loaded
-% @arg Builder The builder into which to place the CSV
-% @arg Layer The returned Layer
-% @arg Options A list containing any of the following:
-%     * data_prefix(Prefix) (default is "csv:///data#")
-%     * predicate_prefix(Prefix) (default is "csv:///schema#")
-%     * header(Bool) (Boolean to read a header, default true)
-%     * skip_header(Bool) (Skip the header regardless of presence,
-%                          default false)
-
-%! csv_builder(+Name:string, +Csv:path, +Builder:builder) is det
-%
-% Creates a layer with the contents of a csv as triples. Options are defaults.
-%
-% @arg Name Name of the CSV object
-% @arg Csv The path to the csv to be loaded
-% @arg Builder The builder into which to place the CSV
-% @arg Layer The returned Layer
-
-%! csv_iri(Name, Prefix, IRI) is det.
-%
-% Creates a CSV IRI from a name and prefix
-
 %! layer_stack_names(+Layer:layer, -Stack:list) is det.
 %
 % Creates a layer-id stack from a layer which contains all ancestor
@@ -593,23 +560,6 @@ triple(Layer, Subject, Predicate, Object) :-
     (   ground(Object)
     ->  true
     ;   object_id(Layer,Object, O_Id)).
-
-csv_builder(Name, Csv, Builder) :-
-    csv_builder(Name, Csv,Builder,[]).
-
-csv_builder(Name, Csv, Builder, Options) :-
-    option(data_prefix(Data), Options, 'csv:///data/'),
-    option(schema_prefix(Schema), Options, 'csv:///schema#'),
-    option(header(Header), Options, true),
-    option(skip_header(Skip), Options, false),
-    csv_builder(Name, Csv, Builder, Data, Schema, Header, Skip).
-
-csv_builder(Name, Csv, Builder, Schema_Builder, Options) :-
-    option(data_prefix(Data), Options, 'csv:///data/'),
-    option(schema_prefix(Schema), Options, 'csv:///schema#'),
-    option(header(Header), Options, true),
-    option(skip_header(Skip), Options, false),
-    csv_builder(Name, Csv, Builder, Schema_Builder, Data, Schema, Header, Skip).
 
 triple_addition(Layer, Subject, Predicate, Object) :-
     (   ground(Subject)
@@ -1120,165 +1070,6 @@ test(apply_empty_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Triple_Additions = Triples,
     findall(X-P-Y, triple_removal(Final_Layer, X, P, Y), Triple_Removals),
     Triple_Removals = [].
-
-test(add_csv,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "some,header~n", []),
-    format(Stream, "1,2~n", []),
-    format(Stream, "3,4~n", []),
-    close(Stream),
-    csv_builder("csv",Filename, Builder, []),
-    nb_commit(Builder, Layer),
-    findall(X-P-Y, triple(Layer, X, P, Y), Triples),
-
-    Triples = [
-        X-"csv:///schema#csv_column_header"-value("\"2\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        X-"csv:///schema#csv_column_some"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        X-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row1),
-        Y-"csv:///schema#csv_column_header"-value("\"4\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Y-"csv:///schema#csv_column_some"-value("\"3\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Y-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row1),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_header"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_some"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(X),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(Y),
-        "csv:///data/CSV_csv"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#CSV"),
-        "csv:///data/CSV_csv"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv\"@en"),
-        "csv:///data/ColumnObject_csv_header"-"csv:///schema#csv_column_index"-value("1^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_header"-"csv:///schema#csv_column_name"-value("\"header\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_header"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column"),
-        "csv:///data/ColumnObject_csv_some"-"csv:///schema#csv_column_index"-value("0^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_some"-"csv:///schema#csv_column_name"-value("\"some\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_some"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column")
-    ].
-
-test(add_csv_skip_header,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "1,2~n", []),
-    format(Stream, "3,4~n", []),
-    close(Stream),
-    csv_builder("csv",Filename, Builder, [skip_header(true)]),
-    nb_commit(Builder, Layer),
-    findall(X-P-Y, triple(Layer, X, P, Y), Triples),
-    Triples = [
-        Row1-"csv:///schema#csv_column_0"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row1-"csv:///schema#csv_column_1"-value("\"2\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row1-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row_Type),
-        Row2-"csv:///schema#csv_column_0"-value("\"3\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row2-"csv:///schema#csv_column_1"-value("\"4\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row2-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row_Type),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_0"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_1"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(Row1),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(Row2),
-        "csv:///data/CSV_csv"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#CSV"),
-        "csv:///data/CSV_csv"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv\"@en"),
-        "csv:///data/ColumnObject_csv_0"-"csv:///schema#csv_column_index"-value("0^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_0"-"csv:///schema#csv_column_name"-value("\"0\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_0"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column"),
-        "csv:///data/ColumnObject_csv_1"-"csv:///schema#csv_column_index"-value("1^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_1"-"csv:///schema#csv_column_name"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_1"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column")
-    ].
-
-test(csv_prefixes,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "some,header~n", []),
-    format(Stream, "1,2~n", []),
-    close(Stream),
-
-    csv_builder("csv",Filename, Builder, [data_prefix('that/'),
-                                          schema_prefix('this#')]),
-    nb_commit(Builder, Layer),
-    findall(X-P-Y, triple(Layer, X, P, Y), Triples),
-
-    Triples = [
-        Row1-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(_),
-        Row1-"this#csv_column_header"-value("\"2\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row1-"this#csv_column_some"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "that/CSV_csv"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("this#CSV"),
-        "that/CSV_csv"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv\"@en"),
-        "that/CSV_csv"-"this#csv_column"-node("that/ColumnObject_csv_header"),
-        "that/CSV_csv"-"this#csv_column"-node("that/ColumnObject_csv_some"),
-        "that/CSV_csv"-"this#csv_row"-node(Row1),
-        "that/ColumnObject_csv_header"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("this#Column"),
-        "that/ColumnObject_csv_header"-"this#csv_column_index"-value("1^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "that/ColumnObject_csv_header"-"this#csv_column_name"-value("\"header\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "that/ColumnObject_csv_some"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("this#Column"),
-        "that/ColumnObject_csv_some"-"this#csv_column_index"-value("0^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "that/ColumnObject_csv_some"-"this#csv_column_name"-value("\"some\"^^'http://www.w3.org/2001/XMLSchema#string'")
-    ].
-
-test(csv_with_schema,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-    open_write(Store, Schema_Builder),
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "some,header~n", []),
-    format(Stream, "1,2~n", []),
-    format(Stream, "3,4~n", []),
-    close(Stream),
-    csv_builder("csv",Filename, Builder, Schema_Builder,
-                [data_prefix('data/'),
-                 schema_prefix('')]),
-    nb_commit(Schema_Builder, Schema_Layer),
-    findall(X-P-Y, triple(Schema_Layer, X, P, Y), Schema_Triples),
-
-    Schema_Expected = [
-        "CSV"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        "CSV"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV object\"@en"),
-        "CSV"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"CSV\"@en"),
-        "CSV"-"http://www.w3.org/2000/01/rdf-schema#subClassOf"-node("http://terminusdb.com/schema/system#Document"),
-        "CSVRow"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        "CSVRow"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Generic Row of a CSV file\"@en"),
-        "CSVRow"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"CSV Row\"@en"),
-        Row_Type-"http://terminusdb.com/schema/system#csv_name"-value("\"csv\"@en"),
-        Row_Type-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        Row_Type-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV Row object for columns [\\\"header\\\", \\\"some\\\"]\"@en"),
-        Row_Type-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"CSV Row from csv\"@en"),
-        Row_Type-"http://www.w3.org/2000/01/rdf-schema#subClassOf"-node("CSVRow"),
-        "Column"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        "Column"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Column information object for a CSV\"@en"),
-        "Column"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"Column\"@en"),
-        "csv_column_header"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV Column for header name header\"@en"),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#domain"-node(Row_Type),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"Column header\"@en"),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#string"),
-        "csv_column_some"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV Column for header name some\"@en"),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#domain"-node(Row_Type),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"Column some\"@en"),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#string"),
-        "csv_column"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#ObjectProperty"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Associates a CSV with a column object\"@en"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("CSV"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv column\"@en"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#range"-node("Column"),
-        "csv_column_index"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"The ordering index for a column in a csv\"@en"),"csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("Column"),
-        "csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv column index\"@en"),"csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#integer"),
-        "csv_column_name"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"The name of the column as it was verbatim in the CSV\"@en"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("Column"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv column name\"@en"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#string"),
-        "csv_row"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#ObjectProperty"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Connects a CSV to its rows\"@en"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("CSV"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv row\"@en"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#range"-node("CSVRow")
-    ],
-
-    forall(member(Triple,Schema_Triples),
-           (   member(Triple,Schema_Expected))).
 
 test(so_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     open_directory_store(TestDir, Store),
