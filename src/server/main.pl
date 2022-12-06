@@ -116,15 +116,24 @@ loading_page -->
         p('TerminusDB is still synchronizing backing store')
     ]).
 
+
+print_welcome_banner(Version, Enterprise, Argv, _, _, Server) :-
+    log_format(json),
+    format(user_error, '{"message": "Welcome to TerminusDB ~s! You can view your server in a browser at ~s",\c
+                          "version": "~s", "args": "~w"}~n',
+          [Enterprise, Server, Version, Argv]).
+print_welcome_banner(Version, Enterprise, Argv, StrTime, Now, Server) :-
+    format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
+           [StrTime, Now, Argv]),
+    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server, version ~s!~n',[Enterprise, Version]),
+    format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).
+
 welcome_banner(Server,Argv) :-
     % Test utils currently reads this so watch out if you change it!
     get_time(Now),
     terminusdb_version(Version),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
-    format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
-           [StrTime, Now, Argv]),
     (   is_enterprise
     ->  Enterprise = ' Enterprise'
     ;   Enterprise = ''),
-    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server, version ~s!~n',[Enterprise, Version]),
-    format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).
+    print_welcome_banner(Version, Enterprise, Argv, StrTime, Now, Server).
