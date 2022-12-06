@@ -120,6 +120,7 @@ loading_page -->
 
 print_welcome_banner(Version, Enterprise, Argv, _, _, Server) :-
     log_format(json),
+    !,
     format(user_error, '{"message": "Welcome to TerminusDB ~s! You can view your server in a browser at ~s",\c
                           "version": "~s", "args": "~w", "severity": "INFO"}~n',
           [Enterprise, Server, Version, Argv]).
