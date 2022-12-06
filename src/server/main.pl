@@ -20,6 +20,7 @@
                                        jwt_jwks_endpoint/1,
                                        server/1,
                                        server_port/1,
+                                       log_format/1,
                                        worker_amount/1,
                                        is_enterprise/0,
                                        terminusdb_version/1]).
