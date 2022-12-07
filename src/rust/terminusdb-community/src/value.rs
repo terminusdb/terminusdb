@@ -1,11 +1,11 @@
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
+use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::str::FromStr;
-
-use serde_json::*;
+use terminusdb_store_prolog::terminus_store::structure::*;
 
 use crate::consts::XSD_PREFIX;
 
@@ -36,31 +36,30 @@ fn value_string_to_slices(s: &str) -> LangOrType {
     }
 }
 
-pub fn value_string_to_string(s: &str) -> Cow<str> {
-    match value_string_to_slices(s) {
-        LangOrType::Lang(s, _) => prolog_string_to_string(s),
-        LangOrType::Type(s, _) => prolog_string_to_string(s),
+pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
+    match tde.datatype() {
+        _ => todo!(),
     }
 }
 
-pub fn value_string_to_bool(s: &str) -> bool {
-    match value_string_to_slices(s) {
-        LangOrType::Type(s, _) => s == "\"true\"",
+pub fn value_to_bool(tde: &TypedDictEntry) -> bool {
+    match tde.datatype() {
+        Datatype::Boolean => tde.as_val::<bool, bool>(),
         _ => panic!("This should not be a string, but a bool"),
     }
 }
 
-pub fn value_string_to_number(s: &str) -> Number {
-    match value_string_to_slices(s) {
-        LangOrType::Type(s, _) => Number::from_str(s).unwrap(),
-        _ => panic!("This should not be a string, but a bool"),
+pub fn value_to_number(tde: &TypedDictEntry) -> Number {
+    // should implement marshalling to Serde number?
+    match tde.datatype() {
+        _ => panic!("This should not be a string, but a number"),
     }
 }
 
-pub fn value_string_to_bigint(s: &str) -> Integer {
-    match value_string_to_slices(s) {
-        LangOrType::Type(s, _) => s.parse::<Integer>().unwrap(),
-        _ => panic!("This should not be a string, but a bool"),
+pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
+    match tde.datatype() {
+        Datatype::BigInt => tde.as_val::<Integer, Integer>(),
+        _ => panic!("This should not be a string, but a big int"),
     }
 }
 
@@ -162,7 +161,19 @@ pub fn type_is_datetime(s: &str) -> bool {
     DATETIME_TYPES.contains(s)
 }
 
-pub fn value_string_to_json(s: &str) -> Value {
+pub fn value_to_json(tde: &TypedDictEntry) -> Value {
+    match tde.datatype() {
+        Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
+        Datatype::Token => Value::Null, // This *really* should be checked.
+        Datatype::UInt32
+        | Datatype::Int32
+        | Datatype::UInt64
+        | Datatype::Int64
+        | Datatype::Float32
+            | Datatype::Float64 => todo!(), // serde number?
+        Datatype::String => Value::String(tde.as_val::<String, String>)
+    }
+    /*
     match value_string_to_slices(s) {
         LangOrType::Type(val, typ) => {
             if typ == "boolean" {
@@ -183,34 +194,38 @@ pub fn value_string_to_json(s: &str) -> Value {
             let l = lang[1..lang.len() - 1].to_string();
             json!({ "@lang" : l, "@value" : s })
         }
-    }
+    }*/
 }
 
-pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
-    match value_string_to_slices(s) {
-        LangOrType::Type(val, typ) => {
-            if typ == "boolean" {
-                juniper::Value::Scalar(DefaultScalarValue::Boolean(val == "\"true\""))
-            } else if typ == "token" && val == "\"null\"" {
-                juniper::Value::Null
-            } else if type_is_small_integer(typ) {
-                juniper::Value::Scalar(DefaultScalarValue::Int(i32::from_str(val).unwrap()))
-            } else if type_is_big_integer(typ) {
-                juniper::Value::Scalar(DefaultScalarValue::String(val.to_owned()))
-            } else if type_is_float(typ) {
-                juniper::Value::Scalar(DefaultScalarValue::Float(f64::from_str(val).unwrap()))
-            } else {
-                // it will be something quoted, which we're gonna return as a string
-                juniper::Value::Scalar(DefaultScalarValue::String(
-                    prolog_string_to_string(val).into_owned(),
-                ))
-            }
+pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarValue> {
+    match tde.datatype() {
+        Datatype::Boolean => {
+            juniper::Value::Scalar(DefaultScalarValue::Boolean(tde.as_val::<bool, bool>()))
         }
-        LangOrType::Lang(val, lang) => {
-            // TODO: we need to include language tag here somehow
-            let s = prolog_string_to_string(val);
-            let _l = lang[1..lang.len() - 1].to_string();
-            juniper::Value::Scalar(DefaultScalarValue::String(s.into_owned()))
+        Datatype::String => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<String, String>()))
+        }
+        Datatype::UInt32 => {
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<u64, u64>() as f64))
+        }
+        Datatype::Int32 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i32, i32>()))
+        }
+        Datatype::UInt64 => {
+            todo!()
+        }
+        Datatype::Int64 => todo!(),
+        Datatype::Float32 => {
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>() as f64))
+        }
+        Datatype::Float64 => {
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>() as f64))
+        }
+        Datatype::Decimal => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Decimal, String>()))
+        }
+        Datatype::BigInt => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Integer, String>()))
         }
     }
 }
@@ -243,16 +258,8 @@ impl FromInputValue for ScalarInputValue {
     }
 }
 
-pub fn value_string_to_usize(s: &str) -> usize {
-    if let LangOrType::Type(val, typ) = value_string_to_slices(s) {
-        if !type_is_numeric(typ) {
-            panic!("not a numeric type: {}", typ);
-        }
-
-        usize::from_str(val).unwrap()
-    } else {
-        panic!("unexpected lang string");
-    }
+pub fn value_to_usize(tde: &TypedDictEntry) -> usize {
+    tde.as_val::<u32, u32>() as usize
 }
 
 const SWIPL_CONTROL_CHAR_A: char = 7 as char;

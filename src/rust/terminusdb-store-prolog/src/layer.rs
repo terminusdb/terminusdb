@@ -1,3 +1,4 @@
+use super::value::*;
 use crate::store::*;
 use std::io::{self, Write};
 use std::iter::Peekable;
@@ -66,14 +67,15 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
 
         let inner = context.new_term_ref();
+        let ty = context.new_term_ref();
         let id: Option<u64>;
         if attempt(object_term.unify(term!{context: node(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
             id = layer.object_node_id(&object);
         }
-        else if attempt(object_term.unify(term!{context: value(#&inner)}?))? {
-            let object: PrologText = inner.get_ex()?;
-            id = layer.object_value_id(&object);
+        else if attempt(object_term.unify(term!{context: value(#&inner,#&ty)}?))? {
+            let entry = make_entry_from_term(context,&inner,&ty)?;
+            id = layer.object_value_id(&entry);
         }
         else {
             return context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?);
@@ -86,18 +88,17 @@ predicates! {
         }
     }
 
-    pub semidet fn id_to_object(_context, layer_term, id_term, object_term) {
+    pub semidet fn id_to_object(context, layer_term, id_term, object_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let id: u64 = id_term.get_ex()?;
 
         match layer.id_object(id) {
             Some(ObjectType::Node(object)) => {
-                object_term.unify(Functor::new("node", 1))?;
-                object_term.unify_arg(1, &object)
+                object_term.unify(functor!("node/1"))?;
+                object_term.unify_arg(1, object)
             }
             Some(ObjectType::Value(object)) => {
-                object_term.unify(Functor::new("value", 1))?;
-                object_term.unify_arg(1, &object)
+                unify_entry(context, &object, object_term)
             }
             None => Err(PrologError::Failure)
         }

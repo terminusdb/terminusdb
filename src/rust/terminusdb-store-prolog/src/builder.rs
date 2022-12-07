@@ -23,11 +23,11 @@ predicates! {
         let inner = context.new_term_ref();
         if attempt(object_term.unify(term!{context: node(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
-            context.try_or_die(builder.add_string_triple(StringTriple::new_node(&subject, &predicate, &object)))
+            context.try_or_die(builder.add_value_triple(ValueTriple::new_node(&subject, &predicate, &object)))
         }
         else if attempt(object_term.unify(term!{context: value(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
-            context.try_or_die(builder.add_string_triple(StringTriple::new_value(&subject, &predicate, &object)))
+            context.try_or_die(builder.add_value_triple(ValueTriple::new_string_value(&subject, &predicate, &object)))
         }
         else {
             context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?)
@@ -51,11 +51,11 @@ predicates! {
         let inner = context.new_term_ref();
         if attempt(object_term.unify(term!{context: node(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
-            context.try_or_die(builder.remove_string_triple(StringTriple::new_node(&subject, &predicate, &object)))
+            context.try_or_die(builder.remove_value_triple(ValueTriple::new_node(&subject, &predicate, &object)))
         }
         else if attempt(object_term.unify(term!{context: value(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
-            context.try_or_die(builder.remove_string_triple(StringTriple::new_value(&subject, &predicate, &object)))
+            context.try_or_die(builder.remove_value_triple(ValueTriple::new_string_value(&subject, &predicate, &object)))
         }
         else {
             context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?)

@@ -529,10 +529,7 @@ fn object_type_filter<'a>(
             let h = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = h.id_object_value(*object).expect("Object value must exist");
-                let object_int = value_string_to_number(&object_value)
-                    .as_i64()
-                    .expect("How did it even get in to the database as a small int")
-                    as i32;
+                let object_int = object_value.as_val::<i32, i32>();
                 let cmp = object_int.cmp(&i);
                 ordering_matches_op(cmp, op)
             }))
@@ -543,9 +540,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_float = value_string_to_number(&object_value)
-                    .as_f64()
-                    .expect("How did this get into the database bigger than f64?");
+                let object_float = object_value.as_val::<f64, f64>();
                 let cmp = OrderedFloat(object_float).cmp(&OrderedFloat(f));
                 ordering_matches_op(cmp, op)
             }))
@@ -556,7 +551,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_bool = value_string_to_bool(&object_value);
+                let object_bool = object_value::<bool, bool>();
                 let cmp = object_bool.cmp(&b);
                 ordering_matches_op(cmp, op)
             }))
@@ -796,8 +791,7 @@ pub fn run_filter_query<'a>(
         match (arguments.get::<ID>("id"), arguments.get::<Vec<ID>>("ids")) {
             (Some(id_string), None) => match zero_iter {
                 None => {
-                    let expanded_type_name =
-                        all_frames.fully_qualified_class_name(class_name);
+                    let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         &RDF_TYPE,
@@ -812,8 +806,7 @@ pub fn run_filter_query<'a>(
             },
             (None, Some(id_vec)) => match zero_iter {
                 None => {
-                    let expanded_type_name =
-                        all_frames.fully_qualified_class_name(class_name);
+                    let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         &RDF_TYPE,

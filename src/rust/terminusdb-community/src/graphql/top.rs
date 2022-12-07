@@ -22,7 +22,7 @@ fn maybe_object_string(db: &SyncStoreLayer, id: u64, prop: &str) -> Option<Strin
         .and_then(|p| db.single_triple_sp(id, p))
         .and_then(|t| db.id_object(t.object))
         .and_then(|o| o.value())
-        .map(move |v| value_string_to_json(&v))
+        .map(move |v| value_string_to_json())
         .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
 }
 
@@ -40,7 +40,7 @@ fn required_object_string(db: &SyncStoreLayer, id: u64, prop: &str) -> String {
         .value()
         .expect("returned object was not a value");
 
-    let name_json = value_string_to_json(&name_unprocessed);
+    let name_json = value_string_to_json();
     let name = name_json.as_str().unwrap();
 
     name.to_string()
@@ -60,7 +60,7 @@ fn required_object_float(db: &SyncStoreLayer, id: u64, prop: &str) -> f64 {
         .value()
         .expect("returned object was not a value");
 
-    let f_json = value_string_to_json(&name_unprocessed);
+    let f_json = value_string_to_json();
     f_json.as_f64().unwrap()
 }
 

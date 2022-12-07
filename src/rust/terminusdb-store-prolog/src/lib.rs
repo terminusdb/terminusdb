@@ -2,6 +2,7 @@ pub mod builder;
 pub mod layer;
 pub mod named_graph;
 pub mod store;
+pub mod value;
 
 pub use swipl;
 pub use terminus_store;
