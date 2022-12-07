@@ -30,6 +30,10 @@ describe('GraphQL', function () {
       '@fields': ['name'],
     },
     name: 'xsd:string',
+  }, {
+    '@id': 'Rocks',
+    '@type': 'Enum',
+    '@value': ['Big', 'Medium', 'Small'],
   }]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }

@@ -512,29 +512,24 @@ pub enum TypeDefinition {
 
 impl TypeDefinition {
     pub fn is_document_type(&self) -> bool {
-        match self {
-            Self::Class(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Class(_))
     }
+
     pub fn is_enum_type(&self) -> bool {
-        match self {
-            Self::Enum(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Enum(_))
     }
 
     pub(crate) fn as_class_definition(&self) -> &ClassDefinition {
         match self {
-            Self::Class(c) => &c,
-            _ => panic!("tried to unwrap non-class definition as class definition"),
+            Self::Class(c) => c,
+            _ => panic!("tried to unwrap non-class definition as class definition: {self:?}"),
         }
     }
 
     pub(crate) fn as_enum_definition(&self) -> &EnumDefinition {
         match self {
-            Self::Enum(e) => &e,
-            _ => panic!("tried to unwrap non-enum definition as enum definition"),
+            Self::Enum(e) => e,
+            _ => panic!("tried to unwrap non-enum definition as enum definition: {self:?}"),
         }
     }
 }
