@@ -83,7 +83,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install shed pytest tox
+          python -m pip install shed pytest tox==3.27.1
           tox -e deps
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
@@ -331,3 +331,17 @@ jobs:
             -v $(pwd):/app/terminusdb \
             terminusdb/terminusdb-server:local \
             make lint
+
+  clippy:
+    name: Clippy comments
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - run: sudo apt update && sudo apt install software-properties-common -y
+      - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox
+      - uses: actions-rs/clippy-check@v1
+        continue-on-error: true
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --manifest-path=src/rust/Cargo.toml
