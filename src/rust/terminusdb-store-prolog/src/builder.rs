@@ -1,3 +1,4 @@
+use super::value::*;
 use crate::layer::*;
 use std::io::{self, Write};
 use swipl::prelude::*;
@@ -15,19 +16,20 @@ predicates! {
         context.try_or_die(builder.add_id_triple(IdTriple::new(subject_id, predicate_id, object_id)))
     }
 
-    pub semidet fn nb_add_string_triple(context, builder_term, subject_term, predicate_term, object_term) {
+    pub semidet fn nb_add_object_triple(context, builder_term, subject_term, predicate_term, object_term) {
         let builder: WrappedBuilder = builder_term.get_ex()?;
         let subject: PrologText = subject_term.get_ex()?;
         let predicate: PrologText = predicate_term.get_ex()?;
 
         let inner = context.new_term_ref();
+        let ty = context.new_term_ref();
         if attempt(object_term.unify(term!{context: node(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
             context.try_or_die(builder.add_value_triple(ValueTriple::new_node(&subject, &predicate, &object)))
         }
-        else if attempt(object_term.unify(term!{context: value(#&inner)}?))? {
-            let object: PrologText = inner.get_ex()?;
-            context.try_or_die(builder.add_value_triple(ValueTriple::new_string_value(&subject, &predicate, &object)))
+        else if attempt(object_term.unify(term!{context: value(#&inner, #&ty)}?))? {
+            let entry = make_entry_from_term(context,&inner,&ty)?;
+            context.try_or_die(builder.add_value_triple(ValueTriple::new_value(&subject, &predicate, entry)))
         }
         else {
             context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?)
@@ -43,19 +45,20 @@ predicates! {
         context.try_or_die(builder.remove_id_triple(IdTriple::new(subject_id, predicate_id, object_id)))
     }
 
-    pub semidet fn nb_remove_string_triple(context, builder_term, subject_term, predicate_term, object_term) {
+    pub semidet fn nb_remove_object_triple(context, builder_term, subject_term, predicate_term, object_term) {
         let builder: WrappedBuilder = builder_term.get_ex()?;
         let subject: PrologText = subject_term.get_ex()?;
         let predicate: PrologText = predicate_term.get_ex()?;
 
         let inner = context.new_term_ref();
+        let ty = context.new_term_ref();
         if attempt(object_term.unify(term!{context: node(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
             context.try_or_die(builder.remove_value_triple(ValueTriple::new_node(&subject, &predicate, &object)))
         }
-        else if attempt(object_term.unify(term!{context: value(#&inner)}?))? {
-            let object: PrologText = inner.get_ex()?;
-            context.try_or_die(builder.remove_value_triple(ValueTriple::new_string_value(&subject, &predicate, &object)))
+        else if attempt(object_term.unify(term!{context: value(#&inner,#&ty)}?))? {
+            let entry = make_entry_from_term(context,&inner,&ty)?;
+            context.try_or_die(builder.remove_value_triple(ValueTriple::new_value(&subject, &predicate, entry)))
         }
         else {
             context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?)

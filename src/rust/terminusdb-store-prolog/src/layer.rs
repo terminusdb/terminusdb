@@ -77,6 +77,10 @@ predicates! {
             let entry = make_entry_from_term(context,&inner,&ty)?;
             id = layer.object_value_id(&entry);
         }
+        else if attempt(object_term.unify(term!{context: lang(#&inner,#&ty)}?))? {
+            let entry = make_entry_from_lang_term(context,&inner,&ty)?;
+            id = layer.object_value_id(&entry);
+        }
         else {
             return context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?);
         }

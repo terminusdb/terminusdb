@@ -392,21 +392,14 @@ nonvar_literal(Atom^^Type, Literal) :-
     !,
     atom_string(Atom, String),
     nonvar_literal(String^^Type, Literal).
-nonvar_literal(String@Lang, value(S)) :-
+nonvar_literal(String@Lang, lang(String,Lang)) :-
     nonvar(Lang),
     nonvar(String),
-    !,
-    format(string(S), '~q@~q', [String,Lang]).
-nonvar_literal(Val^^Type, value(S)) :-
+    !.
+nonvar_literal(Val^^Type, value(Val,Type)) :-
     nonvar(Type),
     nonvar(Val),
-    !,
-    (   is_number_type(Type)
-    ->  format(string(S), '~q^^~q', [Val,Type])
-    ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], Cast^^_)
-    ->  format(string(S), '~q^^~q', [Cast,Type])
-    ;   format(string(S), '~q^^~q', [Val,Type])).
+    !.
 nonvar_literal(Val^^Type, _) :-
     once(var(Val) ; var(Type)),
     !.
@@ -415,7 +408,6 @@ nonvar_literal(Val@Lang, _) :-
     !.
 nonvar_literal(O, node(S)) :-
     nonvar(O),
-
     atom_string(O,S).
 
 object_storage(O,V) :-
@@ -462,25 +454,14 @@ storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),
     storage_value(X1,X2).
 
-/*
- * Too much unnecessary marshalling...
- */
-storage_object(value(S),O) :-
-    (   term_string(Term,S)
-    ->  (   Term = X^^T
-        ->  storage_literal(X^^T,O)
-        ;   Term = X@Lang
-        ->  storage_literal(X@Lang,O)
-        ;   throw(error(storage_unknown_type_error(Term),_)))
-    ;   throw(error(storage_bad_value(S),_))).
+storage_object(lang(S,L),S@L).
+storage_object(value(S,T),S^^T).
 storage_object(node(S),O) :-
     (   nonvar(O)
     ->  (   atom(O)
         ->  atom_string(O,S)
         ;   O = S)
     ;   atom_string(O,S)).
-
-
 
 try_prefix_uri(X,_,X) :-
     nonvar(X),

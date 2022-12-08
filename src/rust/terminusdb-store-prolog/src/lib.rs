@@ -20,9 +20,9 @@ pub fn install(module: Option<&str>) {
     named_graph::register_nb_force_set_head_version_in_module(module);
     store::register_open_write_in_module(module);
     builder::register_nb_add_id_triple_in_module(module);
-    builder::register_nb_add_string_triple_in_module(module);
+    builder::register_nb_add_object_triple_in_module(module);
     builder::register_nb_remove_id_triple_in_module(module);
-    builder::register_nb_remove_string_triple_in_module(module);
+    builder::register_nb_remove_object_triple_in_module(module);
     builder::register_builder_committed_in_module(module);
     builder::register_nb_commit_in_module(module);
     builder::register_nb_apply_delta_in_module(module);
