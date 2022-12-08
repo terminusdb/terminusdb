@@ -544,9 +544,9 @@ checksum = "00f5fb52a06bdcadeb54e8d3671f8888a39697dcb0b81b23b55174030427f4eb"
 
 [[package]]
 name = "futures-locks"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eb42d4fb72227be5778429f9ef5240a38a358925a49f05b5cf702ce7c7e558a"
+checksum = "45ec6fe3675af967e67c5536c0b9d44e34e6c52f86bedc4ea49c5317b8e94d06"
 dependencies = [
  "futures-channel",
  "futures-task",
@@ -908,17 +908,6 @@ checksum = "a8903e5a29a317527874d0402f867152a3d21c908bb0b933e416c65e301d4c36"
 dependencies = [
  "memchr",
  "minimal-lexical",
-]
-
-[[package]]
-name = "num-derive"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1432,13 +1421,9 @@ dependencies = [
  "fs2",
  "futures",
  "futures-locks",
- "itertools",
  "lazy_static",
- "num-derive",
- "num-traits",
  "rand 0.8.5",
  "rayon",
- "rug",
  "tar",
  "thiserror",
  "tokio",
