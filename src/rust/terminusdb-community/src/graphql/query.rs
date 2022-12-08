@@ -438,12 +438,6 @@ pub fn predicate_value_iter<'a>(
     }
 }
 
-pub enum NodeOrValue {
-    Node,
-    #[allow(unused)]
-    Value,
-}
-
 /*
 Supposing we have a filter query of the following form:
 

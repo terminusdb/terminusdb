@@ -346,12 +346,6 @@ impl std::ops::Deref for ReverseInheritanceGraph {
     }
 }
 
-fn triple_str_to_string(input: &str) -> &str {
-    // this is incredibly lazy and assumes no escaping is done in the target string. This is true for schema prefixes though.
-    let end = input.len() - "\"^^'http://www.w3.org/2001/XMLSchema#string'".len();
-    &input[1..end]
-}
-
 pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContracter {
     let context_id = schema.subject_id(TDB_CONTEXT);
     let base_id = schema.predicate_id(SYS_BASE);

@@ -25,7 +25,7 @@ pub fn make_entry_from_lang_term<C: QueryableContextType>(
     let s: PrologText = inner_term.get_ex()?;
 
     assert!(
-        lang.find("@").is_none(),
+        lang.find('@').is_none(),
         "lang term contained an '@', making it invalid"
     );
 
@@ -35,7 +35,7 @@ pub fn make_entry_from_lang_term<C: QueryableContextType>(
 
 pub fn split_lang_string(lang_string: &str) -> (&str, &str) {
     let pos = lang_string
-        .find("@")
+        .find('@')
         .expect("lang strings should have an @ in them");
     let lang = &lang_string[..pos];
     let s = &lang_string[pos + 1..];
@@ -75,15 +75,57 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#string"))
         }
-        Datatype::UInt32 => todo!(),
-        Datatype::Int32 => todo!(),
-        Datatype::Float32 => todo!(),
-        Datatype::UInt64 => todo!(),
-        Datatype::Int64 => todo!(),
-        Datatype::Float64 => todo!(),
-        Datatype::Decimal => todo!(),
-        Datatype::BigInt => todo!(),
-        Datatype::Token => todo!(),
-        Datatype::LangString => todo!(),
+        Datatype::UInt32 => {
+            let val = entry.as_val::<u32, u32>() as u64;
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#int"))
+        }
+        Datatype::Int32 => {
+            let val = entry.as_val::<i32, i32>() as i64;
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#unsignedInt"))
+        }
+        Datatype::Float32 => {
+            let val = entry.as_val::<f32, f32>() as f64;
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#float"))
+        }
+        Datatype::UInt64 => {
+            let val = entry.as_val::<u64, u64>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#unsignedLong"))
+        }
+        Datatype::Int64 => {
+            let val = entry.as_val::<i64, i64>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#long"))
+        }
+        Datatype::Float64 => {
+            let val = entry.as_val::<f64, f64>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#double"))
+        }
+        Datatype::Decimal => {
+            let val = entry
+                .as_val::<Decimal, String>()
+                .parse::<f64>()
+                .expect("Precision to high for cast to f64");
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#decimal"))
+        }
+        Datatype::BigInt => {
+            todo!()
+            /*
+            let val = entry.as_val::<Integer, u64>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#decimal"))
+            */
+        }
+        Datatype::Token => {
+            let val = entry.as_val::<String, String>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#token"))
+        }
+        Datatype::LangString => panic!("Unreachable"),
     }
 }
