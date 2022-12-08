@@ -300,7 +300,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let id_name = self.layer().id_object(id).unwrap();
         if let Some(v) = id_name.value_ref() {
             // this is not actually a document but a value
-            return Err(value_string_to_json());
+            return Err(value_to_json(v));
         }
 
         // we know id_name is properly a node

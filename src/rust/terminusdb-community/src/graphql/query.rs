@@ -7,11 +7,8 @@ use rug::Integer;
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::value::{
-    base_type_kind, value_string_to_bigint, value_string_to_bool, value_string_to_number,
-    value_string_to_string, BaseTypeKind,
-};
-use crate::{consts::RDF_TYPE, terminus_store::*, value::value_string_to_graphql};
+use crate::value::{base_type_kind, value_to_bigint, value_to_string, BaseTypeKind};
+use crate::{consts::RDF_TYPE, terminus_store::*, value::value_to_graphql};
 
 use super::filter::{
     BigIntFilterInputObject, BooleanFilterInputObject, CollectionFilterInputObject,
@@ -60,7 +57,7 @@ enum CollectionOperation {
 }
 
 #[derive(Debug, Clone)]
-enum ObjectType {
+enum FilterObjectType {
     Node(Rc<FilterObject>, String),
     Value(FilterType),
 }
@@ -81,9 +78,9 @@ enum FilterType {
 
 #[derive(Debug)]
 enum FilterValue {
-    Required(ObjectType),
+    Required(FilterObjectType),
     // Optional(OptionalOperation),
-    Collection(CollectionOperation, ObjectType),
+    Collection(CollectionOperation, FilterObjectType),
     And(Vec<Rc<FilterObject>>),
     Or(Vec<Rc<FilterObject>>),
     Not(Rc<FilterObject>),
@@ -219,32 +216,32 @@ fn compile_typed_filter(
     range: &str,
     all_frames: &AllFrames,
     spanning_input_value: &juniper::Spanning<InputValue>,
-) -> ObjectType {
+) -> FilterObjectType {
     if is_base_type(range) {
         match base_type_kind(&range[4..]) {
             BaseTypeKind::String => {
                 let value = StringFilterInputObject::from_input_value(&spanning_input_value.item);
-                ObjectType::Value(compile_string_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_string_input_value(range, value.unwrap()))
             }
             BaseTypeKind::SmallInteger => {
                 let value = IntFilterInputObject::from_input_value(&spanning_input_value.item);
-                ObjectType::Value(compile_small_integer_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_small_integer_input_value(range, value.unwrap()))
             }
             BaseTypeKind::BigIntger => {
                 let value = BigIntFilterInputObject::from_input_value(&spanning_input_value.item);
-                ObjectType::Value(compile_big_int_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_big_int_input_value(range, value.unwrap()))
             }
             BaseTypeKind::Boolean => {
                 let value = BooleanFilterInputObject::from_input_value(&spanning_input_value.item);
-                ObjectType::Value(compile_boolean_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_boolean_input_value(range, value.unwrap()))
             }
             BaseTypeKind::DateTime => {
                 let value = DateTimeFilterInputObject::from_input_value(&spanning_input_value.item);
-                ObjectType::Value(compile_datetime_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_datetime_input_value(range, value.unwrap()))
             }
             BaseTypeKind::Float => {
                 let value = FloatFilterInputObject::from_input_value(&spanning_input_value.item);
-                ObjectType::Value(compile_float_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_float_input_value(range, value.unwrap()))
             }
         }
     } else {
@@ -253,7 +250,7 @@ fn compile_typed_filter(
                 if let InputValue::Object(edges) = &spanning_input_value.item {
                     let inner =
                         compile_edges_to_filter(range, all_frames, class_definition, &edges);
-                    ObjectType::Node(Rc::new(inner), range.to_string())
+                    FilterObjectType::Node(Rc::new(inner), range.to_string())
                 } else {
                     panic!()
                 }
@@ -262,7 +259,7 @@ fn compile_typed_filter(
                 let value =
                     EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
                 let encoded = all_frames.fully_qualified_enum_value(range, &value.enum_value.value);
-                ObjectType::Value(FilterType::Enum {
+                FilterObjectType::Value(FilterType::Enum {
                     op: value.op,
                     value: encoded,
                 })
@@ -395,15 +392,14 @@ fn compile_filter_object(
 pub fn predicate_value_filter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object_type: &NodeOrValue,
-    object: String,
+    object: &ObjectType,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
-        let maybe_object_id = match object_type {
-            NodeOrValue::Value => g.object_value_id(&object),
-            NodeOrValue::Node => g.object_node_id(&object),
+        let maybe_object_id = match object {
+            ObjectType::Value(entry) => g.object_value_id(&entry),
+            ObjectType::Node(node) => g.object_node_id(&node),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -420,14 +416,13 @@ pub fn predicate_value_filter<'a>(
 pub fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object_type: &NodeOrValue,
-    object: String,
+    object: &ObjectType,
 ) -> ClonableIterator<'a, u64> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
-        let maybe_object_id = match object_type {
-            NodeOrValue::Value => g.object_value_id(&object),
-            NodeOrValue::Node => g.object_node_id(&object),
+        let maybe_object_id = match object {
+            ObjectType::Value(entry) => g.object_value_id(&entry),
+            ObjectType::Node(node) => g.object_node_id(&node),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(
@@ -472,10 +467,9 @@ fn object_type_filter<'a>(
                 let g = g.clone();
                 ClonableIterator::new(iter.filter(move |object| {
                     let string = g
-                        .id_object(*object)
+                        .id_object_value(*object)
                         .unwrap()
-                        .value()
-                        .expect("This object should be a value");
+                        .as_val::<String, String>();
                     regex.is_match(&string)
                 }))
             }
@@ -486,10 +480,9 @@ fn object_type_filter<'a>(
                 let g = g.clone();
                 ClonableIterator::new(iter.filter(move |object| {
                     let string = g
-                        .id_object(*object)
+                        .id_object_value(*object)
                         .unwrap()
-                        .value()
-                        .expect("This object should be a value");
+                        .as_val::<String, String>();
                     regex.is_match(&string)
                 }))
             }
@@ -501,10 +494,9 @@ fn object_type_filter<'a>(
                 let g = g.clone();
                 ClonableIterator::new(iter.filter(move |object| {
                     let string = g
-                        .id_object(*object)
+                        .id_object_value(*object)
                         .unwrap()
-                        .value()
-                        .expect("This object should be a value");
+                        .as_val::<String, String>();
                     length == regexset.matches(&string).into_iter().count()
                 }))
             }
@@ -515,10 +507,9 @@ fn object_type_filter<'a>(
                 let g = g.clone();
                 ClonableIterator::new(iter.filter(move |object| {
                     let string = g
-                        .id_object(*object)
+                        .id_object_value(*object)
                         .unwrap()
-                        .value()
-                        .expect("This object should be a value");
+                        .as_val::<String, String>();
                     regexset.is_match(&string)
                 }))
             }
@@ -551,7 +542,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_bool = object_value::<bool, bool>();
+                let object_bool = object_value.as_val::<bool, bool>();
                 let cmp = object_bool.cmp(&b);
                 ordering_matches_op(cmp, op)
             }))
@@ -562,7 +553,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_int = value_string_to_bigint(&object_value);
+                let object_int = value_to_bigint(&object_value);
                 let cmp = object_int.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
@@ -573,7 +564,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_string_to_string(&object_value).to_string();
+                let object_string = value_to_string(&object_value).to_string();
                 // Datetimes are reverse order: newer is bigger, but less!
                 let cmp = val.cmp(&object_string);
                 ordering_matches_op(cmp, op)
@@ -585,7 +576,7 @@ fn object_type_filter<'a>(
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_string_to_string(&object_value).to_string();
+                let object_string = value_to_string(&object_value).to_string();
                 let cmp = object_string.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
@@ -649,7 +640,7 @@ fn compile_query<'a>(
                 let maybe_property_id = g.predicate_id(&predicate);
                 if let Some(property_id) = maybe_property_id {
                     match object_type {
-                        ObjectType::Node(sub_filter, _) => {
+                        FilterObjectType::Node(sub_filter, _) => {
                             let sub_filter = sub_filter.clone();
                             iter = ClonableIterator::new(iter.filter(move |subject| {
                                 let objects = ClonableIterator::new(
@@ -662,7 +653,7 @@ fn compile_query<'a>(
                                     .is_some()
                             }))
                         }
-                        ObjectType::Value(filter_type) => {
+                        FilterObjectType::Value(filter_type) => {
                             let filter_type = filter_type.clone();
                             iter = ClonableIterator::new(iter.filter(move |subject| {
                                 let object_iter = ClonableIterator::new(
@@ -685,7 +676,7 @@ fn compile_query<'a>(
                 if let Some(property_id) = maybe_property_id {
                     match op {
                         CollectionOperation::SomeHave => match o {
-                            ObjectType::Node(sub_filter, _) => {
+                            FilterObjectType::Node(sub_filter, _) => {
                                 let sub_filter = sub_filter.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
@@ -697,7 +688,7 @@ fn compile_query<'a>(
                                         .is_some()
                                 }));
                             }
-                            ObjectType::Value(filter_type) => {
+                            FilterObjectType::Value(filter_type) => {
                                 let filter_type = filter_type.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
@@ -711,7 +702,7 @@ fn compile_query<'a>(
                             }
                         },
                         CollectionOperation::AllHave => match o {
-                            ObjectType::Node(sub_filter, _) => {
+                            FilterObjectType::Node(sub_filter, _) => {
                                 let sub_filter = sub_filter.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
@@ -721,7 +712,7 @@ fn compile_query<'a>(
                                     compile_query(&g, sub_filter.clone(), objects).all(|_| true)
                                 }));
                             }
-                            ObjectType::Value(filter_type) => {
+                            FilterObjectType::Value(filter_type) => {
                                 let filter_type = filter_type.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
@@ -755,7 +746,7 @@ fn generate_initial_iterator<'a>(
             let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
             (
                 filter_opt,
-                predicate_value_iter(g, &RDF_TYPE, &NodeOrValue::Node, expanded_type_name),
+                predicate_value_iter(g, &RDF_TYPE, &ObjectType::Node(expanded_type_name)),
             )
         }
         Some(zi) => (filter_opt, zi),
@@ -795,8 +786,7 @@ pub fn run_filter_query<'a>(
                     Some(predicate_value_filter(
                         g,
                         &RDF_TYPE,
-                        &NodeOrValue::Node,
-                        expanded_type_name,
+                        &ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(g.subject_id(&*id_string).into_iter()),
                     ))
                 }
@@ -810,8 +800,7 @@ pub fn run_filter_query<'a>(
                     Some(predicate_value_filter(
                         g,
                         &RDF_TYPE,
-                        &NodeOrValue::Node,
-                        expanded_type_name,
+                        &ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&*id))),
                     ))
                 }
@@ -896,7 +885,7 @@ fn create_query_order_key(
                     .expect("This object must exist")
                     .value()
                     .unwrap();
-                match value_string_to_graphql(&db_value) {
+                match value_to_graphql(&db_value) {
                     juniper::Value::Scalar(s) => Some(s),
                     juniper::Value::Null => None,
                     _ => panic!("Scalar value or null expected"),

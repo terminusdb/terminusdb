@@ -4,7 +4,6 @@ use rug::Integer;
 use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::str::FromStr;
 use terminusdb_store_prolog::terminus_store::structure::*;
 
 use crate::consts::XSD_PREFIX;
@@ -170,8 +169,11 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         | Datatype::UInt64
         | Datatype::Int64
         | Datatype::Float32
-            | Datatype::Float64 => todo!(), // serde number?
-        Datatype::String => Value::String(tde.as_val::<String, String>)
+        | Datatype::Float64 => todo!(), // serde number?
+        Datatype::String => Value::String(tde.as_val::<String, String>()),
+        Datatype::Decimal => Value::String(tde.as_val::<Decimal, String>()),
+        Datatype::BigInt => Value::String(tde.as_val::<Integer, String>()),
+        Datatype::Token => Value::String(tde.as_val::<Token, String>()),
     }
     /*
     match value_string_to_slices(s) {
@@ -226,6 +228,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         }
         Datatype::BigInt => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Integer, String>()))
+        }
+        Datatype::Token => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Token, String>()))
         }
     }
 }
