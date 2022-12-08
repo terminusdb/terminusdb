@@ -5,6 +5,7 @@ use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use terminusdb_store_prolog::terminus_store::structure::*;
+use terminusdb_store_prolog::value::split_lang_string;
 
 use crate::consts::XSD_PREFIX;
 
@@ -173,7 +174,13 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::String => Value::String(tde.as_val::<String, String>()),
         Datatype::Decimal => Value::String(tde.as_val::<Decimal, String>()),
         Datatype::BigInt => Value::String(tde.as_val::<Integer, String>()),
-        Datatype::Token => Value::String(tde.as_val::<Token, String>()),
+        // Tokens are currently just used for null but may be used for more things in the future
+        //Datatype::Token => Value::String(tde.as_val::<Token, String>()),
+        Datatype::LangString => {
+            let x = tde.as_val::<LangString, String>();
+            let (lang, s) = split_lang_string(&x);
+            json!({ "@lang" : lang, "@value" : s })
+        }
     }
     /*
     match value_string_to_slices(s) {
@@ -231,6 +238,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         }
         Datatype::Token => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Token, String>()))
+        }
+        Datatype::LangString => {
+            todo!();
         }
     }
 }

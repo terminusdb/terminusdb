@@ -31,6 +31,10 @@ predicates! {
             let entry = make_entry_from_term(context,&inner,&ty)?;
             context.try_or_die(builder.add_value_triple(ValueTriple::new_value(&subject, &predicate, entry)))
         }
+        else if attempt(object_term.unify(term!{context: lang(#&inner, #&ty)}?))? {
+            let entry = make_entry_from_lang_term(context,&inner,&ty)?;
+            context.try_or_die(builder.add_value_triple(ValueTriple::new_value(&subject, &predicate, entry)))
+        }
         else {
             context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?)
         }
@@ -58,6 +62,10 @@ predicates! {
         }
         else if attempt(object_term.unify(term!{context: value(#&inner,#&ty)}?))? {
             let entry = make_entry_from_term(context,&inner,&ty)?;
+            context.try_or_die(builder.remove_value_triple(ValueTriple::new_value(&subject, &predicate, entry)))
+        }
+        else if attempt(object_term.unify(term!{context: lang(#&inner,#&ty)}?))? {
+            let entry = make_entry_from_lang_term(context,&inner,&ty)?;
             context.try_or_die(builder.remove_value_triple(ValueTriple::new_value(&subject, &predicate, entry)))
         }
         else {

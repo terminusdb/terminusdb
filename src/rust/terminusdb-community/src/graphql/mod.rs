@@ -1,9 +1,6 @@
-use juniper::{
-    http::{GraphQLRequest},
-    EmptyMutation, EmptySubscription, RootNode,
-};
+use juniper::{http::GraphQLRequest, EmptyMutation, EmptySubscription, RootNode};
 
-use std::io::{Read};
+use std::io::Read;
 use std::sync::Arc;
 use swipl::prelude::*;
 
