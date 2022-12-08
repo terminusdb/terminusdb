@@ -35,7 +35,7 @@ install-dashboard:
 .PHONY: install-pack
 install-pack:
 	mkdir -p .deps/$(PACK_NAME)
-	git clone --depth 1 --branch $(JWT_VERSION) $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
+	git clone --depth 1 --branch $(BRANCH) $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
 	$(SWIPL) \
 	  --on-error=halt \
 	  --on-warning=halt \
