@@ -448,6 +448,10 @@ storage_literal(X1@L1,X2@L2) :-
     storage_value(X1,X2).
 
 storage_object(lang(S,L),S@L).
+storage_object(value(String,'http://www.w3.org/2001/XMLSchema#integer'),
+               Integer^^'http://www.w3.org/2001/XMLSchema#integer') :-
+    !,
+    number_string(Integer,String).
 storage_object(value(S,T),S^^T).
 storage_object(node(S),O) :-
     (   nonvar(O)

@@ -1,4 +1,5 @@
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
+use rug::Integer;
 use swipl::prelude::*;
 use swipl::term::Term;
 use terminus_store::structure::*;
@@ -15,6 +16,20 @@ pub fn make_entry_from_term<C: QueryableContextType>(
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
         let inner_number: f64 = inner_term.get_ex()?;
         Ok(f64::make_entry(&inner_number))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
+        let inner_number: PrologText = inner_term.get_ex()?;
+        let integer: Integer = Integer::parse(&*inner_number).unwrap().into();
+        Ok(Integer::make_entry(&integer))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#gYear") == ty {
+        let inner_number: i64 = inner_term.get_ex()?;
+        Ok(GYear::make_entry(&GYear(inner_number)))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#positiveInteger") == ty {
+        let inner_number: PrologText = inner_term.get_ex()?;
+        let integer: Integer = Integer::parse(&*inner_number).unwrap().into();
+        Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#anyURI") == ty {
+        let inner_string: PrologText = inner_term.get_ex()?;
+        Ok(AnyURI::make_entry(&inner_string.into_inner()))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
         let year: i64 = inner_term.get_arg(1)?;
         let month: i64 = inner_term.get_arg(2)?;
@@ -92,6 +107,11 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#string"))
         }
+        Datatype::AnyURI => {
+            let val = entry.as_val::<AnyURI, AnyURI>();
+            object_term.unify_arg(1, val.as_ref())?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#anyURI"))
+        }
         Datatype::UInt32 => {
             let val = entry.as_val::<u32, u32>() as u64;
             object_term.unify_arg(1, val)?;
@@ -131,12 +151,19 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#decimal"))
         }
         Datatype::BigInt => {
-            todo!()
+            let val: Integer = entry.as_val::<Integer, Integer>();
+            object_term.unify_arg(1, val.to_string())?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#integer"))
         }
         Datatype::Token => {
             let val = entry.as_val::<String, String>();
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#token"))
+        }
+        Datatype::GYear => {
+            let val = entry.as_val::<GYear, GYear>();
+            object_term.unify_arg(1, val.0)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gYear"))
         }
         Datatype::LangString => panic!("Unreachable"),
         Datatype::Date => todo!(),

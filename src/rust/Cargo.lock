@@ -1491,6 +1491,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "hex",
+ "rug",
  "sha-1",
  "swipl",
  "terminus-store",
