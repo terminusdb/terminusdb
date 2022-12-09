@@ -52,7 +52,7 @@ jobs:
 
   python_client:
     name: Python client tests
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Set up Docker Buildx
