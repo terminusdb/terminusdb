@@ -52,7 +52,7 @@ jobs:
 
   python_client:
     name: Python client tests
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Set up Docker Buildx
@@ -95,7 +95,7 @@ jobs:
 
   integration_tests_basic:
     name: Integration tests (basic)
-    runs-on: ${{ inputs.runner }}
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v3
