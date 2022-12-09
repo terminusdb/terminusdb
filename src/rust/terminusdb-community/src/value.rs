@@ -113,14 +113,22 @@ pub fn type_is_datetime(s: &str) -> bool {
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {
     match tde.datatype() {
         Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
-        Datatype::Token => Value::Null, // This *really* should be checked.
+        Datatype::Token => {
+            let x = tde.as_val::<String, String>();
+            if x == "null" {
+                Value::Null
+            } else {
+                Value::String(x)
+            }
+        }
         Datatype::UInt32 => {
             Value::Number(Number::from_f64(tde.as_val::<u32, u32>() as f64).unwrap())
         }
         Datatype::Int32 => {
             Value::Number(Number::from_f64(tde.as_val::<i32, i32>() as f64).unwrap())
         }
-        Datatype::UInt64 | Datatype::Int64 => todo!(),
+        Datatype::UInt64 => Value::String(tde.as_val::<u64, u64>().to_string()),
+        Datatype::Int64 => Value::String(tde.as_val::<i64, i64>().to_string()),
         Datatype::Float32 => {
             Value::Number(Number::from_f64(tde.as_val::<f32, f32>() as f64).unwrap())
         }
@@ -137,32 +145,10 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         }
         Datatype::DateTime => {
             let ndt = tde.as_val::<NaiveDateTime, NaiveDateTime>();
-            Value::String(serde_json::to_string(&ndt).unwrap())
+            Value::String(ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
         }
         _ => todo!(),
     }
-    /*
-    match value_string_to_slices(s) {
-        LangOrType::Type(val, typ) => {
-            if typ == "boolean" {
-                Value::Bool(val == "\"true\"")
-            } else if typ == "token" && val == "\"null\"" {
-                Value::Null
-            } else if type_is_numeric(typ) {
-                // it will have been saved unquoted
-                //Value::Number(Number::from_string_unchecked(val.to_string())) // undocumented api - we know this is a number, so might as well save parse effort
-                Value::Number(Number::from_str(val).unwrap())
-            } else {
-                // it will be something quoted, which we're gonna return as a string
-                Value::String(prolog_string_to_string(val).into_owned())
-            }
-        }
-        LangOrType::Lang(val, lang) => {
-            let s = prolog_string_to_string(val);
-            let l = lang[1..lang.len() - 1].to_string();
-            json!({ "@lang" : l, "@value" : s })
-        }
-    }*/
 }
 
 pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarValue> {
@@ -174,15 +160,17 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<String, String>()))
         }
         Datatype::UInt32 => {
-            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<u64, u64>() as f64))
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<u32, u32>() as f64))
         }
         Datatype::Int32 => {
             juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i32, i32>()))
         }
-        Datatype::UInt64 => {
-            todo!()
-        }
-        Datatype::Int64 => todo!(),
+        Datatype::UInt64 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<u64, u64>().to_string(),
+        )),
+        Datatype::Int64 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<u64, u64>().to_string(),
+        )),
         Datatype::Float32 => {
             juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f32, f32>() as f64))
         }
@@ -198,9 +186,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::Token => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Token, String>()))
         }
-        Datatype::LangString => {
-            todo!();
-        }
+        Datatype::LangString => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<LangString, String>(),
+        )),
         _ => todo!(),
     }
 }
