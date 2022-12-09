@@ -5,7 +5,7 @@ use swipl::term::Term;
 use terminus_store::structure::*;
 
 pub fn make_entry_from_term<C: QueryableContextType>(
-    _context: &Context<C>,
+    context: &Context<C>,
     inner_term: &Term,
     ty_term: &Term,
 ) -> PrologResult<TypedDictEntry> {
@@ -17,15 +17,16 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let inner_number: f64 = inner_term.get_ex()?;
         Ok(f64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
-        let inner_number: PrologText = inner_term.get_ex()?;
-        let integer: Integer = Integer::parse(&*inner_number).unwrap().into();
+        let inner_number: String = context.string_from_term(inner_term)?;
+        let integer: Integer = Integer::parse(&inner_number).unwrap().into();
         Ok(Integer::make_entry(&integer))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYear") == ty {
-        let inner_number: i64 = inner_term.get_ex()?;
+        // TODO check that the functor is what we expect
+        let inner_number: i64 = inner_term.get_arg(1)?; // TODO should this throw if the arg is not there?
         Ok(GYear::make_entry(&GYear(inner_number)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#positiveInteger") == ty {
-        let inner_number: PrologText = inner_term.get_ex()?;
-        let integer: Integer = Integer::parse(&*inner_number).unwrap().into();
+        let inner_number: String = context.string_from_term(inner_term)?;
+        let integer: Integer = Integer::parse(&inner_number).unwrap().into();
         Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#anyURI") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
@@ -152,8 +153,23 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::BigInt => {
             let val: Integer = entry.as_val::<Integer, Integer>();
-            object_term.unify_arg(1, val.to_string())?;
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&val.to_string())?;
+                object_term.unify_arg(1, &term)?;
+                f.close();
+            }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#integer"))
+        }
+        Datatype::PositiveInteger => {
+            let val: Integer = entry.as_val::<Integer, Integer>();
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&val.to_string())?;
+                object_term.unify_arg(1, &term)?;
+                f.close();
+            }
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#positiveInteger"))
         }
         Datatype::Token => {
             let val = entry.as_val::<String, String>();
@@ -162,7 +178,17 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::GYear => {
             let val = entry.as_val::<GYear, GYear>();
-            object_term.unify_arg(1, val.0)?;
+            {
+                let f = context.open_frame();
+                let f_term = f.new_term_ref();
+                f_term.unify(functor!("gyear/2"))?;
+                f_term.unify_arg(1, val.0)?;
+                f_term.unify_arg(2, 0.0_f64)?;
+
+                object_term.unify_arg(1, &f_term)?;
+                f.close();
+            }
+
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gYear"))
         }
         Datatype::LangString => panic!("Unreachable"),
