@@ -1,7 +1,7 @@
+use chrono::{Datelike, NaiveDateTime, Timelike};
 use swipl::prelude::*;
 use swipl::term::Term;
 use terminus_store::structure::*;
-
 pub fn make_entry_from_term<C: QueryableContextType>(
     _context: &Context<C>,
     inner_term: &Term,
@@ -44,7 +44,7 @@ pub fn split_lang_string(lang_string: &str) -> (&str, &str) {
 }
 
 pub fn unify_entry<C: QueryableContextType>(
-    _context: &Context<C>,
+    context: &Context<C>,
     entry: &TypedDictEntry,
     object_term: &Term,
 ) -> PrologResult<()> {
@@ -115,11 +115,6 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::BigInt => {
             todo!()
-            /*
-            let val = entry.as_val::<Integer, u64>();
-            object_term.unify_arg(1, val)?;
-            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#decimal"))
-            */
         }
         Datatype::Token => {
             let val = entry.as_val::<String, String>();
@@ -127,5 +122,28 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#token"))
         }
         Datatype::LangString => panic!("Unreachable"),
+        Datatype::Date => todo!(),
+        Datatype::DateTime => {
+            let datetime_term = context.new_term_ref();
+            datetime_term.unify(functor!("date_time/7"))?;
+            let dt = entry.as_val::<NaiveDateTime, NaiveDateTime>();
+            let year = dt.year() as i64;
+            let month = dt.month() as i64;
+            let day = dt.day() as i64;
+            let hour = dt.hour() as i64;
+            let minute = dt.minute() as i64;
+            let second = dt.second() as i64;
+            let nanosecond = dt.nanosecond() as i64;
+            datetime_term.unify_arg(1, year)?;
+            datetime_term.unify_arg(2, month)?;
+            datetime_term.unify_arg(3, day)?;
+            datetime_term.unify_arg(4, hour)?;
+            datetime_term.unify_arg(5, minute)?;
+            datetime_term.unify_arg(6, second)?;
+            datetime_term.unify_arg(7, nanosecond)?;
+            object_term.unify_arg(1, datetime_term)?;
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dateTime"))
+        }
+        _ => todo!(),
     }
 }

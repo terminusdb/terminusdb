@@ -474,10 +474,11 @@ object_id(Layer, node(Object), Id) :-
     ground(Object),
     !,
     object_to_id(Layer, node(Object), Id).
-object_id(Layer, value(Object), Id) :-
+object_id(Layer, value(Object,Type), Id) :-
     ground(Object),
+    ground(Type),
     !,
-    object_to_id(Layer, value(Object), Id).
+    object_to_id(Layer, value(Object,Type), Id).
 object_id(_Layer, Object, _Id) :-
     % This clause is a final check before we fall through to a very
     % expensive case.  It never succeeds, and can only fail or throw.
@@ -487,14 +488,25 @@ object_id(_Layer, Object, _Id) :-
     % The intention is to prevent callers from accidentally and
     % erroneously reaching the final clause due to having called this
     % predicate wrongly (namely, with an Object which is not of the
-    % form _, node(_) or value(_)).
+    % form _, node(_) or value(_,_) or lang(_,_)).
     (   var(Object)
     ->  fail
     ;   nonvar(Object),
-        (   functor(Object, F, 1, compound),
-            memberchk(F, [node, value]),
+        (   functor(Object, node, 1, compound),
             arg(1, Object, Arg),
             var(Arg)
+        ->  fail
+        ;   functor(Object, value, 2, compound),
+            arg(1, Object, Arg),
+            arg(2, Object, Arg2),
+            var(Arg),
+            var(Arg2)
+        ->  fail
+        ;   functor(Object, lang, 2, compound),
+            arg(1, Object, Arg),
+            arg(2, Object, Arg2),
+            var(Arg),
+            var(Arg2)
         ->  fail
         ;   throw(error(object_id_called_with_invalid_object(Object),_)))).
 object_id(Layer, Object, Id) :-

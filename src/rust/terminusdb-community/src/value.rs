@@ -139,6 +139,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
             let (lang, s) = split_lang_string(&x);
             json!({ "@lang" : lang, "@value" : s })
         }
+        _ => todo!(),
     }
     /*
     match value_string_to_slices(s) {
@@ -200,6 +201,7 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::LangString => {
             todo!();
         }
+        _ => todo!(),
     }
 }
 

@@ -366,17 +366,10 @@ normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
     %   Otherwise walk on by...
     ;   Y = YF).
 
-ground_object_storage(String@Lang, value(S)) :-
-    !,
-    format(string(S), '~q@~q', [String,Lang]).
-ground_object_storage(Val^^Type, value(S)) :-
-    !,
-    (   is_number_type(Type)
-    ->  format(string(S), '~q^^~q', [Val,Type])
-    ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], Cast^^_)
-    ->  format(string(S), '~q^^~q', [Cast,Type])
-    ;   format(string(S), '~q^^~q', [Val,Type])).
+ground_object_storage(String@Lang, lang(String,Lang)) :-
+    !.
+ground_object_storage(Val^^Type, value(Val,Type)) :-
+    !.
 ground_object_storage(O, node(O)).
 
 /*

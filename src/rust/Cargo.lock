@@ -1428,6 +1428,7 @@ dependencies = [
  "async-trait",
  "byteorder",
  "bytes",
+ "chrono",
  "flate2",
  "fs2",
  "futures",
@@ -1485,6 +1486,7 @@ name = "terminusdb-store-prolog"
 version = "0.2.0"
 dependencies = [
  "chardetng",
+ "chrono",
  "encoding_rs",
  "hex",
  "sha-1",
