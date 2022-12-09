@@ -208,6 +208,7 @@ dependencies = [
  "js-sys",
  "num-integer",
  "num-traits",
+ "serde",
  "time",
  "wasm-bindgen",
  "winapi",
@@ -1452,6 +1453,7 @@ version = "0.1.0"
 dependencies = [
  "aho-corasick",
  "bimap",
+ "chrono",
  "float-ord",
  "gmp-mpfr-sys",
  "itertools",

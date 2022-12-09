@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
@@ -8,16 +9,11 @@ use terminusdb_store_prolog::terminus_store::structure::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
-    match tde.datatype() {
-        _ => todo!(),
-    }
+    Cow::Owned(tde.as_val::<String, String>())
 }
 
 pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
-    match tde.datatype() {
-        Datatype::BigInt => tde.as_val::<Integer, Integer>(),
-        _ => panic!("This should not be a string, but a big int"),
-    }
+    tde.as_val::<Integer, Integer>()
 }
 
 lazy_static! {
@@ -139,6 +135,10 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
             let (lang, s) = split_lang_string(&x);
             json!({ "@lang" : lang, "@value" : s })
         }
+        Datatype::DateTime => {
+            let ndt = tde.as_val::<NaiveDateTime, NaiveDateTime>();
+            Value::String(serde_json::to_string(&ndt).unwrap())
+        }
         _ => todo!(),
     }
     /*
@@ -184,10 +184,10 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         }
         Datatype::Int64 => todo!(),
         Datatype::Float32 => {
-            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>() as f64))
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f32, f32>() as f64))
         }
         Datatype::Float64 => {
-            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>() as f64))
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>()))
         }
         Datatype::Decimal => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Decimal, String>()))

@@ -1,7 +1,8 @@
-use chrono::{Datelike, NaiveDateTime, Timelike};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
 use swipl::prelude::*;
 use swipl::term::Term;
 use terminus_store::structure::*;
+
 pub fn make_entry_from_term<C: QueryableContextType>(
     _context: &Context<C>,
     inner_term: &Term,
@@ -11,8 +12,24 @@ pub fn make_entry_from_term<C: QueryableContextType>(
     if atom!("http://www.w3.org/2001/XMLSchema#string") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(String::make_entry(&inner_string.into_inner()))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
+        let inner_number: f64 = inner_term.get_ex()?;
+        Ok(f64::make_entry(&inner_number))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
+        let year: i64 = inner_term.get_arg(1)?;
+        let month: i64 = inner_term.get_arg(2)?;
+        let day: i64 = inner_term.get_arg(3)?;
+        let hour: i64 = inner_term.get_arg(4)?;
+        let minute: i64 = inner_term.get_arg(5)?;
+        let second: i64 = inner_term.get_arg(6)?;
+        let nano: i64 = inner_term.get_arg(7)?;
+        let dt = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
+            .unwrap()
+            .and_hms_nano_opt(hour as u32, minute as u32, second as u32, nano as u32)
+            .unwrap();
+        Ok(NaiveDateTime::make_entry(&dt))
     } else {
-        todo!()
+        Err(PrologError::Exception)
     }
 }
 
