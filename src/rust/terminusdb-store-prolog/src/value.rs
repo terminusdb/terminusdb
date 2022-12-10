@@ -56,6 +56,9 @@ pub fn make_entry_from_term<C: QueryableContextType>(
     } else if atom!("http://www.w3.org/2001/XMLSchema#anyURI") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(AnyURI::make_entry(&inner_string.into_inner()))
+    } else if atom!("http://www.w3.org/2001/XMLSchema#anySimpleType") == ty {
+        let inner_string: String = context.string_from_term(inner_term)?;
+        Ok(AnySimpleType::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedByte") == ty {
         let inner_number: u64 = inner_term.get_ex()?;
         Ok(u8::make_entry(&(inner_number as u8)))
@@ -340,6 +343,16 @@ pub fn unify_entry<C: QueryableContextType>(
             let val = entry.as_val::<AnyURI, AnyURI>();
             object_term.unify_arg(1, val.as_ref())?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#anyURI"))
+        }
+        Datatype::AnySimpleType => {
+            let anysimpletype = entry.as_val::<AnySimpleType, String>();
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&anysimpletype)?;
+                object_term.unify_arg(1, term)?;
+                f.close();
+            }
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#anySimpleType"))
         }
         Datatype::UInt8 => {
             let val = entry.as_val::<u8, u8>() as u64;

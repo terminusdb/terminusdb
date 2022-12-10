@@ -13475,7 +13475,7 @@ test(schema_metadata,
     write_schema(metadata_schema,Desc),
 
     database_context_object(Desc,Context),
-    print_term(Context, []),
+
     Context =
     _{'@base':"terminusdb:///data/",
       '@documentation':
@@ -13827,14 +13827,14 @@ test(rdf_language_doc_insert_get,
     with_test_transaction(
         Desc,
         C1,
-        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : "en", '@value' : "Me"}}, Id)
+        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : en, '@value' : "Me"}}, Id)
     ),
 
     get_document(Desc, Id, Doc),
-
+    print_term(Doc,[]),
     Doc = json{ '@id':_Id,
                 '@type':'LangString',
-                'rdfs:label':json{'@lang':"en",'@value':"Me"}
+                'rdfs:label':json{'@lang':en,'@value':"Me"}
               }.
 
 
