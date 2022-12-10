@@ -11,7 +11,6 @@ describe('cli-triples', function () {
     return exec(command, { env: envs })
   }
 
-
   before(async function () {
     this.timeout(200000)
     dbPath = './storage/' + util.randomString()

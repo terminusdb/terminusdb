@@ -11,7 +11,6 @@ describe('cli-query', function () {
     return exec(command, { env: envs })
   }
 
-
   before(async function () {
     dbPath = './storage/' + util.randomString()
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
