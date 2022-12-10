@@ -479,6 +479,11 @@ object_id(Layer, value(Object,Type), Id) :-
     ground(Type),
     !,
     object_to_id(Layer, value(Object,Type), Id).
+object_id(Layer, lang(Object,Type), Id) :-
+    ground(Object),
+    ground(Type),
+    !,
+    object_to_id(Layer, lang(Object,Type), Id).
 object_id(_Layer, Object, _Id) :-
     % This clause is a final check before we fall through to a very
     % expensive case.  It never succeeds, and can only fail or throw.
