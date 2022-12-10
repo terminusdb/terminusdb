@@ -5,6 +5,8 @@ const { Agent, Cli, util } = require('../lib')
 describe('cli-bundle', function () {
   let agent
   let cli
+  let dbPath
+  let envs
 
   before(async function () {
     agent = new Agent()

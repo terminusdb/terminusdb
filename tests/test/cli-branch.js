@@ -4,17 +4,17 @@ const { expect } = require('chai')
 const { util } = require('../lib')
 
 describe('cli-branch', function () {
-  let db_path
+  let dbPath
   let envs
 
-  async function execEnv(command) {
-    return exec(command, {env: envs})
+  async function execEnv (command) {
+    return exec(command, { env: envs })
   }
 
   before(async function () {
     this.timeout(200000)
-    db_path = './storage/' + util.randomString()
-    envs = {...process.env, TERMINUSDB_SERVER_DB_PATH: db_path}
+    dbPath = './storage/' + util.randomString()
+    envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
     {
       const r = await execEnv('./terminusdb.sh store init --force')
       expect(r.stdout).to.match(/^Successfully initialised database/)
@@ -22,7 +22,7 @@ describe('cli-branch', function () {
   })
 
   after(async function () {
-    await fs.rm(db_path, { recursive: true })
+    await fs.rm(dbPath, { recursive: true })
   })
 
   it('does not allow branch "main" to be deleted', async function () {
@@ -31,7 +31,7 @@ describe('cli-branch', function () {
     // turn off schema
     const r = await execEnv(`./terminusdb.sh branch delete admin/${db} | true`)
     expect(r.stderr).to.match(/Error: Branch 'main' should not be deleted as it is special/)
-    await execEnv(`./terminusdb.sh db delete admin/${db}`, {env: envs})
+    await execEnv(`./terminusdb.sh db delete admin/${db}`, { env: envs })
   })
 
   it('allows other branch than "main" to be deleted', async function () {
