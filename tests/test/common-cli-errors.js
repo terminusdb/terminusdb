@@ -19,8 +19,7 @@ describe('common-cli-errors', function () {
   })
 
   after(async function () {
-    await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
-    delete process.env.TERMINUSDB_SERVER_DB_PATH
+    await fs.rm(dbPath, { recursive: true })
   })
 
   describe('fails for bad descriptor path', function () {
