@@ -4,14 +4,18 @@ const { Agent, api, db, document, util } = require('../lib')
 describe('document', function () {
   let agent
 
-  before(async function () {
+  before(function () {
     agent = new Agent().auth()
-    await db.create(agent)
   })
 
-	after(async function () {
-		await db.delete(agent)
-	})
+  describe('1 database, shared', function () {
+    before(async function () {
+      await db.create(agent)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
 
     describe('fails with missing parameter', function () {
       const options = [
@@ -654,5 +658,5 @@ describe('document', function () {
       expect(r.status).to.equal(404)
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
     })
-  
+  })
 })
