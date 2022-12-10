@@ -389,9 +389,9 @@ nonvar_literal(String@Lang, lang(String,Lang)) :-
     nonvar(Lang),
     nonvar(String),
     !.
-nonvar_literal(Val^^Type, value(Val,Type)) :-
+nonvar_literal(Term^^Type, value(Term,Type)) :-
     nonvar(Type),
-    nonvar(Val),
+    nonvar(Term),
     !.
 nonvar_literal(Val^^Type, _) :-
     once(var(Val) ; var(Type)),

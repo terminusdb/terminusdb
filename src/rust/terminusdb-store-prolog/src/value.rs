@@ -153,14 +153,14 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             offset: offset as i16,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#duration") == ty {
-        let inner_string: PrologText = inner_term.get_ex()?;
-        Ok(Duration::make_entry(&inner_string.into_inner()))
+        let inner_string: String = context.string_from_term(inner_term)?;
+        Ok(Duration::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration") == ty {
-        let inner_string: PrologText = inner_term.get_ex()?;
-        Ok(YearMonthDuration::make_entry(&inner_string.into_inner()))
+        let inner_string: String = context.string_from_term(inner_term)?;
+        Ok(YearMonthDuration::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration") == ty {
-        let inner_string: PrologText = inner_term.get_ex()?;
-        Ok(DayTimeDuration::make_entry(&inner_string.into_inner()))
+        let inner_string: String = context.string_from_term(inner_term)?;
+        Ok(DayTimeDuration::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
         let year: i64 = inner_term.get_arg(1)?;
         let month: i64 = inner_term.get_arg(2)?;
@@ -538,12 +538,22 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::Duration => {
             let val = entry.as_val::<Duration, String>();
-            object_term.unify_arg(1, val)?;
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&val)?;
+                object_term.unify_arg(1, term)?;
+                f.close();
+            }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#duration"))
         }
         Datatype::YearMonthDuration => {
             let val = entry.as_val::<YearMonthDuration, String>();
-            object_term.unify_arg(1, val)?;
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&val)?;
+                object_term.unify_arg(1, term)?;
+                f.close();
+            }
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration"),
@@ -551,7 +561,12 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::DayTimeDuration => {
             let val = entry.as_val::<DayTimeDuration, String>();
-            object_term.unify_arg(1, val)?;
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&val)?;
+                object_term.unify_arg(1, term)?;
+                f.close();
+            }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration"))
         }
         Datatype::Date => {
