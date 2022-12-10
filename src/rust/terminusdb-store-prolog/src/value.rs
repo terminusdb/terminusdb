@@ -14,8 +14,9 @@ pub fn make_entry_from_term<C: QueryableContextType>(
 ) -> PrologResult<TypedDictEntry> {
     let ty: Atom = ty_term.get_ex()?;
     if atom!("http://www.w3.org/2001/XMLSchema#boolean") == ty {
-        let inner: bool = inner_term.get_ex()?;
-        Ok(bool::make_entry(&inner))
+        let inner: Atom = inner_term.get_ex()?;
+        let b = inner == atom!("true");
+        Ok(bool::make_entry(&b))
     } else if atom!("http://www.w3.org/2001/XMLSchema#string") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(String::make_entry(&inner_string.into_inner()))

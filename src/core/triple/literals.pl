@@ -375,16 +375,6 @@ ground_object_storage(O, node(O)).
 /*
  * We can only make a concrete referrent if all parts are bound.
  */
-nonvar_literal(Atom@Lang, Literal) :-
-    atom(Atom),
-    !,
-    atom_string(Atom, String),
-    nonvar_literal(String@Lang, Literal).
-nonvar_literal(Atom^^Type, Literal) :-
-    atom(Atom),
-    !,
-    atom_string(Atom, String),
-    nonvar_literal(String^^Type, Literal).
 nonvar_literal(String@Lang, lang(String,Lang)) :-
     nonvar(Lang),
     nonvar(String),

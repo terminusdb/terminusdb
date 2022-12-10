@@ -13475,6 +13475,7 @@ test(schema_metadata,
     write_schema(metadata_schema,Desc),
 
     database_context_object(Desc,Context),
+    print_term(Context, []),
     Context =
     _{'@base':"terminusdb:///data/",
       '@documentation':
