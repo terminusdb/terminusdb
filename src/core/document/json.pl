@@ -13831,7 +13831,7 @@ test(rdf_language_doc_insert_get,
     ),
 
     get_document(Desc, Id, Doc),
-    print_term(Doc,[]),
+
     Doc = json{ '@id':_Id,
                 '@type':'LangString',
                 'rdfs:label':json{'@lang':en,'@value':"Me"}
