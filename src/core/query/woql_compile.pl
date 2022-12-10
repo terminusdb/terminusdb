@@ -5363,7 +5363,7 @@ test(byte_neg) :-
 
 test(short_pos) :-
     % note that the number saved is not further quoted
-    test_lit(32768^^xsd:short, 32768^^'http://www.w3.org/2001/XMLSchema#short').
+    test_lit(32767^^xsd:short, 32767^^'http://www.w3.org/2001/XMLSchema#short').
 
 test(short_neg) :-
     % note that the number saved is not further quoted
