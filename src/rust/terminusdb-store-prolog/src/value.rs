@@ -403,7 +403,7 @@ pub fn unify_entry<C: QueryableContextType>(
             {
                 let f = context.open_frame();
                 let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, &term)?;
+                object_term.unify_arg(1, term)?;
                 f.close();
             }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#integer"))
@@ -413,7 +413,7 @@ pub fn unify_entry<C: QueryableContextType>(
             {
                 let f = context.open_frame();
                 let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, &term)?;
+                object_term.unify_arg(1, term)?;
                 f.close();
             }
             object_term.unify_arg(
@@ -426,7 +426,7 @@ pub fn unify_entry<C: QueryableContextType>(
             {
                 let f = context.open_frame();
                 let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, &term)?;
+                object_term.unify_arg(1, term)?;
                 f.close();
             }
             object_term.unify_arg(
@@ -439,7 +439,7 @@ pub fn unify_entry<C: QueryableContextType>(
             {
                 let f = context.open_frame();
                 let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, &term)?;
+                object_term.unify_arg(1, term)?;
                 f.close();
             }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#positiveInteger"))
@@ -449,7 +449,7 @@ pub fn unify_entry<C: QueryableContextType>(
             {
                 let f = context.open_frame();
                 let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, &term)?;
+                object_term.unify_arg(1, term)?;
                 f.close();
             }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#negativeInteger"))
@@ -558,7 +558,7 @@ pub fn unify_entry<C: QueryableContextType>(
             let date_term = context.new_term_ref();
             date_term.unify(functor!("date/4"))?;
             let dt = entry.as_val::<Date, Date>();
-            let year = dt.year as i64;
+            let year = dt.year;
             let month = dt.month as i64;
             let day = dt.day as i64;
             let offset = dt.offset as i64;
