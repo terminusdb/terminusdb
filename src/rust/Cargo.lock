@@ -1427,6 +1427,7 @@ name = "terminus-store"
 version = "0.19.9"
 dependencies = [
  "async-trait",
+ "base64",
  "byteorder",
  "bytes",
  "chrono",
@@ -1434,6 +1435,7 @@ dependencies = [
  "fs2",
  "futures",
  "futures-locks",
+ "hex",
  "itertools",
  "lazy_static",
  "num-derive",
@@ -1487,6 +1489,7 @@ dependencies = [
 name = "terminusdb-store-prolog"
 version = "0.2.0"
 dependencies = [
+ "base64",
  "chardetng",
  "chrono",
  "encoding_rs",

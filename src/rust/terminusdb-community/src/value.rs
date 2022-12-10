@@ -121,14 +121,14 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
                 Value::String(x)
             }
         }
-        Datatype::UInt32 => {
-            Value::Number(Number::from_f64(tde.as_val::<u32, u32>() as f64).unwrap())
-        }
-        Datatype::Int32 => {
-            Value::Number(Number::from_f64(tde.as_val::<i32, i32>() as f64).unwrap())
-        }
-        Datatype::UInt64 => Value::String(tde.as_val::<u64, u64>().to_string()),
-        Datatype::Int64 => Value::String(tde.as_val::<i64, i64>().to_string()),
+        Datatype::UInt8 => Value::Number(tde.as_val::<u8, u8>().into()),
+        Datatype::Int8 => Value::Number(tde.as_val::<i8, i8>().into()),
+        Datatype::UInt16 => Value::Number(tde.as_val::<u16, u16>().into()),
+        Datatype::Int16 => Value::Number(tde.as_val::<i16, i16>().into()),
+        Datatype::UInt32 => Value::Number(tde.as_val::<u32, u32>().into()),
+        Datatype::Int32 => Value::Number(tde.as_val::<i32, i32>().into()),
+        Datatype::UInt64 => Value::Number(tde.as_val::<u64, u64>().into()),
+        Datatype::Int64 => Value::Number(tde.as_val::<i64, i64>().into()),
         Datatype::Float32 => {
             Value::Number(Number::from_f64(tde.as_val::<f32, f32>() as f64).unwrap())
         }
@@ -136,6 +136,11 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::String => Value::String(tde.as_val::<String, String>()),
         Datatype::Decimal => Value::String(tde.as_val::<Decimal, String>()),
         Datatype::BigInt => Value::String(tde.as_val::<Integer, String>()),
+        Datatype::GYear => Value::String(tde.as_val::<GYear, String>()),
+        Datatype::GMonth => Value::String(tde.as_val::<GMonth, String>()),
+        Datatype::GDay => Value::String(tde.as_val::<GDay, String>()),
+        Datatype::GYearMonth => Value::String(tde.as_val::<GYearMonth, String>()),
+        Datatype::GMonthDay => Value::String(tde.as_val::<GMonthDay, String>()),
         // Tokens are currently just used for null but may be used for more things in the future
         //Datatype::Token => Value::String(tde.as_val::<Token, String>()),
         Datatype::LangString => {
@@ -189,13 +194,27 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::LangString => juniper::Value::Scalar(DefaultScalarValue::String(
             tde.as_val::<LangString, String>(),
         )),
+        Datatype::GYear => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<GYear, String>()))
+        }
+        Datatype::GMonth => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<GMonth, String>()))
+        }
+        Datatype::GDay => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<GDay, String>()))
+        }
+        Datatype::GYearMonth => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<GYearMonth, String>(),
+        )),
+        Datatype::GMonthDay => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<GMonthDay, String>(),
+        )),
         Datatype::DateTime => {
             let ndt = tde.as_val::<NaiveDateTime, NaiveDateTime>();
             juniper::Value::Scalar(DefaultScalarValue::String(
                 ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string(),
             ))
         }
-        _ => todo!(),
     }
 }
 
