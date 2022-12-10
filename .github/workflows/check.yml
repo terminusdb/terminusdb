@@ -26,7 +26,7 @@ on:
         default: true
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '16'
 
 jobs:
 
