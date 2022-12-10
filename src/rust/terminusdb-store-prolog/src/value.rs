@@ -87,7 +87,7 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(f64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
         let inner_number: f64 = inner_term.get_ex()?;
-        Ok(f64::make_entry(&inner_number))
+        Ok(Decimal::make_entry(&Decimal(format!("{inner_number}"))))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
         let integer: Integer = Integer::parse(inner_number).unwrap().into();
@@ -601,7 +601,7 @@ pub fn unify_entry<C: QueryableContextType>(
             time_term.unify_arg(2, minute)?;
             time_term.unify_arg(3, second)?;
             object_term.unify_arg(1, time_term)?;
-            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dateTimeStamp"))
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#time"))
         }
         Datatype::DateTimeStamp => {
             let datetime_term = context.new_term_ref();

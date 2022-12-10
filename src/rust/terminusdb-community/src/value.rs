@@ -215,6 +215,7 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
                 ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string(),
             ))
         }
+        _ => todo!(),
     }
 }
 
