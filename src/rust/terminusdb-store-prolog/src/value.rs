@@ -364,12 +364,12 @@ pub fn unify_entry<C: QueryableContextType>(
         Datatype::UInt32 => {
             let val = entry.as_val::<u32, u32>() as u64;
             object_term.unify_arg(1, val)?;
-            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#int"))
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#unsignedInt"))
         }
         Datatype::Int32 => {
             let val = entry.as_val::<i32, i32>() as i64;
             object_term.unify_arg(1, val)?;
-            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#unsignedInt"))
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#int"))
         }
         Datatype::Float32 => {
             let val = entry.as_val::<f32, f32>() as f64;
@@ -513,7 +513,7 @@ pub fn unify_entry<C: QueryableContextType>(
                 f_term.unify(functor!("gyear_month/3"))?;
                 f_term.unify_arg(1, val.year)?;
                 f_term.unify_arg(2, val.month as u64)?;
-                f_term.unify_arg(2, val.offset as i64)?;
+                f_term.unify_arg(3, val.offset as i64)?;
 
                 object_term.unify_arg(1, &f_term)?;
                 f.close();
