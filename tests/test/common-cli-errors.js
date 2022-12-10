@@ -4,9 +4,17 @@ const { expect } = require('chai')
 const { util } = require('../lib')
 
 describe('common-cli-errors', function () {
+  let dbPath
+  let envs
+
+  async function execEnv (command) {
+    return exec(command, { env: envs })
+  }
+
   before(async function () {
-    process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
-    const r = await exec('./terminusdb.sh store init --force')
+    dbPath = './storage/' + util.randomString()
+    envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
+    const r = await execEnv('./terminusdb.sh store init --force')
     expect(r.stdout).to.match(/^Successfully initialised database/)
   })
 
@@ -25,7 +33,7 @@ describe('common-cli-errors', function () {
     for (const [command, beforePath, afterPath] of commands) {
       it(command, async function () {
         const path = util.randomString()
-        await exec(`./terminusdb.sh ${command} ${util.isDefined(beforePath) ? beforePath + ' ' : ''}${path}${util.isDefined(afterPath) ? ' ' + afterPath : ''}`)
+        await execEnv(`./terminusdb.sh ${command} ${util.isDefined(beforePath) ? beforePath + ' ' : ''}${path}${util.isDefined(afterPath) ? ' ' + afterPath : ''}`)
           .then((r) => {
             expect.fail(JSON.stringify(r))
           })
@@ -49,7 +57,7 @@ describe('common-cli-errors', function () {
     for (const command of commands) {
       it(command, async function () {
         const dbSpec = util.randomString() + '/' + util.randomString()
-        await exec(`./terminusdb.sh ${command} ${dbSpec}`)
+        await execEnv(`./terminusdb.sh ${command} ${dbSpec}`)
           .then((r) => {
             expect.fail(JSON.stringify(r))
           })

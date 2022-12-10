@@ -14,7 +14,7 @@ class Cli {
   constructor (params) {
     this.params = params
     this.filesToDelete = []
-    process.env.TERMINUSDB_SERVER_DB_PATH = `./storage/${util.randomString()}`
+    this.dbPath = `./storage/${util.randomString()}`
   }
 
   async deleteFiles () {
@@ -25,7 +25,6 @@ class Cli {
 
   async cleanup () {
     await this.deleteFiles()
-    delete process.env.TERMINUSDB_SERVER_DB_PATH
   }
 
   builder () {
@@ -76,7 +75,7 @@ class CommandBuilder {
     if (this.debugCommand) {
       console.error('>>>', command)
     }
-    const r = await exec(command)
+    const r = await exec(command, { env: { TERMINUSDB_SERVER_DB_PATH: this.dbPath } })
     if (this.debugOutput) {
       console.error(r)
     }
