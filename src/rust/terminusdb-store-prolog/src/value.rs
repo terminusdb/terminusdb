@@ -87,8 +87,8 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let inner_number: f64 = inner_term.get_ex()?;
         Ok(f64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
-        let inner_number: f64 = inner_term.get_ex()?;
-        Ok(Decimal::make_entry(&Decimal(format!("{inner_number}"))))
+        let inner_number: String = context.string_from_term(inner_term)?;
+        Ok(Decimal::make_entry(&Decimal(inner_number)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
         let integer: Integer = Integer::parse(inner_number).unwrap().into();
@@ -392,11 +392,13 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#double"))
         }
         Datatype::Decimal => {
-            let val = entry
-                .as_val::<Decimal, String>()
-                .parse::<f64>()
-                .expect("Precision to high for cast to f64");
-            object_term.unify_arg(1, val)?;
+            let decimal = entry.as_val::<Decimal, String>();
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&decimal)?;
+                object_term.unify_arg(1, term)?;
+                f.close();
+            }
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#decimal"))
         }
         Datatype::BigInt => {

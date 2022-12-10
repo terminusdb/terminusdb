@@ -10564,7 +10564,7 @@ test(subdocument_update,
 
     open_descriptor(Desc, DB),
     get_document(DB, 'Organization/somewhere', Organization),
-    print_term(Organization, []),
+
     Organization = json{'@id':'Organization/somewhere',
                         '@type':'Organization',
                         creation_date:"2021-05-01T12:10:10Z",
