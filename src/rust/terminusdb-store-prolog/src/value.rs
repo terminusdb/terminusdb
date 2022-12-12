@@ -157,14 +157,58 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             offset: offset as i16,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#duration") == ty {
-        let inner_string: String = context.string_from_term(inner_term)?;
-        Ok(Duration::make_entry(&inner_string))
+        let sign: i64 = inner_term.get_arg(1)?;
+        let year: i64 = inner_term.get_arg(2)?;
+        let month: i64 = inner_term.get_arg(3)?;
+        let day: i64 = inner_term.get_arg(4)?;
+        let hour: i64 = inner_term.get_arg(5)?;
+        let minute: i64 = inner_term.get_arg(6)?;
+        let second: i64 = inner_term.get_arg(7)?;
+        Ok(Duration::make_entry(&Duration {
+            sign: sign as i8,
+            year,
+            month: month as u8,
+            day: day as u8,
+            hour: hour as u8,
+            minute: minute as u8,
+            second: second as u8,
+        }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration") == ty {
-        let inner_string: String = context.string_from_term(inner_term)?;
-        Ok(YearMonthDuration::make_entry(&inner_string))
+        let sign: i64 = inner_term.get_arg(1)?;
+        let year: i64 = inner_term.get_arg(2)?;
+        let month: i64 = inner_term.get_arg(3)?;
+        let day: i64 = inner_term.get_arg(4)?;
+        let hour: i64 = inner_term.get_arg(5)?;
+        let minute: i64 = inner_term.get_arg(6)?;
+        let second: i64 = inner_term.get_arg(7)?;
+        Ok(YearMonthDuration::make_entry(&YearMonthDuration(
+            Duration {
+                sign: sign as i8,
+                year,
+                month: month as u8,
+                day: day as u8,
+                hour: hour as u8,
+                minute: minute as u8,
+                second: second as u8,
+            },
+        )))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration") == ty {
-        let inner_string: String = context.string_from_term(inner_term)?;
-        Ok(DayTimeDuration::make_entry(&inner_string))
+        let sign: i64 = inner_term.get_arg(1)?;
+        let year: i64 = inner_term.get_arg(2)?;
+        let month: i64 = inner_term.get_arg(3)?;
+        let day: i64 = inner_term.get_arg(4)?;
+        let hour: i64 = inner_term.get_arg(5)?;
+        let minute: i64 = inner_term.get_arg(6)?;
+        let second: i64 = inner_term.get_arg(7)?;
+        Ok(DayTimeDuration::make_entry(&DayTimeDuration(Duration {
+            sign: sign as i8,
+            year,
+            month: month as u8,
+            day: day as u8,
+            hour: hour as u8,
+            minute: minute as u8,
+            second: second as u8,
+        })))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
         let year: i64 = inner_term.get_arg(1)?;
         let month: i64 = inner_term.get_arg(2)?;
@@ -553,36 +597,69 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gMonthDay"))
         }
         Datatype::Duration => {
-            let val = entry.as_val::<Duration, String>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let duration_term = context.new_term_ref();
+            duration_term.unify(functor!("duration/7"))?;
+            let duration = entry.as_val::<Duration, Duration>();
+            let sign = duration.sign as i64;
+            let year = duration.year as i64;
+            let month = duration.month as i64;
+            let day = duration.day as i64;
+            let hour = duration.hour as i64;
+            let minute = duration.minute as i64;
+            let second = duration.second as i64;
+            duration_term.unify_arg(1, sign)?;
+            duration_term.unify_arg(2, year)?;
+            duration_term.unify_arg(3, month)?;
+            duration_term.unify_arg(4, day)?;
+            duration_term.unify_arg(5, hour)?;
+            duration_term.unify_arg(6, minute)?;
+            duration_term.unify_arg(7, second)?;
+            object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#duration"))
         }
         Datatype::YearMonthDuration => {
-            let val = entry.as_val::<YearMonthDuration, String>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let duration_term = context.new_term_ref();
+            duration_term.unify(functor!("duration/7"))?;
+            let duration = entry.as_val::<YearMonthDuration, YearMonthDuration>().0;
+            let sign = duration.sign as i64;
+            let year = duration.year as i64;
+            let month = duration.month as i64;
+            let day = duration.day as i64;
+            let hour = duration.hour as i64;
+            let minute = duration.minute as i64;
+            let second = duration.second as i64;
+            duration_term.unify_arg(1, sign)?;
+            duration_term.unify_arg(2, year)?;
+            duration_term.unify_arg(3, month)?;
+            duration_term.unify_arg(4, day)?;
+            duration_term.unify_arg(5, hour)?;
+            duration_term.unify_arg(6, minute)?;
+            duration_term.unify_arg(7, second)?;
+            object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration"),
             )
         }
         Datatype::DayTimeDuration => {
-            let val = entry.as_val::<DayTimeDuration, String>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let duration_term = context.new_term_ref();
+            duration_term.unify(functor!("duration/7"))?;
+            let duration = entry.as_val::<DayTimeDuration, DayTimeDuration>().0;
+            let sign = duration.sign as i64;
+            let year = duration.year as i64;
+            let month = duration.month as i64;
+            let day = duration.day as i64;
+            let hour = duration.hour as i64;
+            let minute = duration.minute as i64;
+            let second = duration.second as i64;
+            duration_term.unify_arg(1, sign)?;
+            duration_term.unify_arg(2, year)?;
+            duration_term.unify_arg(3, month)?;
+            duration_term.unify_arg(4, day)?;
+            duration_term.unify_arg(5, hour)?;
+            duration_term.unify_arg(6, minute)?;
+            duration_term.unify_arg(7, second)?;
+            object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration"))
         }
         Datatype::Date => {
