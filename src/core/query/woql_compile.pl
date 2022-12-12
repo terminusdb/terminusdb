@@ -5335,12 +5335,12 @@ test(integer_neg) :-
 %% NOTE: doubles and floats actually have an alternative notation (2.7E10 etc), as well as special constants(Inf, NaN..), which are not currently supported.
 
 test(double_pos) :-
-    % note that the number saved is not further quoted
-    test_lit(123.456^^xsd:double, 123.456^^'http://www.w3.org/2001/XMLSchema#double').
+    % note that the number saved is marshalled back with too much precision
+    test_lit(123.456^^xsd:double, 123.45600128173828^^'http://www.w3.org/2001/XMLSchema#float').
 
 test(double_neg) :-
     % note that the number saved is not further quoted
-    test_lit(-123.456^^xsd:double, -123.456^^'http://www.w3.org/2001/XMLSchema#double').
+    test_lit(-123.456^^xsd:double, -123.45600128173828^^'http://www.w3.org/2001/XMLSchema#float').
 
 test(float_pos) :-
     % note that the number saved is not further quoted

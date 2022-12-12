@@ -85,7 +85,7 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(i64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#float") == ty {
         let inner_number: f64 = inner_term.get_ex()?;
-        Ok(Float32::make_entry(&Float32(inner_number)))
+        Ok(f32::make_entry(&(inner_number as f32)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#double") == ty {
         let inner_number: f64 = inner_term.get_ex()?;
         Ok(f64::make_entry(&inner_number))
@@ -385,7 +385,7 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#int"))
         }
         Datatype::Float32 => {
-            let val = entry.as_val::<Float32, f64>();
+            let val = entry.as_val::<f32, f64>();
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#float"))
         }
