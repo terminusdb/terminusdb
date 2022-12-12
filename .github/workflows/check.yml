@@ -15,6 +15,9 @@ on:
       image_platform:
         type: string
         default: "linux/amd64"
+      runner:
+        type: string
+        default: "self-hosted"
 
 env:
   NODE_VERSION: '16'
@@ -23,7 +26,7 @@ jobs:
 
   unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - name: Set up Docker Buildx
@@ -83,7 +86,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install shed pytest tox
+          python -m pip install shed pytest tox==3.27.1
           tox -e deps
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
@@ -92,7 +95,7 @@ jobs:
 
   integration_tests_basic:
     name: Integration tests (basic)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -143,7 +146,7 @@ jobs:
 
   integration_tests_non_parallel:
     name: Integration tests (non-parallel)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -194,7 +197,7 @@ jobs:
 
   integration_tests_header:
     name: Integration tests (header)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -247,7 +250,7 @@ jobs:
 
   integration_tests_jwt:
     name: Integration tests (JWT)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
