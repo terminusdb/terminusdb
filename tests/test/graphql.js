@@ -34,6 +34,47 @@ describe('GraphQL', function () {
     '@id': 'Rocks',
     '@type': 'Enum',
     '@value': ['Big', 'Medium', 'Small'],
+  }, {
+    '@id': 'Everything',
+    '@type': 'Class',
+    anySimpleType: 'xsd:anySimpleType',
+    string: 'xsd:string',
+    boolean: 'xsd:boolean',
+    decimal: 'xsd:decimal',
+    float: 'xsd:float',
+    time: 'xsd:time',
+    date: 'xsd:date',
+    dateTime: 'xsd:dateTime',
+    dateTimeStamp: 'xsd:dateTimeStamp',
+    gYear: 'xsd:gYear',
+    gMonth: 'xsd:gMonth',
+    gDay: 'xsd:gDay',
+    gYearMonth: 'xsd:gYearMonth',
+    duration: 'xsd:duration',
+    yearMonthDuration: 'xsd:yearMonthDuration',
+    dayTimeDuration: 'xsd:dayTimeDuration',
+    byte: 'xsd:byte',
+    short: 'xsd:short',
+    int: 'xsd:int',
+    long: 'xsd:long',
+    unsignedByte: 'xsd:unsignedByte',
+    unsignedShort: 'xsd:unsignedShort',
+    unsignedInt: 'xsd:unsignedInt',
+    unsignedLong: 'xsd:unsignedLong',
+    integer: 'xsd:integer',
+    positiveInteger: 'xsd:positiveInteger',
+    negativeInteger: 'xsd:negativeInteger',
+    nonPositiveInteger: 'xsd:nonPositiveInteger',
+    nonNegativeInteger: 'xsd:nonNegativeInteger',
+    base64nary: 'xsd:base64Binary',
+    hexBinary: 'xsd:hexBinary',
+    anyURI: 'xsd:anyURI',
+    language: 'xsd:language',
+    normalizedString: 'xsd:normalizedString',
+    token: 'xsd:token',
+    NMTOKEN: 'xsd:NMTOKEN',
+    Name: 'xsd:Name',
+    NCName: 'xsd:NCName',
   }]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }
@@ -253,6 +294,139 @@ describe('GraphQL', function () {
       expect(result.data.Person).to.deep.equal([
         { name: 'Immanuel Kant' },
         { name: 'Socrates' },
+      ])
+    })
+
+    it('insert and retrieve everything', async function () {
+      const everything = {
+        '@type': 'Everything',
+        anySimpleType: 3,
+        string: 'string',
+        boolean: true,
+        decimal: 3.2,
+        float: 3.2,
+        time: '23:34:43.0003Z',
+        date: '2021-03-05',
+        dateTime: '2021-03-05T23:34:43.0003Z',
+        dateTimeStamp: '2021-03-05T23:34:43.0003Z',
+        gYear: '-32',
+        gMonth: '--11',
+        gDay: '---29',
+        gYearMonth: '1922-03',
+        duration: 'P3Y2DT7M',
+        yearMonthDuration: 'P3Y7M',
+        dayTimeDuration: 'P1DT10H7M12S',
+        byte: -8,
+        short: -10,
+        int: -32,
+        long: -532,
+        unsignedByte: 3,
+        unsignedShort: 5,
+        unsignedInt: 8,
+        unsignedLong: 10,
+        integer: 20,
+        positiveInteger: '2342423',
+        negativeInteger: '-2348982734',
+        nonPositiveInteger: '-334',
+        nonNegativeInteger: '3243323',
+        base64nary: 'VGhpcyBpcyBhIHRlc3Q=',
+        hexBinary: '5468697320697320612074657374',
+        anyURI: 'http://this.com',
+        language: 'en',
+        normalizedString: 'norm',
+        token: 'token',
+        NMTOKEN: 'NMTOKEN',
+        Name: 'Name',
+        NCName: 'NCName',
+      }
+      const res = await document.insert(agent, { instance: everything }).unverified()
+      const id = res.body[0]
+      const QUERY_EVERYTHING = gql`
+query EverythingQuery {
+   Everything {
+        anySimpleType
+        string
+        boolean
+        decimal
+        float
+        time
+        date
+        dateTime
+        dateTimeStamp
+        gYear
+        gMonth
+        gDay
+        gYearMonth
+        duration
+        yearMonthDuration
+        dayTimeDuration
+        byte
+        short
+        int
+        long
+        unsignedByte
+        unsignedShort
+        unsignedInt
+        unsignedLong
+        integer
+        positiveInteger
+        negativeInteger
+        nonPositiveInteger
+        nonNegativeInteger
+        base64nary
+        hexBinary
+        anyURI
+        language
+        normalizedString
+        token
+        NMTOKEN
+        Name
+        NCName
+   }
+}
+`
+      const r = await client.query({ query: QUERY_EVERYTHING })
+      expect(r.data.Everything).to.deep.equal([
+        {
+          anySimpleType: '"3"',
+          string: 'string',
+          boolean: true,
+          decimal: '3.2',
+          float: 3.200000047683716,
+          time: '23:34:43Z',
+          date: '2021-03-05',
+          dateTime: '2021-03-05T23:34:43.000030Z',
+          dateTimeStamp: '2021-03-05T23:34:43.000030Z',
+          gYear: '-032',
+          gMonth: '--11',
+          gDay: '---29',
+          gYearMonth: '1922-03',
+          duration: 'P3Y2DT7M',
+          yearMonthDuration: 'P3Y7M',
+          dayTimeDuration: 'P1DT10H7M12S',
+          byte: -8,
+          short: -10,
+          int: -32,
+          long: '-532',
+          unsignedByte: 3,
+          unsignedShort: 5,
+          unsignedInt: '8',
+          unsignedLong: '10',
+          integer: '20',
+          positiveInteger: '2342423',
+          negativeInteger: '-2348982734',
+          nonPositiveInteger: '-334',
+          nonNegativeInteger: '3243323',
+          base64nary: 'VGhpcyBpcyBhIHRlc3Q=',
+          hexBinary: '5468697320697320612074657374',
+          anyURI: 'http://this.com',
+          language: 'en',
+          normalizedString: 'norm',
+          token: 'token',
+          NMTOKEN: 'NMTOKEN',
+          Name: 'Name',
+          NCName: 'NCName',
+        },
       ])
     })
   })

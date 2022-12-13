@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, NaiveTime};
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
@@ -114,7 +114,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
     match tde.datatype() {
         Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
         Datatype::Token => {
-            let x = tde.as_val::<String, String>();
+            let x = tde.as_val::<Token, String>();
             if x == "null" {
                 Value::Null
             } else {
@@ -152,7 +152,30 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
             let ndt = tde.as_val::<NaiveDateTime, NaiveDateTime>();
             Value::String(ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
         }
-        _ => todo!(),
+        Datatype::AnyURI => Value::String(tde.as_val::<AnyURI, String>()),
+        Datatype::Language => Value::String(tde.as_val::<Language, String>()),
+        Datatype::NormalizedString => Value::String(tde.as_val::<NormalizedString, String>()),
+        Datatype::NMToken => Value::String(tde.as_val::<NMToken, String>()),
+        Datatype::Name => Value::String(tde.as_val::<Name, String>()),
+        Datatype::NCName => Value::String(tde.as_val::<NCName, String>()),
+        Datatype::Notation => Value::String(tde.as_val::<Notation, String>()),
+        Datatype::QName => Value::String(tde.as_val::<QName, String>()),
+        Datatype::ID => Value::String(tde.as_val::<ID, String>()),
+        Datatype::IDRef => Value::String(tde.as_val::<IDRef, String>()),
+        Datatype::Entity => Value::String(tde.as_val::<Entity, String>()),
+        Datatype::PositiveInteger => Value::String(tde.as_val::<PositiveInteger, String>()),
+        Datatype::NonNegativeInteger => Value::String(tde.as_val::<NonNegativeInteger, String>()),
+        Datatype::NonPositiveInteger => Value::String(tde.as_val::<NonPositiveInteger, String>()),
+        Datatype::NegativeInteger => Value::String(tde.as_val::<NegativeInteger, String>()),
+        Datatype::Date => Value::String(tde.as_val::<Date, String>()),
+        Datatype::DateTimeStamp => Value::String(tde.as_val::<DateTimeStamp, String>()),
+        Datatype::Time => Value::String(tde.as_val::<NaiveTime, String>()),
+        Datatype::Duration => Value::String(tde.as_val::<Duration, String>()),
+        Datatype::YearMonthDuration => Value::String(tde.as_val::<YearMonthDuration, String>()),
+        Datatype::DayTimeDuration => Value::String(tde.as_val::<DayTimeDuration, String>()),
+        Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
+        Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
+        Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
     }
 }
 
@@ -164,9 +187,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::String => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<String, String>()))
         }
-        Datatype::UInt32 => {
-            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<u32, u32>() as f64))
-        }
+        Datatype::UInt32 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<u32, u32>().to_string(),
+        )),
         Datatype::Int32 => {
             juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i32, i32>()))
         }
@@ -174,7 +197,7 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             tde.as_val::<u64, u64>().to_string(),
         )),
         Datatype::Int64 => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<u64, u64>().to_string(),
+            tde.as_val::<i64, i64>().to_string(),
         )),
         Datatype::Float32 => {
             juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f32, f32>() as f64))
@@ -215,7 +238,90 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
                 ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string(),
             ))
         }
-        _ => todo!(),
+        Datatype::AnyURI => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<AnyURI, String>()))
+        }
+        Datatype::Language => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Language, String>()))
+        }
+        Datatype::NormalizedString => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NormalizedString, String>(),
+        )),
+        Datatype::NMToken => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<NMToken, String>()))
+        }
+        Datatype::Name => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Name, String>()))
+        }
+        Datatype::NCName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<NCName, String>()))
+        }
+        Datatype::Notation => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Notation, String>()))
+        }
+        Datatype::QName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<QName, String>()))
+        }
+        Datatype::ID => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<ID, String>()))
+        }
+        Datatype::IDRef => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<IDRef, String>()))
+        }
+        Datatype::Entity => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Entity, String>()))
+        }
+        Datatype::PositiveInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<PositiveInteger, String>(),
+        )),
+        Datatype::NonNegativeInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NonNegativeInteger, String>(),
+        )),
+        Datatype::NonPositiveInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NonPositiveInteger, String>(),
+        )),
+        Datatype::NegativeInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NegativeInteger, String>(),
+        )),
+        Datatype::Date => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Date, String>()))
+        }
+        Datatype::DateTimeStamp => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<DateTimeStamp, String>(),
+        )),
+        Datatype::Time => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NaiveTime, String>(),
+        )),
+        Datatype::Duration => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Duration, String>()))
+        }
+        Datatype::YearMonthDuration => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<YearMonthDuration, String>(),
+        )),
+        Datatype::DayTimeDuration => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<DayTimeDuration, String>(),
+        )),
+        Datatype::UInt8 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<u8, u8>() as i32))
+        }
+        Datatype::Int8 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i8, i8>() as i32))
+        }
+        Datatype::UInt16 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<u16, u16>() as i32))
+        }
+        Datatype::Int16 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i16, i16>() as i32))
+        }
+        Datatype::Base64Binary => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<Base64Binary, String>(),
+        )),
+        Datatype::HexBinary => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<HexBinary, String>(),
+        )),
+        Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<AnySimpleType, String>(),
+        )),
     }
 }
 

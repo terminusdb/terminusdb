@@ -29,7 +29,7 @@ pub fn make_entry_from_term<C: QueryableContextType>(
     } else if atom!("http://www.w3.org/2001/XMLSchema#token") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(Token::make_entry(&inner_string.into_inner()))
-    } else if atom!("http://www.w3.org/2001/XMLSchema#NMToken") == ty {
+    } else if atom!("http://www.w3.org/2001/XMLSchema#NMTOKEN") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(NMToken::make_entry(&inner_string.into_inner()))
     } else if atom!("http://www.w3.org/2001/XMLSchema#Name") == ty {
@@ -346,7 +346,7 @@ pub fn unify_entry<C: QueryableContextType>(
         Datatype::NMToken => {
             let val = entry.as_val::<NMToken, String>();
             object_term.unify_arg(1, val)?;
-            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#NMToken"))
+            object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#NMTOKEN"))
         }
         Datatype::Name => {
             let val = entry.as_val::<Name, String>();
@@ -714,7 +714,7 @@ pub fn unify_entry<C: QueryableContextType>(
         Datatype::DateTimeStamp => {
             let datetime_term = context.new_term_ref();
             datetime_term.unify(functor!("date_time/7"))?;
-            let dt = entry.as_val::<DateTimeStamp, NaiveDateTime>();
+            let dt = entry.as_val::<DateTimeStamp, DateTimeStamp>().0;
             let year = dt.year() as i64;
             let month = dt.month() as i64;
             let day = dt.day() as i64;
