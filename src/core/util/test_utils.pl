@@ -183,7 +183,7 @@ setup_unattached_store(Store-Dir) :-
     random_string(RandomString),
     atomic_list_concat([TmpName, RandomString], Dir),
     make_directory(Dir),
-    open_directory_store(Dir, Store),
+    open_archive_store(Dir, Store),
     initialize_database_with_store('root', Store).
 
 setup_temp_store(Store-Dir) :-

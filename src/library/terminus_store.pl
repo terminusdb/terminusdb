@@ -1,7 +1,7 @@
 :- module(terminus_store, [
               terminus_store_version/1,
               open_memory_store/1,
-              open_directory_store/2,
+              open_archive_store/2,
               open_archive_store/2,
 
               create_named_graph/3,
@@ -105,7 +105,7 @@ terminus_store_version('0.19.8').
 %
 % @arg Store the returned in-memory store.
 
-%! open_directory_store(+Path:text, -Store:store) is det.
+%! open_archive_store(+Path:text, -Store:store) is det.
 %
 % Opens a store backed by a directory, and unifies it with Store.
 %
@@ -649,7 +649,7 @@ createng(TestDir) :-
     random_string(RandomString),
     atomic_list_concat(["testdir", RandomString], TestDir),
     make_directory(TestDir),
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     create_named_graph(X, "sometestdb", _).
 
 create_memory_ng(DB) :-
@@ -659,19 +659,19 @@ create_memory_ng(DB) :-
 test(open_memory_store) :-
     open_memory_store(_).
 
-test(open_directory_store_atom) :-
-    open_directory_store(this_is_an_atom, _),
-    open_directory_store("this is a string", _).
+test(open_archive_store_atom) :-
+    open_archive_store(this_is_an_atom, _),
+    open_archive_store("this is a string", _).
 
-test(open_directory_store_atom_exception, [
+test(open_archive_store_atom_exception, [
          throws(error(type_error(text,234), _))
      ]) :-
-    open_directory_store(234, _).
+    open_archive_store(234, _).
 
 test(create_db, [cleanup(clean(TestDir))]) :-
     make_directory("testdir"),
     TestDir = 'testdir',
-    open_directory_store("testdir", X),
+    open_archive_store("testdir", X),
     create_named_graph(X, "sometestdb", _).
 
 
@@ -680,7 +680,7 @@ test(create_db_on_memory) :-
     create_named_graph(X, "sometestdb", _).
 
 test(open_named_graph, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     open_named_graph(X, "sometestdb", _).
 
 test(open_named_graph_memory) :-
@@ -695,11 +695,11 @@ test(delete_named_graph_memory) :-
     \+ open_named_graph(X, "sometestdb", _).
 
 test(delete_named_graph_directory, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     \+ delete_named_graph(X, "unknowndb").
 
 test(head_from_empty_db, [fail, cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     open_named_graph(X, "sometestdb", DB),
     head(DB, _). % should be false because we have no HEAD yet
 
@@ -712,7 +712,7 @@ test(open_write_from_db_without_head, [
     throws(
         error(cannot_open_named_graph_without_base_layer, _)
     )]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     open_named_graph(X, "sometestdb", DB),
     open_write(DB, _).
 
@@ -720,7 +720,7 @@ test(open_write_from_db_with_head, [
          cleanup(clean(TestDir)),
          setup(createng(TestDir))
      ]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_commit(Builder, Layer),
     open_named_graph(Store, "sometestdb", DB),
@@ -736,7 +736,7 @@ test(open_write_from_memory_ng_without_head, [
     open_write(DB, _).
 
 test(create_base_layer, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, _).
 
 
@@ -745,7 +745,7 @@ test(create_base_layer_memory) :-
     open_write(Store, _).
 
 test(write_value_triple, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')).
 
@@ -755,7 +755,7 @@ test(write_value_triple_memory) :-
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')).
 
 test(commit_and_set_header, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -764,7 +764,7 @@ test(commit_and_set_header, [cleanup(clean(TestDir)), setup(createng(TestDir))])
 
 
 test(commit_and_set_header_version_first, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -773,7 +773,7 @@ test(commit_and_set_header_version_first, [cleanup(clean(TestDir)), setup(create
 
 
 test(commit_and_set_header_version_first_wrong_version, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -781,7 +781,7 @@ test(commit_and_set_header_version_first_wrong_version, [cleanup(clean(TestDir))
     \+ nb_force_set_head(DB, Layer, 1).
 
 test(commit_and_set_header_version_multiple_commits, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -800,7 +800,7 @@ test(commit_and_set_header_version_multiple_commits, [cleanup(clean(TestDir)), s
 
 
 test(commit_and_set_header_version_incorrect, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -809,7 +809,7 @@ test(commit_and_set_header_version_incorrect, [cleanup(clean(TestDir)), setup(cr
 
 
 test(commit_and_set_header_version_multiples_incorrect, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -833,7 +833,7 @@ test(commit_and_set_header_memory) :-
     nb_set_head(DB, Layer).
 
 test(head_after_first_commit, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_named_graph(Store, "sometestdb", DB),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -842,7 +842,7 @@ test(head_after_first_commit, [cleanup(clean(TestDir)), setup(createng(TestDir))
     head(DB, _).
 
 test(predicate_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_named_graph(Store, "sometestdb", DB),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -853,7 +853,7 @@ test(predicate_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Count == 1.
 
 test(node_and_value_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
@@ -861,7 +861,7 @@ test(node_and_value_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) 
     Count == 2.
 
 test(predicate_count_2, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_named_graph(Store, "sometestdb", DB),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
@@ -872,7 +872,7 @@ test(predicate_count_2, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Count == 2.
 
 test(remove_triple, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
@@ -880,7 +880,7 @@ test(remove_triple, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     nb_remove_triple(LayerBuilder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')).
 
 test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
@@ -889,7 +889,7 @@ test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
 
 
 test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
@@ -898,7 +898,7 @@ test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
 
 
 test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
@@ -906,7 +906,7 @@ test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Bag == ["Subject"-"Predicate"-"Object"].
 
 test(backtracking_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     create_named_graph(Store, "testdb", DB),
     nb_add_triple(Builder, "A", "B", node("C")),
@@ -921,7 +921,7 @@ test(backtracking_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Ps = ["D", "E"].
 
 test(query_builder_for_committed, [cleanup(clean(TestDir)),setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
 
     \+ builder_committed(Builder),
@@ -931,7 +931,7 @@ test(query_builder_for_committed, [cleanup(clean(TestDir)),setup(createng(TestDi
     builder_committed(Builder).
 
 test(squash_a_tower,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     create_named_graph(Store, "testdb", DB),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
@@ -957,7 +957,7 @@ test(squash_a_tower,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
 
 
 test(force_set_head,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder1),
     create_named_graph(Store, "testdb", DB1),
     nb_add_triple(Builder1, "joe", "eats", node("urchin")),
@@ -977,7 +977,7 @@ test(force_set_head,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     \+ parent(Layer3,_).
 
 test(apply_a_delta,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
     nb_commit(Builder, Layer),
@@ -1001,7 +1001,7 @@ test(apply_a_delta,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
               ].
 
 test(apply_a_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
     nb_add_triple(Builder, "jill", "eats", node("caviar")),
@@ -1035,7 +1035,7 @@ test(apply_a_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     ].
 
 test(apply_empty_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
     nb_add_triple(Builder, "jill", "eats", node("caviar")),
@@ -1060,7 +1060,7 @@ test(apply_empty_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Triple_Removals = [].
 
 test(so_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("C")),
     nb_add_triple(Builder, "A", "B", node("D")),
@@ -1070,7 +1070,7 @@ test(so_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
           "A"-node("D")].
 
 test(sp_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1080,7 +1080,7 @@ test(sp_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
           "C"-"B"].
 
 test(op_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1089,7 +1089,7 @@ test(op_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Ps = ["A","C"].
 
 test(p_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1098,7 +1098,7 @@ test(p_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Ps = ["B"].
 
 test(rollup,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1116,7 +1116,7 @@ test(rollup,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Triples = ["A"-"B"-"D","E"-"F"-"G"].
 
 test(rollup_upto,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1141,7 +1141,7 @@ test(rollup_upto,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Triples = ["E"-"F"-"G","G"-"H"-"I"].
 
 test(layer_stack_names,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1167,7 +1167,7 @@ test(layer_stack_names,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Expected = Layers.
 
 test(precise_rollup_rolls_up_precisely,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder, "a", "b", value("a",'http://www.w3.org/2001/XMLSchema#string')),
@@ -1214,7 +1214,7 @@ test(precise_rollup_rolls_up_precisely,[cleanup(clean(TestDir)), setup(createng(
     Triples = Expected.
 
 test(imprecise_rollup_rolls_up_imprecisely,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder, "a", "b", value("a",'http://www.w3.org/2001/XMLSchema#string')),
@@ -1261,7 +1261,7 @@ test(imprecise_rollup_rolls_up_imprecisely,[cleanup(clean(TestDir)), setup(creat
     Triples = Expected.
 
 test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("C")),
     nb_add_triple(Builder, "A", "B", node("D")),
@@ -1272,7 +1272,7 @@ test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Count = 2.
 
 setup_object_id_test_layer(TestDir, Layer) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("C")),
     nb_add_triple(Builder, "A", "B", node("D")),

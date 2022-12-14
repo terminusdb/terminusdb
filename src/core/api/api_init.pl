@@ -134,7 +134,7 @@ initialize_database_with_path(Key, DB_Path, _) :-
     make_directory_path(DB_Path),
     delete_directory_contents(DB_Path),
     initialize_storage_version(DB_Path),
-    open_directory_store(DB_Path, Store),
+    open_archive_store(DB_Path, Store),
     initialize_database_with_store(Key, Store).
 
 initialize_storage_version(DB_Path) :-
