@@ -669,7 +669,7 @@ impl AllFrames {
                     .inherits
                     .clone()
                     .unwrap_or(vec![class.to_string()]);
-                eprintln!("supers: {supers:?}");
+
                 for superclass in supers {
                     if let Some(v) = subsumption_rel.get_mut(&superclass) {
                         v.push(class.to_string());

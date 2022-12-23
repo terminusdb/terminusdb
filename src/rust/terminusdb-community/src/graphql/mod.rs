@@ -37,7 +37,7 @@ predicates! {
         let mut sanitized_frames: AllFrames = frames.sanitize();
         sanitized_frames.invert();
         sanitized_frames.calculate_subsumption();
-        eprintln!("sanitized: {sanitized_frames:?}");
+
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(),
                                                 EmptyMutation::<TerminusContext<'a, C>>::new(),
                                                 EmptySubscription::<TerminusContext<'a,C>>::new(),
