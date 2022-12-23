@@ -850,6 +850,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                 key: None,
                 is_subdocument: None,
                 is_abstract: None,
+                inherits: None,
                 one_of: Some(vec![
                     OneOf {
                         choices: BTreeMap::from([
