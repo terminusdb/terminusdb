@@ -326,6 +326,8 @@ pub struct ClassDefinition {
     pub is_abstract: Option<Vec<()>>,
     #[serde(rename = "@oneOf")]
     pub one_of: Option<Vec<OneOf>>,
+    #[serde(rename = "@inherits")]
+    pub inherits: Option<Vec<String>>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
     #[serde(skip_serializing)]
@@ -343,7 +345,7 @@ impl ClassDefinition {
             fields.insert(sanitized_field, fd.sanitize());
         }
         let one_of = self.one_of.as_ref().map(|o| {
-            o.into_iter()
+            o.iter()
                 .map(|c| {
                     let mut choices = BTreeMap::new();
                     for (field,fd) in c.choices.iter() {
@@ -362,11 +364,22 @@ impl ClassDefinition {
         for (s, t) in field_map.iter() {
             field_renaming.insert(s.to_string(), t.to_string());
         }
+        let inherits = if let Some(inherits_val) = &self.inherits {
+            let mut result = vec![];
+            for class_name in inherits_val {
+                let sanitized = graphql_sanitize(class_name);
+                result.push(sanitized)
+            }
+            Some(result)
+        } else {
+            None
+        };
         ClassDefinition {
             documentation,
             key,
             is_subdocument: self.is_subdocument.clone(),
             is_abstract: self.is_abstract.clone(),
+            inherits,
             one_of,
             fields,
             field_renaming: Some(field_renaming),
@@ -381,8 +394,8 @@ impl ClassDefinition {
                     .find_map(|(s, f)| if s == field_name { Some(f) } else { None })
             })
         });
-        if maybe_field.is_some() {
-            maybe_field.unwrap()
+        if let Some(field) = maybe_field {
+            field
         } else {
             &self.fields[field_name]
         }
@@ -393,9 +406,8 @@ impl ClassDefinition {
             .one_of
             .as_ref()
             .map(|s| {
-                s.into_iter()
-                    .map(move |c| c.choices.iter().collect::<Vec<_>>())
-                    .flatten()
+                s.iter()
+                    .flat_map(move |c| c.choices.iter().collect::<Vec<_>>())
             })
             .into_iter()
             .flatten()
@@ -413,9 +425,9 @@ impl ClassDefinition {
         self.field_renaming
             .as_ref()
             .map(|map| {
-                let db_name = map.get(property).expect(&format!(
-                    "The fully qualified property name for {property:?} *should* exist"
-                ));
+                let db_name = map.get(property).unwrap_or_else(|| {
+                    panic!("The fully qualified property name for {property:?} *should* exist")
+                });
                 prefixes.expand_schema(db_name)
             })
             .expect("The field renaming was never built!")
@@ -480,7 +492,7 @@ impl EnumDefinition {
             .map(|map| {
                 urlencoding::encode(
                     map.get_by_left(value)
-                        .expect(&format!("The value name for {value:?} *should* exist")),
+                        .unwrap_or_else(|| panic!("The value name for {value:?} *should* exist")),
                 )
                 .into_owned()
             })
@@ -495,9 +507,9 @@ impl EnumDefinition {
                     &*urlencoding::decode(name)
                         .expect("Somehow encoding went terribly wrong in saving"),
                 )
-                .expect(&format!(
-                    "The value for {name:?} *should* exist as it is in your database"
-                ))
+                .unwrap_or_else(|| {
+                    panic!("The value for {name:?} *should* exist as it is in your database")
+                })
             })
             .expect("No values renaming was generated")
     }
@@ -556,6 +568,8 @@ pub struct AllFrames {
     pub class_renaming: Option<HashMap<String, String>>,
     #[serde(skip_deserializing)]
     pub inverted: Option<AllInvertedFrames>,
+    #[serde(skip_deserializing)]
+    pub subsumption: Option<HashMap<String, Vec<String>>>,
 }
 
 impl AllFrames {
@@ -578,6 +592,7 @@ impl AllFrames {
             frames,
             class_renaming: Some(class_renaming),
             inverted: None,
+            subsumption: None,
         }
     }
 
@@ -613,12 +628,12 @@ impl AllFrames {
         let enum_type_expanded = self.fully_qualified_class_name(enum_type);
         let enum_type_definition = self.frames[enum_type].as_enum_definition();
         let value = enum_type_definition.value_name(value);
-        let expanded_object_node = format!("{}/{}", enum_type_expanded, value);
+        let expanded_object_node = format!("{enum_type_expanded}/{value}");
 
         expanded_object_node
     }
 
-    pub fn invert(&mut self) -> () {
+    pub fn invert(&mut self) {
         let inverted = allframes_to_allinvertedframes(self);
         self.inverted = Some(inverted);
     }
@@ -635,6 +650,37 @@ impl AllFrames {
         } else {
             None
         }
+    }
+
+    pub fn subsumed(&self, class: &str) -> Vec<String> {
+        if let Some(hash) = &self.subsumption {
+            hash.get(class).cloned().unwrap_or(vec![class.to_string()])
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn calculate_subsumption(&mut self) {
+        let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
+        for (class, typedef) in &self.frames {
+            if typedef.is_document_type() {
+                let supers = typedef
+                    .as_class_definition()
+                    .inherits
+                    .clone()
+                    .unwrap_or(vec![class.to_string()]);
+                eprintln!("supers: {supers:?}");
+                for superclass in supers {
+                    if let Some(v) = subsumption_rel.get_mut(&superclass) {
+                        v.push(class.to_string());
+                    } else {
+                        subsumption_rel.insert(superclass, vec![class.to_string()]);
+                    }
+                }
+            }
+        }
+        eprintln!("{subsumption_rel:?}");
+        self.subsumption = Some(subsumption_rel);
     }
 }
 
