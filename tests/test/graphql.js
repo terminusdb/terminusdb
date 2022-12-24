@@ -281,10 +281,10 @@ describe('GraphQL', function () {
       expect(result.data.Parent).to.deep.equal(
         [
           {
-            name: 'Jim',
+            name: 'Joe',
           },
           {
-            name: 'Joe',
+            name: 'Jim',
           },
           {
             name: 'Dad',
