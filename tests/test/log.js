@@ -3,89 +3,86 @@ const { Agent, util, document } = require('../lib')
 
 describe('log', function () {
   let agent
+  let dbName
 
   before(function () {
-    agent = new Agent({ dbName: 'hello' }).auth()
+    dbName = util.randomString()
+    agent = new Agent({ dbName }).auth()
   })
 
-  it('gets a log from changes', async function () {
-    await agent.post('/api/db/admin/hello').send({ label: 'Hello' })
+  describe('logging with new db', function () {
+    beforeEach(async function () {
+      await agent.post(`/api/db/admin/${dbName}`).send({ label: 'Hello' })
+    })
 
-    const id = util.randomString()
-    const schema = { '@type': 'Class', '@id': id }
-    await document.insert(agent, { schema })
-    const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
-    const result1 = await document.insert(agent, { instance: instance1 })
+    afterEach(async function () {
+      await agent.delete(`/api/db/admin/${dbName}`)
+    })
 
-    const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
-    const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
+    it('gets a log from changes', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id }
+      await document.insert(agent, { schema })
+      const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
+      const result1 = await document.insert(agent, { instance: instance1 })
 
-    const result2 = await document.insert(agent, { instance: instance2 })
-    const version2 = result2.headers['terminusdb-data-version'].split('branch:')[1]
+      const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
+      const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
 
-    const logRequest = await agent.get('/api/log/admin/hello')
-    const log = logRequest.body
+      const result2 = await document.insert(agent, { instance: instance2 })
+      const version2 = result2.headers['terminusdb-data-version'].split('branch:')[1]
 
-    expect(log).to.have.lengthOf(3)
-    expect(log[0].author).to.equal('default_author')
-    expect(log[0].identifier).to.equal(version2)
-    expect(log[1].identifier).to.equal(version1)
+      const logRequest = await agent.get(`/api/log/admin/${dbName}`)
+      const log = logRequest.body
 
-    // cleanup
-    await agent.delete('/api/db/admin/hello')
-  })
+      expect(log).to.have.lengthOf(3)
+      expect(log[0].author).to.equal('default_author')
+      expect(log[0].identifier).to.equal(version2)
+      expect(log[1].identifier).to.equal(version1)
+    })
 
-  it('gets a log from changes by commit', async function () {
-    await agent.post('/api/db/admin/hello').send({ label: 'Hello' })
+    it('gets a log from changes by commit', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id }
+      await document.insert(agent, { schema })
+      const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
+      const result1 = await document.insert(agent, { instance: instance1 })
 
-    const id = util.randomString()
-    const schema = { '@type': 'Class', '@id': id }
-    await document.insert(agent, { schema })
-    const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
-    const result1 = await document.insert(agent, { instance: instance1 })
+      const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
+      const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
 
-    const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
-    const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
+      const result2 = await document.insert(agent, { instance: instance2 })
+      const version2 = result2.headers['terminusdb-data-version'].split('branch:')[1]
 
-    const result2 = await document.insert(agent, { instance: instance2 })
-    const version2 = result2.headers['terminusdb-data-version'].split('branch:')[1]
+      const logRequest = await agent.get(`/api/log/admin/${dbName}/local/commit/${version2}`)
+      const log = logRequest.body
 
-    const logRequest = await agent.get(`/api/log/admin/hello/local/commit/${version2}`)
-    const log = logRequest.body
+      expect(log).to.have.lengthOf(3)
+      expect(log[0].author).to.equal('default_author')
+      expect(log[0].identifier).to.equal(version2)
+      expect(log[1].identifier).to.equal(version1)
+    })
 
-    expect(log).to.have.lengthOf(3)
-    expect(log[0].author).to.equal('default_author')
-    expect(log[0].identifier).to.equal(version2)
-    expect(log[1].identifier).to.equal(version1)
+    it('gets a log with count', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id }
+      await document.insert(agent, { schema })
+      const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
+      const result1 = await document.insert(agent, { instance: instance1 })
 
-    // cleanup
-    await agent.delete('/api/db/admin/hello')
-  })
+      const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
+      const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
 
-  it('gets a log with count', async function () {
-    await agent.post('/api/db/admin/hello').send({ label: 'Hello' })
+      await document.insert(agent, { instance: instance2 })
 
-    const id = util.randomString()
-    const schema = { '@type': 'Class', '@id': id }
-    await document.insert(agent, { schema })
-    const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0` }
-    const result1 = await document.insert(agent, { instance: instance1 })
+      const logRequest = await agent.get(`/api/log/admin/${dbName}?start=1&count=1`)
+      const log = logRequest.body
 
-    const version1 = result1.headers['terminusdb-data-version'].split('branch:')[1]
-    const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1` }
-
-    await document.insert(agent, { instance: instance2 })
-
-    const logRequest = await agent.get('/api/log/admin/hello?start=1&count=1')
-    const log = logRequest.body
-
-    expect(log).to.have.lengthOf(1)
-    expect(log[0].author).to.equal('default_author')
-    expect(log[0].identifier).to.equal(version1)
-    // expect(log[1].identifier).to.equal(version1)
-
-    // cleanup
-    await agent.delete('/api/db/admin/hello')
+      expect(log).to.have.lengthOf(1)
+      expect(log[0].author).to.equal('default_author')
+      expect(log[0].identifier).to.equal(version1)
+      // expect(log[1].identifier).to.equal(version1)
+    })
   })
 
   it('gets an error from _system', async function () {

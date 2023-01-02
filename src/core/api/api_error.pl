@@ -697,6 +697,15 @@ api_error_jsonld_(fetch,error(fetch_remote_has_no_url(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:RemoteHasNoURL",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(fetch,error(fetch_requires_repository(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote being fetched has no repository specified ~q", [Path]),
+    JSON = _{'@type' : 'api:FetchErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownRemoteRepository",
+                              'api:absolute_descriptor' : Path}
+            }.
 api_error_jsonld_(rebase,error(invalid_target_absolute_path(Path),_), JSON) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',

@@ -55,3 +55,4 @@ jobs:
       image_artifact: terminusdb-server-docker-image-arm64
       image_platform: linux/arm64
       runner: ubuntu-latest
+      mocha_parallel: false
