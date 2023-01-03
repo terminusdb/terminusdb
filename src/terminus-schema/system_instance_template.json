@@ -39,6 +39,10 @@
   "@type" : "Role",
   "name" : "Consumer Role",
   "action" : [ "class_frame",
+               "clone",
+               "fetch",
+               "meta_read_access",
+               "commit_read_access",
                "instance_read_access",
                "schema_read_access"
              ]}
