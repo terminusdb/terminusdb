@@ -521,6 +521,14 @@ partition(delete(A,B,C,D), Reads, Writes) :-
     !,
     Reads = [],
     Writes = [delete(A,B,C,D)].
+partition(insert_document(A), Reads, Writes) :-
+    !,
+    Reads = [],
+    Writes = [insert_document(A)].
+partition(insert_document(A,B), Reads, Writes) :-
+    !,
+    Reads = [],
+    Writes = [insert_document(A,B)].
 partition(replace_document(A,B), Reads, Writes) :-
     !,
     Reads = [],
@@ -1087,6 +1095,47 @@ assert_pre_flight_access(Context, AST) :-
     forall(member(resource(Collection, Type),Write_Sorted),
            assert_write_access(Context.system, Context.authorization, Collection, Type)).
 
+schema_prefixes(Old_Prefixes, Schema_Prefixes) :-
+    get_dict('@schema', Old_Prefixes, Schema),
+    put_dict(json{
+                 '@base' : Schema,
+                 '@schema' : 'http://terminusdb.com/schema/sys#',
+                 sys:'http://terminusdb.com/schema/sys#',
+                 xsd:'http://www.w3.org/2001/XMLSchema#',
+                 xdd:'http://terminusdb.com/schema/xdd#'
+             }, Old_Prefixes, Schema_Prefixes).
+
+write_graph_resolve(Doc, DocE) -->
+    view(write_graph, Write_Graph),
+    (   {(Write_Graph.type) = schema}
+    ->  update(prefixes, Old_Prefixes, Schema_Prefixes),
+        {schema_prefixes(Old_Prefixes, Schema_Prefixes)}
+    ;   []
+    ),
+    resolve(Doc,DocE),
+    (   {(Write_Graph.type) = schema}
+    ->  update(prefixes, _, Old_Prefixes)
+    ;   []
+    ).
+
+filter_graph_resolve(Doc, DocE) -->
+    view(filter, Filter),
+    {(   Filter = type_name_filter{ type: Type }
+     ->  true
+     ;   Filter = type_filter{ types: [Type] }
+     ->  throw(error(query_is_only_supported_for_one_graph_type,_))
+     )},
+    (   {Type = schema}
+    ->  update(prefixes, Old_Prefixes, Schema_Prefixes),
+        {schema_prefixes(Old_Prefixes, Schema_Prefixes)}
+    ;   []
+    ),
+    resolve(Doc,DocE),
+    (   {Type = schema}
+    ->  update(prefixes, _, Old_Prefixes)
+    ;   []
+    ).
+
 /*
  * turtle_term(Path,Values,Prog,Options) is det.
  *
@@ -1099,51 +1148,110 @@ turtle_term(Path,Vars,Prog,Options) :-
             literals:normalise_triple(Triple, rdf(X,P,Y)),
             Vars = [X,P,Y]).
 
-compile_wf(get_document(Doc_ID,Doc),
-           get_document(S0, URI, JSON)) -->
+compile_wf(get_document(Doc_ID,Doc),Goal) -->
     resolve(Doc_ID,URI),
-    resolve(Doc,JSON),
-    peek(S0).
+    filter_graph_resolve(Doc,JSON),
+    view(filter, Filter),
+    peek(S0),
+    {
+        (   Filter = type_name_filter{ type: Type }
+        ->  true
+        ;   Filter = type_filter{ types: [Type] }
+        ->  throw(error(query_is_only_supported_for_one_graph_type,_))
+        ),
+
+        (   Type = instance
+        ->  Goal = get_document(S0, URI, JSON)
+        ;   Type = schema
+        ->  Goal = get_schema_document(S0, URI, JSON)
+        )
+    }.
 compile_wf(replace_document(Doc),(
                freeze(Guard,
                       call_catch_document_mutation(
                           DocE,
-                          replace_document(S0, DocE, _))))) -->
-    resolve(Doc,DocE),
+                          Goal)))) -->
+    write_graph_resolve(Doc,DocE),
     view(update_guard, Guard),
-    peek(S0).
+    view(write_graph, Write_Graph),
+    peek(S0),
+    {
+        (   (Write_Graph.type) = instance
+        ->  Goal = replace_document(S0, DocE, _)
+        ;   (Write_Graph.type) = schema
+        ->  Goal = replace_schema_document(S0, DocE, _)
+        ;   throw(error(query_is_only_supported_for_one_graph_type,_))
+        )
+    }.
 compile_wf(replace_document(Doc,X),(
                freeze(Guard,
                       call_catch_document_mutation(
                           DocE,
-                          replace_document(S0, DocE, URI))))) -->
+                          Goal)))) -->
     resolve(X,URI),
-    resolve(Doc,DocE),
+    write_graph_resolve(Doc,DocE),
     view(update_guard, Guard),
-    peek(S0).
+    view(write_graph, Write_Graph),
+    peek(S0),
+    {
+        (   (Write_Graph.type) = instance
+        ->  Goal = replace_document(S0, DocE, URI)
+        ;   (Write_Graph.type) = schema
+        ->  Goal = replace_schema_document(S0, DocE, URI)
+        ;   throw(error(query_is_only_supported_for_one_graph_type,_))
+        )
+    }.
 compile_wf(insert_document(Doc),(
                freeze(Guard,
                       call_catch_document_mutation(
                           DocE,
-                          insert_document(S0, DocE, _URI))))) -->
-    resolve(Doc,DocE),
+                          Goal)))) -->
+    write_graph_resolve(Doc,DocE),
     view(update_guard, Guard),
-    peek(S0).
+    view(write_graph, Write_Graph),
+    peek(S0),
+    {
+        (   (Write_Graph.type) = instance
+        ->  Goal = insert_document(S0, DocE, _)
+        ;   (Write_Graph.type) = schema
+        ->  Goal = insert_schema_document(S0, DocE)
+        ;   throw(error(query_is_only_supported_for_one_graph_type,_))
+        )
+    }.
 compile_wf(insert_document(Doc,X),(
                freeze(Guard,
                       call_catch_document_mutation(
                           DocE,
-                          insert_document(S0, DocE, URI))))) -->
+                          Goal)))) -->
     resolve(X,URI),
-    resolve(Doc,DocE),
+    write_graph_resolve(Doc,DocE),
     view(update_guard, Guard),
-    peek(S0).
+    view(write_graph, Write_Graph),
+    peek(S0),
+    {
+        (   (Write_Graph.type) = instance
+        ->  Goal = insert_document(S0, DocE, URI)
+        ;   (Write_Graph.type) = schema
+        ->  Goal = insert_schema_document(S0, DocE),
+            get_dict('@id',DocE,URI)
+        ;   throw(error(query_is_only_supported_for_one_graph_type,_))
+        )
+    }.
 compile_wf(delete_document(X),(
                freeze(Guard,
-                      delete_document(S0, URI)))) -->
+                      Goal))) -->
     resolve(X,URI),
     view(update_guard, Guard),
-    peek(S0).
+    view(write_graph, Write_Graph),
+    peek(S0),
+    {
+        (   (Write_Graph.type) = instance
+        ->  Goal = delete_document(S0, URI)
+        ;   (Write_Graph.type) = schema
+        ->  Goal = delete_schema_document(S0, URI)
+        ;   throw(error(query_is_only_supported_for_one_graph_type,_))
+        )
+    }.
 % TODO: Need to translate the reference WG to a read-write object.
 compile_wf(delete(X,P,Y,G),Goal)
 -->
@@ -5134,6 +5242,49 @@ test(insert_read_document, [
     _{'@id':_,
       '@type':'City',
       name:"Dublin"} = Res2.'Doc'.
+
+test(insert_read_replace_schema_document, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    _{ '@type' : "Class",
+       '@id' : "Document",
+       name : "xsd:string",
+       identifier : "xsd:string"
+     },
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    with_test_transaction(
+        Descriptor,
+        C1,
+        ask(C1,
+            into(schema, insert_document(Document, URI)))
+    ),
+    URI = "Document",
+    with_test_transaction(
+        Descriptor,
+        C2,
+        ask(C2,
+            from(schema, get_document(URI, Old_Document)))
+    ),
+    Old_Document = json{'@id':'Document','@type':'Class',identifier:'xsd:string',name:'xsd:string'},
+    Replace_Document = json{'@id':'Document','@type':'Class',identifier:"xsd:integer",name:"xsd:string"},
+    with_test_transaction(
+        Descriptor,
+        C3,
+        ask(C3,
+            into(schema, replace_document(Replace_Document)))
+    ),
+    with_test_transaction(
+        Descriptor,
+        C4,
+        ask(C4,
+            from(schema, get_document(URI, New_Document)))
+    ),
+    New_Document = json{'@id':'Document','@type':'Class',identifier:'xsd:integer',name:'xsd:string'}.
+
 
 test(insert_document_forget_uri, [
          setup((setup_temp_store(State),

@@ -1708,6 +1708,14 @@ api_document_error_jsonld(Type,error(query_is_only_supported_for_instance_graphs
              'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type,error(query_is_only_supported_for_one_graph_type,_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Query documents are currently only supported for a single graph type", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForOneGraphType'},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type,error(query_error(unknown_prefix(_Query)),_), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Query document used an undefined prefix", []),

@@ -888,7 +888,7 @@ collection_descriptor_transaction_object(Collection_Descriptor, [_Transaction_Ob
     collection_descriptor_transaction_object(Collection_Descriptor, Transaction_Objects, Transaction_Object).
 
 read_write_object_to_name(Object, Name) :-
-    Name = Object.descriptor.name.
+    Name = Object.descriptor.type.
 
 make_branch_descriptor(Organization, DB, Repo_Name, Branch_Name, Branch_Descriptor) :-
     Database_Descriptor = database_descriptor{ organization_name: Organization,
