@@ -272,22 +272,21 @@ describe('GraphQL', function () {
       await document.insert(agent, { instance: members })
       const PARENT_QUERY = gql`
  query ParentQuery {
-    Parent{
+    Parent(orderBy: {name : ASC}){
         name
     }
 }`
       const result = await client.query({ query: PARENT_QUERY })
-      const names = result.data.Parent.slice().sort((a, b) => a.name < b.name)
-      expect(names).to.deep.equal(
+      expect(result.data.Parent).to.deep.equal(
         [
           {
-            name: 'Joe',
+            name: 'Dad',
           },
           {
             name: 'Jim',
           },
           {
-            name: 'Dad',
+            name: 'Joe',
           },
         ])
     })
