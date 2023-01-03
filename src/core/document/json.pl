@@ -9666,8 +9666,6 @@ test(arithmetic_frame, [
      ]) :-
 
     class_frame(Desc, 'Plus2', JSON),
-    print_term(JSON,[
-               ]),
     JSON = json{'@type':'Class',
                 '@key':json{'@type':"Random"},
                 '@subdocument':[],
