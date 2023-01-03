@@ -432,6 +432,25 @@ json_type_to_woql_ast('DeleteObject',JSON,WOQL,Path) :-
 json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
+      object : Object,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = insert(WQA,WQB,WQC,Graph_String).
+json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
       object : Object
      } :< JSON,
     json_value_to_woql_ast(Subject,WQA,[subject
@@ -444,6 +463,25 @@ json_type_to_woql_ast('AddTriple',JSON,WOQL,Path) :-
 json_type_to_woql_ast('AddedTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
+      object : Object,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = addition(WQA,WQB,WQC,Graph_String).
+json_type_to_woql_ast('AddedTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
       object : Object
      } :< JSON,
     json_value_to_woql_ast(Subject,WQA,[subject
@@ -453,6 +491,25 @@ json_type_to_woql_ast('AddedTriple',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Object,WQC,[object
                                        |Path]),
     WOQL = addition(WQA,WQB,WQC).
+json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = removal(WQA,WQB,WQC,Graph_String).
 json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
