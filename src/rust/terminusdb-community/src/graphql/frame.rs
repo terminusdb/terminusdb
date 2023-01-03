@@ -679,7 +679,6 @@ impl AllFrames {
                 }
             }
         }
-        eprintln!("{subsumption_rel:?}");
         self.subsumption = Some(subsumption_rel);
     }
 }
