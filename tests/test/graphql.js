@@ -277,8 +277,8 @@ describe('GraphQL', function () {
     }
 }`
       const result = await client.query({ query: PARENT_QUERY })
-
-      expect(result.data.Parent).to.deep.equal(
+      const names = result.data.Parent.slice().sort((a, b) => a.name < b.name)
+      expect(names).to.deep.equal(
         [
           {
             name: 'Joe',
