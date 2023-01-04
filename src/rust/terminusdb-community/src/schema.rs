@@ -224,11 +224,6 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         let mut result = HashMap::new();
 
         for (sub, supers) in inheritance.iter() {
-            // every type is a subtype of itself
-            let entry = result.entry(*sub).or_insert_with(|| HashSet::new());
-            entry.insert(*sub);
-
-            // next, find all super types
             let mut visited = HashSet::new();
             let mut supers: Vec<&u64> = supers.iter().collect();
             while let Some(sup) = supers.pop() {
@@ -327,7 +322,9 @@ impl<'a, L: Layer> Iterator for RdfListIterator<'a, L> {
     }
 }
 
+#[derive(Debug)]
 pub struct InheritanceGraph(HashMap<u64, HashSet<u64>>);
+#[derive(Debug)]
 pub struct ReverseInheritanceGraph(HashMap<u64, HashSet<u64>>);
 
 impl std::ops::Deref for InheritanceGraph {

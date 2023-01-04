@@ -2113,6 +2113,66 @@ test(add_quad, [
     query_test_response(Descriptor, Query_Out, JSON),
     JSON.inserts = 1.
 
+test(add_quad_schema, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query = _{'@type' : "AddTriple",
+              'subject' : _{ '@type' : "NodeValue",
+                             'node' : "DBadmin"},
+              'predicate' : _{ '@type' : "NodeValue",
+                               'node' : "rdfs:label"},
+              'object' : _{ '@type' : "Value",
+                            'node' : "xxx"},
+              'graph' : "schema"
+             },
+
+    make_branch_descriptor('admin', 'test', Descriptor),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    (JSON.inserts = 1),
+    ask(Descriptor,
+        t(X,Y,Z,schema)),
+    !,
+    X-Y-Z = 'DBadmin'-(rdfs:label)-xxx.
+
+test(added_quad, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Query = _{'@type' : "AddTriple",
+              'subject' : _{ '@type' : "NodeValue",
+                             'node' : "DBadmin"},
+              'predicate' : _{ '@type' : "NodeValue",
+                               'node' : "rdfs:label"},
+              'object' : _{ '@type' : "Value",
+                            'node' : "xxx"},
+              'graph' : "schema"
+             },
+
+    make_branch_descriptor('admin', 'test', Descriptor),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    (JSON.inserts = 1),
+
+    Query_Added = _{'@type' : "AddedTriple",
+                    'subject' : _{ '@type' : "NodeValue",
+                                   'node' : "DBadmin"},
+                    'predicate' : _{ '@type' : "NodeValue",
+                                     'node' : "rdfs:label"},
+                    'object' : _{ '@type' : "Value",
+                                  'node' : "xxx"},
+                    'graph' : "schema"
+                   },
+
+    save_and_retrieve_woql(Query_Added, Query_Added_Out),
+    query_test_response(Descriptor, Query_Added_Out, JSON_Added),
+    (JSON_Added.bindings) = [_{}].
+
 test(upper, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
