@@ -384,7 +384,7 @@ opt_spec(rollup,'terminusdb rollup DATABASE_SPEC OPTIONS',
            help('print help for the `rollup` command')]
          ]).
 opt_spec(bundle,'terminusdb bundle DATABASE_SPEC OPTIONS',
-         'Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unpack`.',
+         'Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unbundle`.',
          [[opt(help),
            type(boolean),
            longflags([help]),
