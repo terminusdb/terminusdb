@@ -1,3 +1,21 @@
+# TerminusDB Server v10.1.11 Release Notes
+
+## Enhancements
+
+* GraphQL now deals with more TerminusDB schemata
+* Add JSON formatted logs for welcome message
+* Consumer role now has expanded privileges enabling public access for clones
+* Context insert/replace now gives a more understandable error
+* We now check the store version before startup to prevent version mismatch between server and store during upgrades
+
+## Bug fixes
+
+* Fix JWT lib build
+* Expanded error handling for fetch
+* WOQL AST was incorrect for some WOQL words which specify the graph
+* Fix subsumption in document retrieval
+* Fix subsumption in GraphQL retrieval
+
 # TerminusDB Server v10.1.10 Release Notes
 
 ## Enhancements
