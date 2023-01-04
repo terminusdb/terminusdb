@@ -12,10 +12,6 @@ describe('cli-bundle', function () {
     await cli.store.init()
   })
 
-  after(async function () {
-    await cli.cleanup()
-  })
-
   it('passes bundle, unbundle empty database', async function () {
     await cli.db.create(agent)
     await cli.bundle(agent)
