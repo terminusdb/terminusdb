@@ -3081,7 +3081,9 @@ valid_schema_name(Prefixes,Name) :-
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
-
+    die_if(
+        get_dict('@type', Document, "@context"),
+        error(inserting_context(Document), _)),
     do_or_die(
         get_dict('@id', Document, Id),
         error(missing_field('@id', Document), _)),

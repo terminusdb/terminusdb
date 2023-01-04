@@ -1604,6 +1604,14 @@ api_document_error_jsonld(Type, error(syntax_error(json(What)), _), JSON) :-
              'api:message' : Msg,
              'api:what': What
             }.
+api_document_error_jsonld(Type, error(inserting_context(Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Inserting contexts is not allowed without using a 'full replace'.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:InsertingContext',
+                              'api:document' : Document},
+             'api:message' : Msg}.
 api_document_error_jsonld(Type, error(missing_field(Field, Document), _), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Missing '~s' field in submitted document.", [Field]),
