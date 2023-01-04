@@ -610,7 +610,7 @@ describe('cli-doc', function () {
       await execEnv(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
       const res = await execEnv(`./terminusdb.sh doc get -g schema admin/${db}`)
       const context = JSON.parse(res.stdout)
-      expect(context['@metadata']).to.deep.equal({some_meta_key:'some_meta_value'})
+      expect(context['@metadata']).to.deep.equal({ some_meta_key: 'some_meta_value' })
       await execEnv(`./terminusdb.sh db delete admin/${db}`)
     })
 
