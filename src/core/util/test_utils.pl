@@ -67,6 +67,7 @@
 
 :- use_module(utils).
 :- use_module(file_utils).
+:- use_module(config(terminus_config)).
 
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
@@ -179,10 +180,10 @@ admin_pass(Pass) :-
     ;   Pass='root').
 
 setup_unattached_store(Store-Dir) :-
-    tmp_file(temporary_terminus_store, TmpName),
+    tmp_path(Folder),
     random_string(RandomString),
-    atomic_list_concat([TmpName, RandomString], Dir),
-    make_directory(Dir),
+    atomic_list_concat([Folder, '/temporary_terminus_store/', RandomString], Dir),
+    make_directory_path(Dir),
     open_archive_store(Dir, Store),
     initialize_database_with_store('root', Store).
 

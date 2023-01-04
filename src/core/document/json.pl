@@ -2987,7 +2987,18 @@ class_frame(Transaction, Class, Frame, Options) :-
     ;   expand_system_uri(sys:'Class', C, Options),
         Pairs8 = ['@type'-C|Pairs7]
     ),
-    sort(Pairs8, Sorted_Pairs),
+    % inherits
+    (   findall(Subsuming,
+                (   class_super(Transaction,Class_Ex,Subsuming_Ex),
+                    compress_schema_uri(Subsuming_Ex, Prefixes, Subsuming, Options)
+                ),
+                Inherits_Unsorted),
+        sort(Inherits_Unsorted,Inherits),
+        Inherits \= []
+    ->  Pairs9 = ['@inherits'-Inherits|Pairs8]
+    ;   Pairs9 = Pairs8),
+
+    sort(Pairs9, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -3070,7 +3081,9 @@ valid_schema_name(Prefixes,Name) :-
 insert_schema_document(Transaction, Document) :-
     is_transaction(Transaction),
     !,
-
+    die_if(
+        get_dict('@type', Document, "@context"),
+        error(inserting_context(Document), _)),
     do_or_die(
         get_dict('@id', Document, Id),
         error(missing_field('@id', Document), _)),
@@ -7439,6 +7452,7 @@ test(inherits_documentation_multi,
 		  '@key':json{'@type':"Random"},
 		  '@subdocument':[],
 		  '@type':'Class',
+          '@inherits':['Subject'],
 		  'Number_of_classes_attended':json{ '@class':'xsd:integer',
 										     '@type':'Optional'
 										   },
@@ -7516,6 +7530,7 @@ test(inherits_documentation,
     ),
 
     class_frame(Desc, 'User', User, [compress_ids(true)]),
+
     User =
     json{ '@documentation':
           [ json{ '@comment':"A user",
@@ -7534,6 +7549,7 @@ test(inherits_documentation,
 			    }
 		  ],
           '@type':'Class',
+          '@inherits':['Agent'],
           age:'xsd:integer',
           id:'xsd:integer',
           name:'xsd:string'
@@ -8311,6 +8327,7 @@ test(diamond_ok,
     class_frame(Transaction, "Bottom", Frame),
 
     Frame = json{ '@type':'Class',
+                  '@inherits':['Left','Right','Top'],
 				  bottom_face:json{ '@class':'Bottom',
 							        '@type':'Optional'
 							      },
@@ -9652,10 +9669,10 @@ test(arithmetic_frame, [
      ]) :-
 
     class_frame(Desc, 'Plus2', JSON),
-
     JSON = json{'@type':'Class',
                 '@key':json{'@type':"Random"},
                 '@subdocument':[],
+                '@inherits':['ArithmeticExpression2'],
                 left:[json{'@class':'Plus2','@subdocument':[]},
                       json{'@class':'Value2','@subdocument':[]}],
                 right:[json{'@class':'Plus2','@subdocument':[]},
@@ -9804,6 +9821,7 @@ test(all_class_frames, [
 				   'Employee':json{ '@key':json{ '@type':"Random"
 									           },
 							        '@type':'Class',
+                                    '@inherits':['Person'],
                                     '@documentation' :
                                     json{'@properties':json{age:"Age of the person.",
                                                             name:"Name of the person."}},
@@ -9877,6 +9895,7 @@ test(all_class_frames_simple, [
 					    },
 		       '@key':json{'@type':"Random"},
 		       '@type':'Class',
+               '@inherits':['Person'],
 		       address_of:'Address',
 		       age:'xsd:integer',
 		       contact_number:json{'@class':'xsd:string','@type':'Optional'},
@@ -13410,10 +13429,12 @@ test(monolingual_inheritance,
      ]) :-
 
     class_frame(Desc, 'Note', Frame),
+
     Frame = json{'@documentation':
                  json{'@comment':"a note",
                       '@properties':json{label:"entity label"}},
                  '@type':'Class',
+                 '@inherits':['Any'],
                  label:json{'@class':'xsd:string','@type':'Optional'},
                  relates_to:json{'@class':'Any','@type':'Set'}}.
 

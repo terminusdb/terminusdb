@@ -432,6 +432,19 @@ impl<L: Layer> GetDocumentContext<L> {
             }
         }
     }
+
+    fn get_subtypes_for(&self, type_name: &str) -> Vec<u64> {
+        let mut types: Vec<u64> = Vec::new();
+        if let Some(type_id) = self.layer().object_node_id(&*type_name) {
+            // always at least search for the type itself
+            types.push(type_id);
+        }
+        if let Some(subtypes) = self.subtypes.get(&*type_name) {
+            types.extend(subtypes.into_iter().cloned());
+        }
+
+        types
+    }
 }
 
 pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
@@ -898,21 +911,11 @@ predicates! {
         }
 
         let type_name: PrologText = type_term.get()?;
-        let found_types = &doc_context.subtypes.get(&*type_name);
-        let types: Vec<u64>;
-        if found_types.is_none() {
-            // it could be that type doesn't appear in the subtype map but is still a valid type. lets check.
-            let type_id = doc_context.layer().object_node_id(&*type_name);
-            if type_id.is_some() {
-                types = vec![type_id.unwrap()];
-            }
-            else {
-                // type not found, so no objects of that type
-                return Ok(())
-            }
-        }
-        else {
-            types = found_types.unwrap().into_iter().cloned().collect();
+        let types = doc_context.get_subtypes_for(&*type_name);
+
+        if types.is_empty() {
+            // no type found that is subsumed by the given type, so we're done
+            return Ok(())
         }
 
         print_documents_of_types(context, &doc_context, stream_term, skip_term, count_term, as_list_term, types.as_slice())
@@ -926,21 +929,11 @@ predicates! {
         }
 
         let type_name: PrologText = type_term.get()?;
-        let found_types = &doc_context.subtypes.get(&*type_name);
-        let types: Vec<u64>;
-        if found_types.is_none() {
-            // it could be that type doesn't appear in the subtype map but is still a valid type. lets check.
-            let type_id = doc_context.layer().object_node_id(&*type_name);
-            if type_id.is_some() {
-                types = vec![type_id.unwrap()];
-            }
-            else {
-                // type not found, so no objects of that type
-                return Ok(())
-            }
-        }
-        else {
-            types = found_types.unwrap().into_iter().cloned().collect();
+        let types = doc_context.get_subtypes_for(&*type_name);
+
+        if types.is_empty() {
+            // no type found that is subsumed by the given type, so we're done
+            return Ok(())
         }
 
         par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types)

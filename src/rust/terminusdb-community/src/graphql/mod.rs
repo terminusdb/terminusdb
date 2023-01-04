@@ -36,6 +36,7 @@ predicates! {
         let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("Unable to parse frames into rust struct");
         let mut sanitized_frames: AllFrames = frames.sanitize();
         sanitized_frames.invert();
+        sanitized_frames.calculate_subsumption();
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(),
                                                 EmptyMutation::<TerminusContext<'a, C>>::new(),

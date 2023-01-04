@@ -36,7 +36,8 @@
               is_abstract/2,
               is_subdocument/2,
               schema_is_subdocument/2,
-              schema_class_predicate_conjunctive_type/4
+              schema_class_predicate_conjunctive_type/4,
+              class_super/3
           ]).
 
 /*

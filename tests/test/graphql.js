@@ -75,6 +75,15 @@ describe('GraphQL', function () {
     NMTOKEN: 'xsd:NMTOKEN',
     Name: 'xsd:Name',
     NCName: 'xsd:NCName',
+  }, {
+    '@id': 'Parent',
+    '@type': 'Class',
+    name: 'xsd:string',
+  }, {
+    '@id': 'Child',
+    '@type': 'Class',
+    '@inherits': ['Parent'],
+    number: 'xsd:byte',
   }]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }
@@ -428,6 +437,32 @@ query EverythingQuery {
           NCName: 'NCName',
         },
       ])
+    })
+
+    it('graphql subsumption', async function () {
+      const members = [{ name: 'Joe', number: 3 },
+        { name: 'Jim', number: 5 },
+        { '@type': 'Parent', name: 'Dad' }]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(orderBy: {name : ASC}){
+        name
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'Dad',
+          },
+          {
+            name: 'Jim',
+          },
+          {
+            name: 'Joe',
+          },
+        ])
     })
   })
 })

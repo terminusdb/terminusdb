@@ -242,7 +242,7 @@ Creates an optimisation layer for queries on the given commit.
 
 `terminusdb bundle DATABASE_SPEC OPTIONS`
 
-Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unpack`.
+Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unbundle`.
 
   * `-h`, `--help`=[value]:
   print help for the `bundle` command
