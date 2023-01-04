@@ -1250,15 +1250,26 @@ command(Command) :-
 command_subcommand(Command,Subcommand) :-
     opt_spec(Command,Subcommand,_,_,_).
 
+assert_system_db_is_accessible :-
+    catch_with_backtrace(
+        (   open_descriptor(system_descriptor{}, _)
+        ->  true
+        ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
+            halt(1)),
+        Error,
+        (   (   api_error_jsonld(toplevel, Error, JSON)
+            ->  get_dict('api:message', JSON, Message),
+                format(user_error, "Unable to open system database: ~s~n", [Message])
+            ;   throw(Error)),
+            halt(1))).
+
 run(Argv) :-
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
-    (   (   Argv = [Cmd|_],
-            member(Cmd, ['--version', help, store, test])
-        ;   open_descriptor(system_descriptor{}, _))
-    ->  run_(Argv)
-    ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
-        halt(1)).
+    (   Argv = [Cmd|_],
+        member(Cmd, ['--version', help, store, test])
+    ;   assert_system_db_is_accessible),
+    run_(Argv).
 
 run_([Command|Rest]) :-
     catch(
