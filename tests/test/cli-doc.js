@@ -608,7 +608,24 @@ describe('cli-doc', function () {
       const db = util.randomString()
       await execEnv(`./terminusdb.sh db create admin/${db}`)
       await execEnv(`./terminusdb.sh doc insert -g schema admin/${db} --full-replace --data='${JSON.stringify(schema)}'`)
-      await execEnv(`./terminusdb.sh doc get -g schema admin/${db}`)
+      const res = await execEnv(`./terminusdb.sh doc get -g schema admin/${db}`)
+      const context = JSON.parse(res.stdout)
+      expect(context['@metadata']).to.deep.equal({some_meta_key:'some_meta_value'})
+      await execEnv(`./terminusdb.sh db delete admin/${db}`)
+    })
+
+    it('cant insert context', async function () {
+      const schema = [
+        {
+          '@base': 'terminusdb:///data/',
+          '@schema': 'terminusdb:///schema#',
+          '@type': '@context',
+        },
+      ]
+      const db = util.randomString()
+      await execEnv(`./terminusdb.sh db create admin/${db}`)
+      const res = await execEnv(`./terminusdb.sh doc insert -g schema admin/${db} --data='${JSON.stringify(schema)}' | true`)
+      expect(res.stderr).to.match(/Error: Inserting contexts.*/)
       await execEnv(`./terminusdb.sh db delete admin/${db}`)
     })
 
