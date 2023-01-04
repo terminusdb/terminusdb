@@ -15,6 +15,15 @@ on:
       image_platform:
         type: string
         default: "linux/amd64"
+      runner:
+        type: string
+        default: "self-hosted"
+      mocha_jobs:
+        type: string
+        default: "4"
+      mocha_parallel:
+        type: boolean
+        default: true
 
 env:
   NODE_VERSION: '16'
@@ -23,7 +32,7 @@ jobs:
 
   unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - name: Set up Docker Buildx
@@ -92,7 +101,7 @@ jobs:
 
   integration_tests_basic:
     name: Integration tests (basic)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -137,13 +146,15 @@ jobs:
         working-directory: tests
         env:
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
+          MOCHA_JOBS: ${{ inputs.mocha_jobs }}
+          MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
         run: |
           npm install-ci-test
 
 
   integration_tests_non_parallel:
     name: Integration tests (non-parallel)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -189,12 +200,14 @@ jobs:
         env:
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
           TERMINUSDB_PARALLELIZE_ENABLED: false
+          MOCHA_JOBS: ${{ inputs.mocha_jobs }}
+          MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
         run: |
           npm install-ci-test
 
   integration_tests_header:
     name: Integration tests (header)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -241,13 +254,15 @@ jobs:
       - name: Run tests
         working-directory: tests
         env:
+          MOCHA_JOBS: ${{ inputs.mocha_jobs }}
+          MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
           TERMINUSDB_INSECURE_USER_HEADER: X-Forwarded-User
         run: npm install-ci-test
 
   integration_tests_jwt:
     name: Integration tests (JWT)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
 
     steps:
       - uses: actions/checkout@v3
@@ -294,6 +309,8 @@ jobs:
       - name: Run tests
         working-directory: tests
         env:
+          MOCHA_JOBS: ${{ inputs.mocha_jobs }}
+          MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
           TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
         run: npm install-ci-test
