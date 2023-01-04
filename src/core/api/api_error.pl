@@ -318,6 +318,28 @@ api_global_error_jsonld(error(not_a_valid_commit_or_branch(Ref),_), Type, JSON) 
                               'api:ref' : Ref},
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(server_outdated(Store_Version,Server_Version), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The storage directory contains a store newer than this server supports. This server expects store version ~q but version ~q is in place.", [Server_Version, Store_Version]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ServerOutdated',
+                              'api:store_version': Store_Version,
+                              'api:server_version': Server_Version
+                            },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The storage directory contains an outdated store. Please upgrade your store. This server expects store version ~q but version ~q is in place.", [Server_Version, Store_Version]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ServerOutdated',
+                              'api:store_version': Store_Version,
+                              'api:server_version': Server_Version
+                            },
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
@@ -1455,6 +1477,7 @@ error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
 error_type_(diff, 'api:DiffErrorResponse').
 error_type_(apply, 'api:ApplyErrorResponse').
+error_type_(toplevel, 'api:TopLevelResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
