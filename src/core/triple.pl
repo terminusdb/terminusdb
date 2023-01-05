@@ -120,10 +120,13 @@
               insert_turtle_graph/2,
               dump_turtle_graph/2,
 
-              % upgrade_db.pl
+              % check_db.pl
               get_db_version/1,
+              get_db_version/2,
               set_db_version/1,
-              maybe_upgrade/0
+              set_db_version/2,
+              database_version/1,
+              assert_database_version_is_current/1
           ]).
 
 :- use_module(triple/base_type).
@@ -134,4 +137,4 @@
 :- use_module(triple/constants).
 :- use_module(triple/triplestore).
 :- use_module(triple/turtle_utils).
-:- use_module(triple/upgrade_db).
+:- use_module(triple/check_db).
