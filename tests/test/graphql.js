@@ -52,7 +52,7 @@ describe('GraphQL', function () {
       '@fields': ['name'],
     },
     name: 'xsd:string',
-    targets: { '@type' : 'List', '@class' : 'Target' }
+    targets: { '@type': 'List', '@class': 'Target' },
   },
   {
     '@id': 'Target',
@@ -61,7 +61,7 @@ describe('GraphQL', function () {
       '@type': 'Lexical',
       '@fields': ['name'],
     },
-    name: 'xsd:string'
+    name: 'xsd:string',
   }]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }
@@ -216,27 +216,27 @@ describe('GraphQL', function () {
     it('back link to list', async function () {
       const edges = [
         {
-          '@type' : 'Source',
-          name: "1",
-          targets: ["Target/1", "Target/2", "Target/3"]
+          '@type': 'Source',
+          name: '1',
+          targets: ['Target/1', 'Target/2', 'Target/3'],
         },
         {
-          '@type' : 'Source',
-          name: "2",
-          targets: ["Target/1", "Target/2", "Target/3"]
+          '@type': 'Source',
+          name: '2',
+          targets: ['Target/1', 'Target/2', 'Target/3'],
         },
         {
-          '@type' : 'Target',
-          name: "1"
+          '@type': 'Target',
+          name: '1',
         },
         {
-          '@type' : 'Target',
-          name: "2"
+          '@type': 'Target',
+          name: '2',
         },
         {
-          '@type' : 'Target',
-          name: "3"
-        }
+          '@type': 'Target',
+          name: '3',
+        },
       ]
       await document.insert(agent, { instance: edges })
       const PATH_QUERY = gql`
@@ -251,10 +251,10 @@ describe('GraphQL', function () {
       const result = await client.query({ query: PATH_QUERY })
       expect(result.data.Target).to.deep.equal(
         [
-          { name: '1', _targets_of_Source: [ { name : '2' }, { name : '1' } ] },
-          { name: '2', _targets_of_Source: [ { name : '2' }, { name : '1' } ] },
-          { name: '3', _targets_of_Source: [ { name : '2' }, { name : '1' }  ] },
-        ]
+          { name: '1', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+          { name: '2', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+          { name: '3', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+        ],
       )
     })
 
