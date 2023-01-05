@@ -757,11 +757,14 @@ fn generate_initial_iterator<'a>(
     match zero_iter {
         None => {
             // If we have a filter here, we probably need to use it.
-            let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
-            (
-                filter_opt,
-                predicate_value_iter(g, &RDF_TYPE, &NodeOrValue::Node, expanded_type_name),
-            )
+            let subsuming = all_frames.subsumed(class_name);
+            let mut iter = ClonableIterator::new(std::iter::empty());
+            for super_class in subsuming {
+                let super_class = all_frames.fully_qualified_class_name(&super_class);
+                let next = predicate_value_iter(g, RDF_TYPE, &NodeOrValue::Node, super_class);
+                iter = ClonableIterator::new(iter.chain(next))
+            }
+            (filter_opt, iter)
         }
         Some(zi) => (filter_opt, zi),
     }
@@ -796,30 +799,28 @@ pub fn run_filter_query<'a>(
         match (arguments.get::<ID>("id"), arguments.get::<Vec<ID>>("ids")) {
             (Some(id_string), None) => match zero_iter {
                 None => {
-                    let expanded_type_name =
-                        all_frames.fully_qualified_class_name(class_name);
+                    let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
-                        &RDF_TYPE,
+                        RDF_TYPE,
                         &NodeOrValue::Node,
                         expanded_type_name,
-                        ClonableIterator::new(g.subject_id(&*id_string).into_iter()),
+                        ClonableIterator::new(g.subject_id(&id_string).into_iter()),
                     ))
                 }
                 Some(zi) => Some(ClonableIterator::new(zi.filter(move |i| {
-                    g.subject_id(&*id_string).into_iter().any(|id| *i == id)
+                    g.subject_id(&id_string).into_iter().any(|id| *i == id)
                 }))),
             },
             (None, Some(id_vec)) => match zero_iter {
                 None => {
-                    let expanded_type_name =
-                        all_frames.fully_qualified_class_name(class_name);
+                    let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
-                        &RDF_TYPE,
+                        RDF_TYPE,
                         &NodeOrValue::Node,
                         expanded_type_name,
-                        ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&*id))),
+                        ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&id))),
                     ))
                 }
                 Some(zi) => {
@@ -828,7 +829,7 @@ pub fn run_filter_query<'a>(
                         id_vec
                             .clone()
                             .into_iter()
-                            .flat_map(|id| g.subject_id(&*id))
+                            .flat_map(|id| g.subject_id(&id))
                             .any(|id| *i == id)
                     })))
                 }
