@@ -193,8 +193,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                 }
             })
             .collect();
-
+        /*
         fields.push(registry.field::<System>("_system", &()));
+        */
         registry
             .build_object_type::<TerminusTypeCollection<'a, C>>(info, &fields)
             .into_meta()
