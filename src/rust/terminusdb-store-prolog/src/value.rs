@@ -91,7 +91,7 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(f64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
-        Ok(Decimal::make_entry(&Decimal(inner_number)))
+        Ok(Decimal::make_entry(&Decimal::new(inner_number).unwrap()))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
         let integer: Integer = Integer::parse(inner_number).unwrap().into();
