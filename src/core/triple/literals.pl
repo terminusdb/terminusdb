@@ -145,7 +145,7 @@ gyear_string(GYear, String) :-
     (   Offset =:= 0
     ->  format(string(String), '~|~`0t~d~4+', [Year])
     ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
-        format(string(String), '~|~`0t~d~4+~|~`0t~d~2+:~|~`0t~d~2+', [Year,Sign,Hour,Minute])
+        format(string(String), '~|~`0t~d~4+~w~|~`0t~d~2+:~|~`0t~d~2+', [Year,Sign,Hour,Minute])
     ).
 gyear_string(gyear(Year,Offset), String) :-
     nonvar(String),
