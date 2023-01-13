@@ -60,16 +60,16 @@ get_db_version(Path, Version) :-
  * Set the Database version to the current database version
  */
 set_db_version :-
-    database_version(Version),
-    set_db_version(Version).
+    db_path(Path),
+    set_db_version(Path).
 
 /*
  * set_db_version(+Version) is det.
  *
  * Set the Database version to Version
  */
-set_db_version(Version) :-
-    db_path(Path),
+set_db_version(Path) :-
+    database_version(Version),
     set_db_version(Path, Version).
 
 set_db_version(Path, Version) :-
