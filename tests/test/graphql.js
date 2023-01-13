@@ -84,6 +84,25 @@ describe('GraphQL', function () {
     '@type': 'Class',
     '@inherits': ['Parent'],
     number: 'xsd:byte',
+  },
+  {
+    '@id': 'Source',
+    '@type': 'Class',
+    '@key': {
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    },
+    name: 'xsd:string',
+    targets: { '@type': 'List', '@class': 'Target' },
+  },
+  {
+    '@id': 'Target',
+    '@type': 'Class',
+    '@key': {
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    },
+    name: 'xsd:string',
   }]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }
@@ -233,6 +252,51 @@ describe('GraphQL', function () {
         { name: 'Karl Popper', age: 92, order: '5', _friend_of_Person: [] },
         { name: 'Kurt Gödel', age: 71, order: '5', _friend_of_Person: [] },
       ])
+    })
+
+    it('back link to list', async function () {
+      const edges = [
+        {
+          '@type': 'Source',
+          name: '1',
+          targets: ['Target/1', 'Target/2', 'Target/3'],
+        },
+        {
+          '@type': 'Source',
+          name: '2',
+          targets: ['Target/1', 'Target/2', 'Target/3'],
+        },
+        {
+          '@type': 'Target',
+          name: '1',
+        },
+        {
+          '@type': 'Target',
+          name: '2',
+        },
+        {
+          '@type': 'Target',
+          name: '3',
+        },
+      ]
+      await document.insert(agent, { instance: edges })
+      const PATH_QUERY = gql`
+ query SourceQuery {
+    Target {
+        name
+        _targets_of_Source(orderBy: { name : DESC }){
+           name
+        }
+    }
+}`
+      const result = await client.query({ query: PATH_QUERY })
+      expect(result.data.Target).to.deep.equal(
+        [
+          { name: '1', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+          { name: '2', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+          { name: '3', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+        ],
+      )
     })
 
     it('path query', async function () {
