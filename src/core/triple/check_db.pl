@@ -27,7 +27,7 @@
  *
  * Supplies the current version number of the DB
  */
-database_version(1).
+database_version(2).
 
 /*
  * get_db_version(-Version) is det.
@@ -49,7 +49,8 @@ get_db_version(Path, Version) :-
             ),
             close(Stream)
         )
-    ;   Version = 1).
+    ;   throw(error(no_database_store_version, _))
+    ).
 
 /*
  * set_db_version(+Version) is det.
