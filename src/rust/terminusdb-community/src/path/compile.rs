@@ -211,14 +211,14 @@ mod tests {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#b",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/c",
                 "http://schema#b",
                 "http://base/d",
@@ -259,28 +259,28 @@ mod tests {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#b",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/c",
                 "http://schema#b",
                 "http://base/d",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/d",
                 "http://schema#b",
                 "http://base/a",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#e",
                 "http://base/z",
@@ -318,28 +318,28 @@ mod tests {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#b",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/o",
                 "http://schema#e",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/o",
                 "http://schema#b",
                 "http://base/q",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/q",
                 "http://schema#b",
                 "http://base/r",
