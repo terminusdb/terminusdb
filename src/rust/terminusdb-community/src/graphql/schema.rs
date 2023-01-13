@@ -175,7 +175,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     where
         DefaultScalarValue: 'r,
     {
-        let mut fields: Vec<_> = info
+        let fields: Vec<_> = info
             .allframes
             .frames
             .iter()
