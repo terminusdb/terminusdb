@@ -185,6 +185,7 @@ setup_unattached_store(Store-Dir) :-
     atomic_list_concat([Folder, '/temporary_terminus_store/', RandomString], Dir),
     make_directory_path(Dir),
     open_archive_store(Dir, Store),
+    set_db_version(Dir),
     initialize_database_with_store('root', Store).
 
 setup_temp_store(Store-Dir) :-
@@ -390,7 +391,10 @@ inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
 
 read_line_until_start_line(Error) :-
     read_line_to_string(Error, Line),
-    re_match("% You can view your server in a browser at ",Line),
+    (   Line = end_of_file
+    ->  throw(error(server_has_no_output, _))
+    ;   re_match("% You can view your server in a browser at ",Line)
+    ),
     !.
 read_line_until_start_line(Error) :-
     read_line_until_start_line(Error).
