@@ -412,8 +412,9 @@ describe('GraphQL', function () {
         Name: 'Name',
         NCName: 'NCName',
       }
-      const res = await document.insert(agent, { instance: everything }).unverified()
-      const id = res.body[0]
+
+      await document.insert(agent, { instance: everything }).unverified()
+
       const QUERY_EVERYTHING = gql`
 query EverythingQuery {
    Everything {
