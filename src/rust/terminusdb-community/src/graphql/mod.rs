@@ -1,9 +1,6 @@
-use juniper::{
-    http::{GraphQLRequest},
-    EmptyMutation, EmptySubscription, RootNode,
-};
+use juniper::{http::GraphQLRequest, EmptyMutation, EmptySubscription, RootNode};
 
-use std::io::{Read};
+use std::io::Read;
 use std::sync::Arc;
 use swipl::prelude::*;
 
@@ -39,6 +36,7 @@ predicates! {
         let frames: AllFrames = context.deserialize_from_term(&frame_term).expect("Unable to parse frames into rust struct");
         let mut sanitized_frames: AllFrames = frames.sanitize();
         sanitized_frames.invert();
+        sanitized_frames.calculate_subsumption();
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(),
                                                 EmptyMutation::<TerminusContext<'a, C>>::new(),
@@ -46,7 +44,6 @@ predicates! {
                                                 TerminusTypeCollectionInfo{ allframes: Arc::new(sanitized_frames)}, (), ());
 
         let graphql_context = TerminusContext::new(context, auth_term, system_term, meta_term, commit_term,transaction_term)?;
-        //let graphql_context = Info::new(context, system_term, meta_term, commit_term, branch_term, transaction_term, auth_term)?;
 
         let response = request.execute_sync(&root_node, &graphql_context);
 

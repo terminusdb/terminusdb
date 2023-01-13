@@ -384,7 +384,7 @@ opt_spec(rollup,'terminusdb rollup DATABASE_SPEC OPTIONS',
            help('print help for the `rollup` command')]
          ]).
 opt_spec(bundle,'terminusdb bundle DATABASE_SPEC OPTIONS',
-         'Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unpack`.',
+         'Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unbundle`.',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -1250,15 +1250,26 @@ command(Command) :-
 command_subcommand(Command,Subcommand) :-
     opt_spec(Command,Subcommand,_,_,_).
 
+assert_system_db_is_accessible :-
+    catch_with_backtrace(
+        (   open_descriptor(system_descriptor{}, _)
+        ->  true
+        ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
+            halt(1)),
+        Error,
+        (   (   api_error_jsonld(toplevel, Error, JSON)
+            ->  get_dict('api:message', JSON, Message),
+                format(user_error, "Unable to open system database: ~s~n", [Message])
+            ;   throw(Error)),
+            halt(1))).
+
 run(Argv) :-
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
-    (   (   Argv = [Cmd|_],
-            member(Cmd, ['--version', help, store, test])
-        ;   open_descriptor(system_descriptor{}, _))
-    ->  run_(Argv)
-    ;   format(user_error,"Unable to find system database.~nTry one of:~n 1. Initialising the database with the command 'terminusdb store init'~n 2. Setting the variable TERMINUSDB_SERVER_DB_PATH to the correct location of the store~n 3. Launching the executable from a directory which already has a store.~n", []),
-        halt(1)).
+    (   Argv = [Cmd|_],
+        member(Cmd, ['--version', help, store, test])
+    ;   assert_system_db_is_accessible),
+    run_(Argv).
 
 run_([Command|Rest]) :-
     catch(
@@ -2298,6 +2309,8 @@ create_authorization(Opts,Authorization) :-
     ;   token_authorization(Token,Authorization)
     ).
 
+report_parse_error(error(existence_error(procedure, optparse:existence_error/2), _), _) =>
+    format(user_error, '~NERROR: Unknown command line option~n', []).
 report_parse_error(error(existence_error(commandline_option, Opt), _), Command) =>
     intersperse(' ', Command, Command_List),
     atomic_list_concat(Command_List, Command_Atom),

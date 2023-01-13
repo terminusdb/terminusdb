@@ -193,8 +193,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                 }
             })
             .collect();
-
+        /*
         fields.push(registry.field::<System>("_system", &()));
+        */
         registry
             .build_object_type::<TerminusTypeCollection<'a, C>>(info, &fields)
             .into_meta()
@@ -388,7 +389,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                     if !info.allframes.frames[class].is_document_type() {
                         continue;
                     }
-                    let kind = &ifd.kind;
                     let class_definition = info.allframes.frames[class].as_class_definition();
                     let new_info = TerminusTypeInfo {
                         class: class.to_string(),
@@ -398,7 +398,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                         registry,
                         field_name,
                         &new_info,
-                        kind.clone(),
+                        FieldKind::Set,
                     );
                     let field = add_arguments(&new_info, registry, field, class_definition);
 

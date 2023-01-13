@@ -326,6 +326,8 @@ pub struct ClassDefinition {
     pub is_abstract: Option<Vec<()>>,
     #[serde(rename = "@oneOf")]
     pub one_of: Option<Vec<OneOf>>,
+    #[serde(rename = "@inherits")]
+    pub inherits: Option<Vec<String>>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
     #[serde(skip_serializing)]
@@ -338,18 +340,24 @@ impl ClassDefinition {
         let mut fields: BTreeMap<String, _> = BTreeMap::new();
         for (field, fd) in self.fields.iter() {
             let sanitized_field = graphql_sanitize(field);
-            field_map.insert(sanitized_field.clone(), field.clone())
-                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+            if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
+                if dup != *field {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
+                }
+            }
             fields.insert(sanitized_field, fd.sanitize());
         }
         let one_of = self.one_of.as_ref().map(|o| {
-            o.into_iter()
+            o.iter()
                 .map(|c| {
                     let mut choices = BTreeMap::new();
                     for (field,fd) in c.choices.iter() {
                         let sanitized_field = graphql_sanitize(field);
-                        field_map.insert(sanitized_field.clone(), field.clone())
-                            .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+                        if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
+                            if dup != *field {
+                                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
+                            }
+                        }
                         choices.insert(sanitized_field.clone(), fd.sanitize());
                     }
                     OneOf { choices }
@@ -362,11 +370,22 @@ impl ClassDefinition {
         for (s, t) in field_map.iter() {
             field_renaming.insert(s.to_string(), t.to_string());
         }
+        let inherits = if let Some(inherits_val) = &self.inherits {
+            let mut result = vec![];
+            for class_name in inherits_val {
+                let sanitized = graphql_sanitize(class_name);
+                result.push(sanitized)
+            }
+            Some(result)
+        } else {
+            None
+        };
         ClassDefinition {
             documentation,
             key,
             is_subdocument: self.is_subdocument.clone(),
             is_abstract: self.is_abstract.clone(),
+            inherits,
             one_of,
             fields,
             field_renaming: Some(field_renaming),
@@ -381,8 +400,8 @@ impl ClassDefinition {
                     .find_map(|(s, f)| if s == field_name { Some(f) } else { None })
             })
         });
-        if maybe_field.is_some() {
-            maybe_field.unwrap()
+        if let Some(field) = maybe_field {
+            field
         } else {
             &self.fields[field_name]
         }
@@ -393,9 +412,8 @@ impl ClassDefinition {
             .one_of
             .as_ref()
             .map(|s| {
-                s.into_iter()
-                    .map(move |c| c.choices.iter().collect::<Vec<_>>())
-                    .flatten()
+                s.iter()
+                    .flat_map(move |c| c.choices.iter().collect::<Vec<_>>())
             })
             .into_iter()
             .flatten()
@@ -413,9 +431,9 @@ impl ClassDefinition {
         self.field_renaming
             .as_ref()
             .map(|map| {
-                let db_name = map.get(property).expect(&format!(
-                    "The fully qualified property name for {property:?} *should* exist"
-                ));
+                let db_name = map.get(property).unwrap_or_else(|| {
+                    panic!("The fully qualified property name for {property:?} *should* exist")
+                });
                 prefixes.expand_schema(db_name)
             })
             .expect("The field renaming was never built!")
@@ -459,11 +477,12 @@ impl EnumDefinition {
         let mut values_renaming: BiMap<String, String> = BiMap::new();
         let values = self.values.iter().map(|v| {
             let sanitized = graphql_sanitize(v);
-            let res = values_renaming.insert(sanitized.to_string(), v.to_string());
-            let overwritten = res.did_overwrite();
-            if overwritten {
-                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following duplicate: {res:?}")
-            };
+            let res = values_renaming.insert_no_overwrite(sanitized.to_string(), v.to_string());
+            if let Err((left,right)) = res {
+                if left != sanitized.to_string() || right != v.to_string() {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized},{v})")
+                }
+            }
             sanitized
         }).collect();
         let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
@@ -480,7 +499,7 @@ impl EnumDefinition {
             .map(|map| {
                 urlencoding::encode(
                     map.get_by_left(value)
-                        .expect(&format!("The value name for {value:?} *should* exist")),
+                        .unwrap_or_else(|| panic!("The value name for {value:?} *should* exist")),
                 )
                 .into_owned()
             })
@@ -495,9 +514,9 @@ impl EnumDefinition {
                     &*urlencoding::decode(name)
                         .expect("Somehow encoding went terribly wrong in saving"),
                 )
-                .expect(&format!(
-                    "The value for {name:?} *should* exist as it is in your database"
-                ))
+                .unwrap_or_else(|| {
+                    panic!("The value for {name:?} *should* exist as it is in your database")
+                })
             })
             .expect("No values renaming was generated")
     }
@@ -556,6 +575,8 @@ pub struct AllFrames {
     pub class_renaming: Option<HashMap<String, String>>,
     #[serde(skip_deserializing)]
     pub inverted: Option<AllInvertedFrames>,
+    #[serde(skip_deserializing)]
+    pub subsumption: Option<HashMap<String, Vec<String>>>,
 }
 
 impl AllFrames {
@@ -564,9 +585,11 @@ impl AllFrames {
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
         for (class_name, typedef) in self.frames.iter() {
             let sanitized_class = graphql_sanitize(class_name);
-            class_renaming.insert(sanitized_class.clone(), class_name.clone())
-                .and_then::<(),_>(|dup|
-                                  panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate: {dup:?}"));
+            if let Some(dup) = class_renaming.insert(sanitized_class.clone(), class_name.clone()) {
+                if dup != *class_name {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate: {dup:?}")
+                }
+            }
             let new_typedef = match typedef {
                 TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),
                 TypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
@@ -578,6 +601,7 @@ impl AllFrames {
             frames,
             class_renaming: Some(class_renaming),
             inverted: None,
+            subsumption: None,
         }
     }
 
@@ -613,12 +637,12 @@ impl AllFrames {
         let enum_type_expanded = self.fully_qualified_class_name(enum_type);
         let enum_type_definition = self.frames[enum_type].as_enum_definition();
         let value = enum_type_definition.value_name(value);
-        let expanded_object_node = format!("{}/{}", enum_type_expanded, value);
+        let expanded_object_node = format!("{enum_type_expanded}/{value}");
 
         expanded_object_node
     }
 
-    pub fn invert(&mut self) -> () {
+    pub fn invert(&mut self) {
         let inverted = allframes_to_allinvertedframes(self);
         self.inverted = Some(inverted);
     }
@@ -635,6 +659,36 @@ impl AllFrames {
         } else {
             None
         }
+    }
+
+    pub fn subsumed(&self, class: &str) -> Vec<String> {
+        if let Some(hash) = &self.subsumption {
+            hash.get(class).cloned().unwrap_or(vec![class.to_string()])
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn calculate_subsumption(&mut self) {
+        let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
+        for (class, typedef) in &self.frames {
+            if typedef.is_document_type() {
+                let supers = typedef
+                    .as_class_definition()
+                    .inherits
+                    .clone()
+                    .unwrap_or(vec![class.to_string()]);
+
+                for superclass in supers {
+                    if let Some(v) = subsumption_rel.get_mut(&superclass) {
+                        v.push(class.to_string());
+                    } else {
+                        subsumption_rel.insert(superclass, vec![class.to_string()]);
+                    }
+                }
+            }
+        }
+        self.subsumption = Some(subsumption_rel);
     }
 }
 
@@ -804,6 +858,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                 key: None,
                 is_subdocument: None,
                 is_abstract: None,
+                inherits: None,
                 one_of: Some(vec![
                     OneOf {
                         choices: BTreeMap::from([

@@ -43,7 +43,7 @@
 :- use_module(library(yall)).
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('10.1.11').
+terminusdb_version('10.1.12').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -130,9 +130,7 @@ registry_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
 
 tmp_path(Value) :-
-    user:file_search_path(terminus_home, Dir),
-    atom_concat(Dir,'/tmp',TmpPathRelative),
-    getenv_default('TERMINUSDB_SERVER_TMP_PATH', TmpPathRelative, Value).
+    getenv_default('TERMINUSDB_SERVER_TMP_PATH', '/tmp', Value).
 
 :- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-
