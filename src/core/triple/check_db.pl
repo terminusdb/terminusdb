@@ -1,5 +1,6 @@
 :- module(upgrade_db,[get_db_version/1,
                       get_db_version/2,
+                      set_db_version/0,
                       set_db_version/1,
                       set_db_version/2,
                       database_version/1,
@@ -52,10 +53,20 @@ get_db_version(Path, Version) :-
     ;   throw(error(no_database_store_version, _))
     ).
 
+
+/*
+ * set_db_version is det.
+ *
+ * Set the Database version to the current database version
+ */
+set_db_version :-
+    database_version(Version),
+    set_db_version(Version).
+
 /*
  * set_db_version(+Version) is det.
  *
- * Set the Database version
+ * Set the Database version to Version
  */
 set_db_version(Version) :-
     db_path(Path),
