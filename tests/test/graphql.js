@@ -216,7 +216,7 @@ describe('GraphQL', function () {
         { name: 'Socrates', age: 71, order: '1', _friend_of_Person: [] },
         {
           name: 'Plato',
-          age: 80,
+          age: '80',
           order: '2',
           _friend_of_Person: [
             {
@@ -229,7 +229,7 @@ describe('GraphQL', function () {
         },
         {
           name: 'Aristotle',
-          age: 61,
+          age: '61',
           order: '3',
           _friend_of_Person: [
             {
@@ -239,7 +239,7 @@ describe('GraphQL', function () {
         },
         {
           name: 'Immanuel Kant',
-          age: 79,
+          age: '79',
           order: '3',
           _friend_of_Person: [{
             name: 'Immanuel Kant',
@@ -249,8 +249,8 @@ describe('GraphQL', function () {
           },
           ],
         },
-        { name: 'Karl Popper', age: 92, order: '5', _friend_of_Person: [] },
-        { name: 'Kurt Gödel', age: 71, order: '5', _friend_of_Person: [] },
+        { name: 'Karl Popper', age: '92', order: '5', _friend_of_Person: [] },
+        { name: 'Kurt Gödel', age: '71', order: '5', _friend_of_Person: [] },
       ])
     })
 
