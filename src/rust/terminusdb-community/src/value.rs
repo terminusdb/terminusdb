@@ -37,8 +37,8 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
-    static ref FLOAT_TYPES: HashSet<&'static str> =
-        ["decimal", "double", "float",].into_iter().collect();
+    static ref DECIMAL_TYPES: HashSet<&'static str> = ["decimal",].into_iter().collect();
+    static ref FLOAT_TYPES: HashSet<&'static str> = ["double", "float",].into_iter().collect();
     static ref SMALL_INTEGER_TYPES: HashSet<&'static str> = [
         "byte",
         "short",
@@ -72,6 +72,7 @@ pub enum BaseTypeKind {
     Boolean,
     DateTime,
     Float,
+    Decimal,
 }
 
 pub fn base_type_kind(s: &str) -> BaseTypeKind {
@@ -85,6 +86,8 @@ pub fn base_type_kind(s: &str) -> BaseTypeKind {
         BaseTypeKind::Float
     } else if type_is_datetime(s) {
         BaseTypeKind::DateTime
+    } else if type_is_decimal(s) {
+        BaseTypeKind::Decimal
     } else {
         BaseTypeKind::String
     }
@@ -108,6 +111,10 @@ pub fn type_is_float(s: &str) -> bool {
 
 pub fn type_is_datetime(s: &str) -> bool {
     DATETIME_TYPES.contains(s)
+}
+
+pub fn type_is_decimal(s: &str) -> bool {
+    DECIMAL_TYPES.contains(s)
 }
 
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {

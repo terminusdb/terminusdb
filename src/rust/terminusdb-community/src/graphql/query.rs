@@ -3,6 +3,7 @@ use juniper::{self, DefaultScalarValue, FromInputValue, InputValue, ScalarValue,
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
+use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType};
 
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::terminus_store::store::sync::SyncStoreLayer;
@@ -11,12 +12,12 @@ use crate::value::{base_type_kind, value_to_bigint, value_to_string, BaseTypeKin
 use crate::{consts::RDF_TYPE, terminus_store::*, value::value_to_graphql};
 
 use super::filter::{
-    BigIntFilterInputObject, BooleanFilterInputObject, CollectionFilterInputObject,
-    DateTimeFilterInputObject, EnumFilterInputObject, FilterInputObject, FloatFilterInputObject,
-    IntFilterInputObject, StringFilterInputObject,
+    BigFloatFilterInputObject, BigIntFilterInputObject, BooleanFilterInputObject,
+    CollectionFilterInputObject, DateTimeFilterInputObject, EnumFilterInputObject,
+    FilterInputObject, FloatFilterInputObject, IntFilterInputObject, StringFilterInputObject,
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
-use super::schema::{BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
+use super::schema::{BigFloat, BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
 
 use crate::path::compile::path_to_class;
 
@@ -71,6 +72,7 @@ enum FilterType {
     Float(GenericOperation, f64, String),
     Boolean(GenericOperation, bool, String),
     BigInt(GenericOperation, BigInt, String),
+    BigFloat(GenericOperation, BigFloat, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
     Enum { op: EnumOperation, value: String },
@@ -188,6 +190,22 @@ fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -
     }
 }
 
+fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObject) -> FilterType {
+    if let Some(val) = value.eq {
+        FilterType::BigFloat(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.lt {
+        FilterType::BigFloat(GenericOperation::Lt, val, string_type.to_string())
+    } else if let Some(val) = value.le {
+        FilterType::BigFloat(GenericOperation::Lt, val, string_type.to_string())
+    } else if let Some(val) = value.gt {
+        FilterType::BigFloat(GenericOperation::Gt, val, string_type.to_string())
+    } else if let Some(val) = value.ge {
+        FilterType::BigFloat(GenericOperation::Ge, val, string_type.to_string())
+    } else {
+        panic!("Unable to compile string input value to a filter")
+    }
+}
+
 fn compile_small_integer_input_value(string_type: &str, value: IntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::SmallInt(GenericOperation::Eq, val, string_type.to_string())
@@ -242,6 +260,10 @@ fn compile_typed_filter(
             BaseTypeKind::Float => {
                 let value = FloatFilterInputObject::from_input_value(&spanning_input_value.item);
                 FilterObjectType::Value(compile_float_input_value(range, value.unwrap()))
+            }
+            BaseTypeKind::Decimal => {
+                let value = BigFloatFilterInputObject::from_input_value(&spanning_input_value.item);
+                FilterObjectType::Value(compile_decimal_input_value(range, value.unwrap()))
             }
         }
     } else {
@@ -549,6 +571,16 @@ fn object_type_filter<'a>(
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
                 let object_int = value_to_bigint(&object_value);
                 let cmp = object_int.cmp(&val);
+                ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterType::BigFloat(op, BigFloat(decimal), _) => {
+            let op = *op;
+            let val = Decimal::make_entry(&Decimal::new(decimal.to_string()).unwrap());
+            let g = g.clone();
+            ClonableIterator::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let cmp = object_value.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
         }

@@ -191,7 +191,6 @@ describe('GraphQL', function () {
     }
 }`
       const result = await client.query({ query: FILTER_QUERY })
-      console.log(result)
       expect(result.data.Person).to.deep.equal([
         { name: 'Socrates', age: '71', order: '1' },
         { name: 'Plato', age: '80', order: '2' },

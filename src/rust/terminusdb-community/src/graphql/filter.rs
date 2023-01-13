@@ -10,7 +10,7 @@ use crate::value::{base_type_kind, BaseTypeKind};
 use super::{
     frame::{AllFrames, TypeDefinition},
     query::EnumOperation,
-    schema::{BigInt, DateTime, TerminusEnum},
+    schema::{BigFloat, BigInt, DateTime, TerminusEnum},
 };
 
 pub struct FilterInputObject {
@@ -80,6 +80,11 @@ impl GraphQLType for FilterInputObject {
                                 >>(
                                     name, &()
                                 )),
+                                BaseTypeKind::Decimal => Some(registry.arg::<Option<
+                                    CollectionBigFloatFilterInputObject,
+                                >>(
+                                    name, &()
+                                )),
                                 BaseTypeKind::DateTime => Some(registry.arg::<Option<
                                     CollectionDateTimeFilterInputObject,
                                 >>(
@@ -110,6 +115,9 @@ impl GraphQLType for FilterInputObject {
                             }
                             BaseTypeKind::Float => {
                                 Some(registry.arg::<Option<FloatFilterInputObject>>(name, &()))
+                            }
+                            BaseTypeKind::Decimal => {
+                                Some(registry.arg::<Option<BigFloatFilterInputObject>>(name, &()))
                             }
                             BaseTypeKind::DateTime => {
                                 Some(registry.arg::<Option<DateTimeFilterInputObject>>(name, &()))
@@ -392,6 +400,25 @@ pub struct IntFilterInputObject {
     pub le: Option<i32>,
     pub gt: Option<i32>,
     pub ge: Option<i32>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionBigFloatFilter")]
+#[allow(non_snake_case)]
+pub struct CollectionBigFloatFilterInputObject {
+    pub someHave: Option<BigFloatFilterInputObject>,
+    pub allHave: Option<BigFloatFilterInputObject>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "BigFloatFilter")]
+pub struct BigFloatFilterInputObject {
+    pub eq: Option<BigFloat>,
+    pub ne: Option<BigFloat>,
+    pub lt: Option<BigFloat>,
+    pub le: Option<BigFloat>,
+    pub gt: Option<BigFloat>,
+    pub ge: Option<BigFloat>,
 }
 
 #[derive(GraphQLInputObject)]

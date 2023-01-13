@@ -1021,3 +1021,27 @@ where
         <String as juniper::ParseScalarValue<S>>::from_str(value)
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct BigFloat(pub String);
+
+#[juniper::graphql_scalar(
+    name = "BigFloat",
+    description = "The `BigFloat` scalar type represents an arbitrary precision decimal."
+)]
+impl<S> GraphQLScalar for BigFloat
+where
+    S: juniper::ScalarValue,
+{
+    fn resolve(&self) -> juniper::Value {
+        juniper::Value::scalar(self.0.to_owned())
+    }
+
+    fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
+        value.as_string_value().map(|s| Self(s.to_owned()))
+    }
+
+    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    }
+}
