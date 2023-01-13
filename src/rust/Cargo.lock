@@ -1432,9 +1432,9 @@ dependencies = [
 
 [[package]]
 name = "terminus-store"
-version = "0.20.0-rc1"
+version = "0.20.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25e7ec2d7cb65f6a8b27268a88a0de3c892463c506c591000c5e0b0fcc5a69f9"
+checksum = "eb1231d0904996aecb1fe3cb725b02c5dc5c8438c84ffaf261aee0a60c7e6ec6"
 dependencies = [
  "async-trait",
  "base64",

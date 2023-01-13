@@ -105,12 +105,12 @@ describe('GraphQL', function () {
     name: 'xsd:string',
   }]
 
-  const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3, friend: ['Person/Plato'] }
-  const plato = { '@type': 'Person', name: 'Plato', age: 80, order: 2, friend: ['Person/Aristotle'] }
-  const socrates = { '@type': 'Person', name: 'Socrates', age: 71, order: 1, friend: ['Person/Plato'] }
-  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: 79, order: 3, friend: ['Person/Immanuel%20Kant'], cat: ['Cat/Toots'] }
-  const popper = { '@type': 'Person', name: 'Karl Popper', age: 92, order: 5, cat: ['Cat/Pickles', 'Cat/Toots'] }
-  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5, friend: ['Person/Immanuel%20Kant'], cat: ['Cat/Pickles'] }
+  const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
+  const plato = { '@type': 'Person', name: 'Plato', age: '80', order: '2', friend: ['Person/Aristotle'] }
+  const socrates = { '@type': 'Person', name: 'Socrates', age: '71', order: '1', friend: ['Person/Plato'] }
+  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: '79', order: '3', friend: ['Person/Immanuel%20Kant'], cat: ['Cat/Toots'] }
+  const popper = { '@type': 'Person', name: 'Karl Popper', age: '92', order: '5', cat: ['Cat/Pickles', 'Cat/Toots'] }
+  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: '71', order: '5', friend: ['Person/Immanuel%20Kant'], cat: ['Cat/Pickles'] }
 
   const pickles = { '@type': 'Cat', name: 'Pickles' }
   const toots = { '@type': 'Cat', name: 'Toots' }
@@ -172,30 +172,31 @@ describe('GraphQL', function () {
       const result = await client.query({ query: PERSON_QUERY })
 
       expect(result.data.Person).to.deep.equal([
-        { name: 'Aristotle', age: 61, order: '3' },
-        { name: 'Immanuel Kant', age: 79, order: '3' },
-        { name: 'Karl Popper', age: 92, order: '5' },
-        { name: 'Kurt Gödel', age: 71, order: '5' },
-        { name: 'Plato', age: 80, order: '2' },
-        { name: 'Socrates', age: 71, order: '1' },
+        { name: 'Aristotle', age: '61', order: '3' },
+        { name: 'Immanuel Kant', age: '79', order: '3' },
+        { name: 'Karl Popper', age: '92', order: '5' },
+        { name: 'Kurt Gödel', age: '71', order: '5' },
+        { name: 'Plato', age: '80', order: '2' },
+        { name: 'Socrates', age: '71', order: '1' },
       ])
     })
 
     it('filter query', async function () {
       const FILTER_QUERY = gql`
  query PersonQuery {
-    Person(filter: {name: {ge : "K"}, age: {ge : 30}}, orderBy : {order : ASC}){
+    Person(filter: {name: {ge : "K"}, age: {ge : "30"}}, orderBy : {order : ASC}){
         name
         age
         order
     }
 }`
       const result = await client.query({ query: FILTER_QUERY })
+      console.log(result)
       expect(result.data.Person).to.deep.equal([
-        { name: 'Socrates', age: 71, order: '1' },
-        { name: 'Plato', age: 80, order: '2' },
-        { name: 'Karl Popper', age: 92, order: '5' },
-        { name: 'Kurt Gödel', age: 71, order: '5' },
+        { name: 'Socrates', age: '71', order: '1' },
+        { name: 'Plato', age: '80', order: '2' },
+        { name: 'Karl Popper', age: '92', order: '5' },
+        { name: 'Kurt Gödel', age: '71', order: '5' },
       ])
     })
 
@@ -213,7 +214,7 @@ describe('GraphQL', function () {
 }`
       const result = await client.query({ query: BACKLINK_QUERY })
       expect(result.data.Person).to.deep.equal([
-        { name: 'Socrates', age: 71, order: '1', _friend_of_Person: [] },
+        { name: 'Socrates', age: '71', order: '1', _friend_of_Person: [] },
         {
           name: 'Plato',
           age: '80',
