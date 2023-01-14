@@ -13919,3 +13919,49 @@ test(choice_with_oneof_abstract,
 
 
 :- end_tests(class_frames).
+
+:- begin_tests(typed_store).
+
+:- use_module(core(util/test_utils)).
+
+date_time_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+
+{ "@type" : "Class",
+  "@id" : "DateTime",
+  "dateTime" : "xsd:dateTime" }
+
+').
+
+test(datetime_deletion,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'dateTime' : "2023-01-13T15:29:45.606Z"}, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        delete_document(C2, Id)
+    ),
+
+    findall(
+        t(X,Y,Z),
+        ask(Desc,
+            t(X,Y,Z)),
+        Triples),
+
+    Triples = [].
+
+:- end_tests(typed_store).
