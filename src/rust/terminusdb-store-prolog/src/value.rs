@@ -336,7 +336,7 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#language"))
         }
         Datatype::NormalizedString => {
-            let val = entry.as_val::<String, String>();
+            let val = entry.as_val::<NormalizedString, String>();
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(
                 2,
