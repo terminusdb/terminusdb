@@ -714,7 +714,7 @@ Get a user from its name or id, or list all if unspecified.
 
 `terminusdb user password USER`
 
-Change passowrd for user USER
+Change password for user USER
 
   * `-h`, `--help`=[value]:
   print help for the `user create` sub command

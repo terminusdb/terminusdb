@@ -1,5 +1,5 @@
-use crate::consts::XSD_PREFIX;
 use crate::terminus_store::store::sync::*;
+use crate::terminus_store::structure::*;
 use crate::terminus_store::Layer as TSLayer;
 use crate::value::*;
 use juniper::FromContext;
@@ -8,7 +8,6 @@ use swipl::prelude::*;
 
 use super::schema::SystemInfo;
 use super::schema::TerminusContext;
-
 impl juniper::Context for SystemInfo {}
 
 impl<'a, C: QueryableContextType> FromContext<TerminusContext<'a, C>> for SystemInfo {
@@ -22,7 +21,8 @@ fn maybe_object_string(db: &SyncStoreLayer, id: u64, prop: &str) -> Option<Strin
         .and_then(|p| db.single_triple_sp(id, p))
         .and_then(|t| db.id_object(t.object))
         .and_then(|o| o.value())
-        .map(move |v| value_string_to_json(&v))
+        .as_ref()
+        .map(move |v| value_to_json(v))
         .and_then(|j| j.as_str().clone().map(|s| s.to_string()))
 }
 
@@ -40,10 +40,7 @@ fn required_object_string(db: &SyncStoreLayer, id: u64, prop: &str) -> String {
         .value()
         .expect("returned object was not a value");
 
-    let name_json = value_string_to_json(&name_unprocessed);
-    let name = name_json.as_str().unwrap();
-
-    name.to_string()
+    name_unprocessed.as_val::<String, String>()
 }
 
 fn required_object_float(db: &SyncStoreLayer, id: u64, prop: &str) -> f64 {
@@ -54,20 +51,19 @@ fn required_object_float(db: &SyncStoreLayer, id: u64, prop: &str) -> f64 {
         .single_triple_sp(id, predicate_id)
         .expect(&format!("can't find triple for {}", prop))
         .object;
-    let name_unprocessed = db
+    let f_unprocessed = db
         .id_object(name_id)
         .expect(&format!("no object for id {}", id))
         .value()
         .expect("returned object was not a value");
 
-    let f_json = value_string_to_json(&name_unprocessed);
-    f_json.as_f64().unwrap()
+    f_unprocessed.as_val::<f64, f64>()
 }
 
 fn has_string_value(db: &SyncStoreLayer, id: u64, prop: &str, obj: &str) -> bool {
     let res = (|| {
         let predicate_id = db.predicate_id(prop)?;
-        let object = format!("\"{}\"^^'{}{}'", obj, XSD_PREFIX, "string");
+        let object = String::make_entry(&obj);
         let object_id = db.object_value_id(&object)?;
         db.triple_exists(id, predicate_id, object_id).then(|| ())
     })();

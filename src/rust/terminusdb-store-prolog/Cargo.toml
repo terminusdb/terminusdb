@@ -8,10 +8,13 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-swipl = {version="0.3.12", features=["serde"]}
-terminus-store = {version="=0.19.10", features=[]}
+swipl = {version="0.3.13", features=["serde"]}
+terminus-store = {version="0.20.0-rc4", features=[]}
 sha-1 = "0.9.1"
 hex = "0.4.2"
 encoding_rs = "0.8.24"
 chardetng = "0.1.9"
 urlencoding = "1.1.1"
+chrono = "0.4"
+rug = {version="1.16", default-features=false, features=["integer","rational"]}
+base64 = "0.13"

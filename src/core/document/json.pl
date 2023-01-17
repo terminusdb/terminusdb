@@ -3273,44 +3273,42 @@ test(write_json_stream_to_builder, [
         triple(Layer,X,Y,Z),
         Triples),
 
-    Triples = [
-        t("http://terminusdb.com/system/schema#User",
-          "http://terminusdb.com/system/schema#capability",
-          node("http://terminusdb.com/system/schema#User/capability/Set+Capability")),
-        t("http://terminusdb.com/system/schema#User",
-          "http://terminusdb.com/system/schema#key_hash",
-          node("http://terminusdb.com/type#string")),
-        t("http://terminusdb.com/system/schema#User",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Class")),
-        t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
-          "http://terminusdb.com/schema/sys#class",
-          node("http://terminusdb.com/system/schema#Capability")),
-        t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Set")),
-        t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
-          "http://terminusdb.com/schema/sys#prefix",
-          value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
-          "http://terminusdb.com/schema/sys#url",
-          value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Prefix")),
-        t("terminusdb://context",
-          "http://terminusdb.com/schema/sys#base",
-          value("\"terminusdb://system/data/\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://context",
-          "http://terminusdb.com/schema/sys#prefix_pair",
-          node("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea")),
-        t("terminusdb://context",
-          "http://terminusdb.com/schema/sys#schema",
-          value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://context",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Context"))
-    ].
+    Triples = [ t("http://terminusdb.com/system/schema#User",
+                  "http://terminusdb.com/system/schema#capability",
+                  node("http://terminusdb.com/system/schema#User/capability/Set+Capability")),
+                t("http://terminusdb.com/system/schema#User",
+                  "http://terminusdb.com/system/schema#key_hash",
+                  node("http://terminusdb.com/type#string")),
+                t("http://terminusdb.com/system/schema#User",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Class")),
+                t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
+                  "http://terminusdb.com/schema/sys#class",
+                  node("http://terminusdb.com/system/schema#Capability")),
+                t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Set")),
+                t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
+                  "http://terminusdb.com/schema/sys#prefix",
+                  value("type",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
+                  "http://terminusdb.com/schema/sys#url",
+                  value("http://terminusdb.com/type#",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Prefix")),
+                t("terminusdb://context",
+                  "http://terminusdb.com/schema/sys#base",
+                  value("terminusdb://system/data/",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://context",
+                  "http://terminusdb.com/schema/sys#prefix_pair",
+                  node("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea")),
+                t("terminusdb://context",
+                  "http://terminusdb.com/schema/sys#schema",
+                  value("http://terminusdb.com/system/schema#",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://context",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Context"))].
 
 :- end_tests(json_stream).
 
@@ -3670,6 +3668,7 @@ test(triple_convert,
     json_triples(DB, Document, Triples),
 
     sort(Triples, Sorted),
+
     Sorted = [
         t('http://i/Employee/gavin',
           'http://s/birthdate',
@@ -3742,6 +3741,7 @@ test(extract_json,
 
     get_document(DB,Id,JSON1),
     !,
+
     JSON1 = json{'@id':'Employee/gavin',
                  '@type':'Employee',
                  birthdate:"1977-05-24",
@@ -3752,6 +3752,7 @@ test(extract_json,
 
     get_document(DB,'Employee/jane',JSON2),
     !,
+
     JSON2 = json{ '@id':'Employee/jane',
                   '@type':'Employee',
                   birthdate:"1979-12-28",
@@ -10582,6 +10583,7 @@ test(subdocument_update,
 
     open_descriptor(Desc, DB),
     get_document(DB, 'Organization/somewhere', Organization),
+
     Organization = json{'@id':'Organization/somewhere',
                         '@type':'Organization',
                         creation_date:"2021-05-01T12:10:10Z",
@@ -13494,6 +13496,7 @@ test(schema_metadata,
     write_schema(metadata_schema,Desc),
 
     database_context_object(Desc,Context),
+
     Context =
     _{'@base':"terminusdb:///data/",
       '@documentation':
@@ -13845,14 +13848,14 @@ test(rdf_language_doc_insert_get,
     with_test_transaction(
         Desc,
         C1,
-        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : "en", '@value' : "Me"}}, Id)
+        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : en, '@value' : "Me"}}, Id)
     ),
 
     get_document(Desc, Id, Doc),
 
     Doc = json{ '@id':_Id,
                 '@type':'LangString',
-                'rdfs:label':json{'@lang':"en",'@value':"Me"}
+                'rdfs:label':json{'@lang':en,'@value':"Me"}
               }.
 
 
@@ -13916,3 +13919,207 @@ test(choice_with_oneof_abstract,
 
 
 :- end_tests(class_frames).
+
+:- begin_tests(typed_store).
+
+:- use_module(core(util/test_utils)).
+
+date_time_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+
+{ "@type" : "Class",
+  "@id" : "DateTime",
+  "dateTime" : "xsd:dateTime" }
+
+').
+
+test(datetime_deletion,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'dateTime' : "2023-01-13T15:29:45.606Z"}, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        delete_document(C2, Id)
+    ),
+
+    findall(
+        t(X,Y,Z),
+        ask(Desc,
+            t(X,Y,Z)),
+        Triples),
+
+    Triples = [].
+
+test(roundtrip_everything,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Schema =
+    _{
+        '@id': 'Everything',
+        '@type': 'Class',
+        anySimpleType: 'xsd:anySimpleType',
+        string: 'xsd:string',
+        boolean: 'xsd:boolean',
+        decimal: 'xsd:decimal',
+        float: 'xsd:float',
+        time: 'xsd:time',
+        date: 'xsd:date',
+        dateTime: 'xsd:dateTime',
+        dateTimeStamp: 'xsd:dateTimeStamp',
+        gYear: 'xsd:gYear',
+        gMonth: 'xsd:gMonth',
+        gDay: 'xsd:gDay',
+        gYearMonth: 'xsd:gYearMonth',
+        duration: 'xsd:duration',
+        yearMonthDuration: 'xsd:yearMonthDuration',
+        dayTimeDuration: 'xsd:dayTimeDuration',
+        byte: 'xsd:byte',
+        short: 'xsd:short',
+        int: 'xsd:int',
+        long: 'xsd:long',
+        unsignedByte: 'xsd:unsignedByte',
+        unsignedShort: 'xsd:unsignedShort',
+        unsignedInt: 'xsd:unsignedInt',
+        unsignedLong: 'xsd:unsignedLong',
+        integer: 'xsd:integer',
+        positiveInteger: 'xsd:positiveInteger',
+        negativeInteger: 'xsd:negativeInteger',
+        nonPositiveInteger: 'xsd:nonPositiveInteger',
+        nonNegativeInteger: 'xsd:nonNegativeInteger',
+        base64nary: 'xsd:base64Binary',
+        hexBinary: 'xsd:hexBinary',
+        anyURI: 'xsd:anyURI',
+        language: 'xsd:language',
+        normalizedString: 'xsd:normalizedString',
+        token: 'xsd:token',
+        'NMTOKEN': 'xsd:NMTOKEN',
+        'Name': 'xsd:Name',
+        'NCName': 'xsd:NCName'
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)
+    ),
+
+    Everything =
+    _{
+        '@type': 'Everything',
+        anySimpleType: 3,
+        string: "string",
+        boolean: true,
+        decimal: 3.2,
+        float: 3.2,
+        time: "23:34:43.0003Z",
+        date: "2021-03-05",
+        dateTime: "2021-03-05T23:34:43.0003Z",
+        dateTimeStamp: "2021-03-05T23:34:43.0003Z",
+        gYear: "-32",
+        gMonth: "--11",
+        gDay: "---29",
+        gYearMonth: "1922-03",
+        duration: "P3Y2DT7M",
+        yearMonthDuration: "P3Y7M",
+        dayTimeDuration: "P1DT10H7M12S",
+        byte: -8,
+        short: -10,
+        int: -32,
+        long: -532,
+        unsignedByte: 3,
+        unsignedShort: 5,
+        unsignedInt: 8,
+        unsignedLong: 10,
+        integer: 20,
+        positiveInteger: "2342423",
+        negativeInteger: "-2348982734",
+        nonPositiveInteger: "-334",
+        nonNegativeInteger: "3243323",
+        base64nary: "VGhpcyBpcyBhIHRlc3Q=",
+        hexBinary: "5468697320697320612074657374",
+        anyURI: "http://this.com",
+        language: "en",
+        normalizedString: "norm",
+        token: "token",
+        'NMTOKEN': "NMTOKEN",
+        'Name': "Name",
+        'NCName': "NCName"
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2, Everything, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C3,
+        delete_document(C3, Id)
+    ),
+
+    findall(
+        t(X,Y,Z),
+        ask(Desc,
+            t(X,Y,Z)),
+        Triples),
+
+    Triples = [].
+
+test(roundtrip_duration,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Schema =
+    _{ '@type' : 'Class',
+       '@id' : 'Duration',
+       duration: 'xsd:duration'
+     },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)
+    ),
+
+    Doc = _{
+        '@type': 'Duration',
+        duration: "PT5558756.00001S"
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2, Doc, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C3,
+        get_document(C3, Id, New_Doc)
+    ),
+    get_dict(duration, Doc, Duration),
+    get_dict(duration, New_Doc, Duration).
+
+:- end_tests(typed_store).

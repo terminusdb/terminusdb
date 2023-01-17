@@ -133,15 +133,9 @@ initialize_database_with_path(_, DB_Path, false) :-
 initialize_database_with_path(Key, DB_Path, _) :-
     make_directory_path(DB_Path),
     delete_directory_contents(DB_Path),
-    initialize_storage_version(DB_Path),
-    open_directory_store(DB_Path, Store),
+    set_db_version(DB_Path),
+    open_archive_store(DB_Path, Store),
     initialize_database_with_store(Key, Store).
-
-initialize_storage_version(DB_Path) :-
-    storage_version_path(DB_Path,Path),
-    open(Path, write, FileStream),
-    writeq(FileStream, 1),
-    close(FileStream).
 
 initialize_schema_graph(Simple_Graph_Name, Store, Graph_Name, Graph_String, Force, Layer) :-
     (   Force = true

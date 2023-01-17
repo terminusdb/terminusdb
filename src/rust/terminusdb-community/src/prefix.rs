@@ -375,7 +375,6 @@ mod tests {
                             prefix: Some(Prefix::other("c", "http://quux/moo")),
                             children: vec![],
                         },
-
                         // this is the default json prefix
                         PrefixContracterTree {
                             part: b"terminusdb.com/schema/json#".to_vec(),

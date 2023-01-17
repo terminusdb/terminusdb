@@ -340,6 +340,14 @@ api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), 
                             },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store has no defined database version and so can not be opened.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists

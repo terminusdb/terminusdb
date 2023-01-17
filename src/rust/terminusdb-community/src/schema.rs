@@ -343,12 +343,6 @@ impl std::ops::Deref for ReverseInheritanceGraph {
     }
 }
 
-fn triple_str_to_string(input: &str) -> &str {
-    // this is incredibly lazy and assumes no escaping is done in the target string. This is true for schema prefixes though.
-    let end = input.len() - "\"^^'http://www.w3.org/2001/XMLSchema#string'".len();
-    &input[1..end]
-}
-
 pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContracter {
     let context_id = schema.subject_id(TDB_CONTEXT);
     let base_id = schema.predicate_id(SYS_BASE);
@@ -367,15 +361,15 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
             .object;
 
         if let ObjectType::Value(base_expansion) = schema.id_object(base_expansion_id).unwrap() {
-            let base_expansion_sub = triple_str_to_string(&base_expansion);
-            prefixes.push(Prefix::base(base_expansion_sub));
+            let base_expansion_sub = base_expansion.as_val::<String, String>();
+            prefixes.push(Prefix::base(&base_expansion_sub));
         } else {
             panic!("unexpected node type for base");
         }
         if let ObjectType::Value(schema_expansion) = schema.id_object(schema_expansion_id).unwrap()
         {
-            let schema_expansion_sub = triple_str_to_string(&schema_expansion);
-            prefixes.push(Prefix::schema(schema_expansion_sub));
+            let schema_expansion_sub = schema_expansion.as_val::<String, String>();
+            prefixes.push(Prefix::schema(&schema_expansion_sub));
         } else {
             panic!("unexpected node type for schema");
         }
@@ -393,9 +387,9 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
                     schema.id_object(contraction_id).unwrap(),
                     schema.id_object(expansion_id).unwrap(),
                 ) {
-                    let contraction_sub = triple_str_to_string(&contraction);
-                    let expansion_sub = triple_str_to_string(&expansion);
-                    prefixes.push(Prefix::other(contraction_sub, expansion_sub));
+                    let contraction_sub = contraction.as_val::<String, String>();
+                    let expansion_sub = expansion.as_val::<String, String>();
+                    prefixes.push(Prefix::other(&contraction_sub, &expansion_sub));
                 }
             }
         }
