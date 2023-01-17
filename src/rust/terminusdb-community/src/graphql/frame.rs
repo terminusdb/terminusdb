@@ -675,9 +675,7 @@ impl AllFrames {
     }
 
     pub fn graphql_class_name(&self, db_name: &str) -> String {
-        eprintln!("{db_name}");
         let db_short_name = self.context.compress_schema(db_name);
-        eprintln!("{db_short_name}");
         let graphql_name = self
             .class_renaming
             .get_by_right(&db_short_name)
