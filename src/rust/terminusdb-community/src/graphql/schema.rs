@@ -382,28 +382,26 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             .collect();
 
         let mut inverted_fields: Vec<_> = Vec::new();
-        if let Some(inverted_frames) = &frames.inverted {
-            if let Some(inverted_type) = inverted_frames.classes.get(&info.class) {
-                for (field_name, ifd) in inverted_type.domain.iter() {
-                    let class = &ifd.class;
-                    if !info.allframes.frames[class].is_document_type() {
-                        continue;
-                    }
-                    let class_definition = info.allframes.frames[class].as_class_definition();
-                    let new_info = TerminusTypeInfo {
-                        class: class.to_string(),
-                        allframes: frames.clone(),
-                    };
-                    let field = Self::register_field::<TerminusType<'a, C>>(
-                        registry,
-                        field_name,
-                        &new_info,
-                        FieldKind::Set,
-                    );
-                    let field = add_arguments(&new_info, registry, field, class_definition);
-
-                    inverted_fields.push(field);
+        if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
+            for (field_name, ifd) in inverted_type.domain.iter() {
+                let class = &ifd.class;
+                if !info.allframes.frames[class].is_document_type() {
+                    continue;
                 }
+                let class_definition = info.allframes.frames[class].as_class_definition();
+                let new_info = TerminusTypeInfo {
+                    class: class.to_string(),
+                    allframes: frames.clone(),
+                };
+                let field = Self::register_field::<TerminusType<'a, C>>(
+                    registry,
+                    field_name,
+                    &new_info,
+                    FieldKind::Set,
+                );
+                let field = add_arguments(&new_info, registry, field, class_definition);
+
+                inverted_fields.push(field);
             }
         }
         fields.append(&mut inverted_fields);
@@ -433,6 +431,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         fields.append(&mut path_fields);
 
         fields.push(registry.field::<ID>("_id", &()));
+        fields.push(registry.field::<ID>("_type", &()));
 
         registry
             .build_object_type::<TerminusType<'a, C>>(info, &fields)
@@ -524,6 +523,18 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
             let allframes = &info.allframes;
             let class = &info.class;
+
+            if field_name == "_type" {
+                let ty = instance
+                    .predicate_id(RDF_TYPE)
+                    .and_then(|pid| instance.single_triple_sp(self.id, pid))
+                    .and_then(|t| instance.id_object_node(t.object))
+                    .map(|ty| {
+                        let small_ty = allframes.graphql_class_name(&ty);
+                        Ok(Value::Scalar(DefaultScalarValue::String(small_ty)))
+                    });
+                return ty;
+            }
 
             if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
                 let property = &reverse_link.property;
