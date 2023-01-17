@@ -17,8 +17,6 @@
 
 :- use_module(jsonld).
 :- use_module(json_woql).
-% We may need to patch this in again...
-%:- use_module(ask), [enrich_graph_fragment/5]).
 :- use_module(global_prefixes, [default_prefixes/1]).
 :- use_module(resolve_query_resource).
 :- use_module(path).
