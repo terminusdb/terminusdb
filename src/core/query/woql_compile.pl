@@ -17,8 +17,6 @@
 
 :- use_module(jsonld).
 :- use_module(json_woql).
-% We may need to patch this in again...
-%:- use_module(ask), [enrich_graph_fragment/5]).
 :- use_module(global_prefixes, [default_prefixes/1]).
 :- use_module(resolve_query_resource).
 :- use_module(path).
@@ -5515,10 +5513,10 @@ test(date) :-
     test_lit(date(1978,6,25,0)^^xsd:date, date(1978,6,25,0)^^'http://www.w3.org/2001/XMLSchema#date').
 
 test(duration_year) :-
-    test_lit(duration(1,10,0,0,0,0,0)^^xsd:duration, duration(1,10,0,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#duration').
+    test_lit(duration(1,10,0,0,0,0,0.0)^^xsd:duration, duration(1,10,0,0,0,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
 
 test(duration_hour) :-
-    test_lit(duration(-1,0,0,0,1,0,0)^^xsd:duration, duration(-1,0,0,0,1,0,0)^^'http://www.w3.org/2001/XMLSchema#duration').
+    test_lit(duration(-1,0,0,0,1,0,0.0)^^xsd:duration, duration(-1,0,0,0,1,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
 
 :- end_tests(store_load_data).
 
