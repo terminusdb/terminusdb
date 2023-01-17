@@ -14084,4 +14084,42 @@ test(roundtrip_everything,
 
     Triples = [].
 
+test(roundtrip_duration,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Schema =
+    _{ '@type' : 'Class',
+       '@id' : 'Duration',
+       duration: 'xsd:duration'
+     },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)
+    ),
+
+    Doc = _{
+        '@type': 'Duration',
+        duration: "PT5558756.00001S"
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2, Doc, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C3,
+        get_document(C3, Id, New_Doc)
+    ),
+    get_dict(duration, Doc, Duration),
+    get_dict(duration, New_Doc, Duration).
+
 :- end_tests(typed_store).
