@@ -1067,7 +1067,7 @@ opt_spec(user,get,'terminusdb user get <USER_NAME_OR_ID>',
            default(false),
            help('Return answer as a JSON document')]]).
 opt_spec(user,password,'terminusdb user password USER',
-         'Change passowrd for user USER',
+         'Change password for user USER',
          [[opt(help),
            type(boolean),
            longflags([help]),

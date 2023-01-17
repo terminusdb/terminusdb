@@ -114,33 +114,33 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(NonNegativeInteger::make_entry(&NonNegativeInteger(integer)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYear") == ty {
         // TODO check that the functor is what we expect
-        let year: i64 = inner_term.get_arg(1)?; // TODO should this throw if the arg is not there?
-        let offset: u64 = inner_term.get_arg(2)?;
+        let year: i64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
+        let offset: u64 = inner_term.get_arg_ex(2)?;
         Ok(GYear::make_entry(&GYear {
             year,
             offset: offset as i16,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gMonth") == ty {
         // TODO check that the functor is what we expect
-        let month: u64 = inner_term.get_arg(1)?; // TODO should this throw if the arg is not there?
-        let offset: u64 = inner_term.get_arg(2)?;
+        let month: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
+        let offset: u64 = inner_term.get_arg_ex(2)?;
         Ok(GMonth::make_entry(&GMonth {
             month: month as u8,
             offset: offset as i16,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gDay") == ty {
         // TODO check that the functor is what we expect
-        let day: u64 = inner_term.get_arg(1)?; // TODO should this throw if the arg is not there?
-        let offset: u64 = inner_term.get_arg(2)?;
+        let day: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
+        let offset: u64 = inner_term.get_arg_ex(2)?;
         Ok(GDay::make_entry(&GDay {
             day: day as u8,
             offset: offset as i16,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYearMonth") == ty {
         // TODO check that the functor is what we expect
-        let year: i64 = inner_term.get_arg(1)?; // TODO should this throw if the arg is not there?
-        let month: u64 = inner_term.get_arg(2)?;
-        let offset: u64 = inner_term.get_arg(3)?;
+        let year: i64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
+        let month: u64 = inner_term.get_arg_ex(2)?;
+        let offset: u64 = inner_term.get_arg_ex(3)?;
         Ok(GYearMonth::make_entry(&GYearMonth {
             year,
             month: month as u8,
@@ -148,22 +148,22 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gMonthDay") == ty {
         // TODO check that the functor is what we expect
-        let month: u64 = inner_term.get_arg(1)?; // TODO should this throw if the arg is not there?
-        let day: u64 = inner_term.get_arg(2)?;
-        let offset: u64 = inner_term.get_arg(3)?;
+        let month: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
+        let day: u64 = inner_term.get_arg_ex(2)?;
+        let offset: u64 = inner_term.get_arg_ex(3)?;
         Ok(GMonthDay::make_entry(&GMonthDay {
             month: month as u8,
             day: day as u8,
             offset: offset as i16,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#duration") == ty {
-        let sign: i64 = inner_term.get_arg(1)?;
-        let year: i64 = inner_term.get_arg(2)?;
-        let month: i64 = inner_term.get_arg(3)?;
-        let day: i64 = inner_term.get_arg(4)?;
-        let hour: i64 = inner_term.get_arg(5)?;
-        let minute: i64 = inner_term.get_arg(6)?;
-        let second: i64 = inner_term.get_arg(7)?;
+        let sign: i64 = inner_term.get_arg_ex(1)?;
+        let year: i64 = inner_term.get_arg_ex(2)?;
+        let month: i64 = inner_term.get_arg_ex(3)?;
+        let day: i64 = inner_term.get_arg_ex(4)?;
+        let hour: i64 = inner_term.get_arg_ex(5)?;
+        let minute: i64 = inner_term.get_arg_ex(6)?;
+        let second: f64 = inner_term.get_arg_ex(7)?;
         Ok(Duration::make_entry(&Duration {
             sign: sign as i8,
             year,
@@ -171,16 +171,16 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             day: day as u8,
             hour: hour as u8,
             minute: minute as u8,
-            second: second as u8,
+            second,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration") == ty {
-        let sign: i64 = inner_term.get_arg(1)?;
-        let year: i64 = inner_term.get_arg(2)?;
-        let month: i64 = inner_term.get_arg(3)?;
-        let day: i64 = inner_term.get_arg(4)?;
-        let hour: i64 = inner_term.get_arg(5)?;
-        let minute: i64 = inner_term.get_arg(6)?;
-        let second: i64 = inner_term.get_arg(7)?;
+        let sign: i64 = inner_term.get_arg_ex(1)?;
+        let year: i64 = inner_term.get_arg_ex(2)?;
+        let month: i64 = inner_term.get_arg_ex(3)?;
+        let day: i64 = inner_term.get_arg_ex(4)?;
+        let hour: i64 = inner_term.get_arg_ex(5)?;
+        let minute: i64 = inner_term.get_arg_ex(6)?;
+        let second: f64 = inner_term.get_arg_ex(7)?;
         Ok(YearMonthDuration::make_entry(&YearMonthDuration(
             Duration {
                 sign: sign as i8,
@@ -189,17 +189,17 @@ pub fn make_entry_from_term<C: QueryableContextType>(
                 day: day as u8,
                 hour: hour as u8,
                 minute: minute as u8,
-                second: second as u8,
+                second,
             },
         )))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration") == ty {
-        let sign: i64 = inner_term.get_arg(1)?;
-        let year: i64 = inner_term.get_arg(2)?;
-        let month: i64 = inner_term.get_arg(3)?;
-        let day: i64 = inner_term.get_arg(4)?;
-        let hour: i64 = inner_term.get_arg(5)?;
-        let minute: i64 = inner_term.get_arg(6)?;
-        let second: i64 = inner_term.get_arg(7)?;
+        let sign: i64 = inner_term.get_arg_ex(1)?;
+        let year: i64 = inner_term.get_arg_ex(2)?;
+        let month: i64 = inner_term.get_arg_ex(3)?;
+        let day: i64 = inner_term.get_arg_ex(4)?;
+        let hour: i64 = inner_term.get_arg_ex(5)?;
+        let minute: i64 = inner_term.get_arg_ex(6)?;
+        let second: f64 = inner_term.get_arg_ex(7)?;
         Ok(DayTimeDuration::make_entry(&DayTimeDuration(Duration {
             sign: sign as i8,
             year,
@@ -207,39 +207,39 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             day: day as u8,
             hour: hour as u8,
             minute: minute as u8,
-            second: second as u8,
+            second,
         })))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
-        let year: i64 = inner_term.get_arg(1)?;
-        let month: i64 = inner_term.get_arg(2)?;
-        let day: i64 = inner_term.get_arg(3)?;
-        let hour: i64 = inner_term.get_arg(4)?;
-        let minute: i64 = inner_term.get_arg(5)?;
-        let second: i64 = inner_term.get_arg(6)?;
-        let nano: i64 = inner_term.get_arg(7)?;
+        let year: i64 = inner_term.get_arg_ex(1)?;
+        let month: i64 = inner_term.get_arg_ex(2)?;
+        let day: i64 = inner_term.get_arg_ex(3)?;
+        let hour: i64 = inner_term.get_arg_ex(4)?;
+        let minute: i64 = inner_term.get_arg_ex(5)?;
+        let second: i64 = inner_term.get_arg_ex(6)?;
+        let nano: i64 = inner_term.get_arg_ex(7)?;
         let dt = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
             .unwrap()
             .and_hms_nano_opt(hour as u32, minute as u32, second as u32, nano as u32)
             .unwrap();
         Ok(NaiveDateTime::make_entry(&dt))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTimeStamp") == ty {
-        let year: i64 = inner_term.get_arg(1)?;
-        let month: i64 = inner_term.get_arg(2)?;
-        let day: i64 = inner_term.get_arg(3)?;
-        let hour: i64 = inner_term.get_arg(4)?;
-        let minute: i64 = inner_term.get_arg(5)?;
-        let second: i64 = inner_term.get_arg(6)?;
-        let nano: i64 = inner_term.get_arg(7)?;
+        let year: i64 = inner_term.get_arg_ex(1)?;
+        let month: i64 = inner_term.get_arg_ex(2)?;
+        let day: i64 = inner_term.get_arg_ex(3)?;
+        let hour: i64 = inner_term.get_arg_ex(4)?;
+        let minute: i64 = inner_term.get_arg_ex(5)?;
+        let second: i64 = inner_term.get_arg_ex(6)?;
+        let nano: i64 = inner_term.get_arg_ex(7)?;
         let dt = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
             .unwrap()
             .and_hms_nano_opt(hour as u32, minute as u32, second as u32, nano as u32)
             .unwrap();
         Ok(DateTimeStamp::make_entry(&DateTimeStamp(dt)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#date") == ty {
-        let year: i64 = inner_term.get_arg(1)?;
-        let month: i64 = inner_term.get_arg(2)?;
-        let day: i64 = inner_term.get_arg(3)?;
-        let offset: i64 = inner_term.get_arg(4)?;
+        let year: i64 = inner_term.get_arg_ex(1)?;
+        let month: i64 = inner_term.get_arg_ex(2)?;
+        let day: i64 = inner_term.get_arg_ex(3)?;
+        let offset: i64 = inner_term.get_arg_ex(4)?;
         let dt = Date {
             year,
             month: month as u8,
@@ -248,9 +248,9 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         };
         Ok(Date::make_entry(&dt))
     } else if atom!("http://www.w3.org/2001/XMLSchema#time") == ty {
-        let hour: u64 = inner_term.get_arg(1)?;
-        let minute: u64 = inner_term.get_arg(2)?;
-        let second: u64 = inner_term.get_arg(3)?;
+        let hour: u64 = inner_term.get_arg_ex(1)?;
+        let minute: u64 = inner_term.get_arg_ex(2)?;
+        let second: u64 = inner_term.get_arg_ex(3)?;
         let t = NaiveTime::from_hms_opt(hour as u32, minute as u32, second as u32).unwrap();
         Ok(NaiveTime::make_entry(&t))
     } else if atom!("http://www.w3.org/2001/XMLSchema#base64Binary") == ty {
@@ -606,7 +606,7 @@ pub fn unify_entry<C: QueryableContextType>(
             let day = duration.day as i64;
             let hour = duration.hour as i64;
             let minute = duration.minute as i64;
-            let second = duration.second as i64;
+            let second = duration.second as f64;
             duration_term.unify_arg(1, sign)?;
             duration_term.unify_arg(2, year)?;
             duration_term.unify_arg(3, month)?;
@@ -627,7 +627,7 @@ pub fn unify_entry<C: QueryableContextType>(
             let day = duration.day as i64;
             let hour = duration.hour as i64;
             let minute = duration.minute as i64;
-            let second = duration.second as i64;
+            let second = duration.second as f64;
             duration_term.unify_arg(1, sign)?;
             duration_term.unify_arg(2, year)?;
             duration_term.unify_arg(3, month)?;
@@ -651,7 +651,7 @@ pub fn unify_entry<C: QueryableContextType>(
             let day = duration.day as i64;
             let hour = duration.hour as i64;
             let minute = duration.minute as i64;
-            let second = duration.second as i64;
+            let second = duration.second as f64;
             duration_term.unify_arg(1, sign)?;
             duration_term.unify_arg(2, year)?;
             duration_term.unify_arg(3, month)?;

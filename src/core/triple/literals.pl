@@ -270,7 +270,7 @@ duration_string(Duration,String) :-
     (   D \= 0
     ->  format(atom(DP),'~wD',[D])
     ;   DP = ''),
-    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0)
+    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0.0)
     ->  TP = 'T'
     ;   TP = ''),
     (   HH \= 0
@@ -279,7 +279,7 @@ duration_string(Duration,String) :-
     (   MM \= 0
     ->  format(atom(MMP),'~wM',[MM])
     ;   MMP = ''),
-    (   SS \= 0
+    (   SS \= 0.0
     ->  format(atom(SSP),'~wS',[SS])
     ;   SSP = ''),
     atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom),
