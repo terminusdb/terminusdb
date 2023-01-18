@@ -1,3 +1,18 @@
+# TerminusDB Server v11.0.0 Release Notes
+
+## Enhancements
+
+* Introduce a layer archive format reducing storage use and latency
+  and simplifying interchange
+* Added typed storage for a wide variety of XSD types, reducing storage
+  overhead and improving search performance
+* GraphQL `_type` added to objects to return the exact rather than subsumed type
+
+## Bus fixes
+
+* Fixed a bug in inverse fields in GraphQL
+* Removed extraneous system objects from GraphQL schema
+
 # TerminusDB Server v10.1.11 Release Notes
 
 ## Enhancements
