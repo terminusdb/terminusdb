@@ -5513,6 +5513,7 @@ test(date) :-
     test_lit(date(1978,6,25,0)^^xsd:date, date(1978,6,25,0)^^'http://www.w3.org/2001/XMLSchema#date').
 
 test(duration_year) :-
+
     test_lit(duration(1,10,0,0,0,0,0.0)^^xsd:duration, duration(1,10,0,0,0,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
 
 test(duration_hour) :-

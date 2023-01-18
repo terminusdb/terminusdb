@@ -10665,10 +10665,8 @@ test(subdocument_update,
                          Document,
                          Id),
                      _),
-    writeq(Id),
 
-    get_document(Desc, Id, New_Doc),
-    writeq(New_Doc).
+    get_document(Desc, Id, _New_Doc).
 
 
 :- end_tests(referential_integrity).

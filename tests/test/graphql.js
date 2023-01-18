@@ -512,6 +512,7 @@ query EverythingQuery {
       const PARENT_QUERY = gql`
  query ParentQuery {
     Parent(orderBy: {name : ASC}){
+        _type
         name
     }
 }`
@@ -519,12 +520,15 @@ query EverythingQuery {
       expect(result.data.Parent).to.deep.equal(
         [
           {
+            _type: 'Parent',
             name: 'Dad',
           },
           {
+            _type: 'Child',
             name: 'Jim',
           },
           {
+            _type: 'Child',
             name: 'Joe',
           },
         ])
