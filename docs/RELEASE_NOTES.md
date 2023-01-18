@@ -2,7 +2,8 @@
 
 ## Enhancements
 
-* Introduce layer archive format reducing storage use and latency
+* Introduce a layer archive format reducing storage use and latency
+  and simplifying interchange
 * Added typed storage for a wide variety of XSD types, reducing storage
   overhead and improving search performance
 * GraphQL `_type` added to objects to return the exact rather than subsumed type
