@@ -236,7 +236,8 @@ jobs:
           fi
 
           # Tag and push the latest image when a version tag is pushed
-          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v") ]; then
+          # We also make sure that rc and beta are not pushed to the latest tag!
+          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v" | grep -v "rc" | grep -v "beta") ]; then
             TAGS="${TAGS},${LATEST_IMAGE}"
           fi
 
