@@ -273,12 +273,12 @@ impl FieldDefinition {
             Self::List(c) => Self::List(sanitize_class(c)),
             Self::Array { class, dimensions } => Self::Array {
                 class: sanitize_class(class),
-                dimensions: dimensions.clone(),
+                dimensions: *dimensions,
             },
             Self::Cardinality { class, min, max } => Self::Cardinality {
                 class: sanitize_class(class),
-                min: min.clone(),
-                max: max.clone(),
+                min: *min,
+                max: *max,
             },
         }
     }
@@ -599,7 +599,7 @@ impl PreAllFrames {
         }
     }
 
-    pub fn sanitize(&self) -> BiMap<String, String> {
+    pub fn sanitize(&self) -> (BTreeMap<String, TypeDefinition>, BiMap<String, String>) {
         let mut class_renaming: BiMap<String, String> = BiMap::new();
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
         for (class_name, typedef) in self.frames.iter() {
@@ -615,7 +615,7 @@ impl PreAllFrames {
             };
             frames.insert(sanitized_class.clone(), new_typedef);
         }
-        class_renaming
+        (frames, class_renaming)
     }
 
     pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
@@ -626,7 +626,7 @@ impl PreAllFrames {
                     .as_class_definition()
                     .inherits
                     .clone()
-                    .unwrap_or(vec![class.to_string()]);
+                    .unwrap_or_else(|| vec![class.to_string()]);
 
                 for superclass in supers {
                     if let Some(v) = subsumption_rel.get_mut(&superclass) {
@@ -641,11 +641,10 @@ impl PreAllFrames {
     }
 
     pub fn finalize(mut self) -> AllFrames {
-        let class_renaming = self.sanitize();
+        let (frames, class_renaming) = self.sanitize();
         let inverted = allframes_to_allinvertedframes(&self);
         let subsumption = self.calculate_subsumption();
         let context = self.context;
-        let frames = self.frames;
 
         AllFrames {
             context,
