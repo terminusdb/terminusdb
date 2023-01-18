@@ -43,7 +43,7 @@
 :- use_module(library(yall)).
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.0.0-rc1').
+terminusdb_version('11.0.0').
 /* [[[end]]] */
 
 bootstrap_config_files :-
