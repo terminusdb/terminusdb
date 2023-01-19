@@ -535,23 +535,23 @@ query EverythingQuery {
     })
 
     it('graphql meta-tags', async function () {
-      const test_obj = {
+      const testObj = {
         '@id': 'Test',
         '@key': {
-            '@type': 'Random'
+          '@type': 'Random',
         },
         '@metadata': {
-            render_as: {
-                test: 'markdown'
-            }
+          render_as: {
+            test: 'markdown',
+          },
         },
         '@type': 'Class',
         test: {
-            '@class': 'xsd:string',
-            '@type': 'Optional'
-        }
+          '@class': 'xsd:string',
+          '@type': 'Optional',
+        },
       }
-      await document.insert(agent, { schema: test_obj })
+      await document.insert(agent, { schema: testObj })
       const TEST_QUERY = gql`
  query TestQuery {
     Test{
