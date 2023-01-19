@@ -24,6 +24,8 @@ pub struct Prefixes {
     pub schema: String,
     #[serde(rename = "@documentation")]
     pub documentation: Option<SchemaDocumentation>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(flatten)]
     pub extra_prefixes: BTreeMap<String, String>,
 }
@@ -326,6 +328,8 @@ pub struct OneOf {
 pub struct ClassDefinition {
     #[serde(rename = "@documentation")]
     pub documentation: Option<ClassDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@key")]
     pub key: Option<KeyDefinition>,
     #[serde(rename = "@subdocument")]
@@ -390,6 +394,7 @@ impl ClassDefinition {
         };
         ClassDefinition {
             documentation,
+            metadata: self.metadata.clone(),
             key,
             is_subdocument: self.is_subdocument.clone(),
             is_abstract: self.is_abstract.clone(),
@@ -474,6 +479,8 @@ pub struct EnumDefinition {
     //pub kind: String,
     #[serde(rename = "@documentation")]
     pub documentation: Option<EnumDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@values")]
     pub values: Vec<String>,
     #[serde(skip_serializing, skip_deserializing)]
@@ -496,6 +503,7 @@ impl EnumDefinition {
         let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
         EnumDefinition {
             documentation,
+            metadata: self.metadata.clone(),
             values,
             values_renaming: Some(values_renaming),
         }
