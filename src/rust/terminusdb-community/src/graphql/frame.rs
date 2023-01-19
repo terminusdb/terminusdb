@@ -966,7 +966,7 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
 
 "#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let typedef: TypeDefinition = dbg!(context.deserialize_from_term(&term)).unwrap();
+        let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
 
         assert_eq!(
             TypeDefinition::Enum(EnumDefinition {
