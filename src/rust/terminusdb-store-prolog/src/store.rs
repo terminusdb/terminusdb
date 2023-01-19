@@ -18,6 +18,12 @@ predicates! {
         out_term.unify(&WrappedStore(store))
     }
 
+    pub semidet fn open_archive_store(_context, dir_term, out_term) {
+        let dir: PrologText = dir_term.get_ex()?;
+        let store = open_sync_archive_store(&*dir);
+        out_term.unify(&WrappedStore(store))
+    }
+
     pub semidet fn open_write(context, store_or_graph_or_layer_term, builder_term) {
         let builder;
         if let Some(store) = attempt_opt(store_or_graph_or_layer_term.get::<WrappedStore>())? {

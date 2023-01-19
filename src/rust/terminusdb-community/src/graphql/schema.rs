@@ -16,7 +16,7 @@ use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_float,
-    type_is_small_integer, value_string_to_graphql,
+    type_is_small_integer, value_to_graphql,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
@@ -175,7 +175,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     where
         DefaultScalarValue: 'r,
     {
-        let mut fields: Vec<_> = info
+        let fields: Vec<_> = info
             .allframes
             .frames
             .iter()
@@ -382,28 +382,26 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             .collect();
 
         let mut inverted_fields: Vec<_> = Vec::new();
-        if let Some(inverted_frames) = &frames.inverted {
-            if let Some(inverted_type) = inverted_frames.classes.get(&info.class) {
-                for (field_name, ifd) in inverted_type.domain.iter() {
-                    let class = &ifd.class;
-                    if !info.allframes.frames[class].is_document_type() {
-                        continue;
-                    }
-                    let class_definition = info.allframes.frames[class].as_class_definition();
-                    let new_info = TerminusTypeInfo {
-                        class: class.to_string(),
-                        allframes: frames.clone(),
-                    };
-                    let field = Self::register_field::<TerminusType<'a, C>>(
-                        registry,
-                        field_name,
-                        &new_info,
-                        FieldKind::Set,
-                    );
-                    let field = add_arguments(&new_info, registry, field, class_definition);
-
-                    inverted_fields.push(field);
+        if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
+            for (field_name, ifd) in inverted_type.domain.iter() {
+                let class = &ifd.class;
+                if !info.allframes.frames[class].is_document_type() {
+                    continue;
                 }
+                let class_definition = info.allframes.frames[class].as_class_definition();
+                let new_info = TerminusTypeInfo {
+                    class: class.to_string(),
+                    allframes: frames.clone(),
+                };
+                let field = Self::register_field::<TerminusType<'a, C>>(
+                    registry,
+                    field_name,
+                    &new_info,
+                    FieldKind::Set,
+                );
+                let field = add_arguments(&new_info, registry, field, class_definition);
+
+                inverted_fields.push(field);
             }
         }
         fields.append(&mut inverted_fields);
@@ -433,6 +431,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         fields.append(&mut path_fields);
 
         fields.push(registry.field::<ID>("_id", &()));
+        fields.push(registry.field::<ID>("_type", &()));
 
         registry
             .build_object_type::<TerminusType<'a, C>>(info, &fields)
@@ -524,6 +523,18 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
             let allframes = &info.allframes;
             let class = &info.class;
+
+            if field_name == "_type" {
+                let ty = instance
+                    .predicate_id(RDF_TYPE)
+                    .and_then(|pid| instance.single_triple_sp(self.id, pid))
+                    .and_then(|t| instance.id_object_node(t.object))
+                    .map(|ty| {
+                        let small_ty = allframes.graphql_class_name(&ty);
+                        Ok(Value::Scalar(DefaultScalarValue::String(small_ty)))
+                    });
+                return ty;
+            }
 
             if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
                 let property = &reverse_link.property;
@@ -666,7 +677,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             Some(Ok(value))
                         } else {
                             let val = instance.id_object_value(object_id).unwrap();
-                            Some(Ok(value_string_to_graphql(&val)))
+                            Some(Ok(value_to_graphql(&val)))
                         }
                     }
                     FieldKind::Optional => {
@@ -685,7 +696,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     ))
                                 } else {
                                     let val = instance.id_object_value(object_id).unwrap();
-                                    Some(Ok(value_string_to_graphql(&val)))
+                                    Some(Ok(value_to_graphql(&val)))
                                 }
                             }
                             None => Some(Ok(Value::Null)),
@@ -882,7 +893,7 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
         let vals: Vec<_> = object_ids
             .map(|o| {
                 let val = instance.id_object_value(o).unwrap();
-                value_string_to_graphql(&val)
+                value_to_graphql(&val)
             })
             .collect();
         Some(Ok(Value::List(vals)))
@@ -1006,6 +1017,30 @@ pub struct DateTime(pub String);
     description = "The `DateTime` scalar type represents a date encoded as a string using the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar."
 )]
 impl<S> GraphQLScalar for DateTime
+where
+    S: juniper::ScalarValue,
+{
+    fn resolve(&self) -> juniper::Value {
+        juniper::Value::scalar(self.0.to_owned())
+    }
+
+    fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
+        value.as_string_value().map(|s| Self(s.to_owned()))
+    }
+
+    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BigFloat(pub String);
+
+#[juniper::graphql_scalar(
+    name = "BigFloat",
+    description = "The `BigFloat` scalar type represents an arbitrary precision decimal."
+)]
+impl<S> GraphQLScalar for BigFloat
 where
     S: juniper::ScalarValue,
 {

@@ -1067,7 +1067,7 @@ opt_spec(user,get,'terminusdb user get <USER_NAME_OR_ID>',
            default(false),
            help('Return answer as a JSON document')]]).
 opt_spec(user,password,'terminusdb user password USER',
-         'Change passowrd for user USER',
+         'Change password for user USER',
          [[opt(help),
            type(boolean),
            longflags([help]),
@@ -1325,10 +1325,13 @@ run_command(test,_Positional,Opts) :-
     ->  halt(0)
     ;   halt(1)).
 run_command(serve,_Positional,Opts) :-
-    (   option(interactive(true), Opts)
-    ->  terminus_server([serve|Opts], false),
-        prolog
-    ;   terminus_server([serve|Opts], true)).
+    api_report_errors(
+        server,
+        (   option(interactive(true), Opts)
+        ->  terminus_server([serve|Opts], false),
+            prolog
+        ;   terminus_server([serve|Opts], true))
+    ).
 run_command(list,Databases,Opts) :-
     super_user_authority(Auth),
     format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~nWarning: Use ('terminusdb db list') instead.~n", []),

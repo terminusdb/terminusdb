@@ -407,6 +407,20 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#duration', 'http://www.w3.org/
     (   duration_string(Cast,Val)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#duration'),_))).
+%%% xsd:string => xsd:yearMonthDuration
+typecast_switch('http://www.w3.org/2001/XMLSchema#yearMonthDuration', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#yearMonthDuration') :-
+    !,
+    (   duration_string(Cast,Val),
+        Cast = duration(_Sign,_Y,_M,_D,0,0,0)
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#yearMonthduration'),_))).
+%%% xsd:string => xsd:dayTimeDuration
+typecast_switch('http://www.w3.org/2001/XMLSchema#dayTimeDuration', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dayTimeDuration') :-
+    !,
+    (   duration_string(Cast,Val),
+        Cast = duration(_Sign,0,0,_D,_H,_M,_S)
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dayTimeDuration'),_))).
 %%% xsd:duration => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#duration', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,

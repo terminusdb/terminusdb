@@ -1,5 +1,5 @@
 TUS_VERSION := v0.0.10
-JWT_VERSION := v0.0.5
+JWT_VERSION := v1.0.3
 DASHBOARD_VERSION := v0.0.10
 DASHBOARD_GITHUB_REPO := terminusdb/terminusdb-dashboard
 

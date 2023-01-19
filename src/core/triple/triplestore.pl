@@ -74,7 +74,7 @@ checkpoint(_DB_ID,_Graph_ID) :-
 default_triple_store(Triple_Store) :-
     db_path(Path),
     assert_database_version_is_current(Path),
-    open_directory_store(Path,Triple_Store).
+    open_archive_store(Path,Triple_Store).
 
 /**
  * memory_triple_store(-Triple_Store) is det.
