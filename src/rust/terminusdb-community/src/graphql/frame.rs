@@ -820,6 +820,7 @@ _{'@base': "http://some_base/",
             Prefixes {
                 kind: "Context".to_string(),
                 documentation: None,
+                metadata: None,
                 base: "http://some_base/".to_string(),
                 schema: "http://some_schema#".to_string(),
                 extra_prefixes: BTreeMap::from([
@@ -888,6 +889,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
             TypeDefinition::Class(ClassDefinition {
                 field_renaming: None,
                 documentation: None,
+                metadata: None,
                 key: None,
                 is_subdocument: None,
                 is_abstract: None,
@@ -979,6 +981,7 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
         assert_eq!(
             TypeDefinition::Enum(EnumDefinition {
                 values_renaming: None,
+                metadata: None,
                 documentation: Some(EnumDocumentationDefinition {
                     label: None,
                     values: None,
