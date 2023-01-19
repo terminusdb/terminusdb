@@ -231,6 +231,7 @@ mod tests {
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
             documentation: None,
+            metadata: None,
             extra_prefixes: Default::default(),
         };
 
@@ -293,6 +294,7 @@ mod tests {
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
             documentation: None,
+            metadata: None,
             extra_prefixes: Default::default(),
         };
 
@@ -352,6 +354,7 @@ mod tests {
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
             documentation: None,
+            metadata: None,
             extra_prefixes: Default::default(),
         };
 
