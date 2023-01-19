@@ -9,7 +9,6 @@ use crate::terminus_store::*;
 
 use serde_json::map;
 use serde_json::{Map, Value};
-use urlencoding;
 
 use super::consts::*;
 use super::prefix::PrefixContracter;
@@ -51,12 +50,11 @@ impl<L: Layer> GetDocumentContext<L> {
         minimized: bool,
     ) -> GetDocumentContext<L> {
         let schema_query_context = SchemaQueryContext::new(schema);
-        let prefixes;
-        if compress {
-            prefixes = prefix_contracter_from_schema_layer(schema);
+        let prefixes = if compress {
+            prefix_contracter_from_schema_layer(schema)
         } else {
-            prefixes = PrefixContracter::new(std::iter::empty());
-        }
+            PrefixContracter::new(std::iter::empty())
+        };
 
         let mut rdf_type_id = None;
         let mut rdf_first_id = None;
@@ -99,10 +97,9 @@ impl<L: Layer> GetDocumentContext<L> {
 
                 let subs: HashSet<u64> = schema_subs
                     .into_iter()
-                    .map(|schema_sub| {
+                    .filter_map(|schema_sub| {
                         schema_query_context.translate_subject_id(instance, schema_sub)
                     })
-                    .flatten()
                     .collect();
 
                 subtypes.insert(sup_name, subs);
@@ -192,15 +189,9 @@ impl<L: Layer> GetDocumentContext<L> {
     }
 
     pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
-        if self.layer.is_some() {
-            if let Some(id) = self.layer().subject_id(iri) {
-                Some(self.get_id_document(id))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        self.layer()
+            .subject_id(iri)
+            .map(|id| self.get_id_document(id))
     }
 
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
@@ -233,7 +224,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
             }
             map::Entry::Occupied(mut e) => {
-                let mut v = e.get_mut();
+                let v = e.get_mut();
                 match v {
                     Value::Array(a) => {
                         a.push(value);
@@ -241,7 +232,7 @@ impl<L: Layer> GetDocumentContext<L> {
                     _ => {
                         let mut a = Vec::new();
                         let mut old_v = Value::Null;
-                        std::mem::swap(&mut old_v, &mut v);
+                        std::mem::swap(&mut old_v, v);
                         a.push(old_v);
                         a.push(value);
                         *v = Value::Array(a);
@@ -435,12 +426,12 @@ impl<L: Layer> GetDocumentContext<L> {
 
     fn get_subtypes_for(&self, type_name: &str) -> Vec<u64> {
         let mut types: Vec<u64> = Vec::new();
-        if let Some(type_id) = self.layer().object_node_id(&*type_name) {
+        if let Some(type_id) = self.layer().object_node_id(type_name) {
             // always at least search for the type itself
             types.push(type_id);
         }
-        if let Some(subtypes) = self.subtypes.get(&*type_name) {
-            types.extend(subtypes.into_iter().cloned());
+        if let Some(subtypes) = self.subtypes.get(type_name) {
+            types.extend(subtypes.iter().cloned());
         }
 
         types
@@ -452,16 +443,12 @@ pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
     let mut index_str = SYS_INDEX.to_string();
     let orig_len = index_str.len();
     let mut ix = 1;
-    loop {
-        if let Some(index_id) = instance.predicate_id(&index_str) {
-            sys_index_ids.push(index_id);
-            ix += 1;
-            let ix_s = ix.to_string();
-            index_str.truncate(orig_len);
-            index_str.push_str(&ix_s);
-        } else {
-            break;
-        }
+    while let Some(index_id) = instance.predicate_id(&index_str) {
+        sys_index_ids.push(index_id);
+        ix += 1;
+        let ix_s = ix.to_string();
+        index_str.truncate(orig_len);
+        index_str.push_str(&ix_s);
     }
 
     sys_index_ids
@@ -484,10 +471,7 @@ enum StackEntry<'a, L: Layer> {
 
 impl<'a, L: Layer> StackEntry<'a, L> {
     fn is_document(&self) -> bool {
-        match self {
-            Self::Document { .. } => true,
-            _ => false,
-        }
+        matches!(self, Self::Document { .. })
     }
 
     fn is_json(&self) -> bool {
@@ -554,7 +538,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     fn peek(&mut self) -> Option<u64> {
         match self {
             Self::Document { fields, .. } => fields.as_mut().unwrap().peek().map(|t| t.object),
-            Self::List { entries, .. } => entries.peek().map(|x| *x),
+            Self::List { entries, .. } => entries.peek().copied(),
             Self::Array(a) => a.entries.next(),
         }
     }
@@ -634,7 +618,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
 
     let dimensions = elements[0].0.len();
     let mut collect: Vec<Vec<Value>> = Vec::with_capacity(dimensions);
-    collect.resize_with(dimensions, || Vec::new());
+    collect.resize_with(dimensions, Vec::new);
 
     for (index, value) in elements {
         assert!(
@@ -648,7 +632,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
             if expected < index[d] {
                 // any less significant dimension will need to be gathered up, provided anything was collected to begin with.
                 for n in (d + 1..dimensions).rev() {
-                    if collect[n].len() != 0 {
+                    if collect[n].is_empty() {
                         let mut x = Vec::new();
                         std::mem::swap(&mut x, &mut collect[n]);
                         collect[n - 1].push(Value::Array(x));
@@ -668,7 +652,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
     // Finally, gather up everything
     for d in (0..dimensions - 1).rev() {
         let x = collect.pop().unwrap();
-        if x.len() != 0 {
+        if !x.is_empty() {
             collect[d].push(Value::Array(x));
         }
     }
@@ -911,7 +895,7 @@ predicates! {
         }
 
         let type_name: PrologText = type_term.get()?;
-        let types = doc_context.get_subtypes_for(&*type_name);
+        let types = doc_context.get_subtypes_for(&type_name);
 
         if types.is_empty() {
             // no type found that is subsumed by the given type, so we're done
@@ -929,7 +913,7 @@ predicates! {
         }
 
         let type_name: PrologText = type_term.get()?;
-        let types = doc_context.get_subtypes_for(&*type_name);
+        let types = doc_context.get_subtypes_for(&type_name);
 
         if types.is_empty() {
             // no type found that is subsumed by the given type, so we're done

@@ -494,7 +494,7 @@ impl EnumDefinition {
             let sanitized = graphql_sanitize(v);
             let res = values_renaming.insert_no_overwrite(sanitized.to_string(), v.to_string());
             if let Err((left,right)) = res {
-                if left != sanitized.to_string() || right != v.to_string() {
+                if left != sanitized || right != *v {
                     panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized},{v})")
                 }
             }
@@ -571,13 +571,10 @@ impl TypeDefinition {
 
 impl FieldKind {
     pub fn is_collection(&self) -> bool {
-        match self {
-            Self::Set => true,
-            Self::Array => true,
-            Self::List => true,
-            Self::Cardinality => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Set | Self::Array | Self::List | Self::Cardinality
+        )
     }
 }
 
@@ -721,7 +718,7 @@ impl AllFrames {
         self.subsumption
             .get(class)
             .cloned()
-            .unwrap_or(vec![class.to_string()])
+            .unwrap_or_else(|| vec![class.to_string()])
     }
 }
 

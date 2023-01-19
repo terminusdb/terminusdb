@@ -10,7 +10,6 @@ mod schema;
 mod types;
 mod value;
 
-use lcs;
 pub use swipl;
 use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
@@ -55,13 +54,13 @@ predicates! {
         let mut buf = [0_u8;31];
         let mut rng = thread_rng();
 
-        for i in 0..31 {
+        for item in &mut buf {
             let r = rng.gen_range(0..36);
             if r < 10 {
-                buf[i] = '0' as u8 + r;
+                *item = b'0' + r;
             }
             else {
-                buf[i] = 'a' as u8 - 10 + r;
+                *item = b'a' - 10 + r;
             }
         }
 

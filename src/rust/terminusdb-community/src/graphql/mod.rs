@@ -24,16 +24,15 @@ predicates! {
         let mut buf = vec![0;len];
         context.try_or_die_generic(input.read_exact(&mut buf))?;
 
-        let request;
-        match serde_json::from_slice::<GraphQLRequest>(&buf) {
+        let request = match serde_json::from_slice::<GraphQLRequest>(&buf) {
             Ok(r) => {
                 log_debug!(context, "request: {:?}", r)?;
-                request = r;
+                r
             },
             Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
-        }
+        };
 
-        let pre_frames: PreAllFrames = context.deserialize_from_term(&frame_term).expect("Unable to parse frames into rust struct");
+        let pre_frames: PreAllFrames = context.deserialize_from_term(frame_term).expect("Unable to parse frames into rust struct");
         let frames: AllFrames = pre_frames.finalize();
 
         let root_node = RootNode::new_with_info(TerminusTypeCollection::new(),

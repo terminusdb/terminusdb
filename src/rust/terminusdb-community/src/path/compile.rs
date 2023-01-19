@@ -23,9 +23,9 @@ pub fn path_to_class<'a, 'b>(
         .expect("Did not give a valid path")
         .1;
     let expanded_type_name = all_frames.fully_qualified_class_name(to_class);
-    let iter = compile_path(&g, all_frames.context.clone(), path, zero_iter);
+    let iter = compile_path(g, all_frames.context.clone(), path, zero_iter);
     ClonableIterator::new(
-        predicate_value_filter(g, &RDF_TYPE, &ObjectType::Node(expanded_type_name), iter).dedup(),
+        predicate_value_filter(g, RDF_TYPE, &ObjectType::Node(expanded_type_name), iter).dedup(),
     )
 }
 
@@ -46,7 +46,7 @@ fn compile_path<'a>(
             let branch = iter.clone();
             let result = vec
                 .into_iter()
-                .map(move |sub_path| compile_path(&g, prefixes.clone(), sub_path, branch.clone()));
+                .map(move |sub_path| compile_path(g, prefixes.clone(), sub_path, branch.clone()));
             ClonableIterator::new(result.flatten())
         }
         Path::Positive(p) => match p {
@@ -128,7 +128,7 @@ impl<'a> Iterator for ManySearchIterator<'a> {
                 std::mem::swap(&mut openset, &mut self.openset);
                 let next_elements = ClonableIterator::new(openset.into_iter());
                 self.iterator = compile_path(
-                    &self.graph,
+                    self.graph,
                     self.prefixes.clone(),
                     (*self.pattern).clone(),
                     next_elements,
@@ -147,7 +147,7 @@ fn compile_many<'a>(
     stop: Option<usize>,
 ) -> ClonableIterator<'a, u64> {
     if Some(0) == stop {
-        return iterator;
+        iterator
     } else {
         ClonableIterator::new(ManySearchIterator {
             graph: g,
