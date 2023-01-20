@@ -9,6 +9,7 @@ use crate::terminus_store::*;
 
 use serde_json::map;
 use serde_json::{Map, Value};
+use urlencoding;
 
 use super::consts::*;
 use super::prefix::PrefixContracter;
@@ -189,9 +190,9 @@ impl<L: Layer> GetDocumentContext<L> {
     }
 
     pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
-        self.layer()
-            .subject_id(iri)
-            .map(|id| self.get_id_document(id))
+        self.layer
+            .as_ref()
+            .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
     }
 
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
@@ -443,12 +444,16 @@ pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
     let mut index_str = SYS_INDEX.to_string();
     let orig_len = index_str.len();
     let mut ix = 1;
-    while let Some(index_id) = instance.predicate_id(&index_str) {
-        sys_index_ids.push(index_id);
-        ix += 1;
-        let ix_s = ix.to_string();
-        index_str.truncate(orig_len);
-        index_str.push_str(&ix_s);
+    loop {
+        if let Some(index_id) = instance.predicate_id(&index_str) {
+            sys_index_ids.push(index_id);
+            ix += 1;
+            let ix_s = ix.to_string();
+            index_str.truncate(orig_len);
+            index_str.push_str(&ix_s);
+        } else {
+            break;
+        }
     }
 
     sys_index_ids
@@ -632,7 +637,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
             if expected < index[d] {
                 // any less significant dimension will need to be gathered up, provided anything was collected to begin with.
                 for n in (d + 1..dimensions).rev() {
-                    if collect[n].is_empty() {
+                    if collect[n].len() != 0 {
                         let mut x = Vec::new();
                         std::mem::swap(&mut x, &mut collect[n]);
                         collect[n - 1].push(Value::Array(x));
