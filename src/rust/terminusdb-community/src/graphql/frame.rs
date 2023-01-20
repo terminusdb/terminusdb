@@ -352,22 +352,6 @@ pub struct OneOf {
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
-#[serde(untagged)]
-pub enum StructuralClassDocumentationDefinition {
-    One(ClassDocumentationDefinition),
-    More(Vec<ClassDocumentationDefinition>),
-}
-
-impl From<StructuralClassDocumentationDefinition> for Vec<ClassDocumentationDefinition> {
-    fn from(value: StructuralClassDocumentationDefinition) -> Self {
-        match value {
-            StructuralClassDocumentationDefinition::One(one) => vec![one],
-            StructuralClassDocumentationDefinition::More(more) => more,
-        }
-    }
-}
-
-#[derive(Deserialize, PartialEq, Debug)]
 pub struct ClassDefinition {
     #[serde(rename = "@documentation")]
     #[serde(default = "empty")]
