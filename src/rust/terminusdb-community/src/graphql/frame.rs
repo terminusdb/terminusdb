@@ -528,7 +528,7 @@ impl EnumDefinition {
             let sanitized = graphql_sanitize(v);
             let res = values_renaming.insert_no_overwrite(sanitized.to_string(), v.to_string());
             if let Err((left,right)) = res {
-                if left != *sanitized || right != *v {
+                if left != sanitized || right != *v {
                     panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized},{v})")
                 }
             }
@@ -762,7 +762,7 @@ impl AllFrames {
         self.subsumption
             .get(class)
             .cloned()
-            .unwrap_or(vec![class.to_string()])
+            .unwrap_or_else(|| vec![class.to_string()])
     }
 }
 

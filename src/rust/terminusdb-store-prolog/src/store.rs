@@ -79,13 +79,13 @@ predicates! {
         let mut result_terms = Vec::with_capacity(layer_parent_map.len());
         for (layer, parent) in layer_parent_map {
             let term = context.new_term_ref();
-            term.unify(&pair_functor)?;
-            term.unify_arg(1, &name_to_string(layer))?;
+            term.unify(pair_functor)?;
+            term.unify_arg(1, name_to_string(layer))?;
             match parent {
                 Some(parent) => {
                     let parent_term = context.new_term_ref();
                     parent_term.unify(some_functor)?;
-                    parent_term.unify_arg(1, &name_to_string(parent))?;
+                    parent_term.unify_arg(1, name_to_string(parent))?;
                     term.unify_arg(2, &parent_term)?;
                 },
                 None => {
