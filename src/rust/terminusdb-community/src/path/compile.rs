@@ -167,6 +167,8 @@ fn compile_many<'a>(
 mod tests {
     use terminusdb_store_prolog::terminus_store::open_sync_memory_store;
 
+    use crate::graphql::frame::OneOrMore;
+
     use super::*;
 
     #[test]
@@ -230,7 +232,7 @@ mod tests {
             kind: "@context".to_string(),
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
-            documentation: None,
+            documentation: OneOrMore::More(vec![]),
             metadata: None,
             extra_prefixes: Default::default(),
         };
@@ -293,7 +295,7 @@ mod tests {
             kind: "@context".to_string(),
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
-            documentation: None,
+            documentation: OneOrMore::More(vec![]),
             metadata: None,
             extra_prefixes: Default::default(),
         };
@@ -308,8 +310,7 @@ mod tests {
         );
 
         let result: Vec<_> = path_iter
-            .map(|object| layer.id_object_node(object))
-            .flatten()
+            .filter_map(|object| layer.id_object_node(object))
             .collect();
 
         assert_eq!(result, vec!["http://base/z".to_string()]);
@@ -353,7 +354,7 @@ mod tests {
             kind: "@context".to_string(),
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
-            documentation: None,
+            documentation: OneOrMore::More(vec![]),
             metadata: None,
             extra_prefixes: Default::default(),
         };
@@ -368,8 +369,7 @@ mod tests {
         );
 
         let result: Vec<_> = path_iter
-            .map(|object| layer.id_object_node(object))
-            .flatten()
+            .filter_map(|object| layer.id_object_node(object))
             .collect();
 
         assert_eq!(
