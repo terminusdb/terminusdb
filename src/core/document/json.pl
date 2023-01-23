@@ -3001,8 +3001,12 @@ class_frame(Transaction, Class, Frame, Options) :-
         Inherits \= []
     ->  Pairs9 = ['@inherits'-Inherits|Pairs8]
     ;   Pairs9 = Pairs8),
+    % Unfoldable
+    (   is_unfoldable(Transaction, Class_Ex)
+    ->  Pairs10 = ['@unfoldable'-[]|Pairs9]
+    ;   Pairs10 = Pairs9),
 
-    sort(Pairs9, Sorted_Pairs),
+    sort(Pairs10, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -13933,7 +13937,7 @@ test(choice_with_oneof_abstract,
     Frame = json{'@oneOf':[json{a:['Concrete'],b:'Alternative'}],'@type':'Class'}.
 
 
-test(unfoldable_frame,
+test(unfoldable_in_sub_frame,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
              write_schema(abstract_choice_schema,Desc)
@@ -13947,6 +13951,16 @@ test(unfoldable_frame,
 			      unfoldable:json{'@class':'Unfoldable','@unfoldable':[]}
 			    }.
 
+test(unfoldable_in_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "Unfoldable", Frame),
+    Frame = json{'@type':'Class','@unfoldable':[],data:'xsd:string'}.
 
 :- end_tests(class_frames).
 
