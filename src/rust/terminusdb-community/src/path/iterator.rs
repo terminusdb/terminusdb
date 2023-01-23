@@ -109,15 +109,12 @@ impl<'a, T: Clone> CachedClonableIteratorState<'a, T> {
 
         if current_pos < self.cache.len() {
             Some(self.cache[current_pos].clone())
+        } else if let Some(next) = self.i.next() {
+            self.cache.push(next.clone());
+            Some(next)
         } else {
-            if let Some(next) = self.i.next() {
-                self.cache.push(next.clone());
-
-                Some(next)
-            } else {
-                self.done = true;
-                None
-            }
+            self.done = true;
+            None
         }
     }
 }
@@ -209,7 +206,7 @@ mod tests {
 
     #[test]
     fn cached_iterator() {
-        let i = (0..5000).into_iter();
+        let i = 0..5000;
 
         let mut cached = CachedClonableIterator::new(i);
         assert_eq!(

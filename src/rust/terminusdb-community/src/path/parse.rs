@@ -44,7 +44,7 @@ fn named(input: &str) -> IResult<&str, &str> {
 
 fn num(input: &str) -> IResult<&str, usize> {
     map_res(
-        take_while(|c: char| c.is_digit(10)),
+        take_while(|c: char| c.is_ascii_digit()),
         |digits: &str| -> Result<usize, _> {
             Ok::<usize, ErrorKind>(digits.parse::<usize>().unwrap())
         },
@@ -69,8 +69,8 @@ fn negative(input: &str) -> IResult<&str, Pred> {
 fn patterns(input: &str) -> IResult<&str, Path> {
     alt((
         delimited(tag("("), ands, tag(")")),
-        map(negative, |elt| Path::Negative(elt)),
-        map(positive, |elt| Path::Positive(elt)),
+        map(negative, Path::Negative),
+        map(positive, Path::Positive),
     ))(input)
 }
 
