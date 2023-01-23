@@ -936,6 +936,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                 metadata: None,
                 key: None,
                 is_subdocument: None,
+                is_unfoldable: None,
                 is_abstract: None,
                 inherits: None,
                 one_of: Some(vec![
