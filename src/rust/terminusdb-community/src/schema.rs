@@ -1,5 +1,4 @@
 use crate::terminus_store::layer::*;
-use itertools;
 use lazy_init::Lazy;
 
 use std::collections::{HashMap, HashSet};
@@ -26,9 +25,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
             let mut result = HashMap::new();
             for triple in self.layer.triples_p(inherits_id) {
-                let entry = result
-                    .entry(triple.subject)
-                    .or_insert_with(|| HashSet::new());
+                let entry = result.entry(triple.subject).or_insert_with(HashSet::new);
                 entry.insert(triple.object);
             }
 
@@ -47,9 +44,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
             let mut result = HashMap::new();
             for triple in self.layer.triples_p(inherits_id) {
-                let entry = result
-                    .entry(triple.object)
-                    .or_insert_with(|| HashSet::new());
+                let entry = result.entry(triple.object).or_insert_with(HashSet::new);
                 entry.insert(triple.subject);
             }
 
@@ -68,18 +63,14 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
         let mut work: Vec<_> = get_direct_subdocument_ids_from_schema(self.layer).collect();
-        loop {
-            if let Some(cur) = work.pop() {
-                if !result.insert(cur) {
-                    // we already found this type.
-                    continue;
-                }
+        while let Some(cur) = work.pop() {
+            if !result.insert(cur) {
+                // we already found this type.
+                continue;
+            }
 
-                if let Some(children) = inheritance.get(&cur) {
-                    work.extend(children);
-                }
-            } else {
-                break;
+            if let Some(children) = inheritance.get(&cur) {
+                work.extend(children);
             }
         }
 
@@ -90,25 +81,21 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
         let mut work: Vec<_> = get_direct_unfoldable_ids_from_schema(self.layer).collect();
-        loop {
-            if let Some(cur) = work.pop() {
-                if !result.insert(cur) {
-                    // we already found this type.
-                    continue;
-                }
+        while let Some(cur) = work.pop() {
+            if !result.insert(cur) {
+                // we already found this type.
+                continue;
+            }
 
-                if let Some(children) = inheritance.get(&cur) {
-                    work.extend(children);
-                }
-            } else {
-                break;
+            if let Some(children) = inheritance.get(&cur) {
+                work.extend(children);
             }
         }
 
         result
     }
 
-    pub fn get_set_pairs_from_schema<'b>(&'b self) -> impl Iterator<Item = (u64, u64)> + 'b {
+    pub fn get_set_pairs_from_schema(&'_ self) -> impl Iterator<Item = (u64, u64)> + '_ {
         let sys_set_id = self.layer.object_node_id(SYS_SET);
         if sys_set_id.is_none() {
             return itertools::Either::Left(std::iter::empty());
@@ -126,7 +113,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
             self.layer
                 .triples_o(sys_set_id)
                 .filter(move |t| t.predicate == rdf_type_id)
-                .map(move |t| {
+                .flat_map(move |t| {
                     let set_origin = self
                         .layer
                         .triples_o(t.subject)
@@ -145,8 +132,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
                     }
 
                     r.into_iter()
-                })
-                .flatten(),
+                }),
         )
     }
 
@@ -229,9 +215,9 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
             while let Some(sup) = supers.pop() {
                 if !visited.contains(&sup) {
                     visited.insert(sup);
-                    let entry = result.entry(*sup).or_insert_with(|| HashSet::new());
+                    let entry = result.entry(*sup).or_insert_with(HashSet::new);
                     entry.insert(*sub);
-                    if let Some(more_supers) = inheritance.get(&sup) {
+                    if let Some(more_supers) = inheritance.get(sup) {
                         supers.extend(more_supers.iter());
                     }
                 }

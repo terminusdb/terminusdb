@@ -48,12 +48,11 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
         transaction_term: &Term,
     ) -> PrologResult<TerminusContext<'a, C>> {
         let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
-        let user;
-        if user_ == atom!("anonymous") {
-            user = atom!("terminusdb://system/data/User/anonymous");
+        let user = if user_ == atom!("anonymous") {
+            atom!("terminusdb://system/data/User/anonymous")
         } else {
-            user = user_;
-        }
+            user_
+        };
         let system =
             transaction_instance_layer(context, system_term)?.expect("system layer not found");
         let meta = if meta_term.unify(atomable("none")).is_ok() {
@@ -187,7 +186,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                     };
                     let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
 
-                    Some(add_arguments(&newinfo, registry, field, &c))
+                    Some(add_arguments(&newinfo, registry, field, c))
                 } else {
                     None
                 }
@@ -948,7 +947,7 @@ impl GraphQLType for TerminusOrderBy {
                 .fields
                 .iter()
                 .filter_map(|(field_name, field_definition)| {
-                    if let Some(_) = field_definition.base_type() {
+                    if field_definition.base_type().is_some() {
                         Some(registry.arg::<Option<TerminusOrdering>>(field_name, &()))
                     } else {
                         None

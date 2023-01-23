@@ -533,5 +533,34 @@ query EverythingQuery {
           },
         ])
     })
+
+    it('graphql meta-tags', async function () {
+      const testObj = {
+        '@id': 'Test',
+        '@key': {
+          '@type': 'Random',
+        },
+        '@metadata': {
+          render_as: {
+            test: 'markdown',
+          },
+        },
+        '@type': 'Class',
+        test: {
+          '@class': 'xsd:string',
+          '@type': 'Optional',
+        },
+      }
+      await document.insert(agent, { schema: testObj })
+      const TEST_QUERY = gql`
+ query TestQuery {
+    Test{
+        test
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.Test).to.deep.equal([])
+    })
   })
 })

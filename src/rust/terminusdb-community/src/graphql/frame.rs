@@ -15,6 +15,32 @@ pub struct SchemaDocumentation {
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(untagged)]
+pub enum OneOrMore<T> {
+    One(T),
+    More(Vec<T>),
+}
+
+impl<T> From<OneOrMore<T>> for Vec<T> {
+    fn from(value: OneOrMore<T>) -> Self {
+        match value {
+            OneOrMore::One(o) => vec![o],
+            OneOrMore::More(v) => v,
+        }
+    }
+}
+
+impl<T> OneOrMore<T> {
+    fn into_vec(self) -> Vec<T> {
+        self.into()
+    }
+}
+
+fn empty<T>() -> OneOrMore<T> {
+    OneOrMore::More(vec![])
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct Prefixes {
     #[serde(rename = "@type")]
     pub kind: String,
@@ -23,7 +49,10 @@ pub struct Prefixes {
     #[serde(rename = "@schema")]
     pub schema: String,
     #[serde(rename = "@documentation")]
-    pub documentation: Option<SchemaDocumentation>,
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<SchemaDocumentation>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(flatten)]
     pub extra_prefixes: BTreeMap<String, String>,
 }
@@ -85,7 +114,7 @@ pub struct PropertyDocumentation {
 }
 
 impl PropertyDocumentation {
-    pub fn sanitize(&self) -> PropertyDocumentation {
+    pub fn sanitize(self) -> PropertyDocumentation {
         let mut records = BTreeMap::new();
         for (s, pdr) in self.records.iter() {
             records.insert(graphql_sanitize(s), pdr.clone());
@@ -105,11 +134,11 @@ pub struct ClassDocumentationDefinition {
 }
 
 impl ClassDocumentationDefinition {
-    pub fn sanitize(&self) -> ClassDocumentationDefinition {
+    pub fn sanitize(self) -> ClassDocumentationDefinition {
         ClassDocumentationDefinition {
-            label: self.label.clone(),
-            comment: self.comment.clone(),
-            properties: self.properties.as_ref().map(|pd| pd.sanitize()),
+            label: self.label,
+            comment: self.comment,
+            properties: self.properties.map(move |pd| pd.sanitize()),
         }
     }
 }
@@ -265,20 +294,20 @@ impl FieldDefinition {
         }
     }
 
-    pub fn sanitize(&self) -> FieldDefinition {
+    pub fn sanitize(self) -> FieldDefinition {
         match self {
-            Self::Required(c) => Self::Required(sanitize_class(c)),
-            Self::Optional(c) => Self::Optional(sanitize_class(c)),
-            Self::Set(c) => Self::Set(sanitize_class(c)),
-            Self::List(c) => Self::List(sanitize_class(c)),
+            Self::Required(c) => Self::Required(sanitize_class(&c)),
+            Self::Optional(c) => Self::Optional(sanitize_class(&c)),
+            Self::Set(c) => Self::Set(sanitize_class(&c)),
+            Self::List(c) => Self::List(sanitize_class(&c)),
             Self::Array { class, dimensions } => Self::Array {
-                class: sanitize_class(class),
-                dimensions: *dimensions,
+                class: sanitize_class(&class),
+                dimensions,
             },
             Self::Cardinality { class, min, max } => Self::Cardinality {
-                class: sanitize_class(class),
-                min: *min,
-                max: *max,
+                class: sanitize_class(&class),
+                min,
+                max,
             },
         }
     }
@@ -300,7 +329,7 @@ pub enum KeyDefinition {
 }
 
 impl KeyDefinition {
-    pub fn sanitize(&self) -> KeyDefinition {
+    pub fn sanitize(self) -> KeyDefinition {
         match self {
             KeyDefinition::Random => KeyDefinition::Random,
             KeyDefinition::Lexical { fields } => {
@@ -325,7 +354,10 @@ pub struct OneOf {
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct ClassDefinition {
     #[serde(rename = "@documentation")]
-    pub documentation: Option<ClassDocumentationDefinition>,
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<ClassDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@key")]
     pub key: Option<KeyDefinition>,
     #[serde(rename = "@subdocument")]
@@ -343,11 +375,11 @@ pub struct ClassDefinition {
 }
 
 impl ClassDefinition {
-    pub fn sanitize(&self) -> ClassDefinition {
+    pub fn sanitize(self) -> ClassDefinition {
         let mut field_map: HashMap<String, String> = HashMap::new();
         let mut fields: BTreeMap<String, _> = BTreeMap::new();
-        for (field, fd) in self.fields.iter() {
-            let sanitized_field = graphql_sanitize(field);
+        for (field, fd) in self.fields.into_iter() {
+            let sanitized_field = graphql_sanitize(&field);
             if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
                 if dup != *field {
                     panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
@@ -355,12 +387,12 @@ impl ClassDefinition {
             }
             fields.insert(sanitized_field, fd.sanitize());
         }
-        let one_of = self.one_of.as_ref().map(|o| {
-            o.iter()
+        let one_of = self.one_of.map(|o| {
+            o.into_iter()
                 .map(|c| {
                     let mut choices = BTreeMap::new();
-                    for (field,fd) in c.choices.iter() {
-                        let sanitized_field = graphql_sanitize(field);
+                    for (field,fd) in c.choices.into_iter() {
+                        let sanitized_field = graphql_sanitize(&field);
                         if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
                             if dup != *field {
                                 panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
@@ -372,8 +404,13 @@ impl ClassDefinition {
                 })
                 .collect()
         });
-        let documentation = self.documentation.as_ref().map(|d| d.sanitize());
-        let key = self.key.as_ref().map(|k| k.sanitize());
+        let documentation: Vec<_> = self
+            .documentation
+            .into_vec()
+            .into_iter()
+            .map(move |d| d.sanitize())
+            .collect();
+        let key = self.key.map(|k| k.sanitize());
         let mut field_renaming: HashMap<String, String> = HashMap::new();
         for (s, t) in field_map.iter() {
             field_renaming.insert(s.to_string(), t.to_string());
@@ -389,10 +426,11 @@ impl ClassDefinition {
             None
         };
         ClassDefinition {
-            documentation,
+            documentation: OneOrMore::More(documentation),
+            metadata: self.metadata.clone(),
             key,
             is_subdocument: self.is_subdocument.clone(),
-            is_abstract: self.is_abstract.clone(),
+            is_abstract: self.is_abstract,
             inherits,
             one_of,
             fields,
@@ -459,11 +497,11 @@ pub struct EnumDocumentationDefinition {
 }
 
 impl EnumDocumentationDefinition {
-    pub fn sanitize(&self) -> EnumDocumentationDefinition {
+    pub fn sanitize(self) -> EnumDocumentationDefinition {
         EnumDocumentationDefinition {
             label: self.label.clone(),
             comment: self.comment.clone(),
-            values: self.values.as_ref().map(|pd| pd.sanitize()),
+            values: self.values.map(|pd| pd.sanitize()),
         }
     }
 }
@@ -473,7 +511,10 @@ pub struct EnumDefinition {
     //#[serde(rename = "@type")]
     //pub kind: String,
     #[serde(rename = "@documentation")]
-    pub documentation: Option<EnumDocumentationDefinition>,
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<EnumDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@values")]
     pub values: Vec<String>,
     #[serde(skip_serializing, skip_deserializing)]
@@ -481,21 +522,27 @@ pub struct EnumDefinition {
 }
 
 impl EnumDefinition {
-    pub fn sanitize(&self) -> EnumDefinition {
+    pub fn sanitize(self) -> EnumDefinition {
         let mut values_renaming: BiMap<String, String> = BiMap::new();
         let values = self.values.iter().map(|v| {
             let sanitized = graphql_sanitize(v);
             let res = values_renaming.insert_no_overwrite(sanitized.to_string(), v.to_string());
             if let Err((left,right)) = res {
-                if left != sanitized.to_string() || right != v.to_string() {
+                if left != sanitized || right != *v {
                     panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized},{v})")
                 }
             }
             sanitized
         }).collect();
-        let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
+        let documentation: Vec<_> = self
+            .documentation
+            .into_vec()
+            .into_iter()
+            .map(|ed| ed.sanitize())
+            .collect();
         EnumDefinition {
-            documentation,
+            documentation: OneOrMore::More(documentation),
+            metadata: self.metadata,
             values,
             values_renaming: Some(values_renaming),
         }
@@ -563,13 +610,10 @@ impl TypeDefinition {
 
 impl FieldKind {
     pub fn is_collection(&self) -> bool {
-        match self {
-            Self::Set => true,
-            Self::Array => true,
-            Self::List => true,
-            Self::Cardinality => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Set | Self::Array | Self::List | Self::Cardinality
+        )
     }
 }
 
@@ -599,11 +643,17 @@ impl PreAllFrames {
         }
     }
 
-    pub fn sanitize(&self) -> (BTreeMap<String, TypeDefinition>, BiMap<String, String>) {
+    pub fn sanitize(
+        self,
+    ) -> (
+        BTreeMap<String, TypeDefinition>,
+        BiMap<String, String>,
+        Prefixes,
+    ) {
         let mut class_renaming: BiMap<String, String> = BiMap::new();
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
-        for (class_name, typedef) in self.frames.iter() {
-            let sanitized_class = graphql_sanitize(class_name);
+        for (class_name, typedef) in self.frames.into_iter() {
+            let sanitized_class = graphql_sanitize(&class_name);
             let res =
                 class_renaming.insert_no_overwrite(sanitized_class.clone(), class_name.clone());
             if let Err((left, right)) = res {
@@ -615,7 +665,7 @@ impl PreAllFrames {
             };
             frames.insert(sanitized_class.clone(), new_typedef);
         }
-        (frames, class_renaming)
+        (frames, class_renaming, self.context)
     }
 
     pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
@@ -641,10 +691,9 @@ impl PreAllFrames {
     }
 
     pub fn finalize(mut self) -> AllFrames {
-        let (frames, class_renaming) = self.sanitize();
         let inverted = allframes_to_allinvertedframes(&self);
         let subsumption = self.calculate_subsumption();
-        let context = self.context;
+        let (frames, class_renaming, context) = self.sanitize();
 
         AllFrames {
             context,
@@ -713,7 +762,7 @@ impl AllFrames {
         self.subsumption
             .get(class)
             .cloned()
-            .unwrap_or(vec![class.to_string()])
+            .unwrap_or_else(|| vec![class.to_string()])
     }
 }
 
@@ -811,7 +860,8 @@ _{'@base': "http://some_base/",
         assert_eq!(
             Prefixes {
                 kind: "Context".to_string(),
-                documentation: None,
+                documentation: OneOrMore::More(vec![]),
+                metadata: None,
                 base: "http://some_base/".to_string(),
                 schema: "http://some_schema#".to_string(),
                 extra_prefixes: BTreeMap::from([
@@ -879,7 +929,8 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
         assert_eq!(
             TypeDefinition::Class(ClassDefinition {
                 field_renaming: None,
-                documentation: None,
+                documentation: OneOrMore::More(vec![]),
+                metadata: None,
                 key: None,
                 is_subdocument: None,
                 is_abstract: None,
@@ -966,12 +1017,13 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
 
 "#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let typedef: TypeDefinition = dbg!(context.deserialize_from_term(&term)).unwrap();
+        let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
 
         assert_eq!(
             TypeDefinition::Enum(EnumDefinition {
                 values_renaming: None,
-                documentation: Some(EnumDocumentationDefinition {
+                metadata: None,
+                documentation: OneOrMore::One(EnumDocumentationDefinition {
                     label: None,
                     values: None,
                     comment: Some(
@@ -1194,5 +1246,44 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
             allframes.inverted.classes["Bar"].domain["_c_of_Foo"].kind,
             FieldKind::Set
         )
+    }
+
+    #[test]
+    fn complex_documentation() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"json{
+                      '@context': json{
+                         '@base': "terminusdb:///data/",
+                         '@documentation': [
+                              json{'@authors':["Gavin Mendel-Gleason"],
+                                   '@description':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+                                   '@language':"en",
+                                   '@title':"Example Schema"},
+                              json{'@authors':["გავინ მენდელ-გლისონი"],
+                                   '@description':"ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
+                                   '@language':"ka",
+                                   '@title':"მაგალითი სქემა"}
+                         ],
+                         '@schema': "terminusdb:///schema#",
+                         '@type': "@context",
+                         xsd: "http://www.w3.org/2001/XMLSchema#"
+                      }}"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let pre_allframes: PreAllFrames = context.deserialize_from_term(&term).unwrap();
+        let allframes = pre_allframes.finalize();
+        assert_eq!(allframes.context.documentation,
+                   OneOrMore::More(vec![
+                       SchemaDocumentation {
+                           title: Some("Example Schema".to_string()),
+                           description: Some("This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.".to_string()),
+                           authors: Some(vec!["Gavin Mendel-Gleason".to_string()]) },
+                       SchemaDocumentation {
+                           title: Some("მაგალითი სქემა".to_string()),
+                           description: Some("ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.".to_string()),
+                           authors: Some(vec!["გავინ მენდელ-გლისონი".to_string()])
+                       }]))
     }
 }
