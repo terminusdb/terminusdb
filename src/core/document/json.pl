@@ -2834,6 +2834,10 @@ type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
         ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
             Frame = json{ '@class' : Class_Comp,
                           '@subdocument' : []}
+        ;   is_unfoldable(DB,C)
+        ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
+            Frame = json{ '@class' : Class_Comp,
+                          '@unfoldable' : []}
         ;   compress_schema_uri(C, Prefixes, Frame, Options)
         )
     ).
@@ -2997,8 +3001,12 @@ class_frame(Transaction, Class, Frame, Options) :-
         Inherits \= []
     ->  Pairs9 = ['@inherits'-Inherits|Pairs8]
     ;   Pairs9 = Pairs8),
+    % Unfoldable
+    (   is_unfoldable(Transaction, Class_Ex)
+    ->  Pairs10 = ['@unfoldable'-[]|Pairs9]
+    ;   Pairs10 = Pairs9),
 
-    sort(Pairs9, Sorted_Pairs),
+    sort(Pairs10, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -13902,6 +13910,19 @@ abstract_choice_schema('
   "@oneOf" : { "a" : "Abstract",
                "b" : "Alternative" }}
 
+{ "@type": "Class",
+  "@id": "HasUnfoldable",
+  "unfoldable" : "Unfoldable",
+  "not_unfoldable" : "NotUnfoldable" }
+
+{ "@type" : "Class",
+  "@id" : "Unfoldable",
+  "@unfoldable" : [],
+  "data" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "NotUnfoldable",
+  "data" : "xsd:string" }
 ').
 
 test(choice_with_oneof_abstract,
@@ -13915,6 +13936,31 @@ test(choice_with_oneof_abstract,
     class_frame(Desc, "Choice", Frame),
     Frame = json{'@oneOf':[json{a:['Concrete'],b:'Alternative'}],'@type':'Class'}.
 
+
+test(unfoldable_in_sub_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "HasUnfoldable", Frame),
+    Frame = json{ '@type':'Class',
+			      not_unfoldable:'NotUnfoldable',
+			      unfoldable:json{'@class':'Unfoldable','@unfoldable':[]}
+			    }.
+
+test(unfoldable_in_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "Unfoldable", Frame),
+    Frame = json{'@type':'Class','@unfoldable':[],data:'xsd:string'}.
 
 :- end_tests(class_frames).
 
