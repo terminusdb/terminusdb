@@ -2834,6 +2834,10 @@ type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
         ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
             Frame = json{ '@class' : Class_Comp,
                           '@subdocument' : []}
+        ;   is_unfoldable(DB,C)
+        ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
+            Frame = json{ '@class' : Class_Comp,
+                          '@unfoldable' : []}
         ;   compress_schema_uri(C, Prefixes, Frame, Options)
         )
     ).
@@ -13902,6 +13906,19 @@ abstract_choice_schema('
   "@oneOf" : { "a" : "Abstract",
                "b" : "Alternative" }}
 
+{ "@type": "Class",
+  "@id": "HasUnfoldable",
+  "unfoldable" : "Unfoldable",
+  "not_unfoldable" : "NotUnfoldable" }
+
+{ "@type" : "Class",
+  "@id" : "Unfoldable",
+  "@unfoldable" : [],
+  "data" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "NotUnfoldable",
+  "data" : "xsd:string" }
 ').
 
 test(choice_with_oneof_abstract,
@@ -13914,6 +13931,21 @@ test(choice_with_oneof_abstract,
 
     class_frame(Desc, "Choice", Frame),
     Frame = json{'@oneOf':[json{a:['Concrete'],b:'Alternative'}],'@type':'Class'}.
+
+
+test(unfoldable_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "HasUnfoldable", Frame),
+    Frame = json{ '@type':'Class',
+			      not_unfoldable:'NotUnfoldable',
+			      unfoldable:json{'@class':'Unfoldable','@unfoldable':[]}
+			    }.
 
 
 :- end_tests(class_frames).

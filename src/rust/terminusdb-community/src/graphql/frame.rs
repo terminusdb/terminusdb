@@ -362,6 +362,8 @@ pub struct ClassDefinition {
     pub key: Option<KeyDefinition>,
     #[serde(rename = "@subdocument")]
     pub is_subdocument: Option<Vec<()>>,
+    #[serde(rename = "@unfoldable")]
+    pub is_unfoldable: Option<Vec<()>>,
     #[serde(rename = "@abstract")]
     pub is_abstract: Option<Vec<()>>,
     #[serde(rename = "@oneOf")]
@@ -430,6 +432,7 @@ impl ClassDefinition {
             metadata: self.metadata.clone(),
             key,
             is_subdocument: self.is_subdocument.clone(),
+            is_unfoldable: self.is_unfoldable.clone(),
             is_abstract: self.is_abstract,
             inherits,
             one_of,
