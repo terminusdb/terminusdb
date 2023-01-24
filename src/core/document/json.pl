@@ -13944,7 +13944,7 @@ test(unfoldable_in_sub_frame,
     class_frame(Desc, "HasUnfoldable", Frame),
     Frame = json{ '@type':'Class',
 			      not_unfoldable:'NotUnfoldable',
-			      unfoldable:json{'@class':'Unfoldable','@unfoldable':[]}
+			      unfoldable: 'Unfoldable'
 			    }.
 
 test(unfoldable_in_frame,
