@@ -2834,10 +2834,6 @@ type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
         ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
             Frame = json{ '@class' : Class_Comp,
                           '@subdocument' : []}
-        ;   is_unfoldable(DB,C)
-        ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
-            Frame = json{ '@class' : Class_Comp,
-                          '@unfoldable' : []}
         ;   compress_schema_uri(C, Prefixes, Frame, Options)
         )
     ).
