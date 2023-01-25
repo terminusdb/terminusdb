@@ -1,17 +1,30 @@
 # TerminusDB Server v11.0.0 Release Notes
 
+This release changes the storage format of TerminusDB. After
+installing this version, you will also need to upgrade your storage
+directory, or the server will not start. A conversion tool is provided
+at
+[terminusdb-10-to-11](https://github.com/terminusdb/terminusdb-10-to-11). This
+is also bundled with
+[terminusdb-bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+
 ## Enhancements
 
-* Introduce a layer archive format reducing storage use and latency
-  and simplifying interchange
-* Added typed storage for a wide variety of XSD types, reducing storage
-  overhead and improving search performance
+* New Storage backend
+  - Added typed storage for a wide variety of XSD types, reducing
+    storage overhead and improving search performance
+  - Introduce a layer archive format reducing storage use and latency
+    and simplifying interchange.
 * GraphQL `_type` added to objects to return the exact rather than subsumed type
+* Added `@unfoldable` document flag to frames
+* Add `@metadata` to frames
 
-## Bus fixes
+## Bug fixes
 
 * Fixed a bug in inverse fields in GraphQL
 * Removed extraneous system objects from GraphQL schema
+* Improved completeness of GraphQL schema handling
+* Added x-method-override header to CORS
 
 # TerminusDB Server v10.1.11 Release Notes
 
