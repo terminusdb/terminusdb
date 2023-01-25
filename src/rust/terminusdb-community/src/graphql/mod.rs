@@ -26,10 +26,7 @@ predicates! {
 
         let request =
             match serde_json::from_slice::<GraphQLRequest>(&buf) {
-                Ok(r) => {
-                    log_debug!(context, "request: {:?}", r)?;
-                    r
-                },
+                Ok(r) => r,
                 Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
             };
 
@@ -44,8 +41,6 @@ predicates! {
         let graphql_context = TerminusContext::new(context, auth_term, system_term, meta_term, commit_term,transaction_term)?;
 
         let response = request.execute_sync(&root_node, &graphql_context);
-
-        log_debug!(context, "graphql response: {:?}", response)?;
 
         match serde_json::to_string(&response){
             Ok(r) => response_term.unify(r),
