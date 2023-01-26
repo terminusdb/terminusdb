@@ -202,9 +202,15 @@ api_global_error_jsonld(error(remote_connection_failure(Status, Response), _), T
     ;   Opening_Msg = "Remote connection failed"
     ),
     % Needs more options....
-    (   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response,
-        _{'@type' : "api:NotALinearHistory"} :< Error
-    ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
+    (   \+ is_dict(Response)
+    ->  format(string(Msg), "~s: ~q", [Opening_Msg,Response])
+    ;   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response,
+        (   \+ is_dict(Error)
+        ->  format(string(Msg), "~s: ~q", [Opening_Msg, Error])
+        ;   _{'@type' : "api:NotALinearHistory"} :< Error
+        ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
+        ;   format(string(Msg), "~s for an unknown reason", [Opening_Msg])
+        )
     ;   get_dict('api:message', Response, Response_Msg)
     ->  format(string(Msg), "~s: ~s", [Opening_Msg, Response_Msg])
     ;   format(string(Msg), "~s for an unknown reason", [Opening_Msg])
