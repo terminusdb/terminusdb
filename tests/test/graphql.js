@@ -103,7 +103,13 @@ describe('GraphQL', function () {
       '@fields': ['name'],
     },
     name: 'xsd:string',
-  }]
+  },
+  {
+    '@id': 'MaybeRocks',
+    '@type': 'Class',
+    rocks_opt: { '@type': 'Optional', '@class': 'Rocks' },
+  },
+  ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
   const plato = { '@type': 'Person', name: 'Plato', age: '80', order: '2', friend: ['Person/Aristotle'] }
@@ -561,6 +567,27 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.Test).to.deep.equal([])
+    })
+
+    it('graphql optional enum', async function () {
+      const testObj = {
+        '@type': 'MaybeRocks',
+        rocks_opt: 'Big',
+      }
+      await document.insert(agent, { instance: testObj })
+      const TEST_QUERY = gql`
+ query TestRocks {
+    MaybeRocks{
+        rocks_opt
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.MaybeRocks).to.deep.equal([
+        {
+          rocks_opt: 'Big',
+        },
+      ])
     })
   })
 })
