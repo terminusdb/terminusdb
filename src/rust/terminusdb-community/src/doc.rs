@@ -513,7 +513,7 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
                 for index_id in self.sys_index_ids {
                     if let Some(index_triple) = self.layer.single_triple_sp(t.object, *index_id) {
                         let index_value = self.layer.id_object_value(index_triple.object).unwrap();
-                        let index = value_to_usize(&index_value);
+                        let index = value_to_array_index(&index_value);
                         indexes.push(index);
                     } else {
                         // no more indexes to come
