@@ -360,6 +360,6 @@ impl FromInputValue for ScalarInputValue {
     }
 }
 
-pub fn value_to_usize(tde: &TypedDictEntry) -> usize {
-    tde.as_val::<u32, u32>() as usize
+pub fn value_to_array_index(tde: &TypedDictEntry) -> usize {
+    tde.as_val::<NonNegativeInteger, Integer>().try_into().expect("couldn't cast array element index to a usize")
 }
