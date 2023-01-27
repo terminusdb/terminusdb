@@ -693,6 +693,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                         },
                                         &TerminusType::new(object_id),
                                     ))
+                                } else if let Some(enum_type) = enum_type {
+                                    let enum_uri = instance.id_object_node(object_id).unwrap();
+                                    let enum_value = enum_node_to_value(enum_type, &enum_uri);
+                                    let enum_definition = allframes.frames[enum_type].as_enum_definition();
+                                    let value = juniper::Value::Scalar(DefaultScalarValue::String(
+                                        enum_definition.name_value(&enum_value).to_string(),
+                                    ));
+                                    Some(Ok(value))
                                 } else {
                                     let val = instance.id_object_value(object_id).unwrap();
                                     Some(Ok(value_to_graphql(&val)))
