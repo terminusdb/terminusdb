@@ -1,12 +1,21 @@
 # TerminusDB Server v11.0.0 Release Notes
 
-This release changes the storage format of TerminusDB. After
-installing this version, you will also need to upgrade your storage
-directory, or the server will not start. A conversion tool is provided
-at
-[terminusdb-10-to-11](https://github.com/terminusdb/terminusdb-10-to-11). This
-is also bundled with
-[terminusdb-bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+## Backwards-Incompatible Changes
+
+* This release changes the storage format of TerminusDB. After
+  installing this version, you will also need to upgrade your storage
+  directory, or the server will not start. A conversion tool is
+  provided at
+  [terminusdb-10-to-11](https://github.com/terminusdb/terminusdb-10-to-11). This
+  is also bundled with
+  [terminusdb-bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+* TerminusDB 11 now responds to `xsd:integer`, `xsd:decimal`, and all
+  of the unbounded sub-types of these two objects in the document
+  interface with strings. This is because many (even most) JSON
+  libraries can not handle arbitrary precision integers, and (few if
+  any) can handle arbitrary precision floats. It should still be
+  possible to submit documents using integers or floats, but when
+  returned they will be strings.
 
 ## Enhancements
 
@@ -25,6 +34,7 @@ is also bundled with
 * Removed extraneous system objects from GraphQL schema
 * Improved completeness of GraphQL schema handling
 * Added x-method-override header to CORS
+
 
 # TerminusDB Server v10.1.11 Release Notes
 
