@@ -13,6 +13,7 @@
 :- use_module(core(account)).
 :- use_module(library(http/http_client)).
 :- use_module(core(document)).
+:- use_module(config(terminus_config), [terminusdb_version/1]).
 
 :- use_module(library(tus)).
 :- use_module(library(plunit)).
@@ -154,10 +155,12 @@ remote_tus_url(URL, TUS_URL) :-
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
+    terminusdb_version(Version),
     catch(
         (   % Try TUS protocol (we could check resulting options too for create etc...)
             remote_tus_url(Remote_URL, TUS_URL),
-            tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization)]),
+            tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization),
+                                                request_header('TerminusDB-Version'=Version)]),
             Using_TUS = true,
 
             % We use a random string as a file extension, because
@@ -171,7 +174,8 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                 close(Stream)
             ),
 
-            tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
+            tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization),
+                                                         request_header('TerminusDB-Version'=Version)]),
             Data = json(_{resource_uri : Resource_URL})
         ),
         error(Err, _),
@@ -189,6 +193,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     Data,
                     Result,
                     [request_header('Authorization'=Authorization),
+                     request_header('TerminusDB-Version'=Version),
                      json_object(dict),
                      timeout(infinite),
                      status_code(Status_Code)
@@ -200,7 +205,8 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ->  (   Using_TUS = true
         ->  tus_delete(Resource_URL, [tus_extension([termination])],
                        % assume extension to avoid pointless pre-flight
-                       [request_header('Authorization'=Authorization)])
+                       [request_header('Authorization'=Authorization),
+                        request_header('TerminusDB-Version'=Version)])
         ;   true)
     ;   throw(error(remote_connection_failure(Status_Code, Result), _))
     ).

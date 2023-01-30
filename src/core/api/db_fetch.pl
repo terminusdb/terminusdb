@@ -13,6 +13,7 @@
 :- use_module(library(http/http_client)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
+:- use_module(config(terminus_config), [terminusdb_version/1]).
 
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
 remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
@@ -73,11 +74,14 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ;   Document = _{}),
 
     remote_pack_url(URL,Pack_URL),
+    terminusdb_version(Version),
 
     catch(
         http_post(
             Pack_URL, json(Document), Payload,
-            [request_header('Authorization'=Authorization), json_object(dict), status_code(Status)]),
+            [request_header('Authorization'=Authorization),
+             request_header('TerminusDB-Version'=Version),
+             json_object(dict), status_code(Status)]),
         error(Err, _),
         throw(error(http_open_error(Err), _))
     ),
