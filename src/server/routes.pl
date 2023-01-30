@@ -3028,10 +3028,10 @@ cors_handler(Method, Goal, Options, R) :-
             ->  add_payload_to_request(R,Request)
             ;   Request = R),
 
-            open_descriptor(system_descriptor{}, System_Database),
             catch((   (   option(skip_authentication(true), Options)
                       ->  true
-                      ;   authenticate(System_Database, Request, Auth)),
+                      ;   open_descriptor(system_descriptor{}, System_Database),
+                          authenticate(System_Database, Request, Auth)),
                       call_http_handler(Method, Goal, Request, System_Database, Auth)),
 
                   error(authentication_incorrect(Reason),_),
