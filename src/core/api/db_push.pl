@@ -13,6 +13,7 @@
 :- use_module(core(account)).
 :- use_module(library(http/http_client)).
 :- use_module(core(document)).
+:- use_module(config(terminus_config), [terminusdb_version/1]).
 
 :- use_module(library(tus)).
 :- use_module(library(plunit)).

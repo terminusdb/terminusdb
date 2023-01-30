@@ -13,6 +13,7 @@
 :- use_module(library(http/http_client)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
+:- use_module(config(terminus_config), [terminusdb_version/1]).
 
 :- meta_predicate remote_fetch(+, +, +, 3, -, -).
 remote_fetch(System_DB, Auth, Path, Fetch_Predicate, New_Head_Layer_Id, Head_Has_Updated) :-
