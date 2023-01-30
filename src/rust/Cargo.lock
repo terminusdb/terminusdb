@@ -36,12 +36,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.68"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cb2f989d18dd141ab8ae82f64d1a8cdd37e0840f73a406896cf5e99502fab61"
-
-[[package]]
 name = "ascii"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -761,10 +755,8 @@ dependencies = [
 [[package]]
 name = "juniper"
 version = "0.15.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f478f229a8ab52ff242f3250c8b3b8fe0a59b5b934f9706b7bdbc980991a7b6"
+source = "git+https://github.com/terminusdb-labs/juniper.git?branch=smartstring-update-backport#16f8c3f22b738c304bbf68723fd144c6ac962b0f"
 dependencies = [
- "anyhow",
  "async-trait",
  "bson",
  "chrono",
@@ -775,7 +767,6 @@ dependencies = [
  "indexmap",
  "juniper_codegen",
  "serde",
- "serde_json",
  "smartstring",
  "static_assertions",
  "url",
@@ -785,8 +776,7 @@ dependencies = [
 [[package]]
 name = "juniper_codegen"
 version = "0.15.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aee97671061ad50301ba077d054d295e01d31a1868fbd07902db651f987e71db"
+source = "git+https://github.com/terminusdb-labs/juniper.git?branch=smartstring-update-backport#16f8c3f22b738c304bbf68723fd144c6ac962b0f"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -1325,11 +1315,13 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "smartstring"
-version = "0.2.10"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e714dff2b33f2321fdcd475b71cec79781a692d846f37f415fb395a1d2bcd48e"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
 dependencies = [
+ "autocfg",
  "static_assertions",
+ "version_check",
 ]
 
 [[package]]
