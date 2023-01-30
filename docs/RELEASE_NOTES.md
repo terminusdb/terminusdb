@@ -34,7 +34,7 @@
 * Removed extraneous system objects from GraphQL schema
 * Improved completeness of GraphQL schema handling
 * Added x-method-override header to CORS
-
+* Fixed GraphQL naming bug leading to GraphQL schema crashes
 
 # TerminusDB Server v10.1.11 Release Notes
 
