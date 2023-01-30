@@ -1,17 +1,40 @@
 # TerminusDB Server v11.0.0 Release Notes
 
+## Backwards-Incompatible Changes
+
+* This release changes the storage format of TerminusDB. After
+  installing this version, you will also need to upgrade your storage
+  directory, or the server will not start. A conversion tool is
+  provided at
+  [terminusdb-10-to-11](https://github.com/terminusdb/terminusdb-10-to-11). This
+  is also bundled with
+  [terminusdb-bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+* TerminusDB 11 now responds to `xsd:integer`, `xsd:decimal`, and all
+  of the unbounded sub-types of these two objects in the document
+  interface with strings. This is because many (even most) JSON
+  libraries can not handle arbitrary precision integers, and (few if
+  any) can handle arbitrary precision floats. It should still be
+  possible to submit documents using integers or floats, but when
+  returned they will be strings.
+
 ## Enhancements
 
-* Introduce a layer archive format reducing storage use and latency
-  and simplifying interchange
-* Added typed storage for a wide variety of XSD types, reducing storage
-  overhead and improving search performance
+* New Storage backend
+  - Added typed storage for a wide variety of XSD types, reducing
+    storage overhead and improving search performance
+  - Introduce a layer archive format reducing storage use and latency
+    and simplifying interchange.
 * GraphQL `_type` added to objects to return the exact rather than subsumed type
+* Added `@unfoldable` document flag to frames
+* Add `@metadata` to frames
 
-## Bus fixes
+## Bug fixes
 
 * Fixed a bug in inverse fields in GraphQL
 * Removed extraneous system objects from GraphQL schema
+* Improved completeness of GraphQL schema handling
+* Added x-method-override header to CORS
+* Fixed GraphQL naming bug leading to GraphQL schema crashes
 
 # TerminusDB Server v10.1.11 Release Notes
 
