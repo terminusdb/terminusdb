@@ -17,7 +17,9 @@
 
               add_user_organization_transaction/4,
 
-              user_organizations/3
+              user_organizations/3,
+
+              generate_password_hash/2
           ]).
 
 :- use_module(core(util)).
@@ -31,6 +33,8 @@
 :- use_module(library(crypto)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
+
+:- use_module(config(terminus_config), [crypto_password_cost/1]).
 
 /** <module> User
  *
@@ -148,6 +152,14 @@ add_user(Nick, Pass_Opt, User_URI) :-
                      add_user(SystemDB, Nick, Pass_Opt, User_URI),
                      _).
 
+generate_password_hash(_Password, Hash) :-
+    (   ground(Hash)
+    ->  throw(error(hash_not_ground, _))
+    ;   fail).
+generate_password_hash(Password, Hash) :-
+    crypto_password_cost(Cost),
+    crypto_password_hash(Password, Hash, [cost(Cost)]).
+
 add_user(SystemDB, Nick, Pass_Opt, User_URI) :-
 
     (   agent_name_exists(SystemDB, Nick)
@@ -165,7 +177,7 @@ add_user(SystemDB, Nick, Pass_Opt, User_URI) :-
                         ]
                     },
     (   some(Pass) = Pass_Opt
-    ->  crypto_password_hash(Pass,Hash),
+    ->  generate_password_hash(Pass,Hash),
         atom_string(Hash,Hash_String),
         Final_User_Document = (User_Document.put(key_hash, Hash_String))
     ;   Final_User_Document = User_Document),
@@ -206,7 +218,7 @@ update_user(SystemDB, Name, Document) :-
 
     do_or_die(
         (   get_dict(password, Document, Password),
-            crypto_password_hash(Password,Hash),
+            generate_password_hash(Password,Hash),
             ask(SystemDB,
                 (   t(User_Uri, key_hash, Old_Hash^^xsd:string),
                     delete(User_Uri, key_hash, Old_Hash^^xsd:string),

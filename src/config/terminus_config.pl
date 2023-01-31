@@ -32,7 +32,8 @@
               plugin_path/1,
               dashboard_enabled/0,
               parallelize_enabled/0,
-              grpc_label_endpoint/1
+              grpc_label_endpoint/1,
+              crypto_password_cost/1
           ]).
 
 :- use_module(library(pcre)).
@@ -297,3 +298,5 @@ parallelize_enabled :-
 :- table grpc_label_endpoint/1.
 grpc_label_endpoint(Endpoint) :-
     getenv('TERMINUSDB_GRPC_LABEL_ENDPOINT', Endpoint).
+
+crypto_password_cost(10).
