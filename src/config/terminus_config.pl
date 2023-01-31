@@ -31,7 +31,8 @@
               pinned_databases/1,
               plugin_path/1,
               dashboard_enabled/0,
-              parallelize_enabled/0
+              parallelize_enabled/0,
+              crypto_password_cost/1
           ]).
 
 :- use_module(library(pcre)).
@@ -292,3 +293,5 @@ pinned_databases([]).
 :- table parallelize_enabled.
 parallelize_enabled :-
     getenv_default('TERMINUSDB_PARALLELIZE_ENABLED', true, true).
+
+crypto_password_cost(10).

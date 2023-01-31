@@ -13,6 +13,7 @@
 :- use_module(core(document)).
 :- use_module(core(query), [expand/2, default_prefixes/1]).
 :- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(account), [generate_password_hash/2]).
 
 :- use_module(config(terminus_config)).
 
@@ -23,7 +24,6 @@
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
 :- use_module(library(filesex)).
-:- use_module(library(crypto)).
 :- use_module(library(git), [git_hash/2]).
 
 /**
@@ -179,7 +179,7 @@ initialize_system_instance(Store, Schema_Layer, Key, Force) :-
     open_descriptor(Descriptor, Transaction_Object),
 
     template_system_instance(Template_Instance_String),
-    crypto_password_hash(Key,Hash, [cost(15)]),
+    generate_password_hash(Key,Hash),
     format(string(Instance_String), Template_Instance_String, [Hash]),
     open_string(Instance_String, Instance_Stream),
     create_graph_from_json(Store,Instance_Name,Instance_Stream,
