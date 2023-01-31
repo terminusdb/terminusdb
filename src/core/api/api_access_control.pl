@@ -527,7 +527,7 @@ api_add_user(SystemDB,Auth,User,Id) :-
 
     get_dict(name, User, Name),
     (   get_dict(password, User, Password)
-    ->  crypto_password_hash(Password, Hash)
+    ->  generate_password_hash(Password, Hash)
     ;   Hash = null
     ),
     New_User =
@@ -656,7 +656,7 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
         ;   get_dict('@id', User, Auth)),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    crypto_password_hash(Password, Hash),
+    generate_password_hash(Password, Hash),
     put_dict(_{ key_hash : Hash}, User, New_User),
 
     create_context(System_DB, commit_info{author: "admin", message: "API: Update User Password"},
