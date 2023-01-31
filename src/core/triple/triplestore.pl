@@ -222,8 +222,8 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
-%pinned_graph_label(X) :-
-%    system_schema_name(X).
+pinned_graph_label(X) :-
+    system_schema_name(X).
 pinned_graph_label(X) :-
     repository_ontology(X).
 pinned_graph_label(X) :-
