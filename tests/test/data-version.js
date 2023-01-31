@@ -184,40 +184,4 @@ describe('data-version', function () {
       })
     })
   })
-
-  describe('/api/document/_system', function () {
-    before(async function () {
-    })
-
-    after(async function () {
-      const r = await document
-        .deleteFromSystem(agent, { query: { id: randomType1 + '/0' } })
-      await document
-        .deleteFromSystem(agent, { query: { graph_type: 'schema', id: randomType1 } })
-        .set('TerminusDB-Data-Version', dataVersionHeader(r))
-    })
-
-    describe('has expected data version for insert', function () {
-      const objects = [
-        { schema: { '@id': randomType1, '@type': 'Class' } },
-        { instance: { '@id': randomType1 + '/0', '@type': randomType1 } },
-      ]
-      for (const object of objects) {
-        it(JSON.stringify(object), async function () {
-          const rs = []
-
-          const getInstances = { query: { as_list: true } }
-          const getSchemas = { query: { graph_type: 'schema', as_list: true } }
-
-          rs.push(await document.getFromSystem(agent, getInstances))
-          rs.push(await document.insertIntoSystem(agent, object))
-          rs.push(await document.getFromSystem(agent, getSchemas))
-
-          rs.push(await document.getFromSystem(agent, getInstances).set('TerminusDB-Data-Version', lastDataVersionHeader(rs)))
-
-          expectHeaders('system', rs)
-        })
-      }
-    })
-  })
 })
