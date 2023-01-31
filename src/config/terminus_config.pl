@@ -31,7 +31,8 @@
               pinned_databases/1,
               plugin_path/1,
               dashboard_enabled/0,
-              parallelize_enabled/0
+              parallelize_enabled/0,
+              grpc_label_endpoint/1
           ]).
 
 :- use_module(library(pcre)).
@@ -292,3 +293,7 @@ pinned_databases([]).
 :- table parallelize_enabled.
 parallelize_enabled :-
     getenv_default('TERMINUSDB_PARALLELIZE_ENABLED', true, true).
+
+:- table grpc_label_endpoint/1.
+grpc_label_endpoint(Endpoint) :-
+    getenv('TERMINUSDB_GRPC_LABEL_ENDPOINT', Endpoint).

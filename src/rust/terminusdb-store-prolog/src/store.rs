@@ -3,8 +3,12 @@ use crate::layer::*;
 use crate::named_graph::*;
 use std::io::{self, Cursor};
 use swipl::prelude::*;
-use terminus_store::storage::{name_to_string, pack_layer_parents, string_to_name, PackError};
-use terminus_store::store::sync::*;
+use terminus_store::storage::CachedLayerStore;
+use terminus_store::storage::LockingHashMapLayerCache;
+use terminus_store::storage::{name_to_string, pack_layer_parents, string_to_name, PackError, archive::ArchiveLayerStore};
+use terminus_store::store::{Store, sync::*};
+
+use terminusdb_grpc_labelstore_client::GrpcLabelStore;
 
 predicates! {
     pub semidet fn open_memory_store(_context, term) {
@@ -21,6 +25,19 @@ predicates! {
     pub semidet fn open_archive_store(_context, dir_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let store = open_sync_archive_store(&*dir);
+        out_term.unify(&WrappedStore(store))
+    }
+
+    pub semidet fn open_grpc_store(context, dir_term, address_term, initial_pool_term, out_term) {
+        let dir: PrologText = dir_term.get_ex()?;
+        let address: PrologText = address_term.get_ex()?;
+        let pool_size: u64 = initial_pool_term.get_ex()?;
+        let layer_store = CachedLayerStore::new(ArchiveLayerStore::new(&*dir), LockingHashMapLayerCache::new());
+
+        let label_store = context.try_or_die_generic(task_sync(GrpcLabelStore::new(address.to_string(), pool_size as usize)))?;
+
+        let store = SyncStore::wrap(Store::new(label_store, layer_store));
+
         out_term.unify(&WrappedStore(store))
     }
 
