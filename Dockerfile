@@ -17,7 +17,7 @@ RUN make
 FROM terminusdb/swipl:v9.0.3 AS rust_builder_base
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
-    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev"; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
