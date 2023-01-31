@@ -103,3 +103,4 @@
 :- use_module('document/apply').
 :- use_module('document/inference').
 :- use_module('document/json_rdf').
+:- use_module('document/migration').
