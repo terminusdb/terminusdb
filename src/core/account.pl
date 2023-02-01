@@ -37,7 +37,8 @@
               add_organization/2,
               add_organization/3,
               add_organization_transaction/3,
-              add_user_organization_transaction/4
+              add_user_organization_transaction/4,
+              generate_password_hash/2
 
           ]).
 
