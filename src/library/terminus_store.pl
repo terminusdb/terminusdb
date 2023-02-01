@@ -1,8 +1,9 @@
 :- module(terminus_store, [
               terminus_store_version/1,
               open_memory_store/1,
+              open_directory_store/2,
               open_archive_store/2,
-              open_archive_store/2,
+              open_grpc_store/4,
 
               create_named_graph/3,
               open_named_graph/3,
