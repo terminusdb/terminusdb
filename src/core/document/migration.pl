@@ -240,7 +240,23 @@ interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
     interpret_schema_operation(Op, Before_Schema, Middle_Schema),
     interpret_schema_operations(Operations, Middle_Schema, After_Schema).
 
+/*************************************
+ *                                   *
+ *  The compiler to instance updates *
+ *                                   *
+ *************************************/
 
+compile_instance_operations([], []).
+compile_instance_operations([Schema_Operation|Schema_Operations], Instance_Operations) :-
+    compile_instance_operation(Schema_Operation,Instance_Operations1),
+    append(Instance_Operations1, Instance_Operations2, Instance_Operations),
+    compile_instance_operations(Schema_Operations, Instance_Operations2).
+
+/*
+ * A convenient intermediate form using a dictionary:
+ * { Class1 : Class_Description1, ... ClassN : Class_DescriptionN }
+ *
+ */
 create_class_dictionary(Transaction, Dictionary) :-
     Config = config{
                  skip: 0,
