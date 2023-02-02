@@ -144,7 +144,7 @@ delete_repository_uri_remote_url(Context, Repo_Uri) :-
              (   t(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
                  delete(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string)))).
 
-delete_repository_uri_remote_path(Context, Repo_Uri, Remote_Path_Uri) :-
+delete_repository_uri_remote_path_uri(Context, Repo_Uri, Remote_Path_Uri) :-
     once(ask(Context,
              t(Repo_Uri, remote_path, Remote_Path_Uri))),
     delete_document(Context, Remote_Path_Uri).
