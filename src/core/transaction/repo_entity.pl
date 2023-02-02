@@ -98,7 +98,8 @@ insert_remote_repository(Context, Repo_Name, Remote_Url, Repo_Uri) :-
     insert_remote_repository(Context, Repo_Name, Remote_Url, _, Repo_Uri).
 
 insert_remote_repository(Context, Repo_Name, Remote_Url, Head_Layer_Id, Repo_Uri) :-
-    (   atom(Remote_Url)
+    (   (   string(Remote_Url)
+        ;   atom(Remote_Url))
     ->  insert_document(
             Context,
             json{
