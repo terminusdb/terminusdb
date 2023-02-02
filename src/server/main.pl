@@ -64,7 +64,7 @@ terminus_server(Argv,Wait) :-
     server_port(Port),
     worker_amount(Workers),
     load_jwt_conditionally,
-    HTTPOptions = [port(Port), workers(Workers)],
+    HTTPOptions = [port(Port), workers(Workers), silent(true)],
     foreach(pre_server_startup_hook(Port),true),
     catch(http_server(http_dispatch, HTTPOptions),
           E,
