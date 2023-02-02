@@ -158,7 +158,7 @@ info_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Ping Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(ok), cors_handler(Method, ok_handler),
+:- http_handler(api(ok), cors_handler(Method, ok_handler, [skip_authentication(true)]),
                 [method(Method),
                  methods([options,get])]).
 
