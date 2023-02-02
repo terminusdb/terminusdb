@@ -722,6 +722,11 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
     ->  true
     ;   Public = false),
 
+    (   _{ remote: Remote } :< Database_Document
+    ->  true
+    ;   Remote = "origin"
+    ),
+
     api_report_errors(
         clone,
         Request,
@@ -729,7 +734,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
                 request_remote_authorization(Request, Authorization),
                 error(no_remote_authorization,_)),
 
-            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
