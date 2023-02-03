@@ -35,9 +35,10 @@
 % -- remote authorization failed
 % - communication error while talking to the remote
 
-:- meta_predicate push(+, +, +, +, +, +, 1, -).
+:- meta_predicate push(+, +, +, +, +, +, 2, -).
 push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
-     Auth_Predicate, Result) :-
+     Authorized_Push_Predicate,
+     Result) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
@@ -137,8 +138,7 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
         (   Payload_Option = none % Last_Head_Id = Current_Head_Id
         ->  Result = same(Last_Head_Id)
         ;   Payload_Option = some(Payload),
-            call(Auth_Predicate, Authorization),
-            authorized_push(Authorization, Remote_URL, Payload),
+            call(Authorized_Push_Predicate, Remote_URL, Payload),
             Database_Transaction_Object = (Remote_Transaction_Object.parent),
             [Read_Obj] = (Remote_Transaction_Object.instance_objects),
             Layer = (Read_Obj.read),

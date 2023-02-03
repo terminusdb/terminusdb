@@ -1443,11 +1443,13 @@ push_handler(post,Path,Request, System_DB, Auth) :-
         Request,
         (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
                  [prefixes(Push_Prefixes)],
-                 {Request}/[Authorization]>>(
+                 {Request}/[Remote_Url,Payload]>>(
                      do_or_die(
                          request_remote_authorization(Request, Authorization),
                          error(no_remote_authorization)
-                     )),
+                     ),
+                     authorized_push(Authorization, Remote_Url, Payload)
+                 ),
                  Result),
             (   Result = same(Head_ID)
             ->  Head_Updated = false

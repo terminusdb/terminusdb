@@ -1397,8 +1397,9 @@ run_command(push,[Path],Opts) :-
     api_report_errors(
         push,
         push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts,
-             {Opts}/[Authorization]>>(
-                 create_authorization(Opts,Authorization)
+             {Opts}/[Remote_Url, Payload]>>(
+                 create_authorization(Opts,Authorization),
+                 authorized_push(Authorization,Remote_Url,Payload)
              ), Result)),
     (   Result = same(Commit_Id)
     ->  format(current_output, "Remote already up to date (head is ~s)~n", [Commit_Id])
