@@ -715,7 +715,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (get_payload(Database_Document,Request),
          _{ comment : Comment,
             label : Label,
-            remote_url: Remote_URL} :< Database_Document),
+            remote_url: Source} :< Database_Document),
         error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
 
     (   _{ public : Public } :< Database_Document
@@ -734,7 +734,12 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
                 request_remote_authorization(Request, Authorization),
                 error(no_remote_authorization,_)),
 
-            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Source,
+                  {Opts}/[URL, Repository_Head_Option, Payload_Option]>>(
+                      create_authorization(Opts,Authorization),
+                      authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option)
+                  ),
+                  _Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',

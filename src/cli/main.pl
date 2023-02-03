@@ -1425,11 +1425,6 @@ run_command(clone,[Source|DB_Path_List],Opts) :-
         option(organization(Organization),Opts)
     ),
 
-    (   re_matchsub('^([^/]*)/([^/]*)$', Source, Source_Match, [])
-    ->  Remote_Path = db(Source_Match.1, Source_Match.2)
-    ;   Remote_Path = Source
-    ),
-
     option(label(Label), Opts),
     (   var(Label)
     ->  Label = DB
@@ -1437,17 +1432,16 @@ run_command(clone,[Source|DB_Path_List],Opts) :-
     option(comment(Comment), Opts),
     option(public(Public), Opts),
     option(remote(Remote), Opts),
-    (   Remote_Path = db(_,_)
-    ->  Authorization = none
-    ;   create_authorization(Opts,Authorization)
-    ),
 
     format(current_output, "Cloning the remote 'origin'~n", []),
     api_report_errors(
         clone,
         clone(System_DB, Auth, Organization, DB, Label, Comment, Public,
-              Remote, Remote_Path,
-              authorized_fetch(Authorization), _Meta_Data)),
+              Remote, Source,
+              {Opts}/[URL, Repository_Head_Option, Payload_Option]>>(
+                  create_authorization(Opts,Authorization),
+                  authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option)
+              ), _Meta_Data)),
     format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),

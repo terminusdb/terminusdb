@@ -13,10 +13,10 @@
 :- use_module(db_fast_forward).
 
 :- meta_predicate clone(+,+,+,+,+,+,+,+,+,3,-).
-clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Remote_URL,Fetch_Predicate,Meta_Data) :-
+clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
-        clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Remote_URL,Fetch_Predicate,Meta_Data),
+        clone_(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data),
         exception(E),
 
         (   clone_cleanup_required(E)
@@ -29,7 +29,13 @@ clone_cleanup_required(error(http_open_error(_), _)).
 clone_cleanup_required(error(remote_connection_failure(_, _), _)).
 
 :- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
-clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Remote_Path,Fetch_Predicate,Meta_Data) :-
+clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
+    % Is this local or over the network
+    (   re_matchsub('^([^/]*)/([^/]*)$', Source, Source_Match, [])
+    ->  Remote_Path = db(Source_Match.1, Source_Match.2)
+    ;   Remote_Path = Source
+    ),
+
     % Create DB
     create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, false, Public, _{'@base' : 'http://example.com/', '@schema' : 'http://example.com#'}, Db_Uri),
 
