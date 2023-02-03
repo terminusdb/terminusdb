@@ -94,8 +94,8 @@ update_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
     with_transaction(
         Context,
         (   Remote_Path = db(Organization, Database)
-        ->  update_repository_remote_url(Context, Remote_Name, Remote_Location)
-        ;   update_repository_remote_path(Context, Remote_Name, Organization, Database)
+        ->  update_repository_remote_path(Context, Remote_Name, Organization, Database)
+        ;   update_repository_remote_url(Context, Remote_Name, Remote_Location)
         ),
         _
     ).
