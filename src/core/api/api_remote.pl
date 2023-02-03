@@ -3,7 +3,8 @@
               remove_remote/4,
               update_remote/5,
               show_remote/5,
-              list_remotes/4
+              list_remotes/4,
+              remote_path/2
           ]).
 
 :- use_module(core(util)).
@@ -12,6 +13,7 @@
 :- use_module(core(account)).
 
 :- use_module(library(plunit)).
+:- use_module(library(pcre)).
 
 add_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
     atomic_list_concat([Path, '/_meta'], Repo_Path),

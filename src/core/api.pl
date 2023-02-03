@@ -107,6 +107,7 @@
               update_remote/5,
               show_remote/5,
               list_remotes/4,
+              remote_path/2,
 
               % api_rollup.pl
               api_rollup/5,

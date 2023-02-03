@@ -12,7 +12,7 @@
 :- use_module(core(triple)).
 :- use_module(core(util)).
 :- use_module(core(document)).
-:- use_module(core(query), [expand/2, default_prefixes/1]).
+:- use_module(core(query), [expand/2, default_prefixes/1, create_context/2]).
 :- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(core(account), [generate_password_hash/2]).
 
