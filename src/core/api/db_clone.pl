@@ -11,6 +11,7 @@
 :- use_module(db_delete).
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
+:- use_module(api_remote).
 
 :- meta_predicate clone(+,+,+,+,+,+,+,+,+,3,-).
 clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
@@ -31,10 +32,7 @@ clone_cleanup_required(error(remote_connection_failure(_, _), _)).
 :- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     % Is this local or over the network
-    (   re_matchsub('^([^/]*)/([^/]*)$', Source, Source_Match, [])
-    ->  Remote_Path = db(Source_Match.1, Source_Match.2)
-    ;   Remote_Path = Source
-    ),
+    remote_path(Source, Remote_Path),
 
     % Create DB
     create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, false, Public, _{'@base' : 'http://example.com/', '@schema' : 'http://example.com#'}, Db_Uri),

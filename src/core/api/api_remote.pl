@@ -31,9 +31,11 @@ add_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
         \+ has_repository(Context, Remote_Name),
         error(remote_exists(Remote_Name),_)),
 
+    remote_path(Remote_Location, Remote_Path),
+
     with_transaction(
         Context,
-        insert_remote_repository(Context, Remote_Name, Remote_Location, _),
+        insert_remote_repository(Context, Remote_Name, Remote_Path, _),
         _
     ).
 
@@ -61,6 +63,12 @@ remove_remote(SystemDB, Auth, Path, Remote_Name) :-
         _
     ).
 
+remote_path(Source, Remote_Path) :-
+    (   re_matchsub('^([^/]*)/([^/]*)$', Source, Source_Match, [])
+    ->  Remote_Path = db(Source_Match.1, Source_Match.2)
+    ;   Remote_Path = Source
+    ).
+
 update_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
     atomic_list_concat([Path, '/_meta'], Repo_Path),
 
@@ -79,9 +87,14 @@ update_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
         has_remote_repository(Context, Remote_Name),
         error(remote_does_not_exist(Remote_Name),_)),
 
+    remote_path(Remote_Location, Remote_Path),
+
     with_transaction(
         Context,
-        update_repository_remote_url(Context, Remote_Name, Remote_Location),
+        (   Remote_Path = db(Organization, Database)
+        ->  update_repository_remote_url(Context, Remote_Name, Remote_Location)
+        ;   update_repository_remote_path(Context, Remote_Name, Organization, Database)
+        ),
         _
     ).
 
@@ -103,7 +116,13 @@ show_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
         has_remote_repository(Context, Remote_Name),
         error(remote_does_not_exist(Remote_Name),_)),
 
-    repository_remote_url(Context, Remote_Name, Remote_Location).
+    (   repository_remote_url(Context, Remote_Name, Remote_Location)
+    ->  true
+    ;   repository_remote_path(Context, Remote_Name, Remote_Path),
+        get_dict(database, Remote_Path, Database),
+        get_dict(organization, Remote_Path, Organization),
+        atomic_list_concat([Organization, '/', Database], Remote_Location)
+    ).
 
 list_remotes(SystemDB, Auth, Path, Remote_Names) :-
     atomic_list_concat([Path, '/_meta'], Repo_Path),
