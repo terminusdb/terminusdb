@@ -199,6 +199,15 @@ initialize_database_with_store(Key, Store, Force) :-
 current_repository_version("v1.0.1").
 
 update_repository_graph :-
+    % we dont yet have a store,
+    % so we will have to fresh init at some point
+    catch(
+        triple_store(_),
+        error(no_database_store_version, _),
+        true
+    ),
+    !.
+update_repository_graph :-
     repository_ontology(Repo_Label),
     Descriptor = label_descriptor{
                      schema:Repo_Label,
