@@ -225,6 +225,7 @@ ref_schema_context_from_label_descriptor(Label, Label_Descriptor, Commit_Info, C
 repo_schema_context_from_label_descriptor(Label, Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     repo_schema_context_from_label_descriptor(Label, Label_Descriptor, Commit_Info, Context).
+
 repo_schema_context_from_label_descriptor(Label, Label_Descriptor, Commit_Info, Context) :-
     repository_ontology(Repo_Label),
     Label_Descriptor = label_descriptor{

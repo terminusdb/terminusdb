@@ -4,7 +4,7 @@
       "@description" : "This is the Repo schema. It is a specification for repository metadata management.",
       "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
   },
-  "@metadata" : { "schema_version" : "0.1" },
+  "@metadata" : { "schema_version" : "v1.0.1" },
   "@base" : "terminusdb://repository/data/",
   "@schema" : "http://terminusdb.com/schema/repository#",
   "layer" : "http://terminusdb.com/schema/layer#",

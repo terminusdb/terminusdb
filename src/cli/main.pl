@@ -12,6 +12,7 @@
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api)).
+:- use_module(core(api/api_init), [update_system_graphs/0]).
 :- use_module(core(triple)).
 :- use_module(server(main), [terminus_server/2]).
 :- use_module(library(http/json)).
@@ -41,7 +42,7 @@
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
-
+    update_system_graphs,
     load_plugins,
     % Better error handling here...
     catch_with_backtrace(
