@@ -252,13 +252,14 @@ describe('cli-clone-push-pull', function () {
       const r = await execEnv(`./terminusdb.sh db create ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database created: ${dbSpec}`))
       const schema = [
-        { '@id' : 'Test',
-          '@type' : 'Class',
-          name : 'xsd:string',
-        }
+        {
+          '@id': 'Test',
+          '@type': 'Class',
+          name: 'xsd:string',
+        },
       ]
       await execEnv(`./terminusdb.sh doc insert -g schema ${dbSpec} --data='${JSON.stringify(schema)}'`)
-      const instance = { name : "bar" }
+      const instance = { name: 'bar' }
       await execEnv(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance)}'`)
     })
 
@@ -278,7 +279,7 @@ describe('cli-clone-push-pull', function () {
     })
 
     it('updates the local clone', async function () {
-      const instance = { name : "foo" }
+      const instance = { name: 'foo' }
       const r = await execEnv(`./terminusdb.sh doc insert ${localDbSpec} --data='${JSON.stringify(instance)}'`)
       expect(r.stdout).to.match(/^Documents inserted:/)
     })
@@ -292,7 +293,6 @@ describe('cli-clone-push-pull', function () {
       const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
       expect(r.stdout).to.match(/^.*"name":"bar".*\n.*"name":"foo"/)
     })
-
   })
 
   describe('empty local database', function () {
