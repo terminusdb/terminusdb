@@ -285,7 +285,12 @@ describe('cli-clone-push-pull', function () {
 
     it('can push the update', async function () {
       const r = await execEnv(`./terminusdb.sh push ${localDbSpec}`)
-      expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
+      expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
+    })
+
+    it('can see the update in origin', async function () {
+      const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
+      expect(r.stdout).to.match(/^.*"name":"bar".*\n.*"name":"foo"/)
     })
 
   })

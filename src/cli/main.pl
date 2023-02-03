@@ -1392,12 +1392,13 @@ run_command(push,[Path],Opts) :-
     ->  Branch = Remote_Branch
     ;   true),
 
-    create_authorization(Opts,Authorization),
-
     format(current_output, "Pushing to remote '~s'~n", [Remote_Name]),
     api_report_errors(
         push,
-        push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
+        push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts,
+             {Opts}/[Authorization]>>(
+                 create_authorization(Opts,Authorization)
+             ), Result)),
     (   Result = same(Commit_Id)
     ->  format(current_output, "Remote already up to date (head is ~s)~n", [Commit_Id])
     ;   Result = new(Commit_Id)

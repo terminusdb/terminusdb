@@ -1431,10 +1431,6 @@ push_handler(post,Path,Request, System_DB, Auth) :-
               remote_branch : Remote_Branch } :< Document),
         error(bad_api_document(Document,[remote,remote_branch]),_)),
 
-    do_or_die(
-        request_remote_authorization(Request, Authorization),
-        error(no_remote_authorization)),
-
     (   get_dict(push_prefixes, Document, true)
     ->  Push_Prefixes = true
     ;   Push_Prefixes = false),
@@ -1442,8 +1438,14 @@ push_handler(post,Path,Request, System_DB, Auth) :-
     api_report_errors(
         push,
         Request,
-        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch, [prefixes(Push_Prefixes)],
-                 authorized_push(Authorization),Result),
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+                 [prefixes(Push_Prefixes)],
+                 {Request}/[Authorization]>>(
+                     do_or_die(
+                         request_remote_authorization(Request, Authorization),
+                         error(no_remote_authorization)
+                     )),
+                 Result),
             (   Result = same(Head_ID)
             ->  Head_Updated = false
             ;   Result = new(Head_ID)
