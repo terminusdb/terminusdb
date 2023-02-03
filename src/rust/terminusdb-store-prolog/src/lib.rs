@@ -11,6 +11,7 @@ pub fn install(module: Option<&str>) {
     store::register_open_memory_store_in_module(module);
     store::register_open_directory_store_in_module(module);
     store::register_open_archive_store_in_module(module);
+    store::register_open_grpc_store_in_module(module);
     named_graph::register_create_named_graph_in_module(module);
     named_graph::register_open_named_graph_in_module(module);
     named_graph::register_delete_named_graph_in_module(module);

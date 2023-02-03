@@ -1,7 +1,7 @@
 name: terminusdb
 title: TerminusDB
 # [[[cog import cog; cog.out(f"version: v{CURRENT_REPO_VERSION}") ]]]
-version: v11.0.0
+version: v11.0.1
 # [[[end]]]
 license: Apache-2.0
 summary: Document graph database
