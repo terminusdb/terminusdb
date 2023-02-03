@@ -730,13 +730,11 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
     api_report_errors(
         clone,
         Request,
-        (   do_or_die(
-                request_remote_authorization(Request, Authorization),
-                error(no_remote_authorization,_)),
-
-            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Source,
-                  {Opts}/[URL, Repository_Head_Option, Payload_Option]>>(
-                      create_authorization(Opts,Authorization),
+        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Source,
+                  {Request}/[URL, Repository_Head_Option, Payload_Option]>>(
+                      do_or_die(
+                          request_remote_authorization(Request, Authorization),
+                          error(no_remote_authorization,_)),
                       authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option)
                   ),
                   _Meta_Data),

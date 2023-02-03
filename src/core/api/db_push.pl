@@ -35,7 +35,7 @@
 % -- remote authorization failed
 % - communication error while talking to the remote
 
-:- meta_predicate push(+, +, +, +, +, +, 2, -).
+:- meta_predicate push(+, +, +, +, +, +, 1, -).
 push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
      Auth_Predicate, Result) :-
 
