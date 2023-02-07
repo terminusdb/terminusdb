@@ -753,6 +753,15 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                }.
 descriptor_to_loggable(Descriptor, Loggable) :-
     label_descriptor{variety: Variety,
+                     schema: Schema} = Descriptor,
+    !,
+    Loggable = json{
+                   descriptorType: label,
+                   variety: Variety,
+                   schema: Schema
+               }.
+descriptor_to_loggable(Descriptor, Loggable) :-
+    label_descriptor{variety: Variety,
                      schema: Schema,
                      instance: Instance} = Descriptor,
     !,
