@@ -202,7 +202,9 @@ update_repository_graph :-
     % we dont yet have a store,
     % so we will have to fresh init at some point
     catch(
-        triple_store(_),
+        (   triple_store(_),
+            false
+        ),
         error(no_database_store_version, _),
         true
     ),
