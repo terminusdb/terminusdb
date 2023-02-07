@@ -5,13 +5,14 @@
               initialize_database_with_store/2,
               index_template/1,
               world_ontology_json/1,
-              graphiql_template/1
+              graphiql_template/1,
+              update_system_graphs/0
           ]).
 
 :- use_module(core(triple)).
 :- use_module(core(util)).
 :- use_module(core(document)).
-:- use_module(core(query), [expand/2, default_prefixes/1]).
+:- use_module(core(query), [expand/2, default_prefixes/1, create_context/3]).
 :- use_module(core(transaction), [open_descriptor/2]).
 :- use_module(core(account), [generate_password_hash/2]).
 
@@ -194,6 +195,45 @@ initialize_database_with_store(Key, Store, Force) :-
     initialize_woql_schema(Store, Force),
 
     initialize_system_instance(Store, System_Schema, Key, Force).
+
+current_repository_version("v1.0.1").
+
+update_repository_graph :-
+    % we dont yet have a store,
+    % so we will have to fresh init at some point
+    catch(
+        triple_store(_),
+        error(no_database_store_version, _),
+        true
+    ),
+    !.
+update_repository_graph :-
+    repository_ontology(Repo_Label),
+    Descriptor = label_descriptor{
+                     schema:Repo_Label,
+                     variety:repository_descriptor
+                 },
+    open_descriptor(Descriptor, Transaction_Object),
+    Commit_Info = commit_info{author:"test",message:"test"},
+    create_context(Transaction_Object, Commit_Info, Context),
+    database_context_object(Context, Obj),
+
+    (   get_dict('@metadata', Obj, Metadata),
+        get_dict('schema_version', Metadata, Version),
+        current_repository_version(Version)
+    % already current
+    ->  true
+    % needs an upgrade
+    ;   api_init:repository_schema_json(RepoPath),
+        file_to_predicate(RepoPath, repo_schema),
+        triple_store(Store),
+        api_init:initialize_repo_schema(Store, true),
+        % remove anything already pinned
+        abolish_all_tables
+    ).
+
+update_system_graphs :-
+    update_repository_graph.
 
 % FIXME! These tests should go into `src/config/terminus_config.pl`, but I
 % couldn't run them when they were there.

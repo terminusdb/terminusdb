@@ -1,5 +1,6 @@
 :- module(db_fetch, [
               remote_fetch/6,
+              local_fetch/5,
               authorized_fetch/4
           ]).
 
@@ -92,6 +93,67 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ->  Payload_Option = none
     ;   throw(error(remote_connection_failure(Status, Payload), _))
     ).
+
+local_fetch(System_DB, Auth, Path, New_Head_Layer_Id, Head_Has_Updated) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Repository_Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    do_or_die(
+        (repository_descriptor{} :< Repository_Descriptor),
+        error(fetch_requires_repository(Repository_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, Repository_Descriptor, '@schema':'Action/fetch', Auth),
+
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+
+    do_or_die(
+        create_context(Database_Descriptor, Database_Context),
+        error(unresolvable_collection(Database_Descriptor),_)),
+
+    do_or_die(
+        repository_remote_path(Database_Descriptor, Repository_Descriptor.repository_name, Remote_Path),       error(fetch_remote_has_no_path(Repository_Descriptor), _)),
+
+    DB = (Remote_Path.database),
+    Organization = (Remote_Path.organization),
+
+    Remote_Path_List = [Organization,DB,"local","_commits"],
+    atomic_list_concat(Remote_Path_List,Err_Path),
+    do_or_die(
+        resolve_absolute_descriptor(Remote_Path_List, Remote_Repository_Descriptor),
+        error(invalid_absolute_path(Err_Path),_)),
+
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    do_or_die(
+        create_context(Remote_Database_Descriptor, Remote_Database_Context),
+        error(unresolvable_collection(Remote_Database_Descriptor),_)),
+
+    check_descriptor_auth(System_DB, Remote_Repository_Descriptor, '@schema':'Action/meta_read_access', Auth),
+
+    with_transaction(
+        Database_Context,
+        (
+            (   repository_head(Database_Context,
+                                (Repository_Descriptor.repository_name),
+                                Repository_Head_Layer_Id)
+            ->  Repository_Head_Option = some(Repository_Head_Layer_Id)
+            ;   Repository_Head_Option = none),
+
+            (   repository_head(Remote_Database_Context,
+                                (Remote_Repository_Descriptor.repository_name),
+                                New_Head_Layer_Id)
+            ->  (   Repository_Head_Option = some(New_Head_Layer_Id)
+                ->  Head_Has_Updated = false
+                ;   update_repository_head(Database_Context,
+                                           (Repository_Descriptor.repository_name),
+                                           New_Head_Layer_Id)
+                )
+            ;   Head_Has_Updated = false
+            )
+        ),
+        _Meta_Data).
+
 
 :- begin_tests(fetch_api).
 :- use_module(core(util/test_utils)).

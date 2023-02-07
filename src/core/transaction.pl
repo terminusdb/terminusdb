@@ -97,6 +97,7 @@
               repository_type/3,
               repository_head/3,
               repository_remote_url/3,
+              repository_remote_path/3,
 
               insert_local_repository/3,
               insert_local_repository/4,
@@ -108,6 +109,7 @@
 
               update_repository_head/3,
               update_repository_remote_url/3,
+              update_repository_remote_path/4,
 
               % system_entity.pl
               database_exists/2,

@@ -148,6 +148,9 @@ Clone a database (into DB_SPEC).
   * `-l`, `--label`=[value]:
   label to use for this database
 
+  * `-r`, `--remote`=[value]:
+  remote to use for this database
+
   * `-c`, `--comment`=[value]:
   long description of the cloned database
 

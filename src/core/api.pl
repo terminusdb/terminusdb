@@ -39,10 +39,11 @@
 
               % db_fetch.pl
               remote_fetch/6,
+              local_fetch/5,
               authorized_fetch/4,
 
               % db_clone.pl
-              clone/10,
+              clone/11,
 
               % db_push.pl
               push/8,
@@ -106,6 +107,7 @@
               update_remote/5,
               show_remote/5,
               list_remotes/4,
+              remote_path/2,
 
               % api_rollup.pl
               api_rollup/5,

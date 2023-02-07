@@ -12,6 +12,7 @@
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api)).
+:- use_module(core(api/api_init), [update_system_graphs/0]).
 :- use_module(core(triple)).
 :- use_module(server(main), [terminus_server/2]).
 :- use_module(library(http/json)).
@@ -41,7 +42,7 @@
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
-
+    update_system_graphs,
     load_plugins,
     % Better error handling here...
     catch_with_backtrace(
@@ -250,6 +251,12 @@ opt_spec(clone,'terminusdb clone URI <DB_SPEC>',
            shortflags([l]),
            default('_'),
            help('label to use for this database')],
+          [opt(remote),
+           type(string),
+           longflags([remote]),
+           shortflags([r]),
+           default("origin"),
+           help('remote to use for this database')],
           [opt(comment),
            type(atom),
            longflags([comment]),
@@ -1386,24 +1393,26 @@ run_command(push,[Path],Opts) :-
     ->  Branch = Remote_Branch
     ;   true),
 
-    create_authorization(Opts,Authorization),
-
     format(current_output, "Pushing to remote '~s'~n", [Remote_Name]),
     api_report_errors(
         push,
-        push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts, authorized_push(Authorization), Result)),
+        push(System_DB, Auth, Path, Remote_Name, Remote_Branch, Opts,
+             {Opts}/[Remote_Url, Payload]>>(
+                 create_authorization(Opts,Authorization),
+                 authorized_push(Authorization,Remote_Url,Payload)
+             ), Result)),
     (   Result = same(Commit_Id)
     ->  format(current_output, "Remote already up to date (head is ~s)~n", [Commit_Id])
     ;   Result = new(Commit_Id)
     ->  format(current_output, "Remote updated (head is ~s)~n", [Commit_Id])
     ;   throw(error(unexpected_result(push, Result), _))
     ).
-run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
+run_command(clone,[Source|DB_Path_List],Opts) :-
     super_user_authority(Auth),
     create_context(system_descriptor{}, System_DB),
 
     (   DB_Path_List = [],
-        re_matchsub('^.*/([^/]*)$', Remote_URL, Match, [])
+        re_matchsub('^.*/([^/]*)$', Source, Match, [])
     % Get the DB name from the URI and organization from switches
     ->  DB = (Match.1),
         option(organization(Organization),Opts)
@@ -1424,14 +1433,17 @@ run_command(clone,[Remote_URL|DB_Path_List],Opts) :-
     ;   true),
     option(comment(Comment), Opts),
     option(public(Public), Opts),
-
-    create_authorization(Opts,Authorization),
+    option(remote(Remote), Opts),
 
     format(current_output, "Cloning the remote 'origin'~n", []),
     api_report_errors(
         clone,
-        clone(System_DB, Auth, Organization, DB, Label, Comment, Public, Remote_URL,
-              authorized_fetch(Authorization), _Meta_Data)),
+        clone(System_DB, Auth, Organization, DB, Label, Comment, Public,
+              Remote, Source,
+              {Opts}/[URL, Repository_Head_Option, Payload_Option]>>(
+                  create_authorization(Opts,Authorization),
+                  authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option)
+              ), _Meta_Data)),
     format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(pull,[Path],Opts) :-
     super_user_authority(Auth),
