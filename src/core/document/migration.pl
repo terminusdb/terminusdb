@@ -246,11 +246,28 @@ interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
  *                                   *
  *************************************/
 
+compile_instance_operation(delete_class(Class), Query) :-
+    Query = (
+        t(X, rdf:type, Class),
+        delete_document(X)
+    ).
+compile_instance_operation(create_class(_), true).
+compile_instance_operation(move_class(Old_Class,New_Class), Query) :-
+    Query = (
+        t(X, rdf:type, Old_Class),
+        get_document(X, Doc),
+        insert_document(Doc),
+        delete(X)
+    ).
+compile_instance_operation(upcast_class_property(Class, Property, New_Type), Query) :-
+    Query = (
+        t(X, rdf:type, Class, schema)
+    ).
+
 compile_instance_operations([], []).
-compile_instance_operations([Schema_Operation|Schema_Operations], Instance_Operations) :-
-    compile_instance_operation(Schema_Operation,Instance_Operations1),
-    append(Instance_Operations1, Instance_Operations2, Instance_Operations),
-    compile_instance_operations(Schema_Operations, Instance_Operations2).
+compile_instance_operations([Schema_Operation|Schema_Operations], [Instance_Operation|Instance_Operations]) :-
+    compile_instance_operation(Schema_Operation,Instance_Operation),
+    compile_instance_operations(Schema_Operations, Instance_Operations).
 
 /*
  * A convenient intermediate form using a dictionary:
