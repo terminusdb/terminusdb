@@ -7,6 +7,7 @@
               json_elaborate/7,
               json_schema_triple/3,
               json_schema_elaborate/3,
+              database_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,

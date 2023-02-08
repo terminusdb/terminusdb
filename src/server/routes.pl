@@ -715,21 +715,29 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (get_payload(Database_Document,Request),
          _{ comment : Comment,
             label : Label,
-            remote_url: Remote_URL} :< Database_Document),
+            remote_url: Source} :< Database_Document),
         error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
 
     (   _{ public : Public } :< Database_Document
     ->  true
     ;   Public = false),
 
+    (   _{ remote: Remote } :< Database_Document
+    ->  true
+    ;   Remote = "origin"
+    ),
+
     api_report_errors(
         clone,
         Request,
-        (   do_or_die(
-                request_remote_authorization(Request, Authorization),
-                error(no_remote_authorization,_)),
-
-            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Source,
+                  {Request}/[URL, Repository_Head_Option, Payload_Option]>>(
+                      do_or_die(
+                          request_remote_authorization(Request, Authorization),
+                          error(no_remote_authorization,_)),
+                      authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option)
+                  ),
+                  _Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
@@ -1426,10 +1434,6 @@ push_handler(post,Path,Request, System_DB, Auth) :-
               remote_branch : Remote_Branch } :< Document),
         error(bad_api_document(Document,[remote,remote_branch]),_)),
 
-    do_or_die(
-        request_remote_authorization(Request, Authorization),
-        error(no_remote_authorization)),
-
     (   get_dict(push_prefixes, Document, true)
     ->  Push_Prefixes = true
     ;   Push_Prefixes = false),
@@ -1437,8 +1441,16 @@ push_handler(post,Path,Request, System_DB, Auth) :-
     api_report_errors(
         push,
         Request,
-        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch, [prefixes(Push_Prefixes)],
-                 authorized_push(Authorization),Result),
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+                 [prefixes(Push_Prefixes)],
+                 {Request}/[Remote_Url,Payload]>>(
+                     do_or_die(
+                         request_remote_authorization(Request, Authorization),
+                         error(no_remote_authorization)
+                     ),
+                     authorized_push(Authorization, Remote_Url, Payload)
+                 ),
+                 Result),
             (   Result = same(Head_ID)
             ->  Head_Updated = false
             ;   Result = new(Head_ID)

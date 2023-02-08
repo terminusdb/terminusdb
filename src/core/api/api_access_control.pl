@@ -22,7 +22,9 @@
               api_update_user_password/4,
               api_get_organizations_users/4,
               api_get_organizations_users_object/5,
-              api_get_organizations_users_databases/5
+              api_get_organizations_users_databases/5,
+
+              get_user_from_name/4
           ]).
 
 :- use_module(core(util)).

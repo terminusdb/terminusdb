@@ -240,6 +240,61 @@ describe('cli-clone-push-pull', function () {
     })
   })
 
+  describe('local clone', function () {
+    let agent
+    let dbSpec
+    let localDbSpec
+
+    before(async function () {
+      agent = new Agent().auth()
+      dbSpec = agent.orgName + '/' + agent.dbName
+      localDbSpec = dbSpec + '_local'
+      const r = await execEnv(`./terminusdb.sh db create ${dbSpec}`)
+      expect(r.stdout).to.match(new RegExp(`^Database created: ${dbSpec}`))
+      const schema = [
+        {
+          '@id': 'Test',
+          '@type': 'Class',
+          name: 'xsd:string',
+        },
+      ]
+      await execEnv(`./terminusdb.sh doc insert -g schema ${dbSpec} --data='${JSON.stringify(schema)}'`)
+      const instance = { name: 'bar' }
+      await execEnv(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance)}'`)
+    })
+
+    after(async function () {
+      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
+    })
+
+    it('performs local clone', async function () {
+      const r = await execEnv(`./terminusdb.sh clone ${dbSpec} ${localDbSpec}`)
+      expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
+    })
+
+    it('document is in local clone', async function () {
+      const r = await execEnv(`./terminusdb.sh doc get ${localDbSpec}`)
+      expect(r.stdout).to.match(/^.*"name":"bar"/)
+    })
+
+    it('updates the local clone', async function () {
+      const instance = { name: 'foo' }
+      const r = await execEnv(`./terminusdb.sh doc insert ${localDbSpec} --data='${JSON.stringify(instance)}'`)
+      expect(r.stdout).to.match(/^Documents inserted:/)
+    })
+
+    it('can push the update', async function () {
+      const r = await execEnv(`./terminusdb.sh push ${localDbSpec}`)
+      expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
+    })
+
+    it('can see the update in origin', async function () {
+      const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
+      expect(r.stdout).to.match(/^.*"name":"bar".*\n.*"name":"foo"/)
+    })
+  })
+
   describe('empty local database', function () {
     let agent
     let dbSpec

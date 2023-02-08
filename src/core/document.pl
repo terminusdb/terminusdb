@@ -23,6 +23,7 @@
               write_json_string_to_instance/2,
               replace_json_schema/2,
 
+              database_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
