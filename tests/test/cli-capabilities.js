@@ -63,7 +63,13 @@ describe('cli-capabilities', function () {
     const result1 = await execEnv(`./terminusdb.sh capability grant ${userName} admin/${dbName} ${roleName}`)
     expect(result1.stdout).to.match(new RegExp(`^Granted.*${roleName}.*to.*${userName}.*over.*admin.${dbName}.*`))
 
-    const result2 = await execEnv(`./terminusdb.sh capability revoke ${userName} admin/${dbName} ${roleName}`)
-    expect(result2.stdout).to.match(/^Capability successfully revoked/)
+    const result2 = await execEnv(`./terminusdb.sh doc get admin/${dbName} --impersonate ${userName} && echo success`)
+    expect(result2.stdout).to.match(new RegExp(`^success`))
+
+    const result3 = await execEnv(`./terminusdb.sh capability revoke ${userName} admin/${dbName} ${roleName}`)
+    expect(result3.stdout).to.match(/^Capability successfully revoked/)
+
+    const result4 = await execEnv(`./terminusdb.sh doc get admin/${dbName} --impersonate ${userName} || echo failure`)
+    expect(result4.stdout).to.match(new RegExp(`^failure`))
   })
 })

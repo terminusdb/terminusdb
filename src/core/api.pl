@@ -174,6 +174,7 @@
               api_get_organizations_users_object/5,
               api_get_organizations_users_databases/5,
 
+              get_user_from_name/4,
 
               % api_db_update.pl
               api_db_update/6,
