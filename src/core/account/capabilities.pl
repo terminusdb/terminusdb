@@ -121,9 +121,9 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
         (
             t(Auth, capability, Capability),
             t(Capability, role, Role),
-            t(Role, action, Action)
+            t(Role, action, Action),
             t(Capability, scope, Intermediate_Scope_Iri),
-            path(Intermediate_Scope_Iri, (star((p(child);p(database)))), Scope_Iri, _),
+            path(Intermediate_Scope_Iri, (star((p(child);p(database)))), Scope_Iri, _)
         )
        ).
 auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
