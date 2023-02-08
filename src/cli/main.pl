@@ -2522,3 +2522,4 @@ format_doc_id_list(Ids) :-
         )
     ;   true
     ).
+
