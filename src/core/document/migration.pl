@@ -221,11 +221,11 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After).
 
-/******************************
- *                            *
- *  The interpreter           *
- *                            *
- ******************************/
+/***********************************
+ *                                 *
+ *  The schema update interpreter  *
+ *                                 *
+ ***********************************/
 interpret_schema_operation(Op, Before, After) :-
     Op =.. [OpName|Args],
     append(Args, [Before, After], Args1),
@@ -242,32 +242,35 @@ interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
 
 /*************************************
  *                                   *
- *  The compiler to instance updates *
+ *  The instance update interpreter  *
  *                                   *
  *************************************/
+/*
 
-compile_instance_operation(delete_class(Class), Query) :-
-    Query = (
-        t(X, rdf:type, Class),
-        delete_document(X)
-    ).
-compile_instance_operation(create_class(_), true).
-compile_instance_operation(move_class(Old_Class,New_Class), Query) :-
-    Query = (
-        t(X, rdf:type, Old_Class),
-        get_document(X, Doc),
-        insert_document(Doc),
-        delete(X)
-    ).
-compile_instance_operation(upcast_class_property(Class, Property, New_Type), Query) :-
-    Query = (
-        t(X, rdf:type, Class, schema)
-    ).
+We will use a shared instance, but a different schema
 
-compile_instance_operations([], []).
-compile_instance_operations([Schema_Operation|Schema_Operations], [Instance_Operation|Instance_Operations]) :-
-    compile_instance_operation(Schema_Operation,Instance_Operation),
-    compile_instance_operations(Schema_Operations, Instance_Operations).
+Schema1   Instance   Schema2
+       \  /       \   /
+     Before,      After
+*/
+
+interpret_instance_operation(delete_class(Class), Before, After) :-
+    get_document_by_type(Before, Class, Uri),
+    delete_document(After, Uri).
+interpret_instance_operation(create_class(_), _Before, _After).
+interpret_instance_operation(move_class(Old_Class, New_Class), Before, After) :-
+    get_document_by_type(Before, Old_Class, Uri),
+    get_document(Before, Uri, Document),
+    delete_document(After, Uri),
+    put_dict(_{'@type' : New_Class}, Document, New_Document),
+    insert_document(After, New_Document).
+interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, After) :-
+    true.
+
+interpret_instance_operations([], []).
+interpret_instance_operations([Schema_Operation|Schema_Operations], [Instance_Operation|Instance_Operations], Before, After) :-
+    interpret_instance_operation(Schema_Operation,Instance_Operation, Before, After),
+    interpret_instance_operations(Schema_Operations, Instance_Operations, Before, After).
 
 /*
  * A convenient intermediate form using a dictionary:
