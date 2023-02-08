@@ -2482,8 +2482,8 @@ format_help_markdown(Command,Subcommand) :-
     ).
 
 embellish_flags(OptsSpec0,OptsSpec2) :-
-    maplist(optparse:embellish_flag(short), OptsSpec0, OptsSpec1),
-    maplist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
+    convlist(optparse:embellish_flag(short), OptsSpec0, OptsSpec1),
+    convlist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
 
 format_help_markdown_opt(Opt) :-
 
