@@ -1248,14 +1248,52 @@ opt_spec(remote,list,'terminusdb remote list DATABASE_SPEC OPTIONS',
            default(false),
            help('print help for the `remote list` sub command')]]).
 
+opt_spec_dont_expand(help).
+opt_spec_dont_expand(serve).
+
+opt_spec_expanded(Command, Help, Description, Spec) :-
+    opt_spec(Command, Help, Description, Intermediate_Spec),
+    (   opt_spec_dont_expand(Command)
+    ->  Spec = Intermediate_Spec
+    ;   Spec = [[opt(impersonate),
+                 type(atom),
+                 longflags([impersonate]),
+                 default(admin),
+                 help('impersonate a particular user')]
+                | Intermediate_Spec]).
+
+opt_spec_expanded(Command, Subcommand, Help, Description, Spec) :-
+    opt_spec(Command, Subcommand, Help, Description, Intermediate_Spec),
+    (   opt_spec_dont_expand(Command)
+    ->  Spec = Intermediate_Spec
+    ;   Spec = [[opt(impersonate),
+                 type(atom),
+                 longflags([impersonate]),
+                 default(admin),
+                 help('impersonate a particular user')]
+                | Intermediate_Spec]).
+
+get_user_or_halt(User, Auth) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    (   get_user_from_name(System_DB, User, Doc, _{})
+    ->  Auth = (Doc.'@id')
+    ;   format(user_error, "Error: Impersonation user ~s does not exist.~n", [User]),
+        status_cli_code('api:forbidden',Status),
+        halt(Status)).
+
+opt_authority(Opt, Auth) :-
+    option(impersonate(User), Opt),
+    (   User = admin
+    ->  super_user_authority(Auth)
+    ;   get_user_or_halt(User, Auth)).
 
 command(Command) :-
-    opt_spec(Command,_,_,_).
+    opt_spec_expanded(Command,_,_,_).
 command(Command) :-
-    opt_spec(Command,_,_,_,_).
+    opt_spec_expanded(Command,_,_,_,_).
 
 command_subcommand(Command,Subcommand) :-
-    opt_spec(Command,Subcommand,_,_,_).
+    opt_spec_expanded(Command,Subcommand,_,_,_).
 
 assert_system_db_is_accessible :-
     catch_with_backtrace(
@@ -1281,7 +1319,7 @@ run(Argv) :-
 run_([Command|Rest]) :-
     catch(
         (
-            opt_spec(Command,_,_,Spec),
+            opt_spec_expanded(Command,_,_,Spec),
             opt_parse(Spec,Rest,Opts,Positional)
         ),
         Error,
@@ -1295,7 +1333,7 @@ run_([Command|Rest]) :-
 run_([Command,Subcommand|Rest]) :-
     catch(
         (
-            opt_spec(Command,Subcommand,_,_,Spec),
+            opt_spec_expanded(Command,Subcommand,_,_,Spec),
             opt_parse(Spec,Rest,Opts,Positional)
         ),
         Error,
@@ -1340,7 +1378,7 @@ run_command(serve,_Positional,Opts) :-
         ;   terminus_server([serve|Opts], true))
     ).
 run_command(list,Databases,Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~nWarning: Use ('terminusdb db list') instead.~n", []),
     option(branches(Branches), Opts),
     (   Databases = []
@@ -1351,8 +1389,8 @@ run_command(list,Databases,Opts) :-
     ->  json_write_dict(current_output, Database_Objects)
     ;   pretty_print_databases(Database_Objects)
     ).
-run_command(optimize,Databases,_Opts) :-
-    super_user_authority(Auth),
+run_command(optimize,Databases,Opts) :-
+    opt_authority(Opts, Auth),
     api_report_errors(
         optimize,
         forall(member(Path, Databases),
@@ -1360,7 +1398,7 @@ run_command(optimize,Databases,_Opts) :-
                    format(current_output, "~N~s optimized~n", [Path])
                ))).
 run_command(query,[Path,Query],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(author(Author), Opts),
@@ -1381,7 +1419,7 @@ run_command(query,[Path,Query],Opts) :-
             )
         )).
 run_command(push,[Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(remote(Remote_Name_Atom), Opts),
@@ -1408,7 +1446,7 @@ run_command(push,[Path],Opts) :-
     ;   throw(error(unexpected_result(push, Result), _))
     ).
 run_command(clone,[Source|DB_Path_List],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     (   DB_Path_List = [],
@@ -1446,7 +1484,7 @@ run_command(clone,[Source|DB_Path_List],Opts) :-
               ), _Meta_Data)),
     format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(pull,[Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(remote(Remote_Name_Atom), Opts),
     atom_string(Remote_Name_Atom,Remote_Name),
@@ -1478,7 +1516,7 @@ run_command(pull,[Path],Opts) :-
     ;   format(current_output, "Local branch status: ~w~n", [Pull_Status])
     ).
 run_command(fetch,[Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     api_report_errors(
@@ -1505,7 +1543,7 @@ run_command(fetch,[Path],Opts) :-
     format(current_output, "~N~s fetch: ~q with updated repository head = ~q~n",
            [Path, New_Head_Layer_Id, Head_Has_Updated]).
 run_command(rebase,[Path,From_Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(author(Author),Opts),
     api_report_errors(
@@ -1521,7 +1559,7 @@ run_command(rebase,[Path,From_Path],Opts) :-
     json_write(current_output,Reports),
     format(current_output, "~n", []).
 run_command(squash,[Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(author(Author),Opts),
     option(message(Message),Opts),
@@ -1545,8 +1583,8 @@ run_command(squash,[Path],Opts) :-
             )
         )
     ).
-run_command(rollup,[Path],_Opts) :-
-    super_user_authority(Auth),
+run_command(rollup,[Path],Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     api_report_errors(
@@ -1555,7 +1593,7 @@ run_command(rollup,[Path],_Opts) :-
 
     format(current_output, "~nRollup performed~n", []).
 run_command(bundle,[Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(output(Filename), Opts),
@@ -1575,8 +1613,8 @@ run_command(bundle,[Path], Opts) :-
         format(Stream, "~s", [Payload]),
         format(current_output, "Bundle successful~n", [])
     ).
-run_command(unbundle,[Path, Filename], _Opts) :-
-    super_user_authority(Auth),
+run_command(unbundle,[Path, Filename], Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     api_report_errors(
@@ -1589,7 +1627,7 @@ run_command(unbundle,[Path, Filename], _Opts) :-
         )
     ).
 run_command(diff, Args, Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(before(Before_Atom), Opts),
@@ -1634,7 +1672,7 @@ run_command(diff, Args, Opts) :-
     json_write_dict(user_output, Patch, [width(0)]),
     nl.
 run_command(apply,[Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(before_commit(Before_Commit), Opts),
@@ -1663,7 +1701,7 @@ run_command(apply,[Path], Opts) :-
         )
     ).
 run_command(log,[Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         log,
@@ -1674,8 +1712,8 @@ run_command(log,[Path], Opts) :-
             )
         )
     ).
-run_command(reset,[Path,Ref], _Opts) :-
-    super_user_authority(Auth),
+run_command(reset,[Path,Ref], Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         reset,
@@ -1688,7 +1726,7 @@ run_command(Command,_Args, Opts) :-
 
 % Subcommands
 run_command(branch,create,[Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(origin(Origin_Base), Opts),
@@ -1700,15 +1738,15 @@ run_command(branch,create,[Path],Opts) :-
         branch,
         branch_create(System_DB, Auth, Path, Origin_Option, _Branch_Uri)),
     format(current_output, "~N~s branch created~n", [Path]).
-run_command(branch,delete,[Path],_Opts) :-
-    super_user_authority(Auth),
+run_command(branch,delete,[Path],Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         branch,
         branch_delete(System_DB, Auth, Path)),
     format(current_output, "~N~s branch deleted~n", [Path]).
 run_command(db,list,Databases,Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     option(branches(Branches), Opts),
     option(verbose(Verbose), Opts),
     api_report_errors(
@@ -1726,7 +1764,7 @@ run_command(db,list,Databases,Opts) :-
         )
     ).
 run_command(db,create,[DB_Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
@@ -1758,7 +1796,7 @@ run_command(db,create,[DB_Path],Opts) :-
         create_db(System_DB, Auth, Organization, DB, Label, Comment, Schema, Public, Merged)),
     format(current_output, "Database created: ~s/~s~n", [Organization, DB]).
 run_command(db,delete,[DB_Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
@@ -1773,7 +1811,7 @@ run_command(db,delete,[DB_Path],Opts) :-
         delete_db(System_DB, Auth, Organization, DB, Force_Delete)),
     format(current_output, "Database deleted: ~s/~s~n", [Organization, DB]).
 run_command(db,update,[DB_Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     (   re_matchsub('([^/]*)/([^/]*)', DB_Path, Match, [])
@@ -1803,7 +1841,7 @@ run_command(db,update,[DB_Path],Opts) :-
     ),
     format(current_output, "Database updated: ~s/~s~n", [Organization, DB]).
 run_command(doc,insert,[Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(data(Data), Opts),
 
@@ -1818,7 +1856,7 @@ run_command(doc,insert,[Path], Opts) :-
     format(current_output, "Documents inserted:~n", []),
     format_doc_id_list(Ids).
 run_command(doc,delete, [Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(id(Id), Opts),
     option(nuke(Nuke), Opts),
@@ -1843,7 +1881,7 @@ run_command(doc,delete, [Path], Opts) :-
         )
     ).
 run_command(doc,replace, [Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(data(Data), Opts),
 
@@ -1859,7 +1897,7 @@ run_command(doc,replace, [Path], Opts) :-
         )
     ).
 run_command(doc,get, [Path], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(graph_type(Graph_Type), Opts),
     option(skip(S), Opts),
@@ -1900,8 +1938,8 @@ run_command(doc,get, [Path], Opts) :-
             no_data_version, _Actual_Data_Version,
             [_L]>>true)
     ).
-run_command(role,create,[Name|Actions], _Opts) :-
-    super_user_authority(Auth),
+run_command(role,create,[Name|Actions], Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     atom_concat('Role/',Name,Name_Id),
     Role =
@@ -1915,7 +1953,7 @@ run_command(role,create,[Name|Actions], _Opts) :-
     ),
     format(current_output, "Role added: ~s~n", [Id]).
 run_command(role,delete,[Role_Id_or_Name], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     (   option(id(false), Opts)
     ->  api_report_errors(
@@ -1931,7 +1969,7 @@ run_command(role,delete,[Role_Id_or_Name], Opts) :-
     ),
     format(current_output, "Role deleted~n", []).
 run_command(role,get,NameOrIdList,Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     (   option(id(false),Opts),
         [Name] = NameOrIdList
@@ -1964,7 +2002,7 @@ run_command(role,get,NameOrIdList,Opts) :-
                ))
     ).
 run_command(role,update,[Role_Id_or_Name|Actions], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         role,
@@ -1981,9 +2019,9 @@ run_command(role,update,[Role_Id_or_Name|Actions], Opts) :-
     ),
     get_dict('@id',Role,Role_Id),
     format(current_output, "Role id: '~s'~n updated with actions: ~q~n", [Role_Id,Actions]).
-run_command(organization,create,[Name], _Opts) :-
+run_command(organization,create,[Name], Opts) :-
 
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     Organization =
@@ -1995,7 +2033,7 @@ run_command(organization,create,[Name], _Opts) :-
     ),
     format(current_output, "Organization added: ~s~n", [Id]).
 run_command(organization,delete,[Name_or_Id], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     (   option(id(true),Opts)
     ->  Organization_Id = Name_or_Id
@@ -2012,7 +2050,7 @@ run_command(organization,delete,[Name_or_Id], Opts) :-
     ),
     format(current_output, "Organization deleted~n", []).
 run_command(organization,get, NameList, Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     (   option(id(false),Opts),
         [Name] = NameList
@@ -2042,7 +2080,7 @@ run_command(organization,get, NameList, Opts) :-
                ))
     ).
 run_command(user,create,[Name], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(password(Password), Opts),
@@ -2062,7 +2100,7 @@ run_command(user,create,[Name], Opts) :-
     ),
     format(current_output, "~nUser '~s' added with id ~s~n", [Name,Id]).
 run_command(user,delete,[Name_or_Id], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     (   option(id(true),Opts)
     ->  User_Id = Name_or_Id
@@ -2079,7 +2117,7 @@ run_command(user,delete,[Name_or_Id], Opts) :-
     ),
     format(current_output, "User deleted~n", []).
 run_command(user,get, NameList, Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(capability(Capability), Opts),
     User_Opts = options{capability:Capability},
@@ -2132,7 +2170,7 @@ run_command(user,get, NameList, Opts) :-
                ))
     ).
 run_command(user,password, [User], Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     option(password(Password), Opts),
@@ -2146,7 +2184,7 @@ run_command(user,password, [User], Opts) :-
     ),
     format(current_output, '~nPassword updated for ~s~n', [User]).
 run_command(capability,grant,[User,Scope|Roles],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, SystemDB),
     option(scope_type(Type),Opts),
     api_report_errors(
@@ -2163,7 +2201,7 @@ run_command(capability,grant,[User,Scope|Roles],Opts) :-
     ),
     format(current_output, "Granted ~q to '~s' over '~s'~n", [Roles,User,Scope]).
 run_command(capability,revoke,[User,Scope|Roles],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, SystemDB),
     option(scope_type(Type),Opts),
     (   Roles = []
@@ -2192,29 +2230,29 @@ run_command(store,init, _, Opts) :-
         store_init,
         initialize_database(Key,Force)),
     format('Successfully initialised database!!!~n').
-run_command(remote,add,[Path,Remote_Name,URL],_Opts) :-
-    super_user_authority(Auth),
+run_command(remote,add,[Path,Remote_Name,URL],Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         remote,
         add_remote(System_DB, Auth, Path, Remote_Name, URL)),
     format(current_output,'Successfully added remote ~s with url ~s~n',[Remote_Name,URL]).
-run_command(remote,remove,[Path,Remote_Name],_Opts) :-
-    super_user_authority(Auth),
+run_command(remote,remove,[Path,Remote_Name],Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         remote,
         remove_remote(System_DB, Auth, Path, Remote_Name)),
     format(current_output,'Successfully added remote ~s~n',[Remote_Name]).
-run_command(remote,'set-url',[Path,Remote_Name,URL],_Opts) :-
-    super_user_authority(Auth),
+run_command(remote,'set-url',[Path,Remote_Name,URL],Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         remote,
         update_remote(System_DB, Auth, Path, Remote_Name, URL)),
     format(current_output,'Successfully set remote url to ~s~n',[URL]).
 run_command(remote,'get-url',[Path|Remote_Name_List],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
 
     (   Remote_Name_List = []
@@ -2225,15 +2263,15 @@ run_command(remote,'get-url',[Path|Remote_Name_List],Opts) :-
         remote,
         show_remote(System_DB, Auth, Path, Remote_Name, URL)),
     format(current_output,'Remote ~s associated with url ~s~n',[Remote_Name,URL]).
-run_command(remote,list,[Path],_Opts) :-
-    super_user_authority(Auth),
+run_command(remote,list,[Path],Opts) :-
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
         remote,
         list_remotes(System_DB, Auth, Path, Remote_Names)),
     format(current_output,'Remotes: ~q~n',[Remote_Names]).
 run_command(triples,dump,[Path],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(format(Format_Atom), Opts),
     atom_string(Format_Atom,Format),
@@ -2242,7 +2280,7 @@ run_command(triples,dump,[Path],Opts) :-
         graph_dump(System_DB, Auth, Path, Format, String)),
     format(current_output,'~s',[String]).
 run_command(triples,update,[Path,File],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(message(Message), Opts),
     option(author(Author), Opts),
@@ -2258,7 +2296,7 @@ run_command(triples,update,[Path,File],Opts) :-
                      Format,TTL)),
     format(current_output,'~nSuccessfully updated triples from ~q~n',[File]).
 run_command(triples,load,[Path,File],Opts) :-
-    super_user_authority(Auth),
+    opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(message(Message), Opts),
     option(author(Author), Opts),
@@ -2354,7 +2392,8 @@ api_report_errors(API,Goal) :-
     ).
 
 api_error_cli(API, Error) :-
-    api_error_jsonld(API,Error,JSON),
+    (   api_error_jsonld(API,Error,JSON)
+    ;   Error=error(Inner_Error,_), generic_exception_jsonld(Inner_Error, JSON)),
     json_cli_code(JSON,Status),
     Msg = (JSON.'api:message'),
     format(user_error,"Error: ~s~n",[Msg]),
@@ -2386,7 +2425,7 @@ prolog:message(server_missing_config(BasePath)) -->
 %% Generate help
 terminusdb_help(Opts) :-
     forall(
-        opt_spec(Command,_,_,_),
+        opt_spec_expanded(Command,_,_,_),
         terminusdb_help(Command,Opts)
     ),
     forall(
@@ -2407,14 +2446,14 @@ terminusdb_help(Command,Subcommand,Opts) :-
     ).
 
 format_help(Command) :-
-    opt_spec(Command,Command_String,Help_String,Spec),
+    opt_spec_expanded(Command,Command_String,Help_String,Spec),
     opt_help(Spec,Help),
     format(current_output,"~n~s~n~n",[Command_String]),
     format(current_output,"~s~n~n",[Help_String]),
     format(current_output,Help,[]).
 
 format_help(Command,Subcommand) :-
-    opt_spec(Command,Subcommand,Command_String,Help_String,Spec),
+    opt_spec_expanded(Command,Subcommand,Command_String,Help_String,Spec),
     opt_help(Spec,Help),
     format(current_output,"~n~s~n~n",[Command_String]),
     format(current_output,"~s~n~n",[Help_String]),
@@ -2422,7 +2461,7 @@ format_help(Command,Subcommand) :-
 
 format_help_markdown(Command) :-
     format(current_output,'### ~s~n~n',[Command]),
-    opt_spec(Command,Command_String,Help_String,OptSpec),
+    opt_spec_expanded(Command,Command_String,Help_String,OptSpec),
     embellish_flags(OptSpec,OptSpec0),
     format(current_output,'`~s`~n~n',[Command_String]),
     format(current_output,'~s~n~n',[Help_String]),
@@ -2433,7 +2472,7 @@ format_help_markdown(Command) :-
 
 format_help_markdown(Command,Subcommand) :-
     format(current_output,'### ~s ~s~n~n',[Command,Subcommand]),
-    opt_spec(Command,Subcommand,Command_String,Help_String,OptSpec),
+    opt_spec_expanded(Command,Subcommand,Command_String,Help_String,OptSpec),
     embellish_flags(OptSpec,OptSpec0),
     format(current_output,'`~s`~n~n',[Command_String]),
     format(current_output,'~s~n~n',[Help_String]),
@@ -2442,17 +2481,20 @@ format_help_markdown(Command,Subcommand) :-
         format_help_markdown_opt(Option)
     ).
 
+opt_short_embellish_flag(Spec0, Spec1) :-
+    (   optparse:embellish_flag(short, Spec0, Spec1)
+    ->  true
+    ;   Spec1 = Spec0).
+
 embellish_flags(OptsSpec0,OptsSpec2) :-
-    maplist(optparse:embellish_flag(short), OptsSpec0, OptsSpec1),
+    maplist(opt_short_embellish_flag, OptsSpec0, OptsSpec1),
     maplist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
 
 format_help_markdown_opt(Opt) :-
-
-    memberchk(shortflags(SFlags0),Opt),
+    ignore((memberchk(shortflags(SFlags0),Opt),
+            atomic_list_concat(['`',SFlags0,'`'],SFlags))),
     memberchk(longflags(LFlags0),Opt),
-
-    atomic_list_concat(['`',SFlags0,'`'],SFlags),
-
+    format(user_error, '~q~n', [SFlags]),
 
     maplist([LFlag_In,LFlag_Out]>>
             atomic_list_concat(['`',LFlag_In,'`'],LFlag_Out),
@@ -2463,7 +2505,11 @@ format_help_markdown_opt(Opt) :-
 
     memberchk(help(Help), Opt),
 
-    format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
+    format(current_output, '  * ', []),
+    (   var(SFlags)
+    ->  true
+    ;   format(current_output, '~s, ', [SFlags])),
+    format(current_output, '~s=[value]:~n', [LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
 format_doc_id_list(Ids) :-
