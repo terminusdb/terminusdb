@@ -2481,17 +2481,20 @@ format_help_markdown(Command,Subcommand) :-
         format_help_markdown_opt(Option)
     ).
 
+opt_short_embellish_flag(Spec0, Spec1) :-
+    (   optparse:embellish_flag(short, Spec0, Spec1)
+    ->  true
+    ;   Spec1 = Spec0).
+
 embellish_flags(OptsSpec0,OptsSpec2) :-
-    convlist(optparse:embellish_flag(short), OptsSpec0, OptsSpec1),
-    convlist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
+    maplist(opt_short_embellish_flag, OptsSpec0, OptsSpec1),
+    maplist(optparse:embellish_flag(long), OptsSpec1, OptsSpec2).
 
 format_help_markdown_opt(Opt) :-
-
-    memberchk(shortflags(SFlags0),Opt),
+    ignore((memberchk(shortflags(SFlags0),Opt),
+            atomic_list_concat(['`',SFlags0,'`'],SFlags))),
     memberchk(longflags(LFlags0),Opt),
-
-    atomic_list_concat(['`',SFlags0,'`'],SFlags),
-
+    format(user_error, '~q~n', [SFlags]),
 
     maplist([LFlag_In,LFlag_Out]>>
             atomic_list_concat(['`',LFlag_In,'`'],LFlag_Out),
@@ -2502,7 +2505,11 @@ format_help_markdown_opt(Opt) :-
 
     memberchk(help(Help), Opt),
 
-    format(current_output, '  * ~s, ~s=[value]:~n', [SFlags,LFlags]),
+    format(current_output, '  * ', []),
+    (   var(SFlags)
+    ->  true
+    ;   format(current_output, '~s, ', [SFlags])),
+    format(current_output, '~s=[value]:~n', [LFlags]),
     format(current_output, '  ~s~n~n', [Help]).
 
 format_doc_id_list(Ids) :-
