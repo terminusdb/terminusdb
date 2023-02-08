@@ -121,19 +121,20 @@ auth_action_scope(DB, Auth, Action, Scope_Iri) :-
         (
             t(Auth, capability, Capability),
             t(Capability, role, Role),
+            t(Role, action, Action)
             t(Capability, scope, Intermediate_Scope_Iri),
             path(Intermediate_Scope_Iri, (star((p(child);p(database)))), Scope_Iri, _),
-            t(Role, action, Action)
         )
        ).
 auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
     % For access to everything that the anonymous user has...
+    % This does not allow transitive scoping to work as written, but relies on the
+    % API setting up a capability for each database marked public
     ask(DB,
-        (   t(anonymous, capability, Capability),
-            isa(Capability, 'Capability'),
-            t(Capability, scope, Scope_Iri),
-            t(Capability, role, anonymous_role),
-            t(anonymous_role, action, Action)
+        (   t(Capability, scope, Scope_Iri),
+            t('User/anonymous', capability, Capability),
+            t(Capability, role, Role),
+            t(Role, action, Action)
         )
        ).
 
