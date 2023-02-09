@@ -640,14 +640,14 @@ property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Cap
 
 json_elaborate(DB,JSON,Elaborated) :-
     empty_assoc(Captures_In),
-    json_elaborate(DB,JSON,Captures_In,Elaborated,_Dependencies,_-_,_Captures_Out).
+    json_elaborate(DB,JSON,Captures_In,Elaborated,_Ids,_Dependencies,_-_,_Captures_Out).
 
-json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,SH-ST,Captures_Out) :-
+json_elaborate(DB,JSON,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
     database_prefixes(DB,Context),
-    json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies,SH-ST,Captures_Out).
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out).
 
 :- use_module(core(document/inference)).
-json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,SH-ST,Captures_Out) :-
+json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
     infer_type(DB,Context,JSON,Type,Result,captures(Captures_In,Dependencies-[],SH-ST,Captures_Out)),
     (   Result = witness(Witness)
     ->  term_variables(Witness, Vars),
@@ -662,7 +662,7 @@ json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,SH-ST,Capture
     ),
     when(ground(Parents),
          do_or_die(
-             json_assign_ids(DB,Context,Elaborated),
+             json_assign_ids(DB,Context,Ids,Elaborated),
              error(unable_to_assign_ids))).
 
 /*
@@ -710,7 +710,7 @@ update_captures(Elaborated,In,Out) :-
     update_captures_with_id(Capture_Group, Id, In, Out).
 update_captures(_Elaborated,Capture,Capture).
 
-json_assign_ids(DB,Context,JSON) :-
+json_assign_ids(DB,Context,Ids,JSON) :-
     get_dict('@type',JSON,Type),
     (   is_subdocument(DB, Type)
     %% Great, it's a subdocument inserted at the top level
@@ -724,15 +724,15 @@ json_assign_ids(DB,Context,JSON) :-
         del_dict('@linked-by', JSON, _, JSON2)
     ;   Path = [],
         JSON2 = JSON),
-    json_assign_ids(DB,Context,JSON2,Path).
+    json_assign_ids(DB,Context,JSON2,Ids,Path).
 
-json_assign_ids(_DB,_Context,JSON,_Path) :-
+json_assign_ids(_DB,_Context,JSON,[],_Path) :-
     \+ is_dict(JSON),
     !.
-json_assign_ids(_DB,_Context,JSON,_Path) :-
+json_assign_ids(_DB,_Context,JSON,[],_Path) :-
     get_dict('@type',JSON,"@id"),
     !.
-json_assign_ids(DB,Context,JSON,Path) :-
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@id',JSON,ID),
     !,
 
@@ -748,24 +748,34 @@ json_assign_ids(DB,Context,JSON,Path) :-
     check_submitted_id_against_generated_id(Context, Generated_Id, ID),
 
     dict_pairs(JSON, _, Pairs),
-    maplist({DB, Context, ID, Next_Path}/[Property-Value]>>(
-                json_assign_ids(DB, Context, Value, [property(Property),node(ID)|Next_Path])
+    maplist({DB, Context, ID, Next_Path}/[Property-Value,Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(ID)|Next_Path])
             ),
-            Pairs).
-json_assign_ids(DB,Context,JSON,Path) :-
+            Pairs,
+            New_Id_Lists),
+    append(New_Id_Lists, New_Ids),
+    (   key_descriptor(DB, Type, value_hash(_))
+    ->  Ids = [Id-value_hash|New_Ids]
+    ;   is_subdocument(DB, Type)
+    ->  Ids = [Id-subdocument|New_Ids]
+    ;   Ids = [Id-normal|New_Ids]
+    ).
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@set"),
     !,
     get_dict('@value', JSON, Values),
-    maplist({DB,Context,Path}/[Value]>>(
-                json_assign_ids(DB, Context, Value, Path)
+    maplist({DB,Context,Path}/[Value, Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, Path)
             ),
-            Values).
-json_assign_ids(DB,Context,JSON,Path) :-
+            Ids_List,
+            Values),
+    append(Ids_List, Ids).
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@array"),
     !,
     get_dict('@value', JSON, Values),
-    array_assign_ids(Values,DB,Context,Path).
-json_assign_ids(DB,Context,JSON,Path) :-
+    array_assign_ids(Values,DB,Context,Ids,Path).
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, _),
     !,
     get_dict('@value', JSON, Values),
@@ -776,30 +786,33 @@ json_assign_ids(DB,Context,JSON,Path) :-
         numlist(0, Max_Index, Numlist)
     ),
 
-    maplist({DB,Context,Path}/[Value,Index]>>(
+    maplist({DB,Context,Path}/[Value,Index,Ids]>>(
                 New_Path=[index(Index)|Path],
-                json_assign_ids(DB, Context, Value, New_Path)
+                json_assign_ids(DB, Context, Value, Ids, New_Path)
             ),
             Values,
-            Numlist).
-json_assign_ids(_DB,_Context,_JSON,_Path).
+            Numlist,
+            Ids_List),
+    append(Ids_List, Ids).
+json_assign_ids(_DB,_Context,_JSON,[],_Path).
 
-array_assign_ids([],_,_,_) :-
+array_assign_ids([],_,_,Ids,_) :-
     !.
-array_assign_ids(Values,DB,Context,Path) :-
+array_assign_ids(Values,DB,Context,Ids,Path) :-
     length(Values, Value_Len),
     Max_Index is Value_Len - 1,
     numlist(0, Max_Index, Numlist),
-    array_assign_ids(Values,Numlist,DB,Context,Path).
+    array_assign_ids(Values,Numlist,DB,Context,Ids,Path).
 
-array_assign_ids([], [], _, _, _).
-array_assign_ids([H|T], [I|Idx], DB, Context, Path) :-
+array_assign_ids([], [], _, _, [], _).
+array_assign_ids([H|T], [I|Idx], DB, Context, Ids, Path) :-
     New_Path=[index(I)|Path],
     (   is_list(H)
-    ->  array_assign_ids(H,DB,Context,New_Path)
-    ;   json_assign_ids(DB,Context,H,New_Path)
+    ->  array_assign_ids(H,DB,Context,Sub_Ids,New_Path)
+    ;   json_assign_ids(DB,Context,H,Sub_Ids,New_Path)
     ),
-    array_assign_ids(T,Idx,DB,Context,Path).
+    append(Sub_Ids, More_Ids, Ids),
+    array_assign_ids(T,Idx,DB,Context,More_Ids,Path).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -1514,7 +1527,7 @@ json_schema_triple(JSON,Context,Triple) :-
 json_triples(DB,JSON,Triples) :-
     database_prefixes(DB,Context),
     empty_assoc(Captures),
-    json_elaborate(DB,JSON,Context,Captures,Elaborated,Dependencies,_-_,_Captures_Out),
+    json_elaborate(DB,JSON,Context,Captures,Elaborated,_,Dependencies,_-_,_Captures_Out),
     do_or_die(ground(Dependencies),
               error(unbound_capture_groups(Dependencies),_)),
     findall(Triple,
@@ -2476,7 +2489,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
 write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
     json_read_term(JSON_Stream, Dict),
     !,
-    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,[]-[],New_Captures_In),
+    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,_,Dependencies,[]-[],New_Captures_In),
 
     when(ground(Dependencies),
          forall(
@@ -2619,11 +2632,9 @@ nuke_schema_documents(Query_Context) :-
     query_default_collection(Query_Context, TO),
     nuke_documents(TO).
 
-check_existing_document_status(Transaction, Document, Status) :-
-    get_dict('@type', Document, Type),
-    get_dict('@id', Document, Id),
+check_existing_document_status(Transaction, Variety, Status) :-
     database_instance(Transaction, Instance),
-    (   key_descriptor(Transaction, Type, value_hash(_))
+    (   Variety = value_hash
     ->  (   xrdf(Instance, Id, _, _)
         ->  Status = equivalent
         ;   Status = not_present)
@@ -2640,28 +2651,28 @@ valid_json_id_or_die(Prefixes,Id) :-
         error(not_a_valid_json_object_id(Id),_)).
 
 % insert_document/3
-insert_document(Transaction, Document, ID) :-
-    insert_document(Transaction, Document, false, ID).
+insert_document(Transaction, Document, IDs) :-
+    insert_document(Transaction, Document, false, IDs).
 
 % insert_document/4
-insert_document(Transaction, Document, Raw_JSON, ID) :-
+insert_document(Transaction, Document, Raw_JSON, IDs) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, IDs, _Dependencies, _Captures_Out).
 
 % insert_document/7
-insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
+insert_document(Query_Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
-insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
+    insert_document(TO, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out).
+insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_and_default_prefixes(Transaction, Prefixes),
-    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out).
 
 % insert_document/8
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, T-T, Captures) :-
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -2677,8 +2688,8 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, T-T
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, SH-ST, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, SH-ST, Captures_Out),
+insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2690,20 +2701,18 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, SH-ST, 
 
     % After elaboration, the Elaborated document will have an '@id'
     do_or_die(
-        get_dict('@id', Elaborated, ID),
+        get_dict('@id', Elaborated, _ID),
         error(missing_field('@id', Elaborated), _)),
 
     ensure_transaction_has_builder(instance, Transaction),
+    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Ids),
     when(ground(Dependencies),
          (
-             check_existing_document_status(Transaction, Elaborated, Status),
-             (   Status = not_present
-             ->  insert_document_expanded(Transaction, Elaborated, ID)
-             ;   Status = equivalent
-             ->  true
-             ;   Status = present
-             ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
-             )
+             forall( member(Id-Variety, Id_Pairs)
+                     (   check_existing_document_status(Transaction, Id, Variety, Status),
+                         die_if(Status = present,
+                                error(can_not_insert_existing_object_with_id(Id), _)))),
+             insert_document_expanded(Transaction, Elaborated, _ID)
          )).
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
@@ -2713,8 +2722,8 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T,
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, BLH-BLT, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, BLH-BLT, Captures_Out),
+insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids, BLH-BLT, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Ids, Dependencies, BLH-BLT, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2724,10 +2733,10 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, 
         error(inserted_subdocument_as_document, _)),
     % After elaboration, the Elaborated document will have an '@id'
     do_or_die(
-        get_dict('@id', Elaborated, Id),
+        get_dict('@id', Elaborated, Id_),
         error(missing_field('@id', Elaborated), _)),
     when(ground(Dependencies),
-         insert_document_expanded(Transaction, Elaborated, Id)).
+         insert_document_expanded(Transaction, Elaborated, Id_)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
@@ -2760,7 +2769,7 @@ replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
 is_json_hash(Id) :-
     re_match('^terminusdb:///json/JSON/.*', Id).
 
-replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures) :-
+replace_document(Transaction, Document, Create, true, Captures, [Id], [], Captures) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Prefixes),
@@ -2776,32 +2785,37 @@ replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures
               Create = true,
               error(document_not_found(Id, Document), _))),
     insert_json_object(Transaction, JSON, Id_Ex).
-replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Transaction, Document, Create, false, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, BLH-[], Captures_Out),
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-[], Captures_Out),
     die_if(
         BLH \= [],
         error(back_links_not_supported_in_replace, _)),
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
-    catch(delete_document(Transaction, false, Id),
-          error(document_not_found(_), _),
-          (   Create = true
-          % If we're creating a document, we gotta be sure that it is not a subdocument
-          ->  get_dict('@type', Elaborated, Type),
-              die_if(is_subdocument(Transaction, Type),
-                     error(inserted_subdocument_as_document, _))
-          ;   throw(error(document_not_found(Id, Document), _)))),
+    include([Id-normal]>>true, Id_Pairs, Deletions),
+    maplist([Deletion_Id]>>(
+                catch(delete_document(Transaction, false, Deletion_Id),
+                      error(document_not_found(_), _),
+                      (   Create = true
+                      % If we're creating a document, we gotta be sure that it is not a subdocument
+                      ->  get_dict('@type', Elaborated, Type),
+                          die_if(is_subdocument(Transaction, Type),
+                                 error(inserted_subdocument_as_document, _))
+                      ;   throw(error(document_not_found(Id, Document), _)))),
+            ),
+            Deletions),
     ensure_transaction_has_builder(instance, Transaction),
+    convlist([Id-Variety,Id]>>(Variety \= value_hash),Id_Pairs,Ids),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
-replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
+    replace_document(TO, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
