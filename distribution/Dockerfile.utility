@@ -1,0 +1,4 @@
+FROM terminusdb/terminusdb-server:latest
+RUN apt update -y && \
+    apt install curl git less vim make -y
+CMD ["/bin/bash"]
