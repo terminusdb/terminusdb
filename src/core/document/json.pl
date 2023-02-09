@@ -4,7 +4,7 @@
               idgen_lexical/3,
               context_triple/2,
               json_elaborate/3,
-              json_elaborate/7,
+              json_elaborate/8,
               json_schema_triple/3,
               json_schema_elaborate/3,
               database_context_object/2,
@@ -733,7 +733,7 @@ json_assign_ids(_DB,_Context,JSON,[],_Path) :-
     get_dict('@type',JSON,"@id"),
     !.
 json_assign_ids(DB,Context,JSON,Ids,Path) :-
-    get_dict('@id',JSON,ID),
+    get_dict('@id',JSON,Id),
     !,
 
     get_dict('@type',JSON,Type),
@@ -745,11 +745,11 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
 
     key_descriptor(DB, Context, Type, Descriptor),
     json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
-    check_submitted_id_against_generated_id(Context, Generated_Id, ID),
+    check_submitted_id_against_generated_id(Context, Generated_Id, Id),
 
     dict_pairs(JSON, _, Pairs),
-    maplist({DB, Context, ID, Next_Path}/[Property-Value,Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(ID)|Next_Path])
+    maplist({DB, Context, Id, Next_Path}/[Property-Value,Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)|Next_Path])
             ),
             Pairs,
             New_Id_Lists),
@@ -767,8 +767,8 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     maplist({DB,Context,Path}/[Value, Ids]>>(
                 json_assign_ids(DB, Context, Value, Ids, Path)
             ),
-            Ids_List,
-            Values),
+            Values,
+            Ids_List),
     append(Ids_List, Ids).
 json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@array"),
@@ -796,7 +796,7 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     append(Ids_List, Ids).
 json_assign_ids(_DB,_Context,_JSON,[],_Path).
 
-array_assign_ids([],_,_,Ids,_) :-
+array_assign_ids([],_,_,[],_) :-
     !.
 array_assign_ids(Values,DB,Context,Ids,Path) :-
     length(Values, Value_Len),
@@ -2632,7 +2632,7 @@ nuke_schema_documents(Query_Context) :-
     query_default_collection(Query_Context, TO),
     nuke_documents(TO).
 
-check_existing_document_status(Transaction, Variety, Status) :-
+check_existing_document_status(Transaction, Id, Variety, Status) :-
     database_instance(Transaction, Instance),
     (   Variety = value_hash
     ->  (   xrdf(Instance, Id, _, _)
@@ -2650,14 +2650,18 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
+%% insert_document arity 3 and 4 return only a single ID
+%% as these predicates are internal, and not API predicates.
+%%
 % insert_document/3
-insert_document(Transaction, Document, IDs) :-
-    insert_document(Transaction, Document, false, IDs).
+insert_document(Transaction, Document, ID) :-
+    insert_document(Transaction, Document, false, ID).
 
 % insert_document/4
-insert_document(Transaction, Document, Raw_JSON, IDs) :-
+insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, IDs, _Dependencies, _Captures_Out).
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, _Dependencies, _Captures_Out),
+    Ids = [ID|_].
 
 % insert_document/7
 insert_document(Query_Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
@@ -2701,18 +2705,26 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
 
     % After elaboration, the Elaborated document will have an '@id'
     do_or_die(
-        get_dict('@id', Elaborated, _ID),
+        get_dict('@id', Elaborated, _),
         error(missing_field('@id', Elaborated), _)),
 
     ensure_transaction_has_builder(instance, Transaction),
-    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Ids),
+    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Top_Ids),
+    % We can't return nothing, even if we're only a value hash...
+    (   Top_Ids = []
+    ->  Id_Pairs = [Id0-_|_],
+        Ids = [Id0]
+    ;   Ids = Top_Ids),
     when(ground(Dependencies),
          (
-             forall( member(Id-Variety, Id_Pairs)
-                     (   check_existing_document_status(Transaction, Id, Variety, Status),
-                         die_if(Status = present,
-                                error(can_not_insert_existing_object_with_id(Id), _)))),
-             insert_document_expanded(Transaction, Elaborated, _ID)
+             forall(
+                 member(Id-Variety, Id_Pairs),
+                 (   check_existing_document_status(Transaction, Id, Variety, Status),
+                     die_if(Status = present,
+                            error(can_not_insert_existing_object_with_id(Id), _))
+                 )
+             ),
+             insert_document_expanded(Transaction, Elaborated, _)
          )).
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
@@ -2749,13 +2761,14 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
             insert(Instance, S, P, OC, _))
     ).
 
-run_insert_document(Desc, Commit, Document, ID) :-
+run_insert_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        insert_document(Context, Document, ID),
+        insert_document(Context, Document, Id),
         _).
 
+%% Arity 2/3/5 return a single ID as they are internal
 replace_document(DB, Document) :-
     replace_document(DB, Document, false, false, _).
 
@@ -2764,7 +2777,8 @@ replace_document(DB, Document, Id) :-
 
 replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
     empty_assoc(Captures),
-    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Id, _Dependencies, _Captures_Out).
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Ids, _Dependencies, _Captures_Out),
+    Ids = [Id|_].
 
 is_json_hash(Id) :-
     re_match('^terminusdb:///json/JSON/.*', Id).
@@ -2796,19 +2810,21 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
     include([Id-normal]>>true, Id_Pairs, Deletions),
-    maplist([Deletion_Id]>>(
-                catch(delete_document(Transaction, false, Deletion_Id),
-                      error(document_not_found(_), _),
-                      (   Create = true
-                      % If we're creating a document, we gotta be sure that it is not a subdocument
-                      ->  get_dict('@type', Elaborated, Type),
-                          die_if(is_subdocument(Transaction, Type),
-                                 error(inserted_subdocument_as_document, _))
-                      ;   throw(error(document_not_found(Id, Document), _)))),
+    maplist({Transaction,Document}/[Deletion_Id-Variety]>>(
+                catch(
+                    delete_document(Transaction, false, Deletion_Id),
+                    error(document_not_found(_), _),
+                    (   Create = true
+                    % If we're creating a document, we gotta be sure that it is not a subdocument
+                    ->  die_if(Variety = subdocument,
+                               error(inserted_subdocument_as_document, _))
+                    ;   throw(error(document_not_found(Deletion_Id, Document), _))
+                    )
+                )
             ),
             Deletions),
     ensure_transaction_has_builder(instance, Transaction),
-    convlist([Id-Variety,Id]>>(Variety \= value_hash),Id_Pairs,Ids),
+    convlist([Id0-Variety,Id0]>>(Variety \= value_hash),Id_Pairs,Ids),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
 replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
@@ -6826,7 +6842,7 @@ test(delete_referenced_object,
     with_transaction(
         Context,
         (   insert_document(Context, Document0, false, Captures_In, _Id1, _, Captures_Out1),
-            insert_document(Context, Document1, false, Captures_Out1, Id2, _, _)
+            insert_document(Context, Document1, false, Captures_Out1, [Id2|_], _, _)
         ),
         _
     ),

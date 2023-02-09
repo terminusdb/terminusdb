@@ -317,7 +317,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                                 error(not_all_captures_found(Nonground), _)),
                          database_instance(Transaction, [Instance]),
                          insert_backlinks(BackLinks, Instance),
-                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids)
+                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
                          die_if(Duplicates \= [],
                                 error(same_ids_in_one_transaction(Duplicates), _))
                      ),
@@ -332,7 +332,7 @@ idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
     ->  Duplicates = []
     ;   has_duplicates(All_Ids, Duplicates)
     ),
-    maplist([[Id|Rest],Id]>>true, Ids, Toplevel).
+    maplist([[Id|_],Id]>>true, Ids, Toplevel).
 
 insert_backlinks(Links, Graph) :-
     nb_link_dict(backlinks,Graph,Links),
@@ -461,7 +461,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                                                              Ids_List),
                          die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
-                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids)
+                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
                          die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
                      ),
                      Meta_Data),
