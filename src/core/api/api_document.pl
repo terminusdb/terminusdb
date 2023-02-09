@@ -197,7 +197,7 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, Id, Captures, T-T) :-
+api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
@@ -210,7 +210,7 @@ api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id,
         do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, Id, Captures, T-T) :-
+api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         (   do_or_die(
