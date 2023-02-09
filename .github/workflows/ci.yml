@@ -241,9 +241,11 @@ jobs:
           TAGS="${{ env.docker_tags }}"
           for TAG in ${TAGS//,/ }
           do
+              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+              # Replace version in Dockerfile with latest pushed version
+              sed -i "s/latest/$TAG/" distribution/Dockerfile.utility
               sudo docker buildx build . -f distribution/Dockerfile.utility -t terminusdb/terminusdb-utility-image:"$TAG"
               sudo docker push terminusdb/terminusdb-utility-image:"$TAG"
-              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           done
 
   trigger_enterprise_build:
