@@ -45,8 +45,12 @@ install-pack:
 	  -g halt
 
 .PHONY: clean
-clean: clean-dashboard
+clean: clean-dashboard clean-deps
 
 .PHONY: clean-dashboard
 clean-dashboard:
 	rm -rf dashboard
+
+.PHONY: clean-deps
+clean-deps:
+	rm -rf .deps
