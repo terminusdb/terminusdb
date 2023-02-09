@@ -348,7 +348,12 @@ describe('document', function () {
       const A = util.randomString()
       const B = util.randomString()
       const schema = [{ '@type': 'Class', '@id': A, b: B },
-        { '@type': 'Class', '@id': B, x: 'xsd:string' }]
+        {
+          '@type': 'Class',
+          '@unfoldable': [],
+          '@id': B,
+          x: 'xsd:string',
+        }]
       before(async function () {
         await document.insert(agent, { schema })
       })
@@ -385,7 +390,8 @@ describe('document', function () {
         ]
         await document.replace(agent, { instance: instance2 })
         const result3 = await document.get(agent, { query: { id: `${A}/2` } })
-        expect(result3.body.b).to.equal(`${B}/2`)
+        console.log(result3.body)
+        expect(result3.body.b.x).to.equal('fdsa')
       })
     })
 
