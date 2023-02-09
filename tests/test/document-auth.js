@@ -390,7 +390,6 @@ describe('document', function () {
         ]
         await document.replace(agent, { instance: instance2 })
         const result3 = await document.get(agent, { query: { id: `${A}/2` } })
-        console.log(result3.body)
         expect(result3.body.b.x).to.equal('fdsa')
       })
     })
