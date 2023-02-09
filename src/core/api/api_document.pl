@@ -25,6 +25,7 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(apply)).
 :- use_module(library(pprint), [print_term/2]).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
