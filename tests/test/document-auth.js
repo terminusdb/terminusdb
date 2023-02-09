@@ -344,6 +344,51 @@ describe('document', function () {
       }
     })
 
+    describe('Deep replace/insertions', function () {
+      const A = util.randomString()
+      const B = util.randomString()
+      const schema = [{ '@type': 'Class', '@id': A, b: B },
+        { '@type': 'Class', '@id': B, x: 'xsd:string' }]
+      before(async function () {
+        await document.insert(agent, { schema })
+      })
+
+      it('add in parallel', async function () {
+        const instance = [
+          { b: { '@id': `${B}/1`, x: 'asdf' } },
+          { b: { '@id': `${B}/1`, x: 'fdsa' } },
+        ]
+        const result = await document.insert(agent, { instance }).unverified()
+        expect(result.body['api:error']['@type']).to.equal('api:SameDocumentIdsMutatedInOneTransaction')
+        expect(result.body['api:error']['api:duplicate_ids']).to.deep.equal([`terminusdb:///data/${B}/1`])
+      })
+
+      it('deep replace', async function () {
+        const instance = [
+          {
+            '@id': `${A}/2`,
+            b: {
+              '@id': `${B}/2`,
+              x: 'asdf',
+            },
+          },
+        ]
+        const result = await document.insert(agent, { instance }).unverified()
+        const instance2 = [
+          {
+            '@id': `${A}/2`,
+            b: {
+              '@id': `${B}/2`,
+              x: 'fdsa',
+            },
+          },
+        ]
+        await document.replace(agent, { instance: instance2 })
+        const result3 = await document.get(agent, { query: { id: `${A}/2` } })
+        expect(result3.body.b).to.equal(`${B}/2`)
+      })
+    })
+
     it('succeeds when ignoring optional combined with oneof (#992)', async function () {
       const Parent = util.randomString()
       const Choice = util.randomString()
