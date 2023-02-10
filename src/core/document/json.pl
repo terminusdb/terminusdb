@@ -2831,8 +2831,7 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
     include([_-normal]>>true, Id_Pairs, Deletions),
     maplist({Create,Transaction,Document}/[Deletion_Id-Variety]>>(
                 catch(
-                    (   format(user_error, 'Deletion: ~q', [Deletion_Id]),
-                        delete_document(Transaction, false, Deletion_Id)),
+                    delete_document(Transaction, false, Deletion_Id),
                     error(document_not_found(_), _),
                     (   Create = true
                     % If we're creating a document, we gotta be sure that it is not a subdocument
