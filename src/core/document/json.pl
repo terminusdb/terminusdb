@@ -464,6 +464,15 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
 
+check_replaceable_has_id(Document, Id) :-
+    die_if(
+        (   var(Id),
+            (   \+ get_dict('@id', Document, Document_Id)
+            ;   get_dict('@id', Document, Document_Id),
+            var(Document_Id))),
+        error(missing_field('@id', Document), _)
+    ).
+
 class_descriptor_image(unit,json{ '@type': SysUnit}) :-
     global_prefix_expand(sys:'Unit', SysUnit).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
@@ -2777,8 +2786,8 @@ replace_document(DB, Document, Id) :-
 
 replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
     empty_assoc(Captures),
-    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Ids, _Dependencies, _Captures_Out),
-    Ids = [Id|_].
+    Ids = [Id|_], % We need to be able to compare against input if supplied.
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Ids, _Dependencies, _Captures_Out).
 
 is_json_hash(Id) :-
     re_match('^terminusdb:///json/JSON/.*', Id).
@@ -2803,13 +2812,18 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
+    (   nonvar(Ids)
+    ->  Ids = [Id|_] % Bind Id to input if we have it
+    ;   true
+    ),
+    check_replaceable_has_id(Document, Id),
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-[], Captures_Out),
     die_if(
         BLH \= [],
         error(back_links_not_supported_in_replace, _)),
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
-    include([Id-normal]>>true, Id_Pairs, Deletions),
+    include([_-normal]>>true, Id_Pairs, Deletions),
     maplist({Transaction,Document}/[Deletion_Id-Variety]>>(
                 catch(
                     delete_document(Transaction, false, Deletion_Id),
