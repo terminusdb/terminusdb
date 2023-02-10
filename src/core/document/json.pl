@@ -10965,6 +10965,52 @@ test(normalizable_float,
            foo: "0.5000000"},
         'Thing/0.5').
 
+nested_document_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Foo",
+  "@key": {"@type":"Lexical", "@fields": ["bar"]},
+  "bar" : "Bar" }
+
+{ "@type" : "Class",
+  "@id" : "Bar",
+  "@key" : {"@type": "Lexical", "@fields": ["x"]},
+  "x" : "xsd:string" }
+').
+
+test(insert_nested_document_with_key_dependency,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(nested_document_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = _{
+        bar: _{x: "hello"}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, Doc, Id)
+    ),
+
+    Expected_Id = 'terminusdb:///data/Foo/terminusdb%3A%2F%2F%2Fdata%2FBar%2Fhello',
+    do_or_die(Id == Expected_Id,
+              error(food_id_mismatch(Id, Expected_Id), _)),
+
+    with_test_transaction(Desc,
+                          C2,
+                          get_document(C2, Id, Inserted)),
+
+    Expected_Bar_Id = 'Bar/hello',
+    Bar_Id = (Inserted.bar),
+    do_or_die(Bar_Id == Expected_Bar_Id,
+              error(bar_id_mismatch(Bar_Id, Expected_Bar_Id), _)).
+
 :- end_tests(document_id_generation).
 
 
