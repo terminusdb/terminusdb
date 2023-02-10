@@ -345,8 +345,8 @@ describe('document', function () {
     })
 
     describe('Deep replace/insertions', function () {
-      const A = util.randomString()
-      const B = util.randomString()
+      let A
+      let B
       const schema = [{ '@type': 'Class', '@id': A, b: B },
         {
           '@type': 'Class',
@@ -354,7 +354,10 @@ describe('document', function () {
           '@id': B,
           x: 'xsd:string',
         }]
+
       before(async function () {
+        A = util.randomString()
+        B = util.randomString()
         await document.insert(agent, { schema })
       })
 
@@ -378,7 +381,7 @@ describe('document', function () {
             },
           },
         ]
-        const result = await document.insert(agent, { instance }).unverified()
+        await document.insert(agent, { instance }).unverified()
         const instance2 = [
           {
             '@id': `${A}/2`,
@@ -389,8 +392,8 @@ describe('document', function () {
           },
         ]
         await document.replace(agent, { instance: instance2 })
-        const result3 = await document.get(agent, { query: { id: `${A}/2` } })
-        expect(result3.body.b.x).to.equal('fdsa')
+        const result = await document.get(agent, { query: { id: `${A}/2` } })
+        expect(result.body.b.x).to.equal('fdsa')
       })
     })
 
