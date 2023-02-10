@@ -464,9 +464,10 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
 
-check_replaceable_has_id(Document, Id) :-
+check_replaceable_has_id(Document, Create, Id) :-
     die_if(
         (   var(Id),
+            Create = false,
             (   \+ get_dict('@id', Document, Document_Id)
             ;   get_dict('@id', Document, Document_Id),
             var(Document_Id))),
@@ -2718,12 +2719,7 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
         error(missing_field('@id', Elaborated), _)),
 
     ensure_transaction_has_builder(instance, Transaction),
-    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Top_Ids),
-    % We can't return nothing, even if we're only a value hash...
-    (   Top_Ids = []
-    ->  Id_Pairs = [Id0-_|_],
-        Ids = [Id0]
-    ;   Ids = Top_Ids),
+    extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
          (
              forall(
@@ -2736,6 +2732,14 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
              insert_document_expanded(Transaction, Elaborated, _)
          )).
 
+extract_return_ids(Id_Pairs, Ids) :-
+    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Top_Ids),
+    % We can't return nothing, even if we're only a value hash...
+    (   Top_Ids = []
+    ->  Id_Pairs = [Id0-_|_],
+        Ids = [Id0]
+    ;   Ids = Top_Ids).
+
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  prefix_expand(Id_Short,Prefixes,Id),
@@ -2744,7 +2748,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T,
     ;   insert_json_object(Transaction, Document, Id)
     ).
 insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids, BLH-BLT, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Ids, Dependencies, BLH-BLT, Captures_Out),
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-BLT, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2756,6 +2760,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
     do_or_die(
         get_dict('@id', Elaborated, Id),
         error(missing_field('@id', Elaborated), _)),
+    extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
 
@@ -2816,7 +2821,7 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
     ->  Ids = [Id|_] % Bind Id to input if we have it
     ;   true
     ),
-    check_replaceable_has_id(Document, Id),
+    check_replaceable_has_id(Document, Create, Id),
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-[], Captures_Out),
     die_if(
         BLH \= [],

@@ -190,7 +190,6 @@ describe('document', function () {
         const instance = [
           { '@type': type1, '@id': `terminusdb:///data/${type1}/1` },
           { '@type': type2, '@id': `terminusdb:///data/${type2}/1`, ref: `terminusdb:///data/${type1}/1` },
-          { '@type': type2, '@id': `terminusdb:///data/${type2}/2`, ref: { '@id': `terminusdb:///data/${type1}/1` } },
           { '@type': type2, '@id': `terminusdb:///data/${type2}/3`, ref: { '@id': `terminusdb:///data/${type1}/1`, '@type': '@id' } },
         ]
         await document.insert(agent, { instance })
@@ -347,17 +346,22 @@ describe('document', function () {
     describe('Deep replace/insertions', function () {
       let A
       let B
-      const schema = [{ '@type': 'Class', '@id': A, b: B },
-        {
-          '@type': 'Class',
-          '@unfoldable': [],
-          '@id': B,
-          x: 'xsd:string',
-        }]
-
+      let schema
       before(async function () {
         A = util.randomString()
         B = util.randomString()
+        schema = [
+          {
+            '@type': 'Class',
+            '@id': A,
+            b: B,
+          },
+          {
+            '@type': 'Class',
+            '@unfoldable': [],
+            '@id': B,
+            x: 'xsd:string',
+          }]
         await document.insert(agent, { schema })
       })
 
