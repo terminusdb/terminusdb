@@ -2754,10 +2754,10 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
         error(inserted_subdocument_as_document, _)),
     % After elaboration, the Elaborated document will have an '@id'
     do_or_die(
-        get_dict('@id', Elaborated, Id_),
+        get_dict('@id', Elaborated, Id),
         error(missing_field('@id', Elaborated), _)),
     when(ground(Dependencies),
-         insert_document_expanded(Transaction, Elaborated, Id_)).
+         insert_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID),
