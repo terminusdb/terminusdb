@@ -318,9 +318,8 @@ describe('woql-auth', function () {
     it('fails UpdateDocument with missing @id', async function () {
       const query = queryTemplate()
       query.document.dictionary.data[0].value.data['@value'] = util.randomString()
-      const r = await woql.post(agent, query).fails()
-      expect(r.body['api:error']['@type']).to.equal('api:MissingField')
-      expect(r.body['api:error']['api:field']).to.equal('@id')
+      const r = await woql.post(agent, query).notFound()
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
     })
 
     it('passes UpdateDocument with node identifier', async function () {

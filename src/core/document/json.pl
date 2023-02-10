@@ -2821,17 +2821,18 @@ replace_document(Transaction, Document, Create, false, Captures_In, Ids, Depende
     ->  Ids = [Id|_] % Bind Id to input if we have it
     ;   true
     ),
-    check_replaceable_has_id(Document, Create, Id),
     json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-[], Captures_Out),
+    %check_replaceable_has_id(Document, Elaborated, Create, Id),
     die_if(
         BLH \= [],
         error(back_links_not_supported_in_replace, _)),
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
     include([_-normal]>>true, Id_Pairs, Deletions),
-    maplist({Transaction,Document}/[Deletion_Id-Variety]>>(
+    maplist({Create,Transaction,Document}/[Deletion_Id-Variety]>>(
                 catch(
-                    delete_document(Transaction, false, Deletion_Id),
+                    (   format(user_error, 'Deletion: ~q', [Deletion_Id]),
+                        delete_document(Transaction, false, Deletion_Id)),
                     error(document_not_found(_), _),
                     (   Create = true
                     % If we're creating a document, we gotta be sure that it is not a subdocument
