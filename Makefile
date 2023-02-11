@@ -67,13 +67,13 @@ i:
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Remove the binary.
-.PHONY: clean
-clean:
-	@$(MAKE) -f distribution/Makefile.prolog $@
+.PHONY: prolog-clean
+prolog-clean:
+	@$(MAKE) -f distribution/Makefile.prolog clean
 
 # Remove everything.
-.PHONY: realclean
-realclean: clean realclean-rust dashboard-clean
+.PHONY: clean
+clean: realclean-rust clean-dashboard clean-deps prolog-clean
 
 # Remove the dylib.
 .PHONY: clean-rust
@@ -88,7 +88,12 @@ realclean-rust:
 # Remove the dashboard
 .PHONY: clean-dashboard
 clean-dashboard:
-	@$(MAKE) -f distribution/Makefile.deps clean
+	@$(MAKE) -f distribution/Makefile.deps clean-dashboard
+
+# Remove the dashboard
+.PHONY: clean-deps
+clean-deps:
+	@$(MAKE) -f distribution/Makefile.deps clean-deps
 
 # Build the documentation.
 .PHONY: docs
