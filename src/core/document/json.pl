@@ -342,8 +342,9 @@ raw(JValue,Value) :-
             maplist(raw, V_1, V_Raw),
             Value = list(V_Raw))
     ;   get_dict('@type', JValue, Value_Type)
-    ->  get_dict('@value', JValue, Uncasted_Value),
-        normalize_json_value(Uncasted_Value, Value_Type, Value)
+    ->  (   get_dict('@value', JValue, Uncasted_Value)
+        ->  normalize_json_value(Uncasted_Value, Value_Type, Value)
+        ;   get_dict('@id', JValue, Value))
     ;   get_dict('@value', JValue, Value)
     ).
 raw(JValue,JValue).
@@ -720,6 +721,29 @@ update_captures(Elaborated,In,Out) :-
     update_captures_with_id(Capture_Group, Id, In, Out).
 update_captures(_Elaborated,Capture,Capture).
 
+descriptor_fields(lexical(_Base, Fields), Fields) :- !.
+descriptor_fields(hash(_Base, Fields), Fields) :- !.
+descriptor_fields(_, []).
+
+split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields) :-
+    descriptor_fields(Descriptor, Fields),
+    maplist({Context}/[F,FE]>>(prefix_expand_schema(F,Context, FE)),
+            Fields,
+            Fields_Ex),
+    dict_pairs(JSON, _, Pairs),
+    maplist({Fields_Ex}/[K-V, Out]>>(
+                memberchk(K, Fields_Ex)
+            ->  Out=key(K,V)
+            ;   Out=normal(K,V)),
+            Pairs,
+            Pairs_Sorted),
+    convlist([key(K,V), K-V]>>true,
+             Pairs_Sorted,
+             Key_Fields),
+    convlist([normal(K,V), K-V]>>true,
+             Pairs_Sorted,
+             Normal_Fields).
+
 json_assign_ids(DB,Context,Ids,JSON) :-
     get_dict('@type',JSON,Type),
     (   is_subdocument(DB, Type)
@@ -754,15 +778,36 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     ;   Next_Path = []),
 
     key_descriptor(DB, Context, Type, Descriptor),
+    split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields),
+
+    % The key fields get an id assigned to them first, as this
+    % document may depend on the result.
+    %
+    % We know that we do not need our ID for that generation, as there
+    % is no path dependency. So we don't even submit a valid path
+    % here, but rather a fake one that will error if it is encountered
+    % later.
+    maplist({DB, Context}/[Property-Value,Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, [inferred_non_subdocument])
+            ),
+            Key_Fields,
+            New_Id_Lists_1),
+
+
+    % Now that all potential dependencies have their key generated,
+    % the id of this document can be generated too.
     json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
     check_submitted_id_against_generated_id(Context, Generated_Id, Id),
 
-    dict_pairs(JSON, _, Pairs),
+    % Finally, we can descend into the other children, giving it a
+    % path that contains the ID of this document.
+
     maplist({DB, Context, Id, Next_Path}/[Property-Value,Ids]>>(
                 json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)|Next_Path])
             ),
-            Pairs,
-            New_Id_Lists),
+            Normal_Fields,
+            New_Id_Lists_2),
+    append(New_Id_Lists_1, New_Id_Lists_2, New_Id_Lists),
     append(New_Id_Lists, New_Ids),
     (   key_descriptor(DB, Type, value_hash(_))
     ->  Ids = [Id-value_hash|New_Ids]
@@ -10919,6 +10964,52 @@ test(normalizable_float,
         _{ '@type': "Thing",
            foo: "0.5000000"},
         'Thing/0.5').
+
+nested_document_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Foo",
+  "@key": {"@type":"Lexical", "@fields": ["bar"]},
+  "bar" : "Bar" }
+
+{ "@type" : "Class",
+  "@id" : "Bar",
+  "@key" : {"@type": "Lexical", "@fields": ["x"]},
+  "x" : "xsd:string" }
+').
+
+test(insert_nested_document_with_key_dependency,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(nested_document_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = _{
+        bar: _{x: "hello"}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, Doc, Id)
+    ),
+
+    Expected_Id = 'terminusdb:///data/Foo/terminusdb%3A%2F%2F%2Fdata%2FBar%2Fhello',
+    do_or_die(Id == Expected_Id,
+              error(food_id_mismatch(Id, Expected_Id), _)),
+
+    with_test_transaction(Desc,
+                          C2,
+                          get_document(C2, Id, Inserted)),
+
+    Expected_Bar_Id = 'Bar/hello',
+    Bar_Id = (Inserted.bar),
+    do_or_die(Bar_Id == Expected_Bar_Id,
+              error(bar_id_mismatch(Bar_Id, Expected_Bar_Id), _)).
 
 :- end_tests(document_id_generation).
 
