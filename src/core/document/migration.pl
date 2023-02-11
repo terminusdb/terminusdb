@@ -27,10 +27,14 @@
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
+:- use_module(core(document)).
 :- use_module(core(transaction)).
 :- use_module(core(util/tables)).
+:- use_module(core(api/api_document)).
 
 /*
+Operations Language:
+
 Default_Or_Error := error
                  |  default(Default)
 Op := delete_class(Name)
@@ -47,6 +51,21 @@ Op := delete_class(Name)
            [default_for_property(Property1,Default1),
             ...,
             default_for_property(PropertyN,DefaultN)])
+
+
+Generic Upgrade Workflow
+
+1. Generate an upgrade plan from a schema version, resulting in a before/after.
+2. Tag the new schema version
+3. Send data product with Before schema (check by Hash) to after schema version into
+   perform_migration/3
+
+Questions:
+
+1. Where do we store the upgrades? How do we attach the exact before
+and after state which the upgrade was designed for?
+2. How do we mark a data product as a "schema" data product?
+
 */
 
 /* delete_class(Name) */
@@ -139,7 +158,6 @@ move_class_property(Class, Old_Property, New_Property, Before, After) :-
     del_dict(Old_Property_Key, Before_Class_Document, Type_Definition, Class_Document0),
     put_dict(New_Property_Key, Class_Document0, Type_Definition, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After).
-
 
 family_weaken("List","List").
 family_weaken("Set","Set").
@@ -252,25 +270,94 @@ We will use a shared instance, but a different schema
 Schema1   Instance   Schema2
        \  /       \   /
      Before,      After
+
+
+TODO: We need to pay attempt to the schema type, as we need to know if we are an Array, or List.
+
 */
+
+
+extract_simple_type(Type, Simple) :-
+    is_dict(Type),
+    !,
+    get_dict('@type', Type, Family),
+    memberchk(Family, ["Set", "Optional", "Cardinality"]),
+    get_dict('@class', Type, Simple).
+extract_simple_type(Type, Type). % implict \+ is_dict(Type)
 
 interpret_instance_operation(delete_class(Class), Before, After) :-
     get_document_by_type(Before, Class, Uri),
     delete_document(After, Uri).
 interpret_instance_operation(create_class(_), _Before, _After).
 interpret_instance_operation(move_class(Old_Class, New_Class), Before, After) :-
-    get_document_by_type(Before, Old_Class, Uri),
-    get_document(Before, Uri, Document),
-    delete_document(After, Uri),
-    put_dict(_{'@type' : New_Class}, Document, New_Document),
-    insert_document(After, New_Document).
-interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, After) :-
-    true.
+    forall(
+        ask(Before,
+            t(Uri, rdf:type, Old_Class)),
+        (   get_document(Before, Uri, Document),
+            delete_document(After, Uri),
+            put_dict(_{'@type' : New_Class}, Document, New_Document),
+            insert_document(After, New_Document, New_Uri),
+            forall(
+                ask(After,
+                    (   t(X, P, Uri),
+                        delete(X, P, Uri),
+                        insert(X, P, New_Uri))),
+                true
+            )
+        )
+    ).
+interpret_instance_operation(delete_class_property(Class, Property), Before, _After) :-
+    % Todo: Array / List
+    forall(
+        ask(Before,
+            (   t(X, rdf:type, Class),
+                t(X, Property, Value),
+                delete(X, Property, Value))),
+        true
+    ).
+interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After) :-
+    (   extract_simple_type(New_Type, Simple_Type)
+    ->  forall(
+            ask(Before,
+                (   t(X, rdf:type, Class),
+                    t(X, Property, Old_Value),
+                    delete(X, Property, Old_Value),
+                    typecast(Old_Value, Simple_Type, [], Cast),
+                    insert(X, Property, Cast)
+                )
+               ),
+            true
+        )
+    ;   % Todo: Array / List
+        throw(error(not_implemented, _))
+    ).
+interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After) :-
+    % Todo: Array / List
+    forall(
+        ask(Before,
+            (   t(X, rdf:type, Class),
+                t(X, Property, Value^^Old_Type),
+                delete(X, Property, Value^^Old_Type)
+            )),
+        (   (   typecast_switch(Old_Type, New_Type, Value, [], Cast)
+            ->  true
+            ;   Default_or_Error = default(Default)
+            ->  Cast = Default^^New_Type
+            ;   throw(error(bad_cast_in_schema_migration(Value,Old_Type,New_Type), _))
+            ),
+            ask(After,
+                (   insert(X, Property, Cast)))
+        )
+    ).
+interpret_instance_operation(change_parents(_Class,_Parents,_Property_Defaults), _Before, _After) :-
+    throw(error(unimplemented, _)).
+interpret_instance_operation(Op, _Before, _After) :-
+    throw(error(instance_operation_failed(Op), _)).
 
-interpret_instance_operations([], []).
-interpret_instance_operations([Schema_Operation|Schema_Operations], [Instance_Operation|Instance_Operations], Before, After) :-
-    interpret_instance_operation(Schema_Operation,Instance_Operation, Before, After),
-    interpret_instance_operations(Schema_Operations, Instance_Operations, Before, After).
+interpret_instance_operations([], _Before, _After).
+interpret_instance_operations([Instance_Operation|Instance_Operations], Before, After) :-
+    interpret_instance_operation(Instance_Operation, Before, After),
+    interpret_instance_operations(Instance_Operations, Before, After).
 
 /*
  * A convenient intermediate form using a dictionary:
@@ -294,6 +381,52 @@ create_class_dictionary(Transaction, Dictionary) :-
         Pairs
     ),
     dict_create(Dictionary, json, Pairs).
+
+class_dictionary_to_schema(Dictionary, Schema) :-
+    dict_pairs(Dictionary, _, Pairs),
+    maplist([_-Class,Class]>>true, Pairs, Schema).
+
+perform_schema_migration(Descriptor, Commit_Info, Ops) :-
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+    interpret_schema_operations(Ops, Dictionary, After),
+    class_dictionary_to_schema(After, Schema),
+    create_context(Transaction,Commit_Info,Context),
+    with_transaction(
+        Context,
+        api_full_replace_schema(Transaction, Schema),
+        _Meta
+    ).
+
+/*
+ * Actually perform the upgrade
+ */
+
+calculate_schema_hash(_, 'some very hashy hash').
+
+perform_instance_migration(Descriptor, New_Schema_Descriptor, Operations) :-
+    open_descriptor(Descriptor, Before_Transaction),
+    open_descriptor(New_Schema_Descriptor, New_Schema_Transaction),
+    get_dict(schema_objects, New_Schema_Transaction, Schema_Objects),
+    put_dict(_{schema_objects: Schema_Objects}, Before_Transaction, After_Transaction),
+    calculate_schema_hash(Before_Transaction, Before_Hash),
+    calculate_schema_hash(After_Transaction, After_Hash),
+    format(string(Message), "TerminusDB schema automated migration v1.0.0, from: ~s to: ~s",
+           [Before_Hash, After_Hash]),
+    create_context(After_Transaction,
+                   commit_info{
+                       author: "automigration",
+                       % todo, supply the input and output migration hash
+                       message: Message
+                   },
+                   After
+                  ),
+    with_transaction(
+        After,
+        interpret_instance_operations(Operations, Before_Transaction, After),
+        _
+    ).
+
 
 :- begin_tests(migration).
 
@@ -371,5 +504,51 @@ test(move_and_weaken,
 							    }
 						   }
 				}.
+
+test(move_and_weaken_with_instance_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(schema,Schema),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Schema),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ a : "bar" },
+                            _)
+        )
+    ),
+
+    Ops = [
+        move_class("A", "B"),
+        upcast_class_property("B", "a", _{ '@type' : "Optional", '@class' : "xsd:string"})
+    ],
+
+    perform_schema_migration(Schema, commit_info{ author: "me", message: "upgrade" }, Ops),
+
+    get_schema_document(Schema, 'B', B_Doc),
+    B_Doc = json{'@id':'B',
+                 '@type':'Class',
+                 a:json{'@class':'xsd:string','@type':'Optional'}
+                },
+
+    perform_instance_migration(Descriptor, Schema, Ops),
+
+    findall(
+        Document,
+        get_document_by_type(Descriptor, "B", Document),
+        Docs),
+
+    print_Term(Docs, []).
+
+
 
 :- end_tests(migration).
