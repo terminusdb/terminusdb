@@ -391,19 +391,15 @@ describe('capabilities', function () {
     const userName = util.randomString()
 
     // org
-    await agent.post(`/api/organizations/${orgName}`)
-
+    const orgResult = await agent.post(`/api/organizations/${orgName}`)
+    const orgId = orgResult.body
     // user
     const user = {
       '@type': 'User',
       name: userName,
       capability: {
         '@type': 'Capability',
-        scope: {
-          '@type': 'Organization',
-          name: orgName,
-          database: [],
-        },
+        scope: orgId,
         role: 'Role/admin',
       },
     }
