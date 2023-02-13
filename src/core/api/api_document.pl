@@ -25,6 +25,7 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(apply)).
 :- use_module(library(pprint), [print_term/2]).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
@@ -197,7 +198,7 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, Id, Captures, T-T) :-
+api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
@@ -210,7 +211,7 @@ api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id,
         do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, Id, Captures, T-T) :-
+api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         (   do_or_die(
@@ -252,20 +253,20 @@ insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In,
     stream_to_lazy_docs(Stream, Lazy_List),
     api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
 
-api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Id|Ids]) :-
+api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
-    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Mid, BLH-BLM),
-    api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, BLM-BLT, Ids).
+    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
 api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-T, []).
 
-api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BLH-BLT, [Id|New_Ids]) :-
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
-    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Mid, BLH-BLM),
+    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
     api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
 api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, T-T, []).
 
 api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
-                                    Captures_In, Captures_Out, [Id|New_Ids]) :-
+                                    Captures_In, Captures_Out, [Ids|New_Ids]) :-
     !,
     call_catch_document_mutation(
         Document,
@@ -275,7 +276,7 @@ api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Trans
                               Document,
                               Create,
                               Captures_In,
-                              Id,
+                              Ids,
                               Captures_Mid)
     ),
     api_replace_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Create, Captures_Mid, Captures_Out, New_Ids).
@@ -312,16 +313,27 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                      (   set_stream_position(Stream, Pos),
                          empty_assoc(Captures_In),
                          ensure_transaction_has_builder(Graph_Type, Transaction),
-                         insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids),
+                         insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
                          die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
                          database_instance(Transaction, [Instance]),
                          insert_backlinks(BackLinks, Instance),
-                         die_if(has_duplicates(Ids, Duplicates),
+                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+                         die_if(Duplicates \= [],
                                 error(same_ids_in_one_transaction(Duplicates), _))
                      ),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
+    append(Ids,All_Ids),
+    length(All_Ids, N),
+    sort(All_Ids, Sorted),
+    (   length(Sorted, N)
+    ->  Duplicates = []
+    ;   has_duplicates(All_Ids, Duplicates)
+    ),
+    maplist([[Id|_],Id]>>true, Ids, Toplevel).
 
 insert_backlinks(Links, Graph) :-
     nb_link_dict(backlinks,Graph,Links),
@@ -411,9 +423,9 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Id, Captures_Out):-
-    replace_document(Transaction, Document, Create, Raw_JSON, Captures_In, Id, _Dependencies, Captures_Out).
-api_replace_document_(schema, _Raw_JSON, Transaction, Document, Create, Captures_In, Id, Captures_In):-
+api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Ids, Captures_Out):-
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures_In, Ids, _Dependencies, Captures_Out).
+api_replace_document_(schema, _Raw_JSON, Transaction, Document, Create, Captures_In, [Id], Captures_In):-
     replace_schema_document(Transaction, Document, Create, Id).
 
 
@@ -447,10 +459,11 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                                                              Create,
                                                              Captures,
                                                              Captures_Out,
-                                                             Ids),
+                                                             Ids_List),
                          die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
-                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
+                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+                         die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
                      ),
                      Meta_Data),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
