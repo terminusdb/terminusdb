@@ -282,21 +282,31 @@ extract_simple_type(Type, Simple) :-
     !,
     get_dict('@type', Type, Family),
     memberchk(Family, ["Set", "Optional", "Cardinality"]),
-    get_dict('@class', Type, Simple).
-extract_simple_type(Type, Type). % implict \+ is_dict(Type)
+    get_dict('@class', Type, Simple_Unexpanded),
+    default_prefixes(Prefixes),
+    prefix_expand_schema(Simple_Unexpanded, Prefixes, Simple).
+extract_simple_type(_, Type, Type). % implict \+ is_dict(Type)
+
+
+% This has to do something with subdocument ids, maybe it has to re-elaborate, re-assign?
+rewrite_document_ids(_Before, _After, Document, Cleaned) :-
+    del_dict('@id', Document, _, Cleaned).
 
 interpret_instance_operation(delete_class(Class), Before, After) :-
     get_document_by_type(Before, Class, Uri),
     delete_document(After, Uri).
 interpret_instance_operation(create_class(_), _Before, _After).
 interpret_instance_operation(move_class(Old_Class, New_Class), Before, After) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
     forall(
         ask(Before,
-            t(Uri, rdf:type, Old_Class)),
+            t(Uri, rdf:type, Old_Class_Ex)),
         (   get_document(Before, Uri, Document),
-            delete_document(After, Uri),
+            delete_document(Before, Uri),
             put_dict(_{'@type' : New_Class}, Document, New_Document),
-            insert_document(After, New_Document, New_Uri),
+            rewrite_document_ids(Before, After, New_Document, Final_Document),
+            insert_document(After, Final_Document, New_Uri),
             forall(
                 ask(After,
                     (   t(X, P, Uri),
@@ -332,22 +342,26 @@ interpret_instance_operation(upcast_class_property(Class, Property, New_Type), B
         throw(error(not_implemented, _))
     ).
 interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After) :-
-    % Todo: Array / List
-    forall(
-        ask(Before,
-            (   t(X, rdf:type, Class),
-                t(X, Property, Value^^Old_Type),
-                delete(X, Property, Value^^Old_Type)
-            )),
-        (   (   typecast_switch(Old_Type, New_Type, Value, [], Cast)
-            ->  true
-            ;   Default_or_Error = default(Default)
-            ->  Cast = Default^^New_Type
-            ;   throw(error(bad_cast_in_schema_migration(Value,Old_Type,New_Type), _))
-            ),
-            ask(After,
-                (   insert(X, Property, Cast)))
+    (   extract_simple_type(New_Type, Simple_Type)
+    ->  forall(
+            ask(Before,
+                (   t(X, rdf:type, Class),
+                    t(X, Property, Value),
+                    delete(X, Property, Value)
+                )),
+            (   (   typecast(Value, Simple_Type, [], Cast)
+                ->  true
+                ;   Default_or_Error = default(Default)
+                ->  Cast = Default^^Simple_Type
+                ;   Value = Base^^Old_Type,
+                    throw(error(bad_cast_in_schema_migration(Base,Old_Type,New_Type), _))
+                ),
+                ask(After,
+                    (   insert(X, Property, Cast)))
+            )
         )
+    ;   % Todo: Array / List
+        throw(error(not_implemented, _))
     ).
 interpret_instance_operation(change_parents(_Class,_Parents,_Property_Defaults), _Before, _After) :-
     throw(error(unimplemented, _)).
@@ -386,17 +400,13 @@ class_dictionary_to_schema(Dictionary, Schema) :-
     dict_pairs(Dictionary, _, Pairs),
     maplist([_-Class,Class]>>true, Pairs, Schema).
 
-perform_schema_migration(Descriptor, Commit_Info, Ops) :-
+perform_schema_migration(Descriptor, Commit_Info, Ops, Transaction2) :-
     open_descriptor(Descriptor, Transaction),
     create_class_dictionary(Transaction, Dictionary),
     interpret_schema_operations(Ops, Dictionary, After),
     class_dictionary_to_schema(After, Schema),
-    create_context(Transaction,Commit_Info,Context),
-    with_transaction(
-        Context,
-        api_full_replace_schema(Transaction, Schema),
-        _Meta
-    ).
+    api_full_replace_schema(Transaction, Schema),
+    Transaction.schema
 
 /*
  * Actually perform the upgrade
@@ -404,15 +414,33 @@ perform_schema_migration(Descriptor, Commit_Info, Ops) :-
 
 calculate_schema_hash(_, 'some very hashy hash').
 
+upgrade_schema(Transaction, Schema_From, Schema_To) :-
+    full_replace_schema(Schema, 
+
 perform_instance_migration(Descriptor, New_Schema_Descriptor, Operations) :-
     open_descriptor(Descriptor, Before_Transaction),
+    % We need to bind the builder so we get the same instance graph in both.
+    ensure_transaction_has_builder(instance, Before_Transaction),
+    nl,writeq(before),nl,
+    print_term(Before_Transaction, []),
     open_descriptor(New_Schema_Descriptor, New_Schema_Transaction),
+
     get_dict(schema_objects, New_Schema_Transaction, Schema_Objects),
     put_dict(_{schema_objects: Schema_Objects}, Before_Transaction, After_Transaction),
+    ensure_transaction_schema_written(After_Transaction),
+    print_term(After_Transaction, []),
     calculate_schema_hash(Before_Transaction, Before_Hash),
     calculate_schema_hash(After_Transaction, After_Hash),
     format(string(Message), "TerminusDB schema automated migration v1.0.0, from: ~s to: ~s",
            [Before_Hash, After_Hash]),
+    create_context(Before_Transaction,
+                   commit_info{
+                       author: "automigration",
+                       % todo, supply the input and output migration hash
+                       message: Message
+                   },
+                   Before
+                  ),
     create_context(After_Transaction,
                    commit_info{
                        author: "automigration",
@@ -423,9 +451,11 @@ perform_instance_migration(Descriptor, New_Schema_Descriptor, Operations) :-
                   ),
     with_transaction(
         After,
-        interpret_instance_operations(Operations, Before_Transaction, After),
+        interpret_instance_operations(Operations, Before, After),
         _
-    ).
+    ),
+    test_utils:print_all_triples(Descriptor),
+    test_utils:print_all_triples(Descriptor,schema).
 
 
 :- begin_tests(migration).
@@ -527,6 +557,13 @@ test(move_and_weaken_with_instance_data,
         )
     ),
 
+    findall(
+        Document_A,
+        get_document_by_type(Descriptor, "A", Document_A),
+        Document_As),
+
+    print_term(Document_As, []),
+
     Ops = [
         move_class("A", "B"),
         upcast_class_property("B", "a", _{ '@type' : "Optional", '@class' : "xsd:string"})
@@ -544,10 +581,10 @@ test(move_and_weaken_with_instance_data,
 
     findall(
         Document,
-        get_document_by_type(Descriptor, "B", Document),
+        get_document_by_type(Descriptor, "A", Document),
         Docs),
 
-    print_Term(Docs, []).
+    print_term(Docs, []).
 
 
 

@@ -59,6 +59,7 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
                                      triple_update: Triple_Update,
+                                     force_write: Force_Write,
                                      backlinks: BL,
                                      write: Layer_Builder },
     Graph_Validation_Obj = graph_validation_obj{ descriptor: Descriptor,
@@ -69,7 +70,9 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
 
     (   var(Layer_Builder)
     ->  New_Layer = Layer,
-        Changed = false
+        (   Force_Write = true
+        ->  Changed = true
+        ;   Changed = false)
     %   NOTE: This seems wasteful - we should ignore this layer not commit it if it is empty.
     ;   nb_commit(Layer_Builder, New_Layer),
         graph_inserts_deletes(Graph_Validation_Obj, N, M),
@@ -90,6 +93,7 @@ graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
                                      triple_update: Triple_Update,
+                                     force_write: false,
                                      backlinks: BL,
                                      write: _Layer_Builder }.
 
