@@ -919,8 +919,25 @@ test(positive_decimal_round_trip, []) :-
     ].
 
 test(gyear_to_string, []) :-
-    typecast(gyear(1990,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear',
+    typecast(gyear(1990,0)^^'http://www.w3.org/2001/XMLSchema#gYear',
              'http://www.w3.org/2001/XMLSchema#string', [], "1990"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(string_to_gyear, []) :-
+    typecast("1990"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#gYear', [],
+             gyear(1990,0)^^'http://www.w3.org/2001/XMLSchema#gYear').
+
+test(integer_to_gyear, []) :-
+    typecast(1990^^'http://www.w3.org/2001/XMLSchema#integer',
+             'http://www.w3.org/2001/XMLSchema#gYear', [],
+             gyear(1990,0)^^'http://www.w3.org/2001/XMLSchema#gYear').
+
+test(float_cast, []) :-
+    typecast("0.5679"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [],
+             0.5679^^'http://www.w3.org/2001/XMLSchema#decimal').
+
 
 test(float_cast, []) :-
     typecast("0.5679"^^'http://www.w3.org/2001/XMLSchema#string',
