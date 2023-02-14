@@ -528,26 +528,6 @@ get_context_documentation(DB, ID, Doc) :-
     ;   Documentations = Doc
     ).
 
-get_context_imports(Db, Id, _{}) :-
-    database_schema(DB, Schema),
-    findall(
-        Imports,
-        (   xrdf(Schema, Id, sys:imports, Doc_Id),
-            Import0 = json{},
-            (   xrdf(Schema, Doc_Id, sys:version, Version^^_),
-            ->  put_dict(_{ '@version' : Version}, Import0, Import1)
-            ;   Import1 = Import0),
-            (   xrdf(Schema, Doc_Id, sys:hash, Hash^^_),
-            ->  put_dict(_{ '@hash' : Hash}, Import1, Import2)
-            ;   Import2 = Import1),
-            (   xrdf(Schema, Doc_Id, sys:source, Hash^^_),
-            ->  put_dict(_{ '@source' : Source}, Import2, Import3)
-            ;   Import3 = Import2),
-            (   xrdf(Schema, Doc_Id, sys:source, Hash^^_),
-            ->  put_dict(_{ '@name' : Source}, Import2, Import3)
-            ;   Import3 = Import2),
-            
-
 database_context_object(DB,Prefixes) :-
     is_transaction(DB),
     is_schemaless(DB),

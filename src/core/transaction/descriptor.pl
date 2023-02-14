@@ -397,7 +397,6 @@ ensure_transaction_has_builder(instance, Transaction) :-
     [RWO] = (Transaction.instance_objects),
     read_write_obj_builder(RWO, _).
 
-
 ensure_transaction_schema_written(Transaction) :-
     [RWO] = (Transaction.schema_objects),
     nb_set_dict(force_write, RWO, true).
