@@ -958,7 +958,7 @@ Add a remote.
 
 ### remote remove
 
-`terminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS`
+`terminusdb remote remove DATABASE_SPEC REMOTE_NAME OPTIONS`
 
 Remove a remote.
 

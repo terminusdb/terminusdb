@@ -1209,7 +1209,7 @@ opt_spec(remote,add,'terminusdb remote add DATABASE_SPEC REMOTE_NAME REMOTE_LOCA
            shortflags([h]),
            default(false),
            help('print help for the `remote add` sub command')]]).
-opt_spec(remote,remove,'terminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS',
+opt_spec(remote,remove,'terminusdb remote remove DATABASE_SPEC REMOTE_NAME OPTIONS',
          'Remove a remote.',
          [[opt(help),
            type(boolean),
@@ -2243,7 +2243,7 @@ run_command(remote,remove,[Path,Remote_Name],Opts) :-
     api_report_errors(
         remote,
         remove_remote(System_DB, Auth, Path, Remote_Name)),
-    format(current_output,'Successfully added remote ~s~n',[Remote_Name]).
+    format(current_output,'Successfully removed remote ~s~n',[Remote_Name]).
 run_command(remote,'set-url',[Path,Remote_Name,URL],Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
