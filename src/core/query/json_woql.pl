@@ -1494,7 +1494,7 @@ test(gyear_int, []) :-
                                       "@type": "xsd:gYear"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=gyear(2004,0.0)^^'http://www.w3.org/2001/XMLSchema#gYear').
+    WOQL = (v('X')=gyear(2004,0)^^'http://www.w3.org/2001/XMLSchema#gYear').
 
 test(gyear_month, []) :-
     JSON_Atom= '{"@type": "Equals",
