@@ -511,12 +511,12 @@ user_accessible_database(DB, User_ID, Org, Name, Database) :-
     ->  atom_string(Name, Name_S)
     ;   true),
     ask(DB,
-        (   t(Database_ID, name, Name_S^^xsd:string),
+        (   t(User_ID, capability, Capability_ID),
+            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
             isa(Database_ID, 'UserDatabase'),
+            t(Database_ID, name, Name_S^^xsd:string),
             t(Org_Id, database, Database_ID),
             t(Org_Id, name, Org_S^^xsd:string),
-            t(User_ID, capability, Capability_ID),
-            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
             get_document(Database_ID, Database)
         )),
     (   var(Org)
