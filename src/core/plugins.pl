@@ -1,4 +1,5 @@
 :- module(plugins, [
+              pre_commit_hook/2,
               post_commit_hook/2,
               pre_server_startup_hook/1,
               post_server_startup_hook/1,

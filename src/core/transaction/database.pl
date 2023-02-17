@@ -274,12 +274,12 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     ->  true
     ;   throw(error(schema_check_failure(Witnesses),_))),
 
-    (   findall(Witness,
-                pre_commit_hook(Validations, Witness),
-                Witnesses),
-        Witnesses = []
+    findall(Witness,
+            pre_commit_hook(Validations, Witness),
+            Hook_Witnesses),
+    (   Hook_Witnesses = []
     ->  true
-    ;   throw(error(schema_check_failure(Witnesses),_))),
+    ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
 
     commit_validation_objects(Validations, Committed),
     collect_validations_metadata(Validations, Validation_Meta_Data),
