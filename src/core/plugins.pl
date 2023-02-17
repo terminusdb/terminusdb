@@ -8,6 +8,7 @@
 :- use_module(library(filesex)).
 :- use_module(config(terminus_config)).
 
+:- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
 :- multifile pre_server_startup_hook/1.
 :- multifile post_server_startup_hook/1.
