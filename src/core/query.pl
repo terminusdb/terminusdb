@@ -99,3 +99,4 @@
 :- use_module(query/query_response).
 :- use_module(query/path).
 :- use_module(query/metadata).
+:- use_module(query/constraints).
