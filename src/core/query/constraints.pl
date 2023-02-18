@@ -3,8 +3,12 @@
               select/5,
               step/5,
               run/2,
-              run/3
+              run/3,
+              run_report/1,
+              my_constraint1/1
           ]).
+
+:- use_module(core(util)).
 
 /*
 
@@ -85,16 +89,24 @@ run(Constraint, Failed_At) :-
     run(Clause, Remaining, Failed_At).
 
 % Build the database into run clause for now.
+run_clause(t(prod1,type,'MidLifeInsurance')).
+run_clause(t(prod2,type,'MidLifeInsurance')).
 run_clause(t(policy1,type,'Policy')).
 run_clause(t(policy1,insurance_product,prod1)).
-run_clause(t(prod1,type,'MidLifeInsurance')).
+run_clause(t(policy1,start_date,0)).
+run_clause(t(policy1,end_date,3)).
 run_clause(t(policy1,customer,cust1)).
+run_clause(t(policy2,type,'Policy')).
+run_clause(t(policy2,insurance_product,prod1)).
+run_clause(t(policy2,start_date,1)).
+run_clause(t(policy2,end_date,4)).
+run_clause(t(policy2,insurance_product,prod1)).
+run_clause(t(policy2,customer,cust1)).
 run_clause(t(cust1,type,'Customer')).
 run_clause(t(cust1,age,12)).
-run_clause(t(policy2,type,'Policy')).
-run_clause(t(policy2,insurance_product,prod2)).
-run_clause(t(prod2,type,'MidLifeInsurance')).
-run_clause(t(policy2,customer,cust2)).
+run_clause(t(policy3,type,'Policy')).
+run_clause(t(policy3,insurance_product,prod2)).
+run_clause(t(policy3,customer,cust2)).
 run_clause(t(cust2,type,'Customer')).
 run_clause(t(cust2,age,40)).
 run_clause(op(<,X,Y)) :- X < Y.
@@ -105,7 +117,7 @@ run_clause(isa(X,T)) :- run_clause(t(X,type,T)).
 
 run(Clause-false, Remaining, Failed_At) :-
     (   run_clause(Clause)
-    ->  step(Remaining,Clause,Next_Stack, Next_Clause, true),
+    *->  step(Remaining,Clause,Next_Stack, Next_Clause, true),
         run(Next_Clause, Next_Stack, Failed_At)
     ;   step(Remaining,Clause,Next_Stack, Next_Clause, true),
         run(Next_Clause, Next_Stack, Failed_At)
@@ -117,6 +129,33 @@ run(Clause-true, Remaining, Failed_At) :-
     step(Remaining,Clause,Next_Stack,Next_Clause, true),
     run(Next_Clause, Next_Stack, Failed_At).
 
+context_hole_term([],Term,Term).
+context_hole_term([and1(B)|T],A,Term) :-
+    context_hole_term(T,and(A,B),Term).
+context_hole_term([and2(A)|T],B,Term) :-
+    context_hole_term(T,and(A,B),Term).
+context_hole_term([or1(B)|T],A,Term) :-
+    context_hole_term(T,or(A,B),Term).
+context_hole_term([or2(A)|T],B,Term) :-
+    context_hole_term(T,or(A,B),Term).
+context_hole_term([impl2(A)|T],B,Term) :-
+    context_hole_term(T,impl(A,B),Term).
+
+report_failure(failed_at(Clause,Remaining)) :-
+    context_hole_term(Remaining,Clause,Term),
+    print_term(Remaining, []),
+    print_term(Term, []),
+    !,
+    render_constraint(Clause,Clause_String),
+    render_constraint(Term,Term_String),
+    format(user_output,"Failed to satisfy: ~w~n~n    In the Constraint:~n~n~w~n",
+           [Clause_String, Term_String]).
+
+run_report(Constraint) :-
+    (   run(Constraint, Failed_At)
+    -> report_failure(Failed_At)
+    ;   format(user_output, "Successfully satisfied constraint", [])
+    ).
 
 or_test(or(op(>,10,12),
            op(<,10,12))).
@@ -192,7 +231,7 @@ my_constraint2(impl(and(isa(Policy1,'Policy'),
                     and(t(Policy1,start_date,Start_Date1),
                         and(t(Policy2,start_date,Start_Date2),
                             and(t(Policy1,end_date,End_Date1),
-                                and(t(Policy2, end_Date, End_Date2),
+                                and(t(Policy2, end_date, End_Date2),
                                     or(and(op(<,Start_Date1, End_Date2),
                                            op(<,End_Date2, End_Date1)),
                                        and(op(<,Start_Date1, Start_Date2),
@@ -203,3 +242,37 @@ my_constraint2(impl(and(isa(Policy1,'Policy'),
 step([or(Before,[Next_Constraint|After])|T], Result, Next_Stack, Next_Clause) :-
     select(Next_Constraint,[or([Result|Before],After)|T], Next_Stack, Next_Clause).
 */
+
+render_constraint(Constraint,String) :-
+    render_constraint(Constraint, String, 0).
+
+render_constraint(isa(X,T), String, Indent) :-
+    pad('',' ',Indent,Pad),
+    format(string(String), "~q:~q~n~s", [X,T,Pad]).
+render_constraint(op(Op,B,C), String, Indent) :-
+    pad('',' ',Indent,Pad),
+    format(string(String),
+           "~q ~s ~q~n~s", [B,Op,C,Pad]).
+render_constraint(t(A,B,C), String, Indent) :-
+    pad('',' ',Indent,Pad),
+    format(string(String),
+           "~q =[~q]> ~q~n~s", [A,B,C,Pad]).
+render_constraint(or(A,B), String, Indent) :-
+    render_constraint(A, StringA, Indent),
+    render_constraint(B, StringB, Indent),
+    format(string(String),
+           "(~s) ∨ (~s)", [StringA,StringB]).
+render_constraint(and(A,B), String, Indent) :-
+    render_constraint(A, StringA, Indent),
+    render_constraint(B, StringB, Indent),
+    format(string(String),
+           "~s ∧ ~s", [StringA,StringB]).
+render_constraint(impl(A,B), String, Indent) :-
+    Indent_First is Indent + 2,
+    render_constraint(A, StringA, Indent_First),
+    Indent_Next is Indent + 4,
+    render_constraint(B, StringB, Indent_Next),
+    pad('',' ',Indent_Next,Pad),
+    format(string(String),
+           "( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
+
