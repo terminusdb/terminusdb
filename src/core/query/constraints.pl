@@ -82,8 +82,9 @@ step([and2(A)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     step(T, and(A,Result), Next_Stack, Next_Clause, Polarity).
 step([or1(B)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     (   step(T, or(Result,B), Next_Stack, Next_Clause, Polarity)
-    ->  true
-    ;   select_redex(B, [or2(Result)], Next_Stack, Next_Clause, Polarity)
+    *-> true
+    ;   negate(Polarity,Negated),
+        select_redex(B, [or2(Result)|T], Next_Stack, Next_Clause, Negated)
     ).
 step([and2(A)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     step(T, and(A,Result), Next_Stack, Next_Clause, Polarity).
@@ -117,9 +118,9 @@ run_clause(isa(X,T), Db) :-
 
 run(Clause-false, Remaining, Db, Failed_At) :-
     (   run_clause(Clause, Db)
-    *-> step(Remaining,Clause,Next_Stack, Next_Clause, true),
+    *-> step(Remaining,Clause,Next_Stack, Next_Clause, false),
         run(Next_Clause, Next_Stack, Db, Failed_At)
-    ;   step(Remaining,Clause,Next_Stack, Next_Clause, true),
+    ;   step(Remaining,Clause,Next_Stack, Next_Clause, false),
         run(Next_Clause, Next_Stack, Db, Failed_At)
     ).
 run(Clause-true, Remaining, Db, failed_at(Clause,Remaining)) :-
@@ -143,8 +144,6 @@ context_hole_term([impl2(A)|T],B,Term) :-
 
 failure_report(failed_at(Clause,Remaining),Report) :-
     context_hole_term(Remaining,Clause,Term),
-    print_term(Remaining, []),
-    print_term(Term, []),
     !,
     render_constraint(Clause,Clause_String),
     render_constraint(Term,Term_String),
@@ -175,9 +174,10 @@ render_constraint(op(Op,B,C), String, Indent) :-
     format(string(String),
            "~q ~s ~q~n~s", [BRaw,Op,CRaw,Pad]).
 render_constraint(t(A,B,C), String, Indent) :-
+    raw(C,CRaw),
     pad('',' ',Indent,Pad),
     format(string(String),
-           "~q =[~q]> ~q~n~s", [A,B,C,Pad]).
+           "~q =[~q]> ~q~n~s", [A,B,CRaw,Pad]).
 render_constraint(or(A,B), String, Indent) :-
     render_constraint(A, StringA, Indent),
     render_constraint(B, StringB, Indent),
@@ -329,13 +329,33 @@ test(or_impl_test,
     run(Db, Or_Impl, Failed_At),
     !,
     Failed_At = failed_at(Op, Ctx),
-    Op = op(<,12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',10),
-	Ctx = [ or2(op(>,
+    Op = op(>,12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',30),
+    Ctx = [ or1(op(<,
 				   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
-				   30))
+				   10)),
+			and2(t('iri://insurance/Customer/Jill+Curry+2',
+				   age,
+				   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger')),
+			impl2(isa('iri://insurance/Customer/Jill+Curry+2',
+					  'Customer'))
 		  ],
+
     context_hole_term(Ctx,Op,Term),
-    print_term(Term, []).
+    !,
+    Term = impl(isa('iri://insurance/Customer/Jill+Curry+2',
+					'Customer'),
+				and(t('iri://insurance/Customer/Jill+Curry+2',
+					  age,
+					  12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
+					or(op(>,
+						  12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+						  30),
+					   op(<,
+						  12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+						  10)))),
+
+    failure_report(Failed_At, String),
+    String = "Failed to satisfy: 12 > 30\n\n\n    In the Constraint:\n\n( 'iri://insurance/Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'iri://insurance/Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (12 < 10\n    )\n".
 
 
 test(midlife_insurance,
