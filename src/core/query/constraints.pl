@@ -222,12 +222,13 @@ test(or_test2, []) :-
     Or_Test = or(op(>,10,100),
                  op(>,10,30)),
     run(fake_db, Or_Test, Failed_At),
-
+    !,
     Failed_At = failed_at(Op,Ctx),
     Op = op(>,10,30),
     Ctx = [or2(op(>,10,100))],
 
     context_hole_term(Ctx, Op, Term),
+    !,
     Term = or(op(>,10,100),op(>,10,30)).
 
 insurance_schema('
@@ -350,16 +351,16 @@ test(or_impl_test,
     run(Db, Or_Impl, Failed_At),
     !,
     Failed_At = failed_at(Op, Ctx),
-    Op = op(>,12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',30),
-    Ctx = [ or1(op(<,
-				   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
-				   10)),
-			and2(t('iri://insurance/Customer/Jill+Curry+2',
-				   age,
-				   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger')),
-			impl2(isa('iri://insurance/Customer/Jill+Curry+2',
-					  'Customer'))
-		  ],
+    Op = op(<,12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',10),
+    Ctx =  [ or2(op(>,
+					12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+					30)),
+			 and2(t('iri://insurance/Customer/Jill+Curry+2',
+					age,
+					12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger')),
+			 impl2(isa('iri://insurance/Customer/Jill+Curry+2',
+					   'Customer'))
+		   ],
 
     context_hole_term(Ctx,Op,Term),
     !,
@@ -376,8 +377,7 @@ test(or_impl_test,
 						  10)))),
 
     failure_report(Db, Failed_At, String),
-    String = "Failed to satisfy: 12 > 30\n\n\n    In the Constraint:\n\n( 'iri://insurance/Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'iri://insurance/Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (12 < 10\n    )\n".
-
+    String = "Failed to satisfy: 12 < 10\n\n\n    In the Constraint:\n\n( 'Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (12 < 10\n    )\n".
 
 test(midlife_insurance,
      [setup((setup_temp_store(State),
