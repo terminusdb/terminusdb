@@ -88,46 +88,23 @@ run(Constraint, Failed_At) :-
     select(Constraint, [], Remaining, Clause, true),
     run(Clause, Remaining, Failed_At).
 
-% Build the database into run clause for now.
-run_clause(t(prod1,type,'MidLifeInsurance')).
-run_clause(t(prod2,type,'MidLifeInsurance')).
-run_clause(t(policy1,type,'Policy')).
-run_clause(t(policy1,insurance_product,prod1)).
-run_clause(t(policy1,start_date,0)).
-run_clause(t(policy1,end_date,3)).
-run_clause(t(policy1,customer,cust1)).
-run_clause(t(policy2,type,'Policy')).
-run_clause(t(policy2,insurance_product,prod1)).
-run_clause(t(policy2,start_date,1)).
-run_clause(t(policy2,end_date,4)).
-run_clause(t(policy2,insurance_product,prod1)).
-run_clause(t(policy2,customer,cust1)).
-run_clause(t(cust1,type,'Customer')).
-run_clause(t(cust1,age,12)).
-run_clause(t(policy3,type,'Policy')).
-run_clause(t(policy3,insurance_product,prod2)).
-run_clause(t(policy3,customer,cust2)).
-run_clause(t(cust2,type,'Customer')).
-run_clause(t(cust2,age,40)).
-run_clause(op(<,X,Y)) :- X < Y.
-run_clause(op(>,X,Y)) :- X > Y.
-run_clause(op(=,X,Y)) :- X = Y.
-run_clause(op(\=,X,Y)) :- X \= Y.
-run_clause(isa(X,T)) :- run_clause(t(X,type,T)).
+run_clause(t(X,P,Y), Db) :- database_instance(Db, G), xrdf(X,P,Y,G).
+run_clause(op(Op,X,Y), _) :- call(Op,X,Y).
+run_clause(isa(X,T), Db) :- run_clause(t(X,rdf:type,T),Db).
 
-run(Clause-false, Remaining, Failed_At) :-
-    (   run_clause(Clause)
-    *->  step(Remaining,Clause,Next_Stack, Next_Clause, true),
-        run(Next_Clause, Next_Stack, Failed_At)
+run(Clause-false, Remaining, Db, Failed_At) :-
+    (   run_clause(Clause, Db)
+    *-> step(Remaining,Clause,Next_Stack, Next_Clause, true),
+        run(Next_Clause, Next_Stack, Db, Failed_At)
     ;   step(Remaining,Clause,Next_Stack, Next_Clause, true),
-        run(Next_Clause, Next_Stack, Failed_At)
+        run(Next_Clause, Next_Stack, Db, Failed_At)
     ).
-run(Clause-true, Remaining, failed_at(Clause,Remaining)) :-
-    \+ run_clause(Clause).
+run(Clause-true, Remaining, Db, failed_at(Clause,Remaining)) :-
+    \+ run_clause(Clause, Db).
 run(Clause-true, Remaining, Failed_At) :-
-    run_clause(Clause),
+    run_clause(Clause, Db),
     step(Remaining,Clause,Next_Stack,Next_Clause, true),
-    run(Next_Clause, Next_Stack, Failed_At).
+    run(Next_Clause, Next_Stack, Db, Failed_At).
 
 context_hole_term([],Term,Term).
 context_hole_term([and1(B)|T],A,Term) :-
@@ -153,7 +130,7 @@ report_failure(failed_at(Clause,Remaining)) :-
 
 run_report(Constraint) :-
     (   run(Constraint, Failed_At)
-    -> report_failure(Failed_At)
+    ->  report_failure(Failed_At)
     ;   format(user_output, "Successfully satisfied constraint", [])
     ).
 
