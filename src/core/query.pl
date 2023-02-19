@@ -85,8 +85,10 @@
               transaction_object_size/2,
               transaction_object_triple_count/2,
               read_object_size/2,
-              read_object_triple_count/2
+              read_object_triple_count/2,
 
+              % constraints.pl
+              check_constraint_document/3
           ]).
 
 :- use_module(query/expansions).
