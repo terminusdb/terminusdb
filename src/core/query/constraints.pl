@@ -118,19 +118,19 @@ context_hole_term([or2(A)|T],B,Term) :-
 context_hole_term([impl2(A)|T],B,Term) :-
     context_hole_term(T,impl(A,B),Term).
 
-report_failure(failed_at(Clause,Remaining)) :-
+report_failure(failed_at(Clause,Remaining),Report) :-
     context_hole_term(Remaining,Clause,Term),
     print_term(Remaining, []),
     print_term(Term, []),
     !,
     render_constraint(Clause,Clause_String),
     render_constraint(Term,Term_String),
-    format(user_output,"Failed to satisfy: ~w~n~n    In the Constraint:~n~n~w~n",
+    format(string(Report),"Failed to satisfy: ~w~n~n    In the Constraint:~n~n~w~n",
            [Clause_String, Term_String]).
 
-run_report(Constraint) :-
+run_report(Constraint, Report) :-
     (   run(Constraint, Failed_At)
-    ->  report_failure(Failed_At)
+    ->  report_failure(Failed_At, Report)
     ;   format(user_output, "Successfully satisfied constraint", [])
     ).
 
