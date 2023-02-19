@@ -89,7 +89,8 @@ step([or1(B)|T], Result, Next_Stack, Next_Clause, Polarity) :-
 step([and2(A)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     step(T, and(A,Result), Next_Stack, Next_Clause, Polarity).
 step([impl1(Consequent)|T], Result, Next_Stack, Next_Clause, Polarity) :-
-    select_redex(Consequent,[impl2(Result)|T], Next_Stack, Next_Clause, Polarity).
+    negate(Polarity,Negated),
+    select_redex(Consequent,[impl2(Result)|T], Next_Stack, Next_Clause, Negated).
 step([impl2(Antecedent)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     step(T, impl(Antecedent, Result), Next_Stack, Next_Clause, Polarity).
 
@@ -142,17 +143,18 @@ context_hole_term([or2(A)|T],B,Term) :-
 context_hole_term([impl2(A)|T],B,Term) :-
     context_hole_term(T,impl(A,B),Term).
 
-failure_report(failed_at(Clause,Remaining),Report) :-
+failure_report(Db, failed_at(Clause,Remaining),Report) :-
+    database_prefixes(Db, Prefixes),
     context_hole_term(Remaining,Clause,Term),
     !,
-    render_constraint(Clause,Clause_String),
-    render_constraint(Term,Term_String),
+    render_constraint(Clause,Prefixes,Clause_String),
+    render_constraint(Term,Prefixes,Term_String),
     format(string(Report),"Failed to satisfy: ~w~n~n    In the Constraint:~n~n~w~n",
            [Clause_String, Term_String]).
 
 run_report(Db, Constraint, Report) :-
     (   run(Db, Constraint, Failed_At)
-    ->  failure_report(Failed_At, Report)
+    ->  failure_report(Db, Failed_At, Report)
     ).
 
 % Some folds here with or...  Let's think about it in a minute
@@ -161,38 +163,44 @@ step([or(Before,[Next_Constraint|After])|T], Result, Next_Stack, Next_Clause) :-
     select_redex(Next_Constraint,[or([Result|Before],After)|T], Next_Stack, Next_Clause).
 */
 
-render_constraint(Constraint,String) :-
-    render_constraint(Constraint, String, 0).
+render_constraint(Constraint,Prefixes,String) :-
+    render_constraint(Constraint,Prefixes,String, 0).
 
-render_constraint(isa(X,T), String, Indent) :-
+render_constraint(isa(X,T), Prefixes, String, Indent) :-
+    'document/json':compress_dict_uri(X,Prefixes,XPretty),
     pad('',' ',Indent,Pad),
-    format(string(String), "~q:~q~n~s", [X,T,Pad]).
-render_constraint(op(Op,B,C), String, Indent) :-
+    format(string(String), "~q:~q~n~s", [XPretty,T,Pad]).
+render_constraint(op(Op,B,C), _, String, Indent) :-
     raw(B,BRaw),
     raw(C,CRaw),
     pad('',' ',Indent,Pad),
     format(string(String),
            "~q ~s ~q~n~s", [BRaw,Op,CRaw,Pad]).
-render_constraint(t(A,B,C), String, Indent) :-
-    raw(C,CRaw),
+render_constraint(t(A,B,C), Prefixes, String, Indent) :-
+    'document/json':compress_dict_uri(A,Prefixes,APretty),
+    'document/json':compress_schema_uri(B,Prefixes,BPretty),
+    (   atom(C)
+    ->  'document/json':compress_dict_uri(C, Prefixes, CPretty)
+    ;   raw(C, CPretty)
+    ),
     pad('',' ',Indent,Pad),
     format(string(String),
-           "~q =[~q]> ~q~n~s", [A,B,CRaw,Pad]).
-render_constraint(or(A,B), String, Indent) :-
-    render_constraint(A, StringA, Indent),
-    render_constraint(B, StringB, Indent),
+           "~q =[~q]> ~q~n~s", [APretty,BPretty,CPretty,Pad]).
+render_constraint(or(A,B), Prefixes, String, Indent) :-
+    render_constraint(A, Prefixes, StringA, Indent),
+    render_constraint(B, Prefixes, StringB, Indent),
     format(string(String),
            "(~s) ∨ (~s)", [StringA,StringB]).
-render_constraint(and(A,B), String, Indent) :-
-    render_constraint(A, StringA, Indent),
-    render_constraint(B, StringB, Indent),
+render_constraint(and(A,B), Prefixes, String, Indent) :-
+    render_constraint(A, Prefixes, StringA, Indent),
+    render_constraint(B, Prefixes, StringB, Indent),
     format(string(String),
            "~s ∧ ~s", [StringA,StringB]).
-render_constraint(impl(A,B), String, Indent) :-
+render_constraint(impl(A,B), Prefixes, String, Indent) :-
     Indent_First is Indent + 2,
-    render_constraint(A, StringA, Indent_First),
+    render_constraint(A, Prefixes, StringA, Indent_First),
     Indent_Next is Indent + 4,
-    render_constraint(B, StringB, Indent_Next),
+    render_constraint(B, Prefixes, StringB, Indent_Next),
     pad('',' ',Indent_Next,Pad),
     format(string(String),
            "( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
@@ -257,6 +265,8 @@ insurance_schema('
 }
 { "@type" : "Class",
   "@id" : "Policy",
+  "@key" : { "@type" : "Lexical", "@fields" : ["id"]},
+  "id" : "xsd:long",
   "customer" : "Customer",
   "insurance_product" : "InsuranceProduct",
   "start_date" : "xsd:dateTime",
@@ -284,18 +294,21 @@ insurance_database(
               age : 12
             },
         json{ '@type' : "Policy",
+              id : 1,
               insurance_product : json{ '@ref' : "Product/midlife" },
               customer : json{ '@ref' : "Customer/jim" },
               start_date : "2020-01-01T00:00:00Z",
               end_date : "2050-01-01T00:00:00Z"
             },
         json{ '@type' : "Policy",
+              id : 2,
               insurance_product : json{ '@ref' : "Product/midlife" },
               customer : json{ '@ref' : "Customer/jim" },
               start_date : "2030-01-01T00:00:00Z",
               end_date : "2060-01-01T00:00:00Z"
             },
         json{ '@type' : "Policy",
+              id : 3,
               insurance_product : json{ '@ref' : "Product/midlife" },
               customer : json{ '@ref' : "Customer/jill" },
               start_date : "2030-01-01T00:00:00Z",
@@ -304,6 +317,20 @@ insurance_database(
     ]
 ).
 
+:- use_module(core(api)).
+
+insert_insurance_documents(Desc) :-
+    insurance_database(Documents),
+
+    with_test_transaction(
+        Desc,
+        C1,
+        (   empty_assoc(Captures_In),
+            api_document:api_insert_document_from_lazy_list(
+                Documents, instance, false, C1, Captures_In, _Captures_Out,
+                _Backlinks, _Ids))
+    ).
+
 test(or_impl_test,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
@@ -311,14 +338,8 @@ test(or_impl_test,
       cleanup(teardown_temp_store(State))
      ]
     ) :-
-    insurance_database(Documents),
 
-    with_test_transaction(
-        Desc,
-        C1,
-        forall(member(Doc, Documents),
-                   insert_document(C1, Doc, _))
-    ),
+    insert_insurance_documents(Desc),
 
     open_descriptor(Desc, Db),
 
@@ -354,7 +375,7 @@ test(or_impl_test,
 						  12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
 						  10)))),
 
-    failure_report(Failed_At, String),
+    failure_report(Db, Failed_At, String),
     String = "Failed to satisfy: 12 > 30\n\n\n    In the Constraint:\n\n( 'iri://insurance/Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'iri://insurance/Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (12 < 10\n    )\n".
 
 
@@ -366,27 +387,62 @@ test(midlife_insurance,
      ]
     ) :-
 
-/*
+    insert_insurance_documents(Desc),
 
-Example constraint1:
-
-{ "@type": "Constraint",
-  "@id": "MidLifeInsuranceAge",
-  "@doc": "People with MidLifeInsurance have to be older than 35, and younger than 70",
-  "@on": "Policy",
-  "@constraints": [{"insurance_product": {"@type": "MidLifeInsurance"}},
-                   {"customer": {"age": [{"@lt": 70},
-                                         {"@gt": 35}]}}],
-}
-
-*/
-    Midlife = impl(and(isa(Policy,'Policy'),
+    MidLife = impl(and(isa(Policy,'Policy'),
                        and(t(Policy,insurance_product,Product),
                            isa(Product,'MidLifeInsurance'))),
                    and(t(Policy,customer,Customer),
                        and(t(Customer,age,Age),
                            and(op(<,Age,70),
-                               op(>,Age,35))))).
+                               op(>,Age,35))))),
+
+    open_descriptor(Desc, Db),
+    run(Db, MidLife, Failed_At),
+    !,
+    Failed_At = failed_at(Op, Ctx),
+    Op = op(>,
+			12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+			35),
+
+    Ctx = [ and2(op(<,
+					12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+					70)),
+			and2(t('iri://insurance/Customer/Jill+Curry+2',
+				   age,
+				   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger')),
+			and2(t(A,customer,'iri://insurance/Customer/Jill+Curry+2')),
+			impl2(and(isa(A,'Policy'),
+					  and(t(A,insurance_product,
+							'iri://insurance/MidLifeInsurance/Mid-Life%20Insurance%20Product'),
+						  isa('iri://insurance/MidLifeInsurance/Mid-Life%20Insurance%20Product',
+							  'MidLifeInsurance'))))
+		  ],
+    !,
+    context_hole_term(Ctx,Op,Term),
+
+    Term = impl(and(isa('iri://insurance/Policy/3','Policy'),
+					and(t('iri://insurance/Policy/3',
+						  insurance_product,
+						  'iri://insurance/MidLifeInsurance/Mid-Life%20Insurance%20Product'),
+						isa('iri://insurance/MidLifeInsurance/Mid-Life%20Insurance%20Product',
+							'MidLifeInsurance'))),
+				and(t('iri://insurance/Policy/3',
+					  customer,
+					  'iri://insurance/Customer/Jill+Curry+2'),
+					and(t('iri://insurance/Customer/Jill+Curry+2',
+						  age,
+						  12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'),
+						and(op(<,
+							   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+							   70),
+							op(>,
+							   12 ^^ 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+							   35))))),
+
+    failure_report(Db, Failed_At, String),
+
+    String = "Failed to satisfy: 12 > 35\n\n\n    In the Constraint:\n\n( 'Policy/3':'Policy'\n   ∧ 'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product'\n   ∧ 'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance'\n   ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2'\n     ∧ 'Customer/Jill+Curry+2' =[age]> 12\n     ∧ 12 < 70\n     ∧ 12 > 35\n    \n".
 
 
 test(insurance_no_overlap, []) :-
@@ -421,7 +477,7 @@ Example constraint:
                                                     "@element: {"@var": "policy_2_end_date"}}}]}]}]
 */
 
-    No_Overlap = impl(and(isa(Policy1,'Policy'),
+    _No_Overlap = impl(and(isa(Policy1,'Policy'),
                           and(t(Policy1,insurance_product,Product),
                               and(t(Policy1,customer,Customer),
                                   and(t(Policy2,customer,Customer),
