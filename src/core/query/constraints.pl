@@ -11,6 +11,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 
+:- use_module(library(apply)).
+
 /*
 
 Term language for constraints
