@@ -602,7 +602,7 @@ test(compile_constraint,
     C1 == C2,
     A1 == A2, A2 == A3.
 
-test(insurance_no_overlap, []) :-
+test(insurance_no_overlap, [blocked('not written yet')]) :-
 /*
 Example constraint2:
 
