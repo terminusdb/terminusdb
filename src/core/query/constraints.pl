@@ -164,10 +164,46 @@ context_hole_term([or2(A)|T],B,Term) :-
 context_hole_term([impl2(A)|T],B,Term) :-
     context_hole_term(T,impl(A,B),Term).
 
-failure_report(Db, failed_at(Clause,Remaining),Report) :-
+name_variables(Variables, Pairs) :-
+    name_variables(Variables, 0, Pairs).
+
+choose_varname(N, Name) :-
+    Code is N mod 26 + 65,
+    char_code(Char, Code),
+    Count is N div 26,
+    (   Count = 0
+    ->  format(string(Name), '~s', [Char])
+    ;   format(string(Name), '~s~d', [Char,Count])
+    ).
+
+name_variables([], _, _).
+name_variables([A|Rest], N, Pairs) :-
+    member(Name-Var, Pairs),
+    A == Var,
+    !,
+    A = var(Name),
+    name_variables(Rest, N, Pairs).
+name_variables([A|Rest], N, Pairs) :-
+    choose_varname(N, Name),
+    A = var(Name),
+    M is N + 1,
+    name_variables(Rest, M, Pairs).
+
+reconcile_bindings(Term, Bindings) :-
+    term_variables(Term, Variables),
+    dict_pairs(Bindings, _, Pairs),
+    name_variables(Variables, Pairs).
+
+failure_report(Db, Failed_At, Report) :-
+    Bindings = bindings{},
+    failure_report(Db, Failed_At, Bindings, Report).
+
+failure_report(Db, failed_at(Clause,Remaining), Bindings, Report) :-
     database_prefixes(Db, Prefixes),
     context_hole_term(Remaining,focus(Clause),Term),
     !,
+    % Binds all free variables in Term for printing.
+    reconcile_bindings(Term, Bindings),
     render_constraint(Clause,Prefixes,Clause_String),
     render_constraint(Term,Prefixes,Term_String),
     format(string(Report),"Failed to satisfy: ~w~n~n    In the Constraint:~n~n~w~n",
@@ -185,7 +221,7 @@ step([or(Before,[Next_Constraint|After])|T], Result, Next_Stack, Next_Clause) :-
 */
 
 render_constraint(Constraint,Prefixes,String) :-
-    render_constraint(Constraint,Prefixes,String, 0).
+    render_constraint(Constraint,Prefixes,String,0,[]).
 
 render_instance_uri(A, _, AString) :-
     var(A),
@@ -201,21 +237,37 @@ render_schema_uri(A, _, AString) :-
 render_schema_uri(A, Prefixes, AString) :-
     'document/json':compress_schema_uri(A,Prefixes,AString).
 
-render_constraint(focus(C), Prefixes, String, Indent) :-
-    render_constraint(C, Prefixes, Internal_String, Indent),
+and_child([and1|Rest]) :-
+    and_child(Rest).
+and_child([and2|_]) :-
+    !.
+
+needs_newline_pad(Indent,Stack,Newline_Pad) :-
+    (   and_child(Stack)
+    ->  pad('',' ',Indent,Pad),
+        format(string(Newline_Pad), "~n~s", [Pad])
+    ;   Newline_Pad = ''
+    ).
+
+render_constraint(var(X), _, Var, _, _) :-
+    format(string(Var), "?~s", [X]).
+render_constraint(true, _, "⊤", _, _).
+render_constraint(false, _, "⊥", _, _).
+render_constraint(focus(C), Prefixes, String, Indent, Stack) :-
+    render_constraint(C, Prefixes, Internal_String, Indent, [focus|Stack]),
     format(string(String), "« ~s »", [Internal_String]).
-render_constraint(isa(X,T), Prefixes, String, Indent) :-
+render_constraint(isa(X,T), Prefixes, String, Indent, Stack) :-
     render_instance_uri(X,Prefixes,XPretty),
     render_schema_uri(T,Prefixes,TPretty),
-    pad('',' ',Indent,Pad),
-    format(string(String), "~q:~q~n~s", [XPretty,TPretty,Pad]).
-render_constraint(op(Op,B,C), _, String, Indent) :-
+    needs_newline_pad(Indent,Stack,Pad),
+    format(string(String), "~s~q:~q", [Pad,XPretty,TPretty]).
+render_constraint(op(Op,B,C), _, String, Indent, Stack) :-
     raw(B,BRaw),
     raw(C,CRaw),
-    pad('',' ',Indent,Pad),
+    needs_newline_pad(Indent,Stack,Pad),
     format(string(String),
-           "~q ~s ~q~n~s", [BRaw,Op,CRaw,Pad]).
-render_constraint(t(A,B,C), Prefixes, String, Indent) :-
+           "~s~q ~s ~q", [Pad,BRaw,Op,CRaw]).
+render_constraint(t(A,B,C), Prefixes, String, Indent, Stack) :-
     render_instance_uri(A,Prefixes,APretty),
     render_schema_uri(B,Prefixes,BPretty),
     (   (   atom(C)
@@ -223,24 +275,24 @@ render_constraint(t(A,B,C), Prefixes, String, Indent) :-
     ->  render_instance_uri(C, Prefixes, CPretty)
     ;   raw(C, CPretty)
     ),
-    pad('',' ',Indent,Pad),
+    needs_newline_pad(Indent,Stack,Pad),
     format(string(String),
-           "~q =[~q]> ~q~n~s", [APretty,BPretty,CPretty,Pad]).
-render_constraint(or(A,B), Prefixes, String, Indent) :-
-    render_constraint(A, Prefixes, StringA, Indent),
-    render_constraint(B, Prefixes, StringB, Indent),
+           "~s~q =[~q]> ~q", [Pad,APretty,BPretty,CPretty]).
+render_constraint(or(A,B), Prefixes, String, Indent, Stack) :-
+    render_constraint(A, Prefixes, StringA, Indent, [or1|Stack]),
+    render_constraint(B, Prefixes, StringB, Indent, [or2|Stack]),
     format(string(String),
-           "(~s) ∨ (~s)", [StringA,StringB]).
-render_constraint(and(A,B), Prefixes, String, Indent) :-
-    render_constraint(A, Prefixes, StringA, Indent),
-    render_constraint(B, Prefixes, StringB, Indent),
+           "(~s ∨ ~s)", [StringA,StringB]).
+render_constraint(and(A,B), Prefixes, String, Indent, Stack) :-
+    render_constraint(A, Prefixes, StringA, Indent, [and1|Stack]),
+    render_constraint(B, Prefixes, StringB, Indent, [and2|Stack]),
     format(string(String),
            "~s ∧ ~s", [StringA,StringB]).
-render_constraint(impl(A,B), Prefixes, String, Indent) :-
+render_constraint(impl(A,B), Prefixes, String, Indent, Stack) :-
     Indent_First is Indent + 2,
-    render_constraint(A, Prefixes, StringA, Indent_First),
+    render_constraint(A, Prefixes, StringA, Indent_First, [impl1|Stack]),
     Indent_Next is Indent + 4,
-    render_constraint(B, Prefixes, StringB, Indent_Next),
+    render_constraint(B, Prefixes, StringB, Indent_Next, [impl2|Stack]),
     pad('',' ',Indent_Next,Pad),
     format(string(String),
            "( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
@@ -367,19 +419,19 @@ is_dict(Dictionary) =>
          Pairs, Rules, Bindings_In, Bindings_Out),
     term_conjunction(Rules,Term).
 
-compile_constraint(Document, Constraint) :-
+compile_constraint(Document, Constraint, Bindings_Out) :-
     get_dict('@rules', Document, Rules),
     Bindings = bindings{},
-    maplist({Bindings,Subject}/[Rule,Term]>>compile_constraint_rule(Rule, Subject, Term, _{}, _),
-            Rules, Terms),
+    mapm({Subject}/[Rule,Term]>>compile_constraint_rule(Rule, Subject, Term),
+         Rules, Terms, Bindings, Bindings_Out),
     term_conjunction(Terms, Constraint).
 
 check_constraint_document(Db,Constraint,Witness) :-
-    compile_constraint(Constraint, Term),
+    compile_constraint(Constraint, Term, Bindings),
     run(Db, Term, Failed_At),
     !,
     format(user_error, 'Constraint Failed: ~q', [Failed_At]),
-    failure_report(Db, Failed_At, Message),
+    failure_report(Db, Failed_At, Bindings, Message),
     Name = (Constraint.'@name'),
     Witness = json{ '@type' : "ConstraintFailure",
                     'constraint_name' : Name,
@@ -532,6 +584,33 @@ insert_insurance_documents(Desc) :-
                 _Backlinks, _Ids))
     ).
 
+test(naming_test, []) :-
+    Or_Impl1 = impl(isa(Customer, 'Customer'),
+                    and(t(Customer, age, Age),
+                        or(op(>, Age, 30),
+                           op(<, Age, 10)))),
+
+    reconcile_bindings(Or_Impl1, bindings{}),
+
+    Or_Impl1 == impl(isa(var("A"),'Customer'),
+					 and(t(var("A"),age,var("B")),
+					     or(op(>,var("B"),30),op(<,var("B"),10)))),
+
+    Or_Impl2 = impl(isa(Customer0, 'Customer'),
+                    and(t(Customer0, age, Age0),
+                        or(op(>, Age0, 30),
+                           op(<, Age0, 10)))),
+
+    reconcile_bindings(Or_Impl2,
+                       bindings{
+                           'Customer' : Customer0,
+                           'Age': Age0
+                       }),
+
+    Or_Impl2 == impl(isa(var('Customer'),'Customer'),
+					 and(t(var('Customer'),age,var('Age')),
+					     or(op(>,var('Age'),30),op(<,var('Age'),10)))).
+
 test(or_impl_test,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
@@ -577,8 +656,8 @@ test(or_impl_test,
 						  10)))),
 
     failure_report(Db, Failed_At, String),
+    String = "Failed to satisfy: 12 < 10\n\n    In the Constraint:\n\n( 'Customer/Jill+Curry+2':'Customer' ) ⇒\n    'Customer/Jill+Curry+2' =[age]> 12 ∧ (12 > 30 ∨ « 12 < 10 »)\n".
 
-    String = "Failed to satisfy: 12 < 10\n\n\n    In the Constraint:\n\n( 'Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (« 12 < 10\n     »)\n".
 
 test(satisfied,
      [setup((setup_temp_store(State),
@@ -695,8 +774,8 @@ test(midlife_insurance,
 							   35))))),
 
     failure_report(Db, Failed_At, String),
-    String = "Failed to satisfy: 12 > 35\n\n\n    In the Constraint:\n\n( 'Policy/3':'Policy'\n   ∧ 'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product'\n   ∧ 'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance'\n   ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2'\n     ∧ 'Customer/Jill+Curry+2' =[age]> 12\n     ∧ 12 < 70\n     ∧ « 12 > 35\n     »\n".
 
+    String = "Failed to satisfy: 12 > 35\n\n    In the Constraint:\n\n( 'Policy/3':'Policy' ∧ \n  'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product' ∧ \n  'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance' ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2' ∧ \n    'Customer/Jill+Curry+2' =[age]> 12 ∧ \n    12 < 70 ∧ « 12 > 35 »\n".
 
 test(compile_constraint,
      [setup((setup_temp_store(State),
@@ -707,7 +786,7 @@ test(compile_constraint,
     database_context_object(Desc, Context),
     Constraints = (Context.'@metadata'.constraints),
     [Constraint1|_Constraints_Rest] = Constraints,
-    compile_constraint(Constraint1, Term),
+    compile_constraint(Constraint1, Term, _Bindings),
 
     Term = impl(and(isa(P0,'Policy'),
                     and(t(P1,insurance_product,PR1),
