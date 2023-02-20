@@ -7,7 +7,6 @@
           ]).
 
 :- use_module(core(util)).
-:- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
@@ -338,8 +337,15 @@ compile_constraint(Document, Constraint) :-
             Rules, Terms),
     term_conjunction(Terms, Constraint).
 
-check_constraint_document(_,_,_) :-
-    fail.
+check_constraint_document(Db,Constraint,Witness) :-
+    compile_constraint(Constraint, Term),
+    run(Db, Term, Failed_At),
+    !,
+    failure_report(Db, Failed_At, Message),
+    Name = (Constraint.'@name'),
+    Witness = json{ '@type' : "ConstraintFailure",
+                    'constraint_name' : Name,
+                    'message' : Message }.
 
 :- begin_tests(constraints).
 
