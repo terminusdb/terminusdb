@@ -56,9 +56,22 @@ inverse_op(>,<=).
 inverse_op(>=,<).
 inverse_op(=<,>).
 
+choice_point([or1(Clause)|Rest], Failed, New_Stack, Redex, Polarity) :-
+    Stack = [or2(Failed)|Rest],
+    select_redex(Clause, Stack, New_Stack, Redex, Polarity).
+choice_point([or2(Clause)|Rest], Failed, New_Stack, Redex, Polarity) :-
+    choice_point(Rest, or(Clause,Failed), New_Stack, Redex, Polarity).
+choice_point([and1(Clause)|Rest], Failed, New_Stack, Redex, Polarity) :-
+    choice_point(Rest, and(Failed,Clause), New_Stack, Redex, Polarity).
+choice_point([and2(Clause)|Rest], Failed, New_Stack, Redex, Polarity) :-
+    choice_point(Rest, and(Clause,Failed), New_Stack, Redex, Polarity).
+choice_point([impl1(Clause)|Rest], Failed, New_Stack, Redex, Polarity) :-
+    choice_point(Rest, impl(Failed,Clause), New_Stack, Redex, Polarity).
+choice_point([impl2(Clause)|Rest], Failed, New_Stack, Redex, Polarity) :-
+    choice_point(Rest, impl(Clause,Failed), New_Stack, Redex, Polarity).
+
 select_redex(or(A,B),Remaining,Stack,Selected,Polarity) =>
-    negate(Polarity,Negated),
-    select_redex(A,[or1(B)|Remaining], Stack, Selected, Negated).
+    select_redex(A,[or1(B)|Remaining], Stack, Selected, Polarity).
 select_redex(and(A,B),Remaining,Stack,Selected,Polarity) =>
     select_redex(A,[and1(B)|Remaining], Stack, Selected, Polarity).
 select_redex(impl(Ante,Con), Remaining, Stack, Selected, Polarity) =>
@@ -76,6 +89,9 @@ select_redex(isa(X,T), Remaining, Stack, Selected, Polarity) =>
 select_redex(true, Remaining, Stack, Selected, Polarity) =>
     Selected = true-Polarity,
     Stack = Remaining.
+select_redex(false, Remaining, Stack, Selected, Polarity) =>
+    Selected = false-Polarity,
+    Stack = Remaining.
 
 % plug the one hole context, and find the next Clause and Stack
 step([and1(B)|T], Result, Next_Stack, Next_Clause, Polarity) :-
@@ -83,22 +99,20 @@ step([and1(B)|T], Result, Next_Stack, Next_Clause, Polarity) :-
 step([and2(A)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     step(T, and(A,Result), Next_Stack, Next_Clause, Polarity).
 step([or1(B)|T], Result, Next_Stack, Next_Clause, Polarity) :-
-    (   step(T, or(Result,B), Next_Stack, Next_Clause, Polarity)
-    *-> true
-    ;   negate(Polarity,Negated),
-        select_redex(B, [or2(Result)|T], Next_Stack, Next_Clause, Negated)
-    ).
+    step(T, or(Result,B), Next_Stack, Next_Clause, Polarity).
+step([or2(A)|T], Result, Next_Stack, Next_Clause, Polarity) :-
+    step(T, or(A,Result), Next_Stack, Next_Clause, Polarity).
 step([and2(A)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     step(T, and(A,Result), Next_Stack, Next_Clause, Polarity).
 step([impl1(Consequent)|T], Result, Next_Stack, Next_Clause, Polarity) :-
     negate(Polarity,Negated),
     select_redex(Consequent,[impl2(Result)|T], Next_Stack, Next_Clause, Negated).
-step([impl2(Antecedent)|T], Result, Next_Stack, Next_Clause, Polarity) :-
-    step(T, impl(Antecedent, Result), Next_Stack, Next_Clause, Polarity).
+step([impl2(Antecedent)|T], Result, Next_Stack, Next_Clause, true) :-
+    step(T, impl(Antecedent, Result), Next_Stack, Next_Clause, true).
 
 run(Db, Constraint, Failed_At) :-
     select_redex(Constraint, [], Remaining, Clause, true),
-    run(Clause, Remaining, Db, Failed_At).
+    once(run(Clause, Remaining, Db, Failed_At)).
 
 raw(X^^_, X) :-
     !.
@@ -121,14 +135,15 @@ run_clause(isa(X,T), Db) :-
     run_clause(t(X,RDF_Type,TEx),Db).
 
 run(Clause-false, Remaining, Db, Failed_At) :-
-    (   run_clause(Clause, Db)
-    *-> step(Remaining,Clause,Next_Stack, Next_Clause, false),
-        run(Next_Clause, Next_Stack, Db, Failed_At)
-    ;   step(Remaining,Clause,Next_Stack, Next_Clause, false),
-        run(Next_Clause, Next_Stack, Db, Failed_At)
+    run_clause(Clause, Db),
+    step(Remaining,Clause,Next_Stack, Next_Clause, false),
+    run(Next_Clause, Next_Stack, Db, Failed_At).
+run(Clause-true, Remaining, Db, Failed_At) :-
+    \+ run_clause(Clause, Db),
+    (   choice_point(Remaining, Clause, Next_Stack, Next_Clause, true)
+    ->  run(Next_Clause, Next_Stack, Db, Failed_At)
+    ;   Failed_At = failed_at(Clause, Remaining)
     ).
-run(Clause-true, Remaining, Db, failed_at(Clause,Remaining)) :-
-    \+ run_clause(Clause, Db).
 run(Clause-true, Remaining, Db, Failed_At) :-
     run_clause(Clause, Db),
     step(Remaining,Clause,Next_Stack,Next_Clause, true),
@@ -148,7 +163,7 @@ context_hole_term([impl2(A)|T],B,Term) :-
 
 failure_report(Db, failed_at(Clause,Remaining),Report) :-
     database_prefixes(Db, Prefixes),
-    context_hole_term(Remaining,Clause,Term),
+    context_hole_term(Remaining,focus(Clause),Term),
     !,
     render_constraint(Clause,Prefixes,Clause_String),
     render_constraint(Term,Prefixes,Term_String),
@@ -169,10 +184,28 @@ step([or(Before,[Next_Constraint|After])|T], Result, Next_Stack, Next_Clause) :-
 render_constraint(Constraint,Prefixes,String) :-
     render_constraint(Constraint,Prefixes,String, 0).
 
+render_instance_uri(A, _, AString) :-
+    var(A),
+    !,
+    AString = "?".
+render_instance_uri(A, Prefixes, AString) :-
+    'document/json':compress_dict_uri(A,Prefixes,AString).
+
+render_schema_uri(A, _, AString) :-
+    var(A),
+    !,
+    AString = "?".
+render_schema_uri(A, Prefixes, AString) :-
+    'document/json':compress_schema_uri(A,Prefixes,AString).
+
+render_constraint(focus(C), Prefixes, String, Indent) :-
+    render_constraint(C, Prefixes, Internal_String, Indent),
+    format(string(String), "« ~s »", [Internal_String]).
 render_constraint(isa(X,T), Prefixes, String, Indent) :-
-    'document/json':compress_dict_uri(X,Prefixes,XPretty),
+    render_instance_uri(X,Prefixes,XPretty),
+    render_schema_uri(T,Prefixes,TPretty),
     pad('',' ',Indent,Pad),
-    format(string(String), "~q:~q~n~s", [XPretty,T,Pad]).
+    format(string(String), "~q:~q~n~s", [XPretty,TPretty,Pad]).
 render_constraint(op(Op,B,C), _, String, Indent) :-
     raw(B,BRaw),
     raw(C,CRaw),
@@ -180,10 +213,11 @@ render_constraint(op(Op,B,C), _, String, Indent) :-
     format(string(String),
            "~q ~s ~q~n~s", [BRaw,Op,CRaw,Pad]).
 render_constraint(t(A,B,C), Prefixes, String, Indent) :-
-    'document/json':compress_dict_uri(A,Prefixes,APretty),
-    'document/json':compress_schema_uri(B,Prefixes,BPretty),
-    (   atom(C)
-    ->  'document/json':compress_dict_uri(C, Prefixes, CPretty)
+    render_instance_uri(A,Prefixes,APretty),
+    render_schema_uri(B,Prefixes,BPretty),
+    (   (   atom(C)
+        ;   var(C))
+    ->  render_instance_uri(C, Prefixes, CPretty)
     ;   raw(C, CPretty)
     ),
     pad('',' ',Indent,Pad),
@@ -341,6 +375,7 @@ check_constraint_document(Db,Constraint,Witness) :-
     compile_constraint(Constraint, Term),
     run(Db, Term, Failed_At),
     !,
+    format(user_error, 'Constraint Failed: ~q', [Failed_At]),
     failure_report(Db, Failed_At, Message),
     Name = (Constraint.'@name'),
     Witness = json{ '@type' : "ConstraintFailure",
@@ -369,6 +404,29 @@ test(or_test2, []) :-
     context_hole_term(Ctx, Op, Term),
     !,
     Term = or(op(>,10,100),op(>,10,30)).
+
+test(impl_false, []) :-
+    Impl_Test = impl(false, true),
+    \+ run(fake_db, Impl_Test, _Failed_At).
+
+test(impl_true, []) :-
+    Impl_Test = impl(true, true),
+    \+ run(fake_db, Impl_Test, _Failed_At).
+
+test(impl_or, []) :-
+    Impl_Or_Test = impl(true, or(false,true)),
+    \+ run(fake_db, Impl_Or_Test, _Failed_At).
+
+test(impl_and_or, []) :-
+    Impl_Or_Test = impl(true, and(or(false,true), false)),
+    run(fake_db, Impl_Or_Test, Failed_At),
+    !,
+    Failed_At = failed_at(Op, Ctx), 
+    Op = false,
+    Ctx = [and2(or(false,true)),impl2(true)],
+    context_hole_term(Ctx, focus(Op), Term),
+    !,
+    Term = impl(true,and(or(false,true),focus(false))).
 
 insurance_schema('
 { "@type" : "@context",
@@ -516,7 +574,61 @@ test(or_impl_test,
 						  10)))),
 
     failure_report(Db, Failed_At, String),
-    String = "Failed to satisfy: 12 < 10\n\n\n    In the Constraint:\n\n( 'Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (12 < 10\n    )\n".
+
+    String = "Failed to satisfy: 12 < 10\n\n\n    In the Constraint:\n\n( 'Customer/Jill+Curry+2':'Customer'\n   ) ⇒\n    'Customer/Jill+Curry+2' =[age]> 12\n     ∧ (12 > 30\n    ) ∨ (« 12 < 10\n     »)\n".
+
+test(satisfied,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    insert_insurance_documents(Desc),
+
+    Satisfied = impl(isa(Customer,'Customer'),
+                     and(t(Customer,age,Age),
+                         or(op(<,Age,70),
+                            op(>,Age,0)))),
+
+    open_descriptor(Desc, Db),
+    \+ run(Db, Satisfied, _Failed_At).
+
+test(failed_antecedent,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    insert_insurance_documents(Desc),
+
+    Satisfied = impl(false,
+                     and(t(_Customer,age,Age),
+                         or(op(<,Age,70),
+                            op(>,Age,0)))),
+
+    open_descriptor(Desc, Db),
+    \+ run(Db, Satisfied, _Failed_At).
+
+test(failed_antecedent_query,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    insert_insurance_documents(Desc),
+
+    Satisfied = impl(t(_, edge_doesnt_exist, B),
+                     or(op(<,B,70),
+                        op(>,B,0))),
+
+    open_descriptor(Desc, Db),
+    \+ run(Db, Satisfied, _Failed_At).
 
 test(midlife_insurance,
      [setup((setup_temp_store(State),
@@ -580,8 +692,7 @@ test(midlife_insurance,
 							   35))))),
 
     failure_report(Db, Failed_At, String),
-
-    String = "Failed to satisfy: 12 > 35\n\n\n    In the Constraint:\n\n( 'Policy/3':'Policy'\n   ∧ 'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product'\n   ∧ 'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance'\n   ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2'\n     ∧ 'Customer/Jill+Curry+2' =[age]> 12\n     ∧ 12 < 70\n     ∧ 12 > 35\n    \n".
+    String = "Failed to satisfy: 12 > 35\n\n\n    In the Constraint:\n\n( 'Policy/3':'Policy'\n   ∧ 'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product'\n   ∧ 'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance'\n   ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2'\n     ∧ 'Customer/Jill+Curry+2' =[age]> 12\n     ∧ 12 < 70\n     ∧ « 12 > 35\n     »\n".
 
 
 test(compile_constraint,
