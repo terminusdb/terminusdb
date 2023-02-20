@@ -117,9 +117,21 @@ run(Db, Constraint, Failed_At) :-
     select_redex(Constraint, [], Remaining, Clause, true),
     once(run(Clause, Remaining, Db, Failed_At)).
 
+raw(var(A), AString) :-
+    render_var(var(A), AString).
+raw(DT^^'http://www.w3.org/2001/XMLSchema#dateTime', X) :-
+    !,
+    literals:date_time_string(DT, X).
 raw(X^^_, X) :-
     !.
 raw(X,X).
+
+op(<, @<).
+op(>, @>).
+op(>=, @>=).
+op(=<, @=<).
+op(=, =).
+op(\=, \=).
 
 run_clause(true, _Db).
 run_clause(t(X,P,Y), Db) :-
@@ -130,7 +142,8 @@ run_clause(t(X,P,Y), Db) :-
 run_clause(op(Op,X,Y), _) :-
     raw(X,XRaw),
     raw(Y,YRaw),
-    call(Op,XRaw,YRaw).
+    op(Op,TermOp),
+    call(TermOp,XRaw,YRaw).
 run_clause(isa(X,T), Db) :-
     database_prefixes(Db, Prefixes),
     prefix_expand_schema(T, Prefixes, TEx),
@@ -223,17 +236,14 @@ step([or(Before,[Next_Constraint|After])|T], Result, Next_Stack, Next_Clause) :-
 render_constraint(Constraint,Prefixes,String) :-
     render_constraint(Constraint,Prefixes,String,0,[]).
 
-render_instance_uri(A, _, AString) :-
-    var(A),
-    !,
-    AString = "?".
+render_instance_uri(var(A), _, AString) :-
+    render_var(var(A), AString).
 render_instance_uri(A, Prefixes, AString) :-
     'document/json':compress_dict_uri(A,Prefixes,AString).
 
-render_schema_uri(A, _, AString) :-
-    var(A),
+render_schema_uri(var(A), _, AString) :-
     !,
-    AString = "?".
+    render_var(var(A), AString).
 render_schema_uri(A, Prefixes, AString) :-
     'document/json':compress_schema_uri(A,Prefixes,AString).
 
@@ -249,8 +259,11 @@ needs_newline_pad(Indent,Stack,Newline_Pad) :-
     ;   Newline_Pad = ''
     ).
 
+render_var(var(X), Var) :-
+    format(string(Var), "?~w", [X]).
+
 render_constraint(var(X), _, Var, _, _) :-
-    format(string(Var), "?~s", [X]).
+    render_var(var(X), Var).
 render_constraint(true, _, "⊤", _, _).
 render_constraint(false, _, "⊥", _, _).
 render_constraint(focus(C), Prefixes, String, Indent, Stack) :-
@@ -260,13 +273,13 @@ render_constraint(isa(X,T), Prefixes, String, Indent, Stack) :-
     render_instance_uri(X,Prefixes,XPretty),
     render_schema_uri(T,Prefixes,TPretty),
     needs_newline_pad(Indent,Stack,Pad),
-    format(string(String), "~s~q:~q", [Pad,XPretty,TPretty]).
+    format(string(String), "~s~w:~w", [Pad,XPretty,TPretty]).
 render_constraint(op(Op,B,C), _, String, Indent, Stack) :-
     raw(B,BRaw),
     raw(C,CRaw),
     needs_newline_pad(Indent,Stack,Pad),
     format(string(String),
-           "~s~q ~s ~q", [Pad,BRaw,Op,CRaw]).
+           "~s~w ~s ~w", [Pad,BRaw,Op,CRaw]).
 render_constraint(t(A,B,C), Prefixes, String, Indent, Stack) :-
     render_instance_uri(A,Prefixes,APretty),
     render_schema_uri(B,Prefixes,BPretty),
@@ -277,7 +290,7 @@ render_constraint(t(A,B,C), Prefixes, String, Indent, Stack) :-
     ),
     needs_newline_pad(Indent,Stack,Pad),
     format(string(String),
-           "~s~q =[~q]> ~q", [Pad,APretty,BPretty,CPretty]).
+           "~s~w =[~w]> ~w", [Pad,APretty,BPretty,CPretty]).
 render_constraint(or(A,B), Prefixes, String, Indent, Stack) :-
     render_constraint(A, Prefixes, StringA, Indent, [or1|Stack]),
     render_constraint(B, Prefixes, StringB, Indent, [or2|Stack]),
@@ -358,9 +371,18 @@ test(merge_vars_for_or, []) :-
 
 :- end_tests(merge_bindings).
 
-pair_rule('@var'-Var, Subject, true, Bindings_In, Bindings_Out) =>
+var_or_val(Dict, Bindings_In, V),
+is_dict(Dict) =>
+    get_dict('@var', Dict, Var),
+    atom_string(VarName, Var),
+    get_dict(VarName,Bindings_In, V).
+var_or_val(Value, _Bindings_In, V) =>
+    Value = V.
+
+pair_rule('@var'-Var, Subject, Term, Bindings_In, Bindings_Out) =>
     atom_string(VarAtom,Var),
-    put_dict(VarAtom, Bindings_In, Subject, Bindings_Out).
+    put_dict(VarAtom, Bindings_In, Subject, Bindings_Out),
+    Term = true.
 pair_rule('@or'-List, Subject, Term, Bindings_In, Bindings_Out) =>
     maplist({Bindings_In,Subject}/[Constraint,Term0,Bindings_Out]>>
             compile_constraint_rule(Constraint,Subject,Term0,Bindings_In,Bindings_Out),
@@ -378,22 +400,28 @@ pair_rule('@and'-List, Subject, Term, Bindings_In, Bindings_Out) =>
          Bindings_Out),
     term_conjunction(Terms,Term).
 pair_rule('@gt'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
-    Term = op(>,Subject,Value),
+    var_or_val(Value,Bindings_In,V),
+    Term = op(>,Subject,V),
     Bindings_In = Bindings_Out.
 pair_rule('@lt'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
-    Term = op(<,Subject,Value),
+    var_or_val(Value,Bindings_In,V),
+    Term = op(<,Subject,V),
     Bindings_In = Bindings_Out.
 pair_rule('@ge'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
-    Term = op(>=,Subject,Value),
+    var_or_val(Value,Bindings_In,V),
+    Term = op(>=,Subject,V),
     Bindings_In = Bindings_Out.
 pair_rule('@le'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
-    Term = op(=<,Subject,Value),
+    var_or_val(Value,Bindings_In,V),
+    Term = op(=<,Subject,V),
     Bindings_In = Bindings_Out.
 pair_rule('@eq'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
-    Term = op(=,Subject,Value),
+    var_or_val(Value,Bindings_In,V),
+    Term = op(=,Subject,V),
     Bindings_In = Bindings_Out.
 pair_rule('@ne'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
-    Term = op(\=,Subject,Value),
+    var_or_val(Value,Bindings_In,V),
+    Term = op(\=,Subject,V),
     Bindings_In = Bindings_Out.
 pair_rule('@isa'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
     atom_string(Atom,Value),
@@ -494,6 +522,12 @@ insurance_schema('
                                   "insurance_product" : { "@isa" : "MidLifeInsurance" }},
                       "@then" : { "customer" : { "age" : { "@and" : [{ "@gt" : 30 },
                                                                      { "@lt" : 60 }]}}}}]
+      },
+      { "@name" : "PolicyEndAfterStart",
+        "@rules" : [{ "@when" : { "@isa" : "Policy" },
+                      "@then" : { "@and" : [{ "start_date" : {"@var" : "StartDate"}},
+                                            { "end_date" : {"@gt" :
+                                                             {"@var" : "StartDate"}}}]}}],
       }
     ]
   }
@@ -656,7 +690,7 @@ test(or_impl_test,
 						  10)))),
 
     failure_report(Db, Failed_At, String),
-    String = "Failed to satisfy: 12 < 10\n\n    In the Constraint:\n\n( 'Customer/Jill+Curry+2':'Customer' ) ⇒\n    'Customer/Jill+Curry+2' =[age]> 12 ∧ (12 > 30 ∨ « 12 < 10 »)\n".
+    String = "Failed to satisfy: 12 < 10\n\n    In the Constraint:\n\n( Customer/Jill+Curry+2:Customer ) ⇒\n    Customer/Jill+Curry+2 =[age]> 12 ∧ (12 > 30 ∨ « 12 < 10 »)\n".
 
 
 test(satisfied,
@@ -774,8 +808,7 @@ test(midlife_insurance,
 							   35))))),
 
     failure_report(Db, Failed_At, String),
-
-    String = "Failed to satisfy: 12 > 35\n\n    In the Constraint:\n\n( 'Policy/3':'Policy' ∧ \n  'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product' ∧ \n  'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance' ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2' ∧ \n    'Customer/Jill+Curry+2' =[age]> 12 ∧ \n    12 < 70 ∧ « 12 > 35 »\n".
+    String = "Failed to satisfy: 12 > 35\n\n    In the Constraint:\n\n( Policy/3:Policy ∧ \n  Policy/3 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ \n  MidLifeInsurance/Mid-Life%20Insurance%20Product:MidLifeInsurance ) ⇒\n    Policy/3 =[customer]> Customer/Jill+Curry+2 ∧ \n    Customer/Jill+Curry+2 =[age]> 12 ∧ \n    12 < 70 ∧ « 12 > 35 »\n".
 
 test(compile_constraint,
      [setup((setup_temp_store(State),
@@ -801,39 +834,46 @@ test(compile_constraint,
     C1 == C2,
     A1 == A2, A2 == A3.
 
-test(insurance_no_overlap, [blocked('not written yet')]) :-
-/*
-Example constraint2:
+test(overlap,
+     []) :-
+    Start_Date_Str1 = "2020-01-01T00:00:00Z",
+    End_Date_Str1 = "2050-01-01T00:00:00Z",
+    Start_Date_Str2 = "2030-01-01T00:00:00Z",
+    End_Date_Str2 = "2060-01-01T00:00:00Z",
+    literals:date_time_string(Start_Date1, Start_Date_Str1),
+    literals:date_time_string(End_Date1, End_Date_Str1),
+    literals:date_time_string(Start_Date2, Start_Date_Str2),
+    literals:date_time_string(End_Date2, End_Date_Str2),
 
-Example constraint:
+    Expr = or(op(>,Start_Date1, End_Date2),
+              op(<,End_Date1, Start_Date2)),
+    run(fake, Expr, Failed_At),
+    !,
+    Failed_At = failed_at(Op, Ctx),
+    Op = op(<,
+			date_time(2050,1,1,0,0,0,0),
+			date_time(2030,1,1,0,0,0,0)),
+    context_hole_term(Ctx, Op, Term),
+    Term = or(op(>,
+				 date_time(2020,1,1,0,0,0,0),
+				 date_time(2060,1,1,0,0,0,0)),
+			  op(<,
+				 date_time(2050,1,1,0,0,0,0),
+				 date_time(2030,1,1,0,0,0,0))).
 
-{ "@type": "Constraint",
-  "@id": "InsuranceNoOverlap",
-  "@doc": "People with an insurance policy can't have that same product in an overlapping duration",
-  "@on": "Policy",
-  "@constraints": [{"@id": {"@var": "policy_id"}},
-                   {"@not": [{"insurance_product": {"@type": {"@var": "product_type_1"}}},
-                             {"customer": {"@linked-by": {"@type": "Policy", "@property": "customer},
-                                           "@id": {"@var": "policy_id_2"}}},
-                             {"@ne": [{"@var": "policy_id"},
-                                      {"@var": "policy_id_2"}]},
-                             {"@match": {"@id": {"@var": "policy_id_2"},
-                                         "insurance_product": {"@var": "product_type_1"}}},
-                             {"@match": {"@id": {"@var": "policy_id"},
-                                         "start_date": {"@var": "policy_1_start_date"},
-                                         "end_date": {"@var": "policy_1_start_date"}}},
-                             {"@match": {"@id": {"@var": "policy_id_2"},
-                                         "start_date": {"@var": "policy_2_start_date"},
-                                         "end_date": {"@var": "policy_2_start_date"}}},
-                             {"@or": [{"@between": {"@from": {"@var": "policy_1_start_date"},
-                                                    "@to": {"@var": "policy_1_end_date"},
-                                                    "@element: {"@var": "policy_2_start_date"}}},
-                                      {"@between": {"@from": {"@var": "policy_1_start_date"},
-                                                    "@to": {"@var": "policy_1_end_date"},
-                                                    "@element: {"@var": "policy_2_end_date"}}}]}]}]
-*/
+test(insurance_no_overlap,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
 
-    _No_Overlap = impl(and(isa(Policy1,'Policy'),
+    insert_insurance_documents(Desc),
+
+    open_descriptor(Desc, Db),
+
+    No_Overlap = impl(and(isa(Policy1,'Policy'),
                           and(t(Policy1,insurance_product,Product),
                               and(t(Policy1,customer,Customer),
                                   and(t(Policy2,customer,Customer),
@@ -843,9 +883,51 @@ Example constraint:
                           and(t(Policy2,start_date,Start_Date2),
                               and(t(Policy1,end_date,End_Date1),
                                   and(t(Policy2, end_date, End_Date2),
-                                      or(and(op(<,Start_Date1, End_Date2),
-                                             op(<,End_Date2, End_Date1)),
-                                         and(op(<,Start_Date1, Start_Date2),
-                                             op(<,Start_Date2, End_Date1)))))))).
+                                      or(op(>,Start_Date1, End_Date2),
+                                         op(<,End_Date1, Start_Date2))))))),
+
+    run(Db, No_Overlap, _Failed_At),
+    !.
+
+test(policy_end_after_start,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    insert_insurance_documents(Desc),
+
+    open_descriptor(Desc, Db),
+
+    End_After_Start = impl(isa(Policy,'Policy'),
+                          and(t(Policy, start_date, Start_Date),
+                              and(t(Policy, end_date, End_Date),
+                                  op(<,Start_Date,End_Date)))),
+    \+ run(Db, End_After_Start, _Failed_At).
+
+
+test(policy_end_after_start_schema,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    database_context_object(Desc, Context),
+    Constraints = (Context.'@metadata'.constraints),
+    [_Constraint1,Constraint2|_Constraints_Rest] = Constraints,
+    compile_constraint(Constraint2, Term, Bindings),
+    Term = impl(isa(A,'Policy'),
+				and(and(t(A,start_date,B),true),
+					and(t(A,end_date,C),op(>,C,B)))),
+
+    reconcile_bindings(Term,Bindings),
+    render_constraint(Term, _{}, String),
+    !,
+    String = "( ?A:Policy ) ⇒\n    ?A =[start_date]> ?StartDate ∧ ⊤ ∧ \n    ?A =[end_date]> ?B ∧ \n    ?B > ?StartDate".
+
 
 :- end_tests(constraints).
