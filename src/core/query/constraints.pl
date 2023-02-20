@@ -25,11 +25,11 @@ X,Y,Z ∈ Node Variables
 W ∈ Node or Variable value := X | G
 S,T ∈ Types
 P,Q,R ∈ Field names
-C,D,E ∈ Constraint := comp(Op,X,O)
+C,D,E ∈ Constraint := op(Op,X,O)
                      | t(X,P,Y)
                      | and(C,D)
                      | or(C,D)
-                     | not(C)
+                     | not(C) % not implemented yet
                      | impl(C,D)
                      | isa(X,T)
 
@@ -74,6 +74,9 @@ select_redex(op(Op,X,Y), Remaining, Stack, Selected, Polarity) =>
 select_redex(isa(X,T), Remaining, Stack, Selected, Polarity) =>
     Selected = isa(X,T)-Polarity,
     Stack = Remaining.
+select_redex(true, Remaining, Stack, Selected, Polarity) =>
+    Selected = true-Polarity,
+    Stack = Remaining.
 
 % plug the one hole context, and find the next Clause and Stack
 step([and1(B)|T], Result, Next_Stack, Next_Clause, Polarity) :-
@@ -102,6 +105,7 @@ raw(X^^_, X) :-
     !.
 raw(X,X).
 
+run_clause(true, _Db).
 run_clause(t(X,P,Y), Db) :-
     database_prefixes(Db, Prefixes),
     prefix_expand_schema(P, Prefixes, PEx),
@@ -204,6 +208,135 @@ render_constraint(impl(A,B), Prefixes, String, Indent) :-
     pad('',' ',Indent_Next,Pad),
     format(string(String),
            "( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
+
+term_conjunction(Terms, Conj) :-
+    (   Terms = []
+    ->  Conj = false
+    ;   Terms = [Conj]
+    ->  true
+    ;   Terms = [Term0|Rest],
+        foldl([Term1, Term2, and(Term2,Term1)]>>true, Rest, Term0, Conj)
+    ).
+
+term_disjunction(Terms, Disj) :-
+    (   Terms = []
+    ->  Disj = true
+    ;   Terms = [Disj]
+    ->  true
+    ;   Terms = [Term0|Rest],
+        foldl([Term1, Term2, or(Term2,Term1)]>>true, Rest, Term0, Disj)
+    ).
+
+% performs a binding fold.
+merge_bindings([Bindings], Bindings).
+merge_bindings([Bindings0|Bindings_List], Bindings) :-
+    merge_bindings(Bindings_List, Bindings0, Bindings).
+
+merge_bindings([], Bindings, Bindings).
+merge_bindings([BindingsNext|Bindings_List], Bindings0, Bindings) :-
+    dict_pairs(BindingsNext,bindings,Pairs),
+    foldl([Key-Value,Bindings_In,Bindings_Out]>>
+          (   get_dict(Key,Bindings_In,Value)
+          ->  Bindings_In = Bindings_Out
+          ;   put_dict(Key,Bindings_In,Value,Bindings_Out)
+          ),
+          Pairs,Bindings0,Bindings_Middle),
+    merge_bindings(Bindings_List,Bindings_Middle,Bindings).
+
+:- begin_tests(merge_bindings).
+
+test(merge_vars_for_or, []) :-
+    D1 = bindings{
+             var1: _X,
+             var2: _Y
+         },
+    D2 = bindings{
+             var2: _Z,
+             var3: _W
+         },
+
+    merge_bindings([D1,D2], D3),
+
+    get_dict(var1,D1,Var11),
+    get_dict(var1,D3,Var13),
+    Var11 == Var13,
+    get_dict(var2,D1,Var21),
+    get_dict(var2,D2,Var22),
+    get_dict(var2,D2,Var23),
+    Var21 == Var22, Var22 == Var23,
+    get_dict(var3,D2,Var32),
+    get_dict(var3,D3,Var33),
+    Var32 == Var33.
+
+:- end_tests(merge_bindings).
+
+pair_rule('@var'-Var, Subject, true, Bindings_In, Bindings_Out) =>
+    atom_string(VarAtom,Var),
+    put_dict(VarAtom, Bindings_In, Subject, Bindings_Out).
+pair_rule('@or'-List, Subject, Term, Bindings_In, Bindings_Out) =>
+    maplist({Bindings_In,Subject}/[Constraint,Term0,Bindings_Out]>>
+            compile_constraint_rule(Constraint,Subject,Term0,Bindings_In,Bindings_Out),
+            List,
+            Terms,
+            Bindings_List),
+    merge_bindings(Bindings_List, Bindings_Out),
+    term_disjunction(Terms,Term).
+pair_rule('@and'-List, Subject, Term, Bindings_In, Bindings_Out) =>
+    mapm({Subject}/[Constraint,Term0,Bindings_In0,Bindings_Out0]>>
+         compile_constraint_rule(Constraint,Subject,Term0,Bindings_In0,Bindings_Out0),
+         List,
+         Terms,
+         Bindings_In,
+         Bindings_Out),
+    term_conjunction(Terms,Term).
+pair_rule('@gt'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = op(>,Subject,Value),
+    Bindings_In = Bindings_Out.
+pair_rule('@lt'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = op(<,Subject,Value),
+    Bindings_In = Bindings_Out.
+pair_rule('@ge'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = op(>=,Subject,Value),
+    Bindings_In = Bindings_Out.
+pair_rule('@le'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = op(=<,Subject,Value),
+    Bindings_In = Bindings_Out.
+pair_rule('@eq'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = op(=,Subject,Value),
+    Bindings_In = Bindings_Out.
+pair_rule('@ne'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = op(\=,Subject,Value),
+    Bindings_In = Bindings_Out.
+pair_rule('@isa'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    atom_string(Atom,Value),
+    Term = isa(Subject,Atom),
+    Bindings_In = Bindings_Out.
+pair_rule(Field-Value, Subject, Term, Bindings_In, Bindings_Out) =>
+    T1 = t(Subject,Field,Object),
+    compile_constraint_rule(Value, Object, T2, Bindings_In, Bindings_Out),
+    Term = and(T1,T2).
+
+% I'm just going to make implication special, otherwise it's annoying.
+compile_constraint_rule(Dictionary, Subject, Term, Bindings_In, Bindings_Out),
+is_dict(Dictionary),
+get_dict('@when', Dictionary, Ante) =>
+    get_dict('@then', Dictionary, Con),
+    compile_constraint_rule(Ante, Subject, Term1, Bindings_In, Bindings_Middle),
+    compile_constraint_rule(Con, Subject, Term2, Bindings_Middle, Bindings_Out),
+    Term = impl(Term1,Term2).
+compile_constraint_rule(Dictionary, Subject, Term, Bindings_In, Bindings_Out),
+is_dict(Dictionary) =>
+    dict_pairs(Dictionary, _, Pairs),
+    mapm({Subject}/[Pair,Rule,BI,BO]>>pair_rule(Pair,Subject,Rule,BI,BO),
+         Pairs, Rules, Bindings_In, Bindings_Out),
+    term_conjunction(Rules,Term).
+
+compile_constraint(Document, Constraint) :-
+    get_dict('@rules', Document, Rules),
+    Bindings = bindings{},
+    maplist({Bindings,Subject}/[Rule,Term]>>compile_constraint_rule(Rule, Subject, Term, _{}, _),
+            Rules, Terms),
+    term_conjunction(Terms, Constraint).
 
 check_constraint_document(_,_,_) :-
     fail.
@@ -444,6 +577,30 @@ test(midlife_insurance,
 
     String = "Failed to satisfy: 12 > 35\n\n\n    In the Constraint:\n\n( 'Policy/3':'Policy'\n   ∧ 'Policy/3' =[insurance_product]> 'MidLifeInsurance/Mid-Life%20Insurance%20Product'\n   ∧ 'MidLifeInsurance/Mid-Life%20Insurance%20Product':'MidLifeInsurance'\n   ) ⇒\n    'Policy/3' =[customer]> 'Customer/Jill+Curry+2'\n     ∧ 'Customer/Jill+Curry+2' =[age]> 12\n     ∧ 12 < 70\n     ∧ 12 > 35\n    \n".
 
+
+test(compile_constraint,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    database_context_object(Desc, Context),
+    Constraints = (Context.'@metadata'.constraints),
+    [Constraint1|_Constraints_Rest] = Constraints,
+    compile_constraint(Constraint1, Term),
+
+    Term = impl(and(isa(P0,'Policy'),
+                    and(t(P1,insurance_product,PR1),
+                        isa(PR2,'MidLifeInsurance'))),
+                and(t(P2,customer,C1),
+                    and(t(C2,age,A1),
+                        and(op(>,A2,30),
+                            op(<,A3,60))))),
+
+    P0 == P1, P1 == P2,
+    PR1 == PR2,
+    C1 == C2,
+    A1 == A2, A2 == A3.
 
 test(insurance_no_overlap, []) :-
 /*
