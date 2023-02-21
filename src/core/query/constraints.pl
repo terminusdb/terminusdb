@@ -577,11 +577,13 @@ insurance_schema('
         "@rules" : [{ "@given": [
                              { "@isa" : "Policy" ,
                                "@var" : "Policy1",
+                               "customer" : { "@var" : "Customer" },
                                "start_date" : { "@var" : "StartDate1"},
                                "end_date" : { "@var" : "EndDate1"},
                                "insurance_product" : { "@var" : "Product" }},
                              { "@isa" : "Policy",
                                "@var" : "Policy2",
+                               "customer" : { "@var" : "Customer" },
                                "start_date" : { "@var" : "StartDate2"},
                                "end_date" : { "@var" : "EndDate2"},
                                "insurance_product" : { "@var" : "Product" }}],
