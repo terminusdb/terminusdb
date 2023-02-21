@@ -219,7 +219,7 @@ failure_report(Db, failed_at(Clause,Remaining), Bindings, Report) :-
     reconcile_bindings(Term, Bindings),
     render_constraint(Clause,Prefixes,Clause_String),
     render_constraint(Term,Prefixes,Term_String),
-    format(string(Report),"Failed to satisfy: ~w~n~n    In the Constraint:~n~n~w~n",
+    format(string(Report),"Failed to satisfy: ~w~n~n    In the Constraint:~n~w~n",
            [Clause_String, Term_String]).
 
 run_report(Db, Constraint, Report) :-
@@ -308,7 +308,7 @@ render_constraint(impl(A,B), Prefixes, String, Indent, Stack) :-
     render_constraint(B, Prefixes, StringB, Indent_Next, [impl2|Stack]),
     pad('',' ',Indent_Next,Pad),
     format(string(String),
-           "( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
+           "~n( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
 
 term_conjunction(Terms, Conj) :-
     (   Terms = []
@@ -953,7 +953,7 @@ test(policy_end_after_start_schema,
     reconcile_bindings(Term,Bindings),
     render_constraint(Term, _{}, String),
     !,
-    String = "( ?A:Policy ) ⇒\n    ?A =[start_date]> ?StartDate ∧ ⊤ ∧ \n    ?A =[end_date]> ?B ∧ \n    ?B > ?StartDate".
+    String = "\n( ?A:Policy ) ⇒\n    ?A =[start_date]> ?StartDate ∧ ⊤ ∧ \n    ?A =[end_date]> ?B ∧ \n    ?B > ?StartDate".
 
 
 test(policy_overlap,
@@ -981,7 +981,7 @@ test(policy_overlap,
     reconcile_bindings(Term,Bindings),
     render_constraint(Term, _{}, String),
     !,
-    String = "( ?Policy1:Policy ∧ ⊤ ∧ \n  ?Policy1 =[end_date]> ?EndDate1 ∧ ⊤ ∧ \n  ?Policy1 =[insurance_product]> ?Product ∧ ⊤ ∧ \n  ?Policy1 =[start_date]> ?StartDate1 ∧ ⊤ ) ⇒\n    ⊤ ∧ ( ?A:Policy ∧ \n  ?A \\= ?Policy1 ∧ \n  ?A =[insurance_product]> ?Product ∧ ⊤ ) ⇒\n    (?A =[start_date]> ?B ∧ \n    ?B > ?EndDate1 ∨ ?A =[end_date]> ?C ∧ \n    ?C < ?StartDate1)".
+    String = "\n( ?Policy1:Policy ∧ ⊤ ∧ \n  ?Policy1 =[end_date]> ?EndDate1 ∧ ⊤ ∧ \n  ?Policy1 =[insurance_product]> ?Product ∧ ⊤ ∧ \n  ?Policy1 =[start_date]> ?StartDate1 ∧ ⊤ ) ⇒\n    ⊤ ∧ \n( ?A:Policy ∧ \n  ?A \\= ?Policy1 ∧ \n  ?A =[insurance_product]> ?Product ∧ ⊤ ) ⇒\n    (?A =[start_date]> ?B ∧ \n    ?B > ?EndDate1 ∨ ?A =[end_date]> ?C ∧ \n    ?C < ?StartDate1)".
 
 
 test(run_policy_overlap,
@@ -1003,10 +1003,7 @@ test(run_policy_overlap,
 
     run(Db, Term, Failed_At),
 
-    print_term(Failed_At, []),
-
     failure_report(Db, Failed_At, Bindings, Report),
-
-    Report = "Failed to satisfy: 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z\n\n    In the Constraint:\n\n( Policy/1:Policy ∧ ⊤ ∧ \n  Policy/1 =[end_date]> 2050-01-01T00:00:00Z ∧ ⊤ ∧ \n  Policy/1 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ ⊤ ∧ \n  Policy/1 =[start_date]> 2020-01-01T00:00:00Z ∧ ⊤ ) ⇒\n    ⊤ ∧ ( Policy/2:Policy ∧ \n  iri://insurance/Policy/2 \\= iri://insurance/Policy/1 ∧ \n  Policy/2 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ ⊤ ) ⇒\n    (Policy/2 =[start_date]> 2030-01-01T00:00:00Z ∧ \n    2030-01-01T00:00:00Z > 2050-01-01T00:00:00Z ∨ Policy/2 =[end_date]> 2060-01-01T00:00:00Z ∧ « 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z »)\n".
+    Report = "Failed to satisfy: 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z\n\n    In the Constraint:\n\n( Policy/1:Policy ∧ ⊤ ∧ \n  Policy/1 =[end_date]> 2050-01-01T00:00:00Z ∧ ⊤ ∧ \n  Policy/1 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ ⊤ ∧ \n  Policy/1 =[start_date]> 2020-01-01T00:00:00Z ∧ ⊤ ) ⇒\n    ⊤ ∧ \n( Policy/2:Policy ∧ \n  iri://insurance/Policy/2 \\= iri://insurance/Policy/1 ∧ \n  Policy/2 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ ⊤ ) ⇒\n    (Policy/2 =[start_date]> 2030-01-01T00:00:00Z ∧ \n    2030-01-01T00:00:00Z > 2050-01-01T00:00:00Z ∨ Policy/2 =[end_date]> 2060-01-01T00:00:00Z ∧ « 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z »)\n".
 
 :- end_tests(constraints).
