@@ -381,7 +381,10 @@ var_or_val(Value, _Bindings_In, V) =>
 
 pair_rule('@var'-Var, Subject, Term, Bindings_In, Bindings_Out) =>
     atom_string(VarAtom,Var),
-    put_dict(VarAtom, Bindings_In, Subject, Bindings_Out),
+    (   get_dict(VarAtom, Bindings_In, Subject)
+    ->  Bindings_In = Bindings_Out
+    ;   put_dict(VarAtom, Bindings_In, Subject, Bindings_Out)
+    ),
     Term = true.
 pair_rule('@or'-List, Subject, Term, Bindings_In, Bindings_Out) =>
     maplist({Bindings_In,Subject}/[Constraint,Term0,Bindings_Out]>>
@@ -446,11 +449,15 @@ is_dict(Dictionary) =>
     mapm({Subject}/[Pair,Rule,BI,BO]>>pair_rule(Pair,Subject,Rule,BI,BO),
          Pairs, Rules, Bindings_In, Bindings_Out),
     term_conjunction(Rules,Term).
+compile_constraint_rule(true, _, Term, Bindings_In, Bindings_Out) =>
+    Term = true,
+    Bindings_In = Bindings_Out.
 
 compile_constraint(Document, Constraint, Bindings_Out) :-
     get_dict('@rules', Document, Rules),
     Bindings = bindings{},
-    mapm({Subject}/[Rule,Term]>>compile_constraint_rule(Rule, Subject, Term),
+    % We need a new subject per rule, but we chain the bindings.
+    mapm([Rule,Term]>>compile_constraint_rule(Rule, _Subject, Term),
          Rules, Terms, Bindings, Bindings_Out),
     term_conjunction(Terms, Constraint).
 
@@ -528,6 +535,25 @@ insurance_schema('
                       "@then" : { "@and" : [{ "start_date" : {"@var" : "StartDate"}},
                                             { "end_date" : {"@gt" :
                                                              {"@var" : "StartDate"}}}]}}],
+      },
+      { "@name" : "PolicyNoOverlap",
+        "@rules" : [{ "@when" : { "@isa" : "Policy" ,
+                                  "@var" : "Policy1",
+                                  "start_date" : { "@var" : "StartDate1"},
+                                  "end_date" : { "@var" : "EndDate1"},
+                                  "insurance_product" : { "@var" : "Product" }},
+                      "@then" : true },
+                    { "@when" : { "@isa" : "Policy",
+                                  "@ne" : { "@var" : "Policy1" },
+                                  "insurance_product" : { "@var" : "Product" }},
+                      "@then" : { "@or" : [{ "start_date" :
+                                            { "@gt" : { "@var" : "EndDate1" }}},
+                                           { "end_date" :
+                                            { "@lt" : { "@var" : "StartDate1" }}}
+                                          ]
+                                }
+                    }
+                   ]
       }
     ]
   }
@@ -929,5 +955,58 @@ test(policy_end_after_start_schema,
     !,
     String = "( ?A:Policy ) ⇒\n    ?A =[start_date]> ?StartDate ∧ ⊤ ∧ \n    ?A =[end_date]> ?B ∧ \n    ?B > ?StartDate".
 
+
+test(policy_overlap,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    database_context_object(Desc, Context),
+    Constraints = (Context.'@metadata'.constraints),
+    [_Constraint1,_Constraint2,Constraint3|_Constraints_Rest] = Constraints,
+    compile_constraint(Constraint3, Term, Bindings),
+    Term = and(impl(and(and(and(and(isa(A,'Policy'),true),
+							   and(t(A,end_date,B),true)),
+						       and(t(A,insurance_product,C),true)),
+						   and(t(A,start_date,D),true)),
+					       true),
+					  impl(and(and(isa(E,'Policy'),op(\=,E,A)),
+						   and(t(E,insurance_product,C),true)),
+					       or(and(t(E,start_date,F),op(>,F,B)),
+						  and(t(E,end_date,G),op(<,G,D))))),
+
+    reconcile_bindings(Term,Bindings),
+    render_constraint(Term, _{}, String),
+    !,
+    String = "( ?Policy1:Policy ∧ ⊤ ∧ \n  ?Policy1 =[end_date]> ?EndDate1 ∧ ⊤ ∧ \n  ?Policy1 =[insurance_product]> ?Product ∧ ⊤ ∧ \n  ?Policy1 =[start_date]> ?StartDate1 ∧ ⊤ ) ⇒\n    ⊤ ∧ ( ?A:Policy ∧ \n  ?A \\= ?Policy1 ∧ \n  ?A =[insurance_product]> ?Product ∧ ⊤ ) ⇒\n    (?A =[start_date]> ?B ∧ \n    ?B > ?EndDate1 ∨ ?A =[end_date]> ?C ∧ \n    ?C < ?StartDate1)".
+
+
+test(run_policy_overlap,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    insert_insurance_documents(Desc),
+
+    database_context_object(Desc, Context),
+    Constraints = (Context.'@metadata'.constraints),
+    [_Constraint1,_Constraint2,Constraint3|_Constraints_Rest] = Constraints,
+    compile_constraint(Constraint3, Term, Bindings),
+
+    open_descriptor(Desc, Db),
+
+    run(Db, Term, Failed_At),
+
+    print_term(Failed_At, []),
+
+    failure_report(Db, Failed_At, Bindings, Report),
+
+    Report = "Failed to satisfy: 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z\n\n    In the Constraint:\n\n( Policy/1:Policy ∧ ⊤ ∧ \n  Policy/1 =[end_date]> 2050-01-01T00:00:00Z ∧ ⊤ ∧ \n  Policy/1 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ ⊤ ∧ \n  Policy/1 =[start_date]> 2020-01-01T00:00:00Z ∧ ⊤ ) ⇒\n    ⊤ ∧ ( Policy/2:Policy ∧ \n  iri://insurance/Policy/2 \\= iri://insurance/Policy/1 ∧ \n  Policy/2 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ ⊤ ) ⇒\n    (Policy/2 =[start_date]> 2030-01-01T00:00:00Z ∧ \n    2030-01-01T00:00:00Z > 2050-01-01T00:00:00Z ∨ Policy/2 =[end_date]> 2060-01-01T00:00:00Z ∧ « 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z »)\n".
 
 :- end_tests(constraints).
