@@ -45,7 +45,7 @@ FROM rust_builder_${DIST} AS rust_builder
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM terminusdb/swipl:v9.0.3 AS base
 RUN set -eux; \
-    RUNTIME_DEPS="libjwt0 make openssl"; \
+    RUNTIME_DEPS="libjwt0 make openssl binutils"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
     rm -rf /var/cache/apt/*; \
