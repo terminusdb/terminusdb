@@ -265,7 +265,7 @@ jobs:
     name: Trigger snap build
     if: >-
       github.repository == 'terminusdb/terminusdb' &&
-      github.event_name == 'push' &&
+      github.event_name == 'push'
       #      startsWith(github.ref, 'refs/tags/v')
     needs:
       - is_build_required
