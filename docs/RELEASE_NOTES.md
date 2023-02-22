@@ -1,3 +1,38 @@
+# TerminusDB Server v11.0.1 Release Notes
+
+## Backwards-incompatible changes
+* Document replacement allowed insertion of nested documents, even
+  without the create option specified. We decided that this was a bug,
+  and made it so that this now errors, unless the create option is
+  specified. This is backwards-incompatible, but we believe that this
+  is the correct behavior. If your code relies on nested documents
+  being inserted, make sure you specify the create option. Note that
+  this is just about nested documents which are top-level
+  types. Subdocuments are not affected.
+
+## New
+
+* Introduced support for a grpc label store as an alternative to file-based label lookup [terminusdb-labs/terminusdb-grpc-labelstore](https://github.com/terminusdb-labs/terminusdb-grpc-labelstore)
+* Implemented local clone
+* Implement user impersionation in the CLI tool
+* Added a pre-commit hook to allow implementation of custom schema validations
+
+## Enhancements
+
+* Pinned system schema graph so it is only loaded once
+* Reduced amount of hash roundtrips for newly generated passwords to speed up login
+* Disabled authentication on the ok endpoint for faster roundtrip
+* Removed default SWI-Prolog HTTP server welcome message
+* Improved db list speed
+
+## Bug fixes
+* Fixed startup message when no store is present
+* Ensured that all users automatically have all capabilities of anonymous
+* Delete the stale database if a clone fails
+* Fix SSL issues in fetch and push: newer version of openssl errors when a connection is closed unexpectedly
+* Fix accidental insertion of duplicate nested documents
+* Fixed GYear support
+
 # TerminusDB Server v11.0.0 Release Notes
 
 ## Backwards-Incompatible Changes
