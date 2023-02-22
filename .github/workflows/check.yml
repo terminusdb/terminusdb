@@ -356,7 +356,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: sudo apt update && sudo apt install software-properties-common -y
-      - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox
+      - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox protobuf-compiler libprotobuf-dev
       - uses: actions-rs/clippy-check@v1
         continue-on-error: true
         with:
