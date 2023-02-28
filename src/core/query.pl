@@ -88,7 +88,12 @@
               read_object_triple_count/2,
 
               % constraints.pl
-              check_constraint_document/3
+              check_constraint_document/3,
+
+              % algebra.pl
+              termlist_conjunction/2,
+              termlist_disjunction/2,
+              conjunct/3
           ]).
 
 :- use_module(query/expansions).
@@ -102,3 +107,5 @@
 :- use_module(query/path).
 :- use_module(query/metadata).
 :- use_module(query/constraints).
+:- use_module(query/algebra).
+:- use_module(query/restrictions).

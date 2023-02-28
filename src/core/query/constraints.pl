@@ -10,6 +10,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
+:- use_module(core(query/algebra)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -319,30 +320,6 @@ render_constraint(impl(A,B), Prefixes, String, Indent, Stack) :-
     format(string(String),
            "~n( ~s ) ⇒~n~s~s", [StringA,Pad,StringB]).
 
-conjunct(true, Term, Term) :-
-    !.
-conjunct(Term, true, Term) :-
-    !.
-conjunct(Term0,Term1,and(Term0,Term1)).
-
-term_conjunction(Terms, Conj) :-
-    (   Terms = []
-    ->  Conj = false
-    ;   Terms = [Conj]
-    ->  true
-    ;   Terms = [Term0|Rest],
-        foldl([Term1, Term2, Term3]>>conjunct(Term2,Term1,Term3), Rest, Term0, Conj)
-    ).
-
-term_disjunction(Terms, Disj) :-
-    (   Terms = []
-    ->  Disj = true
-    ;   Terms = [Disj]
-    ->  true
-    ;   Terms = [Term0|Rest],
-        foldl([Term1, Term2, or(Term2,Term1)]>>true, Rest, Term0, Disj)
-    ).
-
 % performs a binding fold.
 merge_bindings([Bindings], Bindings).
 merge_bindings([Bindings0|Bindings_List], Bindings) :-
@@ -408,7 +385,7 @@ pair_rule('@or'-List, Subject, Term, Bindings_In, Bindings_Out) =>
             Terms,
             Bindings_List),
     merge_bindings(Bindings_List, Bindings_Out),
-    term_disjunction(Terms,Term).
+    termlist_disjunction(Terms,Term).
 pair_rule('@and'-List, Subject, Term, Bindings_In, Bindings_Out) =>
     mapm({Subject}/[Constraint,Term0,Bindings_In0,Bindings_Out0]>>
          compile_constraint_rule(Constraint,Subject,Term0,Bindings_In0,Bindings_Out0),
@@ -416,7 +393,7 @@ pair_rule('@and'-List, Subject, Term, Bindings_In, Bindings_Out) =>
          Terms,
          Bindings_In,
          Bindings_Out),
-    term_conjunction(Terms,Term).
+    termlist_conjunction(Terms,Term).
 pair_rule('@gt'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
     var_or_val(Value,Bindings_In,V),
     Term = op(>,Subject,V),
@@ -460,7 +437,7 @@ get_dict('@when', Dictionary, Ante) =>
              Terms,
              Bindings_In,
              Bindings_Middle0),
-        term_conjunction(Terms,Term0)
+        termlist_conjunction(Terms,Term0)
     ;   Term0 = true,
         Bindings_In = Bindings_Middle0
     ),
@@ -479,13 +456,13 @@ del_dict('@with', Dictionary, With, New_Dictionary) =>
     dict_pairs(New_Dictionary, _, Pairs),
     mapm({New_Subject}/[Pair,Rule,BI,BO]>>pair_rule(Pair,New_Subject,Rule,BI,BO),
          Pairs, Rules, Bindings_In, Bindings_Out),
-    term_conjunction(Rules,Term).
+    termlist_conjunction(Rules,Term).
 compile_constraint_rule(Dictionary, Subject, Term, Bindings_In, Bindings_Out),
 is_dict(Dictionary) =>
     dict_pairs(Dictionary, _, Pairs),
     mapm({Subject}/[Pair,Rule,BI,BO]>>pair_rule(Pair,Subject,Rule,BI,BO),
          Pairs, Rules, Bindings_In, Bindings_Out),
-    term_conjunction(Rules,Term).
+    termlist_conjunction(Rules,Term).
 compile_constraint_rule(true, _, Term, Bindings_In, Bindings_Out) =>
     Term = true,
     Bindings_In = Bindings_Out.
@@ -496,7 +473,7 @@ compile_constraint(Document, Constraint, Bindings_Out) :-
     % We need a new subject per rule, but we chain the bindings.
     mapm([Rule,Term]>>compile_constraint_rule(Rule, _Subject, Term),
          Rules, Terms, Bindings, Bindings_Out),
-    term_conjunction(Terms, Constraint).
+    termlist_conjunction(Terms, Constraint).
 
 check_constraint_document(Db,Constraint,Witness) :-
     compile_constraint(Constraint, Term, Bindings),
@@ -887,14 +864,13 @@ test(compile_constraint,
     Constraints = (Context.'@metadata'.constraints),
     [Constraint1|_Constraints_Rest] = Constraints,
     compile_constraint(Constraint1, Term, _Bindings),
-
-    Term = impl(and(isa(P0,'Policy'),
-                    and(t(P1,insurance_product,PR1),
-                        isa(PR2,'MidLifeInsurance'))),
-                and(t(P2,customer,C1),
-                    and(t(C2,age,A1),
-                        and(op(>,A2,30),
-                            op(<,A3,60))))),
+    Term = impl(and(and(t(P1,insurance_product,PR1),
+                        isa(P0,'Policy')),
+                    isa(PR2,'MidLifeInsurance')),
+                and(and(and(t(P2,customer,C1),
+                            t(C2,age,A1)),
+                        op(<,A2,60)),
+                    op(>,A3,30))),
 
     P0 == P1, P1 == P2,
     PR1 == PR2,
@@ -986,16 +962,15 @@ test(policy_end_after_start_schema,
     Constraints = (Context.'@metadata'.constraints),
     [_Constraint1,Constraint2|_Constraints_Rest] = Constraints,
     compile_constraint(Constraint2, Term, Bindings),
-
     Term = impl(isa(A,'Policy'),
-                and(t(A,start_date,B),
-					and(t(A,end_date,C),
-                        op(>,C,B)))),
+				and(and(t(A,end_date,B),
+						t(A,start_date,C)),
+					op(>,B,C))),
 
     reconcile_bindings(Term,Bindings),
     render_constraint(Term, _{}, String),
     !,
-    String = "\n( ?A:Policy ) ⇒\n    ?A =[start_date]> ?StartDate ∧ \n    ?A =[end_date]> ?B ∧ \n    ?B > ?StartDate".
+    String = "\n( ?A:Policy ) ⇒\n    ?A =[end_date]> ?B ∧ \n    ?A =[start_date]> ?StartDate ∧ \n    ?B > ?StartDate".
 
 test(policy_overlap,
      [setup((setup_temp_store(State),
@@ -1009,24 +984,23 @@ test(policy_overlap,
     Constraints = (Context.'@metadata'.constraints),
     [_Constraint1,_Constraint2,Constraint3|_Constraints_Rest] = Constraints,
     compile_constraint(Constraint3, Term, Bindings),
-    Term = impl(and(and(and(and(and(and(isa(A,'Policy'),
-								        t(A,customer,B)),
-							        t(A,end_date,C)),
-							    t(A,insurance_product,D)),
-						    t(A,start_date,E)),
-						and(and(and(and(isa(F,'Policy'),
-								        t(F,customer,B)),
-							        t(F,end_date,G)),
-							    t(F,insurance_product,D)),
-						    t(F,start_date,H))),
-					op(\=,A,F)),
-				or(op(>,H,C),op(<,G,E))),
+    Term = impl(and(and(and(and(and(and(and(and(and(and(t(A,customer,B),
+                                                        t(A,end_date,C)),
+					                                t(A,insurance_product,D)),
+				                                t(A,start_date,E)),
+				                            t(F,customer,B)),
+			                            t(F,end_date,G)),
+			                        t(F,insurance_product,D)),
+		                        t(F,start_date,H)),
+		                    isa(A,'Policy')),
+	                    isa(F,'Policy')),
+	                op(\=,A,F)),
+                or(op(>,H,C),op(<,G,E))),
 
     reconcile_bindings(Term,Bindings),
     render_constraint(Term, _{}, String),
     !,
-    String = "\n( ?Policy1:Policy ∧ \n  ?Policy1 =[customer]> ?Customer ∧ \n  ?Policy1 =[end_date]> ?EndDate1 ∧ \n  ?Policy1 =[insurance_product]> ?Product ∧ \n  ?Policy1 =[start_date]> ?StartDate1 ∧ \n  ?Policy2:Policy ∧ \n  ?Policy2 =[customer]> ?Customer ∧ \n  ?Policy2 =[end_date]> ?EndDate2 ∧ \n  ?Policy2 =[insurance_product]> ?Product ∧ \n  ?Policy2 =[start_date]> ?StartDate2 ∧ \n  ?Policy1 \\= ?Policy2 ) ⇒\n    (?StartDate2 > ?EndDate1 ∨ ?EndDate2 < ?StartDate1)".
-
+    String = "\n( ?Policy1 =[customer]> ?Customer ∧ \n  ?Policy1 =[end_date]> ?EndDate1 ∧ \n  ?Policy1 =[insurance_product]> ?Product ∧ \n  ?Policy1 =[start_date]> ?StartDate1 ∧ \n  ?Policy2 =[customer]> ?Customer ∧ \n  ?Policy2 =[end_date]> ?EndDate2 ∧ \n  ?Policy2 =[insurance_product]> ?Product ∧ \n  ?Policy2 =[start_date]> ?StartDate2 ∧ \n  ?Policy1:Policy ∧ \n  ?Policy2:Policy ∧ \n  ?Policy1 \\= ?Policy2 ) ⇒\n    (?StartDate2 > ?EndDate1 ∨ ?EndDate2 < ?StartDate1)".
 
 test(run_policy_overlap,
      [setup((setup_temp_store(State),
@@ -1048,7 +1022,6 @@ test(run_policy_overlap,
     run(Db, Term, Failed_At),
 
     failure_report(Db, Failed_At, Bindings, Report),
-
-    Report = "Failed to satisfy: 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z\n    In the Constraint:\n\n( Policy/1:Policy ∧ \n  Policy/1 =[customer]> Customer/Jim+McCoy+1 ∧ \n  Policy/1 =[end_date]> 2050-01-01T00:00:00Z ∧ \n  Policy/1 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ \n  Policy/1 =[start_date]> 2020-01-01T00:00:00Z ∧ \n  Policy/2:Policy ∧ \n  Policy/2 =[customer]> Customer/Jim+McCoy+1 ∧ \n  Policy/2 =[end_date]> 2060-01-01T00:00:00Z ∧ \n  Policy/2 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ \n  Policy/2 =[start_date]> 2030-01-01T00:00:00Z ∧ \n  Policy/1 \\= Policy/2 ) ⇒\n    (2030-01-01T00:00:00Z > 2050-01-01T00:00:00Z ∨ « 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z »)\n".
+    Report = "Failed to satisfy: 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z\n    In the Constraint:\n\n( Policy/1 =[customer]> Customer/Jim+McCoy+1 ∧ \n  Policy/1 =[end_date]> 2050-01-01T00:00:00Z ∧ \n  Policy/1 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ \n  Policy/1 =[start_date]> 2020-01-01T00:00:00Z ∧ \n  Policy/2 =[customer]> Customer/Jim+McCoy+1 ∧ \n  Policy/2 =[end_date]> 2060-01-01T00:00:00Z ∧ \n  Policy/2 =[insurance_product]> MidLifeInsurance/Mid-Life%20Insurance%20Product ∧ \n  Policy/2 =[start_date]> 2030-01-01T00:00:00Z ∧ \n  Policy/1:Policy ∧ \n  Policy/2:Policy ∧ \n  Policy/1 \\= Policy/2 ) ⇒\n    (2030-01-01T00:00:00Z > 2050-01-01T00:00:00Z ∨ « 2060-01-01T00:00:00Z < 2020-01-01T00:00:00Z »)\n".
 
 :- end_tests(constraints).
