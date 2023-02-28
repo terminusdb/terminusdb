@@ -5,8 +5,10 @@ use std::io::{self, Cursor};
 use swipl::prelude::*;
 use terminus_store::storage::CachedLayerStore;
 use terminus_store::storage::LockingHashMapLayerCache;
-use terminus_store::storage::{name_to_string, pack_layer_parents, string_to_name, PackError, archive::ArchiveLayerStore};
-use terminus_store::store::{Store, sync::*};
+use terminus_store::storage::{
+    archive::ArchiveLayerStore, name_to_string, pack_layer_parents, string_to_name, PackError,
+};
+use terminus_store::store::{sync::*, Store};
 
 use terminusdb_grpc_labelstore_client::GrpcLabelStore;
 

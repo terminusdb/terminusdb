@@ -49,7 +49,7 @@ pub struct RestrictionDefinition {
     #[serde(skip)]
     pub original_id: Option<String>,
     #[serde(flatten)]
-    pub restriction_data: BTreeMap<String, serde_json::Value>
+    pub restriction_data: BTreeMap<String, serde_json::Value>,
 }
 
 impl RestrictionDefinition {
@@ -61,7 +61,7 @@ impl RestrictionDefinition {
             id,
             on,
             original_id: Some(self.id.clone()),
-            restriction_data: self.restriction_data
+            restriction_data: self.restriction_data,
         }
     }
 }
@@ -71,7 +71,7 @@ pub struct SchemaMetadata {
     #[serde(default)]
     pub restrictions: Vec<RestrictionDefinition>,
     #[serde(flatten)]
-    pub extra_metadata: BTreeMap<String, serde_json::Value>
+    pub extra_metadata: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -705,16 +705,20 @@ impl PreAllFrames {
             frames.insert(sanitized_class.clone(), new_typedef);
         }
         let mut sanitized_restrictions = BTreeMap::new();
-        if let Some(restrictions) = self.context.metadata.as_ref().map(|m|&m.restrictions) {
+        if let Some(restrictions) = self.context.metadata.as_ref().map(|m| &m.restrictions) {
             for restriction in restrictions.iter() {
                 let restriction_name = &restriction.id;
                 let sanitized_restriction_name = graphql_sanitize(restriction_name);
-                let res = class_renaming.insert_no_overwrite(sanitized_restriction_name.clone(), restriction_name.clone());
+                let res = class_renaming.insert_no_overwrite(
+                    sanitized_restriction_name.clone(),
+                    restriction_name.clone(),
+                );
                 if let Err((left, right)) = res {
                     panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate pair: ({left},{right}) != ({sanitized_restriction_name},{restriction_name})")
                 }
 
-                sanitized_restrictions.insert(sanitized_restriction_name, restriction.clone().sanitize());
+                sanitized_restrictions
+                    .insert(sanitized_restriction_name, restriction.clone().sanitize());
             }
         }
         (frames, sanitized_restrictions, class_renaming, self.context)
