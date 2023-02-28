@@ -34,6 +34,7 @@ pub struct SystemInfo {
 
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
+    pub transaction_term: Term<'a>,
     pub system_info: SystemInfo,
     pub schema: WrappedLayer,
     pub instance: Option<WrappedLayer>,
@@ -71,6 +72,10 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
             transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
         let instance = transaction_instance_layer(context, transaction_term)?;
 
+        let new_transaction_term = context.new_term_ref();
+        new_transaction_term.unify(&transaction_term)?;
+
+
         Ok(TerminusContext {
             system_info: SystemInfo {
                 user,
@@ -78,6 +83,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
                 meta,
                 commit,
             },
+            transaction_term: new_transaction_term,
             context,
             schema,
             instance,
@@ -242,25 +248,18 @@ fn result_to_execution_result<'a, C: QueryableContextType, T>(context: &Context<
 }
 
 fn pl_ids_from_restriction<'a, C: QueryableContextType>(context: &TerminusContext<'a, C>, restriction: &RestrictionDefinition) -> PrologResult<Vec<u64>> {
-    if let Some(instance) = context.instance.as_ref() {
-        let mut result = Vec::new();
-        let prolog_context = &context.context;
-        let frame = prolog_context.open_frame();
-        let [schema_term, instance_term, restriction_term, id_term] = frame.new_term_refs();
-        schema_term.unify(&context.schema)?;
-        instance_term.unify(&instance)?;
-        restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
-        let open_call = frame.open(pred!("query:ids_for_restriction/4"), [&schema_term, &instance_term, &restriction_term, &id_term]);
-        while attempt_opt(open_call.next_solution())?.is_some() {
-            let id: u64 = id_term.get_ex()?;
-            result.push(id);
-        }
+    let mut result = Vec::new();
+    let prolog_context = &context.context;
+    let frame = prolog_context.open_frame();
+    let [restriction_term, id_term] = frame.new_term_refs();
+    restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
+    let open_call = frame.open(pred!("query:ids_for_restriction/3"), [&context.transaction_term, &restriction_term, &id_term]);
+    while attempt_opt(open_call.next_solution())?.is_some() {
+        let id: u64 = id_term.get_ex()?;
+        result.push(id);
+    }
 
-        Ok(result)
-    }
-    else {
-        Ok(vec![])
-    }
+    Ok(result)
 }
 
 fn ids_from_restriction<'a, C: QueryableContextType>(context: &TerminusContext<'a, C>, restriction: &RestrictionDefinition) -> Result<Vec<u64>, juniper::FieldError> {
