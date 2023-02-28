@@ -119,17 +119,6 @@ run(Db, Constraint, Failed_At) :-
     select_redex(Constraint, [], Remaining, Clause, true),
     once(run(Clause, Remaining, Db, Failed_At)).
 
-raw(X^^_, X) :-
-    !.
-raw(X,X).
-
-op(<, @<).
-op(>, @>).
-op(>=, @>=).
-op(=<, @=<).
-op(=, =).
-op(\=, \=).
-
 run_clause(true, _Db).
 run_clause(t(X,P,Y), Db) :-
     database_prefixes(Db, Prefixes),
@@ -137,9 +126,9 @@ run_clause(t(X,P,Y), Db) :-
     database_instance(Db, G),
     xrdf(G,X,PEx,Y).
 run_clause(op(Op,X,Y), _) :-
-    raw(X,XRaw),
-    raw(Y,YRaw),
-    op(Op,TermOp),
+    unannotated(X,XRaw),
+    unannotated(Y,YRaw),
+    effective_operator(Op,TermOp),
     call(TermOp,XRaw,YRaw).
 run_clause(isa(X,T), Db) :-
     database_prefixes(Db, Prefixes),
@@ -269,7 +258,7 @@ render_operand(Uri, Prefixes, String) :-
     !,
     render_instance_uri(Uri, Prefixes, String).
 render_operand(A, _, String) :-
-    raw(A, Term),
+    unannotated(A, Term),
     format(string(String), '~w', [Term]).
 
 render_constraint(var(X), _, Var, _, _) :-

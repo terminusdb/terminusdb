@@ -2,8 +2,21 @@
           [
               termlist_conjunction/2,
               termlist_disjunction/2,
-              conjunct/3
+              conjunct/3,
+              unannotated/2,
+              effective_operator/2
           ]).
+
+unannotated(X^^,_, X) :-
+    !.
+unannotated(X, X).
+
+effective_operator(<, @<).
+effective_operator(>, @>).
+effective_operator(>=, @>=).
+effective_operator(=<, @=<).
+effective_operator(=, =).
+effective_operator(\=, \=).
 
 conjunct(true, Term, Term) :-
     !.

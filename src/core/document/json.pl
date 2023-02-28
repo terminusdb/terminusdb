@@ -8,6 +8,7 @@
               json_schema_triple/3,
               json_schema_elaborate/3,
               database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
@@ -528,16 +529,8 @@ get_context_documentation(DB, ID, Doc) :-
     ;   Documentations = Doc
     ).
 
-database_context_object(DB,Prefixes) :-
-    is_transaction(DB),
-    is_schemaless(DB),
-    !,
-    database_prefixes(DB, Prefixes).
-database_context_object(DB,Context) :-
-    is_transaction(DB),
-    !,
-    database_prefixes(DB, Prefixes),
-    database_schema(DB, Schema),
+database_schema_context_object(Schema, Context) :-
+    database_schema_prefixes(Schema, Prefixes),
     % This should always exist according to schema correctness criteria?
     xrdf(Schema, ID, rdf:type, sys:'Context'),
     xrdf(Schema, ID, sys:base, Base_String^^_),
@@ -557,6 +550,17 @@ database_context_object(DB,Context) :-
     ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
     ;   Context = Context0
     ).
+
+database_context_object(DB,Prefixes) :-
+    is_transaction(DB),
+    is_schemaless(DB),
+    !,
+    database_prefixes(DB, Prefixes).
+database_context_object(DB,Context) :-
+    is_transaction(DB),
+    !,
+    database_schema(DB, Schema),
+    database_schema_context_object(Schema, Context).
 database_context_object(Query_Context,Context) :-
     is_query_context(Query_Context),
     !,

@@ -24,6 +24,7 @@
               replace_json_schema/2,
 
               database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
