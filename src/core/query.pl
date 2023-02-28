@@ -102,3 +102,8 @@
 :- use_module(query/path).
 :- use_module(query/metadata).
 :- use_module(query/constraints).
+
+
+%% this is a temporary placeholder for a cooler predicate elsewhere
+ids_for_restriction(_Schema, _Instance, _Restriction, _Id) :-
+    fail.

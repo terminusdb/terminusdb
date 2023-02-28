@@ -6,6 +6,7 @@ use juniper::{
     Registry, Value, ID,
 };
 use swipl::prelude::*;
+use terminusdb_store_prolog::layer::WrappedLayer;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
@@ -26,16 +27,16 @@ use super::top::System;
 
 pub struct SystemInfo {
     pub user: Atom,
-    pub system: SyncStoreLayer,
-    pub commit: Option<SyncStoreLayer>,
-    pub meta: Option<SyncStoreLayer>,
+    pub system: WrappedLayer,
+    pub commit: Option<WrappedLayer>,
+    pub meta: Option<WrappedLayer>,
 }
 
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
     pub system_info: SystemInfo,
-    pub schema: SyncStoreLayer,
-    pub instance: Option<SyncStoreLayer>,
+    pub schema: WrappedLayer,
+    pub instance: Option<WrappedLayer>,
 }
 
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
@@ -174,7 +175,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     where
         DefaultScalarValue: 'r,
     {
-        let fields: Vec<_> = info
+        let mut fields: Vec<_> = info
             .allframes
             .frames
             .iter()
@@ -192,6 +193,29 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                 }
             })
             .collect();
+        let restriction_fields: Vec<_> = info
+            .allframes
+            .restrictions
+            .iter()
+            .map(|(name, restrictiondef)| {
+                let newinfo = TerminusTypeInfo {
+                    class: restrictiondef.on.to_owned(),
+                    allframes: info.allframes.clone(),
+                };
+                let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                let class_def;
+                if let TypeDefinition::Class(c) = info.allframes.frames.get(&restrictiondef.on).expect("Restriction not on known class") {
+                    class_def = c;
+                } else {
+                    panic!("Restriction not on a classa");
+                }
+
+                add_arguments(&newinfo, registry, field, class_def)
+            })
+            .collect();
+
+        fields.extend(restriction_fields);
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
@@ -203,6 +227,45 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
 
 pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
+}
+
+fn result_to_execution_result<'a, C: QueryableContextType, T>(context: &Context<'a, C>, result: PrologResult<T>) -> Result<T, juniper::FieldError> {
+    result_to_string_result(context, result)
+        .map_err(|e| match e {
+            PrologStringError::Failure => juniper::FieldError::new(
+                "prolog call failed",
+                Value::Null),
+            PrologStringError::Exception(e) => juniper::FieldError::new(
+                e,
+                Value::Null)
+        })
+}
+
+fn pl_ids_from_restriction<'a, C: QueryableContextType>(context: &TerminusContext<'a, C>, restriction: &RestrictionDefinition) -> PrologResult<Vec<u64>> {
+    if let Some(instance) = context.instance.as_ref() {
+        let mut result = Vec::new();
+        let prolog_context = &context.context;
+        let frame = prolog_context.open_frame();
+        let [schema_term, instance_term, restriction_term, id_term] = frame.new_term_refs();
+        schema_term.unify(&context.schema)?;
+        instance_term.unify(&instance)?;
+        restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
+        let open_call = frame.open(pred!("query:ids_for_restriction/4"), [&schema_term, &instance_term, &restriction_term, &id_term]);
+        while attempt_opt(open_call.next_solution())?.is_some() {
+            let id: u64 = id_term.get_ex()?;
+            result.push(id);
+        }
+
+        Ok(result)
+    }
+    else {
+        Ok(vec![])
+    }
+}
+
+fn ids_from_restriction<'a, C: QueryableContextType>(context: &TerminusContext<'a, C>, restriction: &RestrictionDefinition) -> Result<Vec<u64>, juniper::FieldError> {
+    let result = pl_ids_from_restriction(context, restriction);
+    result_to_execution_result(&context.context, result)
 }
 
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
@@ -224,6 +287,14 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         if field_name == "_system" {
             executor.resolve_with_ctx(&(), &System {})
         } else {
+            let zero_iter;
+            if let Some(restriction) = info.allframes.restrictions.get(field_name) {
+                // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
+                let id_list = ids_from_restriction(executor.context(), restriction)?;
+                zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
+            } else {
+                zero_iter = None;
+            }
             let objects = match executor.context().instance.as_ref() {
                 Some(instance) => run_filter_query(
                     instance,
@@ -231,7 +302,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
                     arguments,
                     field_name,
                     &info.allframes,
-                    None,
+                    zero_iter
                 )
                 .into_iter()
                 .map(|id| TerminusType::new(id))
@@ -545,9 +616,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 // List and array are special since they are *deep* objects
                 match kind {
                     FieldKind::List => {
-                        let instance1 = instance.clone();
-                        let instance2 = instance.clone();
-                        let instance3 = instance.clone();
+                        let instance1 = instance.0.clone();
+                        let instance2 = instance.0.clone();
+                        let instance3 = instance.0.clone();
                         let object_ids = instance
                             .triples_o(self.id)
                             .flat_map(move |t| {
@@ -577,9 +648,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     FieldKind::Array => {
-                        let instance1 = instance.clone();
-                        let instance2 = instance.clone();
-                        let instance3 = instance.clone();
+                        let instance1 = instance.0.clone();
+                        let instance2 = instance.0.clone();
+                        let instance3 = instance.0.clone();
                         let object_ids = instance
                             .triples_o(self.id)
                             .flat_map(move |t| {
@@ -608,8 +679,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     _ => {
-                        let instance1 = instance.clone();
-                        let object_ids = instance
+                        let instance1 = instance.0.clone();
+                        let object_ids = instance.0
                             .triples_o(self.id)
                             .filter(move |t| {
                                 t.predicate == field_id
@@ -727,13 +798,13 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     FieldKind::List => {
-                        let list_id = instance
+                        let list_id = instance.0
                             .single_triple_sp(self.id, field_id)
                             .expect("list element expected but not found")
                             .object;
                         let object_ids =
                             ClonableIterator::new(CachedClonableIterator::new(RdfListIterator {
-                                layer: instance,
+                                layer: &instance.0,
                                 cur: list_id,
                                 rdf_first_id: instance.predicate_id(RDF_FIRST),
                                 rdf_rest_id: instance.predicate_id(RDF_REST),
@@ -746,9 +817,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     FieldKind::Array => {
                         let array_element_ids: Box<dyn Iterator<Item = IdTriple> + Send> =
                             Box::new(instance.triples_sp(self.id, field_id));
-                        let sys_index_ids = retrieve_all_index_ids(instance);
+                        let sys_index_ids = retrieve_all_index_ids(&instance.0);
                         let array_iterator = SimpleArrayIterator(ArrayIterator {
-                            layer: instance,
+                            layer: &instance.0,
                             it: array_element_ids.peekable(),
                             subject: self.id,
                             predicate: field_id,
