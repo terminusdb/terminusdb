@@ -7,6 +7,12 @@
               effective_operator/2
           ]).
 
+:- use_module(library(sort)).
+
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(lists)).
+
 unannotated(X^^_, X) :-
     !.
 unannotated(X, X).

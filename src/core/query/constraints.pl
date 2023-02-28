@@ -13,6 +13,8 @@
 :- use_module(core(document)).
 :- use_module(core(query/algebra)).
 
+:- use_module(library(sort)).
+
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(lists)).

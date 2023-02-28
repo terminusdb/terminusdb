@@ -1,5 +1,6 @@
 :- module('query/restrictions', [
-              run_restriction_named/4
+              run_restriction_named/4,
+              ids_for_restriction/3
           ]).
 
 :- use_module(core(util)).
@@ -8,6 +9,8 @@
 :- use_module(core(document)).
 :- use_module(core(query/algebra)).
 :- use_module(core(query/constraints)).
+
+:- use_module(library(terminus_store)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -71,12 +74,19 @@ get_restriction_named(Name, Schema, Restriction) :-
             Restrictions,
             [Restriction|_]).
 
-run_restriction_named(Schema, Instance, Name, Results) :-
+run_restriction_named(Schema, Instance, Name, Subject) :-
     get_restriction_named(Name, Schema, Restriction),
     compile_restriction(Restriction, Schema, Subject, Expression),
-    findall(Subject,
-            interpret_restriction(Expression, database(Schema, Instance)),
-            Results).
+    interpret_restriction(Expression, database(Schema, Instance)).
+
+ids_for_restriction(Transaction, Restriction_Name, Id) :-
+    database_instance(Transaction, Instance),
+    database_schema(Transaction, Schema),
+    Instance = [Instance_Obj],
+    get_dict(read, Instance_Obj, Layer),
+    ground(Layer),
+    run_restriction_named(Schema, Instance, Restriction_Name, IRI),
+    subject_id(Layer, IRI, Id).
 
 :- begin_tests(restrictions).
 :- use_module(core(util/test_utils)).
@@ -141,7 +151,7 @@ insurance_schema('
 { "@id": "Beneficiary",
   "@type": "Class",
   "bank_account": "xsd:string",
-  "date_of_birth": "xsd:string",
+  "date_of_birth": "xsd:dateTime",
   "is_flagged": "xsd:boolean",
   "name": "xsd:string"
 }
