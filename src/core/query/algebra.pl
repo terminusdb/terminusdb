@@ -7,7 +7,7 @@
               effective_operator/2
           ]).
 
-unannotated(X^^,_, X) :-
+unannotated(X^^_, X) :-
     !.
 unannotated(X, X).
 

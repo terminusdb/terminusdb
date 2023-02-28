@@ -499,8 +499,14 @@ class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
 get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
+get_schema_context_metadata(Schema, ID, Metadata) :-
+    schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
+
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
+    get_schema_context_documentation(Schema, ID, Doc).
+
+get_schema_context_documentation(Schema, ID, Doc) :-
     findall(
         Documentation,
         (   xrdf(Schema, ID, sys:documentation, Doc_ID),
@@ -535,7 +541,7 @@ database_schema_context_object(Schema, Context) :-
     xrdf(Schema, ID, rdf:type, sys:'Context'),
     xrdf(Schema, ID, sys:base, Base_String^^_),
     xrdf(Schema, ID, sys:schema, Schema_String^^_),
-    (   get_context_documentation(DB, ID, Documentation)
+    (   get_schema_context_documentation(Schema, ID, Documentation)
     ->  put_dict(
             _{ '@base' : Base_String,
                '@schema' : Schema_String,
@@ -546,7 +552,7 @@ database_schema_context_object(Schema, Context) :-
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
-    (   get_context_metadata(DB, ID, Metadata)
+    (   get_schema_context_metadata(Schema, ID, Metadata)
     ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
     ;   Context = Context0
     ).

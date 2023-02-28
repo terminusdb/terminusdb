@@ -5,6 +5,7 @@
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 :- use_module(core(query/algebra)).
 :- use_module(core(query/constraints)).
 
@@ -34,7 +35,12 @@ interpret_restriction(t(A,P,C), DB) :-
     DB = database(Schema,Instance),
     database_schema_prefixes(Schema,Prefixes),
     prefix_expand_schema(P, Prefixes, PEx),
-    xrdf(Instance, A, Pex, C).
+    xrdf(Instance, A, PEx, C).
+interpret_restriction(nt(A,P,C), DB) :-
+    DB = database(Schema,Instance),
+    database_schema_prefixes(Schema,Prefixes),
+    prefix_expand_schema(P, Prefixes, PEx),
+    \+ xrdf(Instance, A, PEx, C).
 interpret_restriction(isa(X,C), DB) :-
     DB = database(Schema,Instance),
     database_schema_prefixes(Schema,Prefixes),
@@ -42,27 +48,175 @@ interpret_restriction(isa(X,C), DB) :-
     global_prefix_expand(rdf:type, RDF_Type),
     xrdf(Instance, X, RDF_Type, CEx).
 
-compile_restriction(Dictionary, Subject, Expression),
+compile_restriction(Dictionary, _Schema, Subject, Expression),
 is_dict(Dictionary),
 get_dict('@having', Dictionary, Having) =>
     compile_constraint_rule(Having, Subject, Expression, _{}, _).
-compile_restriction(Dictionary, Subject, Expression),
+compile_restriction(Dictionary, Schema, Subject, Expression),
 is_dict(Dictionary),
 get_dict('@anyOf', Dictionary, Restrictions) =>
-    maplist({Subject}/[Restriction, Expression]
-            >>compile_restriction(Restriction, Expression _{}, _),
+    maplist({Schema, Subject}/[Restriction_Name, Expression]>>(
+                get_restriction_named(Restriction_Name, Schema, Restriction),
+                compile_restriction(Restriction, Schema, Subject, Expression)
+            ),
             Restrictions,
             Expressions),
-    termlist_disjunction(Expresssions, Expression).
+    termlist_disjunction(Expressions, Expression).
 
-run_restriction_named(Schema, Instance, Name, Results) :-
+get_restriction_named(Name, Schema, Restriction) :-
     database_schema_context_object(Schema, Context),
     get_dict('@metadata', Context, Metadata),
     get_dict('restrictions', Metadata, Restrictions),
-    mapconv({Name}/[Restriction,Restriction]>>get_dict('_id', Restriction, Name),
+    include({Name}/[R]>>get_dict('_id', R, Name),
             Restrictions,
-            [Named]),
-    compile_restriction(Named, Subject, Expression),
+            [Restriction|_]).
+
+run_restriction_named(Schema, Instance, Name, Results) :-
+    get_restriction_named(Name, Schema, Restriction),
+    compile_restriction(Restriction, Schema, Subject, Expression),
     findall(Subject,
             interpret_restriction(Expression, database(Schema, Instance)),
             Results).
+
+:- begin_tests(restrictions).
+:- use_module(core(util/test_utils)).
+
+insurance_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "@metadata" : {
+      "restrictions" : [
+            { "_type" : "Restriction",
+              "_id" : "NoDeathCert",
+              "@on" : "ClaimCase",
+              "@having" : { "death_certificate" : null }
+            },
+            { "_type" : "Restriction",
+              "_id" : "NoPolicy",
+              "@on" : "ClaimCase",
+              "@having" : { "policy" : null }
+            },
+            { "_type" : "Restriction",
+              "_id" : "NeedsService",
+              "@on" : "ClaimCase",
+              "@anyOf" : ["NoDeathCert", "NoPolicy"]
+            },
+            { "_type" : "Restriction",
+              "_id" : "NamesDontMatch",
+              "@on" : "ClaimCase",
+              "@having" :
+              { "@and" : [{ "death_certificate" : { "name" : { "@var" : "DeathCertName"}},
+                            "policy" : { "life_assured_name" : { "@var" : "PolicyName"}}},
+                          { "@with" : "DeathCertName",
+                            "@ne" : {"@var" : "PolicyName"}}]
+              }
+            },
+            { "_type" : "Restriction",
+              "_id" : "NeedsAssessment",
+              "@on" : "ClaimCase",
+              "@anyOf" : ["NamesDontMatch"]
+            }
+        ]
+  }
+}
+{ "@id": "Policy",
+  "@type": "Class",
+  "beneficiary": "Beneficiary",
+  "country_of_issue": "Country",
+  "covered_countries": {
+      "@class": "Country",
+      "@type": "Set"
+  },
+  "effective_date" : "xsd:dateTime",
+  "life_assured_date_of_birth": "xsd:string",
+  "life_assured_name": "xsd:string",
+  "premium_paid_to_date": "xsd:double",
+  "sum_assured": "xsd:double"
+}
+{ "@id": "Refund",
+  "@type": "Class",
+  "refunded_to": "Beneficiary",
+}
+{ "@id": "Beneficiary",
+  "@type": "Class",
+  "bank_account": "xsd:string",
+  "date_of_birth": "xsd:string",
+  "is_flagged": "xsd:boolean",
+  "name": "xsd:string"
+}
+{ "@id": "ClaimCase",
+  "@type": "Class",
+  "death_certificate":
+  { "@class": "DeathCertificate",
+    "@type": "Optional"
+  },
+  "incur":
+  { "@class": "Refund",
+    "@type": "Optional"
+  },
+  "policy":
+  { "@class": "Policy",
+    "@type": "Optional"
+  }
+}
+{ "@id": "DeathCertificate",
+  "@type": "Class",
+  "country_of_death": "xsd:dateTime",
+  "date_of_birth": "xsd:dateTime",
+  "date_of_death": "xsd:dateTime",
+  "issued_for": "Deceased",
+  "name": "xsd:string"
+}
+{ "@id": "Deceased",
+  "@type": "Class",
+  "assured_with": "Policy"
+}
+{ "@id": "Country",
+  "@key":
+  { "@fields": ["name"],
+    "@type": "Lexical"
+  },
+  "@type": "Class",
+  "name": "xsd:string"
+}
+').
+
+test(compile_needs_service,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Desc, Db),
+    database_schema(Db, Schema),
+
+    get_restriction_named("NeedsService", Schema, Named),
+    compile_restriction(Named, Schema, Subject, Expression),
+    Expression = or(nt(A,death_certificate,_),nt(B,policy,_)),
+    A == Subject,
+    B == Subject.
+
+
+test(compile_names_dont_match,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Desc, Db),
+    database_schema(Db, Schema),
+
+    get_restriction_named("NamesDontMatch", Schema, Named),
+    compile_restriction(Named, Schema, Subject, Expression),
+    Expression = and(and(and(and(t(A,death_certificate,B),
+                                 t(A,policy,C)),
+                             t(B,name,D)),
+                         t(C,life_assured_name,E)),
+                     op(\=,D,E)),
+    A == Subject.
+
+:- end_tests(restrictions).
+

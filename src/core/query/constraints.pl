@@ -3,7 +3,8 @@
               run/3,
               run/4,
               run_report/3,
-              check_constraint_document/3
+              check_constraint_document/3,
+              compile_constraint_rule/5
           ]).
 
 :- use_module(core(util)).
@@ -125,6 +126,11 @@ run_clause(t(X,P,Y), Db) :-
     prefix_expand_schema(P, Prefixes, PEx),
     database_instance(Db, G),
     xrdf(G,X,PEx,Y).
+run_clause(nt(X,P,Y), Db) :-
+    database_prefixes(Db, Prefixes),
+    prefix_expand_schema(P, Prefixes, PEx),
+    database_instance(Db, G),
+    \+ xrdf(G,X,PEx,Y).
 run_clause(op(Op,X,Y), _) :-
     unannotated(X,XRaw),
     unannotated(Y,YRaw),
@@ -360,6 +366,19 @@ is_dict(Dict) =>
 var_or_val(Value, _Bindings_In, V) =>
     Value = V.
 
+pair_order(Op,'@ne'-A,'@ne'-B) :-
+    !,
+    compare(Op,A,B).
+pair_order((<),_,'@ne'-_) :-
+    !.
+pair_order((>),'@ne'-_, _) :-
+    !.
+pair_order(Op, Pair1, Pair2) :-
+    compare(Op, Pair1, Pair2).
+
+sort_pairs(Pairs, Sorted) :-
+    predsort(pair_order,Pairs,Sorted).
+
 pair_rule('@var'-Var, Subject, Term, Bindings_In, Bindings_Out) =>
     atom_string(VarAtom,Var),
     (   get_dict(VarAtom, Bindings_In, Subject)
@@ -411,6 +430,9 @@ pair_rule('@isa'-Value, Subject, Term, Bindings_In, Bindings_Out) =>
     atom_string(Atom,Value),
     Term = isa(Subject,Atom),
     Bindings_In = Bindings_Out.
+pair_rule(Field-null, Subject, Term, Bindings_In, Bindings_Out) =>
+    Term = nt(Subject,Field,_Object),
+    Bindings_In = Bindings_Out.
 pair_rule(Field-Value, Subject, Term, Bindings_In, Bindings_Out) =>
     T1 = t(Subject,Field,Object),
     compile_constraint_rule(Value, Object, T2, Bindings_In, Bindings_Out),
@@ -439,16 +461,18 @@ compile_constraint_rule(Dictionary, _Subject, Term, Bindings_In, Bindings_Out),
 is_dict(Dictionary),
 del_dict('@with', Dictionary, With, New_Dictionary) =>
     atom_string(WithAtom, With),
-    do_or_die(
-        get_dict(WithAtom, Bindings_In, New_Subject),
-        error(unbound_variable_referenced(WithAtom, Dictionary))),
-    dict_pairs(New_Dictionary, _, Pairs),
+    dict_pairs(New_Dictionary, _, Unsorted),
+    sort_pairs(Unsorted, Pairs),
     mapm({New_Subject}/[Pair,Rule,BI,BO]>>pair_rule(Pair,New_Subject,Rule,BI,BO),
          Pairs, Rules, Bindings_In, Bindings_Out),
+    do_or_die(
+        get_dict(WithAtom, Bindings_Out, New_Subject),
+        error(unbound_variable_referenced(WithAtom, Dictionary))),
     termlist_conjunction(Rules,Term).
 compile_constraint_rule(Dictionary, Subject, Term, Bindings_In, Bindings_Out),
 is_dict(Dictionary) =>
-    dict_pairs(Dictionary, _, Pairs),
+    dict_pairs(Dictionary, _, Unsorted),
+    sort_pairs(Unsorted, Pairs),
     mapm({Subject}/[Pair,Rule,BI,BO]>>pair_rule(Pair,Subject,Rule,BI,BO),
          Pairs, Rules, Bindings_In, Bindings_Out),
     termlist_conjunction(Rules,Term).
