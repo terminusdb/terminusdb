@@ -33,6 +33,7 @@ pub struct SystemInfo {
 
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
+    pub transaction_term: Term<'a>,
     pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
@@ -70,6 +71,10 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
             transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
         let instance = transaction_instance_layer(context, transaction_term)?;
 
+        let new_transaction_term = context.new_term_ref();
+        new_transaction_term.unify(&transaction_term)?;
+
+
         Ok(TerminusContext {
             system_info: SystemInfo {
                 user,
@@ -77,6 +82,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
                 meta,
                 commit,
             },
+            transaction_term: new_transaction_term,
             context,
             schema,
             instance,
@@ -174,7 +180,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     where
         DefaultScalarValue: 'r,
     {
-        let fields: Vec<_> = info
+        let mut fields: Vec<_> = info
             .allframes
             .frames
             .iter()
@@ -192,6 +198,29 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                 }
             })
             .collect();
+        let restriction_fields: Vec<_> = info
+            .allframes
+            .restrictions
+            .iter()
+            .map(|(name, restrictiondef)| {
+                let newinfo = TerminusTypeInfo {
+                    class: restrictiondef.on.to_owned(),
+                    allframes: info.allframes.clone(),
+                };
+                let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                let class_def;
+                if let TypeDefinition::Class(c) = info.allframes.frames.get(&restrictiondef.on).expect("Restriction not on known class") {
+                    class_def = c;
+                } else {
+                    panic!("Restriction not on a classa");
+                }
+
+                add_arguments(&newinfo, registry, field, class_def)
+            })
+            .collect();
+
+        fields.extend(restriction_fields);
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
@@ -203,6 +232,38 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
 
 pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
+}
+
+fn result_to_execution_result<'a, C: QueryableContextType, T>(context: &Context<'a, C>, result: PrologResult<T>) -> Result<T, juniper::FieldError> {
+    result_to_string_result(context, result)
+        .map_err(|e| match e {
+            PrologStringError::Failure => juniper::FieldError::new(
+                "prolog call failed",
+                Value::Null),
+            PrologStringError::Exception(e) => juniper::FieldError::new(
+                e,
+                Value::Null)
+        })
+}
+
+fn pl_ids_from_restriction<'a, C: QueryableContextType>(context: &TerminusContext<'a, C>, restriction: &RestrictionDefinition) -> PrologResult<Vec<u64>> {
+    let mut result = Vec::new();
+    let prolog_context = &context.context;
+    let frame = prolog_context.open_frame();
+    let [restriction_term, id_term] = frame.new_term_refs();
+    restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
+    let open_call = frame.open(pred!("query:ids_for_restriction/3"), [&context.transaction_term, &restriction_term, &id_term]);
+    while attempt_opt(open_call.next_solution())?.is_some() {
+        let id: u64 = id_term.get_ex()?;
+        result.push(id);
+    }
+
+    Ok(result)
+}
+
+fn ids_from_restriction<'a, C: QueryableContextType>(context: &TerminusContext<'a, C>, restriction: &RestrictionDefinition) -> Result<Vec<u64>, juniper::FieldError> {
+    let result = pl_ids_from_restriction(context, restriction);
+    result_to_execution_result(&context.context, result)
 }
 
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
@@ -224,6 +285,14 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         if field_name == "_system" {
             executor.resolve_with_ctx(&(), &System {})
         } else {
+            let zero_iter;
+            if let Some(restriction) = info.allframes.restrictions.get(field_name) {
+                // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
+                let id_list = ids_from_restriction(executor.context(), restriction)?;
+                zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
+            } else {
+                zero_iter = None;
+            }
             let objects = match executor.context().instance.as_ref() {
                 Some(instance) => run_filter_query(
                     instance,
@@ -231,7 +300,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
                     arguments,
                     field_name,
                     &info.allframes,
-                    None,
+                    zero_iter
                 )
                 .into_iter()
                 .map(|id| TerminusType::new(id))

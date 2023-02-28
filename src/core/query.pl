@@ -109,3 +109,7 @@
 :- use_module(query/constraints).
 :- use_module(query/algebra).
 :- use_module(query/restrictions).
+
+%% this is a temporary placeholder for a cooler predicate elsewhere
+ids_for_restriction(_Transaction, _Restriction, _Id) :-
+    fail.
