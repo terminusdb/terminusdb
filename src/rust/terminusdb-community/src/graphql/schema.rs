@@ -6,7 +6,6 @@ use juniper::{
     Registry, Value, ID,
 };
 use swipl::prelude::*;
-use terminusdb_store_prolog::layer::WrappedLayer;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
@@ -27,17 +26,17 @@ use super::top::System;
 
 pub struct SystemInfo {
     pub user: Atom,
-    pub system: WrappedLayer,
-    pub commit: Option<WrappedLayer>,
-    pub meta: Option<WrappedLayer>,
+    pub system: SyncStoreLayer,
+    pub commit: Option<SyncStoreLayer>,
+    pub meta: Option<SyncStoreLayer>,
 }
 
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
     pub transaction_term: Term<'a>,
     pub system_info: SystemInfo,
-    pub schema: WrappedLayer,
-    pub instance: Option<WrappedLayer>,
+    pub schema: SyncStoreLayer,
+    pub instance: Option<SyncStoreLayer>,
 }
 
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
@@ -615,9 +614,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 // List and array are special since they are *deep* objects
                 match kind {
                     FieldKind::List => {
-                        let instance1 = instance.0.clone();
-                        let instance2 = instance.0.clone();
-                        let instance3 = instance.0.clone();
+                        let instance1 = instance.clone();
+                        let instance2 = instance.clone();
+                        let instance3 = instance.clone();
                         let object_ids = instance
                             .triples_o(self.id)
                             .flat_map(move |t| {
@@ -647,9 +646,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     FieldKind::Array => {
-                        let instance1 = instance.0.clone();
-                        let instance2 = instance.0.clone();
-                        let instance3 = instance.0.clone();
+                        let instance1 = instance.clone();
+                        let instance2 = instance.clone();
+                        let instance3 = instance.clone();
                         let object_ids = instance
                             .triples_o(self.id)
                             .flat_map(move |t| {
@@ -678,8 +677,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     _ => {
-                        let instance1 = instance.0.clone();
-                        let object_ids = instance.0
+                        let instance1 = instance.clone();
+                        let object_ids = instance
                             .triples_o(self.id)
                             .filter(move |t| {
                                 t.predicate == field_id
@@ -797,13 +796,13 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         )
                     }
                     FieldKind::List => {
-                        let list_id = instance.0
+                        let list_id = instance
                             .single_triple_sp(self.id, field_id)
                             .expect("list element expected but not found")
                             .object;
                         let object_ids =
                             ClonableIterator::new(CachedClonableIterator::new(RdfListIterator {
-                                layer: &instance.0,
+                                layer: instance,
                                 cur: list_id,
                                 rdf_first_id: instance.predicate_id(RDF_FIRST),
                                 rdf_rest_id: instance.predicate_id(RDF_REST),
@@ -816,9 +815,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     FieldKind::Array => {
                         let array_element_ids: Box<dyn Iterator<Item = IdTriple> + Send> =
                             Box::new(instance.triples_sp(self.id, field_id));
-                        let sys_index_ids = retrieve_all_index_ids(&instance.0);
+                        let sys_index_ids = retrieve_all_index_ids(instance);
                         let array_iterator = SimpleArrayIterator(ArrayIterator {
-                            layer: &instance.0,
+                            layer: instance,
                             it: array_element_ids.peekable(),
                             subject: self.id,
                             predicate: field_id,

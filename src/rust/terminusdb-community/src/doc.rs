@@ -859,7 +859,7 @@ predicates! {
         let unfold: bool = unfold_term.get()?;
         let minimized: bool = minimized_term.get()?;
 
-        let get_context = GetDocumentContext::new(&schema_layer.0, instance_layer.map(|l|l.0), compress, unfold, minimized);
+        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, compress, unfold, minimized);
 
         context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
     }
