@@ -16,7 +16,7 @@ pub fn transaction_instance_layer<C: QueryableContextType>(
 
     if let Some(item) = frame.term_list_iter(&list_term).next() {
         let layer: Option<WrappedLayer> = attempt_opt(item.get_dict_key(&read_atom))?;
-        Ok(layer.map(|l|l.0))
+        Ok(layer.map(|l| l.0))
     } else {
         Ok(None)
     }
@@ -35,7 +35,7 @@ pub fn transaction_schema_layer<C: QueryableContextType>(
 
     if let Some(item) = frame.term_list_iter(&list_term).next() {
         let layer: Option<WrappedLayer> = attempt_opt(item.get_dict_key(&read_atom))?;
-        Ok(layer.map(|l|l.0))
+        Ok(layer.map(|l| l.0))
     } else {
         Ok(None)
     }
