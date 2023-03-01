@@ -218,7 +218,11 @@ test(compile_needs_service,
 
     get_restriction_named("NeedsService", Schema, Named),
     compile_restriction(Named, Schema, Subject, Expression),
-    Expression = or(nt(A,death_certificate,_),nt(B,policy,_)),
+
+    Expression = or(and(isa(A,'ClaimCase'),
+						nt(A,death_certificate,_)),
+					and(isa(B,'ClaimCase'),
+                        nt(B,policy,_))),
     A == Subject,
     B == Subject.
 
@@ -235,11 +239,12 @@ test(compile_names_dont_match,
 
     get_restriction_named("NamesDontMatch", Schema, Named),
     compile_restriction(Named, Schema, Subject, Expression),
-    Expression = and(and(and(and(t(A,death_certificate,B),
-                                 t(A,policy,C)),
-                             t(B,name,D)),
-                         t(C,life_assured_name,E)),
-                     op(\=,D,E)),
+    Expression = and(isa(A,'ClaimCase'),
+					 and(and(and(and(t(A,death_certificate,B),
+								     t(A,policy,C)),
+								 t(B,name,D)),
+							 t(C,life_assured_name,E)),
+						 op(\=,D,E))),
     A == Subject.
 
 :- end_tests(restrictions).
