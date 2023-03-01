@@ -297,11 +297,14 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
             executor.resolve_with_ctx(&(), &System {})
         } else {
             let zero_iter;
+            let type_name;
             if let Some(restriction) = info.allframes.restrictions.get(field_name) {
                 // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
+                type_name = restriction.on.as_str();
                 let id_list = ids_from_restriction(executor.context(), restriction)?;
                 zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
             } else {
+                type_name = field_name;
                 zero_iter = None;
             }
             let objects = match executor.context().instance.as_ref() {
@@ -309,7 +312,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
                     instance,
                     &info.allframes.context,
                     arguments,
-                    field_name,
+                    type_name,
                     &info.allframes,
                     zero_iter,
                 )
@@ -321,7 +324,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
 
             executor.resolve(
                 &TerminusTypeInfo {
-                    class: field_name.to_owned(),
+                    class: type_name.to_owned(),
                     allframes: info.allframes.clone(),
                 },
                 &objects,
