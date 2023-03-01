@@ -54,7 +54,11 @@ interpret_restriction(isa(X,C), DB) :-
 compile_restriction(Dictionary, _Schema, Subject, Expression),
 is_dict(Dictionary),
 get_dict('@having', Dictionary, Having) =>
-    compile_constraint_rule(Having, Subject, Expression, _{}, _).
+    get_dict('@on', Dictionary, Type),
+    atom_string(Type_Atom, Type),
+    compile_constraint_rule(Having, Subject, Rule_Expression, _{}, _),
+    Expression = and(isa(Subject, Type_Atom),
+                     Rule_Expression).
 compile_restriction(Dictionary, Schema, Subject, Expression),
 is_dict(Dictionary),
 get_dict('@anyOf', Dictionary, Restrictions) =>

@@ -39,6 +39,7 @@ precedence(impl,3).
 precedence(or,4).
 precedence(op,5).
 precedence(not,6).
+precedence(nt,7).
 
 term_priority(Op,Term1,Term2) :-
     Term1 =.. [F|_],
