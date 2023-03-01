@@ -3,7 +3,7 @@ use std::sync::Arc;
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
 use juniper::{
     DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue, InputValue,
-    Registry, Value, ID,
+    Registry, Value, ID, graphql_value,
 };
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
@@ -277,6 +277,32 @@ fn ids_from_restriction<'a, C: QueryableContextType>(
     result_to_execution_result(&context.context, result)
 }
 
+fn pl_id_matches_restriction<'a, C: QueryableContextType>(
+    context: &TerminusContext<'a, C>,
+    restriction: &str,
+    id: u64
+) -> PrologResult<bool> {
+    let prolog_context = &context.context;
+    let frame = prolog_context.open_frame();
+    let [restriction_term, id_term] = frame.new_term_refs();
+    restriction_term.unify(restriction)?;
+    id_term.unify(id)?;
+    let open_call = frame.open(
+        pred!("query:ids_for_restriction/3"),
+        [&context.transaction_term, &restriction_term, &id_term],
+    );
+    Ok(attempt_opt(open_call.next_solution())?.is_some())
+}
+
+fn id_matches_restriction<'a, C: QueryableContextType>(
+    context: &TerminusContext<'a, C>,
+    restriction: &str,
+    id: u64,
+) -> Result<bool, juniper::FieldError> {
+    let result = pl_id_matches_restriction(context, restriction, id);
+    result_to_execution_result(&context.context, result)
+}
+
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
     type Context = TerminusContext<'a, C>;
 
@@ -366,6 +392,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
     }
 
     fn generate_class_type<'r>(
+        class_name: &str,
         d: &ClassDefinition,
         info: &<Self as GraphQLValue>::TypeInfo,
         registry: &mut juniper::Registry<'r, DefaultScalarValue>,
@@ -512,6 +539,14 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
 
         fields.append(&mut path_fields);
 
+        for restriction in frames.restrictions.values() {
+            if restriction.on == class_name {
+                let field_name = format!("_restriction_{}", restriction.id);
+                let field = registry.field::<bool>(&field_name, &());
+                fields.push(field);
+            }
+        }
+
         fields.push(registry.field::<ID>("_id", &()));
         fields.push(registry.field::<ID>("_type", &()));
 
@@ -537,7 +572,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
         let allframes = &info.allframes;
         let frame = &allframes.frames[class];
         match frame {
-            TypeDefinition::Class(d) => Self::generate_class_type(d, info, registry),
+            TypeDefinition::Class(d) => Self::generate_class_type(&class, d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
         }
     }
@@ -710,7 +745,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     }
                 }
             } else if is_path_field_name(field_name) {
-                let class = &field_name[9..field_name.len()];
+                const PREFIX_LEN: usize = "_path_for_".len();
+                let class = &field_name[PREFIX_LEN..];
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
                     Some(class),
@@ -720,6 +756,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     ClonableIterator::new(CachedClonableIterator::new(ids)),
                     instance,
                 )
+            } else if is_restriction_name(field_name) {
+                const PREFIX_LEN: usize = "_restriction_".len();
+                let restriction = &field_name[PREFIX_LEN..];
+                let original_restriction = &allframes.class_renaming.get_by_left(restriction).unwrap();
+
+                let result = id_matches_restriction(executor.context(), original_restriction, self.id);
+
+                Some(result.map(|r|graphql_value!(r)))
             } else {
                 let field_name_expanded = allframes.context.expand_schema(field_name);
                 let field_id = instance.predicate_id(&field_name_expanded)?;
@@ -869,6 +913,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
 
 fn is_path_field_name(field_name: &str) -> bool {
     field_name.starts_with("_path_to_")
+}
+
+fn is_restriction_name(field_name: &str) -> bool {
+    field_name.starts_with("_restriction")
 }
 
 pub struct TerminusEnum {

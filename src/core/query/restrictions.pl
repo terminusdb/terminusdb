@@ -80,6 +80,16 @@ run_restriction_named(Schema, Instance, Name, Subject) :-
     interpret_restriction(Expression, database(Schema, Instance)).
 
 ids_for_restriction(Transaction, Restriction_Name, Id) :-
+    ground(Id),
+    !,
+    database_instance(Transaction, Instance),
+    database_schema(Transaction, Schema),
+    Instance = [Instance_Obj],
+    get_dict(read, Instance_Obj, Layer),
+    ground(Layer),
+    subject_id(Layer, IRI, Id),
+    run_restriction_named(Schema, Instance, Restriction_Name, IRI).
+ids_for_restriction(Transaction, Restriction_Name, Id) :-
     database_instance(Transaction, Instance),
     database_schema(Transaction, Schema),
     Instance = [Instance_Obj],
