@@ -134,6 +134,13 @@ impl GraphQLType for FilterInputObject {
                 })
                 .collect();
 
+            for restriction in info.frames.restrictions.values() {
+                if restriction.on == info.type_name {
+                    let arg_name = format!("_restriction_{}", restriction.id);
+                    args.push(registry.arg::<Option<bool>>(&arg_name, &()));
+                }
+            }
+
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",
                 &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),

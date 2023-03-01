@@ -3,6 +3,7 @@ use juniper::{self, DefaultScalarValue, FromInputValue, InputValue, ScalarValue,
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
+use swipl::prelude::QueryableContextType;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType};
 
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -17,7 +18,10 @@ use super::filter::{
     FilterInputObject, FloatFilterInputObject, IntFilterInputObject, StringFilterInputObject,
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
-use super::schema::{BigFloat, BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
+use super::schema::{
+    get_restriction_name, id_matches_restriction, BigFloat, BigInt, DateTime, TerminusContext,
+    TerminusOrderBy, TerminusOrdering,
+};
 
 use crate::path::compile::path_to_class;
 
@@ -90,6 +94,7 @@ enum FilterValue {
 
 #[derive(Debug)]
 struct FilterObject {
+    restrictions: Vec<(String, bool)>,
     edges: Vec<(String, FilterValue)>,
 }
 
@@ -315,6 +320,7 @@ fn compile_edges_to_filter(
     edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 ) -> FilterObject {
     let mut result: Vec<(String, FilterValue)> = Vec::with_capacity(edges.len());
+    let mut restrictions: Vec<(String, bool)> = Vec::new();
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = &spanning_string.item;
         if field_name == "_and" {
@@ -377,6 +383,12 @@ fn compile_edges_to_filter(
                 )),
                 _ => panic!("We should not have a non object in And-clause"),
             }
+        } else if let Some(restriction_name) = get_restriction_name(field_name) {
+            let input_value = &spanning_input_value.item;
+            let expected = *input_value
+                .as_scalar_value()
+                .expect("restriction value in filter was not a boolean");
+            restrictions.push((restriction_name.to_owned(), expected));
         } else {
             let field = class_definition.resolve_field(field_name);
             let prefixes = &all_frames.context;
@@ -397,7 +409,10 @@ fn compile_edges_to_filter(
             }
         }
     }
-    FilterObject { edges: result }
+    FilterObject {
+        restrictions,
+        edges: result,
+    }
 }
 
 fn compile_filter_object(
@@ -622,17 +637,23 @@ fn object_type_filter<'a>(
     }
 }
 
-fn compile_query<'a>(
+fn compile_query<'a, C: QueryableContextType>(
+    context: &'a TerminusContext<'a, C>,
     g: &'a SyncStoreLayer,
     filter: Rc<FilterObject>,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     let mut iter = iter;
+    for (restriction_name, expected_value) in filter.restrictions.iter().cloned() {
+        iter = ClonableIterator::new(iter.filter(move |id| {
+            expected_value == id_matches_restriction(context, &restriction_name, *id).unwrap()
+        }));
+    }
     for (predicate, filter) in filter.edges.iter() {
         match filter {
             FilterValue::And(vec) => {
                 for filter in vec.iter() {
-                    iter = compile_query(g, filter.clone(), iter)
+                    iter = compile_query(context, g, filter.clone(), iter)
                 }
             }
             FilterValue::Or(vec) => {
@@ -644,7 +665,7 @@ fn compile_query<'a>(
                 //or_iter = ClonableIterator::new(std::iter::empty());
                 iter = ClonableIterator::new(vec.clone().into_iter().flat_map(move |filter| {
                     let iter_copy = ClonableIterator::new(initial_vector.clone().into_iter());
-                    compile_query(g, filter, iter_copy)
+                    compile_query(context, g, filter, iter_copy)
                 }));
             }
             FilterValue::Not(filter) => {
@@ -656,7 +677,7 @@ fn compile_query<'a>(
                     initial_set.clone().into_iter(),
                 ));
                 let sub_iter: HashSet<u64> =
-                    compile_query(g, filter.clone(), initial_iter).collect();
+                    compile_query(context, g, filter.clone(), initial_iter).collect();
 
                 let result = &initial_set - &sub_iter;
                 iter = ClonableIterator::new(CachedClonableIterator::new(result.into_iter()));
@@ -673,7 +694,7 @@ fn compile_query<'a>(
                                         .map(|t| t.object)
                                         .into_iter(),
                                 );
-                                compile_query(g, sub_filter.clone(), objects)
+                                compile_query(context, g, sub_filter.clone(), objects)
                                     .next()
                                     .is_some()
                             }))
@@ -708,7 +729,7 @@ fn compile_query<'a>(
                                         ClonableIterator::new(CachedClonableIterator::new(
                                             g.triples_sp(*subject, property_id).map(|t| t.object),
                                         ));
-                                    compile_query(g, sub_filter.clone(), objects)
+                                    compile_query(context, g, sub_filter.clone(), objects)
                                         .next()
                                         .is_some()
                                 }));
@@ -734,7 +755,8 @@ fn compile_query<'a>(
                                         ClonableIterator::new(CachedClonableIterator::new(
                                             g.triples_sp(*subject, property_id).map(|t| t.object),
                                         ));
-                                    compile_query(g, sub_filter.clone(), objects).all(|_| true)
+                                    compile_query(context, g, sub_filter.clone(), objects)
+                                        .all(|_| true)
                                 }));
                             }
                             FilterObjectType::Value(filter_type) => {
@@ -781,7 +803,8 @@ fn generate_initial_iterator<'a>(
     }
 }
 
-fn lookup_by_filter<'a>(
+fn lookup_by_filter<'a, C: QueryableContextType>(
+    context: &'a TerminusContext<'a, C>,
     g: &'a SyncStoreLayer,
     class_name: &'a str,
     all_frames: &AllFrames,
@@ -792,13 +815,14 @@ fn lookup_by_filter<'a>(
         generate_initial_iterator(g, class_name, all_frames, filter_opt, zero_iter);
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
-        compile_query(g, continuation_filter, iterator)
+        compile_query(context, g, continuation_filter, iterator)
     } else {
         iterator
     }
 }
 
-pub fn run_filter_query<'a>(
+pub fn run_filter_query<'a, C: QueryableContextType>(
+    context: &'a TerminusContext<'a, C>,
     g: &'a SyncStoreLayer,
     prefixes: &'a Prefixes,
     arguments: &'a juniper::Arguments,
@@ -871,7 +895,7 @@ pub fn run_filter_query<'a>(
     let it: ClonableIterator<'a, u64> =
         if let Some(TerminusOrderBy { fields }) = arguments.get::<TerminusOrderBy>("orderBy") {
             let mut results: Vec<u64> =
-                lookup_by_filter(g, class_name, all_frames, filter, new_zero_iter)
+                lookup_by_filter(context, g, class_name, all_frames, filter, new_zero_iter)
                     .unique()
                     .collect();
             results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
@@ -884,7 +908,7 @@ pub fn run_filter_query<'a>(
             )
         } else {
             ClonableIterator::new(
-                lookup_by_filter(g, class_name, all_frames, filter, new_zero_iter)
+                lookup_by_filter(context, g, class_name, all_frames, filter, new_zero_iter)
                     .skip(usize::try_from(offset).unwrap_or(0)),
             )
         };
