@@ -746,7 +746,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     }
                 }
             } else if is_path_field_name(field_name) {
-                const PREFIX_LEN: usize = "_path_for_".len();
+                const PREFIX_LEN: usize = "_path_to_".len();
                 let class = &field_name[PREFIX_LEN..];
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
