@@ -273,7 +273,13 @@ fn ids_from_restriction<'a, C: QueryableContextType>(
     context: &TerminusContext<'a, C>,
     restriction: &RestrictionDefinition,
 ) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(context, restriction);
+    let result = pl_ids_from_restriction(context, restriction)
+        .map(|mut r| {
+            r.sort();
+            r.dedup();
+
+            r
+        });
     result_to_execution_result(&context.context, result)
 }
 
