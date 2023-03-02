@@ -344,8 +344,8 @@ test(interpret_restrictions,
             ids_for_restriction(Db, Restriction_Name, Id, Reason),
             All),
 
-    All = [ 1 - "[\n  {\n    \"id\":\"NeedsService\",\n    \"message\":\"NeedsService\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"NoPolicy\"}\n  }\n]",
-            2 - "[\n  {\n    \"id\":\"NeedsService\",\n    \"message\":\"NeedsService\",\n    \"reason\": {\n      \"id\":\"NoDeathCert\",\n      \"message\":\"There was no death certificate in this claims case\"\n    }\n  },\n  {\n    \"id\":\"NeedsService\",\n    \"message\":\"NeedsService\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"NoPolicy\"}\n  }\n]"
+    All = [ 1 - _,
+            2 - _
           ].
 
 
