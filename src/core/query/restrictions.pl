@@ -16,6 +16,7 @@
 :- use_module(library(yall)).
 :- use_module(library(lists)).
 :- use_module(library(http/json)).
+:- use_module(library(solution_sequences)).
 
 interpret_restriction(and(A,B),DB) :-
     interpret_restriction(A,DB),
