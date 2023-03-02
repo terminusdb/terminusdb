@@ -255,11 +255,16 @@ fn pl_ids_from_restriction<'a, C: QueryableContextType>(
     let mut result = Vec::new();
     let prolog_context = &context.context;
     let frame = prolog_context.open_frame();
-    let [restriction_term, id_term] = frame.new_term_refs();
+    let [restriction_term, id_term, reason_term] = frame.new_term_refs();
     restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
     let open_call = frame.open(
-        pred!("query:ids_for_restriction/3"),
-        [&context.transaction_term, &restriction_term, &id_term],
+        pred!("query:ids_for_restriction/4"),
+        [
+            &context.transaction_term,
+            &restriction_term,
+            &id_term,
+            &reason_term,
+        ],
     );
     while attempt_opt(open_call.next_solution())?.is_some() {
         let id: u64 = id_term.get_ex()?;
@@ -273,13 +278,12 @@ fn ids_from_restriction<'a, C: QueryableContextType>(
     context: &TerminusContext<'a, C>,
     restriction: &RestrictionDefinition,
 ) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(context, restriction)
-        .map(|mut r| {
-            r.sort();
-            r.dedup();
+    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
+        r.sort();
+        r.dedup();
 
-            r
-        });
+        r
+    });
     result_to_execution_result(&context.context, result)
 }
 
@@ -290,12 +294,17 @@ fn pl_id_matches_restriction<'a, C: QueryableContextType>(
 ) -> PrologResult<bool> {
     let prolog_context = &context.context;
     let frame = prolog_context.open_frame();
-    let [restriction_term, id_term] = frame.new_term_refs();
+    let [restriction_term, id_term, reason_term] = frame.new_term_refs();
     restriction_term.unify(restriction)?;
     id_term.unify(id)?;
     let open_call = frame.open(
-        pred!("query:ids_for_restriction/3"),
-        [&context.transaction_term, &restriction_term, &id_term],
+        pred!("query:ids_for_restriction/4"),
+        [
+            &context.transaction_term,
+            &restriction_term,
+            &id_term,
+            &reason_term,
+        ],
     );
     Ok(attempt_opt(open_call.next_solution())?.is_some())
 }

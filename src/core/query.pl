@@ -96,7 +96,7 @@
               conjunct/3,
 
               % restriction.pl
-              ids_for_restriction/3
+              ids_for_restriction/4
           ]).
 
 :- use_module(query/expansions).

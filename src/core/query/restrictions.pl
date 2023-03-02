@@ -1,6 +1,6 @@
 :- module('query/restrictions', [
               run_restriction_named/4,
-              ids_for_restriction/3
+              ids_for_restriction/4
           ]).
 
 :- use_module(core(util)).
@@ -83,7 +83,7 @@ run_restriction_named(Schema, Instance, Name, Subject) :-
     compile_restriction(Restriction, Schema, Subject, Expression),
     interpret_restriction(Expression, database(Schema, Instance)).
 
-ids_for_restriction(Transaction, Restriction_Name, Id) :-
+ids_for_restriction(Transaction, Restriction_Name, Id, Reason) :-
     ground(Id),
     !,
     database_instance(Transaction, Instance),
@@ -92,15 +92,17 @@ ids_for_restriction(Transaction, Restriction_Name, Id) :-
     get_dict(read, Instance_Obj, Layer),
     ground(Layer),
     subject_id(Layer, IRI, Id),
-    run_restriction_named(Schema, Instance, Restriction_Name, IRI).
-ids_for_restriction(Transaction, Restriction_Name, Id) :-
+    run_restriction_named(Schema, Instance, Restriction_Name, IRI),
+    Reason = "lorem ipsum".
+ids_for_restriction(Transaction, Restriction_Name, Id, Reason) :-
     database_instance(Transaction, Instance),
     database_schema(Transaction, Schema),
     Instance = [Instance_Obj],
     get_dict(read, Instance_Obj, Layer),
     ground(Layer),
     run_restriction_named(Schema, Instance, Restriction_Name, IRI),
-    subject_id(Layer, IRI, Id).
+    subject_id(Layer, IRI, Id),
+    Reason = "lorem ipsum".
 
 :- begin_tests(restrictions).
 :- use_module(core(util/test_utils)).
