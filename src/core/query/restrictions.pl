@@ -51,40 +51,85 @@ interpret_restriction(isa(X,C), DB) :-
     prefix_expand_schema(C, Prefixes, CEx),
     global_prefix_expand(rdf:type, RDF_Type),
     xrdf(Instance, X, RDF_Type, CEx).
+interpret_restriction(not(P), DB) :-
+    \+ interpret_restriction(P, DB).
 
-compile_restriction(Dictionary, _Schema, Subject, Expression, Reason),
-is_dict(Dictionary),
-get_dict('@having', Dictionary, Having) =>
-    get_dict('@on', Dictionary, Type),
-    atom_string(Type_Atom, Type),
-    get_dict('_id', Dictionary, Id),
-    (   get_dict('@comment', Dictionary, Message)
-    ->  true
-    ;   Id = Message
-    ),
-    compile_constraint_rule(Having, Subject, Rule_Expression, _{}, _),
-    Expression = and(isa(Subject, Type_Atom),
-                     and(Rule_Expression,
-                         op(=,Reason, json{ id: Id, message: Message}))).
-compile_restriction(Dictionary, Schema, Subject, Expression, Reason),
-is_dict(Dictionary),
-get_dict('@anyOf', Dictionary, Restrictions) =>
-    maplist({Schema, Subject, R}/[Restriction_Name, Expression]>>(
+compile_any_of(Dictionary, Schema, Subject, Expression, Reason) :-
+    (   get_dict('@anyOf', Dictionary, Restrictions)
+    ->  maplist({Schema, Subject, R}/[Restriction_Name, Expression]>>(
+                    get_restriction_named(Restriction_Name, Schema, Restriction),
+                    compile_restriction(Restriction, Schema, Subject, Expression, R)
+                ),
+                Restrictions,
+                Expressions),
+        termlist_disjunction(Expressions, Expression),
+        Reason = json{ reason: R }
+    ;   Expression = true,
+        Reason = json{}
+    ).
+
+compile_none_of(Dictionary, Schema, Subject, Expression, Reasons) :-
+    (   get_dict('@noneOf', Dictionary, Restrictions)
+    ->  maplist({Schema, Subject}/[Restriction_Name, not(Expression)]>>(
                 get_restriction_named(Restriction_Name, Schema, Restriction),
-                compile_restriction(Restriction, Schema, Subject, Expression, R)
+                compile_restriction(Restriction, Schema, Subject, Expression, _)
             ),
             Restrictions,
             Expressions),
+        termlist_conjunction(Expressions, Expression),
+        Reasons = json{ none_of: Restrictions }
+    ;   Expression = true,
+        Reasons = json{}
+    ).
+
+compile_has(Dictionary, Subject, Expression, Bindings) :-
+    (   get_dict('@has', Dictionary, Restriction)
+    ->  compile_constraint_rule(Restriction, Subject, Expression, Bindings, _)
+    ;   Expression = true
+    ).
+
+compile_given(Dictionary, Subject, Expression, Bindings) :-
+    (   get_dict('@given', Dictionary, Restrictions)
+    ->  mapm({Subject}/[Restriction, Exp, BIn, BOut]>>(
+                 compile_constraint_rule(Restriction,Subject,Exp, BIn, BOut)
+             ),
+             Restrictions,
+             Expressions,
+             _{},
+             Bindings),
+        termlist_conjunction(Expressions, Expression)
+    ;   Expression = true,
+        Bindings = _{}
+    ).
+
+restriction_message(Dictionary, Message) :-
     get_dict('_id', Dictionary, Id),
     (   get_dict('@comment', Dictionary, Message)
     ->  true
     ;   Id = Message
-    ),
-    termlist_disjunction(Expressions, Or_Expression),
-    Expression = and(Or_Expression,
-                     op(=,Reason,
-                        json{ id: Id, message: Message, reason: R}
-                       )).
+    ).
+
+compile_restriction(Dictionary, Schema, Subject, Expression, Reason),
+is_dict(Dictionary) =>
+    get_dict('@on', Dictionary, Type),
+    atom_string(Type_Atom, Type),
+    get_dict('_id', Dictionary, Id),
+    restriction_message(Dictionary, Message),
+    compile_given(Dictionary, Subject, Given_Expression, Bindings),
+    compile_has(Dictionary, Subject, Has_Expression, Bindings),
+    compile_any_of(Dictionary, Schema, Subject, Any_Of_Expression, Reasons1),
+    compile_none_of(Dictionary, Schema, Subject, None_Of_Expression, Reasons2),
+    Reason_Dict0 = json{ id: Id, message: Message },
+    put_dict(Reason_Dict0, Reasons1, Reason_Dict1),
+    put_dict(Reason_Dict1, Reasons2, Reason_Dict2),
+    Conjuncts = [isa(Subject, Type_Atom),
+                 Given_Expression,
+                 Has_Expression,
+                 Any_Of_Expression,
+                 None_Of_Expression,
+                 op(=,Reason,
+                    Reason_Dict2)],
+    termlist_conjunction(Conjuncts, Expression).
 
 get_restriction_named(Name, Schema, Restriction) :-
     database_schema_context_object(Schema, Context),
@@ -127,112 +172,332 @@ ids_for_restriction(Transaction, Restriction_Name, Id, Reason) :-
 :- use_module(core(util/test_utils)).
 
 insurance_schema('
-{ "@base": "terminusdb:///data/",
-  "@schema": "terminusdb:///schema#",
-  "@type": "@context",
-  "@metadata" : {
-      "restrictions" : [
-            { "_type" : "Restriction",
-              "_id" : "NoDeathCert",
-              "@comment" : "There was no death certificate in this claims case",
-              "@on" : "ClaimCase",
-              "@having" : { "death_certificate" : null }
+{
+    "@base": "terminusdb:///data/",
+    "@metadata": {
+        "restrictions": [
+            {   "@on" : "ClaimCase",
+                "_id" : "CauseOfDeathAssessed",
+                "@comment" : "Cause is one of manslaughter, murder, accidental, suicide",
+                "_type" : "Restriction",
+                "@given" : [{ "death_certificate_for_claim" :
+                              { "country_of_death" : {"@var" : "CountryOfDeath"}},
+                              "policy_of_claim" :
+                              { "country_of_issue" : {"@var" : "CountryOfIssue"}}}],
+                "@has" : { "@with" : "CountryOfDeath",
+                           "@neq" : {"@var" : "CountryOfIssue"}}
             },
-            { "_type" : "Restriction",
-              "_id" : "NoPolicy",
-              "@on" : "ClaimCase",
-              "@having" : { "policy" : null }
+            {   "@on" : "ClaimCase",
+                "_id" : "CountryOfDeath",
+                "@comment" : "The Country of death is not the same as the country of issue",
+                "_type" : "Restriction",
+                "@has" : { "death_certificate_for_claim" :
+                              { "cause_of_death" :
+                                { "@or" : [{ "@eq" : "CauseOfDeath/manslaughter" },
+                                           { "@eq" : "CauseOfDeath/murder" },
+                                           { "@eq" : "CauseOfDeath/accidental" },
+                                           { "@eq" : "CauseOfDeath/suicide" }
+                                          ]}}}
             },
-            { "_type" : "Restriction",
-              "_id" : "NeedsService",
-              "@on" : "ClaimCase",
-              "@anyOf" : ["NoDeathCert", "NoPolicy"]
+            {
+                "@anyOf": ["CauseOfDeathAssessed", "CountryOfDeath"],
+                "@on": "ClaimCase",
+                "@comment" : "Claim requires assessment",
+                "_id": "ReferralForAssessment",
+                "_type": "Restriction"
             },
-            { "_type" : "Restriction",
-              "_id" : "NamesDontMatch",
-              "@on" : "ClaimCase",
-              "@having" :
-              { "@and" : [{ "death_certificate" : { "name" : { "@var" : "DeathCertName"}},
-                            "policy" : { "life_assured_name" : { "@var" : "PolicyName"}}},
-                          { "@with" : "DeathCertName",
-                            "@ne" : {"@var" : "PolicyName"}}]
-              }
+            {
+                "@given" : [
+                    { "death_certificate_for_claim" : {
+                        "date_of_death" : { "@var" : "DateOfDeath" }},
+                      "policy_of_claim" : {
+                        "moratorium_end" : { "@var" : "MoratoriumEnd" },
+                        "moratorium_start" : { "@var" : "MoratoriumStart" }}}],
+                "@has": { "@with" : "DateOfDeath",
+                          "@ge": { "@var" : "MoratoriumStart" },
+                          "@le": { "@var" : "MoratoriumEnd" }
+                        },
+                "@on": "ClaimCase",
+                "@noneOf" : ["ReferralForAssessment","ReferralForService",
+                             "ClaimClosed"],
+                "@comment" : "Claim is eligible for a premium refund",
+                "_id": "PremiumRefund",
+                "_type": "Restriction"
             },
-            { "_type" : "Restriction",
-              "_id" : "NeedsAssessment",
-              "@on" : "ClaimCase",
-              "@anyOf" : ["NamesDontMatch"]
+            {
+                "@on": "ClaimCase",
+                "@comment" : "Claim is eligible for a sum assured refund",
+                "@noneOf" : ["ReferralForAssessment","ReferralForService",
+                             "PremiumRefund",
+                             "ClaimClosed"],
+                "_id": "SumAssuredRefund",
+                "_type": "Restriction"
+            },
+            {
+                "@has" : { "incur" : { "@var" : "_"}},
+                "@on": "ClaimCase",
+                "_id": "ClaimClosed",
+                "_type": "Restriction"
+            },
+            {
+                "@has": {
+                    "death_certificate_for_claim": null
+                },
+                "@on": "ClaimCase",
+                "@comment" : "Claim had no associated death certificate",
+                "_id": "NoDeathCert",
+                "_type": "Restriction"
+            },
+            {
+                "@has": {
+                    "policy_of_claim": null
+                },
+                "@on": "ClaimCase",
+                "@comment" : "Claim had no associated policy",
+                "_id": "NoPolicy",
+                "_type": "Restriction"
+            },
+            {
+                "@given": [{"policy_of_claim":
+                               { "start_date" : { "@var": "StartDate" }},
+                               "death_certificate_for_claim":
+                               { "date_of_death" : { "@var": "DateOfDeath" }}},],
+                "@has": { "@with" : "StartDate",
+                          "@le" : { "@var" : "DateOfDeath" }},
+                "@on": "ClaimCase",
+                "@comment" : "Date of death on certificate is prior to start date of policy.",
+                "_id": "DeathAfterStart",
+                "_type": "Restriction"
+            },
+            {
+                "@has": {"policy_of_claim":
+                            { "beneficiary" : { "flagged" : { "@eq" : true }}}},
+                "@on": "ClaimCase",
+                "@comment" : "The beneficiary is flagged.",
+                "_id": "BeneficiaryIsFlagged",
+                "_type": "Restriction"
+            },
+            {
+                "@anyOf": [
+                    "NoDeathCert",
+                    "NoPolicy",
+                    "NamesDontMatch",
+                    "DateOfBirthDoesntMatch",
+                    "DeathAfterStart",
+                    "BeneficiaryIsFlagged"
+                ],
+                "@on": "ClaimCase",
+                "@comment" : "Claim requires servicing",
+                "_id": "ReferralForService",
+                "_type": "Restriction"
+            },
+            {
+                "@given" : [{
+                              "death_certificate_for_claim": {
+                                  "name": {
+                                      "@var": "DeathCertName"
+                                  }
+                               },
+                              "policy_of_claim": {
+                                  "life_assured_name": {
+                                      "@var": "PolicyName"
+                                  }
+                              }
+                            }],
+                "@has": {
+                            "@ne": {
+                                "@var": "PolicyName"
+                            },
+                            "@with": "DeathCertName"
+                        },
+                "@on": "ClaimCase",
+                "@comment" : "The death certificate and policy names do not match",
+                "_id": "NamesDontMatch",
+                "_type": "Restriction"
+            },
+            {
+                "@given" : [
+                        {
+                            "death_certificate_for_claim": {
+                                "date_of_birth": {
+                                    "@var": "DeathCertDateOfBirth"
+                                }
+                            },
+                            "policy_of_claim": {
+                                "life_assured_date_of_birth": {
+                                    "@var": "PolicyDateOfBirth"
+                                }
+                            }
+                        }],
+                "@has": {
+                            "@ne": {
+                                "@var": "PolicyDateOfBirth"
+                            },
+                            "@with": "DeathCertDateOfBirth"
+                        },
+                "@on": "ClaimCase",
+                "@comment" : "The death certificate and policy dates of birth do not match",
+                "_id": "DateOfBirthDoesntMatch",
+                "_type": "Restriction"
             }
         ]
-  }
+    },
+    "@schema": "terminusdb:///schema#",
+    "@type": "@context"
 }
-{ "@id": "Policy",
-  "@type": "Class",
-  "beneficiary": "Beneficiary",
-  "country_of_issue": "Country",
-  "covered_countries": {
-      "@class": "Country",
-      "@type": "Set"
-  },
-  "effective_date" : "xsd:dateTime",
-  "life_assured_date_of_birth": "xsd:string",
-  "life_assured_name": "xsd:string",
-  "premium_paid_to_date": "xsd:double",
-  "sum_assured": "xsd:double"
+{
+    "@id": "Refund",
+    "@type": "Enum",
+    "@value": [
+        "SumAssured",
+        "Premium",
+        "Denied"
+    ]
 }
-{ "@id": "Refund",
-  "@type": "Class",
-  "refunded_to": "Beneficiary",
+{
+    "@id": "ClaimCase",
+    "@type": "Class",
+    "death_certificate_for_claim": {
+        "@class": "DeathCertificate",
+        "@type": "Optional"
+    },
+    "incur": {
+        "@class": "Refund",
+        "@type": "Optional"
+    },
+    "policy_of_claim": {
+        "@class": "Policy",
+        "@type": "Optional"
+    }
 }
-{ "@id": "Beneficiary",
-  "@type": "Class",
-  "bank_account": "xsd:string",
-  "date_of_birth": "xsd:dateTime",
-  "is_flagged": "xsd:boolean",
-  "name": "xsd:string"
+{
+    "@id": "Beneficiary",
+    "@type": "Class",
+    "@unfoldable": [],
+    "bank_account": "xsd:string",
+    "date_of_birth": {
+        "@class": "xsd:dateTime",
+        "@type": "Optional"
+    },
+    "is_flagged": "xsd:boolean",
+    "name": "xsd:string"
 }
-{ "@id": "ClaimCase",
-  "@type": "Class",
-  "death_certificate":
-  { "@class": "DeathCertificate",
-    "@type": "Optional"
-  },
-  "incur":
-  { "@class": "Refund",
-    "@type": "Optional"
-  },
-  "policy":
-  { "@class": "Policy",
-    "@type": "Optional"
-  }
+{
+    "@id": "Policy",
+    "@type": "Class",
+    "@unfoldable": [],
+    "beneficiary": "Beneficiary",
+    "country_of_issue": "Country",
+    "covered_countries": {
+        "@class": "Country",
+        "@type": "Set"
+    },
+    "life_assured_date_of_birth": {
+        "@class": "xsd:dateTime",
+        "@type": "Optional"
+    },
+    "start_date" : { "@type" : "Optional",
+                     "@class" : "xsd:dateTime" },
+    "life_assured_name": "xsd:string",
+    "premium_paid_to_date": "xsd:double",
+    "sum_assured": "xsd:double",
+    "moratorium_start" : { "@type" : "Optional",
+                           "@class" : "xsd:dateTime"},
+    "moratorium_end" : { "@type" : "Optional",
+                         "@class" : "xsd:dateTime" }
 }
-{ "@id": "DeathCertificate",
-  "@type": "Class",
-  "country_of_death": "Country",
-  "date_of_birth": "xsd:dateTime",
-  "date_of_death": "xsd:dateTime",
-  "name": "xsd:string"
+{
+    "@id": "DeathCertificate",
+    "@type": "Class",
+    "@unfoldable": [],
+    "country_of_death": "Country",
+    "date_of_birth": "xsd:dateTime",
+    "date_of_death": "xsd:dateTime",
+    "name": "xsd:string",
+    "cause_of_death" : { "@type" : "Optional",
+                         "@class" : "CauseOfDeath" }
 }
-{ "@id": "Country",
-  "@key":
-  { "@fields": ["name"],
-    "@type": "Lexical"
-  },
-  "@type": "Class",
-  "name": "xsd:string"
+{
+    "@id" : "CauseOfDeath",
+    "@type" : "Enum",
+    "@value" : ["natural",
+                "manslaughter",
+                "murder",
+                "accidental",
+                "suicide"]
+}
+{
+    "@id": "Country",
+    "@key": {
+        "@fields": [
+            "name"
+        ],
+        "@type": "Lexical"
+    },
+    "@type": "Class",
+    "name": "xsd:string"
 }
 ').
 
 insurance_database(
     [
         json{ '@type' : "Country", name : "Germany" },
-        json{ '@type' : "ClaimCase" },
         json{ '@type' : "ClaimCase",
-              death_certificate: json{ '@type' : "DeathCertificate",
-                                       name : "Joe",
-                                       country_of_death: "Country/Germany",
-                                       date_of_birth: "2012-01-01T00:00:00Z",
-                                       date_of_death: "2013-01-01T00:00:00Z"}}
+              '@id' : "ClaimCase/1" },
+        json{ '@type' : "ClaimCase",
+              '@id' : "ClaimCase/2",
+              death_certificate_for_claim:
+              json{ '@type' : "DeathCertificate",
+                    name : "Jack",
+                    country_of_death: "Country/Germany",
+                    date_of_birth: "2012-01-01T00:00:00Z",
+                    date_of_death: "2013-01-01T00:00:00Z"}},
+        json{ '@type' : "ClaimCase",
+              '@id' : "ClaimCase/3",
+              policy_of_claim:
+              json{ '@type' : "Policy",
+                    beneficiary:
+                    json{ '@type' : "Beneficiary",
+                          bank_account: "B",
+                          date_of_birth : "2000-01-01T00:00:00Z",
+                          is_flagged: false,
+                          name: "Spok" },
+                    country_of_issue: "Country/Germany",
+                    life_assured_date_of_birth: "2012-01-01T00:00:00Z",
+                    start_date: "2020-01-01T00:00:00Z",
+                    life_assured_name : "Cathrine",
+                    premium_paid_to_date: "334.43",
+                    sum_assured : "21.34",
+                    moratorium_start: "2020-01-01T00:00:00Z",
+                    moratorium_end: "2021-01-01T00:00:00Z"
+                  }
+            },
+        json{ '@type' : "ClaimCase",
+              '@id' : "ClaimCase/4",
+              death_certificate_for_claim:
+              json{ '@type' : "DeathCertificate",
+                    name : "Joe",
+                    country_of_death: "Country/Germany",
+                    date_of_birth: "2012-01-01T00:00:00Z",
+                    date_of_death: "2013-01-01T00:00:00Z"},
+              policy_of_claim:
+              json{ '@type' : "Policy",
+                    beneficiary:
+                    json{ '@type' : "Beneficiary",
+                          bank_account: "B",
+                          date_of_birth : "2000-01-01T00:00:00Z",
+                          is_flagged: false,
+                          name: "Kirk" },
+                    country_of_issue: "Country/Germany",
+                    life_assured_date_of_birth: "2012-01-01T00:00:00Z",
+                    start_date: "2020-01-01T00:00:00Z",
+                    life_assured_name : "Joe",
+                    premium_paid_to_date: "334.43",
+                    sum_assured : "21.34",
+                    moratorium_start: "2012-01-01T00:00:00Z",
+                    moratorium_end: "2021-01-01T00:00:00Z"
+                  }
+            }
     ]
 ).
 
@@ -261,36 +526,69 @@ test(compile_needs_service,
     open_descriptor(Desc, Db),
     database_schema(Db, Schema),
 
-    get_restriction_named("NeedsService", Schema, Named),
-    compile_restriction(Named, Schema, Subject, Expression, Reason),
+    get_restriction_named("ReferralForService", Schema, Named),
+    compile_restriction(Named, Schema, _Subject, Expression, Reason),
 
-    Expression =
-    and(or(and(and(isa(NoDeathCert,'ClaimCase'),
-				   op(=,
-					  R1,
-					  json{ id:"NoDeathCert",
-							message:"There was no death certificate in this claims case"
-						  })),
-			   nt(A,death_certificate,_)),
-		   and(and(isa(NoPolicy,'ClaimCase'),
-				   op(=,
-					  R2,
-					  json{ id:"NoPolicy",
-							message:"NoPolicy"
-						  })),
-			   nt(A,policy,_))),
-		op(=,
-		   R,
-		   json{ id:"NeedsService",
-				 message:"NeedsService",
-				 reason:RInner
-			   })),
-
-    NoDeathCert == Subject,
-    NoPolicy == Subject,
+    Expression = and(_,
+                     op(=,R,_)),
     R == Reason,
-    RInner = R1,
-    RInner = R2.
+
+    Expression =@=
+    and(and(isa(A,'ClaimCase'),
+	        or(or(or(or(or(and(and(isa(A,'ClaimCase'),
+			                       op(=,
+				                      B,
+				                      json{ id:"NoDeathCert",
+					                        message:"Claim had no associated death certificate"
+				                          })),
+			                   nt(A,death_certificate_for_claim,_)),
+		                   and(and(isa(A,'ClaimCase'),
+			                       op(=,
+				                      B,
+				                      json{id:"NoPolicy",message:"Claim had no associated policy"})),
+			                   nt(A,policy_of_claim,_))),
+		                and(and(and(and(and(and(t(A,death_certificate_for_claim,C),
+					                            t(A,policy_of_claim,D)),
+					                        t(C,name,E)),
+				                        t(D,life_assured_name,F)),
+				                    isa(A,'ClaimCase')),
+			                    op(=,
+			                       B,
+			                       json{ id:"NamesDontMatch",
+				                         message:"The death certificate and policy names do not match"
+				                       })),
+			                op(\=,E,F))),
+		             and(and(and(and(and(and(t(A,death_certificate_for_claim,G),
+					                         t(A,policy_of_claim,H)),
+				                         t(G,date_of_birth,I)),
+				                     t(H,life_assured_date_of_birth,J)),
+			                     isa(A,'ClaimCase')),
+			                 op(=,
+			                    B,
+			                    json{ id:"DateOfBirthDoesntMatch",
+				                      message:"The death certificate and policy dates of birth do not match"
+				                    })),
+		                 op(\=,I,J))),
+	              and(and(and(and(and(and(t(A,death_certificate_for_claim,K),
+				                          t(A,policy_of_claim,L)),
+				                      t(K,date_of_death,M)),
+			                      t(L,start_date,N)),
+			                  isa(A,'ClaimCase')),
+		                  op(=,
+			                 B,
+			                 json{ id:"DeathAfterStart",
+			                       message:"Date of death on certificate is prior to start date of policy."
+			                     })),
+		              op(=<,N,M))),
+	           and(and(and(and(and(t(A,policy_of_claim,O),
+                                   t(O,beneficiary,P)),
+                               t(P,flagged,Q)),
+		                   isa(A,'ClaimCase')),
+		               op(=,
+		                  B,
+		                  json{id:"BeneficiaryIsFlagged",message:"The beneficiary is flagged."})),
+	               op(=,Q,true)))),
+        op(=,_,json{id:"ReferralForService",message:"Claim requires servicing",reason:B})).
 
 test(compile_names_dont_match,
      [setup((setup_temp_store(State),
@@ -303,23 +601,20 @@ test(compile_names_dont_match,
     database_schema(Db, Schema),
 
     get_restriction_named("NamesDontMatch", Schema, Named),
-    compile_restriction(Named, Schema, Subject, Expression, Reason),
+    compile_restriction(Named, Schema, _Subject, Expression, _Reason),
 
-    Expression = and(isa(A,'ClaimCase'),
-					 and(and(and(and(and(t(A,
-									       death_certificate,
-									       B),
-									     t(A,policy,C)),
-								     t(B,name,D)),
-								 t(C,life_assured_name,E)),
-							 op(\=,D,E)),
-						 op(=,
-							R,
-							json{ id:"NamesDontMatch",
-								  message:"NamesDontMatch"
-								}))),
-    A == Subject,
-    R == Reason.
+    Expression =@=
+    and(and(and(and(and(and(t(A,death_certificate_for_claim,B),
+                            t(A,policy_of_claim,C)),
+		                t(B,name,D)),
+		            t(C,life_assured_name,E)),
+	            isa(A,'ClaimCase')),
+	        op(=,
+	           _,
+	           json{ id:"NamesDontMatch",
+		             message:"The death certificate and policy names do not match"
+	               })),
+        op(\=,D,E)).
 
 test(interpret_names_dont_match,[]) :-
 
@@ -328,7 +623,7 @@ test(interpret_names_dont_match,[]) :-
     interpret_restriction(Term, fake_db),
     Reason == "Foo".
 
-test(interpret_restrictions,
+test(referral_for_service,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
              write_schema(insurance_schema, Desc))),
@@ -339,14 +634,36 @@ test(interpret_restrictions,
 
     open_descriptor(Desc, Db),
 
-    Restriction_Name = "NeedsService",
+    Restriction_Name = "ReferralForService",
     findall(Id-Reason,
             ids_for_restriction(Db, Restriction_Name, Id, Reason),
             All),
+    print_term(All, []),
+    All = [
+        3 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\n      \"id\":\"NoDeathCert\",\n      \"message\":\"Claim had no associated death certificate\"\n    }\n  },\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}\n  }\n]",
+        4 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}\n  }\n]",
+        5 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\n      \"id\":\"NoDeathCert\",\n      \"message\":\"Claim had no associated death certificate\"\n    }\n  }\n]"
+    ].
 
-    All = [ 1 - _,
-            2 - _
-          ].
+
+test(premium_refund,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    insert_insurance_documents(Desc),
+
+    open_descriptor(Desc, Db),
+
+    Restriction_Name = "PremiumRefund",
+    findall(Id-Reason,
+            ids_for_restriction(Db, Restriction_Name, Id, Reason),
+            All),
+    All = [
+        6 - "[\n  {\n    \"id\":\"PremiumRefund\",\n    \"message\":\"Claim is eligible for a premium refund\",\n    \"none_of\": [\"ReferralForAssessment\", \"ReferralForService\", \"ClaimClosed\" ]\n  }\n]"
+    ].
 
 
 :- end_tests(restrictions).
