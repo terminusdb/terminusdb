@@ -638,7 +638,7 @@ test(referral_for_service,
     findall(Id-Reason,
             ids_for_restriction(Db, Restriction_Name, Id, Reason),
             All),
-    print_term(All, []),
+
     All = [
         3 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\n      \"id\":\"NoDeathCert\",\n      \"message\":\"Claim had no associated death certificate\"\n    }\n  },\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}\n  }\n]",
         4 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}\n  }\n]",
