@@ -19,7 +19,7 @@ use super::filter::{
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
 use super::schema::{
-    get_restriction_name, id_matches_restriction, BigFloat, BigInt, DateTime, TerminusContext,
+    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
     TerminusOrderBy, TerminusOrdering,
 };
 
@@ -94,7 +94,7 @@ enum FilterValue {
 
 #[derive(Debug)]
 struct FilterObject {
-    restrictions: Vec<(String, bool)>,
+    restriction: Option<String>,
     edges: Vec<(String, FilterValue)>,
 }
 
@@ -320,7 +320,7 @@ fn compile_edges_to_filter(
     edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 ) -> FilterObject {
     let mut result: Vec<(String, FilterValue)> = Vec::with_capacity(edges.len());
-    let mut restrictions: Vec<(String, bool)> = Vec::new();
+    let mut restriction = None;
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = &spanning_string.item;
         if field_name == "_and" {
@@ -383,12 +383,11 @@ fn compile_edges_to_filter(
                 )),
                 _ => panic!("We should not have a non object in And-clause"),
             }
-        } else if let Some(restriction_name) = get_restriction_name(field_name) {
+        } else if field_name == "_restriction" {
             let input_value = &spanning_input_value.item;
-            let expected = *input_value
-                .as_scalar_value()
-                .expect("restriction value in filter was not a boolean");
-            restrictions.push((restriction_name.to_owned(), expected));
+            let expected: GeneratedEnum = GeneratedEnum::from_input_value(input_value)
+                .expect("restriction value in filter was not a string");
+            restriction = Some(expected.value);
         } else {
             let field = class_definition.resolve_field(field_name);
             let prefixes = &all_frames.context;
@@ -410,7 +409,7 @@ fn compile_edges_to_filter(
         }
     }
     FilterObject {
-        restrictions,
+        restriction,
         edges: result,
     }
 }
@@ -644,9 +643,11 @@ fn compile_query<'a, C: QueryableContextType>(
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     let mut iter = iter;
-    for (restriction_name, expected_value) in filter.restrictions.iter().cloned() {
+    if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
-            expected_value == id_matches_restriction(context, &restriction_name, *id).unwrap()
+            id_matches_restriction(context, &restriction_name, *id)
+                .unwrap()
+                .is_some()
         }));
     }
     for (predicate, filter) in filter.edges.iter() {

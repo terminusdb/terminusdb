@@ -291,7 +291,7 @@ fn pl_id_matches_restriction<'a, C: QueryableContextType>(
     context: &TerminusContext<'a, C>,
     restriction: &str,
     id: u64,
-) -> PrologResult<bool> {
+) -> PrologResult<Option<String>> {
     let prolog_context = &context.context;
     let frame = prolog_context.open_frame();
     let [restriction_term, id_term, reason_term] = frame.new_term_refs();
@@ -306,14 +306,19 @@ fn pl_id_matches_restriction<'a, C: QueryableContextType>(
             &reason_term,
         ],
     );
-    Ok(attempt_opt(open_call.next_solution())?.is_some())
+    if attempt_opt(open_call.next_solution())?.is_some() {
+        let reason: String = reason_term.get_ex()?;
+        Ok(Some(reason))
+    } else {
+        Ok(None)
+    }
 }
 
 pub fn id_matches_restriction<'a, C: QueryableContextType>(
     context: &TerminusContext<'a, C>,
     restriction: &str,
     id: u64,
-) -> Result<bool, juniper::FieldError> {
+) -> Result<Option<String>, juniper::FieldError> {
     let result = pl_id_matches_restriction(context, restriction, id);
     result_to_execution_result(&context.context, result)
 }
@@ -555,12 +560,25 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
 
         fields.append(&mut path_fields);
 
+        let mut applicable_restrictions = Vec::new();
         for restriction in frames.restrictions.values() {
             if restriction.on == class_name {
-                let field_name = format!("_restriction_{}", restriction.id);
-                let field = registry.field::<bool>(&field_name, &());
-                fields.push(field);
+                applicable_restrictions.push(restriction.id.to_owned());
             }
+        }
+
+        if !applicable_restrictions.is_empty() {
+            let enum_name = format!("{class_name}_Restriction");
+            let type_info = GeneratedEnumTypeInfo {
+                name: enum_name,
+                values: applicable_restrictions,
+            };
+
+            let restriction_field = registry
+                .field::<Option<GraphQLJSON>>("_restriction", &())
+                .argument(registry.arg::<GeneratedEnum>("name", &type_info));
+
+            fields.push(restriction_field);
         }
 
         fields.push(registry.field::<ID>("_id", &()));
@@ -772,16 +790,22 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     ClonableIterator::new(CachedClonableIterator::new(ids)),
                     instance,
                 )
-            } else if is_restriction_name(field_name) {
-                const PREFIX_LEN: usize = "_restriction_".len();
-                let restriction = &field_name[PREFIX_LEN..];
-                let original_restriction =
-                    &allframes.class_renaming.get_by_left(restriction).unwrap();
+            } else if field_name == "_restriction" {
+                // fetch argument
+                let restriction_enum_value: GeneratedEnum = arguments.get("name")?;
+                let original_restriction = &allframes
+                    .class_renaming
+                    .get_by_left(&restriction_enum_value.value)
+                    .unwrap();
 
                 let result =
                     id_matches_restriction(executor.context(), original_restriction, self.id);
 
-                Some(result.map(|r| graphql_value!(r)))
+                match result {
+                    Ok(Some(reason)) => Some(Ok(graphql_value!(reason))),
+                    Ok(None) => Some(Ok(graphql_value!(None))),
+                    Err(e) => Some(Err(e)),
+                }
             } else {
                 let field_name_expanded = allframes.context.expand_schema(field_name);
                 let field_id = instance.predicate_id(&field_name_expanded)?;
@@ -933,17 +957,65 @@ fn is_path_field_name(field_name: &str) -> bool {
     field_name.starts_with("_path_to_")
 }
 
-pub fn is_restriction_name(field_name: &str) -> bool {
-    field_name.starts_with("_restriction")
+/// An enum type that is generated dynamically
+pub struct GeneratedEnumTypeInfo {
+    pub name: String,
+    pub values: Vec<String>,
 }
 
-pub fn get_restriction_name(field_name: &str) -> Option<&str> {
-    const PREFIX: &str = "_restriction_";
+/// An enum value that is generated dynamically
+pub struct GeneratedEnum {
+    pub value: String,
+}
 
-    if field_name.starts_with(PREFIX) {
-        Some(&field_name[PREFIX.len()..])
-    } else {
-        None
+impl GraphQLValue for GeneratedEnum {
+    type Context = ();
+
+    type TypeInfo = GeneratedEnumTypeInfo;
+
+    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some(&info.name)
+    }
+}
+
+impl GraphQLType for GeneratedEnum {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(&info.name)
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let values: Vec<_> = info
+            .values
+            .iter()
+            .map(|v| EnumValue {
+                name: v.to_string(),
+                description: None,
+                deprecation_status: DeprecationStatus::Current,
+            })
+            .collect();
+        registry
+            .build_enum_type::<GeneratedEnum>(info, &values)
+            .into_meta()
+    }
+}
+
+impl FromInputValue for GeneratedEnum {
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        match v {
+            InputValue::Enum(value) => Some(Self {
+                value: value.to_owned(),
+            }),
+            InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
+                value: value.to_owned(),
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -1161,6 +1233,27 @@ pub struct BigInt(pub String);
     description = "The `BigInt` scalar type represents non-fractional signed whole numeric values."
 )]
 impl<S> GraphQLScalar for BigInt
+where
+    S: juniper::ScalarValue,
+{
+    fn resolve(&self) -> juniper::Value {
+        juniper::Value::scalar(self.0.to_owned())
+    }
+
+    fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
+        value.as_string_value().map(|s| Self(s.to_owned()))
+    }
+
+    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphQLJSON(pub String);
+
+#[juniper::graphql_scalar(name = "JSON", description = "An arbitrary JSON value.")]
+impl<S> GraphQLScalar for GraphQLJSON
 where
     S: juniper::ScalarValue,
 {
