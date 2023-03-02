@@ -13,7 +13,9 @@
 :- use_module(library(yall)).
 :- use_module(library(lists)).
 
-unannotated(X^^_, X) :-
+unannotated(L, X) :-
+    ground(L),
+    L = X^^_,
     !.
 unannotated(X, X).
 
