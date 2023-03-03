@@ -177,8 +177,8 @@ insurance_schema('
     "@metadata": {
         "restrictions": [
             {   "@on" : "ClaimCase",
-                "_id" : "CauseOfDeathAssessed",
-                "@comment" : "Cause is one of manslaughter, murder, accidental, suicide",
+                "_id" : "CountryOfDeath",
+                "@comment" : "The Country of death is not the same as the country of issue",
                 "_type" : "Restriction",
                 "@given" : [{ "death_certificate_for_claim" :
                               { "country_of_death" : {"@var" : "CountryOfDeath"}},
@@ -188,8 +188,8 @@ insurance_schema('
                            "@neq" : {"@var" : "CountryOfIssue"}}
             },
             {   "@on" : "ClaimCase",
-                "_id" : "CountryOfDeath",
-                "@comment" : "The Country of death is not the same as the country of issue",
+                "_id" : "CauseOfDeathAssessed",
+                "@comment" : "Cause is one of manslaughter, murder, accidental, suicide",
                 "_type" : "Restriction",
                 "@has" : { "death_certificate_for_claim" :
                               { "cause_of_death" :
@@ -261,7 +261,7 @@ insurance_schema('
                 "@given": [{"policy_of_claim":
                                { "start_date" : { "@var": "StartDate" }},
                                "death_certificate_for_claim":
-                               { "date_of_death" : { "@var": "DateOfDeath" }}},],
+                               { "date_of_death" : { "@var": "DateOfDeath" }}}],
                 "@has": { "@with" : "StartDate",
                           "@le" : { "@var" : "DateOfDeath" }},
                 "@on": "ClaimCase",
