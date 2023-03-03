@@ -657,7 +657,7 @@ test(referral_for_service,
 		5 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoDeathCert\", \"message\":\"Claim had no associated death certificate\"}} ]"
 	].
 
-test(premium_refund,
+test(referral_for_assessment,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
              write_schema(insurance_schema, Desc))),
@@ -668,12 +668,13 @@ test(premium_refund,
 
     open_descriptor(Desc, Db),
 
-    Restriction_Name = "PremiumRefund",
+    Restriction_Name = "ReferralForAssessment",
     findall(Id-Reason,
             ids_for_restriction(Db, Restriction_Name, Id, Reason),
             All),
-    print_term(All, []).
-
+    All = [
+        6 - "[ {\"id\":\"ReferralForAssessment\", \"message\":\"Claim requires assessment\", \"reason\": {\"id\":\"CauseOfDeathAssessed\", \"message\":\"Cause is one of manslaughter, murder, accidental, suicide\"}} ]"
+	].
 
 test(cause_of_death,
      [setup((setup_temp_store(State),
