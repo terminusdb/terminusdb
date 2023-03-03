@@ -44,8 +44,9 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
+
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.0.1').
+terminusdb_version('11.0.2').
 /* [[[end]]] */
 
 bootstrap_config_files :-
