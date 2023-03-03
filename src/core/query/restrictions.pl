@@ -9,6 +9,7 @@
 :- use_module(core(document)).
 :- use_module(core(query/algebra)).
 :- use_module(core(query/constraints)).
+:- use_module(core(query/jsonld)).
 
 :- use_module(library(terminus_store)).
 
@@ -17,6 +18,9 @@
 :- use_module(library(lists)).
 :- use_module(library(http/json)).
 :- use_module(library(solution_sequences)).
+
+is_enum(A,_) :-
+    atom(A).
 
 interpret_restriction(and(A,B),DB) :-
     interpret_restriction(A,DB),
@@ -30,6 +34,14 @@ interpret_restriction(impl(A,B), DB) :-
     *-> interpret_restriction(B, DB)
     ;   true
     ).
+interpret_restriction(op(Op,A,B),Db) :-
+    is_enum(A,Db),
+    !,
+    Db = database(Schema, _),
+    database_schema_prefixes(Schema,Prefixes),
+    prefix_expand(B, Prefixes, BEx),
+    effective_operator(Op, Operator),
+    call(Operator, A, BEx).
 interpret_restriction(op(Op,A,B),_) :-
     effective_operator(Op, Operator),
     unannotated(A, ARaw),
@@ -156,7 +168,7 @@ ids_for_restriction(Transaction, Restriction_Name, Id, Reason) :-
     ground(Layer),
     subject_id(Layer, IRI, Id),
     run_restriction_named(Schema, Instance, Restriction_Name, IRI, Reason_JSON),
-    atom_json_dict(Reason, Reason_JSON, [as(string)]).
+    atom_json_dict(Reason, Reason_JSON, [as(string), width(0)]).
 ids_for_restriction(Transaction, Restriction_Name, Id, Reason) :-
     database_instance(Transaction, Instance),
     database_schema(Transaction, Schema),
@@ -165,7 +177,7 @@ ids_for_restriction(Transaction, Restriction_Name, Id, Reason) :-
     ground(Layer),
     run_restriction_named(Schema, Instance, Restriction_Name, IRI, Reason_JSON),
     subject_id(Layer, IRI, Id),
-    atom_json_dict(Reason, Reason_JSON, [as(string)]).
+    atom_json_dict(Reason, Reason_JSON, [as(string), width(0)]).
 
 
 :- begin_tests(restrictions).
@@ -193,10 +205,10 @@ insurance_schema('
                 "_type" : "Restriction",
                 "@has" : { "death_certificate_for_claim" :
                               { "cause_of_death" :
-                                { "@or" : [{ "@eq" : "CauseOfDeath/manslaughter" },
-                                           { "@eq" : "CauseOfDeath/murder" },
-                                           { "@eq" : "CauseOfDeath/accidental" },
-                                           { "@eq" : "CauseOfDeath/suicide" }
+                                { "@or" : [{ "@eq" : "@schema:CauseOfDeath/manslaughter" },
+                                           { "@eq" : "@schema:CauseOfDeath/murder" },
+                                           { "@eq" : "@schema:CauseOfDeath/accidental" },
+                                           { "@eq" : "@schema:CauseOfDeath/suicide" }
                                           ]}}}
             },
             {
@@ -477,6 +489,7 @@ insurance_database(
               death_certificate_for_claim:
               json{ '@type' : "DeathCertificate",
                     name : "Joe",
+                    cause_of_death: "murder",
                     country_of_death: "Country/Germany",
                     date_of_birth: "2012-01-01T00:00:00Z",
                     date_of_death: "2013-01-01T00:00:00Z"},
@@ -638,13 +651,11 @@ test(referral_for_service,
     findall(Id-Reason,
             ids_for_restriction(Db, Restriction_Name, Id, Reason),
             All),
-
     All = [
-        3 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\n      \"id\":\"NoDeathCert\",\n      \"message\":\"Claim had no associated death certificate\"\n    }\n  },\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}\n  }\n]",
-        4 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}\n  }\n]",
-        5 - "[\n  {\n    \"id\":\"ReferralForService\",\n    \"message\":\"Claim requires servicing\",\n    \"reason\": {\n      \"id\":\"NoDeathCert\",\n      \"message\":\"Claim had no associated death certificate\"\n    }\n  }\n]"
-    ].
-
+        3 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoDeathCert\", \"message\":\"Claim had no associated death certificate\"}},  {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}} ]",
+		4 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}} ]",
+		5 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoDeathCert\", \"message\":\"Claim had no associated death certificate\"}} ]"
+	].
 
 test(premium_refund,
      [setup((setup_temp_store(State),
@@ -661,8 +672,27 @@ test(premium_refund,
     findall(Id-Reason,
             ids_for_restriction(Db, Restriction_Name, Id, Reason),
             All),
+    print_term(All, []).
+
+
+test(cause_of_death,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(insurance_schema, Desc))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    insert_insurance_documents(Desc),
+
+    open_descriptor(Desc, Db),
+
+    Restriction_Name = "CauseOfDeathAssessed",
+    findall(Id-Reason,
+            ids_for_restriction(Db, Restriction_Name, Id, Reason),
+            All),
     All = [
-        6 - "[\n  {\n    \"id\":\"PremiumRefund\",\n    \"message\":\"Claim is eligible for a premium refund\",\n    \"none_of\": [\"ReferralForAssessment\", \"ReferralForService\", \"ClaimClosed\" ]\n  }\n]"
+        6 - "[ {\"id\":\"CauseOfDeathAssessed\", \"message\":\"Cause is one of manslaughter, murder, accidental, suicide\"} ]"
+
     ].
 
 
