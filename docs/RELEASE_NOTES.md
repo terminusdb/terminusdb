@@ -1,3 +1,9 @@
+# TerminusDB Server v11.0.2 Release Notes
+
+## Bug fixes
+* On replace, schema documentation entities were not cleaned up properly
+* Fix support for ne (not equal) operator in graphql
+
 # TerminusDB Server v11.0.1 Release Notes
 
 ## Backwards-incompatible changes
