@@ -125,6 +125,8 @@ FilterObject{ edges:
 fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::String(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::String(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::String(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -150,6 +152,8 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
 fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::BigInt(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::BigInt(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::BigInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -166,6 +170,8 @@ fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject
 fn compile_datetime_input_value(string_type: &str, value: DateTimeFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::DateTime(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::DateTime(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::DateTime(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -182,6 +188,8 @@ fn compile_datetime_input_value(string_type: &str, value: DateTimeFilterInputObj
 fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::Float(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::Float(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::Float(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -198,6 +206,8 @@ fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -
 fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::BigFloat(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::BigFloat(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::BigFloat(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -214,6 +224,8 @@ fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObje
 fn compile_small_integer_input_value(string_type: &str, value: IntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::SmallInt(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::SmallInt(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::SmallInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -230,6 +242,8 @@ fn compile_small_integer_input_value(string_type: &str, value: IntFilterInputObj
 fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::Boolean(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::Boolean(GenericOperation::Ne, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
