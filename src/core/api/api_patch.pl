@@ -1,5 +1,6 @@
 :- module(api_patch, [
               api_patch/6,
+              api_patch/7,
               api_diff/6,
               api_diff_id/8,
               api_diff_id_document/8,
@@ -19,6 +20,10 @@
 :- use_module(library(option)).
 
 api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
+    % no auth yet.
+    simple_patch(Patch,Before,After,Options).
+
+api_patch(System_DB, Auth, Path, Patch, Options) :-
     % no auth yet.
     simple_patch(Patch,Before,After,Options).
 

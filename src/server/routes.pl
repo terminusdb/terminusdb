@@ -2459,6 +2459,10 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(patch), cors_handler(Method, patch_handler),
                 [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path)),
+                [method(Method),
                  prefix,
                  time_limit(infinite),
                  methods([options,post])]).
@@ -2488,6 +2492,32 @@ patch_handler(post, Request, System_DB, Auth) :-
             )
         )
     ).
+
+/*
+ * patch_handler(Mode, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+patch_handler(post, Path, Request, System_DB, Auth) :-
+    do_or_die(
+        (   get_payload(Document, Request),
+            _{ patch : Patch
+             } :< Document),
+        error(bad_api_document(Document, [patch]), _)),
+
+    % We should take options about final state here.
+    api_report_errors(
+        patch,
+        Request,
+        (   api_patch(System_DB, Auth, Patch, Before, Result, Document),
+            (   Result = success(After)
+            ->  cors_reply_json(Request, After)
+            ;   Result = conflict(Conflict)
+            ->  cors_reply_json(Request, Conflict, [status(409)])
+            )
+        )
+    ).
+
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
