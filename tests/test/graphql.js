@@ -305,6 +305,26 @@ describe('GraphQL', function () {
       )
     })
 
+    it('ne query', async function () {
+      const NE_QUERY = gql`
+  query PersonQuery {
+     Person(filter:{name:{ne:"Socrates"}}, orderBy : {order : ASC}){
+          name
+        }
+   }`
+      const result = await client.query({ query: NE_QUERY })
+
+      expect(result.data.Person).to.deep.equal(
+        [
+          { name: 'Plato' },
+          { name: 'Aristotle' },
+          { name: 'Immanuel Kant' },
+          { name: 'Karl Popper' },
+          { name: 'Kurt Gödel' },
+        ],
+      )
+    })
+
     it('path query', async function () {
       const PATH_QUERY = gql`
  query PersonQuery {
