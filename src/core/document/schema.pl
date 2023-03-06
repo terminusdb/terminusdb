@@ -696,7 +696,8 @@ is_key(Type) :-
     memberchk(Type, List).
 
 is_documentation(Type) :-
-    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation'], List),
+    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation',
+                 sys:'DocumentationLabelComment'], List),
     memberchk(Type, List).
 
 refute_class_key(Validation_Object,Class,Witness) :-
