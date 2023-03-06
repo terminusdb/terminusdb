@@ -121,7 +121,6 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
     if let Some(val) = value.eq {
         FilterType::String(GenericOperation::Eq, val, string_type.to_string())
     } else if let Some(val) = value.ne {
-        eprintln!("value is ne");
         FilterType::String(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::String(GenericOperation::Lt, val, string_type.to_string())
