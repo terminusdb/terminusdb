@@ -1,6 +1,6 @@
 :- module(api_patch, [
+              api_patch_resource/5,
               api_patch/6,
-              api_patch/7,
               api_diff/6,
               api_diff_id/8,
               api_diff_id_document/8,
@@ -23,9 +23,50 @@ api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
     % no auth yet.
     simple_patch(Patch,Before,After,Options).
 
-api_patch(System_DB, Auth, Path, Patch, Options) :-
-    % no auth yet.
-    simple_patch(Patch,Before,After,Options).
+patch_id(Patch, Id) :-
+    do_or_die(
+        get_dict('@id', Patch, Id),
+        error(no_id_in_patch(Patch), _)
+    ).
+
+patch_id_pairs(Context, Patch, Patch_And_Ids) :-
+    (   is_list(Patch)
+    ->  findall(Patch-Id,
+                (
+                    member(P, Patch),
+                    patch_id(Patch, Id)
+                ),
+                Patch_And_Ids),
+    ;   patch_id(Patch, Id),
+        Patch_And_Ids = [Patch-Id]
+    ).
+
+api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
+    % 1. Check for duplicates, can we make the stuff generic for the replace document api?
+    % 2. Nested document test
+    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
+    create_context(Branch_Descriptor, Commit_Info, Context),
+    merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
+    with_transaction(
+        Context,
+        (
+            findall(Witness-Ids_List,
+                    (   patch_id_pairs(Patch, Patch_And_Ids),
+                        member(Patch-Id, Ids),
+                        apply_diff(Context, Patch, Witness, Ids, Options)
+                    ),
+                    Witnesses_Ids_List),
+            % actually an unzip
+            zip(Witnesses, Ids_List, Witnesses_Ids_List),
+            (   Witnesses = []
+            ->  true
+            ;   throw(error(patch_witnesses(Witnesses)))
+            ),
+            idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+            die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
+        ),
+        _
+    ).
 
 api_diff(_System_DB, _Auth, Before, After, Diff, Options) :-
     % no auth yet.
