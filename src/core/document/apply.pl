@@ -77,6 +77,21 @@ apply_diff(Context, Diff, Conflict, Options) :-
     ).
 
 
+apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Captures_Out) :-
+    do_or_die(
+        get_dict('@id', Diff, ID),
+        error(missing_field('@id', Diff), _)
+    ),
+    get_document(Context, ID, JSON_In),
+    simple_patch(Diff,JSON_In,Result,Options),
+    (   Result = success(JSON_Out)
+    ->  replace_document(Context, JSON_Out, false, true, Captures_In, Ids, Dependencies, Captures_Out),
+        Conflict = null
+    ;   Result = conflict(Conflict_Prototype),
+        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+    ).
+
+
 /*
 Schematic of application
             apply

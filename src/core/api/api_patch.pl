@@ -1,5 +1,5 @@
 :- module(api_patch, [
-              api_patch_resource/5,
+              api_patch_resource/7,
               api_patch/6,
               api_diff/6,
               api_diff_id/8,
@@ -13,7 +13,8 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
-
+:- use_module(core(api/api_document), [idlists_duplicates_toplevel/3]).
+:- use_module(core(document/apply), [apply_diff/4]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
@@ -29,35 +30,37 @@ patch_id(Patch, Id) :-
         error(no_id_in_patch(Patch), _)
     ).
 
-patch_id_pairs(Context, Patch, Patch_And_Ids) :-
+patch_id_pairs(Patch, Patch_And_Ids) :-
     (   is_list(Patch)
-    ->  findall(Patch-Id,
+    ->  findall(P-Id,
                 (
                     member(P, Patch),
                     patch_id(Patch, Id)
                 ),
-                Patch_And_Ids),
+                Patch_And_Ids)
     ;   patch_id(Patch, Id),
         Patch_And_Ids = [Patch-Id]
     ).
 
 api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
-    % 1. Check for duplicates, can we make the stuff generic for the replace document api?
-    % 2. Nested document test
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     create_context(Branch_Descriptor, Commit_Info, Context),
     merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
+    empty_assoc(Empty),
     with_transaction(
         Context,
         (
-            findall(Witness-Ids_List,
-                    (   patch_id_pairs(Patch, Patch_And_Ids),
-                        member(Patch-Id, Ids),
-                        apply_diff(Context, Patch, Witness, Ids, Options)
-                    ),
-                    Witnesses_Ids_List),
+            mapm({Context, Merged_Options}/[Patch-_,Conflict,Ids]>>(
+                     apply_diff_ids_captures(Context, Patch, Conflict, Ids, Merged_Options)
+                 ),
+                 Patch_And_Ids,
+                 Conflicts,
+                 Ids_List,
+                 Empty,
+                 _Captures
+                ),
             % actually an unzip
-            zip(Witnesses, Ids_List, Witnesses_Ids_List),
+            exclude([null]>>true, Conflicts, Witnesses),
             (   Witnesses = []
             ->  true
             ;   throw(error(patch_witnesses(Witnesses)))

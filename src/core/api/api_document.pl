@@ -9,7 +9,8 @@
               call_catch_document_mutation/2,
               api_read_document_selector/11,
               api_generate_document_ids/4,
-              api_get_document/5
+              api_get_document/5,
+              idlists_duplicates_toplevel/3
           ]).
 
 :- use_module(core(util)).
