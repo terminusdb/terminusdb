@@ -13425,6 +13425,77 @@ test(schema_read_class,
          choice:'Choice',
          name:'xsd:string'}.
 
+
+test(schema_update_i18n_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Schema_Document =
+    json{'@documentation':
+         [json{'@comment':"An example class",
+               '@label':"Example",
+               '@language':"en",
+               '@properties':
+               json{choice:json{'@comment':"A thing to choose",
+                                '@label':"choice"},
+                    name:json{'@comment':"The name of the example object",
+                              '@label':"name"}}},
+          json{'@comment':"Foo",
+               '@label':"Bar",
+               '@language':"de",
+               '@properties':
+               json{choice:json{'@comment':"Baz",
+                                '@label':"Zib"},
+                    name:json{'@comment':"Zukunft",
+                              '@label':"Zimmer"}}}],
+         '@id':'Example',
+         '@type':'Class',
+         choice:'Choice',
+         name:'xsd:string'},
+
+    with_test_transaction(Desc,
+                          C1,
+                          replace_schema_document(
+                              C1,
+                              Schema_Document)
+                         ),
+
+    get_schema_document(Desc, 'Example', Example),
+
+    Example = json{ '@documentation':
+                    [ json{ '@comment':"An example class",
+							'@label':"Example",
+							'@language':"en",
+							'@properties':json{ choice:json{ '@comment':"A thing to choose",
+														     '@label':"choice"
+													       },
+												name:json{ '@comment':"The name of the example object",
+													       '@label':"name"
+													     }
+											  }
+						  },
+					  json{ '@comment':"Foo",
+							'@label':"Bar",
+							'@language':"de",
+							'@properties':json{ choice:json{ '@comment':"Baz",
+														     '@label':"Zib"
+													       },
+												name:json{ '@comment':"Zukunft",
+													       '@label':"Zimmer"
+													     }
+											  }
+						  }
+					],
+					'@id':'Example',
+					'@type':'Class',
+					choice:'Choice',
+					name:'xsd:string'
+				  }.
+
 test(schema_read_enum,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
