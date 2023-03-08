@@ -218,7 +218,7 @@ api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures
                 insert_schema_document_unsafe(Transaction, Prefixes, Document),
                 error(document_insertion_failed_unexpectedly(Document), _)),
             do_or_die(
-                Id = (Document.get('@id')),
+                get_dict('@id', Document, Id),
                 error(document_has_no_id_somehow, _)))
     ).
 api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Out, SH-ST) :-
