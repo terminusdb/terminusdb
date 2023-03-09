@@ -246,7 +246,7 @@ module.exports = {
       }
     },
     deleteSuccess: {
-      status: 200,
+      status: 204,
     },
     deleteFailure (errorObject) {
       const result = {
