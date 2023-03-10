@@ -61,24 +61,28 @@ describe('patch', function () {
       const res = await agent.post(path).send({ patch, author, message })
       expect(res.body).to.deep.equal({
         '@type': 'api:PatchResponse',
-        'api:error': { '@type': 'api:PatchConflict', 'api:conflicts': [
-          { '@id' : id1,
-            name: {
-              '@expected': "quux",
-              '@found': "foo",
-              '@op': "Conflict"
-            }
-          }
-        ] },
+        'api:error': {
+          '@type': 'api:PatchConflict',
+          'api:conflicts': [
+            {
+              '@id': id1,
+              name: {
+                '@expected': 'quux',
+                '@found': 'foo',
+                '@op': 'Conflict',
+              },
+            },
+          ],
+        },
         'api:message': 'The patch did not apply cleanly because of the attached conflicts',
-        'api:status': 'api:conflict'
+        'api:status': 'api:conflict',
       })
     })
 
     it('applies several patches to db with final state match', async function () {
       const path = api.path.patchDb(agent)
       const patch = [{ '@id': id1, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } },
-                     { '@id': id2, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } }]
+        { '@id': id2, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } }]
       const author = 'me'
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
@@ -88,26 +92,31 @@ describe('patch', function () {
     it('fails apply several patches to db without final state match', async function () {
       const path = api.path.patchDb(agent)
       const patch = [{ '@id': id1, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } },
-                     { '@id': id2, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } }]
+        { '@id': id2, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } }]
       const author = 'me'
       const message = 'yo'
-      const match_final_state = false
-      const res = await agent.post(path).send({ match_final_state, patch, author, message })
+      const res = await agent.post(path).send({
+        match_final_state: false,
+        patch,
+        author,
+        message,
+      })
 
       expect(res.body).to.deep.equal({
         '@type': 'api:PatchResponse',
         'api:error':
-        { '@type': 'api:PatchConflict',
+        {
+          '@type': 'api:PatchConflict',
           'api:conflicts': [
             {
               '@id': id2,
-              name: { '@expected': 'foo', '@found': 'bar', '@op': 'Conflict' }
-            }
-          ] },
+              name: { '@expected': 'foo', '@found': 'bar', '@op': 'Conflict' },
+            },
+          ],
+        },
         'api:message': 'The patch did not apply cleanly because of the attached conflicts',
-        'api:status': 'api:conflict'
+        'api:status': 'api:conflict',
       })
     })
-
   })
 })
