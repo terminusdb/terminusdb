@@ -14,7 +14,7 @@
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(api/api_document), [idlists_duplicates_toplevel/3]).
-:- use_module(core(document/apply), [apply_diff/4]).
+:- use_module(core(document/apply), [apply_diff_ids_captures/7]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
@@ -50,6 +50,7 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
     with_transaction(
         Context,
         (
+            patch_id_pairs(Patch, Patch_And_Ids),
             mapm({Context, Merged_Options}/[Patch-_,Conflict,Ids]>>(
                      apply_diff_ids_captures(Context, Patch, Conflict, Ids, Merged_Options)
                  ),
@@ -59,11 +60,15 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
                  Empty,
                  _Captures
                 ),
+            format(user_error, "ids: ~q", [Ids_List]),
             % actually an unzip
             exclude([null]>>true, Conflicts, Witnesses),
             (   Witnesses = []
             ->  true
-            ;   throw(error(patch_witnesses(Witnesses)))
+            ;   maplist([conflict(Conflict),Conflict]>>true,
+                        Witnesses,
+                        Conflicts),
+                throw(error(patch_conflicts(Conflicts)))
             ),
             idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
             die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))

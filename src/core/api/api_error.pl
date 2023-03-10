@@ -1425,6 +1425,14 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
                               'api:user' : User,
                               'api:scope' : Scope }
             }.
+api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
+    format(string(Msg), "The patch did not apply cleanly because of the attached conflicts", []),
+    JSON = _{'@type' : 'api:PatchResponse',
+             'api:status' : "api:conflict",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:PatchConflict",
+                              'api:conflicts' : Conflicts }
+            }.
 api_error_jsonld_(woql, Error, JSON) :-
     api_document_error_jsonld(woql, Error, JSON).
 api_error_jsonld_(access_documents, Error, JSON) :-

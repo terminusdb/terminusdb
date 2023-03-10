@@ -2500,21 +2500,25 @@ patch_handler(post, Request, System_DB, Auth) :-
  */
 patch_handler(post, Path, Request, System_DB, Auth) :-
     do_or_die(
-        (   get_payload(Document, Request),
-            _{ patch : Patch
-             } :< Document),
-        error(bad_api_document(Document, [patch]), _)),
-
+        (   get_payload(JSON, Request),
+            _{ patch : Patch } :< JSON),
+        error(bad_api_document(JSON, [patch]), _)),
     % We should take options about final state here.
     api_report_errors(
         patch,
         Request,
-        (   api_patch(System_DB, Auth, Patch, Before, Result, Document),
-            (   Result = success(After)
-            ->  cors_reply_json(Request, After)
-            ;   Result = conflict(Conflict)
-            ->  cors_reply_json(Request, Conflict, [status(409)])
-            )
+        (   (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, author, text, Author),
+            param_value_search_or_json_required(Search, JSON, message, text, Message),
+            api_patch_resource(System_DB, Auth, Path, Patch,
+                               commit_info{
+                                   author: Author,
+                                   message: Message },
+                               Ids,
+                               []),
+            cors_reply_json(Request, Ids)
         )
     ).
 
