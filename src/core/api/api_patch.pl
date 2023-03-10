@@ -13,7 +13,10 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
-:- use_module(core(api/api_document), [idlists_duplicates_toplevel/3]).
+:- use_module(core(api/api_document), [
+                  idlists_duplicates_toplevel/3,
+                  nonground_captures/2
+              ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
@@ -36,7 +39,7 @@ patch_id_pairs(Patch, Patch_And_Ids) :-
     ->  findall(P-Id,
                 (
                     member(P, Patch),
-                    patch_id(Patch, Id)
+                    patch_id(P, Id)
                 ),
                 Patch_And_Ids)
     ;   patch_id(Patch, Id),
@@ -52,23 +55,24 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
         Context,
         (
             patch_id_pairs(Patch, Patch_And_Ids),
-            mapm({Context, Merged_Options}/[Patch-_,Conflict,Ids]>>(
-                     apply_diff_ids_captures(Context, Patch, Conflict, Ids, Merged_Options)
+            print_term(Patch_And_Ids,[output(user_error)]),
+            mapm({Context, Merged_Options}/[Patch-_,Conflict,Ids,C1,C2]>>(
+                     apply_diff_ids_captures(Context, Patch, Conflict, Ids, Merged_Options,C1,C2)
                  ),
                  Patch_And_Ids,
                  Conflicts,
                  Ids_List,
                  Empty,
-                 _Captures
+                 Captures
                 ),
-            % actually an unzip
+            !,
+            die_if(nonground_captures(Captures, Nonground),
+                   error(not_all_captures_found(Nonground), _)),
+
             exclude([null]>>true, Conflicts, Witnesses),
             (   Witnesses = []
             ->  true
-            ;   maplist([conflict(Conflict),Conflict]>>true,
-                        Witnesses,
-                        Conflicts),
-                throw(error(patch_conflicts(Conflicts)))
+            ;   throw(error(patch_conflicts(Witnesses)))
             ),
             idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
             die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))

@@ -1502,6 +1502,7 @@ error_type_(triples, 'api:TriplesErrorResponse').
 error_type_(diff, 'api:DiffErrorResponse').
 error_type_(apply, 'api:ApplyErrorResponse').
 error_type_(toplevel, 'api:TopLevelResponse').
+error_type_(patch, 'api:PatchErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1558,6 +1559,7 @@ document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 document_error_type(diff, 'api:DiffErrorResponse').
 document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
+%document_error_type(patch, 'api:PatchErrorResponse').
 
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),

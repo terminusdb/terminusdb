@@ -10,7 +10,8 @@
               api_read_document_selector/11,
               api_generate_document_ids/4,
               api_get_document/5,
-              idlists_duplicates_toplevel/3
+              idlists_duplicates_toplevel/3,
+              nonground_captures/2
           ]).
 
 :- use_module(core(util)).

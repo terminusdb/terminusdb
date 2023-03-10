@@ -2511,12 +2511,13 @@ patch_handler(post, Path, Request, System_DB, Auth) :-
             ;   Search = []),
             param_value_search_or_json_required(Search, JSON, author, text, Author),
             param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_optional(Search, JSON, match_final_state, boolean, true, Matches),
             api_patch_resource(System_DB, Auth, Path, Patch,
                                commit_info{
                                    author: Author,
                                    message: Message },
                                Ids,
-                               []),
+                               [match_final_state(Matches)]),
             cors_reply_json(Request, Ids)
         )
     ).

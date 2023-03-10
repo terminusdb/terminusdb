@@ -92,6 +92,7 @@ apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Capt
         Conflict = null
     ;   Result = conflict(Conflict_Prototype),
         Ids = [],
+        Captures_Out = Captures_In,
         put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
     ).
 
