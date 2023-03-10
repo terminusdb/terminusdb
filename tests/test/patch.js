@@ -40,7 +40,7 @@ describe('patch', function () {
 
     it('applies patch to db', async function () {
       const path = api.path.patchDb(agent)
-      const patch = { '@id': id1, name: { '@op' : "SwapValue", '@before': 'foo', '@after': 'bar' } }
+      const patch = { '@id': id1, name: { '@op': 'SwapValue', '@before': 'foo', '@after': 'bar' } }
       const author = 'me'
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
