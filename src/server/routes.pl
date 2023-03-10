@@ -431,7 +431,6 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 chunked,
                  time_limit(infinite),
                  methods([head,options,post,delete,get,put])]).
 
@@ -573,7 +572,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            nl,nl
+            format("Status: 204~n~n")
         )).
 
 document_handler(put, Path, Request, System_DB, Auth) :-
@@ -3354,6 +3353,7 @@ cors_reply_json(Request, JSON, Options) :-
 cors_json_stream_write_headers_(Request, Data_Version, As_List) :-
     write_cors_headers(Request),
     write_data_version_header(Data_Version),
+    format("Transfer-Encoding: chunked~n"),
     (   As_List = true
     ->  % Write the JSON header
         format("Content-type: application/json; charset=UTF-8~n~n")
