@@ -55,7 +55,6 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
         Context,
         (
             patch_id_pairs(Patch, Patch_And_Ids),
-            print_term(Patch_And_Ids,[output(user_error)]),
             mapm({Context, Merged_Options}/[Patch-_,Conflict,Ids,C1,C2]>>(
                      apply_diff_ids_captures(Context, Patch, Conflict, Ids, Merged_Options,C1,C2)
                  ),
