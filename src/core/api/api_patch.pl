@@ -23,6 +23,9 @@
 :- use_module(library(plunit)).
 :- use_module(library(option)).
 :- use_module(library(assoc)).
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
+:- use_module(library(yall)).
 
 api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
     % no auth yet.
@@ -46,6 +49,17 @@ patch_id_pairs(Patch, Patch_And_Ids) :-
         Patch_And_Ids = [Patch-Id]
     ).
 
+map_apply_captures(Context,Options,Patch_And_Ids,Conflicts,Ids_List,Empty,Captures) :-
+    mapm({Context, Options}/[Patch-_,Conflict,Ids,C1,C2]>>(
+             apply_diff_ids_captures(Context, Patch, Conflict, Ids, Options, C1, C2)
+         ),
+         Patch_And_Ids,
+         Conflicts,
+         Ids_List,
+         Empty,
+         Captures
+        ).
+
 api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     create_context(Branch_Descriptor, Commit_Info, Context),
@@ -54,16 +68,8 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
     with_transaction(
         Context,
         (
-            patch_id_pairs(Patch, Patch_And_Ids),
-            mapm({Context, Merged_Options}/[Patch-_,Conflict,Ids,C1,C2]>>(
-                     apply_diff_ids_captures(Context, Patch, Conflict, Ids, Merged_Options,C1,C2)
-                 ),
-                 Patch_And_Ids,
-                 Conflicts,
-                 Ids_List,
-                 Empty,
-                 Captures
-                ),
+            patch_id_pairs(Patch, Patch_Ids),
+            map_apply_captures(Context,Merged_Options,Patch_Ids,Conflicts,Ids_List,Empty,Captures),
             !,
             die_if(nonground_captures(Captures, Nonground),
                    error(not_all_captures_found(Nonground), _)),
