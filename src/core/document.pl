@@ -85,6 +85,7 @@
 
               % apply.pl
               apply_diff/4,
+              apply_diff_ids_captures/7,
 
               % json_rdf.pl
               is_json_document_type/1,

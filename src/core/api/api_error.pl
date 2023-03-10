@@ -1425,6 +1425,14 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
                               'api:user' : User,
                               'api:scope' : Scope }
             }.
+api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
+    format(string(Msg), "The patch did not apply cleanly because of the attached conflicts", []),
+    JSON = _{'@type' : 'api:PatchResponse',
+             'api:status' : "api:conflict",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:PatchConflict",
+                              'api:conflicts' : Conflicts }
+            }.
 api_error_jsonld_(woql, Error, JSON) :-
     api_document_error_jsonld(woql, Error, JSON).
 api_error_jsonld_(access_documents, Error, JSON) :-
@@ -1494,6 +1502,7 @@ error_type_(triples, 'api:TriplesErrorResponse').
 error_type_(diff, 'api:DiffErrorResponse').
 error_type_(apply, 'api:ApplyErrorResponse').
 error_type_(toplevel, 'api:TopLevelResponse').
+error_type_(patch, 'api:PatchErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1550,6 +1559,7 @@ document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 document_error_type(diff, 'api:DiffErrorResponse').
 document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
+%document_error_type(patch, 'api:PatchErrorResponse').
 
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),

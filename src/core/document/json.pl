@@ -62,7 +62,9 @@
               update_captures_with_id/4,
               capture_ref/4,
               schema_document_exists/2,
-              document_exists/2
+              document_exists/2,
+              compress_schema_uri/4,
+              compress_dict_uri/4
           ]).
 
 :- use_module(instance).
