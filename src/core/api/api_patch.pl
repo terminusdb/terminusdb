@@ -19,6 +19,7 @@
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
+:- use_module(library(assoc)).
 
 api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
     % no auth yet.
