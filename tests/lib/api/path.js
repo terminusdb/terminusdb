@@ -105,6 +105,12 @@ module.exports = {
   patch () {
     return '/api/patch'
   },
+  patchDb (params, extra) {
+    params = new Params({ ...params, ...extra })
+    const orgName = params.stringRequired('orgName')
+    const dbName = params.stringRequired('dbName')
+    return `/api/patch/${orgName}/${dbName}`
+  },
   graphQL (params, extra) {
     params = new Params({ ...params, ...extra })
     const orgName = params.stringRequired('orgName')
