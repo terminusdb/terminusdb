@@ -60,7 +60,6 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
                  Empty,
                  _Captures
                 ),
-            format(user_error, "ids: ~q", [Ids_List]),
             % actually an unzip
             exclude([null]>>true, Conflicts, Witnesses),
             (   Witnesses = []
