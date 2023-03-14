@@ -128,6 +128,7 @@
               api_generate_document_ids/4,
               api_read_document_selector/11,
               api_generate_document_ids/4,
+              api_get_documents/4,
               api_get_document/5,
               call_catch_document_mutation/2,
 

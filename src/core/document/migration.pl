@@ -405,8 +405,8 @@ perform_schema_migration(Descriptor, Commit_Info, Ops, Transaction2) :-
     create_class_dictionary(Transaction, Dictionary),
     interpret_schema_operations(Ops, Dictionary, After),
     class_dictionary_to_schema(After, Schema),
-    api_full_replace_schema(Transaction, Schema),
-    Transaction.schema
+    api_full_replace_schema(Transaction, Schema).
+    %Transaction.schema
 
 /*
  * Actually perform the upgrade
