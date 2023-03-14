@@ -514,7 +514,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         let mut inverted_fields: Vec<_> = Vec::new();
         if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
             for (field_name, ifd) in inverted_type.domain.iter() {
-                let class = &ifd.class;
+                let class = &frames.graphql_class_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
                     continue;
                 }
