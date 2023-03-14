@@ -383,7 +383,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         let mut inverted_fields: Vec<_> = Vec::new();
         if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
             for (field_name, ifd) in inverted_type.domain.iter() {
-                let class = &ifd.class;
+                let class = &frames.graphql_class_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
                     continue;
                 }
@@ -696,7 +696,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                 } else if let Some(enum_type) = enum_type {
                                     let enum_uri = instance.id_object_node(object_id).unwrap();
                                     let enum_value = enum_node_to_value(enum_type, &enum_uri);
-                                    let enum_definition = allframes.frames[enum_type].as_enum_definition();
+                                    let enum_definition =
+                                        allframes.frames[enum_type].as_enum_definition();
                                     let value = juniper::Value::Scalar(DefaultScalarValue::String(
                                         enum_definition.name_value(&enum_value).to_string(),
                                     ));
