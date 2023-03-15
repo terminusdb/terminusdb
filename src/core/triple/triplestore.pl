@@ -76,7 +76,8 @@ default_triple_store(Triple_Store) :-
     !,
     db_path(Path),
     assert_database_version_is_current(Path),
-    open_grpc_store(Path, Endpoint, 1, Triple_Store).
+    lru_cache_size(Cache_Size),
+    open_grpc_store(Path, Endpoint, 1, Cache_Size, Triple_Store).
 default_triple_store(Triple_Store) :-
     db_path(Path),
     assert_database_version_is_current(Path),
