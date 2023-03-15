@@ -10,7 +10,7 @@ use crate::value::{base_type_kind, BaseTypeKind};
 use super::{
     frame::{AllFrames, TypeDefinition},
     query::EnumOperation,
-    schema::{BigFloat, BigInt, DateTime, TerminusEnum},
+    schema::{BigFloat, BigInt, DateTime, GeneratedEnum, GeneratedEnumTypeInfo, TerminusEnum},
 };
 
 pub struct FilterInputObject {
@@ -133,6 +133,23 @@ impl GraphQLType for FilterInputObject {
                     }
                 })
                 .collect();
+
+            let mut applicable_restrictions = Vec::new();
+            for restriction in info.frames.restrictions.values() {
+                if restriction.on == info.type_name {
+                    applicable_restrictions.push(restriction.id.to_owned());
+                }
+            }
+
+            if !applicable_restrictions.is_empty() {
+                let enum_name = format!("{}_Restriction", info.type_name);
+                let type_info = GeneratedEnumTypeInfo {
+                    name: enum_name,
+                    values: applicable_restrictions,
+                };
+
+                args.push(registry.arg::<Option<GeneratedEnum>>("_restriction", &type_info));
+            }
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",

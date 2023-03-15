@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
 use juniper::{
-    DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue, InputValue,
-    Registry, Value, ID,
+    graphql_value, DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue,
+    InputValue, Registry, Value, ID,
 };
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
@@ -33,6 +33,7 @@ pub struct SystemInfo {
 
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
+    pub transaction_term: Term<'a>,
     pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
@@ -70,6 +71,9 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
             transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
         let instance = transaction_instance_layer(context, transaction_term)?;
 
+        let new_transaction_term = context.new_term_ref();
+        new_transaction_term.unify(&transaction_term)?;
+
         Ok(TerminusContext {
             system_info: SystemInfo {
                 user,
@@ -77,6 +81,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
                 meta,
                 commit,
             },
+            transaction_term: new_transaction_term,
             context,
             schema,
             instance,
@@ -174,7 +179,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     where
         DefaultScalarValue: 'r,
     {
-        let fields: Vec<_> = info
+        let mut fields: Vec<_> = info
             .allframes
             .frames
             .iter()
@@ -192,6 +197,34 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                 }
             })
             .collect();
+        let restriction_fields: Vec<_> = info
+            .allframes
+            .restrictions
+            .iter()
+            .map(|(name, restrictiondef)| {
+                let newinfo = TerminusTypeInfo {
+                    class: restrictiondef.on.to_owned(),
+                    allframes: info.allframes.clone(),
+                };
+                let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                let class_def;
+                if let TypeDefinition::Class(c) = info
+                    .allframes
+                    .frames
+                    .get(&restrictiondef.on)
+                    .expect("Restriction not on known class")
+                {
+                    class_def = c;
+                } else {
+                    panic!("Restriction not on a class");
+                }
+
+                add_arguments(&newinfo, registry, field, class_def)
+            })
+            .collect();
+
+        fields.extend(restriction_fields);
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
@@ -203,6 +236,91 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
 
 pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
+}
+
+fn result_to_execution_result<'a, C: QueryableContextType, T>(
+    context: &Context<'a, C>,
+    result: PrologResult<T>,
+) -> Result<T, juniper::FieldError> {
+    result_to_string_result(context, result).map_err(|e| match e {
+        PrologStringError::Failure => juniper::FieldError::new("prolog call failed", Value::Null),
+        PrologStringError::Exception(e) => juniper::FieldError::new(e, Value::Null),
+    })
+}
+
+fn pl_ids_from_restriction<'a, C: QueryableContextType>(
+    context: &TerminusContext<'a, C>,
+    restriction: &RestrictionDefinition,
+) -> PrologResult<Vec<u64>> {
+    let mut result = Vec::new();
+    let prolog_context = &context.context;
+    let frame = prolog_context.open_frame();
+    let [restriction_term, id_term, reason_term] = frame.new_term_refs();
+    restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
+    let open_call = frame.open(
+        pred!("query:ids_for_restriction/4"),
+        [
+            &context.transaction_term,
+            &restriction_term,
+            &id_term,
+            &reason_term,
+        ],
+    );
+    while attempt_opt(open_call.next_solution())?.is_some() {
+        let id: u64 = id_term.get_ex()?;
+        result.push(id);
+    }
+
+    Ok(result)
+}
+
+fn ids_from_restriction<'a, C: QueryableContextType>(
+    context: &TerminusContext<'a, C>,
+    restriction: &RestrictionDefinition,
+) -> Result<Vec<u64>, juniper::FieldError> {
+    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
+        r.sort();
+        r.dedup();
+
+        r
+    });
+    result_to_execution_result(&context.context, result)
+}
+
+fn pl_id_matches_restriction<'a, C: QueryableContextType>(
+    context: &TerminusContext<'a, C>,
+    restriction: &str,
+    id: u64,
+) -> PrologResult<Option<String>> {
+    let prolog_context = &context.context;
+    let frame = prolog_context.open_frame();
+    let [restriction_term, id_term, reason_term] = frame.new_term_refs();
+    restriction_term.unify(restriction)?;
+    id_term.unify(id)?;
+    let open_call = frame.open(
+        pred!("query:ids_for_restriction/4"),
+        [
+            &context.transaction_term,
+            &restriction_term,
+            &id_term,
+            &reason_term,
+        ],
+    );
+    if attempt_opt(open_call.next_solution())?.is_some() {
+        let reason: String = reason_term.get_ex()?;
+        Ok(Some(reason))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn id_matches_restriction<'a, C: QueryableContextType>(
+    context: &TerminusContext<'a, C>,
+    restriction: &str,
+    id: u64,
+) -> Result<Option<String>, juniper::FieldError> {
+    let result = pl_id_matches_restriction(context, restriction, id);
+    result_to_execution_result(&context.context, result)
 }
 
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
@@ -224,14 +342,26 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         if field_name == "_system" {
             executor.resolve_with_ctx(&(), &System {})
         } else {
+            let zero_iter;
+            let type_name;
+            if let Some(restriction) = info.allframes.restrictions.get(field_name) {
+                // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
+                type_name = restriction.on.as_str();
+                let id_list = ids_from_restriction(executor.context(), restriction)?;
+                zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
+            } else {
+                type_name = field_name;
+                zero_iter = None;
+            }
             let objects = match executor.context().instance.as_ref() {
                 Some(instance) => run_filter_query(
+                    executor.context(),
                     instance,
                     &info.allframes.context,
                     arguments,
-                    field_name,
+                    type_name,
                     &info.allframes,
-                    None,
+                    zero_iter,
                 )
                 .into_iter()
                 .map(|id| TerminusType::new(id))
@@ -241,7 +371,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
 
             executor.resolve(
                 &TerminusTypeInfo {
-                    class: field_name.to_owned(),
+                    class: type_name.to_owned(),
                     allframes: info.allframes.clone(),
                 },
                 &objects,
@@ -283,6 +413,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
     }
 
     fn generate_class_type<'r>(
+        class_name: &str,
         d: &ClassDefinition,
         info: &<Self as GraphQLValue>::TypeInfo,
         registry: &mut juniper::Registry<'r, DefaultScalarValue>,
@@ -429,6 +560,27 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
 
         fields.append(&mut path_fields);
 
+        let mut applicable_restrictions = Vec::new();
+        for restriction in frames.restrictions.values() {
+            if restriction.on == class_name {
+                applicable_restrictions.push(restriction.id.to_owned());
+            }
+        }
+
+        if !applicable_restrictions.is_empty() {
+            let enum_name = format!("{class_name}_Restriction");
+            let type_info = GeneratedEnumTypeInfo {
+                name: enum_name,
+                values: applicable_restrictions,
+            };
+
+            let restriction_field = registry
+                .field::<Option<GraphQLJSON>>("_restriction", &())
+                .argument(registry.arg::<GeneratedEnum>("name", &type_info));
+
+            fields.push(restriction_field);
+        }
+
         fields.push(registry.field::<ID>("_id", &()));
         fields.push(registry.field::<ID>("_type", &()));
 
@@ -454,7 +606,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
         let allframes = &info.allframes;
         let frame = &allframes.frames[class];
         match frame {
-            TypeDefinition::Class(d) => Self::generate_class_type(d, info, registry),
+            TypeDefinition::Class(d) => Self::generate_class_type(&class, d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
         }
     }
@@ -627,7 +779,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     }
                 }
             } else if is_path_field_name(field_name) {
-                let class = &field_name[9..field_name.len()];
+                const PREFIX_LEN: usize = "_path_to_".len();
+                let class = &field_name[PREFIX_LEN..];
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
                     Some(class),
@@ -637,6 +790,22 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     ClonableIterator::new(CachedClonableIterator::new(ids)),
                     instance,
                 )
+            } else if field_name == "_restriction" {
+                // fetch argument
+                let restriction_enum_value: GeneratedEnum = arguments.get("name")?;
+                let original_restriction = &allframes
+                    .class_renaming
+                    .get_by_left(&restriction_enum_value.value)
+                    .unwrap();
+
+                let result =
+                    id_matches_restriction(executor.context(), original_restriction, self.id);
+
+                match result {
+                    Ok(Some(reason)) => Some(Ok(graphql_value!(reason))),
+                    Ok(None) => Some(Ok(graphql_value!(None))),
+                    Err(e) => Some(Err(e)),
+                }
             } else {
                 let field_name_expanded = allframes.context.expand_schema(field_name);
                 let field_id = instance.predicate_id(&field_name_expanded)?;
@@ -788,6 +957,68 @@ fn is_path_field_name(field_name: &str) -> bool {
     field_name.starts_with("_path_to_")
 }
 
+/// An enum type that is generated dynamically
+pub struct GeneratedEnumTypeInfo {
+    pub name: String,
+    pub values: Vec<String>,
+}
+
+/// An enum value that is generated dynamically
+pub struct GeneratedEnum {
+    pub value: String,
+}
+
+impl GraphQLValue for GeneratedEnum {
+    type Context = ();
+
+    type TypeInfo = GeneratedEnumTypeInfo;
+
+    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some(&info.name)
+    }
+}
+
+impl GraphQLType for GeneratedEnum {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(&info.name)
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let values: Vec<_> = info
+            .values
+            .iter()
+            .map(|v| EnumValue {
+                name: v.to_string(),
+                description: None,
+                deprecation_status: DeprecationStatus::Current,
+            })
+            .collect();
+        registry
+            .build_enum_type::<GeneratedEnum>(info, &values)
+            .into_meta()
+    }
+}
+
+impl FromInputValue for GeneratedEnum {
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        match v {
+            InputValue::Enum(value) => Some(Self {
+                value: value.to_owned(),
+            }),
+            InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
+                value: value.to_owned(),
+            }),
+            _ => None,
+        }
+    }
+}
+
 pub struct TerminusEnum {
     pub value: String,
 }
@@ -880,6 +1111,7 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
     if let Some(doc_type) = doc_type {
         let object_ids = match executor.context().instance.as_ref() {
             Some(instance) => run_filter_query(
+                executor.context(),
                 instance,
                 &info.allframes.context,
                 arguments,
@@ -1001,6 +1233,27 @@ pub struct BigInt(pub String);
     description = "The `BigInt` scalar type represents non-fractional signed whole numeric values."
 )]
 impl<S> GraphQLScalar for BigInt
+where
+    S: juniper::ScalarValue,
+{
+    fn resolve(&self) -> juniper::Value {
+        juniper::Value::scalar(self.0.to_owned())
+    }
+
+    fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
+        value.as_string_value().map(|s| Self(s.to_owned()))
+    }
+
+    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
+        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphQLJSON(pub String);
+
+#[juniper::graphql_scalar(name = "JSON", description = "An arbitrary JSON value.")]
+impl<S> GraphQLScalar for GraphQLJSON
 where
     S: juniper::ScalarValue,
 {

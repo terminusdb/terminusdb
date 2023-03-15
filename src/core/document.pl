@@ -13,6 +13,7 @@
               json_schema_elaborate/3,
               context_triple/2,
               database_prefixes/2,
+              database_schema_prefixes/2,
               database_and_default_prefixes/2,
               run_insert_document/4,
               create_graph_from_json/5,
@@ -24,6 +25,7 @@
               replace_json_schema/2,
 
               database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
