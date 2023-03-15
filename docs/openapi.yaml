@@ -1363,6 +1363,60 @@ paths:
               schema:
                 type: object
                 example: { "name" : { "@op" : "ValueSwap", "@before" : "Doug", "@after": "Jane" }}
+  /patch/{path}:
+    parameters:
+      - $ref: '#/components/parameters/branch_path'
+    post:
+      summary: Apply a patch object to a resource
+      tags:
+        - Change management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: 
+                - "patch"
+                - "author"
+                - "message"
+              properties:
+                "patch":
+                  type: object
+                  example:
+                    - '@id': Obj/id1
+                      name:
+                        '@op': SwapValue
+                        '@before': foo
+                        '@after': bar
+                    - '@id': Obj/id2
+                      name:
+                        '@op': SwapValue
+                        '@before': foo
+                        '@after': bar
+                "author": 
+                  type: string
+                  example: me
+                "message": 
+                  type: string
+                  example: message
+      responses:
+        200:
+          description: "Patch applied cleanly"
+          content:
+            application/json:
+              schema:
+                type: array
+                items: 
+                  type: string
+                example: ["Obj/id1", "Obj/id2"]
+        409:
+          description: "Failed to apply patch: returning conflict patch"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: { "@type" : "api:PatchError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /apply/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
