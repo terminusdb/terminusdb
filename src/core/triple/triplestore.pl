@@ -80,7 +80,8 @@ default_triple_store(Triple_Store) :-
 default_triple_store(Triple_Store) :-
     db_path(Path),
     assert_database_version_is_current(Path),
-    open_archive_store(Path,Triple_Store).
+    lru_cache_size(Cache_Size),
+    open_archive_store(Path,Cache_Size,Triple_Store).
 
 /**
  * memory_triple_store(-Triple_Store) is det.

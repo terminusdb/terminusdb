@@ -33,7 +33,8 @@
               dashboard_enabled/0,
               parallelize_enabled/0,
               grpc_label_endpoint/1,
-              crypto_password_cost/1
+              crypto_password_cost/1,
+              lru_cache_size/1
           ]).
 
 :- use_module(library(pcre)).
@@ -301,3 +302,7 @@ grpc_label_endpoint(Endpoint) :-
     getenv('TERMINUSDB_GRPC_LABEL_ENDPOINT', Endpoint).
 
 crypto_password_cost(10).
+
+:- table lru_cache_size/1.
+lru_cache_size(Cache_Size) :-
+    getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).
