@@ -1,3 +1,17 @@
+# TerminusDB Server v11.0.3 Release Notes
+
+## Bug fixes
+
+* Prevent early failure on full schema replace where id is missing
+* Support stringy filters on all stringy types, not just strings
+* Return 204 on doc delete (and disable chunking for non-gets)
+* Fix inversion naming issue. This causes issues when using non-standard GraphQL class names
+
+## New
+
+* Adding Patch Endpoint for Resources
+* Implement pinned organization ENV variable to keep data products of whole organizations/teams in memory
+
 # TerminusDB Server v11.0.2 Release Notes
 
 ## Bug fixes
