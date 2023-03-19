@@ -9,7 +9,50 @@ use terminusdb_store_prolog::terminus_store::structure::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
-    Cow::Owned(tde.as_val::<String, String>())
+    let result = match tde.datatype() {
+        Datatype::String => {
+            tde.as_val::<String, String>()
+        }
+        Datatype::Token => {
+            tde.as_val::<Token, String>()
+        }
+        Datatype::AnyURI => {
+            tde.as_val::<AnyURI, String>()
+        }
+        Datatype::Language => {
+            tde.as_val::<Language, String>()
+        }
+        Datatype::NormalizedString => {
+            tde.as_val::<NormalizedString, String>()
+        }
+        Datatype::NMToken => {
+            tde.as_val::<NMToken, String>()
+        }
+        Datatype::Name => {
+            tde.as_val::<Name, String>()
+        }
+        Datatype::NCName => {
+            tde.as_val::<NCName, String>()
+        }
+        Datatype::Notation => {
+            tde.as_val::<Notation, String>()
+        }
+        Datatype::QName => {
+            tde.as_val::<QName, String>()
+        }
+        Datatype::ID => {
+            tde.as_val::<ID, String>()
+        }
+        Datatype::IDRef => {
+            tde.as_val::<IDRef, String>()
+        }
+        Datatype::Entity => {
+            tde.as_val::<Entity, String>()
+        }
+        x => panic!("not a stringy type: {:?}", x)
+    };
+
+    Cow::Owned(result)
 }
 
 pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
@@ -361,5 +404,7 @@ impl FromInputValue for ScalarInputValue {
 }
 
 pub fn value_to_array_index(tde: &TypedDictEntry) -> usize {
-    tde.as_val::<NonNegativeInteger, Integer>().try_into().expect("couldn't cast array element index to a usize")
+    tde.as_val::<NonNegativeInteger, Integer>()
+        .try_into()
+        .expect("couldn't cast array element index to a usize")
 }

@@ -29,6 +29,7 @@
               clear_check_insecure_user_header_enabled/0,
               clear_insecure_user_header_key/0,
               pinned_databases/1,
+              pinned_organizations/1,
               plugin_path/1,
               dashboard_enabled/0,
               parallelize_enabled/0,
@@ -44,8 +45,9 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
+
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.0.1').
+terminusdb_version('11.0.3').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -290,6 +292,18 @@ pinned_databases(Pinned) :-
     !,
     parse_pinned_databases(Pinned_Env, Pinned).
 pinned_databases([]).
+
+
+parse_pinned_organizations(Pinned_Env, Pinned) :-
+    merge_separator_split(Pinned_Env, ',', Pinned_Atoms),
+    maplist(atom_string, Pinned_Atoms, Pinned).
+
+:- table pinned_organizations/1.
+pinned_organizations(Pinned) :-
+    getenv('TERMINUSDB_PINNED_ORGANIZATIONS', Pinned_Env),
+    !,
+    parse_pinned_organizations(Pinned_Env, Pinned).
+pinned_organizations([]).
 
 :- table parallelize_enabled.
 parallelize_enabled :-

@@ -66,6 +66,7 @@
               resolve_absolute_string_descriptor_and_default_graph/3,
               resolve_absolute_or_relative_string_descriptor/3,
               resolve_filter/2,
+	      descriptor_organization/2,
 
               % woql_compile.pl
               lookup/3,
@@ -88,7 +89,15 @@
               read_object_triple_count/2,
 
               % constraints.pl
-              check_constraint_document/3
+              check_constraint_document/3,
+
+              % algebra.pl
+              termlist_conjunction/2,
+              termlist_disjunction/2,
+              conjunct/3,
+
+              % restriction.pl
+              ids_for_restriction/4
           ]).
 
 :- use_module(query/expansions).
@@ -102,3 +111,5 @@
 :- use_module(query/path).
 :- use_module(query/metadata).
 :- use_module(query/constraints).
+:- use_module(query/algebra).
+:- use_module(query/restrictions).

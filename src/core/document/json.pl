@@ -8,6 +8,7 @@
               json_schema_triple/3,
               json_schema_elaborate/3,
               database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
@@ -61,7 +62,9 @@
               update_captures_with_id/4,
               capture_ref/4,
               schema_document_exists/2,
-              document_exists/2
+              document_exists/2,
+              compress_schema_uri/4,
+              compress_dict_uri/4
           ]).
 
 :- use_module(instance).
@@ -498,8 +501,14 @@ class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
 get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
+get_schema_context_metadata(Schema, ID, Metadata) :-
+    schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
+
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
+    get_schema_context_documentation(Schema, ID, Doc).
+
+get_schema_context_documentation(Schema, ID, Doc) :-
     findall(
         Documentation,
         (   xrdf(Schema, ID, sys:documentation, Doc_ID),
@@ -528,21 +537,13 @@ get_context_documentation(DB, ID, Doc) :-
     ;   Documentations = Doc
     ).
 
-database_context_object(DB,Prefixes) :-
-    is_transaction(DB),
-    is_schemaless(DB),
-    !,
-    database_prefixes(DB, Prefixes).
-database_context_object(DB,Context) :-
-    is_transaction(DB),
-    !,
-    database_prefixes(DB, Prefixes),
-    database_schema(DB, Schema),
+database_schema_context_object(Schema, Context) :-
+    database_schema_prefixes(Schema, Prefixes),
     % This should always exist according to schema correctness criteria?
     xrdf(Schema, ID, rdf:type, sys:'Context'),
     xrdf(Schema, ID, sys:base, Base_String^^_),
     xrdf(Schema, ID, sys:schema, Schema_String^^_),
-    (   get_context_documentation(DB, ID, Documentation)
+    (   get_schema_context_documentation(Schema, ID, Documentation)
     ->  put_dict(
             _{ '@base' : Base_String,
                '@schema' : Schema_String,
@@ -553,10 +554,21 @@ database_context_object(DB,Context) :-
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
-    (   get_context_metadata(DB, ID, Metadata)
+    (   get_schema_context_metadata(Schema, ID, Metadata)
     ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
     ;   Context = Context0
     ).
+
+database_context_object(DB,Prefixes) :-
+    is_transaction(DB),
+    is_schemaless(DB),
+    !,
+    database_prefixes(DB, Prefixes).
+database_context_object(DB,Context) :-
+    is_transaction(DB),
+    !,
+    database_schema(DB, Schema),
+    database_schema_context_object(Schema, Context).
 database_context_object(Query_Context,Context) :-
     is_query_context(Query_Context),
     !,
@@ -13424,6 +13436,77 @@ test(schema_read_class,
          '@type':'Class',
          choice:'Choice',
          name:'xsd:string'}.
+
+
+test(schema_update_i18n_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Schema_Document =
+    json{'@documentation':
+         [json{'@comment':"An example class",
+               '@label':"Example",
+               '@language':"en",
+               '@properties':
+               json{choice:json{'@comment':"A thing to choose",
+                                '@label':"choice"},
+                    name:json{'@comment':"The name of the example object",
+                              '@label':"name"}}},
+          json{'@comment':"Foo",
+               '@label':"Bar",
+               '@language':"de",
+               '@properties':
+               json{choice:json{'@comment':"Baz",
+                                '@label':"Zib"},
+                    name:json{'@comment':"Zukunft",
+                              '@label':"Zimmer"}}}],
+         '@id':'Example',
+         '@type':'Class',
+         choice:'Choice',
+         name:'xsd:string'},
+
+    with_test_transaction(Desc,
+                          C1,
+                          replace_schema_document(
+                              C1,
+                              Schema_Document)
+                         ),
+
+    get_schema_document(Desc, 'Example', Example),
+
+    Example = json{ '@documentation':
+                    [ json{ '@comment':"An example class",
+							'@label':"Example",
+							'@language':"en",
+							'@properties':json{ choice:json{ '@comment':"A thing to choose",
+														     '@label':"choice"
+													       },
+												name:json{ '@comment':"The name of the example object",
+													       '@label':"name"
+													     }
+											  }
+						  },
+					  json{ '@comment':"Foo",
+							'@label':"Bar",
+							'@language':"de",
+							'@properties':json{ choice:json{ '@comment':"Baz",
+														     '@label':"Zib"
+													       },
+												name:json{ '@comment':"Zukunft",
+													       '@label':"Zimmer"
+													     }
+											  }
+						  }
+					],
+					'@id':'Example',
+					'@type':'Class',
+					choice:'Choice',
+					name:'xsd:string'
+				  }.
 
 test(schema_read_enum,
      [setup((setup_temp_store(State),

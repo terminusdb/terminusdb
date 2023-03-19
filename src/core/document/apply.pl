@@ -1,6 +1,7 @@
 :- module('document/apply',
           [
-              apply_diff/4
+              apply_diff/4,
+              apply_diff_ids_captures/7
           ]).
 
 :- use_module(core(util)).
@@ -76,6 +77,50 @@ apply_diff(Context, Diff, Conflict, Options) :-
         put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
     ).
 
+
+apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Captures_Out) :-
+    do_or_die(
+        get_dict('@id', Diff, ID),
+        error(missing_field('@id', Diff), _)
+    ),
+    get_dict(prefixes, Context, Prefixes),
+    normalize_diff(Prefixes, Diff, Normalized_Diff),
+    get_document(Context, ID, JSON_In),
+    simple_patch(Normalized_Diff,JSON_In,Result,Options),
+    (   Result = success(JSON_Out)
+    ->  replace_document(Context, JSON_Out, false, false, Captures_In, Ids, _Dependencies, Captures_Out),
+        Conflict = null
+    ;   Result = conflict(Conflict_Prototype),
+        Ids = [],
+        Captures_Out = Captures_In,
+        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+    ).
+
+normalize_diff(Prefixes, Diff, Normalized),
+is_dict(Diff) =>
+    dict_pairs(Diff, _, Pairs),
+    maplist(normalize_pairs(Prefixes), Pairs, New_Pairs),
+    dict_create(Normalized, json, New_Pairs).
+normalize_diff(Prefixes, Diff, Normalized),
+is_list(Diff) =>
+    maplist(normalize_diff(Prefixes),Diff,Normalized).
+normalize_diff(_, Diff, Normalized) =>
+    Diff = Normalized.
+
+normalize_pairs(Prefixes,Key-Value, Result),
+Key = '@type' =>
+    Result = New_Key-New_Value,
+    New_Key = '@type',
+    compress_schema_uri(Value, Prefixes, New_Value, [compress_ids(true)]).
+normalize_pairs(Prefixes,Key-Value, Result),
+Key = '@id' =>
+    Result = New_Key-New_Value,
+    New_Key = '@id',
+    compress_dict_uri(Value, Prefixes, New_Value, [compress_ids(true)]).
+normalize_pairs(Prefixes,Key-Value, Result) =>
+    Result = New_Key-New_Value,
+    compress_schema_uri(Key, Prefixes, New_Key, [compress_ids(true)]),
+    normalize_diff(Prefixes, Value, New_Value).
 
 /*
 Schematic of application

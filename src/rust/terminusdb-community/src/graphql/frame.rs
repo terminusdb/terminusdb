@@ -41,6 +41,40 @@ fn empty<T>() -> OneOrMore<T> {
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
+pub struct RestrictionDefinition {
+    #[serde(rename = "_id")]
+    pub id: String,
+    #[serde(rename = "@on")]
+    pub on: String,
+    #[serde(skip)]
+    pub original_id: Option<String>,
+    #[serde(flatten)]
+    pub restriction_data: BTreeMap<String, serde_json::Value>,
+}
+
+impl RestrictionDefinition {
+    fn sanitize(self) -> Self {
+        let id = graphql_sanitize(&self.id);
+        let on = graphql_sanitize(&self.on);
+
+        Self {
+            id,
+            on,
+            original_id: Some(self.id.clone()),
+            restriction_data: self.restriction_data,
+        }
+    }
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+pub struct SchemaMetadata {
+    #[serde(default)]
+    pub restrictions: Vec<RestrictionDefinition>,
+    #[serde(flatten)]
+    pub extra_metadata: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct Prefixes {
     #[serde(rename = "@type")]
     pub kind: String,
@@ -52,7 +86,7 @@ pub struct Prefixes {
     #[serde(default = "empty")]
     pub documentation: OneOrMore<SchemaDocumentation>,
     #[serde(rename = "@metadata")]
-    pub metadata: Option<serde_json::Value>,
+    pub metadata: Option<SchemaMetadata>,
     #[serde(flatten)]
     pub extra_prefixes: BTreeMap<String, String>,
 }
@@ -635,6 +669,7 @@ pub struct AllFrames {
     pub class_renaming: BiMap<String, String>,
     pub inverted: AllInvertedFrames,
     pub subsumption: HashMap<String, Vec<String>>,
+    pub restrictions: BTreeMap<String, RestrictionDefinition>,
 }
 
 impl PreAllFrames {
@@ -650,6 +685,7 @@ impl PreAllFrames {
         self,
     ) -> (
         BTreeMap<String, TypeDefinition>,
+        BTreeMap<String, RestrictionDefinition>,
         BiMap<String, String>,
         Prefixes,
     ) {
@@ -668,7 +704,24 @@ impl PreAllFrames {
             };
             frames.insert(sanitized_class.clone(), new_typedef);
         }
-        (frames, class_renaming, self.context)
+        let mut sanitized_restrictions = BTreeMap::new();
+        if let Some(restrictions) = self.context.metadata.as_ref().map(|m| &m.restrictions) {
+            for restriction in restrictions.iter() {
+                let restriction_name = &restriction.id;
+                let sanitized_restriction_name = graphql_sanitize(restriction_name);
+                let res = class_renaming.insert_no_overwrite(
+                    sanitized_restriction_name.clone(),
+                    restriction_name.clone(),
+                );
+                if let Err((left, right)) = res {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate pair: ({left},{right}) != ({sanitized_restriction_name},{restriction_name})")
+                }
+
+                sanitized_restrictions
+                    .insert(sanitized_restriction_name, restriction.clone().sanitize());
+            }
+        }
+        (frames, sanitized_restrictions, class_renaming, self.context)
     }
 
     pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
@@ -696,11 +749,12 @@ impl PreAllFrames {
     pub fn finalize(mut self) -> AllFrames {
         let inverted = allframes_to_allinvertedframes(&self);
         let subsumption = self.calculate_subsumption();
-        let (frames, class_renaming, context) = self.sanitize();
+        let (frames, restrictions, class_renaming, context) = self.sanitize();
 
         AllFrames {
             context,
             frames,
+            restrictions,
             class_renaming,
             inverted,
             subsumption,

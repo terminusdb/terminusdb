@@ -431,7 +431,6 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 chunked,
                  time_limit(infinite),
                  methods([head,options,post,delete,get,put])]).
 
@@ -573,7 +572,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            nl,nl
+            format("Status: 204~n~n")
         )).
 
 document_handler(put, Path, Request, System_DB, Auth) :-
@@ -2459,6 +2458,10 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(patch), cors_handler(Method, patch_handler),
                 [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path)),
+                [method(Method),
                  prefix,
                  time_limit(infinite),
                  methods([options,post])]).
@@ -2488,6 +2491,37 @@ patch_handler(post, Request, System_DB, Auth) :-
             )
         )
     ).
+
+/*
+ * patch_handler(Mode, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+patch_handler(post, Path, Request, System_DB, Auth) :-
+    do_or_die(
+        (   get_payload(JSON, Request),
+            _{ patch : Patch } :< JSON),
+        error(bad_api_document(JSON, [patch]), _)),
+    % We should take options about final state here.
+    api_report_errors(
+        patch,
+        Request,
+        (   (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, author, text, Author),
+            param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_optional(Search, JSON, match_final_state, boolean, true, Matches),
+            api_patch_resource(System_DB, Auth, Path, Patch,
+                               commit_info{
+                                   author: Author,
+                                   message: Message },
+                               Ids,
+                               [match_final_state(Matches)]),
+            cors_reply_json(Request, Ids)
+        )
+    ).
+
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
@@ -3320,6 +3354,7 @@ cors_reply_json(Request, JSON, Options) :-
 cors_json_stream_write_headers_(Request, Data_Version, As_List) :-
     write_cors_headers(Request),
     write_data_version_header(Data_Version),
+    format("Transfer-Encoding: chunked~n"),
     (   As_List = true
     ->  % Write the JSON header
         format("Content-type: application/json; charset=UTF-8~n~n")
