@@ -290,8 +290,13 @@ extract_simple_type(_, Type, Type). % implict \+ is_dict(Type)
 
 
 % This has to do something with subdocument ids, maybe it has to re-elaborate, re-assign?
-rewrite_document_ids(_Before, _After, Document, Cleaned) :-
-    del_dict('@id', Document, _, Cleaned).
+rewrite_document_ids(_Before, _After, Document, New_Class, New_Document) :-
+    get_dict('@type', Document, Type_A),
+    get_dict('@id', Document, Id_A),
+    atom_concat(Type_A, Id_Suffix, Id_A),
+    atom_concat(New_Class, Id_Suffix, Id_B),
+    put_dict(_{ '@type' : New_Class,
+                '@id' : Id_B }, Document, New_Document).
 
 interpret_instance_operation(delete_class(Class), Before, After) :-
     get_document_by_type(Before, Class, Uri),
@@ -305,8 +310,7 @@ interpret_instance_operation(move_class(Old_Class, New_Class), Before, After) :-
             t(Uri, rdf:type, Old_Class_Ex)),
         (   get_document(Before, Uri, Document),
             delete_document(Before, Uri),
-            put_dict(_{'@type' : New_Class}, Document, New_Document),
-            rewrite_document_ids(Before, After, New_Document, Final_Document),
+            rewrite_document_ids(Before, After, Document, New_Class, Final_Document),
             insert_document(After, Final_Document, New_Uri),
             forall(
                 ask(After,
@@ -401,13 +405,10 @@ class_dictionary_to_schema(Dictionary, Schema) :-
     dict_pairs(Dictionary, _, Pairs),
     maplist([_-Class,Class]>>true, Pairs, Schema).
 
-perform_schema_migration(Descriptor, Commit_Info, Ops, Transaction2) :-
-    open_descriptor(Descriptor, Transaction),
+calculate_schema_migration(Transaction, Ops, Schema) :-
     create_class_dictionary(Transaction, Dictionary),
     interpret_schema_operations(Ops, Dictionary, After),
-    class_dictionary_to_schema(After, Schema),
-    api_full_replace_schema(Transaction, Schema).
-    %Transaction.schema
+    class_dictionary_to_schema(After, Schema).
 
 /*
  * Actually perform the upgrade
@@ -416,50 +417,47 @@ perform_schema_migration(Descriptor, Commit_Info, Ops, Transaction2) :-
 calculate_schema_hash(_, 'some very hashy hash').
 
 /*
+
+Database1
+------
+Schema   = M => Schema'
+Instance
+
+
+get_schema(Database1,Schema),
+migrate_schema(Schema, Ops, Schema2),
+replace_schema(Database1, Schema2, Database2),
+with_transaction(Database2,
+  (
+  )
+)
+
 upgrade_schema(Transaction, Schema_From, Schema_To) :-
     full_replace_schema(Schema, 
 */
 
-perform_instance_migration(Descriptor, New_Schema_Descriptor, Operations) :-
-    open_descriptor(Descriptor, Before_Transaction),
-    % We need to bind the builder so we get the same instance graph in both.
-    ensure_transaction_has_builder(instance, Before_Transaction),
-    nl,writeq(before),nl,
-    print_term(Before_Transaction, []),
-    open_descriptor(New_Schema_Descriptor, New_Schema_Transaction),
+replace_schema(Before_Transaction, Schema, After_Transaction) :-
+    api_full_replace_schema(Before_Transaction, Schema),
+    get_dict(schema_objects,Before_Transaction,[Schema_RW_Obj]),
+    get_dict(write,Schema_RW_Obj,Builder),
+    nb_commit(Builder, Layer),
+    put_dict(_{write:_, read:Layer, force_write: true}, Schema_RW_Obj, New_Schema_RW_Obj),
+    put_dict(_{schema_objects: [New_Schema_RW_Obj]}, Before_Transaction, After_Transaction).
 
-    get_dict(schema_objects, New_Schema_Transaction, Schema_Objects),
-    put_dict(_{schema_objects: Schema_Objects}, Before_Transaction, After_Transaction),
-    ensure_transaction_schema_written(After_Transaction),
-    print_term(After_Transaction, []),
-    calculate_schema_hash(Before_Transaction, Before_Hash),
-    calculate_schema_hash(After_Transaction, After_Hash),
-    format(string(Message), "TerminusDB schema automated migration v1.0.0, from: ~s to: ~s",
-           [Before_Hash, After_Hash]),
-    create_context(Before_Transaction,
-                   commit_info{
-                       author: "automigration",
-                       % todo, supply the input and output migration hash
-                       message: Message
-                   },
-                   Before
-                  ),
-    create_context(After_Transaction,
-                   commit_info{
-                       author: "automigration",
-                       % todo, supply the input and output migration hash
-                       message: Message
-                   },
-                   After
-                  ),
-    with_transaction(
-        After,
-        interpret_instance_operations(Operations, Before, After),
-        _
-    ),
-    test_utils:print_all_triples(Descriptor),
-    test_utils:print_all_triples(Descriptor,schema).
+perform_instance_migration(Descriptor, Commit_Info, Operations) :-
+    % restart logic here
+    max_transaction_retries(Max),
+    between(0, Max, _),
 
+    open_descriptor(Descriptor, Commit_Info, Before_Transaction),
+    calculate_schema_migration(Before_Transaction, Operations, Schema),
+    replace_schema(Before_Transaction, Schema, After_Transaction),
+    interpret_instance_operations(Operations, Before_Transaction, After_Transaction),
+    % run logic here.
+    run_transactions([After_Transaction], false, _),
+    !.
+perform_instance_migration(_, _, _, _) :-
+    throw(error(transaction_retry_exceeded, _)).
 
 :- begin_tests(migration).
 
@@ -540,9 +538,7 @@ test(move_and_weaken,
 
 test(move_and_weaken_with_instance_data,
      [setup((setup_temp_store(State),
-             test_document_label_descriptor(schema,Schema),
              test_document_label_descriptor(database,Descriptor),
-             write_schema(before2,Schema),
              write_schema(before2,Descriptor)
             )),
       cleanup(teardown_temp_store(State))
@@ -552,10 +548,10 @@ test(move_and_weaken_with_instance_data,
         Descriptor,
         C1,
         (   insert_document(C1,
-                            _{ a : "foo" },
+                            _{ '@id' : 'A/1', a : "foo" },
                             _),
             insert_document(C1,
-                            _{ a : "bar" },
+                            _{ '@id' : 'A/2', a : "bar" },
                             _)
         )
     ),
@@ -572,23 +568,22 @@ test(move_and_weaken_with_instance_data,
         upcast_class_property("B", "a", _{ '@type' : "Optional", '@class' : "xsd:string"})
     ],
 
-    perform_schema_migration(Schema, commit_info{ author: "me", message: "upgrade" }, Ops),
-
-    get_schema_document(Schema, 'B', B_Doc),
-    B_Doc = json{'@id':'B',
-                 '@type':'Class',
-                 a:json{'@class':'xsd:string','@type':'Optional'}
-                },
-
-    perform_instance_migration(Descriptor, Schema, Ops),
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops),
 
     findall(
-        Document,
-        get_document_by_type(Descriptor, "A", Document),
-        Docs),
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+    A_Docs = [],
+    findall(
+        DocB,
+        get_document_by_type(Descriptor, "B", DocB),
+        B_Docs),
 
-    print_term(Docs, []).
-
-
+    B_Docs = [ json{'@id':'B/1','@type':'B',a:"foo"},
+	           json{'@id':'B/2','@type':'B',a:"bar"}
+	         ].
 
 :- end_tests(migration).

@@ -523,7 +523,6 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query,
 
     json_stream_end(Config).
 
-
 api_full_replace_schema(Transaction, Schema) :-
     empty_assoc(Captures_In),
     database_prefixes(Transaction, Prefixes),
