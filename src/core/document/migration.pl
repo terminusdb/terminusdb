@@ -561,8 +561,6 @@ test(move_and_weaken_with_instance_data,
         get_document_by_type(Descriptor, "A", Document_A),
         Document_As),
 
-    print_term(Document_As, []),
-
     Ops = [
         move_class("A", "B"),
         upcast_class_property("B", "a", _{ '@type' : "Optional", '@class' : "xsd:string"})
