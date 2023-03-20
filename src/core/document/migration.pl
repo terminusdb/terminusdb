@@ -41,6 +41,7 @@ Op := delete_class(Name)
     | create_class(ClassDocument)
     | move_class(Old_Name,New_Name)
     | delete_class_property(Class,Property)
+    | create_class_property(Class,Property,Type)  % for option or set
     | create_class_property(Class,Property,Type,Default)
     | move_class_property(Class, Old_Property, New_Property)
     | upcast_class_property(Class, Property, New_Type)
@@ -414,8 +415,10 @@ perform_schema_migration(Descriptor, Commit_Info, Ops, Transaction2) :-
 
 calculate_schema_hash(_, 'some very hashy hash').
 
+/*
 upgrade_schema(Transaction, Schema_From, Schema_To) :-
     full_replace_schema(Schema, 
+*/
 
 perform_instance_migration(Descriptor, New_Schema_Descriptor, Operations) :-
     open_descriptor(Descriptor, Before_Transaction),
