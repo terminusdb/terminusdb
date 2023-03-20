@@ -1,4 +1,6 @@
-:- module('document/migration', []).
+:- module('document/migration', [
+              perform_instance_migration/3
+          ]).
 
 :- use_module(instance).
 :- use_module(schema).
@@ -27,7 +29,6 @@
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
-:- use_module(core(document)).
 :- use_module(core(transaction)).
 :- use_module(core(util/tables)).
 :- use_module(core(api/api_document)).
@@ -555,11 +556,6 @@ test(move_and_weaken_with_instance_data,
                             _)
         )
     ),
-
-    findall(
-        Document_A,
-        get_document_by_type(Descriptor, "A", Document_A),
-        Document_As),
 
     Ops = [
         move_class("A", "B"),

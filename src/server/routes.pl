@@ -2962,6 +2962,32 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%% Schema Migration %%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+migration_handler(post,Path,Request,System_DB,Auth) :-
+    (   get_payload(JSON, Request)
+    ->  true
+    ;   JSON = _{}),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    api_report_errors(
+        migration,
+        Request,
+        (   param_value_search_or_json_required(Search, JSON, author, text, Author),
+            param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_required(Search, JSON, operations, text, Operations),
+            api_migrate_resource(System_DB, Auth,Path,commit_info{
+                                                          author: Author,
+                                                          message: Message
+                                                      }, Operations)
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
 :- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),

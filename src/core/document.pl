@@ -92,7 +92,10 @@
               json_document_triple/3,
               json_subdocument_triple/4,
               assign_json_document_id/2,
-              get_json_object/3
+              get_json_object/3,
+
+              % migration.pl
+              perform_instance_migration/3
           ]).
 
 :- use_module('document/validation').

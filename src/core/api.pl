@@ -182,7 +182,12 @@
               api_db_update/6,
 
               % api_graphql.pl
-              handle_graphql_request/8
+              handle_graphql_request/8,
+
+              % api_migration
+              api_hypothetical_migration/4,
+              api_migrate_resource/5,
+              api_transform_schema/3
           ]).
 
 :- use_module(api/api_init).
@@ -219,3 +224,4 @@
 :- use_module(api/api_access_control).
 :- use_module(api/api_db_update).
 :- use_module(api/api_graphql).
+:- use_module(api/api_migration).
