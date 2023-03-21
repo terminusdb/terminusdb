@@ -168,8 +168,12 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
        'schema': Schema_Layer
      },
     (   ground(Instance_Layer)
-    ->  put_dict(instance, Commit_Document0, Instance_Layer, Commit_Document)
-    ;   Commit_Document = Commit_Document0),
+    ->  put_dict(instance, Commit_Document0, Instance_Layer, Commit_Document1)
+    ;   Commit_Document1 = Commit_Document0),
+
+    (   get_dict(migration, Commit_Info, Migration)
+    ->  put_dict(migration, Commit_Document1, Migration, Commit_Document)
+    ;   Commit_Document = Commit_Document1),
 
     insert_document(
         Context,

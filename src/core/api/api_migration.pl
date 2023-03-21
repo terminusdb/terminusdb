@@ -15,10 +15,11 @@ operations_string_to_list(Operations_String, Operations) :-
         error(malformed_operations_string)),
     xfy_list(',', Term, Operations).
 
-api_migrate_resource(System, Auth, Path, Commit_Info, Operations_String) :-
+api_migrate_resource(System, Auth, Path, Commit_Info0, Operations_String) :-
     resolve_descriptor_auth(write, System, Auth, Path, instance, _Descriptor),
     resolve_descriptor_auth(write, System, Auth, Path, schema, Descriptor),
     operations_string_to_list(Operations_String, Operations),
+    put_dict(migration, Commit_Info0, Operations_String, Commit_Info),
     perform_instance_migration(Descriptor, Commit_Info, Operations).
 
 api_hypothetical_migration(_System, _Auth, _Path, _New_Schema) :-

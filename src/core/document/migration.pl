@@ -4,6 +4,7 @@
 
 :- use_module(instance).
 :- use_module(schema).
+:- use_module(json).
 
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
