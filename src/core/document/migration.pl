@@ -1,5 +1,6 @@
 :- module('document/migration', [
-              perform_instance_migration/3
+              perform_instance_migration/3,
+              perform_instance_migration_on_transaction/2
           ]).
 
 :- use_module(instance).
@@ -451,15 +452,19 @@ perform_instance_migration(Descriptor, Commit_Info, Operations) :-
     max_transaction_retries(Max),
     between(0, Max, _),
 
-    open_descriptor(Descriptor, Commit_Info, Before_Transaction),
+    do_or_die(open_descriptor(Descriptor, Commit_Info, Transaction),
+              something),
+    perform_instance_migration_on_transaction(Transaction, Operations),
+    !.
+perform_instance_migration(_, _, _, _) :-
+    throw(error(transaction_retry_exceeded, _)).
+
+perform_instance_migration_on_transaction(Before_Transaction, Operations) :-
     calculate_schema_migration(Before_Transaction, Operations, Schema),
     replace_schema(Before_Transaction, Schema, After_Transaction),
     interpret_instance_operations(Operations, Before_Transaction, After_Transaction),
     % run logic here.
-    run_transactions([After_Transaction], false, _),
-    !.
-perform_instance_migration(_, _, _, _) :-
-    throw(error(transaction_retry_exceeded, _)).
+    run_transactions([After_Transaction], false, _).
 
 :- begin_tests(migration).
 

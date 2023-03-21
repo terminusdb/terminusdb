@@ -2980,11 +2980,15 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
         Request,
         (   param_value_search_or_json_required(Search, JSON, author, text, Author),
             param_value_search_or_json_required(Search, JSON, message, text, Message),
-            param_value_search_or_json_required(Search, JSON, operations, text, Operations),
-            api_migrate_resource(System_DB, Auth,Path,commit_info{
-                                                          author: Author,
-                                                          message: Message
-                                                      }, Operations)
+            Commit_Info = commit_info{
+                              author: Author,
+                              message: Message
+                          },
+            (   param_value_search_or_json(Search, JSON, operations, text, Operations)
+            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations)
+            ;   param_value_search_or_json(Search, JSON, target, text, Target)
+            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, _)
+            ;   throw(error(missing_parameter(operations), _)))
         )
     ).
 

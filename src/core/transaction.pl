@@ -89,6 +89,7 @@
               commit_uri_to_history_commit_uris/3,
               commit_uri_to_history_commit_uris/4,
               layer_uri_for_commit/4,
+              schema_migration_for_commit/3,
 
               % repo_entity.pl
               has_repository/2,

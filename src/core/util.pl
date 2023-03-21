@@ -248,6 +248,7 @@
               param_value_search_optional/5,
               param_value_json_required/4,
               param_value_json_optional/5,
+              param_value_search_or_json/5,
               param_value_search_or_json_required/5,
               param_value_search_or_json_optional/6,
               param_value_search_author/2,

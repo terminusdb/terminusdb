@@ -40,7 +40,8 @@
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
-              commit_uri_to_history_commit_uris/4
+              commit_uri_to_history_commit_uris/4,
+              schema_migration_for_commit/3
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -1169,6 +1170,11 @@ commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit
 commit_uri_to_history_commit_ids(Context, Commit_Uri, History_Commit_Ids) :-
     commit_uri_to_history_commit_ids_(Context, Commit_Uri, Reversed_History_Commit_Ids),
     reverse(Reversed_History_Commit_Ids, History_Commit_Ids).
+
+schema_migration_for_commit(Context, Commit_Id, Migration_String) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    once(ask(Context,
+             t(Commit_Uri, migration, Migration_String^^xsd:string))).
 
 :- begin_tests(commit_history).
 :- use_module(core(util/test_utils)).

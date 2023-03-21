@@ -187,6 +187,7 @@
               % api_migration
               api_hypothetical_migration/4,
               api_migrate_resource/5,
+              api_migrate_resource_to/6,
               api_transform_schema/3
           ]).
 
