@@ -431,28 +431,6 @@ calculate_schema_migration(Transaction, Ops, Schema) :-
  * Actually perform the upgrade
  */
 
-calculate_schema_hash(_, 'some very hashy hash').
-
-/*
-
-Database1
-------
-Schema   = M => Schema'
-Instance
-
-
-get_schema(Database1,Schema),
-migrate_schema(Schema, Ops, Schema2),
-replace_schema(Database1, Schema2, Database2),
-with_transaction(Database2,
-  (
-  )
-)
-
-upgrade_schema(Transaction, Schema_From, Schema_To) :-
-    full_replace_schema(Schema, 
-*/
-
 replace_schema(Before_Transaction, Schema, After_Transaction) :-
     api_full_replace_schema(Before_Transaction, Schema),
     get_dict(schema_objects,Before_Transaction,[Schema_RW_Obj]),
