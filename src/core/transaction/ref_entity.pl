@@ -41,7 +41,7 @@
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
               commit_uri_to_history_commit_uris/4,
-              schema_migration_for_commit/3
+              schema_change_for_commit/3
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -1171,10 +1171,16 @@ commit_uri_to_history_commit_ids(Context, Commit_Uri, History_Commit_Ids) :-
     commit_uri_to_history_commit_ids_(Context, Commit_Uri, Reversed_History_Commit_Ids),
     reverse(Reversed_History_Commit_Ids, History_Commit_Ids).
 
-schema_migration_for_commit(Context, Commit_Id, Migration_String) :-
+schema_change_for_commit(Context, Commit_Id, Change) :-
     commit_id_uri(Context, Commit_Id, Commit_Uri),
-    once(ask(Context,
-             t(Commit_Uri, migration, Migration_String^^xsd:string))).
+    (   ask(Context,
+            t(Commit_Uri, migration, Migration_String^^xsd:string))
+    ->  Change = migration(Migration_String)
+    ;   layer_uri_for_commit(Context, Commit_Uri, schema, Schema_Uri),
+        commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri),
+        layer_uri_for_commit(Context, Parent_Uri, schema, Schema_Uri)
+    ->  Change = no_change
+    ;   Change = no_migration).
 
 :- begin_tests(commit_history).
 :- use_module(core(util/test_utils)).

@@ -40,6 +40,16 @@ auth_check_migrate_resource_to(System, Auth, Path, Target, Our_Descriptor, Their
     check_descriptor_auth(System, Their_Descriptor, '@schema':'Action/schema_read_access', Auth),
     check_descriptor_auth(System, Their_Descriptor, '@schema':'Action/commit_read_access', Auth).
 
+schema_migration_for_commit(Transaction, Commit_Id, Migration_String) :-
+    schema_change_for_commit(Transaction, Commit_Id, Change),
+    (   Change = no_change
+    ->  fail
+    ;   Change = no_migration
+    ->  throw(error(no_migration_at_commit(Commit_Id), _))
+    ;   Change = migration(Migration_String)
+    ->  true
+    ;   throw(error(unexpected_change_type(Change)))).
+
 combined_migration_from_commits(Transaction, Commits, Migration_String) :-
     convlist(schema_migration_for_commit(Transaction),
              Commits,
@@ -93,13 +103,14 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
     ->  Result = no_migration
     ;   (   string_concat(",", Suffix, Suffix0)
         ->  true
-        ;   Suffix = Suffix0)
-    ),
+        ;   Suffix = Suffix0),
 
-    put_dict(migration, Commit_Info0, Suffix, Commit_Info),
-    put_dict(commit_info, Our_Transaction, Commit_Info, Our_Final_Transaction),
+        put_dict(migration, Commit_Info0, Suffix, Commit_Info),
+        put_dict(commit_info, Our_Transaction, Commit_Info, Our_Final_Transaction),
 
-    operations_string_to_list(Suffix, Operations),
-    perform_instance_migration_on_transaction(Our_Final_Transaction, Operations).
+        operations_string_to_list(Suffix, Operations),
+        perform_instance_migration_on_transaction(Our_Final_Transaction, Operations),
+
+        Result = migration).
 
 
