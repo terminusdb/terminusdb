@@ -9,6 +9,7 @@
 :- use_module(core(document/migration)).
 :- use_module(core(util)).
 :- use_module(core(transaction)).
+:- use_module(core(query)).
 
 operations_string_to_list(Operations_String, Operations) :-
     term_string(Term, Operations_String, [variable_names(VNames)]),
@@ -97,7 +98,7 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
     combined_migration_from_commits(Their_Repo_Transaction, Their_Commits, Their_Migration_String),
 
     do_or_die(string_concat(Our_Migration_String, Suffix0, Their_Migration_String),
-              error(migration_impossible, _)),
+              error(no_common_migration_prefix(Our_Migration_String,Their_Migration_String), _)),
 
     (   Suffix0 = ""
     ->  Result = no_migration

@@ -361,8 +361,8 @@ interpret_instance_operation(cast_class_property(Class, Property, New_Type, Defa
                 ->  true
                 ;   Default_or_Error = default(Default)
                 ->  Cast = Default^^Simple_Type
-                ;   Value = Base^^Old_Type,
-                    throw(error(bad_cast_in_schema_migration(Base,Old_Type,New_Type), _))
+                ;   Value = _^^Old_Type,
+                    throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
                 ),
                 ask(After,
                     (   insert(X, Property, Cast)))
