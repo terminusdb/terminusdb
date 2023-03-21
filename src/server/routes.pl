@@ -2985,9 +2985,15 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
                               message: Message
                           },
             (   param_value_search_or_json(Search, JSON, operations, text, Operations)
-            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations)
+            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result),
+                put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
+                         Result, Response),
+                cors_reply_json(Request, Response)
             ;   param_value_search_or_json(Search, JSON, target, text, Target)
-            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, _)
+            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result),
+                put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
+                         Result, Response),
+                cors_reply_json(Request, Response)
             ;   throw(error(missing_parameter(operations), _)))
         )
     ).

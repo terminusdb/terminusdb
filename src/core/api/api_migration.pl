@@ -1,6 +1,6 @@
 :- module(api_migration, [
               api_hypothetical_migration/4,
-              api_migrate_resource/5,
+              api_migrate_resource/6,
               api_migrate_resource_to/6,
               api_transform_schema/3
           ]).
@@ -18,12 +18,12 @@ operations_string_to_list(Operations_String, Operations) :-
         error(malformed_operations_string)),
     xfy_list(',', Term, Operations).
 
-api_migrate_resource(System, Auth, Path, Commit_Info0, Operations_String) :-
+api_migrate_resource(System, Auth, Path, Commit_Info0, Operations_String, Result) :-
     resolve_descriptor_auth(write, System, Auth, Path, instance, _Descriptor),
     resolve_descriptor_auth(write, System, Auth, Path, schema, Descriptor),
     operations_string_to_list(Operations_String, Operations),
     put_dict(migration, Commit_Info0, Operations_String, Commit_Info),
-    perform_instance_migration(Descriptor, Commit_Info, Operations).
+    perform_instance_migration(Descriptor, Commit_Info, Operations, Result).
 
 api_hypothetical_migration(_System, _Auth, _Path, _New_Schema) :-
     throw(unimplemented).
@@ -101,7 +101,7 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
               error(no_common_migration_prefix(Our_Migration_String,Their_Migration_String), _)),
 
     (   Suffix0 = ""
-    ->  Result = no_migration
+    ->  Result = _{ schema_operations: 0, instance_operations: 0 }
     ;   (   string_concat(",", Suffix, Suffix0)
         ->  true
         ;   Suffix = Suffix0),
@@ -110,8 +110,6 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
         put_dict(commit_info, Our_Transaction, Commit_Info, Our_Final_Transaction),
 
         operations_string_to_list(Suffix, Operations),
-        perform_instance_migration_on_transaction(Our_Final_Transaction, Operations),
-
-        Result = migration).
-
+        perform_instance_migration_on_transaction(Our_Final_Transaction, Operations, Result)
+    ).
 

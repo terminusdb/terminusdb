@@ -1,6 +1,6 @@
 :- module('document/migration', [
-              perform_instance_migration/3,
-              perform_instance_migration_on_transaction/2
+              perform_instance_migration/4,
+              perform_instance_migration_on_transaction/3
           ]).
 
 :- use_module(instance).
@@ -301,85 +301,99 @@ rewrite_document_ids(_Before, _After, Document, New_Class, New_Document) :-
     put_dict(_{ '@type' : New_Class,
                 '@id' : Id_B }, Document, New_Document).
 
-interpret_instance_operation(delete_class(Class), Before, After) :-
-    get_document_by_type(Before, Class, Uri),
-    delete_document(After, Uri).
-interpret_instance_operation(create_class(_), _Before, _After).
-interpret_instance_operation(move_class(Old_Class, New_Class), Before, After) :-
+interpret_instance_operation(delete_class(Class), Before, After, Count) :-
+    count_solutions(
+        (   get_document_by_type(Before, Class, Uri),
+            delete_document(After, Uri)
+        ),
+        Count
+    ).
+interpret_instance_operation(create_class(_), _Before, _After, 0).
+interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
-    forall(
-        ask(Before,
-            t(Uri, rdf:type, Old_Class_Ex)),
-        (   get_document(Before, Uri, Document),
-            delete_document(Before, Uri),
-            rewrite_document_ids(Before, After, Document, New_Class, Final_Document),
-            insert_document(After, Final_Document, New_Uri),
-            forall(
-                ask(After,
-                    (   t(X, P, Uri),
-                        delete(X, P, Uri),
-                        insert(X, P, New_Uri))),
-                true
+    count_solutions(
+        (   ask(Before,
+                t(Uri, rdf:type, Old_Class_Ex)),
+            once(
+                (   get_document(Before, Uri, Document),
+                    delete_document(Before, Uri),
+                    rewrite_document_ids(Before, After, Document, New_Class, Final_Document),
+                    insert_document(After, Final_Document, New_Uri),
+                    forall(
+                        ask(After,
+                            (   t(X, P, Uri),
+                                delete(X, P, Uri),
+                                insert(X, P, New_Uri))),
+                        true)
+                )
             )
-        )
+        ),
+        Count
     ).
-interpret_instance_operation(delete_class_property(Class, Property), Before, _After) :-
+interpret_instance_operation(delete_class_property(Class, Property), Before, _After, Count) :-
     % Todo: Array / List
-    forall(
+    count_solutions(
         ask(Before,
             (   t(X, rdf:type, Class),
                 t(X, Property, Value),
                 delete(X, Property, Value))),
-        true
+        Count
     ).
-interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After) :-
+interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
-    ->  forall(
+    ->  count_solutions(
             ask(Before,
-                (   t(X, rdf:type, Class),
-                    t(X, Property, Old_Value),
-                    delete(X, Property, Old_Value),
-                    typecast(Old_Value, Simple_Type, [], Cast),
-                    insert(X, Property, Cast)
-                )
+                    (   t(X, rdf:type, Class),
+                        t(X, Property, Old_Value),
+                        delete(X, Property, Old_Value),
+                        typecast(Old_Value, Simple_Type, [], Cast),
+                        insert(X, Property, Cast)
+                    )
                ),
-            true
+            Count
         )
     ;   % Todo: Array / List
         throw(error(not_implemented, _))
     ).
-interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After) :-
+interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
-    ->  forall(
-            ask(Before,
-                (   t(X, rdf:type, Class),
-                    t(X, Property, Value),
-                    delete(X, Property, Value)
-                )),
-            (   (   typecast(Value, Simple_Type, [], Cast)
-                ->  true
-                ;   Default_or_Error = default(Default)
-                ->  Cast = Default^^Simple_Type
-                ;   Value = _^^Old_Type,
-                    throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
-                ),
-                ask(After,
-                    (   insert(X, Property, Cast)))
-            )
+    ->  count_solutions(
+            (   ask(Before,
+                    (   t(X, rdf:type, Class),
+                        t(X, Property, Value),
+                        delete(X, Property, Value)
+                    )),
+                once(
+                    (   (   typecast(Value, Simple_Type, [], Cast)
+                        ->  true
+                        ;   Default_or_Error = default(Default)
+                        ->  Cast = Default^^Simple_Type
+                        ;   Value = _^^Old_Type,
+                            throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
+                        ),
+                        ask(After,
+                            (   insert(X, Property, Cast)))
+                    ))
+            ),
+            Count
         )
     ;   % Todo: Array / List
         throw(error(not_implemented, _))
     ).
-interpret_instance_operation(change_parents(_Class,_Parents,_Property_Defaults), _Before, _After) :-
+interpret_instance_operation(change_parents(_Class,_Parents,_Property_Defaults), _Before, _After,_Count) :-
     throw(error(unimplemented, _)).
-interpret_instance_operation(Op, _Before, _After) :-
+interpret_instance_operation(Op, _Before, _After, _Count) :-
     throw(error(instance_operation_failed(Op), _)).
 
-interpret_instance_operations([], _Before, _After).
-interpret_instance_operations([Instance_Operation|Instance_Operations], Before, After) :-
-    interpret_instance_operation(Instance_Operation, Before, After),
-    interpret_instance_operations(Instance_Operations, Before, After).
+interpret_instance_operations([], _Before, _After, Count, Count).
+interpret_instance_operations([Instance_Operation|Instance_Operations], Before, After, Count_In, Count_Out) :-
+    interpret_instance_operation(Instance_Operation, Before, After, Count),
+    Count1 is Count + Count_In,
+    interpret_instance_operations(Instance_Operations, Before, After, Count1, Count_Out).
+
+interpret_instance_operations(Ops, Before, After, Count) :-
+    interpret_instance_operations(Ops, Before, After, 0, Count).
 
 /*
  * A convenient intermediate form using a dictionary:
@@ -447,24 +461,27 @@ replace_schema(Before_Transaction, Schema, After_Transaction) :-
     put_dict(_{write:_, read:Layer, force_write: true}, Schema_RW_Obj, New_Schema_RW_Obj),
     put_dict(_{schema_objects: [New_Schema_RW_Obj]}, Before_Transaction, After_Transaction).
 
-perform_instance_migration(Descriptor, Commit_Info, Operations) :-
+perform_instance_migration(Descriptor, Commit_Info, Operations, Result) :-
     % restart logic here
     max_transaction_retries(Max),
     between(0, Max, _),
 
     do_or_die(open_descriptor(Descriptor, Commit_Info, Transaction),
               something),
-    perform_instance_migration_on_transaction(Transaction, Operations),
+    perform_instance_migration_on_transaction(Transaction, Operations, Result),
     !.
 perform_instance_migration(_, _, _, _) :-
     throw(error(transaction_retry_exceeded, _)).
 
-perform_instance_migration_on_transaction(Before_Transaction, Operations) :-
+perform_instance_migration_on_transaction(Before_Transaction, Operations, Result) :-
     calculate_schema_migration(Before_Transaction, Operations, Schema),
     replace_schema(Before_Transaction, Schema, After_Transaction),
-    interpret_instance_operations(Operations, Before_Transaction, After_Transaction),
+    interpret_instance_operations(Operations, Before_Transaction, After_Transaction, Count),
     % run logic here.
-    run_transactions([After_Transaction], false, _).
+    run_transactions([After_Transaction], false, _),
+    length(Operations, Op_Count),
+    Result = metadata{ schema_operations: Op_Count,
+                       instance_operations: Count }.
 
 :- begin_tests(migration).
 
