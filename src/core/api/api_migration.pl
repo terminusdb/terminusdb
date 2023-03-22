@@ -112,4 +112,3 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
         operations_string_to_list(Suffix, Operations),
         perform_instance_migration_on_transaction(Our_Final_Transaction, Operations, Result)
     ).
-

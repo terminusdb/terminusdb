@@ -614,4 +614,48 @@ test(move_and_weaken_with_instance_data,
 	           json{'@id':'B/2','@type':'B',a:"bar"}
 	         ].
 
+
+test(delete_class_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'A/2', a : "bar" },
+                            _)
+        )
+    ),
+
+    Ops = [
+        delete_class_property("A", "a")
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result),
+    print_term(Result, []),
+    Result = metadata{instance_operations:2,schema_operations:1},
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+
+    A_Docs = [ json{ '@id':'A/1',
+					 '@type':'A'
+				   },
+			   json{ '@id':'A/2',
+					 '@type':'A'
+				   }
+			 ].
+
 :- end_tests(migration).
