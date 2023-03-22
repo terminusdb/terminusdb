@@ -314,14 +314,34 @@ extract_simple_type(Type, Simple) :-
 extract_simple_type(_, Type, Type). % implict \+ is_dict(Type)
 
 
-% This has to do something with subdocument ids, maybe it has to re-elaborate, re-assign?
-rewrite_document_ids(_Before, _After, Document, New_Class, New_Document) :-
-    get_dict('@type', Document, Type_A),
-    get_dict('@id', Document, Id_A),
+rewrite_document_key_value('@id',Id_A,Type_A,Type_B,Key,Id_B) =>
     atom_concat(Type_A, Id_Suffix, Id_A),
-    atom_concat(New_Class, Id_Suffix, Id_B),
-    put_dict(_{ '@type' : New_Class,
-                '@id' : Id_B }, Document, New_Document).
+    atom_concat(Type_B, Id_Suffix, Id_B),
+    Key = '@id'.
+rewrite_document_key_value('@type',Type,Type_A,Type_B,Key,Value),
+atom_string(Type,Type_A) =>
+    atom_string(Value,Type_B),
+    Key = '@type'.
+rewrite_document_key_value(P,V,Type_A,Type_B,Key,Value) =>
+    P = Key,
+    rewrite_document_ids(V,Type_A,Type_B,Value).
+
+rewrite_document_ids(Document, Class_A, Class_B, New_Document),
+is_dict(Document) =>
+    findall(
+        Key-Value,
+        (   get_dict(K, Document, V),
+            rewrite_document_key_value(K,V,Class_A,Class_B,Key,Value)
+        ),
+        Pairs
+    ),
+    dict_create(New_Document, json, Pairs).
+rewrite_document_ids(Document, Class_A, Class_B, New_Document),
+is_list(Document) =>
+    maplist({Class_A,Class_B}/[D0,D1]>>rewrite_document_ids(D0,Class_A,Class_B,D1),
+            Document, New_Document).
+rewrite_document_ids(Value, _Class_A, _Class_B, New_Value) =>
+    Value = New_Value.
 
 interpret_instance_operation(delete_class(Class), Before, After, Count) :-
     count_solutions(
@@ -340,7 +360,7 @@ interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Co
             once(
                 (   get_document(Before, Uri, Document),
                     delete_document(Before, Uri),
-                    rewrite_document_ids(Before, After, Document, New_Class, Final_Document),
+                    rewrite_document_ids(Document, Old_Class, New_Class, Final_Document),
                     insert_document(After, Final_Document, New_Uri),
                     forall(
                         ask(After,
@@ -542,6 +562,16 @@ before2('
   "@id" : "A",
   "a" : "xsd:string" }
 
+{ "@type" : "Class",
+  "@id" : "Super",
+  "sub" : "Sub" }
+
+{ "@type" : "Class",
+  "@id" : "Sub",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Lexical", "@fields" : ["value"] },
+  "value" : "xsd:string" }
+
 ').
 
 test(move_and_weaken,
@@ -558,17 +588,18 @@ test(move_and_weaken,
     ],
     open_descriptor(Before, Transaction),
     create_class_dictionary(Transaction, Dictionary),
-    Dictionary = json{'A':json{'@id':'A','@type':'Class',a:'xsd:string'}},
+
+    json{'A':json{'@id':'A','@type':'Class',a:'xsd:string'}} :< Dictionary,
 
     interpret_schema_operations(Ops, Dictionary, After),
 
-    After = json{ 'B': json{ '@id':"B",
-						     '@type':'Class',
-						     a:_{ '@class':"xsd:string",
-							      '@type':"Optional"
-							    }
-						   }
-				}.
+    json{ 'B': json{ '@id':"B",
+					 '@type':'Class',
+					 a:_{ '@class':"xsd:string",
+						  '@type':"Optional"
+						}
+				   }
+		} :< After.
 
 test(move_and_weaken_with_instance_data,
      [setup((setup_temp_store(State),
@@ -643,7 +674,7 @@ test(delete_class_property,
                                                         message: "Fancy" },
                                Ops,
                                Result),
-    print_term(Result, []),
+
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
         DocA,
@@ -657,5 +688,71 @@ test(delete_class_property,
 					 '@type':'A'
 				   }
 			 ].
+
+test(rewrite_subdocument_ids, []) :-
+    rewrite_document_ids(
+        json{'@id':'Super/1', '@type':'Super',
+             sub:json{'@id':'Super/1/sub/Sub/asdf',
+                      '@type':'Sub', value:"asdf"}},
+        "Super",
+        "Duper",
+        Result),
+    Result =
+    json{'@id':'Duper/1', '@type':'Duper',
+         sub:json{'@id':'Duper/1/sub/Sub/asdf',
+                  '@type':'Sub', value:"asdf"}}.
+
+test(subdocument_move_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'Super/1', sub : _{ '@id' : "Super/1/sub/Sub/asdf",
+                                                           value : "asdf" }},
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'Super/2', sub : _{ '@id' : "Super/2/sub/Sub/fdsa",
+                                                           value: "fdsa" }},
+                            _)
+        )
+    ),
+
+    Ops = [
+        move_class("Super", "Duper")
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result),
+
+    Result = metadata{instance_operations:2,schema_operations:1},
+    findall(
+        DocDuper,
+        get_document_by_type(Descriptor, "Duper", DocDuper),
+        Duper_Docs),
+    Duper_Docs = [
+        json{ '@id':'Duper/1',
+			  '@type':'Duper',
+			  sub:json{ '@id':'Duper/1/sub/Sub/asdf',
+						'@type':'Sub',
+						value:"asdf"
+					  }
+			},
+		json{ '@id':'Duper/2',
+			  '@type':'Duper',
+			  sub:json{ '@id':'Duper/2/sub/Sub/fdsa',
+						'@type':'Sub',
+						value:"fdsa"
+					  }
+			}
+	].
 
 :- end_tests(migration).
