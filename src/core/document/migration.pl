@@ -374,16 +374,25 @@ interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Co
         Count
     ).
 interpret_instance_operation(delete_class_property(Class, Property), Before, _After, Count) :-
-    % Todo: Array / List
+    % Todo: Tagged Union
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     prefix_expand_schema(Property, Prefixes, P),
-    count_solutions(
-        ask(Before,
-            (   t(X, rdf:type, Class_Ex),
-                t(X, P, Value),
-                delete(X, P, Value))),
-        Count
+    once(class_predicate_type(Before,Class_Ex,P, Type)),
+    (   member(Type,[unit,enum(_,_),base_class(_),class(_),
+                     optional(_),set(_),cardinality(_,_),foreign(_)])
+    ->  count_solutions(
+            ask(Before,
+                (   t(X, rdf:type, Class_Ex),
+                    t(X, P, Value),
+                    delete(X, P, Value))),
+            Count
+        )
+    ;   Type = list(_)
+    ->  throw(error(not_implemented, _))
+    ;   Type = array(_)
+    ->  throw(error(not_implemented, _))
+    ;   throw(error(not_implemented, _))
     ).
 interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
@@ -754,5 +763,59 @@ test(subdocument_move_class,
 					  }
 			}
 	].
+
+test(cast_in_list,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'Super/1', sub : _{ '@id' : "Super/1/sub/Sub/asdf",
+                                                           value : "asdf" }},
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'Super/2', sub : _{ '@id' : "Super/2/sub/Sub/fdsa",
+                                                           value: "fdsa" }},
+                            _)
+        )
+    ),
+
+    Ops = [
+        move_class("Super", "Duper")
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result),
+
+    Result = metadata{instance_operations:2,schema_operations:1},
+    findall(
+        DocDuper,
+        get_document_by_type(Descriptor, "Duper", DocDuper),
+        Duper_Docs),
+    Duper_Docs = [
+        json{ '@id':'Duper/1',
+			  '@type':'Duper',
+			  sub:json{ '@id':'Duper/1/sub/Sub/asdf',
+						'@type':'Sub',
+						value:"asdf"
+					  }
+			},
+		json{ '@id':'Duper/2',
+			  '@type':'Duper',
+			  sub:json{ '@id':'Duper/2/sub/Sub/fdsa',
+						'@type':'Sub',
+						value:"fdsa"
+					  }
+			}
+	].
+
 
 :- end_tests(migration).
