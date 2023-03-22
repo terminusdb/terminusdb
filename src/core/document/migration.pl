@@ -146,6 +146,11 @@ move_class_in_document(Before_Class, After_Class, Before_Document, After_Documen
     dict_create(After_Document, json, Pairs).
 
 move_class(Before_Class, After_Class, Before, After) :-
+    atom_string(After_Name, After_Class),
+    die_if(
+        get_dict(After_Name,Before,_),
+        error(class_already_exists(After_Class), _)
+    ),
     findall(
         Class-After_Document,
         (   get_dict(Name,Before,Before_Document),
@@ -378,7 +383,7 @@ interpret_instance_operation(delete_class_property(Class, Property), Before, _Af
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     prefix_expand_schema(Property, Prefixes, P),
-    once(class_predicate_type(Before,Class_Ex,P, Type)),
+    once(class_predicate_type(Before,Class_Ex, P, Type)),
     (   member(Type,[unit,enum(_,_),base_class(_),class(_),
                      optional(_),set(_),cardinality(_,_),foreign(_)])
     ->  count_solutions(
@@ -581,6 +586,10 @@ before2('
   "@key" : { "@type" : "Lexical", "@fields" : ["value"] },
   "value" : "xsd:string" }
 
+{ "@type" : "Class",
+  "@id" : "C",
+  "c" : "xsd:string" }
+
 ').
 
 test(move_and_weaken,
@@ -764,36 +773,37 @@ test(subdocument_move_class,
 			}
 	].
 
-test(cast_in_list,
+test(move_to_existing_fails,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
              write_schema(before2,Descriptor)
             )),
-      cleanup(teardown_temp_store(State))
+      cleanup(teardown_temp_store(State)),
+      error(class_already_exists("C"),_)
      ]) :-
 
     with_test_transaction(
         Descriptor,
         C1,
         (   insert_document(C1,
-                            _{ '@id' : 'Super/1', sub : _{ '@id' : "Super/1/sub/Sub/asdf",
-                                                           value : "asdf" }},
+                            _{ '@id' : 'A/1', a : "foo" },
                             _),
             insert_document(C1,
-                            _{ '@id' : 'Super/2', sub : _{ '@id' : "Super/2/sub/Sub/fdsa",
-                                                           value: "fdsa" }},
+                            _{ '@id' : 'A/2', a : "bar" },
                             _)
         )
     ),
 
     Ops = [
-        move_class("Super", "Duper")
+        move_class("A", "C")
     ],
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
                                Result),
+
+    print_term(Result, []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
