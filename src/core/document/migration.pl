@@ -451,14 +451,34 @@ interpret_instance_operation(change_parents(_Class,_Parents,_Property_Defaults),
 interpret_instance_operation(Op, _Before, _After, _Count) :-
     throw(error(instance_operation_failed(Op), _)).
 
+cycle_instance(Before_Transaction, After_Transaction) :-
+    get_dict(instance_objects, Before_Transaction, [Instance_RWO]),
+    get_dict(write, Instance_RWO, Builder),
+    nb_commit(Builder, Layer),
+    put_dict(_{read: Layer, write: _}, Instance_RWO, New_Instance_RWO),
+    put_dict(_{instance_objects: [New_Instance_RWO]}, Before_Transaction, After_Transaction).
+
 interpret_instance_operations([], _Before, _After, Count, Count).
 interpret_instance_operations([Instance_Operation|Instance_Operations], Before, After, Count_In, Count_Out) :-
     interpret_instance_operation(Instance_Operation, Before, After, Count),
     Count1 is Count + Count_In,
-    interpret_instance_operations(Instance_Operations, Before, After, Count1, Count_Out).
+    cycle_instance(Before, Intermediate),
+    interpret_instance_operations(Instance_Operations, Intermediate, After, Count1, Count_Out).
 
 interpret_instance_operations(Ops, Before, After, Count) :-
-    interpret_instance_operations(Ops, Before, After, 0, Count).
+    interpret_instance_operations(Ops, Before, Intermediate, 0, Count),
+
+    % squash the result
+    get_dict(instance_objects, Before, [Before_Instance_RWO]),
+    get_dict(read, Before_Instance_RWO, Before_Layer),
+
+    get_dict(instance_objects, Intermediate, [Intermediate_Instance_RWO]),
+    get_dict(read, Intermediate_Instance_RWO, Intermediate_Layer),
+
+    squash_upto(Before_Layer, Intermediate_Layer, After_Layer),
+
+    put_dict(_{read: After_Layer}, Intermediate_Instance_RWO, After_Instance_RWO),
+    put_dict(_{instance_objects: [After_Instance_RWO]}, Intermediate_Transaction, After_Transaction).
 
 /*
  * A convenient intermediate form using a dictionary:

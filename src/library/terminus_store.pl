@@ -43,6 +43,7 @@
 
               parent/2,
               squash/2,
+              squash_upto/3,
 
               layer_addition_count/2,
               layer_removal_count/2,
