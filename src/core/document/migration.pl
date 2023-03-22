@@ -355,22 +355,28 @@ interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Co
     ).
 interpret_instance_operation(delete_class_property(Class, Property), Before, _After, Count) :-
     % Todo: Array / List
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    prefix_expand_schema(Property, Prefixes, P),
     count_solutions(
         ask(Before,
-            (   t(X, rdf:type, Class),
-                t(X, Property, Value),
-                delete(X, Property, Value))),
+            (   t(X, rdf:type, Class_Ex),
+                t(X, P, Value),
+                delete(X, P, Value))),
         Count
     ).
 interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
-    ->  count_solutions(
+    ->  database_prefixes(Before, Prefixes),
+        prefix_expand_schema(Class, Prefixes, Class_Ex),
+        prefix_expand_schema(Property, Prefixes, P),
+        count_solutions(
             ask(Before,
-                    (   t(X, rdf:type, Class),
-                        t(X, Property, Old_Value),
-                        delete(X, Property, Old_Value),
+                    (   t(X, rdf:type, Class_Ex),
+                        t(X, P, Old_Value),
+                        delete(X, P, Old_Value),
                         typecast(Old_Value, Simple_Type, [], Cast),
-                        insert(X, Property, Cast)
+                        insert(X, P, Cast)
                     )
                ),
             Count
@@ -380,11 +386,14 @@ interpret_instance_operation(upcast_class_property(Class, Property, New_Type), B
     ).
 interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
-    ->  count_solutions(
+    ->  database_prefixes(Before, Prefixes),
+        prefix_expand_schema(Class, Prefixes, Class_Ex),
+        prefix_expand_schema(Property, Prefixes, P),
+        count_solutions(
             (   ask(Before,
-                    (   t(X, rdf:type, Class),
+                    (   t(X, rdf:type, Class_Ex),
                         t(X, Property, Value),
-                        delete(X, Property, Value)
+                        delete(X, P, Value)
                     )),
                 once(
                     (   (   typecast(Value, Simple_Type, [], Cast)
@@ -392,10 +401,10 @@ interpret_instance_operation(cast_class_property(Class, Property, New_Type, Defa
                         ;   Default_or_Error = default(Default)
                         ->  Cast = Default^^Simple_Type
                         ;   Value = _^^Old_Type,
-                            throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
+                            throw(error(bad_cast_in_schema_migration(Class,P,Old_Type,New_Type), _))
                         ),
                         ask(After,
-                            (   insert(X, Property, Cast)))
+                            (   insert(X, P, Cast)))
                     ))
             ),
             Count
@@ -474,6 +483,7 @@ perform_instance_migration(_, _, _, _) :-
     throw(error(transaction_retry_exceeded, _)).
 
 perform_instance_migration_on_transaction(Before_Transaction, Operations, Result) :-
+    ensure_transaction_has_builder(instance, Before_Transaction),
     calculate_schema_migration(Before_Transaction, Operations, Schema),
     replace_schema(Before_Transaction, Schema, After_Transaction),
     interpret_instance_operations(Operations, Before_Transaction, After_Transaction, Count),
@@ -587,8 +597,9 @@ test(move_and_weaken_with_instance_data,
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
-                               Ops),
-
+                               Ops,
+                               Result),
+    Result = metadata{instance_operations:2,schema_operations:2},
     findall(
         DocA,
         get_document_by_type(Descriptor, "A", DocA),

@@ -1754,7 +1754,7 @@ run_command(reset,[Path,Ref], Opts) :-
             format(current_output, "Succesfully reset ~s to ~s~n", [Path,Ref])
         )
     ).
-run_command(migration,[Path],Opts) :-
+run_command(migration,[Path], Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(message(Message), Opts),
