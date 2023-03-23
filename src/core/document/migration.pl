@@ -455,18 +455,20 @@ cycle_instance(Before_Transaction, After_Transaction) :-
     get_dict(instance_objects, Before_Transaction, [Instance_RWO]),
     get_dict(write, Instance_RWO, Builder),
     nb_commit(Builder, Layer),
+
     put_dict(_{read: Layer, write: _}, Instance_RWO, New_Instance_RWO),
-    put_dict(_{instance_objects: [New_Instance_RWO]}, Before_Transaction, After_Transaction).
+    put_dict(_{instance_objects: [New_Instance_RWO]}, Before_Transaction, After_Transaction),
+    ensure_transaction_has_builder(instance, After_Transaction).
 
-interpret_instance_operations([], _Before, _After, Count, Count).
-interpret_instance_operations([Instance_Operation|Instance_Operations], Before, After, Count_In, Count_Out) :-
-    interpret_instance_operation(Instance_Operation, Before, After, Count),
+interpret_instance_operations([], _Before_Transaction, After_Transaction, After_Transaction, Count, Count).
+interpret_instance_operations([Instance_Operation|Instance_Operations], Before, Intermediate0, After, Count_In, Count_Out) :-
+    interpret_instance_operation(Instance_Operation, Before, Intermediate0, Count),
     Count1 is Count + Count_In,
-    cycle_instance(Before, Intermediate),
-    interpret_instance_operations(Instance_Operations, Intermediate, After, Count1, Count_Out).
+    cycle_instance(Intermediate0, Intermediate1),
+    interpret_instance_operations(Instance_Operations, Before, Intermediate1, After, Count1, Count_Out).
 
-interpret_instance_operations(Ops, Before, After, Count) :-
-    interpret_instance_operations(Ops, Before, Intermediate, 0, Count),
+interpret_instance_operations(Ops, Before, Intermediate0, After, Count) :-
+    interpret_instance_operations(Ops, Before, Intermediate0, Intermediate, 0, Count),
 
     % squash the result
     get_dict(instance_objects, Before, [Before_Instance_RWO]),
@@ -475,10 +477,17 @@ interpret_instance_operations(Ops, Before, After, Count) :-
     get_dict(instance_objects, Intermediate, [Intermediate_Instance_RWO]),
     get_dict(read, Intermediate_Instance_RWO, Intermediate_Layer),
 
-    squash_upto(Before_Layer, Intermediate_Layer, After_Layer),
+    squash_upto(Intermediate_Layer, Before_Layer, After_Layer),
 
-    put_dict(_{read: After_Layer}, Intermediate_Instance_RWO, After_Instance_RWO),
-    put_dict(_{instance_objects: [After_Instance_RWO]}, Intermediate_Transaction, After_Transaction).
+    (   layer_addition_count(After_Layer, Additions),
+        layer_removal_count(After_Layer, Removals),
+        (   Additions \= 0
+        ;   Removals \= 0)
+    ->  Force_Write = true
+    ;   Force_Write = false),
+
+    put_dict(_{read: After_Layer, write: _, force_write: Force_Write}, Intermediate_Instance_RWO, After_Instance_RWO),
+    put_dict(_{instance_objects: [After_Instance_RWO]}, Intermediate, After).
 
 /*
  * A convenient intermediate form using a dictionary:
@@ -539,8 +548,8 @@ perform_instance_migration(_, _, _, _) :-
 perform_instance_migration_on_transaction(Before_Transaction, Operations, Result) :-
     ensure_transaction_has_builder(instance, Before_Transaction),
     calculate_schema_migration(Before_Transaction, Operations, Schema),
-    replace_schema(Before_Transaction, Schema, After_Transaction),
-    interpret_instance_operations(Operations, Before_Transaction, After_Transaction, Count),
+    replace_schema(Before_Transaction, Schema, Intermediate_Transaction),
+    interpret_instance_operations(Operations, Before_Transaction, Intermediate_Transaction, After_Transaction, Count),
     % run logic here.
     run_transactions([After_Transaction], false, _),
     length(Operations, Op_Count),
@@ -630,7 +639,7 @@ test(move_and_weaken,
     json{'A':json{'@id':'A','@type':'Class',a:'xsd:string'}} :< Dictionary,
 
     interpret_schema_operations(Ops, Dictionary, After),
-
+    
     json{ 'B': json{ '@id':"B",
 					 '@type':'Class',
 					 a:_{ '@class':"xsd:string",
@@ -823,7 +832,6 @@ test(move_to_existing_fails,
                                Ops,
                                Result),
 
-    print_term(Result, []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(

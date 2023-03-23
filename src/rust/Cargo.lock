@@ -1823,6 +1823,7 @@ dependencies = [
 [[package]]
 name = "terminus-store"
 version = "0.20.1"
+source = "git+https://github.com/terminusdb/terminusdb-store.git?branch=squash_upto#dea09882ca79ae83ac644a527ee71aca33512a97"
 dependencies = [
  "async-trait",
  "base64",
