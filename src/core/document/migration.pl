@@ -240,8 +240,9 @@ type_weaken(Type1, Type2) :-
     class_weaken(Class1, Class2).
 type_weaken(Type1Text, Type2) :-
     is_dict(Type2),
-    atom_string(Type1, Type1Text),
+    text(Type1Text),
     !,
+    atom_string(Type1, Type1Text),
     get_dict('@type', Type2, Family),
     (   memberchk(Family, ["Set", "Optional"])
     ->  true
@@ -254,6 +255,11 @@ type_weaken(Type1Text, Type2) :-
     get_dict('@class', Type2, Class2Text),
     atom_string(Class2, Class2Text),
     class_weaken(Type1, Class2).
+type_weaken(Type1, Type2) :-
+    is_dict(Type1),
+    text(Type2),
+    !,
+    fail.
 type_weaken(Type1Text, Type2Text) :-
     atom_string(Type, Type1Text),
     atom_string(Type, Type2Text).
@@ -733,6 +739,10 @@ before2('
   "e" : { "@type" : "List",
           "@class" : "Sub" }}
 
+{ "@type" : "Class",
+  "@id" : "F",
+  "f" : { "@type" : "Optional", "@class" : "xsd:float" }}
+
 ').
 
 test(move_and_weaken,
@@ -1120,7 +1130,7 @@ test(delete_and_create_class_property,
 				   }
 			 ].
 
-test(delete_and_create_class_property_with_set_default,
+test(float_to_string,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
              write_schema(before2,Descriptor)
@@ -1132,27 +1142,24 @@ test(delete_and_create_class_property_with_set_default,
         Descriptor,
         C1,
         (   insert_document(C1,
-                            _{ '@id' : 'A/1', a : "foo" },
+                            _{ '@id' : 'F/1', f : 33.4 },
                             _),
             insert_document(C1,
-                            _{ '@id' : 'A/2', a : "bar" },
+                            _{ '@id' : 'F/2', f : 44.3 },
                             _)
         )
     ),
 
     Ops = [
-        delete_class_property("A", "a"),
-        create_class_property("A", "a",
-                              _{'@type' : "Set",
-                                '@class': "xsd:int"},
-                              [1,2,3])
+        cast_class_property("F", "f",_{ '@type' : "Optional",
+                                        '@class' : "xsd:string"},error)
     ],
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
                                Result),
-
+    print_term(Result, []),
     Result = metadata{instance_operations:4,schema_operations:2},
     findall(
         DocA,
