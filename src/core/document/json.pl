@@ -18,6 +18,7 @@
               get_document_uri_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
+              delete_subdocument/3,
               insert_document/3,
               insert_document/7,
               insert_document_unsafe/8,

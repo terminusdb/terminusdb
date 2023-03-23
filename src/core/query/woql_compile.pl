@@ -248,11 +248,12 @@ resolve_predicate(null,_Something) -->
     [].
 resolve_predicate(P,PE) -->
     {
-        atom(P),
-        \+ uri_has_protocol(P),
+        text(P),
+        atom_string(PA,P),
+        \+ uri_has_protocol(PA),
         !
     },
-    resolve_prefix('@schema', P, PE).
+    resolve_prefix('@schema', PA, PE).
 resolve_predicate(P, PE) -->
    resolve(P,PE).
 
