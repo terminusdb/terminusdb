@@ -72,26 +72,6 @@ and after state which the upgrade was designed for?
 
 */
 
-json_term_to_dict(Term, List),
-is_list(Term) =>
-    maplist(json_term_to_dict, Term, List).
-json_term_to_dict(Term, Dict),
-Term = {_} =>
-    Term =.. [_,R],
-    xfy_list(',', R, List),
-    findall(
-        K-V,
-        (   member(KV, List),
-            do_or_die(
-                KV = KString:VTerm,
-                error(json_syntax_error(Term, KV), _)),
-            atom_string(K, KString),
-            json_term_to_dict(VTerm, V)
-        ),
-        Pairs),
-    dict_create(Dict, json, Pairs).
-json_term_to_dict(Term, Value) =>
-    Term = Value.
 
 /* delete_class(Name) */
 delete_class(Name, Before, After) :-
@@ -99,8 +79,7 @@ delete_class(Name, Before, After) :-
     del_dict(Name_Key, Before, _, After).
 
 /* create_class(Class_Document) */
-create_class(Class_Term, Before, After) :-
-    json_term_to_dict(Class_Term, Class_Document),
+create_class(Class_Document, Before, After) :-
     get_dict('@id', Class_Document, Name),
     atom_string(Name_Key, Name),
     put_dict(Name_Key, Before, Class_Document, After).
@@ -174,12 +153,11 @@ delete_class_property(Class, Property, Before, After) :-
 
 /* create_class_property(Class,Property,Type) */
 create_class_property(Class, Property, Type, Before, After) :-
-    json_term_to_dict(Type, Type_Dict),
     atom_string(Class_Key, Class),
     atom_string(Property_Key, Property),
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
-    put_dict(Property_Key, Class_Document, Type_Dict, Final_Document),
+    put_dict(Property_Key, Class_Document, Type, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* create_class_property(Class,Property,Type,Default) */

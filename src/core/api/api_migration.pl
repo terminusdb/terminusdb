@@ -11,12 +11,41 @@
 :- use_module(core(transaction)).
 :- use_module(core(query)).
 
+json_term_to_dict(Term, List),
+is_list(Term) =>
+    maplist(json_term_to_dict, Term, List).
+json_term_to_dict(Term, Dict),
+Term = {_} =>
+    Term =.. [_,R],
+    xfy_list(',', R, List),
+    findall(
+        K-V,
+        (   member(KV, List),
+            do_or_die(
+                KV = KString:VTerm,
+                error(json_syntax_error(Term, KV), _)),
+            atom_string(K, KString),
+            json_term_to_dict(VTerm, V)
+        ),
+        Pairs),
+    dict_create(Dict, json, Pairs).
+json_term_to_dict(Term, Value) =>
+    Term = Value.
+
+sanitize_operations(Operations_List, Sanitized) :-
+    maplist([Op,San_Op]>>(
+                Op =.. [Op_Name|Args],
+                maplist(json_term_to_dict,Args,San_Args),
+                San_Op =.. [Op_Name|San_Args]),
+            Operations_List, Sanitized).
+
 operations_string_to_list(Operations_String, Operations) :-
     term_string(Term, Operations_String, [variable_names(VNames)]),
     do_or_die(
         VNames = [],
         error(malformed_operations_string)),
-    xfy_list(',', Term, Operations).
+    xfy_list(',', Term, Operations_List),
+    sanitize_operations(Operations_List, Operations).
 
 api_migrate_resource(System, Auth, Path, Commit_Info0, Operations_String, Result) :-
     resolve_descriptor_auth(write, System, Auth, Path, instance, _Descriptor),
