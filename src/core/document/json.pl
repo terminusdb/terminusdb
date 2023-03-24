@@ -8,6 +8,7 @@
               json_schema_triple/3,
               json_schema_elaborate/3,
               database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
@@ -504,8 +505,14 @@ get_context_metadata(DB, ID, Metadata) :-
 get_context_imports(_DB, _ID, _Metadata) :-
     fail.
 
+get_schema_context_metadata(Schema, ID, Metadata) :-
+    schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
+
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
+    get_schema_context_documentation(Schema, ID, Doc).
+
+get_schema_context_documentation(Schema, ID, Doc) :-
     findall(
         Documentation,
         (   xrdf(Schema, ID, sys:documentation, Doc_ID),
@@ -534,21 +541,13 @@ get_context_documentation(DB, ID, Doc) :-
     ;   Documentations = Doc
     ).
 
-database_context_object(DB,Prefixes) :-
-    is_transaction(DB),
-    is_schemaless(DB),
-    !,
-    database_prefixes(DB, Prefixes).
-database_context_object(DB,Context) :-
-    is_transaction(DB),
-    !,
-    database_prefixes(DB, Prefixes),
-    database_schema(DB, Schema),
+database_schema_context_object(Schema, Context) :-
+    database_schema_prefixes(Schema, Prefixes),
     % This should always exist according to schema correctness criteria?
     xrdf(Schema, ID, rdf:type, sys:'Context'),
     xrdf(Schema, ID, sys:base, Base_String^^_),
     xrdf(Schema, ID, sys:schema, Schema_String^^_),
-    (   get_context_documentation(DB, ID, Documentation)
+    (   get_schema_context_documentation(Schema, ID, Documentation)
     ->  put_dict(
             _{ '@base' : Base_String,
                '@schema' : Schema_String,
@@ -559,14 +558,21 @@ database_context_object(DB,Context) :-
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
-    (   get_context_metadata(DB, ID, Metadata)
-    ->  put_dict(_{'@metadata' : Metadata}, Context0, Context1)
-    ;   Context1 = Context0
-    ),
-    (   get_context_imports(DB, ID, Imports)
-    ->  put_dict(_{'@imports' : Imports}, Context1, Context)
-    ;   Context = Context1
+    (   get_schema_context_metadata(Schema, ID, Metadata)
+    ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
+    ;   Context = Context0
     ).
+
+database_context_object(DB,Prefixes) :-
+    is_transaction(DB),
+    is_schemaless(DB),
+    !,
+    database_prefixes(DB, Prefixes).
+database_context_object(DB,Context) :-
+    is_transaction(DB),
+    !,
+    database_schema(DB, Schema),
+    database_schema_context_object(Schema, Context).
 database_context_object(Query_Context,Context) :-
     is_query_context(Query_Context),
     !,

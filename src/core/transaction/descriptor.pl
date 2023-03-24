@@ -708,10 +708,16 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
 
-should_retain_layers_for_descriptor(system_descriptor{}).
+should_retain_layers_for_descriptor(system_descriptor{}) :-
+    !.
 should_retain_layers_for_descriptor(D) :-
     pinned_databases(Pinned),
-    memberchk(D, Pinned).
+    memberchk(D, Pinned),
+    !.
+should_retain_layers_for_descriptor(D) :-
+    catch(descriptor_organization(D, Org), error(descriptor_has_no_organization), false),
+    pinned_organizations(Pinned),
+    memberchk(Org, Pinned).
 
 layers_for_transaction(Transaction, Layers) :-
     _{
