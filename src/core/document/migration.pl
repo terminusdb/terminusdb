@@ -174,11 +174,12 @@ delete_class_property(Class, Property, Before, After) :-
 
 /* create_class_property(Class,Property,Type) */
 create_class_property(Class, Property, Type, Before, After) :-
+    json_term_to_dict(Type, Type_Dict),
     atom_string(Class_Key, Class),
     atom_string(Property_Key, Property),
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
-    put_dict(Property_Key, Class_Document, Type, Final_Document),
+    put_dict(Property_Key, Class_Document, Type_Dict, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* create_class_property(Class,Property,Type,Default) */
