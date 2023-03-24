@@ -7,8 +7,8 @@ listed below.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| > 10.0  | :white_check_mark: |
-| < 10.0  | :x:                |
+| > 11.0  | :white_check_mark: |
+| < 11.0  | :x:                |
 
 Report the vulnerability to <security@terminusdb.com>.
 
