@@ -487,8 +487,8 @@ interpret_instance_operation(create_class_property(Class, Property, Type, Defaul
         prefix_expand_schema(Type, Prefixes, Value_Type_Atom),
         count_solutions(
             ask(After,
-                isa(X, Class),
-                insert(X, Property, Default^^Value_Type_Atom)),
+                (   isa(X, Class),
+                    insert(X, Property, Default^^Value_Type_Atom))),
             Count)
     ;   throw(
             error(
