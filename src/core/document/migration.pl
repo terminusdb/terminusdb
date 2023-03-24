@@ -539,15 +539,17 @@ interpret_instance_operation(cast_class_property(Class, Property, New_Type, Defa
                         delete(X, Property, Value)
                     )),
                 once(
-                    (   (   typecast(Value, Simple_Type, [], Cast)
+                    (   Value = V^^Old_Type,
+                        global_prefix_expand(Old_Type, Old_Type_Ex),
+                        (   typecast(V^^Old_Type_Ex, Simple_Type, [], Cast)
                         ->  true
                         ;   Default_or_Error = default(Default)
                         ->  Cast = Default^^Simple_Type
                         ;   Value = _^^Old_Type,
-                            throw(error(bad_cast_in_schema_migration(Class,P,Old_Type,New_Type), _))
+                            throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
                         ),
                         ask(After,
-                            (   insert(X, P, Cast)))
+                            (   insert(X, Property, Cast)))
                     ))
             ),
             Count
@@ -1159,15 +1161,15 @@ test(float_to_string,
                                                         message: "Fancy" },
                                Ops,
                                Result),
-    print_term(Result, []),
-    Result = metadata{instance_operations:4,schema_operations:2},
-    findall(
-        DocA,
-        get_document_by_type(Descriptor, "A", DocA),
-        A_Docs),
 
-    A_Docs = [ json{'@id':'A/1','@type':'A',a:[1,2,3]},
-			   json{'@id':'A/2','@type':'A',a:[1,2,3]}
+    Result = metadata{instance_operations:2,schema_operations:1},
+    findall(
+        DocF,
+        get_document_by_type(Descriptor, "F", DocF),
+        F_Docs),
+
+    F_Docs = [ json{'@id':'F/1','@type':'F',f:"33.400001525878906"},
+			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
 
 
