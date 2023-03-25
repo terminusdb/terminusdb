@@ -250,7 +250,15 @@ upcast_class_property(Class, Property, New_Type, Before, After) :-
 
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, Type_Definition),
-    type_weaken(Type_Definition, New_Type),
+    do_or_die(
+        type_weaken(Type_Definition, New_Type),
+        error(not_an_irrefutable_weakening_operation(
+                  upcast_class_property,
+                  Class,
+                  Property,
+                  New_Type),
+              _)
+    ),
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After).
 
@@ -260,8 +268,7 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
     atom_string(Property_Key, Property),
 
     get_dict(Class_Key, Before, Before_Class_Document),
-    get_dict(Property_Key, Before_Class_Document, Type_Definition),
-    \+ type_weaken(Type_Definition, New_Type),
+    get_dict(Property_Key, Before_Class_Document, _Type_Definition),
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After).
 
@@ -311,7 +318,7 @@ extract_simple_type(Type, Simple) :-
     get_dict('@class', Type, Simple_Unexpanded),
     default_prefixes(Prefixes),
     prefix_expand_schema(Simple_Unexpanded, Prefixes, Simple).
-extract_simple_type(_, Type, Type). % implict \+ is_dict(Type)
+extract_simple_type(Type, Type). % implict \+ is_dict(Type)
 
 
 rewrite_document_key_value('@id',Id_A,Type_A,Type_B,Key,Id_B) =>
@@ -1151,5 +1158,69 @@ test(float_to_string,
 			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
 
+test(cast_to_required_fails,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_an_irrefutable_weakening_operation(
+                upcast_class_property,"F","f","xsd:string"
+            ),_)
+     ]) :-
+
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+
+    Ops = [
+        upcast_class_property("F", "f","xsd:string")
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result).
+
+test(cast_to_required_or_error,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+
+    Ops = [
+        cast_class_property("F", "f", "xsd:string", error)
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result),
+
+    print_term(Result, []).
 
 :- end_tests(migration).
