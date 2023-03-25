@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 11.0.2
-  CURRENT_REPO_VERSION: 11.0.3
+  LAST_RELEASED_VERSION: 11.0.3
+  CURRENT_REPO_VERSION: 11.0.4
 
 jobs:
   openapi_lint:
