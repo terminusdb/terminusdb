@@ -33,4 +33,5 @@ jobs:
           terminusdb store init
           terminusdb serve &
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
+          sleep 5 # Sleep a bit to be sure that the server started
           cd tests && npm i && npm run test
