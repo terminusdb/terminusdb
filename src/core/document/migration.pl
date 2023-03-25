@@ -503,14 +503,17 @@ interpret_instance_operation(create_class_property(Class, Property, Type), _Befo
 interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
-            ask(Before,
+            (   default_prefixes(Prefixes),
+                prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex),
+                ask(Before,
                     (   isa(X, Class),
                         t(X, Property, Old_Value),
                         delete(X, Property, Old_Value),
-                        typecast(Old_Value, Simple_Type, [], Cast),
+                        typecast(Old_Value, Simple_Type_Ex, [], Cast),
                         insert(X, Property, Cast)
                     )
-               ),
+                   )
+            ),
             Count
         )
     ;   % Todo: Array / List
@@ -519,7 +522,9 @@ interpret_instance_operation(upcast_class_property(Class, Property, New_Type), B
 interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
-            (   ask(Before,
+            (   default_prefixes(Prefixes),
+                prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex),
+                ask(Before,
                     (   t(X, rdf:type, '@schema':Class),
                         t(X, Property, Value),
                         delete(X, Property, Value)
@@ -527,7 +532,7 @@ interpret_instance_operation(cast_class_property(Class, Property, New_Type, Defa
                 once(
                     (   Value = V^^Old_Type,
                         global_prefix_expand(Old_Type, Old_Type_Ex),
-                        (   typecast(V^^Old_Type_Ex, Simple_Type, [], Cast)
+                        (   typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast)
                         ->  true
                         ;   Default_or_Error = default(Default)
                         ->  Cast = Default^^Simple_Type
@@ -1220,7 +1225,17 @@ test(cast_to_required_or_error,
                                                         message: "Fancy" },
                                Ops,
                                Result),
+    Result = metadata{ instance_operations:2,
+					   schema_operations:1
+					 },
+    findall(
+        DocF,
+        get_document_by_type(Descriptor, "F", DocF),
+        F_Docs),
 
-    print_term(Result, []).
+    F_Docs = [ json{'@id':'F/1','@type':'F',f:"33.400001525878906"},
+			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
+			 ].
+
 
 :- end_tests(migration).
