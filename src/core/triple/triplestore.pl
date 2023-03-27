@@ -33,7 +33,7 @@
 
 :- use_module(core(transaction)).
 
-:- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1]).
+:- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1, lru_cache_size/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(debug)).
