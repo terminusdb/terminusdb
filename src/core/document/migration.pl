@@ -72,6 +72,11 @@ and after state which the upgrade was designed for?
 
 */
 
+operation_string(Term,String) :-
+    Term =.. [F|Args],
+    maplist([Atom,A]>>atom_json_dict(Atom,A,[]),Atom_Args,Args),
+    New_Term =.. [F|Atom_Args],
+    format(string(String), "~q", [New_Term]).
 
 /* delete_class(Name) */
 delete_class(Name, Before, After) :-
@@ -281,10 +286,17 @@ interpret_schema_operation(Op, Before, After) :-
     Op =.. [OpName|Args],
     append(Args, [Before, After], Args1),
     Pred =.. [OpName|Args1],
-    call(Pred),
+    catch(
+        call(Pred),
+        error(existence_error(procedure,_), _),
+        (   operation_string(Op, Op_String),
+            throw(error(schema_operation_failed(Op_String, Before), _))
+        )
+    ),
     !.
 interpret_schema_operation(Op, Before, _After) :-
-    throw(error(schema_operation_failed(Op, Before), _)).
+    operation_string(Op, Op_String),
+    throw(error(schema_operation_failed(Op_String, Before), _)).
 
 interpret_schema_operations([], Schema, Schema).
 interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
@@ -478,7 +490,7 @@ interpret_instance_operation(create_class_property(Class, Property, Type, Defaul
             Count)
     ;   throw(
             error(
-                unknown_irrefutable_property_creation(Class,Property,Type)))
+                not_irrefutable_property_creation(Class,Property,Type)))
     ).
 interpret_instance_operation(create_class_property(Class, Property, Type), _Before, After, Count) :-
     (   is_dict(Type),
@@ -517,7 +529,8 @@ interpret_instance_operation(upcast_class_property(Class, Property, New_Type), B
             Count
         )
     ;   % Todo: Array / List
-        throw(error(not_implemented, _))
+        operation_string(upcast_class_property(Class,Property,New_Type), Op_String),
+        throw(error(not_implemented(Op_String), _))
     ).
 interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
@@ -546,12 +559,15 @@ interpret_instance_operation(cast_class_property(Class, Property, New_Type, Defa
             Count
         )
     ;   % Todo: Array / List
-        throw(error(not_implemented, _))
+        operation_string(cast_class_property(Class, Property, New_Type, Default_or_Error), Op_String),
+        throw(error(not_implemented(Op_String), _))
     ).
-interpret_instance_operation(change_parents(_Class,_Parents,_Property_Defaults), _Before, _After,_Count) :-
-    throw(error(unimplemented, _)).
+interpret_instance_operation(change_parents(Class,Parents,Property_Defaults), _Before, _After,_Count) :-
+    operation_string(change_parents(Class,Parents,Property_Defaults), Op_String),
+    throw(error(not_implemented(Op_String), _)).
 interpret_instance_operation(Op, _Before, _After, _Count) :-
-    throw(error(instance_operation_failed(Op), _)).
+    operation_string(Op, Op_String),
+    throw(error(instance_operation_failed(Op_String), _)).
 
 cycle_instance(Before_Transaction, After_Transaction) :-
     get_dict(instance_objects, Before_Transaction, [Instance_RWO]),
@@ -1237,5 +1253,23 @@ test(cast_to_required_or_error,
 			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
 
+
+test(garbage_op,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_operation_failed("foo",_),_)
+     ]) :-
+
+    Ops = [
+        foo
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result).
 
 :- end_tests(migration).

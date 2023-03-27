@@ -1512,6 +1512,87 @@ api_error_jsonld_(migration, error(no_common_migration_prefix(Our_Migration,Thei
                               'api:our_migration' : Our_Migration
                             }
             }.
+api_error_jsonld_(migration, error(schema_operation_failed(Op, Before), _), JSON) :-
+    format(string(Msg), "The schema operation '~q' failed and could not be performed", [Op]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:SchemaOperationFailed",
+                              'api:schema_operation' : Op,
+                              'api:schema' : Before
+                            }
+            }.
+api_error_jsonld_(migration, error(not_an_irrefutable_weakening_operation(
+                                       upcast_class_property,
+                                       Class,
+                                       Property,
+                                       New_Type), _), JSON) :-
+    atom_json_dict(Type, New_Type, []),
+    format(string(Msg), "It is impossible to upcast the property ~q on class ~q to a stricter type ~q", [Class,Property,Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UpcastNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : New_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(class_already_exists(Class), _), JSON) :-
+    format(string(Msg), "It is impossible to move to the class ~q as it already exists", [Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:ClassExists",
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(not_an_irrefutable_weakening_operation(
+                                      upcast_class_property,
+                                      Class,
+                                      Property,
+                                      New_Type), _), JSON) :-
+    atom_json_dict(Type, New_Type, []),
+    format(string(Msg), "It is impossible to upcast the property ~q on class ~q to a stricter type ~q", [Class,Property,Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UpcastNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : New_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(not_irrefutable_property_creation(Class, Property, Type), _), JSON) :-
+    atom_json_dict(Type_Atom, Type, []),
+    format(string(Msg), "It is impossible to prove that the creation of the property ~q on the class ~q with type ~q will be valid, as it may not match user data", [Class, Property, Type_Atom]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:PropertyCreationNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : Type
+                            }
+            }.
+api_error_jsonld_(migration, error(not_implemented(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q is not yet implemented", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OperationNotImplemented",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(instance_operation_failed(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q failed for an unknown reason", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InstanceOperationFailure",
+                              'api:operation' : Operation
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
