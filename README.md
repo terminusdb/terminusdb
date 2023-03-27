@@ -105,10 +105,10 @@ terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 EOF
 ```
 
-You can attach this to a database on TerminusX in order to distribute it by setting your remote. First you will need to create
-a resource from [TerminusX](https://dashboard.terminusdb.com/). This is analogous to creating a repository on GitHub.
+You can attach this to a database on TerminusCMS in order to distribute it by setting your remote. First you will need to create
+a resource from [TerminusCMS](https://dashboard.terminusdb.com/). This is analogous to creating a repository on GitHub.
 
-Log into TerminusX, create a new data product, and make sure
+Log into TerminusCMS, create a new data product, and make sure
 you have an access token to the team in which we created that data
 product. Then copy the URL to clone from the data product info page.
 
