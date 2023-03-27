@@ -33,7 +33,7 @@
 
 :- use_module(core(transaction)).
 
-:- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1]).
+:- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1, lru_cache_size/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(debug)).
@@ -76,11 +76,13 @@ default_triple_store(Triple_Store) :-
     !,
     db_path(Path),
     assert_database_version_is_current(Path),
-    open_grpc_store(Path, Endpoint, 1, Triple_Store).
+    lru_cache_size(Cache_Size),
+    open_grpc_store(Path, Endpoint, 1, Cache_Size, Triple_Store).
 default_triple_store(Triple_Store) :-
     db_path(Path),
     assert_database_version_is_current(Path),
-    open_archive_store(Path,Triple_Store).
+    lru_cache_size(Cache_Size),
+    open_archive_store(Path,Cache_Size,Triple_Store).
 
 /**
  * memory_triple_store(-Triple_Store) is det.
