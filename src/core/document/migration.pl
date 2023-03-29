@@ -43,6 +43,8 @@ Default_Or_Error := error
 Op := delete_class(Name)
     | create_class(ClassDocument)
     | move_class(Old_Name,New_Name)
+    | replace_class_metadata(Class,Metadata)
+    | replace_class_documentation(Class,Documentation)
     | delete_class_property(Class,Property)
     | create_class_property(Class,Property,Type)  % for option or set
     | create_class_property(Class,Property,Type,Default)
@@ -147,6 +149,20 @@ move_class(Before_Class, After_Class, Before, After) :-
         Pairs),
     dict_create(After, json, Pairs).
 
+/* replace_class_metadata(Class,Metadata) */
+replace_class_metadata(Class, Metadata, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@metadata', Class_Document, Metadata, Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* replace_class_documentation(Class,Documentation) */
+replace_class_documentation(Class, Documentation, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@documentation', Class_Document, Documentation, Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
 /* delete_class_property(Class,Property) */
 delete_class_property(Class, Property, Before, After) :-
     atom_string(Class_Key, Class),
@@ -227,15 +243,7 @@ type_weaken(Type1Text, Type2) :-
     text(Type1Text),
     !,
     atom_string(Type1, Type1Text),
-    get_dict('@type', Type2, Family),
-    (   memberchk(Family, ["Set", "Optional"])
-    ->  true
-    ;   Family = "Cardinality"
-    ->  get_dict('@min_cardinality', Type2, Min),
-        get_dict('@max_cardinality', Type2, Max),
-        Min =< 1,
-        Max >= 1
-    ),
+    type_is_optional(Type2),
     get_dict('@class', Type2, Class2Text),
     atom_string(Class2, Class2Text),
     class_weaken(Type1, Class2).
@@ -247,6 +255,98 @@ type_weaken(Type1, Type2) :-
 type_weaken(Type1Text, Type2Text) :-
     atom_string(Type, Type1Text),
     atom_string(Type, Type2Text).
+
+type_is_optional(Type) :-
+    get_dict('@type', Type, Family),
+    (   memberchk(Family, ["Set", "Optional"])
+    ->  true
+    ;   Family = "Cardinality"
+    ->  get_dict('@min_cardinality', Type, Min),
+        get_dict('@max_cardinality', Type, Max),
+        Min =< 1,
+        Max >= 1
+    ).
+
+/* Failure is no-op, success is operation, and no clause head is an error
+
+class_property_weakened(+,+,+,-) is semidet  + error
+*/
+class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+memberchk(Property,['@type','@key','@subdocument','@inherits','@id','@unfoldable']),
+get_dict(Property,Weakening,New_Value),
+get_dict(Property,Original,Old_Value),
+New_Value = Old_Value =>
+    fail.
+class_property_weakened('@metadata', _Original, Weakening, Class, Operation) =>
+    get_dict('@metadata',Weakening, New_Metadata),
+    Operation = replace_class_metadata(Class,New_Metadata).
+class_property_weakened('@documentation', _Original, Weakening, Class, Operation) =>
+    get_dict('@documentation',Weakening, New_Docs),
+    Operation = replace_class_documentation(Class,New_Docs).
+class_property_weakened(Property, Original, Weakening, Class, Operation),
+get_dict(Property, Original, Original_Type),
+get_dict(Property, Weakening, Weakening_Type) =>
+    do_or_die(type_weaken(Original_Type, Weakening_Type),
+              error(class_property_change_not_a_weakening(Class,Property,Original,Weakening),_)),
+    Operation = upcast_class_property(Class,Property,Weakening).
+class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
+    throw(error(class_definition_not_a_weakening(Class,Property,Value,Weakening),_)).
+
+class_property_optional(Property,Weakening,Class,Operation) :-
+    get_dict(Property,Weakening,Type),
+    do_or_die(
+        type_is_optional(Type),
+        error(class_property_addition_not_optional(Class,Property,Weakening),_)),
+    Operation = add_class_property(Class,Property,Type).
+
+class_weakened(Class, Definition, Weakening, Operations) :-
+    dict_keys(Weakening, New),
+    dict_keys(Definition, Old),
+    ord_subtract(Old,New,Dropped),
+    % deleted
+    do_or_die(
+        Dropped = [],
+        error(class_property_deletion_not_a_weakening(Definition,Weakening),_)
+    ),
+    % added
+    ord_subtract(New,Old,Added),
+    findall(Operation0,
+            (   member(Property, Added),
+                class_property_optional(Property,Weakening,Class,Operation0)
+            ),
+            Operations0),
+    % shared
+    ord_intersection(New,Old,Shared),
+    findall(Operation1,
+            (   member(Property,Shared),
+                class_property_weakened(Property,Definition,Weakening,Class,Operation1)
+            ),
+            Operations1),
+    append(Operations0,Operations1,Operations).
+
+schema_weakening(Schema,Weakened,Operations) :-
+    dict_keys(Schema,Old),
+    dict_keys(Weakened,New),
+    ord_subtract(Old,New,Deleted),
+    do_or_die(
+        Deleted = [],
+        error(not_a_weakening_class_definitions_deleted(Deleted),_)),
+    ord_subtract(New,Old,Added),
+    maplist({Weakened}/[Class,Operation]>>(
+                get_dict(Class, Weakened, Definition),
+                Operation = create_class(Definition)),
+            Added,
+            Operations0),
+    ord_intersection(Old,New,Shared),
+    findall(Intermediate_Operations,
+            (   member(Key, Shared),
+                get_dict(Key,Schema,Old_Class),
+                get_dict(Key,Weakened,New_Class),
+                class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+            ),
+            Operations_List),
+    append(Operations_List, Operations1),
+    append(Operations0,Operations1,Operations).
 
 /* upcast_class_property(Class, Property, New_Type) */
 upcast_class_property(Class, Property, New_Type, Before, After) :-
@@ -378,6 +478,8 @@ interpret_instance_operation(delete_class(Class), Before, After, Count) :-
         Count
     ).
 interpret_instance_operation(create_class(_), _Before, _After, 0).
+interpret_instance_operation(replace_class_metadata(_,_), _Before, _After, 0).
+interpret_instance_operation(replace_class_documentation(_,_), _Before, _After, 0).
 interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
@@ -502,11 +604,7 @@ interpret_instance_operation(create_class_property(Class, Property, Type), _Befo
             Count
         )
     ;   is_dict(Type),
-        get_dict('@type', Type, Family),
-        (   memberchk(Family, ["Set", "Optional", "Array"])
-        ;   Family = "Cardinality",
-            get_dict('@min_cardinality', Type, 0)
-        )
+        type_is_optional(Type)
     ->  Count = 0
     ;   throw(
             error(
@@ -595,16 +693,20 @@ interpret_instance_operations(Ops, Before, Intermediate0, After, Count) :-
     get_dict(instance_objects, Intermediate, [Intermediate_Instance_RWO]),
     get_dict(read, Intermediate_Instance_RWO, Intermediate_Layer),
 
-    squash_upto(Intermediate_Layer, Before_Layer, After_Layer),
-
-    * test_utils:print_all_triples(Intermediate0, schema),
-
-    (   layer_addition_count(After_Layer, Additions),
-        layer_removal_count(After_Layer, Removals),
-        (   Additions \= 0
-        ;   Removals \= 0)
-    ->  Force_Write = true
-    ;   Force_Write = false),
+    (   ground(Intermediate_Layer)
+    ->  (   ground(Before_Layer)
+        ->  squash_upto(Intermediate_Layer, Before_Layer, After_Layer)
+        ;   After_Layer = Intermediate_Layer % first write to DB
+        ),
+        (   layer_addition_count(After_Layer, Additions),
+            layer_removal_count(After_Layer, Removals),
+            (   Additions \= 0
+            ;   Removals \= 0)
+        ->  Force_Write = true
+        ;   Force_Write = false
+        )
+    ;   true % no data ever written to db
+    ),
 
     put_dict(_{read: After_Layer, write: _, force_write: Force_Write}, Intermediate_Instance_RWO, After_Instance_RWO),
     put_dict(_{instance_objects: [After_Instance_RWO]}, Intermediate, After).
@@ -1271,5 +1373,70 @@ test(garbage_op,
                                                         message: "Fancy" },
                                Ops,
                                _Result).
+
+test(replace_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Ops = [
+        replace_class_metadata("F", _{ asdf : "fdsa" })
+    ],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result),
+
+    get_schema_document(Descriptor, "F", F),
+    F = json{ '@id':'F',
+              '@metadata':json{asdf:"fdsa"},
+              '@type':'Class',
+              f:json{'@class':'xsd:float','@type':'Optional'}
+            },
+    Result = metadata{instance_operations:0,schema_operations:1}.
+
+test(weakening_inference,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before1,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    create_class_dictionary(Descriptor, Before),
+    After = json{'A':json{'@id':'A','@type':'Class', a:json{ '@type' : "Optional",
+                                                             '@class' : 'xsd:string'}},
+                 'B':json{'@id': 'B', '@type':'Class', b: 'xsd:integer'}},
+    schema_weakening(Before, After, Operations),
+
+    Operations = [ create_class(json{ '@id':'B',
+							          '@type':'Class',
+							          b:'xsd:integer'
+							        }),
+				   upcast_class_property('A',
+								         a,
+								         json{ '@id':'A',
+								               '@type':'Class',
+								               a:json{ '@class':'xsd:string',
+									                   '@type':"Optional"
+									                 }
+								             })
+				 ].
+
+test(weakening_inference_class_missing,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before1,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(not_a_weakening_class_definitions_deleted(['A']), _)
+     ]) :-
+
+    create_class_dictionary(Descriptor, Before),
+    After = json{},
+    schema_weakening(Before, After, _Operations).
 
 :- end_tests(migration).
