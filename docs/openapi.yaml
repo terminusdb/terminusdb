@@ -2001,6 +2001,13 @@ paths:
         403:
           description: Forbidden
   /migration/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          example: admin/MyDB
     post:
       tags:
         - Change management
