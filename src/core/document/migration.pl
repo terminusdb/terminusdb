@@ -287,16 +287,30 @@ class_property_weakened(Property, Original, Weakening, Class, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
     do_or_die(type_weaken(Original_Type, Weakening_Type),
-              error(class_property_change_not_a_weakening(Class,Property,Original,Weakening),_)),
+              error(weakening_failure(json{ reason: class_property_change_not_a_weakening,
+                                            message: "The class property was changed to a type which was not weaker",
+                                            class: Class,
+                                            property: Property,
+                                            original: Original,
+                                            candidate: Weakening}),_)),
     Operation = upcast_class_property(Class,Property,Weakening).
 class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
-    throw(error(class_definition_not_a_weakening(Class,Property,Value,Weakening),_)).
+    throw(error(weakening_failure(json{ reason: class_definition_not_a_weakening,
+                                        message: "The class definition was not a weakening of the original",
+                                        class: Class,
+                                        property: Property,
+                                        value: Value,
+                                        candidate: Weakening}),_)).
 
 class_property_optional(Property,Weakening,Class,Operation) :-
     get_dict(Property,Weakening,Type),
     do_or_die(
         type_is_optional(Type),
-        error(class_property_addition_not_optional(Class,Property,Weakening),_)),
+        error(weakening_failure(json{ reason: class_property_addition_not_optional,
+                                      message: "The class property which was not added, did not have an optional type",
+                                      class: Class,
+                                      property: Property,
+                                      candidate: Weakening}),_)),
     Operation = add_class_property(Class,Property,Type).
 
 class_weakened(Class, Definition, Weakening, Operations) :-
@@ -306,7 +320,11 @@ class_weakened(Class, Definition, Weakening, Operations) :-
     % deleted
     do_or_die(
         Dropped = [],
-        error(class_property_deletion_not_a_weakening(Definition,Weakening),_)
+        error(weakening_failure(json{ reason: class_property_deletion_not_a_weakening,
+                                      message: "Deletion of a class property is never a weakening",
+                                      dropped: Dropped,
+                                      definition: Definition,
+                                      candidate: Weakening}),_)
     ),
     % added
     ord_subtract(New,Old,Added),
@@ -330,7 +348,9 @@ schema_weakening(Schema,Weakened,Operations) :-
     ord_subtract(Old,New,Deleted),
     do_or_die(
         Deleted = [],
-        error(not_a_weakening_class_definitions_deleted(Deleted),_)),
+        error(weakening_failure(json{ reason: not_a_weakening_class_definitions_deleted,
+                                      message: "The specified class(es) were deleted, violating the weakening conditions",
+                                      deleted: Deleted}),_)),
     ord_subtract(New,Old,Added),
     maplist({Weakened}/[Class,Operation]>>(
                 get_dict(Class, Weakened, Definition),
@@ -759,7 +779,6 @@ perform_instance_migration(Descriptor, Commit_Info, Operations, Result) :-
     % restart logic here
     max_transaction_retries(Max),
     between(0, Max, _),
-
     do_or_die(open_descriptor(Descriptor, Commit_Info, Transaction),
               something),
     perform_instance_migration_on_transaction(Transaction, Operations, Result),
@@ -1432,11 +1451,31 @@ test(weakening_inference_class_missing,
              write_schema(before1,Descriptor)
             )),
       cleanup(teardown_temp_store(State)),
-      error(not_a_weakening_class_definitions_deleted(['A']), _)
+      error(weakening_failure(json{deleted:['A'],
+                                   message:"The specified class(es) were deleted, violating the weakening conditions",
+                                   reason:not_a_weakening_class_definitions_deleted}),_)
      ]) :-
 
     create_class_dictionary(Descriptor, Before),
     After = json{},
+    schema_weakening(Before, After, _Operations).
+
+
+test(weakening_inference_property_missing,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before1,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(weakening_failure(json{definition:json{'@id':'A','@type':'Class',a:'xsd:string'},
+                                   dropped:[a],
+                                   message:"Deletion of a class property is never a weakening",
+                                   reason:class_property_deletion_not_a_weakening,
+                                   candidate:json{'@id':'A','@type':'Class'}}),_)
+     ]) :-
+
+    create_class_dictionary(Descriptor, Before),
+    After = json{'A':json{'@id':'A','@type':'Class'}},
     schema_weakening(Before, After, _Operations).
 
 :- end_tests(migration).

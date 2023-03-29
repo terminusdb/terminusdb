@@ -104,13 +104,18 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
     % - determine that this is prefix of the target migrations
     % - determine the suffix
     % apply suffix
-
     auth_check_migrate_resource_to(System, Auth, Path, Target, Our_Descriptor, Their_Descriptor),
-    open_descriptor(Our_Descriptor, Commit_Info0, Our_Transaction, [], Map),
-    get_dict(parent, Our_Transaction, Our_Repo_Transaction),
+    do_or_die(
+        open_descriptor(Our_Descriptor, Commit_Info0, Our_Transaction, [], Map),
+        error(unresolvable_absolute_descriptor(Our_Descriptor),_)
+    ),
 
+    get_dict(parent, Our_Transaction, Our_Repo_Transaction),
     get_dict(repository_descriptor, Their_Descriptor, Their_Repo_Descriptor),
-    open_descriptor(Their_Repo_Descriptor, Commit_Info0, Their_Repo_Transaction, Map, _),
+    do_or_die(
+        open_descriptor(Their_Repo_Descriptor, Commit_Info0, Their_Repo_Transaction, Map, _),
+        error(unresolvable_absolute_descriptor(Our_Descriptor),_)
+    ),
 
     branch_head_commit(Our_Repo_Transaction, Our_Descriptor.branch_name, Our_Commit_Uri),
     commit_id_uri(Our_Repo_Transaction, Our_Commit_Id, Our_Commit_Uri),

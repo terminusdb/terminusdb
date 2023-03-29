@@ -1593,6 +1593,16 @@ api_error_jsonld_(migration, error(instance_operation_failed(Operation), _), JSO
                               'api:operation' : Operation
                             }
             }.
+api_error_jsonld_(migration, error(weakening_failure(Witness), _), JSON) :-
+    get_dict(message,Witness,Message),
+    format(string(Msg), "Weakening failure: ~s", [Message]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:WeakeningFailure",
+                              'api:witness' : Witness
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
