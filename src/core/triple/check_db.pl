@@ -35,10 +35,12 @@ database_version(2).
  *
  * Reports the version associated with the current backing store
  */
+:- table get_db_version/1.
 get_db_version(Version) :-
     db_path(Path),
     get_db_version(Path, Version).
 
+:- table get_db_version/2.
 get_db_version(Path, Version) :-
     storage_version_path(Path, Version_File),
     (   exists_file(Version_File)
