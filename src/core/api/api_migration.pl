@@ -10,8 +10,11 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(config(terminus_config), [max_transaction_retries/1]).
 
 :- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(yall)).
 
 json_term_to_dict(Term, List),
 is_list(Term) =>

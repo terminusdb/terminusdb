@@ -696,7 +696,7 @@ cycle_instance(Before_Transaction, After_Transaction) :-
     get_dict(instance_objects, Before_Transaction, [Instance_RWO]),
     get_dict(write, Instance_RWO, Builder),
     nb_commit(Builder, Layer),
-
+    !,
     put_dict(_{read: Layer, write: _}, Instance_RWO, New_Instance_RWO),
     put_dict(_{instance_objects: [New_Instance_RWO]}, Before_Transaction, After_Transaction),
     ensure_transaction_has_builder(instance, After_Transaction).
