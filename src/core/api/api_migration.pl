@@ -11,6 +11,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(query)).
 
+:- use_module(library(apply)).
+
 json_term_to_dict(Term, List),
 is_list(Term) =>
     maplist(json_term_to_dict, Term, List).
