@@ -56,7 +56,7 @@ Op := delete_class(Name)
     | move_class_property(Class, Old_Property, New_Property)
     | upcast_class_property(Class, Property, New_Type)
     | cast_class_property(Class, Property, New_Type, Default_Or_Error)
-    | move_key(Class, KeyType, [Property1, ..., PropertyN])
+    | change_key(Class, KeyType, [Property1, ..., PropertyN])
     | change_parents(Class,
            [Parent1,...ParentN],
            [default_for_property(Property1,Default1),

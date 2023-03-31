@@ -5347,22 +5347,15 @@ load_get_lit(Term, Data) :-
             resolve_absolute_string_descriptor("admin/test", Descriptor),
 
             create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
-            [Transaction] = (Context.transaction_objects),
-            [RWO] = (Transaction.instance_objects),
-            read_write_obj_builder(RWO, Builder),
 
-            (   Term = Literal^^Type
-            ->  with_transaction(Context,
-                                 nb_add_triple(Builder, "a", "b", value(Literal,Type)),
-                                 _)
-            ;   Term = Literal@Type
-            ->  with_transaction(Context,
-                                 nb_add_triple(Builder, "a", "b", lang(Literal,Type)),
-                                 _)
+            with_transaction(
+                Context,
+                ask(Context,
+                    insert("a","b",Term)),
+                _
             ),
             once(ask(Descriptor,
                      t("a", "b", Data)))
-
         ),
         teardown_temp_store(State)).
 
