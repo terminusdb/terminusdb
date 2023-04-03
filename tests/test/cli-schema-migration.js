@@ -61,10 +61,8 @@ describe('cli-schema-migration', function () {
   })
 
   afterEach(async function () {
-    {
-      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
-      expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
-    }
+    const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+    expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
   })
 
   it('target a migration of a branch', async function () {
