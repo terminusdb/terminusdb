@@ -69,7 +69,7 @@ describe('woql-auth', function () {
       ascribed_type: `terminusdb:///schema#${randomType0}`,
       document: {
         '@id': `${randomType0}/0`,
-        '@type': randomType0,
+        '@type': `terminusdb:///schema#${randomType0}`,
         something: 'a default something',
       },
     }
