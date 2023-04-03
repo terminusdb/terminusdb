@@ -20,6 +20,13 @@ describe('cli-schema-migration', function () {
       const r = await execEnv('./terminusdb.sh store init --force')
       expect(r.stdout).to.match(/^Successfully initialised database/)
     }
+  })
+
+  after(async function () {
+    await fs.rm(dbPath, { recursive: true })
+  })
+
+  beforeEach(async function () {
     dbSpec = `admin/${util.randomString()}`
     {
       const r = await execEnv(`./terminusdb.sh db create ${dbSpec}`)
@@ -53,10 +60,11 @@ describe('cli-schema-migration', function () {
     await execEnv(`./terminusdb.sh doc insert ${dbSpec} --graph_type=schema --data='${JSON.stringify(schema)}'`)
   })
 
-  after(async function () {
-    const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
-    expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
-    await fs.rm(dbPath, { recursive: true })
+  afterEach(async function () {
+    {
+      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
+    }
   })
 
   it('target a migration of a branch', async function () {

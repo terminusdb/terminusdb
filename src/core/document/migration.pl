@@ -407,7 +407,7 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
  *  The schema update interpreter  *
  *                                 *
  ***********************************/
-interpret_schema_operation(Op, Before, After) :-
+interpret_schema_operation_(Op, Before, After) :-
     Op =.. [OpName|Args],
     append(Args, [Before, After], Args1),
     Pred =.. [OpName|Args1],
@@ -419,14 +419,18 @@ interpret_schema_operation(Op, Before, After) :-
         )
     ),
     !.
-interpret_schema_operation(Op, Before, _After) :-
+interpret_schema_operation_(Op, Before, _After) :-
     operation_string(Op, Op_String),
     throw(error(schema_operation_failed(Op_String, Before), _)).
 
 interpret_schema_operations([], Schema, Schema).
 interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
-    interpret_schema_operation(Op, Before_Schema, Middle_Schema),
+    interpret_schema_operation_(Op, Before_Schema, Middle_Schema),
     interpret_schema_operations(Operations, Middle_Schema, After_Schema).
+
+interpret_schema_operation(Operation, Before, After) :-
+    calculate_schema_migration(Before, [Operation], Schema),
+    replace_schema(Before, Schema, After).
 
 /*************************************
  *                                   *
@@ -635,12 +639,12 @@ interpret_instance_operation(create_class_property(Class, Property, Type), _Befo
             error(
                 unknown_irrefutable_property_creation(Class,Property,Type)))
     ).
-interpret_instance_operation(upcast_class_property(Class, Property, New_Type), Before, _After, Count) :-
+interpret_instance_operation(upcast_class_property(Class, Property, New_Type), _Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
             (   default_prefixes(Prefixes),
                 prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex),
-                ask(Before,
+                ask(After,
                     (   isa(X, Class),
                         t(X, Property, Old_Value),
                         delete(X, Property, Old_Value),
@@ -692,31 +696,50 @@ interpret_instance_operation(Op, _Before, _After, _Count) :-
     operation_string(Op, Op_String),
     throw(error(instance_operation_failed(Op_String), _)).
 
-cycle_instance(Before_Transaction, After_Transaction) :-
-    get_dict(instance_objects, Before_Transaction, [Instance_RWO]),
-    get_dict(write, Instance_RWO, Builder),
-    nb_commit(Builder, Layer),
-    !,
-    put_dict(_{read: Layer, write: _}, Instance_RWO, New_Instance_RWO),
-    put_dict(_{instance_objects: [New_Instance_RWO]}, Before_Transaction, After_Transaction),
-    ensure_transaction_has_builder(instance, After_Transaction).
+object_type(instance,instance_objects).
+object_type(schema,schema_objects).
 
-interpret_instance_operations([], _Before_Transaction, After_Transaction, After_Transaction, Count, Count).
-interpret_instance_operations([Instance_Operation|Instance_Operations], Before, Intermediate0, After, Count_In, Count_Out) :-
-    interpret_instance_operation(Instance_Operation, Before, Intermediate0, Count),
-    Count1 is Count + Count_In,
-    cycle_instance(Intermediate0, Intermediate1),
-    interpret_instance_operations(Instance_Operations, Before, Intermediate1, After, Count1, Count_Out).
+cycle_layer(Type, Before_Transaction, After_Transaction) :-
+    object_type(Type,OT),
+    get_dict(OT, Before_Transaction, [RWO]),
+    get_dict(write, RWO, Builder),
+    (   var(Builder)
+    ->  Before_Transaction = After_Transaction
+    ;   nb_commit(Builder, Layer),
+        put_dict(_{read: Layer, write: _}, RWO, New_RWO),
+        put_dict(OT, Before_Transaction, [New_RWO], After_Transaction)
+    ),
+    ensure_transaction_has_builder(Type, After_Transaction).
 
-interpret_instance_operations(Ops, Before, Intermediate0, After, Count) :-
-    interpret_instance_operations(Ops, Before, Intermediate0, Intermediate, 0, Count),
+interpret_operations([], After_Transaction, After_Transaction, Instance_Count, Instance_Count).
+interpret_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
+    interpret_schema_operation(Operation, Before, Intermediate0),
+    cycle_layer(schema,Intermediate0,Intermediate1),
 
+    interpret_instance_operation(Operation, Before, Intermediate1, Instance_Count),
+    Instance_Count1 is Instance_Count + Instance_Count_In,
+    cycle_layer(instance,Intermediate1, Intermediate2),
+
+    interpret_operations(Operations, Intermediate2, After, Instance_Count1, Instance_Count_Out).
+
+interpret_operations(Ops, Before, After, Instance_Count) :-
+    % Preflight to test that everything is ok...
+    calculate_schema_migration(Before, Ops, _),
+    interpret_operations(Ops, Before, Intermediate, 0, Instance_Count),
+    squash_layer(Before, Intermediate, After).
+
+squash_layer(Before,Intermediate,After) :-
+    squash_layer(instance, Before, Intermediate, Intermediate0),
+    squash_layer(schema, Before, Intermediate0, After).
+
+squash_layer(Type,Before,Intermediate,After) :-
     % squash the result
-    get_dict(instance_objects, Before, [Before_Instance_RWO]),
-    get_dict(read, Before_Instance_RWO, Before_Layer),
+    object_type(Type,OT),
+    get_dict(OT, Before, [Before_RWO]),
+    get_dict(read, Before_RWO, Before_Layer),
 
-    get_dict(instance_objects, Intermediate, [Intermediate_Instance_RWO]),
-    get_dict(read, Intermediate_Instance_RWO, Intermediate_Layer),
+    get_dict(OT, Intermediate, [Intermediate_RWO]),
+    get_dict(read, Intermediate_RWO, Intermediate_Layer),
 
     (   ground(Intermediate_Layer)
     ->  (   ground(Before_Layer)
@@ -733,8 +756,8 @@ interpret_instance_operations(Ops, Before, Intermediate0, After, Count) :-
     ;   true % no data ever written to db
     ),
 
-    put_dict(_{read: After_Layer, write: _, force_write: Force_Write}, Intermediate_Instance_RWO, After_Instance_RWO),
-    put_dict(_{instance_objects: [After_Instance_RWO]}, Intermediate, After).
+    put_dict(_{read: After_Layer, write: _, force_write: Force_Write}, Intermediate_RWO, After_RWO),
+    put_dict(OT, Intermediate, [After_RWO], After).
 
 /*
  * A convenient intermediate form using a dictionary:
@@ -793,9 +816,8 @@ perform_instance_migration(_, _, _, _) :-
 
 perform_instance_migration_on_transaction(Before_Transaction, Operations, Result) :-
     ensure_transaction_has_builder(instance, Before_Transaction),
-    calculate_schema_migration(Before_Transaction, Operations, Schema),
-    replace_schema(Before_Transaction, Schema, Intermediate_Transaction),
-    interpret_instance_operations(Operations, Before_Transaction, Intermediate_Transaction, After_Transaction, Count),
+    ensure_transaction_has_builder(schema, Before_Transaction),
+    interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
     % run logic here.
     run_transactions([After_Transaction], false, _),
     length(Operations, Op_Count),
@@ -936,7 +958,7 @@ test(move_and_weaken_with_instance_data,
                                                         message: "Fancy" },
                                Ops,
                                Result),
-    Result = metadata{instance_operations:2,schema_operations:2},
+    Result = metadata{instance_operations:4,schema_operations:2},
     findall(
         DocA,
         get_document_by_type(Descriptor, "A", DocA),
