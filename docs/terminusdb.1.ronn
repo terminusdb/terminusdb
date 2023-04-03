@@ -401,6 +401,30 @@ Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
   * `-h`, `--help`=[value]:
   print help for the `reset` command
 
+### migration
+
+`terminusdb migration BRANCH_SPEC`
+
+Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `migration` command
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-o`, `--operations`=[value]:
+  operations to perform on the schema
+
+  * `-t`, `--target`=[value]:
+  resource with a schema as migration target
+
 ### branch create
 
 `terminusdb branch create BRANCH_SPEC OPTIONS`
