@@ -98,8 +98,20 @@ describe('cli-schema-migration', function () {
       },
     ]
     await execEnv(`./terminusdb.sh doc insert ${dbSpec}/local/branch/foo --data='${JSON.stringify(branchInstance)}'`)
-
-    const rMigration = await execEnv(`./terminusdb.sh migration ${dbSpec} --operations='delete_class_property("String", "string"), create_class_property("String", "string", {"@type" : "Optional", "@class" : "String"})'`)
+    const operations = [
+      {
+        '@type': 'DeleteClassProperty',
+        class: 'String',
+        property: 'string',
+      },
+      {
+        '@type': 'CreateClassProperty',
+        class: 'String',
+        property: 'string',
+        type: { '@type': 'Optional', '@class': 'String' },
+      },
+    ]
+    const rMigration = await execEnv(`./terminusdb.sh migration ${dbSpec} --operations='${JSON.stringify(operations)}'`)
     expect(rMigration.stdout).to.match(/{"instance_operations":2, "schema_operations":2}/)
 
     const rMain = await execEnv(`./terminusdb.sh doc get ${dbSpec} --as-list`)
@@ -154,8 +166,15 @@ describe('cli-schema-migration', function () {
       },
     ]
     await execEnv(`./terminusdb.sh doc insert ${dbSpec}/local/branch/foo --data='${JSON.stringify(branchInstance)}'`)
-
-    const rMigration = await execEnv(`./terminusdb.sh migration ${dbSpec} --operations='upcast_class_property("String", "string", {"@type" : "Optional", "@class" : "xsd:string"})'`)
+    const operations = [
+      {
+        '@type': 'UpcastClassProperty',
+        class: 'String',
+        property: 'string',
+        type: { '@type': 'Optional', '@class': 'xsd:string' },
+      },
+    ]
+    const rMigration = await execEnv(`./terminusdb.sh migration ${dbSpec} --operations='${JSON.stringify(operations)}'`)
     expect(rMigration.stdout).to.match(/{"instance_operations":2, "schema_operations":1}/)
 
     const rMain = await execEnv(`./terminusdb.sh doc get ${dbSpec} --as-list`)

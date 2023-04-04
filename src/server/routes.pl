@@ -2984,7 +2984,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
                               author: Author,
                               message: Message
                           },
-            (   param_value_search_or_json(Search, JSON, operations, text, Operations)
+            (   param_value_search_or_json(Search, JSON, operations, object, Operations)
             ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),

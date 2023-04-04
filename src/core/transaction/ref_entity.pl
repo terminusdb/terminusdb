@@ -49,6 +49,7 @@
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
+:- use_module(library(http/json), [atom_json_dict/3]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -1175,7 +1176,9 @@ schema_change_for_commit(Context, Commit_Id, Change) :-
     commit_id_uri(Context, Commit_Id, Commit_Uri),
     (   ask(Context,
             t(Commit_Uri, migration, Migration_String^^xsd:string))
-    ->  Change = migration(Migration_String)
+    ->  atom_json_dict(Migration_String, Migration, [default_tag(json)]),
+        format(user_error, "Migration: ~s", [Migration_String]),
+        Change = migration(Migration)
     ;   layer_uri_for_commit(Context, Commit_Uri, schema, Schema_Uri),
         commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri),
         layer_uri_for_commit(Context, Parent_Uri, schema, Schema_Uri)

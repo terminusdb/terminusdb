@@ -7,6 +7,7 @@
 
 :- use_module(core(account)).
 :- use_module(core(document/migration)).
+:- use_module(core(document/migration_dict)).
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
@@ -15,48 +16,14 @@
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
+:- use_module(library(http/json)).
 
-json_term_to_dict(Term, List),
-is_list(Term) =>
-    maplist(json_term_to_dict, Term, List).
-json_term_to_dict(Term, Dict),
-Term = {_} =>
-    Term =.. [_,R],
-    xfy_list(',', R, List),
-    findall(
-        K-V,
-        (   member(KV, List),
-            do_or_die(
-                KV = KString:VTerm,
-                error(json_syntax_error(Term, KV), _)),
-            atom_string(K, KString),
-            json_term_to_dict(VTerm, V)
-        ),
-        Pairs),
-    dict_create(Dict, json, Pairs).
-json_term_to_dict(Term, Value) =>
-    Term = Value.
-
-sanitize_operations(Operations_List, Sanitized) :-
-    maplist([Op,San_Op]>>(
-                Op =.. [Op_Name|Args],
-                maplist(json_term_to_dict,Args,San_Args),
-                San_Op =.. [Op_Name|San_Args]),
-            Operations_List, Sanitized).
-
-operations_string_to_list(Operations_String, Operations) :-
-    term_string(Term, Operations_String, [variable_names(VNames)]),
-    do_or_die(
-        VNames = [],
-        error(malformed_operations_string)),
-    xfy_list(',', Term, Operations_List),
-    sanitize_operations(Operations_List, Operations).
-
-api_migrate_resource(System, Auth, Path, Commit_Info0, Operations_String, Result) :-
+api_migrate_resource(System, Auth, Path, Commit_Info0, Operations, Result) :-
     resolve_descriptor_auth(write, System, Auth, Path, instance, _Descriptor),
     resolve_descriptor_auth(write, System, Auth, Path, schema, Descriptor),
-    operations_string_to_list(Operations_String, Operations),
+    atom_json_dict(Operations_String, Operations, [default_tag(json)]),
     put_dict(migration, Commit_Info0, Operations_String, Commit_Info),
+    trace(perform_instance_migration),
     perform_instance_migration(Descriptor, Commit_Info, Operations, Result).
 
 api_hypothetical_migration(_System, _Auth, _Path, _New_Schema) :-
@@ -75,21 +42,21 @@ auth_check_migrate_resource_to(System, Auth, Path, Target, Our_Descriptor, Their
     check_descriptor_auth(System, Their_Descriptor, '@schema':'Action/schema_read_access', Auth),
     check_descriptor_auth(System, Their_Descriptor, '@schema':'Action/commit_read_access', Auth).
 
-schema_migration_for_commit(Transaction, Commit_Id, Migration_String) :-
+schema_migration_for_commit(Transaction, Commit_Id, Migration) :-
     schema_change_for_commit(Transaction, Commit_Id, Change),
     (   Change = no_change
     ->  fail
     ;   Change = no_migration
     ->  throw(error(no_migration_at_commit(Commit_Id), _))
-    ;   Change = migration(Migration_String)
+    ;   Change = migration(Migration)
     ->  true
     ;   throw(error(unexpected_change_type(Change)))).
 
-combined_migration_from_commits(Transaction, Commits, Migration_String) :-
+combined_migration_from_commits(Transaction, Commits, Migrations) :-
     convlist(schema_migration_for_commit(Transaction),
              Commits,
-             Migrations),
-    merge_separator_split(Migration_String, ',', Migrations).
+             Migrations_List),
+    append(Migrations_List, Migrations).
 
 api_migrate_resource_to(System, Auth, Path, Target, Commit_Info, Result) :-
     max_transaction_retries(Max),
@@ -133,21 +100,17 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
     do_or_die(Common_Option = some(_),
               error(no_common_history, _)),
 
-    combined_migration_from_commits(Our_Repo_Transaction, Our_Commits, Our_Migration_String),
-    combined_migration_from_commits(Their_Repo_Transaction, Their_Commits, Their_Migration_String),
+    combined_migration_from_commits(Our_Repo_Transaction, Our_Commits, Our_Migration),
+    combined_migration_from_commits(Their_Repo_Transaction, Their_Commits, Their_Migration),
 
-    do_or_die(string_concat(Our_Migration_String, Suffix0, Their_Migration_String),
-              error(no_common_migration_prefix(Our_Migration_String,Their_Migration_String), _)),
+    do_or_die(append(Our_Migration, Suffix, Their_Migration),
+              error(no_common_migration_prefix(Our_Migration,Their_Migration), _)),
 
-    (   Suffix0 = ""
+    (   Suffix = []
     ->  Result = _{ schema_operations: 0, instance_operations: 0 }
-    ;   (   string_concat(",", Suffix, Suffix0)
-        ->  true
-        ;   Suffix = Suffix0),
-
-        put_dict(migration, Commit_Info0, Suffix, Commit_Info),
+    ;   atom_json_dict(Suffix_String, Suffix, [default_tag(json)]),
+        put_dict(migration, Commit_Info0, Suffix_String, Commit_Info),
         put_dict(commit_info, Our_Transaction, Commit_Info, Our_Final_Transaction),
 
-        operations_string_to_list(Suffix, Operations),
-        perform_instance_migration_on_transaction(Our_Final_Transaction, Operations, Result)
+        perform_instance_migration_on_transaction(Our_Final_Transaction, Suffix, Result)
     ).

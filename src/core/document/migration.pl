@@ -40,6 +40,8 @@
 :- use_module(core(util/tables)).
 :- use_module(core(api/api_document)).
 
+:- use_module(migration_dict).
+
 /*
 Operations Language:
 
@@ -59,9 +61,9 @@ Op := delete_class(Name)
     | change_key(Class, KeyType, [Property1, ..., PropertyN])
     | change_parents(Class,
            [Parent1,...ParentN],
-           [default_for_property(Property1,Default1),
+           [property_default(Property1,Default1),
             ...,
-            default_for_property(PropertyN,DefaultN)])
+            property_default(PropertyN,DefaultN)])
 
 
 Generic Upgrade Workflow
@@ -722,7 +724,8 @@ interpret_operations([Operation|Operations], Before, After, Instance_Count_In, I
 
     interpret_operations(Operations, Intermediate2, After, Instance_Count1, Instance_Count_Out).
 
-interpret_operations(Ops, Before, After, Instance_Count) :-
+interpret_operations(JSONOps, Before, After, Instance_Count) :-
+    migration_list_to_ast_list(JSONOps, Ops),
     % Preflight to test that everything is ok...
     calculate_schema_migration(Before, Ops, _),
     interpret_operations(Ops, Before, Intermediate, 0, Instance_Count),
@@ -809,6 +812,7 @@ perform_instance_migration(Descriptor, Commit_Info, Operations, Result) :-
     between(0, Max, _),
     do_or_die(open_descriptor(Descriptor, Commit_Info, Transaction),
               something),
+    format(user_error, "~q", [Operations]),
     perform_instance_migration_on_transaction(Transaction, Operations, Result),
     !.
 perform_instance_migration(_, _, _, _) :-

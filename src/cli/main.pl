@@ -1759,13 +1759,14 @@ run_command(migration,[Path], Opts) :-
     create_context(system_descriptor{}, System_DB),
     option(message(Message), Opts),
     option(author(Author), Opts),
-    option(operations(Operations), Opts),
+    option(operations(OpString), Opts),
     option(target(Target), Opts),
     Commit_Info = commit_info{ author: Author, message: Message},
     api_report_errors(
         migration,
-        (   ground(Operations)
-        ->  api_migrate_resource(System_DB, Auth, Path, Commit_Info, Operations, Result),
+        (   ground(OpString)
+        ->  atom_json_dict(OpString, Operations, [default_tag(json)]),
+            api_migrate_resource(System_DB, Auth, Path, Commit_Info, Operations, Result),
             json_write_dict(current_output, Result),
             nl
         ;   ground(Target)

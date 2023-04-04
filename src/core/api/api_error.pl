@@ -1603,6 +1603,16 @@ api_error_jsonld_(migration, error(weakening_failure(Witness), _), JSON) :-
                               'api:witness' : Witness
                             }
             }.
+api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation), _), JSON) :-
+    atom_json_dict(OpString, Operation, []),
+    format(string(Msg), "Unknown or poorly formed schema migration operation: ~s", [OpString]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownSchemaMigrationOperation",
+                              'api:operation' : Operation
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(

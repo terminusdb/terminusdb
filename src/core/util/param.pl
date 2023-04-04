@@ -26,6 +26,8 @@
 
 :- use_module(utils).
 
+:- use_module(library(http/json)).
+
 /*
  * Check a JSON dict parameter value against an expected type. If it's wrong,
  * throw an error. Otherwise, convert it if necessary.
@@ -41,6 +43,9 @@ param_check_json_(graph, "schema", schema).
 param_check_json_(graph, "instance", instance).
 param_check_json_(object, Value_In, Value_Out) :-
     is_dict(Value_In),
+    Value_Out = Value_In.
+param_check_json_(list, Value_In, Value_Out) :-
+    is_list(Value_In),
     Value_Out = Value_In.
 param_check_json_(non_empty_string, Value_In, Value_Out) :-
     string(Value_In),
@@ -72,6 +77,10 @@ param_check_search_(non_empty_atom, Value_In, Value_Out) :-
     atom(Value_In),
     Value_In \= '',
     Value_Out = Value_In.
+param_check_search_(object, Value_In, Value_Out) :-
+    atom_json_dict(Value_In, Value_Out, [default_tag(json)]).
+param_check_search_(list, Value_In, Value_Out) :-
+    atom_json_dict(Value_In, Value_Out, [default_tag(json)]).
 
 /* Check parameters common to both JSON dicts and stream lists. */
 param_check_common_(boolean, false, false).
