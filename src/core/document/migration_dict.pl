@@ -5,6 +5,7 @@
 :- use_module(core(util)).
 
 migration_list_to_ast_list(List,AST) :-
+    trace(migration_dict_to_ast),
     maplist(migration_dict_to_ast_ex, List, AST).
 
 migration_dict_to_ast_ex(Dict, AST) :-
@@ -30,7 +31,7 @@ migration_dict_to_ast(json{ '@type' : "ReplaceClassDocumentation",
                             class: Class,
                             documentation: Documentation},
                       replace_class_documentation(Class, Documentation)).
-migration_dict_to_ast(json{ '@json' : "DeleteClassProperty",
+migration_dict_to_ast(json{ '@type' : "DeleteClassProperty",
                             class: Class,
                             property: Property},
                       delete_class_property(Class, Property)).
