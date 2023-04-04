@@ -812,7 +812,6 @@ perform_instance_migration(Descriptor, Commit_Info, Operations, Result) :-
     between(0, Max, _),
     do_or_die(open_descriptor(Descriptor, Commit_Info, Transaction),
               something),
-    format(user_error, "~q", [Operations]),
     perform_instance_migration_on_transaction(Transaction, Operations, Result),
     !.
 perform_instance_migration(_, _, _, _) :-
@@ -914,16 +913,17 @@ test(move_and_weaken,
       cleanup(teardown_temp_store(State))
      ]) :-
 
-    Ops = [
+    Term_Ops = [
         move_class("A", "B"),
         upcast_class_property("B", "a", _{ '@type' : "Optional", '@class' : "xsd:string"})
     ],
+
     open_descriptor(Before, Transaction),
     create_class_dictionary(Transaction, Dictionary),
 
     json{'A':json{'@id':'A','@type':'Class',a:'xsd:string'}} :< Dictionary,
 
-    interpret_schema_operations(Ops, Dictionary, After),
+    interpret_schema_operations(Term_Ops, Dictionary, After),
 
     json{ 'B': json{ '@id':"B",
 					 '@type':'Class',
@@ -953,11 +953,11 @@ test(move_and_weaken_with_instance_data,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         move_class("A", "B"),
         upcast_class_property("B", "a", _{ '@type' : "Optional", '@class' : "xsd:string"})
     ],
-
+    migration_list_to_ast_list(Ops,Term_Ops),
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
@@ -998,10 +998,10 @@ test(delete_class_property,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         delete_class_property("A", "a")
     ],
-
+    migration_list_to_ast_list(Ops,Term_Ops),
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
@@ -1056,10 +1056,10 @@ test(subdocument_move_class,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         move_class("Super", "Duper")
     ],
-
+    migration_list_to_ast_list(Ops,Term_Ops),
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
@@ -1108,10 +1108,10 @@ test(move_to_existing_fails,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         move_class("A", "C")
     ],
-
+    migration_list_to_ast_list(Ops,Term_Ops),
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
@@ -1161,10 +1161,10 @@ test(delete_list_property,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         delete_class_property("D", "d")
     ],
-
+    migration_list_to_ast_list(Ops,Term_Ops),
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
@@ -1222,9 +1222,10 @@ test(delete_list_of_subdocument_property,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         delete_class_property("E", "e")
     ],
+    migration_list_to_ast_list(Ops,Term_Ops),
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
@@ -1266,12 +1267,13 @@ test(delete_and_create_class_property,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         delete_class_property("A", "a"),
         create_class_property("A", "a",
                               _{'@type' : "Optional",
                                 '@class': "xsd:integer"})
     ],
+    migration_list_to_ast_list(Ops,Term_Ops),
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
@@ -1311,10 +1313,11 @@ test(float_to_string,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         cast_class_property("F", "f",_{ '@type' : "Optional",
                                         '@class' : "xsd:string"},error)
     ],
+    migration_list_to_ast_list(Ops,Term_Ops),
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
@@ -1355,9 +1358,10 @@ test(cast_to_required_fails,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         upcast_class_property("F", "f","xsd:string")
     ],
+    migration_list_to_ast_list(Ops,Term_Ops),
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
@@ -1385,9 +1389,10 @@ test(cast_to_required_or_error,
         )
     ),
 
-    Ops = [
+    Term_Ops = [
         cast_class_property("F", "f", "xsd:string", error)
     ],
+    migration_list_to_ast_list(Ops,Term_Ops),
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
@@ -1412,7 +1417,7 @@ test(garbage_op,
              write_schema(before2,Descriptor)
             )),
       cleanup(teardown_temp_store(State)),
-      error(schema_operation_failed("foo",_),_)
+      error(unknown_schema_migration_operation(foo),_)
      ]) :-
 
     Ops = [
@@ -1432,9 +1437,10 @@ test(replace_metadata,
       cleanup(teardown_temp_store(State))
      ]) :-
 
-    Ops = [
+    Term_Ops = [
         replace_class_metadata("F", _{ asdf : "fdsa" })
     ],
+    migration_list_to_ast_list(Ops,Term_Ops),
 
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
