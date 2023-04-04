@@ -23,7 +23,6 @@ api_migrate_resource(System, Auth, Path, Commit_Info0, Operations, Result) :-
     resolve_descriptor_auth(write, System, Auth, Path, schema, Descriptor),
     atom_json_dict(Operations_String, Operations, [default_tag(json)]),
     put_dict(migration, Commit_Info0, Operations_String, Commit_Info),
-    trace(perform_instance_migration),
     perform_instance_migration(Descriptor, Commit_Info, Operations, Result).
 
 api_hypothetical_migration(_System, _Auth, _Path, _New_Schema) :-
