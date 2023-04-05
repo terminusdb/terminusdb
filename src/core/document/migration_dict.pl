@@ -5,7 +5,6 @@
 :- use_module(core(util)).
 
 migration_list_to_ast_list(List,AST) :-
-    trace(migration_dict_to_ast),
     maplist(migration_dict_to_ast_ex, List, AST).
 
 migration_dict_to_ast_ex(Dict, AST) :-
