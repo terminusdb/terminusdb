@@ -66,20 +66,6 @@ Op := delete_class(Name)
             ...,
             property_default(PropertyN,DefaultN)])
 
-
-Generic Upgrade Workflow
-
-1. Generate an upgrade plan from a schema version, resulting in a before/after.
-2. Tag the new schema version
-3. Send data product with Before schema (check by Hash) to after schema version into
-   perform_migration/3
-
-Questions:
-
-1. Where do we store the upgrades? How do we attach the exact before
-and after state which the upgrade was designed for?
-2. How do we mark a data product as a "schema" data product?
-
 */
 
 operation_string(Term,String) :-
