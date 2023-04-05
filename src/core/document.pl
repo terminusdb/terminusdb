@@ -97,8 +97,8 @@
               get_json_object/3,
 
               % migration.pl
-              perform_instance_migration/4,
-              perform_instance_migration_on_transaction/3
+              perform_instance_migration/5,
+              perform_instance_migration_on_transaction/4
           ]).
 
 :- use_module('document/validation').

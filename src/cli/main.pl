@@ -582,7 +582,19 @@ opt_spec(migration,'terminusdb migration BRANCH_SPEC',
            longflags([target]),
            shortflags([t]),
            default('_'),
-           help('resource with a schema as migration target')]
+           help('resource with a schema as migration target')],
+          [opt(verbose),
+           type(boolean),
+           longflags([verbose]),
+           shortflags([v]),
+           default(false),
+           help('give back schema update information')],
+          [opt(dry_run),
+           type(boolean),
+           longflags([dry_run]),
+           shortflags([d]),
+           default(false),
+           help('provide information about what would occur if the operations were performed')]
          ]).
 
 % subcommands
@@ -1761,16 +1773,24 @@ run_command(migration,[Path], Opts) :-
     option(author(Author), Opts),
     option(operations(OpString), Opts),
     option(target(Target), Opts),
+    option(verbose(Verbose), Opts),
+    option(dry_run(Dry_Run), Opts),
     Commit_Info = commit_info{ author: Author, message: Message},
     api_report_errors(
         migration,
         (   ground(OpString)
         ->  atom_json_dict(OpString, Operations, [default_tag(json)]),
-            api_migrate_resource(System_DB, Auth, Path, Commit_Info, Operations, Result),
+            api_migrate_resource(System_DB, Auth, Path, Commit_Info, Operations, Result,
+                                 [dry_run(Dry_Run),
+                                  verbose(Verbose)
+                                 ]),
             json_write_dict(current_output, Result),
             nl
         ;   ground(Target)
-        ->  api_migrate_resource_to(System_DB, Auth, Path, Target, Commit_Info, Result),
+        ->  api_migrate_resource_to(System_DB, Auth, Path, Target, Commit_Info, Result,
+                                   [dry_run(Dry_Run),
+                                    verbose(Verbose)
+                                   ]),
             json_write_dict(current_output, Result),
             nl
         ;   throw(error(missing_parameter(operations), _)))

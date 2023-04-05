@@ -1,8 +1,6 @@
 :- module(api_migration, [
-              api_hypothetical_migration/4,
-              api_migrate_resource/6,
-              api_migrate_resource_to/6,
-              api_transform_schema/3
+              api_migrate_resource/7,
+              api_migrate_resource_to/7
           ]).
 
 :- use_module(core(account)).
@@ -18,18 +16,12 @@
 :- use_module(library(yall)).
 :- use_module(library(http/json)).
 
-api_migrate_resource(System, Auth, Path, Commit_Info0, Operations, Result) :-
+api_migrate_resource(System, Auth, Path, Commit_Info0, Operations, Result, Options) :-
     resolve_descriptor_auth(write, System, Auth, Path, instance, _Descriptor),
     resolve_descriptor_auth(write, System, Auth, Path, schema, Descriptor),
     atom_json_dict(Operations_String, Operations, [default_tag(json)]),
     put_dict(migration, Commit_Info0, Operations_String, Commit_Info),
-    perform_instance_migration(Descriptor, Commit_Info, Operations, Result).
-
-api_hypothetical_migration(_System, _Auth, _Path, _New_Schema) :-
-    throw(unimplemented).
-
-api_transform_schema(_Schema, _Operations, _New_Schema) :-
-    throw(unimplemented).
+    perform_instance_migration(Descriptor, Commit_Info, Operations, Result, Options).
 
 auth_check_migrate_resource_to(System, Auth, Path, Target, Our_Descriptor, Their_Descriptor) :-
     resolve_absolute_typed_string_descriptor_ex(Path, branch_descriptor, Our_Descriptor),
@@ -57,16 +49,22 @@ combined_migration_from_commits(Transaction, Commits, Migrations) :-
              Migrations_List),
     append(Migrations_List, Migrations).
 
-api_migrate_resource_to(System, Auth, Path, Target, Commit_Info, Result) :-
+api_migrate_resource_to(System, Auth, Path, Target, Commit_Info, Result, Options) :-
+    (   option(dry_run(true), Options)
+    ->  api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info, Result, Options)
+    ;   api_migrate_resource_to_retry(System, Auth, Path, Target, Commit_Info, Result, Options)
+    ).
+
+api_migrate_resource_to_retry(System, Auth, Path, Target, Commit_Info, Result, Options) :-
     max_transaction_retries(Max),
     between(0, Max, _),
 
-    api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info, Result),
+    api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info, Result, Options),
     !.
-api_migrate_resource_to(_System, _Auth, _Path, _Target, _Commit_Info, _Result) :-
+api_migrate_resource_to_retry(_System, _Auth, _Path, _Target, _Commit_Info, _Result, _Options) :-
     throw(error(transaction_retry_exceeded, _)).
 
-api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
+api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result, Options) :-
     % find recent common ancestor
     % determine all migrations that happened in Target since that point
     % - glue together
@@ -111,5 +109,5 @@ api_migrate_resource_to_(System, Auth, Path, Target, Commit_Info0, Result) :-
         put_dict(migration, Commit_Info0, Suffix_String, Commit_Info),
         put_dict(commit_info, Our_Transaction, Commit_Info, Our_Final_Transaction),
 
-        perform_instance_migration_on_transaction(Our_Final_Transaction, Suffix, Result)
+        perform_instance_migration_on_transaction(Our_Final_Transaction, Suffix, Result, Options)
     ).

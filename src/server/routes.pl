@@ -2980,17 +2980,23 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
         Request,
         (   param_value_search_or_json_required(Search, JSON, author, text, Author),
             param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_optional(Search, JSON, dry_run, boolean, false, Dry_Run),
+            param_value_search_or_json_optional(Search, JSON, verbose, boolean, false, Verbose),
             Commit_Info = commit_info{
                               author: Author,
                               message: Message
                           },
             (   param_value_search_or_json(Search, JSON, operations, object, Operations)
-            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result),
+            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
+                                     [dry_run(Dry_Run),
+                                      verbose(Verbose)]),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),
                 cors_reply_json(Request, Response)
             ;   param_value_search_or_json(Search, JSON, target, text, Target)
-            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result),
+            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result,
+                                        [dry_run(Dry_Run),
+                                         verbose(Verbose)]),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),
                 cors_reply_json(Request, Response)

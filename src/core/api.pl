@@ -185,10 +185,8 @@
               handle_graphql_request/8,
 
               % api_migration
-              api_hypothetical_migration/4,
-              api_migrate_resource/6,
-              api_migrate_resource_to/6,
-              api_transform_schema/3
+              api_migrate_resource/7,
+              api_migrate_resource_to/7
           ]).
 
 :- use_module(api/api_init).

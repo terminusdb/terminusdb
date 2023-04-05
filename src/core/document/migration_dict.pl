@@ -1,4 +1,5 @@
-:- module(migration_dict, [migration_list_to_ast_list/2]).
+:- module(migration_dict, [migration_list_to_ast_list/2,
+                           migration_dict_to_ast/2]).
 
 :- use_module(library(yall)).
 :- use_module(library(apply)).

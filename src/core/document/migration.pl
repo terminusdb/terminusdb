@@ -1,6 +1,6 @@
 :- module('document/migration', [
-              perform_instance_migration/4,
-              perform_instance_migration_on_transaction/3
+              perform_instance_migration/5,
+              perform_instance_migration_on_transaction/4
           ]).
 
 :- use_module(instance).
@@ -29,6 +29,7 @@
 :- use_module(library(ordsets)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
+:- use_module(library(http/json)).
 
 :- use_module(config(terminus_config)).
 
@@ -82,10 +83,8 @@ and after state which the upgrade was designed for?
 */
 
 operation_string(Term,String) :-
-    Term =.. [F|Args],
-    maplist([Atom,A]>>atom_json_dict(Atom,A,[]),Atom_Args,Args),
-    New_Term =.. [F|Atom_Args],
-    format(string(String), "~q", [New_Term]).
+    migration_dict_to_ast(Dict, Term),
+    atom_json_dict(String, Dict, []).
 
 /* delete_class(Name) */
 delete_class(Name, Before, After) :-
@@ -501,17 +500,17 @@ delete_value(_, Before, Value) =>
     database_prefixes(Before, Prefixes),
     delete_subdocument(Before, Prefixes, Value).
 
-interpret_instance_operation(delete_class(Class), Before, After, Count) :-
+interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
     count_solutions(
         (   get_document_by_type(Before, Class, Uri),
             delete_document(After, Uri)
         ),
         Count
     ).
-interpret_instance_operation(create_class(_), _Before, _After, 0).
-interpret_instance_operation(replace_class_metadata(_,_), _Before, _After, 0).
-interpret_instance_operation(replace_class_documentation(_,_), _Before, _After, 0).
-interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Count) :-
+interpret_instance_operation_(create_class(_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
+interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
     count_solutions(
@@ -533,7 +532,7 @@ interpret_instance_operation(move_class(Old_Class, New_Class), Before, After, Co
         ),
         Count
     ).
-interpret_instance_operation(delete_class_property(Class, Property), Before, _After, Count) :-
+interpret_instance_operation_(delete_class_property(Class, Property), Before, _After, Count) :-
     % Todo: Tagged Union
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
@@ -548,7 +547,7 @@ interpret_instance_operation(delete_class_property(Class, Property), Before, _Af
         ),
         Count
     ).
-interpret_instance_operation(create_class_property(Class, Property, Type, Default), _Before, After, Count) :-
+interpret_instance_operation_(create_class_property(Class, Property, Type, Default), _Before, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
     ->  database_prefixes(After, Prefixes),
@@ -625,7 +624,7 @@ interpret_instance_operation(create_class_property(Class, Property, Type, Defaul
             error(
                 not_irrefutable_property_creation(Class,Property,Type)))
     ).
-interpret_instance_operation(create_class_property(Class, Property, Type), _Before, After, Count) :-
+interpret_instance_operation_(create_class_property(Class, Property, Type), _Before, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
     ->  count_solutions(
@@ -641,7 +640,7 @@ interpret_instance_operation(create_class_property(Class, Property, Type), _Befo
             error(
                 unknown_irrefutable_property_creation(Class,Property,Type)))
     ).
-interpret_instance_operation(upcast_class_property(Class, Property, New_Type), _Before, After, Count) :-
+interpret_instance_operation_(upcast_class_property(Class, Property, New_Type), _Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
             (   default_prefixes(Prefixes),
@@ -661,7 +660,7 @@ interpret_instance_operation(upcast_class_property(Class, Property, New_Type), _
         operation_string(upcast_class_property(Class,Property,New_Type), Op_String),
         throw(error(not_implemented(Op_String), _))
     ).
-interpret_instance_operation(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
+interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
             (   default_prefixes(Prefixes),
@@ -691,9 +690,13 @@ interpret_instance_operation(cast_class_property(Class, Property, New_Type, Defa
         operation_string(cast_class_property(Class, Property, New_Type, Default_or_Error), Op_String),
         throw(error(not_implemented(Op_String), _))
     ).
-interpret_instance_operation(change_parents(Class,Parents,Property_Defaults), _Before, _After,_Count) :-
+interpret_instance_operation_(change_parents(Class,Parents,Property_Defaults), _Before, _After,_Count) :-
     operation_string(change_parents(Class,Parents,Property_Defaults), Op_String),
     throw(error(not_implemented(Op_String), _)).
+
+interpret_instance_operation(Op, Before, After, Count) :-
+    interpret_instance_operation_(Op, Before, After, Count),
+    !.
 interpret_instance_operation(Op, _Before, _After, _Count) :-
     operation_string(Op, Op_String),
     throw(error(instance_operation_failed(Op_String), _)).
@@ -806,26 +809,52 @@ replace_schema(Before_Transaction, Schema, After_Transaction) :-
     put_dict(_{write:_, read:Layer, force_write: true}, Schema_RW_Obj, New_Schema_RW_Obj),
     put_dict(_{schema_objects: [New_Schema_RW_Obj]}, Before_Transaction, After_Transaction).
 
-perform_instance_migration(Descriptor, Commit_Info, Operations, Result) :-
+perform_instance_migration(Descriptor, Commit_Info, Operations, Result, Options) :-
+    (   option(dry_run(true), Options)
+    ->  do_or_die(
+            open_descriptor(Descriptor, Commit_Info, Transaction),
+            error(unresolvable_absolute_descriptor(Descriptor),_)
+        ),
+        perform_instance_migration_on_transaction(Transaction, Operations, Result, Options)
+    ;   perform_instance_migration_retry(Descriptor, Commit_Info, Operations, Result, Options)
+    ).
+
+perform_instance_migration_retry(Descriptor, Commit_Info, Operations, Result, Options) :-
     % restart logic here
     max_transaction_retries(Max),
     between(0, Max, _),
-    do_or_die(open_descriptor(Descriptor, Commit_Info, Transaction),
-              something),
-    perform_instance_migration_on_transaction(Transaction, Operations, Result),
+    do_or_die(
+        open_descriptor(Descriptor, Commit_Info, Transaction),
+        error(unresolvable_absolute_descriptor(Descriptor),_)
+    ),
+    perform_instance_migration_on_transaction(Transaction, Operations, Result, Options),
     !.
-perform_instance_migration(_, _, _, _) :-
+perform_instance_migration_retry(_, _, _, _, _) :-
     throw(error(transaction_retry_exceeded, _)).
 
-perform_instance_migration_on_transaction(Before_Transaction, Operations, Result) :-
+perform_instance_migration_on_transaction(Before_Transaction, Operations, Result, Options) :-
     ensure_transaction_has_builder(instance, Before_Transaction),
     ensure_transaction_has_builder(schema, Before_Transaction),
     interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
-    % run logic here.
-    run_transactions([After_Transaction], false, _),
     length(Operations, Op_Count),
-    Result = metadata{ schema_operations: Op_Count,
-                       instance_operations: Count }.
+    % run logic here.
+    (   option(dry_run(true), Options)
+    ->  create_class_dictionary(After_Transaction, Dictionary),
+        class_dictionary_to_schema(Dictionary, Schema),
+        Result = metadata{ schema_operations: Op_Count,
+                           schema: Schema,
+                           instance_operations: Count }
+    ;   run_transactions([After_Transaction], false, _),
+        (   option(verbose(true), Options)
+        ->  create_class_dictionary(After_Transaction, Dictionary),
+            class_dictionary_to_schema(Dictionary, Schema),
+            Result = metadata{ schema_operations: Op_Count,
+                               schema: Schema,
+                               instance_operations: Count }
+        ;   Result = metadata{ schema_operations: Op_Count,
+                               instance_operations: Count }
+        )
+    ).
 
 :- begin_tests(migration).
 
@@ -961,7 +990,8 @@ test(move_and_weaken_with_instance_data,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
     Result = metadata{instance_operations:4,schema_operations:2},
     findall(
         DocA,
@@ -1005,7 +1035,8 @@ test(delete_class_property,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
@@ -1063,7 +1094,8 @@ test(subdocument_move_class,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
@@ -1115,8 +1147,8 @@ test(move_to_existing_fails,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
-
+                               Result,
+                               []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
@@ -1168,7 +1200,8 @@ test(delete_list_property,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
@@ -1230,7 +1263,8 @@ test(delete_list_of_subdocument_property,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
@@ -1278,7 +1312,8 @@ test(delete_and_create_class_property,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
     Result = metadata{instance_operations:2,schema_operations:2},
     findall(
         DocA,
@@ -1322,7 +1357,8 @@ test(float_to_string,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
 
     Result = metadata{instance_operations:2,schema_operations:1},
     findall(
@@ -1366,7 +1402,8 @@ test(cast_to_required_fails,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               _Result).
+                               _Result,
+                               []).
 
 test(cast_to_required_or_error,
      [setup((setup_temp_store(State),
@@ -1397,7 +1434,8 @@ test(cast_to_required_or_error,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
     Result = metadata{ instance_operations:2,
 					   schema_operations:1
 					 },
@@ -1427,7 +1465,8 @@ test(garbage_op,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               _Result).
+                               _Result,
+                               []).
 
 test(replace_metadata,
      [setup((setup_temp_store(State),
@@ -1445,7 +1484,8 @@ test(replace_metadata,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops,
-                               Result),
+                               Result,
+                               []),
 
     get_schema_document(Descriptor, "F", F),
     F = json{ '@id':'F',
@@ -1514,5 +1554,103 @@ test(weakening_inference_property_missing,
     create_class_dictionary(Descriptor, Before),
     After = json{'A':json{'@id':'A','@type':'Class'}},
     schema_weakening(Before, After, _Operations).
+
+test(dry_run,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        cast_class_property("F", "f", "xsd:string", error)
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               [dry_run(true)]),
+
+    Result = metadata{ instance_operations:2,
+					   schema_operations:1,
+                       schema: Schema
+					 },
+
+    memberchk(json{'@id':'F','@type':'Class',f:'xsd:string'}, Schema),
+
+    findall(
+        DocF,
+        get_document_by_type(Descriptor, "F", DocF),
+        F_Docs),
+
+    F_Docs = [ json{'@id':'F/1','@type':'F',f:33.400001525878906},
+			   json{'@id':'F/2','@type':'F',f:44.29999923706055}
+			 ].
+
+
+
+
+test(verbose,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        cast_class_property("F", "f", "xsd:string", error)
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               [verbose(true)]),
+
+    Result = metadata{ instance_operations:2,
+					   schema_operations:1,
+                       schema: Schema
+					 },
+
+    memberchk(json{'@id':'F','@type':'Class',f:'xsd:string'}, Schema),
+
+    findall(
+        DocF,
+        get_document_by_type(Descriptor, "F", DocF),
+        F_Docs),
+
+    F_Docs = [ json{'@id':'F/1','@type':'F',f:"33.400001525878906"},
+			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
+			 ].
+
 
 :- end_tests(migration).
