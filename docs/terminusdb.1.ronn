@@ -425,6 +425,12 @@ Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
   * `-t`, `--target`=[value]:
   resource with a schema as migration target
 
+  * `-v`, `--verbose`=[value]:
+  give back schema update information
+
+  * `-d`, `--dry_run`=[value]:
+  provide information about what would occur if the operations were performed
+
 ### branch create
 
 `terminusdb branch create BRANCH_SPEC OPTIONS`
