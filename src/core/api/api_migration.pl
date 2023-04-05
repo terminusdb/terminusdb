@@ -15,6 +15,7 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(http/json)).
+:- use_module(library(option)).
 
 api_migrate_resource(System, Auth, Path, Commit_Info0, Operations, Result, Options) :-
     resolve_descriptor_auth(write, System, Auth, Path, instance, _Descriptor),
