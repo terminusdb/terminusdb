@@ -40,12 +40,49 @@ next([X|Tail], Tail) :-
     member(X, [1,2,3]).
 next([], []).
 
-document_created_at(_Askable, _Document, _At) :-
-    fail.
+history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
+    resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
+    document_created(Commit_Descriptor, Id),
+    !,
+    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
+    Info = json{
+               commit_id: Commit_Id,
+               author: Author,
+               message: Message,
+               timestamp: Timestamp
+           }.
+history_to_created_at([_|T], Repo, Id, Info) :-
+    history_to_created_at(T, Repo, Id, Info).
 
-document_updated_at(_Askable, _Document, _At) :-
-    fail.
+document_created_at(Descriptor, Id, Info) :-
+    Branch_Name = (Descriptor.branch_name),
+    Repo = (Descriptor.repository_descriptor),
+    commits(Repo,Branch_Name,LL),
+    database_prefixes(Descriptor, Prefixes),
+    prefix_expand(Id,Prefixes,Id_Ex),
+    history_to_created_at(LL,Repo,Id_Ex,Info).
 
+history_to_updated_at([Commit_Id|_], Repo, Id, Info) :-
+    resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
+    document_modified(Commit_Descriptor, Id),
+    !,
+    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
+    Info = json{
+               commit_id: Commit_Id,
+               author: Author,
+               message: Message,
+               timestamp: Timestamp
+           }.
+history_to_updated_at([_|T], Repo, Id, Info) :-
+    history_to_updated_at(T, Repo, Id, Info).
+
+document_updated_at(Descriptor, Id, Info) :-
+    Branch_Name = (Descriptor.branch_name),
+    Repo = (Descriptor.repository_descriptor),
+    commits(Repo,Branch_Name,LL),
+    database_prefixes(Descriptor, Prefixes),
+    prefix_expand(Id,Prefixes,Id_Ex),
+    history_to_updated_at(LL,Repo,Id_Ex,Info).
 
 document_created(Askable, Id) :-
     ask(Askable,
@@ -176,6 +213,55 @@ test(show_document_history,
 	                  timestamp:_
                     }
               ].
+
+test(show_document_updated_created,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,_{'@type' : "City", name : "Warsaw"}, Warsaw)
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C2,
+        replace_document(C2,_{'@id' : Warsaw, '@type' : "City", name : "Warszawa"}, _)
+    ),
+
+    document_history(Descriptor, Warsaw, 0, inf, History),
+    History = [ json{ author:"test",
+	                  commit_id:Commit_1,
+	                  message:"test",
+	                  timestamp:TS_1
+                    },
+                json{ author:"test",
+	                  commit_id:Commit_2,
+	                  message:"test",
+	                  timestamp:TS_2
+                    }
+              ],
+
+    document_updated_at(Descriptor, Warsaw, Updated),
+    json{ author:"test",
+	      commit_id:Commit_1,
+	      message:"test",
+	      timestamp:TS_1
+        } :< Updated,
+
+    document_created_at(Descriptor, Warsaw, Created),
+    json{ author:"test",
+	      commit_id:Commit_2,
+	      message:"test",
+	      timestamp:TS_2
+        } :< Created.
 
 
 :- end_tests(history).
