@@ -542,6 +542,51 @@ opt_spec(log,'terminusdb log DB_SPEC',
            default(-1),
            help('Number of results to return')]
          ]).
+opt_spec(history,'terminusdb history DB_SPEC',
+         'Get the history for a given document by id in DB_SPEC.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `history` command')],
+          [opt(id),
+           type(atom),
+           longflags([id]),
+           shortflags([i]),
+           default(false),
+           help('The id of the document to provide history for')],
+          [opt(json),
+           type(boolean),
+           longflags([json]),
+           shortflags([j]),
+           default(false),
+           help('return history as JSON')],
+          [opt(start),
+           type(integer),
+           longflags([start]),
+           shortflags([s]),
+           default(0),
+           help('How far back in commit history to start giving results')],
+          [opt(created),
+           type(boolean),
+           longflags([created]),
+           shortflags([k]),
+           default(false),
+           help('return time of creation (does not report all history)')],
+          [opt(updated),
+           type(boolean),
+           longflags([updated]),
+           shortflags([u]),
+           default(false),
+           help('return time of last update (does not report all history)')],
+          [opt(count),
+           type(integer),
+           longflags([count]),
+           shortflags([c]),
+           default(-1),
+           help('Number of results to return')]
+         ]).
 opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
          'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
          [[opt(help),
@@ -1709,6 +1754,24 @@ run_command(log,[Path], Opts) :-
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Log, [])
             ;   format_log(current_output,Log)
+            )
+        )
+    ).
+run_command(history,[Path], Opts) :-
+    opt_authority(Opts, Auth),
+    create_context(system_descriptor{}, System_DB),
+    option(id(Id), Opts),
+    option(count(Count), Opts),
+    (   Count = -1
+    ->  New_Count = inf
+    ;   New_Count = Count),
+    merge_options([count(New_Count)], Opts, New_Opts),
+    api_report_errors(
+        log,
+        (   api_document_history(System_DB, Auth, Path, Id, History, New_Opts),
+            (   option(json(true), Opts)
+            ->  json_write_dict(current_output, History, [])
+            ;   format_log(current_output,History)
             )
         )
     ).

@@ -17,13 +17,13 @@
 
 History (paged) of an object returns an historical list of changes
 
-history(Askable, Id, Start, End, Result).
+history(Askable, Id, Start, Count, Result).
 
 
 Returns a list `Result` of the form:
 
 ```json
-[{ commit_id : "SDFSDLKJE",
+[{ identifier : "SDFSDLKJE",
    modified : "2012-12-03T23:22:01Z",
    author : "Author",
    message : "Message"},
@@ -46,7 +46,7 @@ history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
     !,
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
-               commit_id: Commit_Id,
+               identifier: Commit_Id,
                author: Author,
                message: Message,
                timestamp: Timestamp
@@ -68,7 +68,7 @@ history_to_updated_at([Commit_Id|_], Repo, Id, Info) :-
     !,
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
-               commit_id: Commit_Id,
+               identifier: Commit_Id,
                author: Author,
                message: Message,
                timestamp: Timestamp
@@ -137,37 +137,38 @@ has_change(Repo,Commit_Id,Id,Info) :-
     changed_document_id(Commit_Descriptor, Id),
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
-               commit_id: Commit_Id,
+               identifier: Commit_Id,
                author: Author,
                message: Message,
                timestamp: Timestamp
            }.
 
-collect_history([_|_], _Repo, _Id, _Start, End, I, History-History) :-
-    I > End,
+collect_history([_|_], _Repo, _Id, _Start, Count, I, History-History) :-
+    I >= Count,
     !.
-collect_history([Commit_URI|Rest], Repo, Id, Start, End, I, History-History_Tail) :-
+collect_history([Commit_URI|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
     I >= Start,
     !,
     (   has_change(Repo,Commit_URI,Id,Info)
     ->  History=[Info|Middle],
         Iprime is I + 1,
-        collect_history(Rest, Repo, Id, Start, End, Iprime, Middle-History_Tail)
-    ;   collect_history(Rest, Repo, Id, Start, End, I, History-History_Tail)
+        collect_history(Rest, Repo, Id, Start, Count, Iprime, Middle-History_Tail)
+    ;   collect_history(Rest, Repo, Id, Start, Count, I, History-History_Tail)
     ).
-collect_history([_|Rest], Repo, Id, Start, End, I, History-History_Tail) :-
+collect_history([_|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
     I < Start,
     !,
-    collect_history(Rest, Repo, Id, Start, End, I, History-History_Tail).
-collect_history([], _Repo, _Id, _Start, _End, _I, History-History).
+    StartPrime is Start - 1,
+    collect_history(Rest, Repo, Id, StartPrime, Count, I, History-History_Tail).
+collect_history([], _Repo, _Id, _Start, _Count, _I, History-History).
 
-document_history(Descriptor, Id, Start, End, History) :-
+document_history(Descriptor, Id, Start, Count, History) :-
     Branch_Name = (Descriptor.branch_name),
     Repo = (Descriptor.repository_descriptor),
     commits(Repo,Branch_Name,LL),
     database_prefixes(Descriptor, Prefixes),
     prefix_expand(Id,Prefixes,Id_Ex),
-    collect_history(LL,Repo,Id_Ex,Start,End,0,History-[]).
+    collect_history(LL,Repo,Id_Ex,Start,Count,0,History-[]).
 
 
 :- begin_tests(history).
@@ -203,12 +204,12 @@ test(show_document_history,
 
     document_history(Descriptor, Warsaw, 0, inf, History),
     History = [ json{ author:"test",
-	                  commit_id:_,
+	                  identifier:_,
 	                  message:"test",
 	                  timestamp:_
                     },
                 json{ author:"test",
-	                  commit_id:_,
+	                  identifier:_,
 	                  message:"test",
 	                  timestamp:_
                     }
@@ -238,12 +239,12 @@ test(show_document_updated_created,
 
     document_history(Descriptor, Warsaw, 0, inf, History),
     History = [ json{ author:"test",
-	                  commit_id:Commit_1,
+	                  identifier:Commit_1,
 	                  message:"test",
 	                  timestamp:TS_1
                     },
                 json{ author:"test",
-	                  commit_id:Commit_2,
+	                  identifier:Commit_2,
 	                  message:"test",
 	                  timestamp:TS_2
                     }
@@ -251,14 +252,14 @@ test(show_document_updated_created,
 
     document_updated_at(Descriptor, Warsaw, Updated),
     json{ author:"test",
-	      commit_id:Commit_1,
+	      identifier:Commit_1,
 	      message:"test",
 	      timestamp:TS_1
         } :< Updated,
 
     document_created_at(Descriptor, Warsaw, Created),
     json{ author:"test",
-	      commit_id:Commit_2,
+	      identifier:Commit_2,
 	      message:"test",
 	      timestamp:TS_2
         } :< Created.

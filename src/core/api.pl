@@ -181,7 +181,10 @@
               api_db_update/6,
 
               % api_graphql.pl
-              handle_graphql_request/8
+              handle_graphql_request/8,
+
+              % api_history.pl
+              api_document_history/6
           ]).
 
 :- use_module(api/api_init).
@@ -218,3 +221,4 @@
 :- use_module(api/api_access_control).
 :- use_module(api/api_db_update).
 :- use_module(api/api_graphql).
+:- use_module(api/api_history).

@@ -1496,6 +1496,7 @@ error_type_(organization, 'api:OrganizationErrorResponse').
 error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
+error_type_(history, 'api:HistoryErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
