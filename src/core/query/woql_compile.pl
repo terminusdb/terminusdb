@@ -5471,6 +5471,7 @@ test(nonPositiveInteger) :-
     test_lit(-123456^^xsd:nonPositiveInteger, -123456^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
 
 test(hexBinary) :-
+    % should this be checked for generating genuine hex?
     test_lit("abcd0123"^^xsd:hexBinary, "abcd0123"^^'http://www.w3.org/2001/XMLSchema#hexBinary').
 
 test(base64Binary) :-
