@@ -161,29 +161,6 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     normalize_document(Transaction, After_Document, Normal_Document),
     simple_diff(Before,Normal_Document,Diff,Options).
 
-changed_document_id(Transaction,Containing) :-
-    ask(Transaction,
-        distinct(Containing,
-                 (   distinct(Id, (   addition(Id, _, _)
-                                  ;   removal(Id, _, _),
-                                      once(t(Id, _, _))
-                                  )),
-                     once((path(Containing, star(p), Id),
-                           t(Containing,rdf:type,Type),
-                           (   t(Type,rdf:type,sys:'Class',schema)
-                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
-                           ;   Type = sys:'JSONDocument'),
-                           not(t(Type,sys:subdocument, _,schema))))
-                 ;   removal(Id, rdf:type, Type),
-                     once(((   t(Type,rdf:type,sys:'Class',schema)
-                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
-                           ;   Type = sys:'JSONDocument'),
-                           not(t(Type,sys:subdocument, _,schema)))),
-                     Containing = Id
-                 )
-                )
-       ).
-
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
     create_context(Branch_Descriptor.repository_descriptor, Context),
     most_recent_common_ancestor(Context, Context,
