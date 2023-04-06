@@ -1177,7 +1177,6 @@ schema_change_for_commit(Context, Commit_Id, Change) :-
     (   ask(Context,
             t(Commit_Uri, migration, Migration_String^^xsd:string))
     ->  atom_json_dict(Migration_String, Migration, [default_tag(json)]),
-        format(user_error, "Migration: ~s", [Migration_String]),
         Change = migration(Migration)
     ;   layer_uri_for_commit(Context, Commit_Uri, schema, Schema_Uri),
         commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri),

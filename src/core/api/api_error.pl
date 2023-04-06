@@ -1522,22 +1522,6 @@ api_error_jsonld_(migration, error(schema_operation_failed(Op, Before), _), JSON
                               'api:schema' : Before
                             }
             }.
-api_error_jsonld_(migration, error(not_an_irrefutable_weakening_operation(
-                                       upcast_class_property,
-                                       Class,
-                                       Property,
-                                       New_Type), _), JSON) :-
-    atom_json_dict(Type, New_Type, []),
-    format(string(Msg), "It is impossible to upcast the property ~q on class ~q to a stricter type ~q", [Class,Property,Type]),
-    JSON = _{'@type' : 'api:MigrationErrorResponse',
-             'api:status' : "api:failure",
-             'api:message' : Msg,
-             'api:error' : _{ '@type' : "api:UpcastNotASchemaWeakening",
-                              'api:class' : Class,
-                              'api:property' : Property,
-                              'api:new_type' : New_Type
-                            }
-            }.
 api_error_jsonld_(migration, error(class_already_exists(Class), _), JSON) :-
     format(string(Msg), "It is impossible to move to the class ~q as it already exists", [Class]),
     JSON = _{'@type' : 'api:MigrationErrorResponse',
