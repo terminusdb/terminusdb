@@ -2026,8 +2026,8 @@ paths:
                   type: string
                   example: "updating schema"
                 "operations":
-                  type: string
-                  example: "delete_class_property(\"MyClass\", \"not_needed_property\")"
+                  type: object
+                  example: [{"@type" : "DeleteClassProperty", "class : "MyClass", "property" : "my_property}]
                 "target":
                   type: string
                   example: "admin/foo"
