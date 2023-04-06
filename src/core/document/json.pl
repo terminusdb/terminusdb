@@ -502,9 +502,6 @@ class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
 get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
-get_context_imports(_DB, _ID, _Metadata) :-
-    fail.
-
 get_schema_context_metadata(Schema, ID, Metadata) :-
     schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
 

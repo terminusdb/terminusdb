@@ -10,7 +10,6 @@
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
-:- use_module(library(crypto)).
 :- use_module(library(when)).
 :- use_module(library(option)).
 
@@ -745,7 +744,7 @@ squash_layer(Type,Before,Intermediate,After) :-
         ->  Force_Write = true
         ;   Force_Write = false
         )
-    ;   true % no data ever written to db
+    ;   Force_Write = false % no data ever written to db
     ),
 
     put_dict(_{read: After_Layer, write: _, force_write: Force_Write}, Intermediate_RWO, After_RWO),
@@ -825,21 +824,18 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, Result
     length(Operations, Op_Count),
     % run logic here.
     (   option(dry_run(true), Options)
+    ->  true
+    ;   run_transactions([After_Transaction], false, _)
+    ),
+
+    (   option(verbose(true), Options)
     ->  create_class_dictionary(After_Transaction, Dictionary),
         class_dictionary_to_schema(Dictionary, Schema),
         Result = metadata{ schema_operations: Op_Count,
                            schema: Schema,
                            instance_operations: Count }
-    ;   run_transactions([After_Transaction], false, _),
-        (   option(verbose(true), Options)
-        ->  create_class_dictionary(After_Transaction, Dictionary),
-            class_dictionary_to_schema(Dictionary, Schema),
-            Result = metadata{ schema_operations: Op_Count,
-                               schema: Schema,
-                               instance_operations: Count }
-        ;   Result = metadata{ schema_operations: Op_Count,
-                               instance_operations: Count }
-        )
+    ;   Result = metadata{ schema_operations: Op_Count,
+                           instance_operations: Count }
     ).
 
 :- begin_tests(migration).
