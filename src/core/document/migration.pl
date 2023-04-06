@@ -1566,7 +1566,7 @@ test(dry_run,
                                                         message: "Fancy" },
                                Ops,
                                Result,
-                               [dry_run(true)]),
+                               [dry_run(true), verbose(true)]),
 
     Result = metadata{ instance_operations:2,
 					   schema_operations:1,
