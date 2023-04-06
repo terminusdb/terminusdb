@@ -18,6 +18,7 @@
                   nonground_captures/2
               ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
+:- use_module(core(document/history), [changed_document_id/2]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
@@ -160,7 +161,7 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     normalize_document(Transaction, After_Document, Normal_Document),
     simple_diff(Before,Normal_Document,Diff,Options).
 
-changed_id(Transaction,Containing) :-
+changed_document_id(Transaction,Containing) :-
     ask(Transaction,
         distinct(Containing,
                  (   distinct(Id, (   addition(Id, _, _)
@@ -198,7 +199,7 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                  do_or_die(
                      open_descriptor(Commit_Descriptor, Transaction),
                      error(unresolvable_collection(Commit_Descriptor), _)),
-                 changed_id(Transaction, Changed)
+                 changed_document_id(Transaction, Changed)
              )).
 
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
