@@ -108,9 +108,9 @@ document_modified(Askable, Containing) :-
 
 changed_document_id(Askable,Containing) :-
     distinct(Containing,
-             (   document_created(Askable, Containing)
-             ;   document_deleted(Askable, Containing)
-             ;   document_modified(Askable, Containing))).
+             (   document_modified(Askable, Containing)
+             ;   document_created(Askable, Containing)
+             ;   document_deleted(Askable, Containing))).
 
 commit_generator(Repo, state(name(Branch_Name)), state(commit(Head_Commit)), Commit_Id) :-
     ask(Repo,
