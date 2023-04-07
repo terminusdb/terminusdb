@@ -47,7 +47,6 @@
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
-:- use_module(library(plunit)).
 :- use_module(library(when)).
 
 % We rename the imported `when` here, because `when` is also a term in the WOQL
