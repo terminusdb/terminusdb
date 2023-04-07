@@ -35,14 +35,6 @@ Returns a list `Result` of the form:
 
 */
 
-pred(fail, H-T, H-T).
-pred(next(Next), H-T1, H-T2) :-
-    freeze(T1, T2 = [Next|T2]).
-
-next([X|Tail], Tail) :-
-    member(X, [1,2,3]).
-next([], []).
-
 history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     document_created(Commit_Descriptor, Id),
