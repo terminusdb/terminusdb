@@ -184,7 +184,8 @@ setup_unattached_store(Store-Dir) :-
     random_string(RandomString),
     atomic_list_concat([Folder, '/temporary_terminus_store/', RandomString], Dir),
     make_directory_path(Dir),
-    open_archive_store(Dir, Store),
+    lru_cache_size(Cache_Size),
+    open_archive_store(Dir, Cache_Size, Store),
     set_db_version(Dir),
     initialize_database_with_store('root', Store).
 
