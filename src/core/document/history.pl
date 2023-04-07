@@ -6,6 +6,7 @@
           ]).
 
 :- use_module(library(yall)).
+:- use_module(library(lists)).
 
 :- use_module(core(document/json), [
                   database_prefixes/2
