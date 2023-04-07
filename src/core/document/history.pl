@@ -20,8 +20,7 @@
 
 History (paged) of an object returns an historical list of changes
 
-history(Askable, Id, Start, Count, Result).
-
+document_history(Askable, Id, Start, Count, Result).
 
 Returns a list `Result` of the form:
 
