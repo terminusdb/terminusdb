@@ -1584,9 +1584,6 @@ test(dry_run,
 			   json{'@id':'F/2','@type':'F',f:44.29999923706055}
 			 ].
 
-
-
-
 test(verbose,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
