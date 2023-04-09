@@ -20,6 +20,7 @@
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 :- use_module(core(plugins)).
+:- use_module(core(document/migration)).
 
 :- use_module(config(terminus_config), [max_transaction_retries/1]).
 
@@ -218,31 +219,38 @@ post_transaction_tabling :-
  * The body is assumed semidet.
  */
 :- meta_predicate with_transaction(?,0,?).
+with_transaction(Query_Context,Body,Meta_Data) :-
+    with_transaction(Query_Context,Body,Meta_Data, []).
+
+:- meta_predicate with_transaction(?,0,?,+).
 with_transaction(Query_Context,
                  Body,
-                 Meta_Data) :-
+                 Meta_Data,
+                 Options) :-
     setup_call_cleanup(
         pre_transaction_tabling,
-        with_transaction_(Query_Context,Body,Meta_Data),
+        with_transaction_(Query_Context,Body,Meta_Data,Options),
         post_transaction_tabling % Do some cleanup of schema compilation etc.
     ).
 
-:- meta_predicate with_transaction(?,0,?).
+:- meta_predicate with_transaction(?,0,?,+).
 with_transaction_(Query_Context,
                   Body,
-                  Meta_Data) :-
+                  Meta_Data,
+                  Options) :-
     retry_transaction(Query_Context, Transaction_Retry_Count),
     (   catch(call(Body),
               fail_transaction,
               Fail_Transaction=true)
     ->  Fail_Transaction = false,
         query_context_transaction_objects(Query_Context, Transactions),
-        run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0),
+        run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0,Options),
         !, % No going back now!
         Meta_Data = (Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}))
     ;   !,
         fail).
 with_transaction_(_,
+                  _,
                   _,
                   _) :-
     throw(error(transaction_retry_exceeded, _)).
@@ -255,6 +263,9 @@ with_transaction_(_,
  * Run all transactions and throw errors with witnesses.
  */
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
+    run_transactions(Transactions, All_Witnesses, Meta_Data,[]).
+
+run_transactions(Transactions, All_Witnesses, Meta_Data,Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     validate_validation_objects(Validations, All_Witnesses, Witnesses),
     /*
@@ -271,21 +282,35 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     ),*/
 
     (   Witnesses = []
-    ->  true
+    ->  infer_migrations_for_commit(Validations,Validations0,Options)
     ;   throw(error(schema_check_failure(Witnesses),_))),
 
     findall(Witness,
-            pre_commit_hook(Validations, Witness),
+            pre_commit_hook(Validations0, Witness),
             Hook_Witnesses),
     (   Hook_Witnesses = []
     ->  true
     ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
 
-    commit_validation_objects(Validations, Committed),
-    collect_validations_metadata(Validations, Validation_Meta_Data),
+    commit_validation_objects(Validations0, Committed),
+    collect_validations_metadata(Validations0, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
     put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data),
-    ignore(forall(post_commit_hook(Validations, Meta_Data), true)).
+    ignore(forall(post_commit_hook(Validations0, Meta_Data), true)).
+
+infer_migrations_for_commit(Validations0,Validations1,Options) :-
+    (   option(require_migration(true), Options)
+    ->  do_or_die(
+            (   option(allow_destructive_migration(true), Options)
+            ->  infer_arbitrary_migration(Validations0, Validations1)
+            ;   infer_weakening_migration(Validations0, Validations1)),
+            error(no_inferrable_migration, _))
+    ;   (   option(allow_destructive_migration(true), Options)
+        ->  infer_arbitrary_migration(Validations0, Validations1)
+        ;   infer_weakening_migration(Validations0, Validations1))
+    ->  true
+    ;   Validations0 = Validations1
+    ).
 
 /* Note: This should not exist */
 graph_inserts_deletes(Graph, I, D) :-

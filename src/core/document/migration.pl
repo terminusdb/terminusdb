@@ -1,6 +1,8 @@
 :- module('document/migration', [
               perform_instance_migration/5,
-              perform_instance_migration_on_transaction/4
+              perform_instance_migration_on_transaction/4,
+              infer_weakening_migration/2,
+              infer_arbitrary_migration/2
           ]).
 
 :- use_module(instance).
@@ -358,6 +360,54 @@ schema_weakening(Schema,Weakened,Operations) :-
             Operations_List),
     append(Operations_List, Operations1),
     append(Operations0,Operations1,Operations).
+
+schema_strengthening(Schema,Weakened,Operations) :-
+    dict_keys(Schema,Old),
+    dict_keys(Weakened,New),
+    ord_subtract(Old,New,Deleted),
+    maplist([Deleted,delete_class(Deleted)]>>true, Deleted, Operations0),
+    do_or_die(
+        Deleted = [],
+        error(weakening_failure(json{ reason: not_a_weakening_class_definitions_deleted,
+                                      message: "The specified class(es) were deleted, violating the weakening conditions",
+                                      deleted: Deleted}),_)),
+    ord_subtract(New,Old,Added),
+    maplist({Weakened}/[Class,Operation]>>(
+                get_dict(Class, Weakened, Definition),
+                Operation = create_class(Definition)),
+            Added,
+            Operations1),
+    ord_intersection(Old,New,Shared),
+    % We can do more here! Dropped properties should be accepted
+    findall(Intermediate_Operations,
+            (   member(Key, Shared),
+                get_dict(Key,Schema,Old_Class),
+                get_dict(Key,Weakened,New_Class),
+                class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+            ),
+            Operations_List),
+    append(Operations_List, Operations2),
+    append([Operations0,Operations1,Operations2],Operations).
+
+infer_weakening_migration([Validation],[New_Validation]) :-
+    Descriptor = (Validation.descriptor),
+    create_class_dictionary(Descriptor, Before),
+    create_class_dictionary(Validation, After),
+    schema_weakening(Before, After, Operations),
+    atom_json_dict(Migration, Operations, [default_tag(json)]),
+    get_dict(commit_info, Validation, Commit_Info),
+    put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
+    put_dict(_{commit_info: Commit_Info0}, Validation, New_Validation).
+
+infer_arbitrary_migration([Validation],[New_Validation]) :-
+    Descriptor = (Validation.descriptor),
+    create_class_dictionary(Descriptor, Before),
+    create_class_dictionary(Validation, After),
+    schema_strengthening(Before, After, Operations),
+    atom_json_dict(Migration, Operations, [default_tag(json)]),
+    get_dict(commit_info, Validation, Commit_Info),
+    put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
+    put_dict(_{commit_info: Commit_Info0}, Validation, New_Validation).
 
 /* upcast_class_property(Class, Property, New_Type) */
 upcast_class_property(Class, Property, New_Type, Before, After) :-
@@ -1631,5 +1681,36 @@ test(verbose,
 			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
 
+
+test(infer_destructive_migration,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    print_term("here", []),
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+    print_term("asdf", []),
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, Context),
+    print_term("fdsa", []),
+    with_transaction(
+        Context,
+        delete_schema_document(Context, "F"),
+        _,
+        [require_migration(true), allow_destuctive_migration(true)]
+    ).
 
 :- end_tests(migration).
