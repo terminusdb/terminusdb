@@ -128,6 +128,7 @@
               api_generate_document_ids/4,
               api_read_document_selector/11,
               api_generate_document_ids/4,
+              api_get_documents/4,
               api_get_document/5,
               call_catch_document_mutation/2,
 
@@ -184,7 +185,11 @@
               handle_graphql_request/8,
 
               % api_history.pl
-              api_document_history/6
+              api_document_history/6,
+
+              % api_migration
+              api_migrate_resource/7,
+              api_migrate_resource_to/7
           ]).
 
 :- use_module(api/api_init).
@@ -222,3 +227,4 @@
 :- use_module(api/api_db_update).
 :- use_module(api/api_graphql).
 :- use_module(api/api_history).
+:- use_module(api/api_migration).

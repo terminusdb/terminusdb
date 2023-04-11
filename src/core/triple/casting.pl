@@ -1,5 +1,6 @@
 :- module(casting,[
-              typecast/4
+              typecast/4,
+              typecast_switch/5
           ]).
 
 /** <module> Casting

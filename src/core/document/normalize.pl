@@ -42,6 +42,7 @@ normalize_document(Transaction, Document, Normalized) :-
                    descriptor: labelled_graph{ label: instance,
                                                type: instance },
                    triple_update: false,
+                   force_write: false,
                    backlinks: [],
                    read: _Layer,
                    write: Write
@@ -59,6 +60,7 @@ normalize_document(Transaction, Document, Normalized) :-
                        descriptor: labelled_graph{ label: instance,
                                                    type: instance },
                        triple_update: false,
+                       force_write: false,
                        backlinks: [],
                        read: New_Instance_Layer,
                        write: _Write

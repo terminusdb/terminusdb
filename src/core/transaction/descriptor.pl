@@ -22,6 +22,7 @@
               collection_descriptor_default_write_graph/2,
               descriptor_to_loggable/2,
               ensure_transaction_has_builder/2,
+              ensure_transaction_schema_written/1,
               should_retain_layers_for_descriptor/1,
               retain_descriptor_layers/2
           ]).
@@ -111,8 +112,12 @@
  * all of these cases. However, *write* transactions have to be done differently on each of
  * these by case, though triple writes can be done identically.
  *
- * read_write_obj ---> read_write_obj{ descriptor : graph_descriptor, read : Layer,
- *                                     triple_update: Bool, write: Var_Or_Layer_Builder}
+ * read_write_obj ---> read_write_obj{ descriptor : graph_descriptor,
+ *                                     read : Layer,
+ *                                     triple_update: Bool,
+ *                                     force_write: Bool,
+ *                                     backlinks: BL,
+ *                                     write: Var_Or_Layer_Builder}
  *
  * transaction_object ---> transaction_object{ descriptor : collection_descriptor,
  *                                 <parent : transaction_object>, % except for database/terminus descriptors
@@ -196,6 +201,7 @@ graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, read_write_obj{
                                                                 descriptor: Descriptor,
                                                                 backlinks: [],
                                                                 triple_update: false,
+                                                                force_write: false,
                                                                 read: Layer,
                                                                 write: _Layer_Builder
                                                             }).
@@ -390,6 +396,11 @@ ensure_transaction_has_builder(schema, Transaction) :-
 ensure_transaction_has_builder(instance, Transaction) :-
     [RWO] = (Transaction.instance_objects),
     read_write_obj_builder(RWO, _).
+
+ensure_transaction_schema_written(Transaction) :-
+    [RWO] = (Transaction.schema_objects),
+    nb_set_dict(force_write, RWO, true).
+
 /*
 read_write_obj_builder(Read_Write_Obj, Layer_Builder) :-
     (   get_dict(commit_type, (Read_Write_Obj.descriptor), 'http://terminusdb.com/schema/ref#InitialCommit')

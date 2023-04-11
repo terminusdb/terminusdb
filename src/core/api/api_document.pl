@@ -9,7 +9,9 @@
               call_catch_document_mutation/2,
               api_read_document_selector/11,
               api_generate_document_ids/4,
+              api_get_documents/4,
               api_get_document/5,
+              api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
               nonground_captures/2
           ]).
@@ -521,6 +523,12 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query,
 
     json_stream_end(Config).
 
+api_full_replace_schema(Transaction, Schema) :-
+    empty_assoc(Captures_In),
+    database_prefixes(Transaction, Prefixes),
+    nuke_schema_documents(Transaction),
+    api_insert_document_from_lazy_list_unsafe(Schema, schema, false, Transaction, Prefixes,
+                                              Captures_In, _Captures_Out, _BackLinks-[], _Ids).
 
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).

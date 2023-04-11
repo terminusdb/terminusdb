@@ -356,6 +356,26 @@ api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
              'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(invalid_path(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Resource path invalid: ~q", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidResourcePath',
+                              'api:resource_path' : Path },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(unexpected_descriptor_type(Descriptor, Desc_Type), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    format(string(Msg), "Unexpected resource type, with resource: ~q and type: ~q", [Path, Desc_Type]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnexpectedResourceType',
+                              'api:resource_type' : Desc_Type,
+                              'api:resource_path' : Path },
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
@@ -1456,6 +1476,127 @@ api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:ResourceHasNoHistory",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(migration, error(no_migration_at_commit(Commit_Id), _), JSON) :-
+    format(string(Msg), "Unable to find a migration for schema change at commit id: ~q", [Commit_Id]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoMigrationAtCommit",
+                              'api:commit_id' : Commit_Id}
+            }.
+api_error_jsonld_(migration, error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _), JSON) :-
+    format(string(Msg), "Unable to cast value from ~q to ~q in class ~q on property ~q", [Old_Type,New_Type,Class,Property]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:MigrationCastFailure",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : New_Type,
+                              'api:old_type' : Old_Type }
+            }.
+api_error_jsonld_(migration, error(no_common_history, _), JSON) :-
+    format(string(Msg), "Unable to find a common history between these two resources", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoCommonHistory"}
+            }.
+api_error_jsonld_(migration, error(no_common_migration_prefix(Our_Migration,Their_Migration), _), JSON) :-
+    format(string(Msg), "No common prefix between migrations", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoCommonMigrationPrefix",
+                              'api:their_migration' : Their_Migration,
+                              'api:our_migration' : Our_Migration
+                            }
+            }.
+api_error_jsonld_(migration, error(schema_operation_failed(Op, Before), _), JSON) :-
+    format(string(Msg), "The schema operation '~q' failed and could not be performed", [Op]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:SchemaOperationFailed",
+                              'api:schema_operation' : Op,
+                              'api:schema' : Before
+                            }
+            }.
+api_error_jsonld_(migration, error(class_already_exists(Class), _), JSON) :-
+    format(string(Msg), "It is impossible to move to the class ~q as it already exists", [Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:ClassExists",
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(not_an_irrefutable_weakening_operation(
+                                      upcast_class_property,
+                                      Class,
+                                      Property,
+                                      New_Type), _), JSON) :-
+    atom_json_dict(Type, New_Type, []),
+    format(string(Msg), "It is impossible to upcast the property ~q on class ~q to a stricter type ~q", [Class,Property,Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UpcastNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : New_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(not_irrefutable_property_creation(Class, Property, Type), _), JSON) :-
+    atom_json_dict(Type_Atom, Type, []),
+    format(string(Msg), "It is impossible to prove that the creation of the property ~q on the class ~q with type ~q will be valid, as it may not match user data", [Class, Property, Type_Atom]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:PropertyCreationNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : Type
+                            }
+            }.
+api_error_jsonld_(migration, error(not_implemented(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q is not yet implemented", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OperationNotImplemented",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(instance_operation_failed(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q failed for an unknown reason", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InstanceOperationFailure",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(weakening_failure(Witness), _), JSON) :-
+    get_dict(message,Witness,Message),
+    format(string(Msg), "Weakening failure: ~s", [Message]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:WeakeningFailure",
+                              'api:witness' : Witness
+                            }
+            }.
+api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation), _), JSON) :-
+    atom_json_dict(OpString, Operation, []),
+    format(string(Msg), "Unknown or poorly formed schema migration operation: ~s", [OpString]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownSchemaMigrationOperation",
+                              'api:operation' : Operation
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
@@ -1504,6 +1645,7 @@ error_type_(diff, 'api:DiffErrorResponse').
 error_type_(apply, 'api:ApplyErrorResponse').
 error_type_(toplevel, 'api:TopLevelResponse').
 error_type_(patch, 'api:PatchErrorResponse').
+error_type_(migration, 'api:MigrationErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

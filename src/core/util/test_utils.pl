@@ -586,13 +586,15 @@ test_document_label_descriptor(Name, Descriptor) :-
     triple_store(Store),
     atom_concat(Name, '_schema', Schema_Name),
     atom_concat(Name, '_instance', Instance_Name),
-    create_named_graph(Store, Schema_Name, _),
-    create_named_graph(Store, Instance_Name, _),
+    atom_string(Schema_Name, Schema_String),
+    atom_string(Instance_Name, Instance_String),
+    create_named_graph(Store, Schema_String, _),
+    create_named_graph(Store, Instance_String, _),
 
     Descriptor = label_descriptor{
                      variety: branch_descriptor,
-                     schema: Schema_Name,
-                     instance: Instance_Name
+                     schema: Schema_String,
+                     instance: Instance_String
                  }.
 
 test_woql_label_descriptor(Descriptor) :-

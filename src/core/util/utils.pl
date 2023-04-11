@@ -86,6 +86,7 @@
               with_memory_file_stream/4,
               terminal_slash/2,
               dict_field_verifier/3,
+              count_solutions/2,
 
               %%% From the rust module
               random_string/1
@@ -429,6 +430,20 @@ sfoldr(Pred,Generator,Zero,Result) :-
     ;  arg(1, State, R),
        nonvar(R),
        R=Result
+    ).
+
+/**
+ * count_solutions(Goal,Count) is det.
+ *
+ * Counts the number of solutions of Goal
+ */
+:- meta_predicate count_solutions(0,-).
+count_solutions(Goal,Count) :-
+    sfoldr(
+        plus,
+        {Goal}/[1]>>call(Goal),
+        0,
+        Count
     ).
 
 /*
