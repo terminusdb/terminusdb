@@ -1524,7 +1524,7 @@ paths:
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
   /history/{organization}/{database}:
     get:
-      x-python-client: Client::log
+      x-python-client: not_implemented
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
       tags:
