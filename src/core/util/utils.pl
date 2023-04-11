@@ -1149,7 +1149,9 @@ skip_generate_nsols(Goal, Skip, Count) :-
  * Instead, we just fail and interpret failure as a type error.
  */
 input_to_integer(Atom, Integer) :-
-    (   integer(Atom)
+    (   Atom = inf
+    ->  Integer = inf
+    ;   integer(Atom)
     ->  Integer = Atom
     ;   text(Atom)
     ->  catch(atom_number(Atom, Integer), _, fail),

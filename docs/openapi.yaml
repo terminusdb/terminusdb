@@ -1522,6 +1522,60 @@ paths:
                       type: number
                       example: 1660919664.9129035
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+  /history/{organization}/{database}:
+    get:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Get commits from a specific database or branch"
+      tags:
+        - Change management
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: id
+          description: id of document to report histry of
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "A/0"
+        - name: start
+          description: Index to start from
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 0
+        - name: count
+          description: Amount of commits to show
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 10
+      responses:
+        200:
+          description: "Successful history request"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    "author":
+                      type: string
+                      example: admin
+                    "identifier":
+                      type: string
+                      example: hpl18q42dbnab4vzq8me4bg1xn8p2a0
+                    "message":
+                      type: string
+                      example: create initial schema
+                    "timestamp":
+                      type: number
+                      example: 1660919664.9129035
+                  example: [{"author":"admin","identifier":"tbn15yq6rw1l4e9bgboyu3vwcoxgri5","message":"cli: document replace","timestamp":1680808874.324928},{"author":"admin","identifier":"3v3naa8jrt8612dg5zryu4vjqwa2w9s","message":"cli: document insert","timestamp":1680808847.4063878}]
   /roles:
     post:
       x-python-client: Client::add_role

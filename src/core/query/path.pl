@@ -9,7 +9,6 @@
 :- use_module(core(query), [run_context_ast_jsonld_response/5]).
 
 :- use_module(library(lists)).
-:- use_module(library(plunit)).
 
 hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
     memberchk(instance,Types),

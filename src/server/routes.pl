@@ -607,6 +607,42 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             nl
         )).
 
+%%%%%%%%%%%%%%%%%%%% History %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+history_handler(get, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        history,
+        Request,
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = json{}),
+
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_required(Search, JSON, id, text, Id),
+
+            param_value_search_or_json_optional(Search, JSON, created, boolean, false, Created),
+            param_value_search_or_json_optional(Search, JSON, updated, boolean, false, Updated),
+
+            param_value_search_or_json_optional(Search, JSON, start, integer, 0, Start),
+            param_value_search_or_json_optional(Search, JSON, count, integer, inf, Count),
+
+            api_document_history(System_DB, Auth, Path, Id, Result,
+                                 [start(Start),
+                                  count(Count),
+                                  created(Created),
+                                  updated(Updated)]),
+            write_cors_headers(Request),
+            reply_json(Result, [width(0)])
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
