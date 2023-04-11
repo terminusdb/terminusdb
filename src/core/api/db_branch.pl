@@ -33,6 +33,7 @@ create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)
     Schema_RWO = read_write_obj{
                      descriptor: Schema_Descriptor,
                      triple_update: false,
+                     force_write: false,
                      read: _,
                      backlinks: [],
                      write: Builder},

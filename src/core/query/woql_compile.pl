@@ -47,7 +47,6 @@
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
-:- use_module(library(plunit)).
 :- use_module(library(when)).
 
 % We rename the imported `when` here, because `when` is also a term in the WOQL
@@ -248,11 +247,12 @@ resolve_predicate(null,_Something) -->
     [].
 resolve_predicate(P,PE) -->
     {
-        atom(P),
-        \+ uri_has_protocol(P),
+        text(P),
+        atom_string(PA,P),
+        \+ uri_has_protocol(PA),
         !
     },
-    resolve_prefix('@schema', P, PE).
+    resolve_prefix('@schema', PA, PE).
 resolve_predicate(P, PE) -->
    resolve(P,PE).
 
@@ -5346,22 +5346,15 @@ load_get_lit(Term, Data) :-
             resolve_absolute_string_descriptor("admin/test", Descriptor),
 
             create_context(Descriptor, commit_info{author:"test", message:"test"}, Context),
-            [Transaction] = (Context.transaction_objects),
-            [RWO] = (Transaction.instance_objects),
-            read_write_obj_builder(RWO, Builder),
 
-            (   Term = Literal^^Type
-            ->  with_transaction(Context,
-                                 nb_add_triple(Builder, "a", "b", value(Literal,Type)),
-                                 _)
-            ;   Term = Literal@Type
-            ->  with_transaction(Context,
-                                 nb_add_triple(Builder, "a", "b", lang(Literal,Type)),
-                                 _)
+            with_transaction(
+                Context,
+                ask(Context,
+                    insert("a","b",Term)),
+                _
             ),
             once(ask(Descriptor,
                      t("a", "b", Data)))
-
         ),
         teardown_temp_store(State)).
 
@@ -5477,6 +5470,7 @@ test(nonPositiveInteger) :-
     test_lit(-123456^^xsd:nonPositiveInteger, -123456^^'http://www.w3.org/2001/XMLSchema#nonPositiveInteger').
 
 test(hexBinary) :-
+    % should this be checked for generating genuine hex?
     test_lit("abcd0123"^^xsd:hexBinary, "abcd0123"^^'http://www.w3.org/2001/XMLSchema#hexBinary').
 
 test(base64Binary) :-

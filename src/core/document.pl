@@ -33,6 +33,7 @@
               get_schema_document/3,
               get_schema_document_uri/2,
               get_document_uri_by_type/3,
+              get_document_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
@@ -93,7 +94,11 @@
               json_document_triple/3,
               json_subdocument_triple/4,
               assign_json_document_id/2,
-              get_json_object/3
+              get_json_object/3,
+
+              % migration.pl
+              perform_instance_migration/5,
+              perform_instance_migration_on_transaction/4
           ]).
 
 :- use_module('document/validation').
@@ -107,3 +112,4 @@
 :- use_module('document/apply').
 :- use_module('document/inference').
 :- use_module('document/json_rdf').
+:- use_module('document/migration').

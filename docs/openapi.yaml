@@ -2000,6 +2000,51 @@ paths:
                 example: {'@type':"api:UsersResponse",'api:status' :"api:success"}
         403:
           description: Forbidden
+  /migration/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          example: admin/MyDB
+    post:
+      tags:
+        - Change management
+      summary: Schema migration either by explicit operation, or implicit schema targetting
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "author":
+                  type: string
+                  example: "Jimbo"
+                "message":
+                  type: string
+                  example: "updating schema"
+                "operations":
+                  type: object
+                  example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
+                "target":
+                  type: string
+                  example: "admin/foo"
+      responses:
+        200:
+          description: "Successfully migrated schema"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:MigrationResponse","api:status":"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
   /capabilities:
     post:
       x-python-client: Client::change_capabilities
