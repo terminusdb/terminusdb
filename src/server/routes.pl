@@ -607,6 +607,42 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             nl
         )).
 
+%%%%%%%%%%%%%%%%%%%% History %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+history_handler(get, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        history,
+        Request,
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = json{}),
+
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_required(Search, JSON, id, text, Id),
+
+            param_value_search_or_json_optional(Search, JSON, created, boolean, false, Created),
+            param_value_search_or_json_optional(Search, JSON, updated, boolean, false, Updated),
+
+            param_value_search_or_json_optional(Search, JSON, start, integer, 0, Start),
+            param_value_search_or_json_optional(Search, JSON, count, integer, inf, Count),
+
+            api_document_history(System_DB, Auth, Path, Id, Result,
+                                 [start(Start),
+                                  count(Count),
+                                  created(Created),
+                                  updated(Updated)]),
+            write_cors_headers(Request),
+            reply_json(Result, [width(0)])
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
@@ -2959,6 +2995,48 @@ capabilities_handler(post, Request, System_DB, Auth) :-
                                      'api:status' : "api:success"})
             ;   throw(error(unknown_capabilities_operation(Op)))
             )
+        )
+    ).
+
+%%%%%%%%%%%%%%%%%%% Schema Migration %%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+migration_handler(post,Path,Request,System_DB,Auth) :-
+    (   get_payload(JSON, Request)
+    ->  true
+    ;   JSON = _{}),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    api_report_errors(
+        migration,
+        Request,
+        (   param_value_search_or_json_required(Search, JSON, author, text, Author),
+            param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_optional(Search, JSON, dry_run, boolean, false, Dry_Run),
+            param_value_search_or_json_optional(Search, JSON, verbose, boolean, false, Verbose),
+            Commit_Info = commit_info{
+                              author: Author,
+                              message: Message
+                          },
+            (   param_value_search_or_json(Search, JSON, operations, object, Operations)
+            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
+                                     [dry_run(Dry_Run),
+                                      verbose(Verbose)]),
+                put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
+                         Result, Response),
+                cors_reply_json(Request, Response)
+            ;   param_value_search_or_json(Search, JSON, target, text, Target)
+            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result,
+                                        [dry_run(Dry_Run),
+                                         verbose(Verbose)]),
+                put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
+                         Result, Response),
+                cors_reply_json(Request, Response)
+            ;   throw(error(missing_parameter(operations), _)))
         )
     ).
 

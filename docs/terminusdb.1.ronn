@@ -389,6 +389,36 @@ Get the log for a branch given by DB_SPEC.
   * `-c`, `--count`=[value]:
   Number of results to return
 
+### history
+
+`terminusdb history DB_SPEC`
+
+Get the history for a given document by id in DB_SPEC.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `history` command
+
+  * `-i`, `--id`=[value]:
+  The id of the document to provide history for
+
+  * `-j`, `--json`=[value]:
+  return history as JSON
+
+  * `-s`, `--start`=[value]:
+  How far back in commit history to start giving results
+
+  * `-k`, `--created`=[value]:
+  return time of creation (does not report all history)
+
+  * `-u`, `--updated`=[value]:
+  return time of last update (does not report all history)
+
+  * `-c`, `--count`=[value]:
+  Number of results to return
+
 ### reset
 
 `terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC`
@@ -400,6 +430,36 @@ Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
 
   * `-h`, `--help`=[value]:
   print help for the `reset` command
+
+### migration
+
+`terminusdb migration BRANCH_SPEC`
+
+Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `migration` command
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-o`, `--operations`=[value]:
+  operations to perform on the schema
+
+  * `-t`, `--target`=[value]:
+  resource with a schema as migration target
+
+  * `-v`, `--verbose`=[value]:
+  give back schema update information
+
+  * `-d`, `--dry_run`=[value]:
+  provide information about what would occur if the operations were performed
 
 ### branch create
 
