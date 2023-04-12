@@ -198,21 +198,17 @@ initialize_database_with_store(Key, Store, Force) :-
 
 current_repository_version("v1.0.1").
 
-update_repository_graph :-
-    % we dont yet have a store,
-    % so we will have to fresh init at some point
+has_no_store :-
     catch(
         (   triple_store(_),
-            false
-        ),
+            fail),
         error(no_database_store_version, _),
         true
-    ),
-    !.
-update_repository_graph :-
-    repository_ontology(Repo_Label),
+    ).
+
+update_system_graph(Label, Path, Predicate, Initialization) :-
     Descriptor = label_descriptor{
-                     schema:Repo_Label,
+                     schema:Label,
                      variety:repository_descriptor
                  },
     open_descriptor(Descriptor, Transaction_Object),
@@ -226,16 +222,34 @@ update_repository_graph :-
     % already current
     ->  true
     % needs an upgrade
-    ;   api_init:repository_schema_json(RepoPath),
-        file_to_predicate(RepoPath, repo_schema),
+    ;   file_to_predicate(Path, Predicate),
         triple_store(Store),
-        api_init:initialize_repo_schema(Store, true),
+        call(Initialization, Store, true),
         % remove anything already pinned
         abolish_all_tables
     ).
 
+update_repository_graph :-
+    repository_ontology(Repo_Label),
+    api_init:repository_schema_json(Repo_Path),
+    update_system_graph(Repo_Label,
+                        Repo_Path,
+                        repo_schema,
+                        api_init:initialize_repo_schema).
+
+update_commit_graph :-
+    ref_ontology(Ref_Label),
+    api_init:ref_schema_json(Ref_Path),
+    update_system_graph(Ref_Label,
+                        Ref_Path,
+                        ref_schema,
+                        api_init:initialize_ref_schema).
+
 update_system_graphs :-
-    update_repository_graph.
+    (   has_no_store
+    ->  true
+    ;   update_repository_graph,
+        update_commit_graph).
 
 % FIXME! These tests should go into `src/config/terminus_config.pl`, but I
 % couldn't run them when they were there.

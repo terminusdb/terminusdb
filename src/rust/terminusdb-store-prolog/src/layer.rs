@@ -122,6 +122,13 @@ predicates! {
         squashed_layer_term.unify(&WrappedLayer(squashed))
     }
 
+    pub semidet fn squash_upto(context, layer_term, upto_term, squashed_layer_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let upto: WrappedLayer = upto_term.get_ex()?;
+        let squashed = context.try_or_die(layer.squash_upto(&upto))?;
+        squashed_layer_term.unify(&WrappedLayer(squashed))
+    }
+
     pub semidet fn rollup(context, layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         context.try_or_die(layer.rollup())

@@ -39,6 +39,7 @@ pub fn install(module: Option<&str>) {
     layer::register_id_to_object_in_module(module);
     layer::register_parent_in_module(module);
     layer::register_squash_in_module(module);
+    layer::register_squash_upto_in_module(module);
     layer::register_rollup_in_module(module);
     layer::register_rollup_upto_in_module(module);
     layer::register_imprecise_rollup_upto_in_module(module);

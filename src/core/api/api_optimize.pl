@@ -76,6 +76,13 @@ descriptor_optimize(branch_descriptor{
                     },
 
     open_descriptor(Descriptor, Transaction_Object),
+    Schema_Objects = (Transaction_Object.schema_objects),
+    forall(
+        (   member(Schema, Schema_Objects),
+            Layer = (Schema.read)
+        ),
+        rollup(Layer)
+    ),
     Instance_Objects = (Transaction_Object.instance_objects),
     forall(
         (   member(Instance, Instance_Objects),

@@ -40,7 +40,8 @@
               most_recent_common_ancestor/7,
               commit_uri_to_history_commit_ids/3,
               commit_uri_to_history_commit_uris/3,
-              commit_uri_to_history_commit_uris/4
+              commit_uri_to_history_commit_uris/4,
+              schema_change_for_commit/3
           ]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -48,6 +49,7 @@
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
+:- use_module(library(http/json), [atom_json_dict/3]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -168,8 +170,12 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
        'schema': Schema_Layer
      },
     (   ground(Instance_Layer)
-    ->  put_dict(instance, Commit_Document0, Instance_Layer, Commit_Document)
-    ;   Commit_Document = Commit_Document0),
+    ->  put_dict(instance, Commit_Document0, Instance_Layer, Commit_Document1)
+    ;   Commit_Document1 = Commit_Document0),
+
+    (   get_dict(migration, Commit_Info, Migration)
+    ->  put_dict(migration, Commit_Document1, Migration, Commit_Document)
+    ;   Commit_Document = Commit_Document1),
 
     insert_document(
         Context,
@@ -1165,6 +1171,18 @@ commit_uri_to_history_commit_ids_(Context, Commit_Uri, [Commit_Id|History_Commit
 commit_uri_to_history_commit_ids(Context, Commit_Uri, History_Commit_Ids) :-
     commit_uri_to_history_commit_ids_(Context, Commit_Uri, Reversed_History_Commit_Ids),
     reverse(Reversed_History_Commit_Ids, History_Commit_Ids).
+
+schema_change_for_commit(Context, Commit_Id, Change) :-
+    commit_id_uri(Context, Commit_Id, Commit_Uri),
+    (   ask(Context,
+            t(Commit_Uri, migration, Migration_String^^xsd:string))
+    ->  atom_json_dict(Migration_String, Migration, [default_tag(json)]),
+        Change = migration(Migration)
+    ;   layer_uri_for_commit(Context, Commit_Uri, schema, Schema_Uri),
+        commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri),
+        layer_uri_for_commit(Context, Parent_Uri, schema, Schema_Uri)
+    ->  Change = no_change
+    ;   Change = no_migration).
 
 :- begin_tests(commit_history).
 :- use_module(core(util/test_utils)).

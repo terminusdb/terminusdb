@@ -6,6 +6,7 @@
 
               % casting.pl
               typecast/4,
+              typecast_switch/5,
 
               % database_utils.pl
               system_graph_layer/2,

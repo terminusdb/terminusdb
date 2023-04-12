@@ -28,6 +28,7 @@
               transactions_to_map/2,
               collection_descriptor_graph_filter_graph_descriptor/3,
               ensure_transaction_has_builder/2,
+              ensure_transaction_schema_written/1,
 
               % validate.pl
               transaction_objects_to_validation_objects/2,
@@ -88,6 +89,7 @@
               commit_uri_to_history_commit_uris/3,
               commit_uri_to_history_commit_uris/4,
               layer_uri_for_commit/4,
+              schema_change_for_commit/3,
 
               % repo_entity.pl
               has_repository/2,
