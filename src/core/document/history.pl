@@ -81,16 +81,18 @@ document_updated_at(Descriptor, Id, Info) :-
 document_created(Askable, Id) :-
     ask(Askable,
         (   addition(Id, rdf:type, Type),
-            (   t(Type,rdf:type,sys:'Class',schema)
-            ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
-            ;   Type = sys:'JSONDocument'))).
+            once(((   t(Type,rdf:type,sys:'Class',schema)
+                  ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
+                  ;   Type = sys:'JSONDocument'),
+                  not(t(Type,sys:subdocument, _,schema)))))).
 
 document_deleted(Askable, Id) :-
     ask(Askable,
         (   removal(Id, rdf:type, Type),
-            (   t(Type,rdf:type,sys:'Class',schema)
-            ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
-            ;   Type = sys:'JSONDocument'))).
+            once(((   t(Type,rdf:type,sys:'Class',schema)
+                  ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
+                  ;   Type = sys:'JSONDocument'),
+                  not(t(Type,sys:subdocument, _,schema)))))).
 
 document_modified(Askable, Containing) :-
     ask(Askable,
@@ -258,5 +260,75 @@ test(show_document_updated_created,
 	      timestamp:TS_2
         } :< Created.
 
+original_changed_document_id(Askable,Containing) :-
+    ask(Askable,
+        distinct(Containing,
+                 (   distinct(Id, (   addition(Id, _, _)
+                                  ;   removal(Id, _, _),
+                                      once(t(Id, _, _))
+                                  )),
+                     once((path(Containing, star(p), Id),
+                           t(Containing,rdf:type,Type),
+                           (   t(Type,rdf:type,sys:'Class',schema)
+                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
+                           ;   Type = sys:'JSONDocument'),
+                           not(t(Type,sys:subdocument, _,schema))))
+                 ;   removal(Id, rdf:type, Type),
+                     once(((   t(Type,rdf:type,sys:'Class',schema)
+                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
+                           ;   Type = sys:'JSONDocument'),
+                           not(t(Type,sys:subdocument, _,schema)))),
+                     Containing = Id
+                 )
+                )
+       ).
+
+subdocument_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Thing",
+  "sub" : "Sub" }
+
+{ "@type" : "Class",
+  "@id" : "Sub",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Random" },
+  "string" : "xsd:string" }
+
+').
+
+:- use_module(core(document/json)).
+
+test(subdocument_apply,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(subdocument_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2,_{sub : _{ string : "foo" }}, _),
+        _
+    ),
+
+    findall(Id,
+            changed_document_id(Desc, Id),
+            Ids),
+
+    findall(Id,
+            original_changed_document_id(Desc, Id),
+            Original_Ids),
+
+    sort(Ids, Sorted_Ids),
+    sort(Original_Ids, Original_Sorted_Ids),
+
+    length(Original_Ids, 1),
+    Sorted_Ids = Original_Sorted_Ids.
 
 :- end_tests(history).
