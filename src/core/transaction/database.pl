@@ -3,6 +3,7 @@
               run_transactions/3,
               retry_transaction/2,
               with_transaction/3,
+              with_transaction/4,
               graph_inserts_deletes/3
           ]).
 
@@ -265,24 +266,26 @@ with_transaction_(_,
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     run_transactions(Transactions, All_Witnesses, Meta_Data,[]).
 
-run_transactions(Transactions, All_Witnesses, Meta_Data,Options) :-
+run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    validate_validation_objects(Validations, All_Witnesses, Witnesses),
+    infer_migrations_for_commit(Validations,Validations0,Options),
+    validate_validation_objects(Validations0, All_Witnesses, Witnesses),
+
     /*
     with_output_to(
         user_error,
         (   format("~n~nXXXXXXXXXXXXXXX~n",[]),
             maplist(
                 [Askable]>>print_all_triples(Askable,schema),
-                Validations),
+                Validations0),
             format(user_error,"~n~nYYYYYYYYYYYYYYY~n",[]),
             maplist(
                 [Askable]>>print_all_triples(Askable),
-                Validations))
+                Validations0))
     ),*/
 
     (   Witnesses = []
-    ->  infer_migrations_for_commit(Validations,Validations0,Options)
+    ->  true
     ;   throw(error(schema_check_failure(Witnesses),_))),
 
     findall(Witness,
@@ -298,6 +301,19 @@ run_transactions(Transactions, All_Witnesses, Meta_Data,Options) :-
     put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data),
     ignore(forall(post_commit_hook(Validations0, Meta_Data), true)).
 
+no_schema_changes_for_validation(Validation) :-
+    member(Schema_Object,(Validation.schema_objects)),
+    (Schema_Object.changed) = false.
+
+no_schema_changes(Validations) :-
+    forall(
+        member(Validation, Validations),
+        no_schema_changes_for_validation(Validation)
+    ).
+
+infer_migrations_for_commit(Validations,Validations,_Options) :-
+    no_schema_changes(Validations),
+    !.
 infer_migrations_for_commit(Validations0,Validations1,Options) :-
     (   option(require_migration(true), Options)
     ->  do_or_die(
@@ -305,9 +321,9 @@ infer_migrations_for_commit(Validations0,Validations1,Options) :-
             ->  infer_arbitrary_migration(Validations0, Validations1)
             ;   infer_weakening_migration(Validations0, Validations1)),
             error(no_inferrable_migration, _))
-    ;   (   option(allow_destructive_migration(true), Options)
-        ->  infer_arbitrary_migration(Validations0, Validations1)
-        ;   infer_weakening_migration(Validations0, Validations1))
+    ;   option(allow_destructive_migration(true), Options)
+    ->  infer_arbitrary_migration(Validations0, Validations1)
+    ;   infer_weakening_migration(Validations0, Validations1)
     ->  true
     ;   Validations0 = Validations1
     ).

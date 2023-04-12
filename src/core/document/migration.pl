@@ -276,6 +276,11 @@ class_property_weakened('@metadata', _Original, Weakening, Class, Operation) =>
 class_property_weakened('@documentation', _Original, Weakening, Class, Operation) =>
     get_dict('@documentation',Weakening, New_Docs),
     Operation = replace_class_documentation(Class,New_Docs).
+class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+get_dict(Property,Weakening,New_Value),
+get_dict(Property,Original,Old_Value),
+New_Value = Old_Value =>
+    fail.
 class_property_weakened(Property, Original, Weakening, Class, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
@@ -366,11 +371,6 @@ schema_strengthening(Schema,Weakened,Operations) :-
     dict_keys(Weakened,New),
     ord_subtract(Old,New,Deleted),
     maplist([Deleted,delete_class(Deleted)]>>true, Deleted, Operations0),
-    do_or_die(
-        Deleted = [],
-        error(weakening_failure(json{ reason: not_a_weakening_class_definitions_deleted,
-                                      message: "The specified class(es) were deleted, violating the weakening conditions",
-                                      deleted: Deleted}),_)),
     ord_subtract(New,Old,Added),
     maplist({Weakened}/[Class,Operation]>>(
                 get_dict(Class, Weakened, Definition),
@@ -389,25 +389,61 @@ schema_strengthening(Schema,Weakened,Operations) :-
     append(Operations_List, Operations2),
     append([Operations0,Operations1,Operations2],Operations).
 
-infer_weakening_migration([Validation],[New_Validation]) :-
-    Descriptor = (Validation.descriptor),
-    create_class_dictionary(Descriptor, Before),
-    create_class_dictionary(Validation, After),
-    schema_weakening(Before, After, Operations),
-    atom_json_dict(Migration, Operations, [default_tag(json)]),
-    get_dict(commit_info, Validation, Commit_Info),
-    put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
-    put_dict(_{commit_info: Commit_Info0}, Validation, New_Validation).
+schema_inference_rule(weakening, Before, After, Operations) :-
+    catch(
+        schema_weakening(Before, After, Operations),
+        error(weakening_failure(_),_),
+        fail
+    ).
+schema_inference_rule(strengthening, Before, After, Operations) :-
+    schema_strengthening(Before, After, Operations).
 
-infer_arbitrary_migration([Validation],[New_Validation]) :-
+perform_migration_rule(weakening,_Before, After, Operations_List, Validation_Out) :-
+    transaction_objects_to_validation_objects([After], [Validation]),
+    (   Operations_List = []
+    ->  Validation = Validation_Out
+    ;   get_dict(schema_objects, Validation, [Schema_Object]),
+        put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
+        put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation, Validation_Out)
+    ).
+perform_migration_rule(strengthening, Before, After, Operations_List, Validation_Out) :-
+    interpret_instance_operations(Operations_List, Before, After, Count),
+    transaction_objects_to_validation_objects([After], [Validation]),
+    (   Operations_List = []
+    ->  Validation = Validation0
+    ;   get_dict(schema_objects, Validation, [Schema_Object]),
+        put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
+        put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation, Validation0)
+    ),
+    (   Count > 0
+    ->  Validation0 = Validation_Out
+    ;   get_dict(schema_objects, Validation0, [Schema_Object]),
+        put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
+        put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation0, Validation_Out)
+    ).
+
+infer_migration(Rule, [Validation], [New_Validation]) :-
+    validation_objects_to_transaction_objects([Validation],[After_Transaction]),
     Descriptor = (Validation.descriptor),
-    create_class_dictionary(Descriptor, Before),
-    create_class_dictionary(Validation, After),
-    schema_strengthening(Before, After, Operations),
-    atom_json_dict(Migration, Operations, [default_tag(json)]),
-    get_dict(commit_info, Validation, Commit_Info),
+    open_descriptor(Descriptor, Before_Transaction),
+    create_class_dictionary(Before_Transaction, Before),
+    create_class_dictionary(After_Transaction, After),
+    schema_inference_rule(Rule, Before, After, Operations),
+    migration_list_to_ast_list(Operations_List,Operations),
+    !,
+    perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0),
+    atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
+    (   get_dict(commit_info, Validation, Commit_Info)
+    ->  true
+    ;   Commit_Info = commit_info{}),
     put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
-    put_dict(_{commit_info: Commit_Info0}, Validation, New_Validation).
+    put_dict(_{commit_info: Commit_Info0}, Validation0, New_Validation).
+
+infer_weakening_migration(Validations,New_Validations) :-
+    infer_migration(weakening, Validations, New_Validations).
+
+infer_arbitrary_migration(Validations,New_Validations) :-
+    infer_migration(strengthening, Validations, New_Validations).
 
 /* upcast_class_property(Class, Property, New_Type) */
 upcast_class_property(Class, Property, New_Type, Before, After) :-
@@ -537,7 +573,7 @@ delete_value(_, Before, Value) =>
 
 interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
     count_solutions(
-        (   get_document_by_type(Before, Class, Uri),
+        (   get_document_uri_by_type(Before, Class, Uri),
             delete_document(After, Uri)
         ),
         Count
@@ -751,6 +787,17 @@ cycle_layer(Type, Before_Transaction, After_Transaction) :-
     ),
     ensure_transaction_has_builder(Type, After_Transaction).
 
+interpret_instance_operations([], _Before, _After, Instance_Count, Instance_Count).
+interpret_instance_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
+    interpret_instance_operation(Operation, Before, After, Instance_Count),
+    Instance_Count1 is Instance_Count + Instance_Count_In,
+
+    interpret_instance_operations(Operations, Before, After, Instance_Count1, Instance_Count_Out).
+
+interpret_instance_operations(JSONOps, Before, After, Instance_Count) :-
+    migration_list_to_ast_list(JSONOps, Ops),
+    interpret_instance_operations(Ops, Before, After, 0, Instance_Count).
+
 interpret_operations([], After_Transaction, After_Transaction, Instance_Count, Instance_Count).
 interpret_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
     interpret_schema_operation(Operation, Before, Intermediate0),
@@ -805,6 +852,15 @@ squash_layer(Type,Before,Intermediate,After) :-
  * { Class1 : Class_Description1, ... ClassN : Class_DescriptionN }
  *
  */
+create_class_dictionary(Transaction, Dictionary) :-
+    Schema_Objects = (Transaction.schema_objects),
+    forall(
+        member(Schema_Object,Schema_Objects),
+        (   get_dict(read, Schema_Object, Read),
+            var(Read))
+    ),
+    !,
+    Dictionary = json{}.
 create_class_dictionary(Transaction, Dictionary) :-
     Config = config{
                  skip: 0,
@@ -868,6 +924,9 @@ perform_instance_migration_retry(_, _, _, _, _) :-
     throw(error(transaction_retry_exceeded, _)).
 
 perform_instance_migration_on_transaction(Before_Transaction, Operations, Result, Options) :-
+    perform_instance_migration_on_transaction(Before_Transaction, Operations, _, Result, Options).
+
+perform_instance_migration_on_transaction(Before_Transaction, Operations, After_Transaction, Result, Options) :-
     ensure_transaction_has_builder(instance, Before_Transaction),
     ensure_transaction_has_builder(schema, Before_Transaction),
     interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
@@ -891,6 +950,13 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, Result
 :- begin_tests(migration).
 
 :- use_module(core(util/test_utils)).
+
+test(property_weakening, []) :-
+    \+ class_property_weakened(
+           d,
+           json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
+           json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
+           'D', _Weakened).
 
 before1('
 { "@base": "terminusdb:///data/",
@@ -1690,11 +1756,13 @@ test(infer_destructive_migration,
       cleanup(teardown_temp_store(State))
      ]) :-
 
-    print_term("here", []),
     with_test_transaction(
         Descriptor,
         C1,
         (   insert_document(C1,
+                            _{ '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
                             _{ '@id' : 'F/1', f : 33.4 },
                             _),
             insert_document(C1,
@@ -1702,15 +1770,27 @@ test(infer_destructive_migration,
                             _)
         )
     ),
-    print_term("asdf", []),
+
     create_context(Descriptor, commit_info{author:"me",
                                            message:"yes"}, Context),
-    print_term("fdsa", []),
+
     with_transaction(
         Context,
         delete_schema_document(Context, "F"),
         _,
-        [require_migration(true), allow_destuctive_migration(true)]
-    ).
+        [require_migration(true), allow_destructive_migration(true)]
+    ),
+
+    findall(
+        Doc_Id,
+        get_document_uri(Descriptor, false, Doc_Id),
+        Docs
+    ),
+    Docs = ['terminusdb:///data/A/1'],
+
+    \+ ask(Descriptor,
+           t('@schema':'F', rdf:type, sys:'Class', schema)
+          ).
+
 
 :- end_tests(migration).

@@ -550,6 +550,7 @@ refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
     ;   terminus_store:id_triple(Layer,S_Id,P_Id,_),
         terminus_store:subject_id(Layer, Subject_String, S_Id),
         atom_string(Subject, Subject_String),
+        test_utils:print_all_triples(Validation_Object, schema),
         Witness = json{ '@type' : invalid_predicate,
                         class: Class,
                         predicate: Predicate,
