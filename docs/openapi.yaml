@@ -1546,6 +1546,18 @@ paths:
           schema:
             type: integer
             example: 0
+        - name: updated
+          description: Last updated time (excludes history, but can be combined with created)
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: created
+          description: Created date of object (excludes history, but can be combined with updated)
+          in: query
+          required: false
+          schema:
+            type: boolean
         - name: count
           description: Amount of commits to show
           in: query
