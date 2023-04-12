@@ -29,9 +29,13 @@
               clear_check_insecure_user_header_enabled/0,
               clear_insecure_user_header_key/0,
               pinned_databases/1,
+              pinned_organizations/1,
               plugin_path/1,
               dashboard_enabled/0,
-              parallelize_enabled/0
+              parallelize_enabled/0,
+              grpc_label_endpoint/1,
+              crypto_password_cost/1,
+              lru_cache_size/1
           ]).
 
 :- use_module(library(pcre)).
@@ -42,8 +46,9 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
+
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('10.1.12').
+terminusdb_version('11.0.6').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -289,6 +294,28 @@ pinned_databases(Pinned) :-
     parse_pinned_databases(Pinned_Env, Pinned).
 pinned_databases([]).
 
+
+parse_pinned_organizations(Pinned_Env, Pinned) :-
+    merge_separator_split(Pinned_Env, ',', Pinned_Atoms),
+    maplist(atom_string, Pinned_Atoms, Pinned).
+
+:- table pinned_organizations/1.
+pinned_organizations(Pinned) :-
+    getenv('TERMINUSDB_PINNED_ORGANIZATIONS', Pinned_Env),
+    !,
+    parse_pinned_organizations(Pinned_Env, Pinned).
+pinned_organizations([]).
+
 :- table parallelize_enabled.
 parallelize_enabled :-
     getenv_default('TERMINUSDB_PARALLELIZE_ENABLED', true, true).
+
+:- table grpc_label_endpoint/1.
+grpc_label_endpoint(Endpoint) :-
+    getenv('TERMINUSDB_GRPC_LABEL_ENDPOINT', Endpoint).
+
+crypto_password_cost(10).
+
+:- table lru_cache_size/1.
+lru_cache_size(Cache_Size) :-
+    getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).

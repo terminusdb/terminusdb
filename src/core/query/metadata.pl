@@ -9,7 +9,6 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
-:- use_module(library(plunit)).
 
 :- use_module(config(terminus_config), [db_path/1]).
 
@@ -51,8 +50,11 @@ layer_directory_prefix_length(3).
 
 % NOTE: Stub! layer_size Should be in store.
 layer_size(Layer_Name,Size) :-
-    layerid_to_directory(Layer_Name,Directory),
-    size_directory(Directory,Size).
+    current_db_path(Path),
+    layer_directory_prefix_length(Length),
+    sub_string(Layer_Name, 0, Length, _, Prefix),
+    atomic_list_concat([Path,Prefix,'/',Layer_Name, '.larch'], LayerFile),
+    size_file(LayerFile, Size).
 
 :- thread_local current_db_path_pred/1.
 current_db_path(Path) :-

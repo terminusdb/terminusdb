@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 10.1.11
-  CURRENT_REPO_VERSION: 10.1.12
+  LAST_RELEASED_VERSION: 11.0.5
+  CURRENT_REPO_VERSION: 11.0.6
 
 jobs:
   openapi_lint:
@@ -120,13 +120,6 @@ jobs:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}
 
-  benchmark:
-    name: Benchmark
-    if: github.repository == 'terminusdb/terminusdb' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/benchmark.yml
-    secrets: inherit
-
-
  # This is required for status checks.
   all_checks_pass_with_build:
     name: All checks pass
@@ -236,7 +229,8 @@ jobs:
           fi
 
           # Tag and push the latest image when a version tag is pushed
-          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v") ]; then
+          # We also make sure that rc and beta are not pushed to the latest tag!
+          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v" | grep -v "rc" | grep -v "beta") ]; then
             TAGS="${TAGS},${LATEST_IMAGE}"
           fi
 

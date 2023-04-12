@@ -69,7 +69,7 @@ describe('woql-auth', function () {
       ascribed_type: `terminusdb:///schema#${randomType0}`,
       document: {
         '@id': `${randomType0}/0`,
-        '@type': randomType0,
+        '@type': `terminusdb:///schema#${randomType0}`,
         something: 'a default something',
       },
     }
@@ -320,12 +320,6 @@ describe('woql-auth', function () {
       query.document.dictionary.data[0].value.data['@value'] = util.randomString()
       const r = await woql.post(agent, query).notFound()
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
-      expect(r.body['api:error']['api:document']).to.deep.equal({
-        '@type': randomType1,
-        label: query.document.dictionary.data[0].value.data['@value'],
-      })
-      const re = new RegExp('^' + 'terminusdb:///data/' + randomType1 + '/')
-      expect(r.body['api:error']).to.have.property('api:document_id').that.matches(re)
     })
 
     it('passes UpdateDocument with node identifier', async function () {

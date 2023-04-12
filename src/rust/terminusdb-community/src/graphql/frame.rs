@@ -15,6 +15,66 @@ pub struct SchemaDocumentation {
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
+#[serde(untagged)]
+pub enum OneOrMore<T> {
+    One(T),
+    More(Vec<T>),
+}
+
+impl<T> From<OneOrMore<T>> for Vec<T> {
+    fn from(value: OneOrMore<T>) -> Self {
+        match value {
+            OneOrMore::One(o) => vec![o],
+            OneOrMore::More(v) => v,
+        }
+    }
+}
+
+impl<T> OneOrMore<T> {
+    fn into_vec(self) -> Vec<T> {
+        self.into()
+    }
+}
+
+fn empty<T>() -> OneOrMore<T> {
+    OneOrMore::More(vec![])
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+pub struct RestrictionDefinition {
+    #[serde(rename = "_id")]
+    pub id: String,
+    #[serde(rename = "@on")]
+    pub on: String,
+    #[serde(skip)]
+    pub original_id: Option<String>,
+    #[serde(flatten)]
+    pub restriction_data: BTreeMap<String, serde_json::Value>,
+}
+
+impl RestrictionDefinition {
+    fn sanitize(self) -> Self {
+        let id = graphql_sanitize(&self.id);
+        let on = graphql_sanitize(&self.on);
+
+        Self {
+            id,
+            on,
+            original_id: Some(self.id.clone()),
+            restriction_data: self.restriction_data,
+        }
+    }
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
+pub struct SchemaMetadata {
+    #[serde(default)]
+    pub restrictions: Vec<RestrictionDefinition>,
+    #[serde(flatten)]
+    pub extra_metadata: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct Prefixes {
     #[serde(rename = "@type")]
     pub kind: String,
@@ -23,7 +83,10 @@ pub struct Prefixes {
     #[serde(rename = "@schema")]
     pub schema: String,
     #[serde(rename = "@documentation")]
-    pub documentation: Option<SchemaDocumentation>,
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<SchemaDocumentation>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<SchemaMetadata>,
     #[serde(flatten)]
     pub extra_prefixes: BTreeMap<String, String>,
 }
@@ -32,6 +95,14 @@ impl Prefixes {
     pub fn expand_schema(&self, s: &str) -> String {
         // this is dumb but will work for now
         format!("{}{}", self.schema, s)
+    }
+
+    pub fn compress_schema(&self, s: &str) -> String {
+        if s.starts_with(&self.schema) {
+            s[self.schema.len()..].to_string()
+        } else {
+            s.to_string()
+        }
     }
 }
 
@@ -77,7 +148,7 @@ pub struct PropertyDocumentation {
 }
 
 impl PropertyDocumentation {
-    pub fn sanitize(&self) -> PropertyDocumentation {
+    pub fn sanitize(self) -> PropertyDocumentation {
         let mut records = BTreeMap::new();
         for (s, pdr) in self.records.iter() {
             records.insert(graphql_sanitize(s), pdr.clone());
@@ -97,11 +168,11 @@ pub struct ClassDocumentationDefinition {
 }
 
 impl ClassDocumentationDefinition {
-    pub fn sanitize(&self) -> ClassDocumentationDefinition {
+    pub fn sanitize(self) -> ClassDocumentationDefinition {
         ClassDocumentationDefinition {
-            label: self.label.clone(),
-            comment: self.comment.clone(),
-            properties: self.properties.as_ref().map(|pd| pd.sanitize()),
+            label: self.label,
+            comment: self.comment,
+            properties: self.properties.map(move |pd| pd.sanitize()),
         }
     }
 }
@@ -257,20 +328,20 @@ impl FieldDefinition {
         }
     }
 
-    pub fn sanitize(&self) -> FieldDefinition {
+    pub fn sanitize(self) -> FieldDefinition {
         match self {
-            Self::Required(c) => Self::Required(sanitize_class(c)),
-            Self::Optional(c) => Self::Optional(sanitize_class(c)),
-            Self::Set(c) => Self::Set(sanitize_class(c)),
-            Self::List(c) => Self::List(sanitize_class(c)),
+            Self::Required(c) => Self::Required(sanitize_class(&c)),
+            Self::Optional(c) => Self::Optional(sanitize_class(&c)),
+            Self::Set(c) => Self::Set(sanitize_class(&c)),
+            Self::List(c) => Self::List(sanitize_class(&c)),
             Self::Array { class, dimensions } => Self::Array {
-                class: sanitize_class(class),
-                dimensions: dimensions.clone(),
+                class: sanitize_class(&class),
+                dimensions,
             },
             Self::Cardinality { class, min, max } => Self::Cardinality {
-                class: sanitize_class(class),
-                min: min.clone(),
-                max: max.clone(),
+                class: sanitize_class(&class),
+                min,
+                max,
             },
         }
     }
@@ -292,7 +363,7 @@ pub enum KeyDefinition {
 }
 
 impl KeyDefinition {
-    pub fn sanitize(&self) -> KeyDefinition {
+    pub fn sanitize(self) -> KeyDefinition {
         match self {
             KeyDefinition::Random => KeyDefinition::Random,
             KeyDefinition::Lexical { fields } => {
@@ -317,11 +388,16 @@ pub struct OneOf {
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct ClassDefinition {
     #[serde(rename = "@documentation")]
-    pub documentation: Option<ClassDocumentationDefinition>,
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<ClassDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@key")]
     pub key: Option<KeyDefinition>,
     #[serde(rename = "@subdocument")]
     pub is_subdocument: Option<Vec<()>>,
+    #[serde(rename = "@unfoldable")]
+    pub is_unfoldable: Option<Vec<()>>,
     #[serde(rename = "@abstract")]
     pub is_abstract: Option<Vec<()>>,
     #[serde(rename = "@oneOf")]
@@ -335,31 +411,42 @@ pub struct ClassDefinition {
 }
 
 impl ClassDefinition {
-    pub fn sanitize(&self) -> ClassDefinition {
+    pub fn sanitize(self) -> ClassDefinition {
         let mut field_map: HashMap<String, String> = HashMap::new();
         let mut fields: BTreeMap<String, _> = BTreeMap::new();
-        for (field, fd) in self.fields.iter() {
-            let sanitized_field = graphql_sanitize(field);
-            field_map.insert(sanitized_field.clone(), field.clone())
-                .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+        for (field, fd) in self.fields.into_iter() {
+            let sanitized_field = graphql_sanitize(&field);
+            if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
+                if dup != *field {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
+                }
+            }
             fields.insert(sanitized_field, fd.sanitize());
         }
-        let one_of = self.one_of.as_ref().map(|o| {
-            o.iter()
+        let one_of = self.one_of.map(|o| {
+            o.into_iter()
                 .map(|c| {
                     let mut choices = BTreeMap::new();
-                    for (field,fd) in c.choices.iter() {
-                        let sanitized_field = graphql_sanitize(field);
-                        field_map.insert(sanitized_field.clone(), field.clone())
-                            .and_then::<(), _>(|dup| panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}"));
+                    for (field,fd) in c.choices.into_iter() {
+                        let sanitized_field = graphql_sanitize(&field);
+                        if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
+                            if dup != *field {
+                                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
+                            }
+                        }
                         choices.insert(sanitized_field.clone(), fd.sanitize());
                     }
                     OneOf { choices }
                 })
                 .collect()
         });
-        let documentation = self.documentation.as_ref().map(|d| d.sanitize());
-        let key = self.key.as_ref().map(|k| k.sanitize());
+        let documentation: Vec<_> = self
+            .documentation
+            .into_vec()
+            .into_iter()
+            .map(move |d| d.sanitize())
+            .collect();
+        let key = self.key.map(|k| k.sanitize());
         let mut field_renaming: HashMap<String, String> = HashMap::new();
         for (s, t) in field_map.iter() {
             field_renaming.insert(s.to_string(), t.to_string());
@@ -375,10 +462,12 @@ impl ClassDefinition {
             None
         };
         ClassDefinition {
-            documentation,
+            documentation: OneOrMore::More(documentation),
+            metadata: self.metadata.clone(),
             key,
             is_subdocument: self.is_subdocument.clone(),
-            is_abstract: self.is_abstract.clone(),
+            is_unfoldable: self.is_unfoldable.clone(),
+            is_abstract: self.is_abstract,
             inherits,
             one_of,
             fields,
@@ -445,11 +534,11 @@ pub struct EnumDocumentationDefinition {
 }
 
 impl EnumDocumentationDefinition {
-    pub fn sanitize(&self) -> EnumDocumentationDefinition {
+    pub fn sanitize(self) -> EnumDocumentationDefinition {
         EnumDocumentationDefinition {
             label: self.label.clone(),
             comment: self.comment.clone(),
-            values: self.values.as_ref().map(|pd| pd.sanitize()),
+            values: self.values.map(|pd| pd.sanitize()),
         }
     }
 }
@@ -459,7 +548,10 @@ pub struct EnumDefinition {
     //#[serde(rename = "@type")]
     //pub kind: String,
     #[serde(rename = "@documentation")]
-    pub documentation: Option<EnumDocumentationDefinition>,
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<EnumDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@values")]
     pub values: Vec<String>,
     #[serde(skip_serializing, skip_deserializing)]
@@ -467,20 +559,27 @@ pub struct EnumDefinition {
 }
 
 impl EnumDefinition {
-    pub fn sanitize(&self) -> EnumDefinition {
+    pub fn sanitize(self) -> EnumDefinition {
         let mut values_renaming: BiMap<String, String> = BiMap::new();
         let values = self.values.iter().map(|v| {
             let sanitized = graphql_sanitize(v);
-            let res = values_renaming.insert(sanitized.to_string(), v.to_string());
-            let overwritten = res.did_overwrite();
-            if overwritten {
-                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following duplicate: {res:?}")
-            };
+            let res = values_renaming.insert_no_overwrite(sanitized.to_string(), v.to_string());
+            if let Err((left,right)) = res {
+                if left != sanitized || right != *v {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized},{v})")
+                }
+            }
             sanitized
         }).collect();
-        let documentation = self.documentation.as_ref().map(|ed| ed.sanitize());
+        let documentation: Vec<_> = self
+            .documentation
+            .into_vec()
+            .into_iter()
+            .map(|ed| ed.sanitize())
+            .collect();
         EnumDefinition {
-            documentation,
+            documentation: OneOrMore::More(documentation),
+            metadata: self.metadata,
             values,
             values_renaming: Some(values_renaming),
         }
@@ -548,54 +647,122 @@ impl TypeDefinition {
 
 impl FieldKind {
     pub fn is_collection(&self) -> bool {
-        match self {
-            Self::Set => true,
-            Self::Array => true,
-            Self::List => true,
-            Self::Cardinality => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Set | Self::Array | Self::List | Self::Cardinality
+        )
     }
 }
 
 #[derive(Deserialize, Debug)]
-pub struct AllFrames {
+pub struct PreAllFrames {
     #[serde(rename = "@context")]
     pub context: Prefixes,
     #[serde(flatten)]
     pub frames: BTreeMap<String, TypeDefinition>,
-    #[serde(skip_serializing)]
-    pub class_renaming: Option<HashMap<String, String>>,
-    #[serde(skip_deserializing)]
-    pub inverted: Option<AllInvertedFrames>,
-    #[serde(skip_deserializing)]
-    pub subsumption: Option<HashMap<String, Vec<String>>>,
 }
 
-impl AllFrames {
-    pub fn sanitize(&self) -> AllFrames {
-        let mut class_renaming: HashMap<String, String> = HashMap::new();
+#[derive(Debug)]
+pub struct AllFrames {
+    pub context: Prefixes,
+    pub frames: BTreeMap<String, TypeDefinition>,
+    pub class_renaming: BiMap<String, String>,
+    pub inverted: AllInvertedFrames,
+    pub subsumption: HashMap<String, Vec<String>>,
+    pub restrictions: BTreeMap<String, RestrictionDefinition>,
+}
+
+impl PreAllFrames {
+    pub fn document_type<'a>(&self, s: &'a str) -> Option<&'a str> {
+        if self.frames.contains_key(s) && self.frames[s].is_document_type() {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    pub fn sanitize(
+        self,
+    ) -> (
+        BTreeMap<String, TypeDefinition>,
+        BTreeMap<String, RestrictionDefinition>,
+        BiMap<String, String>,
+        Prefixes,
+    ) {
+        let mut class_renaming: BiMap<String, String> = BiMap::new();
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
-        for (class_name, typedef) in self.frames.iter() {
-            let sanitized_class = graphql_sanitize(class_name);
-            class_renaming.insert(sanitized_class.clone(), class_name.clone())
-                .and_then::<(),_>(|dup|
-                                  panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate: {dup:?}"));
+        for (class_name, typedef) in self.frames.into_iter() {
+            let sanitized_class = graphql_sanitize(&class_name);
+            let res =
+                class_renaming.insert_no_overwrite(sanitized_class.clone(), class_name.clone());
+            if let Err((left, right)) = res {
+                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate pair: ({left},{right}) != ({sanitized_class},{class_name})")
+            }
             let new_typedef = match typedef {
                 TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),
                 TypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
             };
             frames.insert(sanitized_class.clone(), new_typedef);
         }
-        AllFrames {
-            context: self.context.clone(),
-            frames,
-            class_renaming: Some(class_renaming),
-            inverted: None,
-            subsumption: None,
+        let mut sanitized_restrictions = BTreeMap::new();
+        if let Some(restrictions) = self.context.metadata.as_ref().map(|m| &m.restrictions) {
+            for restriction in restrictions.iter() {
+                let restriction_name = &restriction.id;
+                let sanitized_restriction_name = graphql_sanitize(restriction_name);
+                let res = class_renaming.insert_no_overwrite(
+                    sanitized_restriction_name.clone(),
+                    restriction_name.clone(),
+                );
+                if let Err((left, right)) = res {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate pair: ({left},{right}) != ({sanitized_restriction_name},{restriction_name})")
+                }
+
+                sanitized_restrictions
+                    .insert(sanitized_restriction_name, restriction.clone().sanitize());
+            }
         }
+        (frames, sanitized_restrictions, class_renaming, self.context)
     }
 
+    pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
+        let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
+        for (class, typedef) in &self.frames {
+            if typedef.is_document_type() {
+                let supers = typedef
+                    .as_class_definition()
+                    .inherits
+                    .clone()
+                    .unwrap_or_else(|| vec![class.to_string()]);
+
+                for superclass in supers {
+                    if let Some(v) = subsumption_rel.get_mut(&superclass) {
+                        v.push(class.to_string());
+                    } else {
+                        subsumption_rel.insert(superclass, vec![class.to_string()]);
+                    }
+                }
+            }
+        }
+        subsumption_rel
+    }
+
+    pub fn finalize(mut self) -> AllFrames {
+        let inverted = allframes_to_allinvertedframes(&self);
+        let subsumption = self.calculate_subsumption();
+        let (frames, restrictions, class_renaming, context) = self.sanitize();
+
+        AllFrames {
+            context,
+            frames,
+            restrictions,
+            class_renaming,
+            inverted,
+            subsumption,
+        }
+    }
+}
+
+impl AllFrames {
     pub fn document_type<'a>(&self, s: &'a str) -> Option<&'a str> {
         if self.frames.contains_key(s) && self.frames[s].is_document_type() {
             Some(s)
@@ -612,16 +779,21 @@ impl AllFrames {
         }
     }
 
+    pub fn graphql_class_name(&self, db_name: &str) -> String {
+        let db_short_name = self.context.compress_schema(db_name);
+        let graphql_name = self
+            .class_renaming
+            .get_by_right(&db_short_name)
+            .expect("This class name {db_short_name} *should* exist");
+        graphql_name.to_string()
+    }
+
     pub fn fully_qualified_class_name(&self, class_name: &str) -> String {
-        self.class_renaming
-            .as_ref()
-            .map(|map| {
-                let db_name = map
-                    .get(class_name)
-                    .expect("This fully qualified class name *should* exist");
-                self.context.expand_schema(db_name)
-            })
-            .expect("No renaming was built")
+        let db_name = self
+            .class_renaming
+            .get_by_left(class_name)
+            .expect("This fully qualified class name *should* exist");
+        self.context.expand_schema(db_name)
     }
 
     pub fn fully_qualified_enum_value(&self, enum_type: &str, value: &str) -> String {
@@ -633,53 +805,21 @@ impl AllFrames {
         expanded_object_node
     }
 
-    pub fn invert(&mut self) {
-        let inverted = allframes_to_allinvertedframes(self);
-        self.inverted = Some(inverted);
-    }
-
     pub fn reverse_link(&self, class: &str, field: &str) -> Option<&InvertedFieldDefinition> {
-        if let Some(inverted) = &self.inverted {
-            if inverted.classes.contains_key(class)
-                && inverted.classes[class].domain.contains_key(field)
-            {
-                Some(&inverted.classes[class].domain[field])
-            } else {
-                None
-            }
+        if self.inverted.classes.contains_key(class)
+            && self.inverted.classes[class].domain.contains_key(field)
+        {
+            Some(&self.inverted.classes[class].domain[field])
         } else {
             None
         }
     }
 
     pub fn subsumed(&self, class: &str) -> Vec<String> {
-        if let Some(hash) = &self.subsumption {
-            hash.get(class).cloned().unwrap_or(vec![class.to_string()])
-        } else {
-            vec![]
-        }
-    }
-
-    pub fn calculate_subsumption(&mut self) {
-        let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
-        for (class, typedef) in &self.frames {
-            if typedef.is_document_type() {
-                let supers = typedef
-                    .as_class_definition()
-                    .inherits
-                    .clone()
-                    .unwrap_or(vec![class.to_string()]);
-
-                for superclass in supers {
-                    if let Some(v) = subsumption_rel.get_mut(&superclass) {
-                        v.push(class.to_string());
-                    } else {
-                        subsumption_rel.insert(superclass, vec![class.to_string()]);
-                    }
-                }
-            }
-        }
-        self.subsumption = Some(subsumption_rel);
+        self.subsumption
+            .get(class)
+            .cloned()
+            .unwrap_or_else(|| vec![class.to_string()])
     }
 }
 
@@ -704,7 +844,7 @@ pub fn inverse_field_name(property: &str, class: &str) -> String {
     format!("_{property}_of_{class}")
 }
 
-pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrames {
+pub fn allframes_to_allinvertedframes(allframes: &PreAllFrames) -> AllInvertedFrames {
     let frames = &allframes.frames;
     let mut classes: BTreeMap<String, InvertedTypeDefinition> = BTreeMap::new();
     for (class, record) in frames.iter() {
@@ -777,7 +917,8 @@ _{'@base': "http://some_base/",
         assert_eq!(
             Prefixes {
                 kind: "Context".to_string(),
-                documentation: None,
+                documentation: OneOrMore::More(vec![]),
+                metadata: None,
                 base: "http://some_base/".to_string(),
                 schema: "http://some_schema#".to_string(),
                 extra_prefixes: BTreeMap::from([
@@ -845,9 +986,11 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
         assert_eq!(
             TypeDefinition::Class(ClassDefinition {
                 field_renaming: None,
-                documentation: None,
+                documentation: OneOrMore::More(vec![]),
+                metadata: None,
                 key: None,
                 is_subdocument: None,
+                is_unfoldable: None,
                 is_abstract: None,
                 inherits: None,
                 one_of: Some(vec![
@@ -895,7 +1038,7 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
       'Test':json{'@type':'Class',bar:'xsd:string',foo:'xsd:integer'}}
 "#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
+        let _frames: PreAllFrames = context.deserialize_from_term(&term).unwrap();
 
         // TODO actually test something here
     }
@@ -932,12 +1075,13 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
 
 "#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let typedef: TypeDefinition = dbg!(context.deserialize_from_term(&term)).unwrap();
+        let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
 
         assert_eq!(
             TypeDefinition::Enum(EnumDefinition {
                 values_renaming: None,
-                documentation: Some(EnumDocumentationDefinition {
+                metadata: None,
+                documentation: OneOrMore::One(EnumDocumentationDefinition {
                     label: None,
                     values: None,
                     comment: Some(
@@ -1097,7 +1241,7 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
 "#;
 
         let term = unwrap_result(&context, context.term_from_string(term));
-        let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
+        let _frames: PreAllFrames = context.deserialize_from_term(&term).unwrap();
         // at least it parses!
     }
 
@@ -1117,7 +1261,7 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
 'And':json{'@documentation':json{'@comment':"A conjunction of queries which must all have a solution.",'@properties':json{and:"List of queries which must hold."}},'@key':json{'@type':"ValueHash"},'@subdocument':[],'@type':'Class',and:json{'@class':'Query','@type':'List'}},
 'ArithmeticExpression':json{'@abstract':[],'@documentation':json{'@comment':"An abstract class specifying the AST super-class of all arithemtic expressions."},'@key':json{'@type':"ValueHash"},'@subdocument':[],'@type':'Class'}}"#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let _frames: AllFrames = context.deserialize_from_term(&term).unwrap();
+        let _frames: PreAllFrames = context.deserialize_from_term(&term).unwrap();
         // at least it parses!
         // TODO test something here
     }
@@ -1133,31 +1277,71 @@ json{ '@context':_{ '@base':"terminusdb://system/data/",
                    'Bar' : json{ '@type' : "Class", elt : "xsd:string" },
                    'Foo' : json{ '@type' : "Class", a : "Bar", b: json{ '@type' : "Optional", '@class' : "Bar"}, c: json{ '@type' : "Set", '@class' : "Bar"}}}"#;
         let term = unwrap_result(&context, context.term_from_string(term));
-        let mut allframes: AllFrames = context.deserialize_from_term(&term).unwrap();
-        allframes.invert();
+        let pre_allframes: PreAllFrames = context.deserialize_from_term(&term).unwrap();
+        let allframes = pre_allframes.finalize();
+
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_a_of_Foo"].class,
+            allframes.inverted.classes["Bar"].domain["_a_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_a_of_Foo"].kind,
+            allframes.inverted.classes["Bar"].domain["_a_of_Foo"].kind,
             FieldKind::Required
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_b_of_Foo"].class,
+            allframes.inverted.classes["Bar"].domain["_b_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_b_of_Foo"].kind,
+            allframes.inverted.classes["Bar"].domain["_b_of_Foo"].kind,
             FieldKind::Optional
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_c_of_Foo"].class,
+            allframes.inverted.classes["Bar"].domain["_c_of_Foo"].class,
             "Foo"
         );
         assert_eq!(
-            allframes.inverted.as_ref().unwrap().classes["Bar"].domain["_c_of_Foo"].kind,
+            allframes.inverted.classes["Bar"].domain["_c_of_Foo"].kind,
             FieldKind::Set
         )
+    }
+
+    #[test]
+    fn complex_documentation() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"json{
+                      '@context': json{
+                         '@base': "terminusdb:///data/",
+                         '@documentation': [
+                              json{'@authors':["Gavin Mendel-Gleason"],
+                                   '@description':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.",
+                                   '@language':"en",
+                                   '@title':"Example Schema"},
+                              json{'@authors':["გავინ მენდელ-გლისონი"],
+                                   '@description':"ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.",
+                                   '@language':"ka",
+                                   '@title':"მაგალითი სქემა"}
+                         ],
+                         '@schema': "terminusdb:///schema#",
+                         '@type': "@context",
+                         xsd: "http://www.w3.org/2001/XMLSchema#"
+                      }}"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let pre_allframes: PreAllFrames = context.deserialize_from_term(&term).unwrap();
+        let allframes = pre_allframes.finalize();
+        assert_eq!(allframes.context.documentation,
+                   OneOrMore::More(vec![
+                       SchemaDocumentation {
+                           title: Some("Example Schema".to_string()),
+                           description: Some("This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content.".to_string()),
+                           authors: Some(vec!["Gavin Mendel-Gleason".to_string()]) },
+                       SchemaDocumentation {
+                           title: Some("მაგალითი სქემა".to_string()),
+                           description: Some("ეს არის მაგალითის სქემა. ჩვენ ვიყენებთ მას, რათა ვაჩვენოთ ინფორმაციის მრავალ ენაზე ჩვენების შესაძლებლობა ერთი და იმავე სემანტიკური შინაარსის შესახებ.".to_string()),
+                           authors: Some(vec!["გავინ მენდელ-გლისონი".to_string()])
+                       }]))
     }
 }

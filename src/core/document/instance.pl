@@ -426,6 +426,11 @@ instance_layer(Validation_Object, Layer) :-
     member(G, Instance),
     read_write_obj_reader(G, Layer).
 
+schema_layer(Validation_Object, Layer) :-
+    database_schema(Validation_Object, Schema),
+    member(G, Schema),
+    read_write_obj_reader(G, Layer).
+
 refute_existing_object_keys(Validation_Object,Class,Witness) :-
     % this is just wrong
     key_descriptor(Validation_Object, Class,Desc),
@@ -542,7 +547,8 @@ refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
         terminus_store:object_id(Layer,O,O_Id),
         storage_object(O,Object),
         refute_object_type_(Type,Validation_Object,Object,Witness)
-    ;   terminus_store:subject_id(Layer, Subject_String, S_Id),
+    ;   terminus_store:id_triple(Layer,S_Id,P_Id,_),
+        terminus_store:subject_id(Layer, Subject_String, S_Id),
         atom_string(Subject, Subject_String),
         Witness = json{ '@type' : invalid_predicate,
                         class: Class,

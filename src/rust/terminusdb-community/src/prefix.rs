@@ -87,7 +87,7 @@ impl PrefixContracter {
 
         items.push(Prefix::JSON);
 
-        items.sort_by(|p1, p2| p1.expansion().cmp(&p2.expansion()));
+        items.sort_by(|p1, p2| p1.expansion().cmp(p2.expansion()));
         items.dedup();
         items.reverse();
 
@@ -99,94 +99,86 @@ impl PrefixContracter {
 
         let mut offset = 0;
         let mut matched: Vec<u8> = Vec::with_capacity(0);
-        loop {
-            if let Some(prefix) = items.pop() {
-                if let Some(mut previous) = stack.pop() {
-                    let common = common_prefix(&matched, prefix.expansion().as_bytes()).to_vec();
-                    if common.len() == matched.len() {
-                        // this prefix is a continuation of the previous one. neat.
-                        let part = prefix.expansion().as_bytes()[common.len()..].to_vec();
+        while let Some(prefix) = items.pop() {
+            if let Some(mut previous) = stack.pop() {
+                let common = common_prefix(&matched, prefix.expansion().as_bytes()).to_vec();
+                if common.len() == matched.len() {
+                    // this prefix is a continuation of the previous one. neat.
+                    let part = prefix.expansion().as_bytes()[common.len()..].to_vec();
 
-                        let current = PrefixContracterTree {
-                            part,
-                            prefix: Some(prefix),
-                            children: Vec::new(),
-                        };
-                        offset += previous.part.len();
-                        matched.extend_from_slice(current.part.as_slice());
-                        stack.push(previous);
-                        stack.push(current);
-                    } else {
-                        // This prefix deviates from previous.
-                        // we must unwind until we reach a point where it can be made a continuation.
-                        // This is either because we discover a point where it is an exact continuation, or we find a point where we can make a branch, or roll up to termination.
-
-                        loop {
-                            if common.len() == offset + previous.part.len() {
-                                // we found an exact continuation point. by pushing this back onto the stack we're good.
-                                stack.push(previous);
-
-                                matched = common;
-                                break;
-                            } else if common.len() > offset
-                                && common.len() < offset + previous.part.len()
-                            {
-                                // we found a branch point. We set up a branch tree entry and push it onto the stack. next iteration of the outer loop will find it as something it is able to continue on.
-                                let part = common[offset..].to_vec();
-                                previous.part = previous.part[part.len()..].to_vec();
-
-                                let current = PrefixContracterTree {
-                                    part,
-                                    prefix: None,
-                                    children: vec![previous],
-                                };
-
-                                offset = common.len() - current.part.len();
-                                matched = common;
-
-                                stack.push(current);
-
-                                break;
-                            } else {
-                                if let Some(mut parent) = stack.pop() {
-                                    // we're rolling up things here. We know there will be no further extensions until we come in a part where we can branch.
-                                    //if let Some(last) = stack.last() {
-                                    //    offset -= last.part.len();
-                                    //}
-                                    //else {
-                                    //    offset = 0;
-                                    //}
-                                    offset -= parent.part.len();
-
-                                    parent.children.push(previous);
-                                    previous = parent;
-                                } else {
-                                    // we've terminated, there are no more parents, this is a result.
-                                    intermediate.push(previous);
-                                    break;
-                                }
-                            }
-                        }
-
-                        // prefix will be re-popped on next iteration
-                        items.push(prefix);
-                    }
-                } else {
-                    // nothing on stack means we're starting a completely new segment. exciting.
-                    let part = prefix.expansion().as_bytes().to_vec();
                     let current = PrefixContracterTree {
                         part,
                         prefix: Some(prefix),
                         children: Vec::new(),
                     };
-
-                    offset = 0;
-                    matched = current.part.clone();
+                    offset += previous.part.len();
+                    matched.extend_from_slice(current.part.as_slice());
+                    stack.push(previous);
                     stack.push(current);
+                } else {
+                    // This prefix deviates from previous.
+                    // we must unwind until we reach a point where it can be made a continuation.
+                    // This is either because we discover a point where it is an exact continuation, or we find a point where we can make a branch, or roll up to termination.
+
+                    loop {
+                        if common.len() == offset + previous.part.len() {
+                            // we found an exact continuation point. by pushing this back onto the stack we're good.
+                            stack.push(previous);
+
+                            matched = common;
+                            break;
+                        } else if common.len() > offset
+                            && common.len() < offset + previous.part.len()
+                        {
+                            // we found a branch point. We set up a branch tree entry and push it onto the stack. next iteration offset_to_sign_hour_minute the outer loop will find it as something it is able to continue on.
+                            let part = common[offset..].to_vec();
+                            previous.part = previous.part[part.len()..].to_vec();
+
+                            let current = PrefixContracterTree {
+                                part,
+                                prefix: None,
+                                children: vec![previous],
+                            };
+
+                            offset = common.len() - current.part.len();
+                            matched = common;
+                            stack.push(current);
+
+                            break;
+                        } else if let Some(mut parent) = stack.pop() {
+                            // we're rolling up things here. We know there will be no further extensions until we come in a part where we can branch.
+                            //if let Some(last) = stack.last() {
+                            //    offset -= last.part.len();
+                            //}
+                            //else {
+                            //    offset = 0;
+                            //}
+                            offset -= parent.part.len();
+
+                            parent.children.push(previous);
+                            previous = parent;
+                        } else {
+                            // we've terminated, there are no more parents, this is a result.
+                            intermediate.push(previous);
+                            break;
+                        }
+                    }
+
+                    // prefix will be re-popped on next iteration
+                    items.push(prefix);
                 }
             } else {
-                break;
-                // nothing left on item, all that remains to be done is to roll up the stack (if any) into a final result.
+                // nothing on stack means we're starting a completely new segment. exciting.
+                let part = prefix.expansion().as_bytes().to_vec();
+                let current = PrefixContracterTree {
+                    part,
+                    prefix: Some(prefix),
+                    children: Vec::new(),
+                };
+
+                offset = 0;
+                matched = current.part.clone();
+                stack.push(current);
             }
         }
 
@@ -375,7 +367,6 @@ mod tests {
                             prefix: Some(Prefix::other("c", "http://quux/moo")),
                             children: vec![],
                         },
-
                         // this is the default json prefix
                         PrefixContracterTree {
                             part: b"terminusdb.com/schema/json#".to_vec(),

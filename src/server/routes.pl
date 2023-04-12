@@ -158,7 +158,7 @@ info_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Ping Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(ok), cors_handler(Method, ok_handler),
+:- http_handler(api(ok), cors_handler(Method, ok_handler, [skip_authentication(true)]),
                 [method(Method),
                  methods([options,get])]).
 
@@ -431,7 +431,6 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 :- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
-                 chunked,
                  time_limit(infinite),
                  methods([head,options,post,delete,get,put])]).
 
@@ -573,7 +572,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
-            nl,nl
+            format("Status: 204~n~n")
         )).
 
 document_handler(put, Path, Request, System_DB, Auth) :-
@@ -607,6 +606,42 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             reply_json(Ids, [width(0)]),
             nl
         )).
+
+%%%%%%%%%%%%%%%%%%%% History %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+history_handler(get, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        history,
+        Request,
+        (   (   http_read_json_semidet(json_dict(JSON), Request)
+            ->  true
+            ;   JSON = json{}),
+
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+
+            param_value_search_or_json_required(Search, JSON, id, text, Id),
+
+            param_value_search_or_json_optional(Search, JSON, created, boolean, false, Created),
+            param_value_search_or_json_optional(Search, JSON, updated, boolean, false, Updated),
+
+            param_value_search_or_json_optional(Search, JSON, start, integer, 0, Start),
+            param_value_search_or_json_optional(Search, JSON, count, integer, inf, Count),
+
+            api_document_history(System_DB, Auth, Path, Id, Result,
+                                 [start(Start),
+                                  count(Count),
+                                  created(Created),
+                                  updated(Updated)]),
+            write_cors_headers(Request),
+            reply_json(Result, [width(0)])
+        )
+    ).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
@@ -715,21 +750,29 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
         (get_payload(Database_Document,Request),
          _{ comment : Comment,
             label : Label,
-            remote_url: Remote_URL} :< Database_Document),
+            remote_url: Source} :< Database_Document),
         error(bad_api_document(Database_Document,[comment,label,remote_url]),_)),
 
     (   _{ public : Public } :< Database_Document
     ->  true
     ;   Public = false),
 
+    (   _{ remote: Remote } :< Database_Document
+    ->  true
+    ;   Remote = "origin"
+    ),
+
     api_report_errors(
         clone,
         Request,
-        (   do_or_die(
-                request_remote_authorization(Request, Authorization),
-                error(no_remote_authorization,_)),
-
-            clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote_URL,authorized_fetch(Authorization),_Meta_Data),
+        (   clone(System_DB, Auth, Organization,DB,Label,Comment,Public,Remote,Source,
+                  {Request}/[URL, Repository_Head_Option, Payload_Option]>>(
+                      do_or_die(
+                          request_remote_authorization(Request, Authorization),
+                          error(no_remote_authorization,_)),
+                      authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option)
+                  ),
+                  _Meta_Data),
             write_cors_headers(Request),
             reply_json_dict(
                 _{'@type' : 'api:CloneResponse',
@@ -1426,10 +1469,6 @@ push_handler(post,Path,Request, System_DB, Auth) :-
               remote_branch : Remote_Branch } :< Document),
         error(bad_api_document(Document,[remote,remote_branch]),_)),
 
-    do_or_die(
-        request_remote_authorization(Request, Authorization),
-        error(no_remote_authorization)),
-
     (   get_dict(push_prefixes, Document, true)
     ->  Push_Prefixes = true
     ;   Push_Prefixes = false),
@@ -1437,8 +1476,16 @@ push_handler(post,Path,Request, System_DB, Auth) :-
     api_report_errors(
         push,
         Request,
-        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch, [prefixes(Push_Prefixes)],
-                 authorized_push(Authorization),Result),
+        (   push(System_DB, Auth, Path, Remote_Name, Remote_Branch,
+                 [prefixes(Push_Prefixes)],
+                 {Request}/[Remote_Url,Payload]>>(
+                     do_or_die(
+                         request_remote_authorization(Request, Authorization),
+                         error(no_remote_authorization)
+                     ),
+                     authorized_push(Authorization, Remote_Url, Payload)
+                 ),
+                 Result),
             (   Result = same(Head_ID)
             ->  Head_Updated = false
             ;   Result = new(Head_ID)
@@ -2447,6 +2494,10 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(patch), cors_handler(Method, patch_handler),
                 [method(Method),
+                 time_limit(infinite),
+                 methods([options,post])]).
+:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path)),
+                [method(Method),
                  prefix,
                  time_limit(infinite),
                  methods([options,post])]).
@@ -2476,6 +2527,37 @@ patch_handler(post, Request, System_DB, Auth) :-
             )
         )
     ).
+
+/*
+ * patch_handler(Mode, Request, System, Auth) is det.
+ *
+ * Reset a branch to a new commit.
+ */
+patch_handler(post, Path, Request, System_DB, Auth) :-
+    do_or_die(
+        (   get_payload(JSON, Request),
+            _{ patch : Patch } :< JSON),
+        error(bad_api_document(JSON, [patch]), _)),
+    % We should take options about final state here.
+    api_report_errors(
+        patch,
+        Request,
+        (   (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            param_value_search_or_json_required(Search, JSON, author, text, Author),
+            param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_optional(Search, JSON, match_final_state, boolean, true, Matches),
+            api_patch_resource(System_DB, Auth, Path, Patch,
+                               commit_info{
+                                   author: Author,
+                                   message: Message },
+                               Ids,
+                               [match_final_state(Matches)]),
+            cors_reply_json(Request, Ids)
+        )
+    ).
+
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
@@ -2916,6 +2998,48 @@ capabilities_handler(post, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%% Schema Migration %%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
+migration_handler(post,Path,Request,System_DB,Auth) :-
+    (   get_payload(JSON, Request)
+    ->  true
+    ;   JSON = _{}),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    api_report_errors(
+        migration,
+        Request,
+        (   param_value_search_or_json_required(Search, JSON, author, text, Author),
+            param_value_search_or_json_required(Search, JSON, message, text, Message),
+            param_value_search_or_json_optional(Search, JSON, dry_run, boolean, false, Dry_Run),
+            param_value_search_or_json_optional(Search, JSON, verbose, boolean, false, Verbose),
+            Commit_Info = commit_info{
+                              author: Author,
+                              message: Message
+                          },
+            (   param_value_search_or_json(Search, JSON, operations, object, Operations)
+            ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
+                                     [dry_run(Dry_Run),
+                                      verbose(Verbose)]),
+                put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
+                         Result, Response),
+                cors_reply_json(Request, Response)
+            ;   param_value_search_or_json(Search, JSON, target, text, Target)
+            ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result,
+                                        [dry_run(Dry_Run),
+                                         verbose(Verbose)]),
+                put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
+                         Result, Response),
+                cors_reply_json(Request, Response)
+            ;   throw(error(missing_parameter(operations), _)))
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
 :- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),
@@ -2982,28 +3106,28 @@ http:location(assets,root(assets),[]).
 
 :- http_handler(root(.), redirect_to_dashboard,
                 [methods([options,get])]).
-:- http_handler(dashboard(.), cors_handler(Method, dashboard_handler),
-                [method(Method),
-                 prefix,
+:- http_handler(dashboard(.), dashboard_handler,
+                [prefix,
                  methods([options,get])]).
 :- http_handler(assets(.), serve_dashboard_assets,
                 [prefix,
                  methods([options,get])]).
 
+:- meta_predicate try_dashboard(+, :).
+try_dashboard(Request, Goal) :-
+    (   config:dashboard_enabled
+    ->  call(Goal)
+    ;   memberchk(request_uri(Uri), Request),
+        throw(http_reply(gone(Uri)))).
+
 serve_dashboard_assets(Request) :-
-    do_or_die(config:dashboard_enabled,
-              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
-    serve_files_in_directory(assets, Request).
+    try_dashboard(Request, serve_files_in_directory(assets, Request)).
 
 redirect_to_dashboard(Request) :-
-    do_or_die(config:dashboard_enabled,
-              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
-    http_redirect(moved_temporary, dashboard(.), Request).
+    try_dashboard(Request, http_redirect(moved_temporary, dashboard(.), Request)).
 
-dashboard_handler(get, Request, _System_DB, _Auth) :-
-    do_or_die(config:dashboard_enabled,
-              http_reply(method_not_allowed(_{'api:status': 'api:failure'}))),
-    http_reply_file(dashboard('index.html'), [], Request).
+dashboard_handler(Request) :-
+    try_dashboard(Request, http_reply_file(dashboard('index.html'), [], Request)).
 
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
@@ -3286,7 +3410,7 @@ write_cors_headers(Request) :-
         format(Out,'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\n',[]),
         format(Out,'Access-Control-Allow-Credentials: true\n',[]),
         format(Out,'Access-Control-Max-Age: 1728000\n',[]),
-        format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description\n',[]),
+        format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description, X-HTTP-METHOD-OVERRIDE\n',[]),
         format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
     ;   true).
 
@@ -3308,6 +3432,7 @@ cors_reply_json(Request, JSON, Options) :-
 cors_json_stream_write_headers_(Request, Data_Version, As_List) :-
     write_cors_headers(Request),
     write_data_version_header(Data_Version),
+    format("Transfer-Encoding: chunked~n"),
     (   As_List = true
     ->  % Write the JSON header
         format("Content-type: application/json; charset=UTF-8~n~n")

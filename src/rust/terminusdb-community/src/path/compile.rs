@@ -8,7 +8,7 @@ use super::parse::*;
 
 use crate::consts::RDF_TYPE;
 use crate::graphql::frame::{AllFrames, Prefixes};
-use crate::graphql::query::{predicate_value_filter, NodeOrValue};
+use crate::graphql::query::predicate_value_filter;
 use crate::terminus_store::layer::*;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
@@ -23,9 +23,9 @@ pub fn path_to_class<'a, 'b>(
         .expect("Did not give a valid path")
         .1;
     let expanded_type_name = all_frames.fully_qualified_class_name(to_class);
-    let iter = compile_path(&g, all_frames.context.clone(), path, zero_iter);
+    let iter = compile_path(g, all_frames.context.clone(), path, zero_iter);
     ClonableIterator::new(
-        predicate_value_filter(g, &RDF_TYPE, &NodeOrValue::Node, expanded_type_name, iter).dedup(),
+        predicate_value_filter(g, RDF_TYPE, &ObjectType::Node(expanded_type_name), iter).dedup(),
     )
 }
 
@@ -46,7 +46,7 @@ fn compile_path<'a>(
             let branch = iter.clone();
             let result = vec
                 .into_iter()
-                .map(move |sub_path| compile_path(&g, prefixes.clone(), sub_path, branch.clone()));
+                .map(move |sub_path| compile_path(g, prefixes.clone(), sub_path, branch.clone()));
             ClonableIterator::new(result.flatten())
         }
         Path::Positive(p) => match p {
@@ -128,7 +128,7 @@ impl<'a> Iterator for ManySearchIterator<'a> {
                 std::mem::swap(&mut openset, &mut self.openset);
                 let next_elements = ClonableIterator::new(openset.into_iter());
                 self.iterator = compile_path(
-                    &self.graph,
+                    self.graph,
                     self.prefixes.clone(),
                     (*self.pattern).clone(),
                     next_elements,
@@ -147,7 +147,7 @@ fn compile_many<'a>(
     stop: Option<usize>,
 ) -> ClonableIterator<'a, u64> {
     if Some(0) == stop {
-        return iterator;
+        iterator
     } else {
         ClonableIterator::new(ManySearchIterator {
             graph: g,
@@ -166,6 +166,8 @@ fn compile_many<'a>(
 #[cfg(test)]
 mod tests {
     use terminusdb_store_prolog::terminus_store::open_sync_memory_store;
+
+    use crate::graphql::frame::OneOrMore;
 
     use super::*;
 
@@ -211,14 +213,14 @@ mod tests {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#b",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/c",
                 "http://schema#b",
                 "http://base/d",
@@ -230,7 +232,8 @@ mod tests {
             kind: "@context".to_string(),
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
-            documentation: None,
+            documentation: OneOrMore::More(vec![]),
+            metadata: None,
             extra_prefixes: Default::default(),
         };
 
@@ -259,28 +262,28 @@ mod tests {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#b",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/c",
                 "http://schema#b",
                 "http://base/d",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/d",
                 "http://schema#b",
                 "http://base/a",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#e",
                 "http://base/z",
@@ -292,7 +295,8 @@ mod tests {
             kind: "@context".to_string(),
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
-            documentation: None,
+            documentation: OneOrMore::More(vec![]),
+            metadata: None,
             extra_prefixes: Default::default(),
         };
 
@@ -306,8 +310,7 @@ mod tests {
         );
 
         let result: Vec<_> = path_iter
-            .map(|object| layer.id_object_node(object))
-            .flatten()
+            .filter_map(|object| layer.id_object_node(object))
             .collect();
 
         assert_eq!(result, vec!["http://base/z".to_string()]);
@@ -318,28 +321,28 @@ mod tests {
         let store = open_sync_memory_store();
         let builder = store.create_base_layer().unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/a",
                 "http://schema#b",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/o",
                 "http://schema#e",
                 "http://base/c",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/o",
                 "http://schema#b",
                 "http://base/q",
             ))
             .unwrap();
         builder
-            .add_string_triple(StringTriple::new_node(
+            .add_value_triple(ValueTriple::new_node(
                 "http://base/q",
                 "http://schema#b",
                 "http://base/r",
@@ -351,7 +354,8 @@ mod tests {
             kind: "@context".to_string(),
             base: "http://base/".to_string(),
             schema: "http://schema#".to_string(),
-            documentation: None,
+            documentation: OneOrMore::More(vec![]),
+            metadata: None,
             extra_prefixes: Default::default(),
         };
 
@@ -365,8 +369,7 @@ mod tests {
         );
 
         let result: Vec<_> = path_iter
-            .map(|object| layer.id_object_node(object))
-            .flatten()
+            .filter_map(|object| layer.id_object_node(object))
             .collect();
 
         assert_eq!(

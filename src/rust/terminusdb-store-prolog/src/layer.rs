@@ -1,3 +1,4 @@
+use super::value::*;
 use crate::store::*;
 use std::io::{self, Write};
 use std::iter::Peekable;
@@ -66,14 +67,19 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
 
         let inner = context.new_term_ref();
+        let ty = context.new_term_ref();
         let id: Option<u64>;
         if attempt(object_term.unify(term!{context: node(#&inner)}?))? {
             let object: PrologText = inner.get_ex()?;
             id = layer.object_node_id(&object);
         }
-        else if attempt(object_term.unify(term!{context: value(#&inner)}?))? {
-            let object: PrologText = inner.get_ex()?;
-            id = layer.object_value_id(&object);
+        else if attempt(object_term.unify(term!{context: value(#&inner,#&ty)}?))? {
+            let entry = make_entry_from_term(context,&inner,&ty)?;
+            id = layer.object_value_id(&entry);
+        }
+        else if attempt(object_term.unify(term!{context: lang(#&inner,#&ty)}?))? {
+            let entry = make_entry_from_lang_term(context,&inner,&ty)?;
+            id = layer.object_value_id(&entry);
         }
         else {
             return context.raise_exception(&term!{context: error(domain_error(oneof([node(), value()]), #object_term), _)}?);
@@ -86,18 +92,17 @@ predicates! {
         }
     }
 
-    pub semidet fn id_to_object(_context, layer_term, id_term, object_term) {
+    pub semidet fn id_to_object(context, layer_term, id_term, object_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let id: u64 = id_term.get_ex()?;
 
         match layer.id_object(id) {
             Some(ObjectType::Node(object)) => {
-                object_term.unify(Functor::new("node", 1))?;
-                object_term.unify_arg(1, &object)
+                object_term.unify(functor!("node/1"))?;
+                object_term.unify_arg(1, object)
             }
             Some(ObjectType::Value(object)) => {
-                object_term.unify(Functor::new("value", 1))?;
-                object_term.unify_arg(1, &object)
+                unify_entry(context, &object, object_term)
             }
             None => Err(PrologError::Failure)
         }
@@ -114,6 +119,13 @@ predicates! {
     pub semidet fn squash(context, layer_term, squashed_layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let squashed = context.try_or_die(layer.squash())?;
+        squashed_layer_term.unify(&WrappedLayer(squashed))
+    }
+
+    pub semidet fn squash_upto(context, layer_term, upto_term, squashed_layer_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let upto: WrappedLayer = upto_term.get_ex()?;
+        let squashed = context.try_or_die(layer.squash_upto(&upto))?;
         squashed_layer_term.unify(&WrappedLayer(squashed))
     }
 
@@ -173,7 +185,7 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let name = name_to_string(layer.name());
 
-        id_term.unify(&name)
+        id_term.unify(name)
     }
 
     pub semidet fn store_id_layer(context, store_term, id_term, layer_term) {
@@ -191,7 +203,7 @@ predicates! {
             let layer: WrappedLayer = layer_term.get_ex()?;
             let name = name_to_string(layer.name());
 
-            id_term.unify(&name)
+            id_term.unify(name)
         }
     }
 
@@ -264,7 +276,7 @@ predicates! {
                 Ok(iter.peek().is_some())
             }
             else {
-                return Err(PrologError::Failure);
+                Err(PrologError::Failure)
             }
         }
     }
@@ -347,7 +359,7 @@ predicates! {
                 Ok(iter.peek().is_some())
             }
             else {
-                return Err(PrologError::Failure);
+                Err(PrologError::Failure)
             }
         }
     }
@@ -421,7 +433,7 @@ predicates! {
                 Ok(iter.peek().is_some())
             }
             else {
-                return Err(PrologError::Failure);
+                Err(PrologError::Failure)
             }
         }
     }
@@ -431,7 +443,7 @@ predicates! {
 
         let names = context.try_or_die(layer.retrieve_layer_stack_names())?;
         let name_strings: Vec<String> = names.into_iter()
-            .map(|name| name_to_string(name))
+            .map(name_to_string)
             .collect();
 
         layer_stack_term.unify(name_strings.as_slice())

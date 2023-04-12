@@ -1,4 +1,5 @@
 :- module(api_patch, [
+              api_patch_resource/7,
               api_patch/6,
               api_diff/6,
               api_diff_id/8,
@@ -12,15 +13,78 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
-
+:- use_module(core(api/api_document), [
+                  idlists_duplicates_toplevel/3,
+                  nonground_captures/2
+              ]).
+:- use_module(core(document/apply), [apply_diff_ids_captures/7]).
+:- use_module(core(document/history), [changed_document_id/2]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
+:- use_module(library(assoc)).
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
+:- use_module(library(yall)).
 
 api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
     % no auth yet.
     simple_patch(Patch,Before,After,Options).
+
+patch_id(Patch, Id) :-
+    do_or_die(
+        get_dict('@id', Patch, Id),
+        error(no_id_in_patch(Patch), _)
+    ).
+
+patch_id_pairs(Patch, Patch_And_Ids) :-
+    (   is_list(Patch)
+    ->  findall(P-Id,
+                (
+                    member(P, Patch),
+                    patch_id(P, Id)
+                ),
+                Patch_And_Ids)
+    ;   patch_id(Patch, Id),
+        Patch_And_Ids = [Patch-Id]
+    ).
+
+map_apply_captures(Context,Options,Patch_And_Ids,Conflicts,Ids_List,Empty,Captures) :-
+    mapm({Context, Options}/[Patch-_,Conflict,Ids,C1,C2]>>(
+             apply_diff_ids_captures(Context, Patch, Conflict, Ids, Options, C1, C2)
+         ),
+         Patch_And_Ids,
+         Conflicts,
+         Ids_List,
+         Empty,
+         Captures
+        ).
+
+api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
+    create_context(Branch_Descriptor, Commit_Info, Context),
+    merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
+    empty_assoc(Empty),
+    with_transaction(
+        Context,
+        (
+            patch_id_pairs(Patch, Patch_Ids),
+            map_apply_captures(Context,Merged_Options,Patch_Ids,Conflicts,Ids_List,Empty,Captures),
+            !,
+            die_if(nonground_captures(Captures, Nonground),
+                   error(not_all_captures_found(Nonground), _)),
+
+            exclude([null]>>true, Conflicts, Witnesses),
+            (   Witnesses = []
+            ->  true
+            ;   throw(error(patch_conflicts(Witnesses)))
+            ),
+            idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+            die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
+        ),
+        _
+    ).
 
 api_diff(_System_DB, _Auth, Before, After, Diff, Options) :-
     % no auth yet.
@@ -97,29 +161,6 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     normalize_document(Transaction, After_Document, Normal_Document),
     simple_diff(Before,Normal_Document,Diff,Options).
 
-changed_id(Transaction,Containing) :-
-    ask(Transaction,
-        distinct(Containing,
-                 (   distinct(Id, (   addition(Id, _, _)
-                                  ;   removal(Id, _, _),
-                                      once(t(Id, _, _))
-                                  )),
-                     once((path(Containing, star(p), Id),
-                           t(Containing,rdf:type,Type),
-                           (   t(Type,rdf:type,sys:'Class',schema)
-                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
-                           ;   Type = sys:'JSONDocument'),
-                           not(t(Type,sys:subdocument, _,schema))))
-                 ;   removal(Id, rdf:type, Type),
-                     once(((   t(Type,rdf:type,sys:'Class',schema)
-                           ;   t(Type,rdf:type,sys:'TaggedUnion',schema)
-                           ;   Type = sys:'JSONDocument'),
-                           not(t(Type,sys:subdocument, _,schema)))),
-                     Containing = Id
-                 )
-                )
-       ).
-
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
     create_context(Branch_Descriptor.repository_descriptor, Context),
     most_recent_common_ancestor(Context, Context,
@@ -135,7 +176,7 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                  do_or_die(
                      open_descriptor(Commit_Descriptor, Transaction),
                      error(unresolvable_collection(Commit_Descriptor), _)),
-                 changed_id(Transaction, Changed)
+                 changed_document_id(Transaction, Changed)
              )).
 
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-

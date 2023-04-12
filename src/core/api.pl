@@ -39,10 +39,11 @@
 
               % db_fetch.pl
               remote_fetch/6,
+              local_fetch/5,
               authorized_fetch/4,
 
               % db_clone.pl
-              clone/10,
+              clone/11,
 
               % db_push.pl
               push/8,
@@ -106,6 +107,7 @@
               update_remote/5,
               show_remote/5,
               list_remotes/4,
+              remote_path/2,
 
               % api_rollup.pl
               api_rollup/5,
@@ -126,6 +128,7 @@
               api_generate_document_ids/4,
               api_read_document_selector/11,
               api_generate_document_ids/4,
+              api_get_documents/4,
               api_get_document/5,
               call_catch_document_mutation/2,
 
@@ -139,6 +142,7 @@
               api_diff_id_document/8,
               api_diff_all_documents/7,
               api_apply_squash_commit/7,
+              api_patch_resource/7,
 
               % api_log.pl
               api_log/5,
@@ -172,12 +176,20 @@
               api_get_organizations_users_object/5,
               api_get_organizations_users_databases/5,
 
+              get_user_from_name/4,
 
               % api_db_update.pl
               api_db_update/6,
 
               % api_graphql.pl
-              handle_graphql_request/8
+              handle_graphql_request/8,
+
+              % api_history.pl
+              api_document_history/6,
+
+              % api_migration
+              api_migrate_resource/7,
+              api_migrate_resource_to/7
           ]).
 
 :- use_module(api/api_init).
@@ -214,3 +226,5 @@
 :- use_module(api/api_access_control).
 :- use_module(api/api_db_update).
 :- use_module(api/api_graphql).
+:- use_module(api/api_history).
+:- use_module(api/api_migration).

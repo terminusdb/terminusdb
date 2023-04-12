@@ -4,9 +4,11 @@
               idgen_lexical/3,
               context_triple/2,
               json_elaborate/3,
-              json_elaborate/7,
+              json_elaborate/8,
               json_schema_triple/3,
               json_schema_elaborate/3,
+              database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
@@ -17,6 +19,7 @@
               get_document_uri_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
+              delete_subdocument/3,
               insert_document/3,
               insert_document/7,
               insert_document_unsafe/8,
@@ -60,7 +63,9 @@
               update_captures_with_id/4,
               capture_ref/4,
               schema_document_exists/2,
-              document_exists/2
+              document_exists/2,
+              compress_schema_uri/4,
+              compress_dict_uri/4
           ]).
 
 :- use_module(instance).
@@ -341,8 +346,9 @@ raw(JValue,Value) :-
             maplist(raw, V_1, V_Raw),
             Value = list(V_Raw))
     ;   get_dict('@type', JValue, Value_Type)
-    ->  get_dict('@value', JValue, Uncasted_Value),
-        normalize_json_value(Uncasted_Value, Value_Type, Value)
+    ->  (   get_dict('@value', JValue, Uncasted_Value)
+        ->  normalize_json_value(Uncasted_Value, Value_Type, Value)
+        ;   get_dict('@id', JValue, Value))
     ;   get_dict('@value', JValue, Value)
     ).
 raw(JValue,JValue).
@@ -463,6 +469,16 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
 
+check_replaceable_has_id(Document, Create, Id) :-
+    die_if(
+        (   var(Id),
+            Create = false,
+            (   \+ get_dict('@id', Document, Document_Id)
+            ;   get_dict('@id', Document, Document_Id),
+            var(Document_Id))),
+        error(missing_field('@id', Document), _)
+    ).
+
 class_descriptor_image(unit,json{ '@type': SysUnit}) :-
     global_prefix_expand(sys:'Unit', SysUnit).
 class_descriptor_image(class(_),json{ '@type' : "@id" }).
@@ -486,8 +502,14 @@ class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
 get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
+get_schema_context_metadata(Schema, ID, Metadata) :-
+    schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
+
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
+    get_schema_context_documentation(Schema, ID, Doc).
+
+get_schema_context_documentation(Schema, ID, Doc) :-
     findall(
         Documentation,
         (   xrdf(Schema, ID, sys:documentation, Doc_ID),
@@ -516,21 +538,13 @@ get_context_documentation(DB, ID, Doc) :-
     ;   Documentations = Doc
     ).
 
-database_context_object(DB,Prefixes) :-
-    is_transaction(DB),
-    is_schemaless(DB),
-    !,
-    database_prefixes(DB, Prefixes).
-database_context_object(DB,Context) :-
-    is_transaction(DB),
-    !,
-    database_prefixes(DB, Prefixes),
-    database_schema(DB, Schema),
+database_schema_context_object(Schema, Context) :-
+    database_schema_prefixes(Schema, Prefixes),
     % This should always exist according to schema correctness criteria?
     xrdf(Schema, ID, rdf:type, sys:'Context'),
     xrdf(Schema, ID, sys:base, Base_String^^_),
     xrdf(Schema, ID, sys:schema, Schema_String^^_),
-    (   get_context_documentation(DB, ID, Documentation)
+    (   get_schema_context_documentation(Schema, ID, Documentation)
     ->  put_dict(
             _{ '@base' : Base_String,
                '@schema' : Schema_String,
@@ -541,10 +555,21 @@ database_context_object(DB,Context) :-
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
-    (   get_context_metadata(DB, ID, Metadata)
+    (   get_schema_context_metadata(Schema, ID, Metadata)
     ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
     ;   Context = Context0
     ).
+
+database_context_object(DB,Prefixes) :-
+    is_transaction(DB),
+    is_schemaless(DB),
+    !,
+    database_prefixes(DB, Prefixes).
+database_context_object(DB,Context) :-
+    is_transaction(DB),
+    !,
+    database_schema(DB, Schema),
+    database_schema_context_object(Schema, Context).
 database_context_object(Query_Context,Context) :-
     is_query_context(Query_Context),
     !,
@@ -639,14 +664,14 @@ property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Cap
 
 json_elaborate(DB,JSON,Elaborated) :-
     empty_assoc(Captures_In),
-    json_elaborate(DB,JSON,Captures_In,Elaborated,_Dependencies,_-_,_Captures_Out).
+    json_elaborate(DB,JSON,Captures_In,Elaborated,_Ids,_Dependencies,_-_,_Captures_Out).
 
-json_elaborate(DB,JSON,Captures_In,Elaborated,Dependencies,SH-ST,Captures_Out) :-
+json_elaborate(DB,JSON,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
     database_prefixes(DB,Context),
-    json_elaborate(DB,JSON,Context,Captures_In,Elaborated, Dependencies,SH-ST,Captures_Out).
+    json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out).
 
 :- use_module(core(document/inference)).
-json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,SH-ST,Captures_Out) :-
+json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
     infer_type(DB,Context,JSON,Type,Result,captures(Captures_In,Dependencies-[],SH-ST,Captures_Out)),
     (   Result = witness(Witness)
     ->  term_variables(Witness, Vars),
@@ -661,7 +686,7 @@ json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Dependencies,SH-ST,Capture
     ),
     when(ground(Parents),
          do_or_die(
-             json_assign_ids(DB,Context,Elaborated),
+             json_assign_ids(DB,Context,Ids,Elaborated),
              error(unable_to_assign_ids))).
 
 /*
@@ -709,7 +734,30 @@ update_captures(Elaborated,In,Out) :-
     update_captures_with_id(Capture_Group, Id, In, Out).
 update_captures(_Elaborated,Capture,Capture).
 
-json_assign_ids(DB,Context,JSON) :-
+descriptor_fields(lexical(_Base, Fields), Fields) :- !.
+descriptor_fields(hash(_Base, Fields), Fields) :- !.
+descriptor_fields(_, []).
+
+split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields) :-
+    descriptor_fields(Descriptor, Fields),
+    maplist({Context}/[F,FE]>>(prefix_expand_schema(F,Context, FE)),
+            Fields,
+            Fields_Ex),
+    dict_pairs(JSON, _, Pairs),
+    maplist({Fields_Ex}/[K-V, Out]>>(
+                memberchk(K, Fields_Ex)
+            ->  Out=key(K,V)
+            ;   Out=normal(K,V)),
+            Pairs,
+            Pairs_Sorted),
+    convlist([key(K,V), K-V]>>true,
+             Pairs_Sorted,
+             Key_Fields),
+    convlist([normal(K,V), K-V]>>true,
+             Pairs_Sorted,
+             Normal_Fields).
+
+json_assign_ids(DB,Context,Ids,JSON) :-
     get_dict('@type',JSON,Type),
     (   is_subdocument(DB, Type)
     %% Great, it's a subdocument inserted at the top level
@@ -723,16 +771,16 @@ json_assign_ids(DB,Context,JSON) :-
         del_dict('@linked-by', JSON, _, JSON2)
     ;   Path = [],
         JSON2 = JSON),
-    json_assign_ids(DB,Context,JSON2,Path).
+    json_assign_ids(DB,Context,JSON2,Ids,Path).
 
-json_assign_ids(_DB,_Context,JSON,_Path) :-
+json_assign_ids(_DB,_Context,JSON,[],_Path) :-
     \+ is_dict(JSON),
     !.
-json_assign_ids(_DB,_Context,JSON,_Path) :-
+json_assign_ids(_DB,_Context,JSON,[],_Path) :-
     get_dict('@type',JSON,"@id"),
     !.
-json_assign_ids(DB,Context,JSON,Path) :-
-    get_dict('@id',JSON,ID),
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
+    get_dict('@id',JSON,Id),
     !,
 
     get_dict('@type',JSON,Type),
@@ -743,28 +791,59 @@ json_assign_ids(DB,Context,JSON,Path) :-
     ;   Next_Path = []),
 
     key_descriptor(DB, Context, Type, Descriptor),
-    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
-    check_submitted_id_against_generated_id(Context, Generated_Id, ID),
+    split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields),
 
-    dict_pairs(JSON, _, Pairs),
-    maplist({DB, Context, ID, Next_Path}/[Property-Value]>>(
-                json_assign_ids(DB, Context, Value, [property(Property),node(ID)|Next_Path])
+    % The key fields get an id assigned to them first, as this
+    % document may depend on the result.
+    %
+    % We know that we do not need our ID for that generation, as there
+    % is no path dependency. So we don't even submit a valid path
+    % here, but rather a fake one that will error if it is encountered
+    % later.
+    maplist({DB, Context}/[Property-Value,Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, [inferred_non_subdocument])
             ),
-            Pairs).
-json_assign_ids(DB,Context,JSON,Path) :-
+            Key_Fields,
+            New_Id_Lists_1),
+
+
+    % Now that all potential dependencies have their key generated,
+    % the id of this document can be generated too.
+    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
+    check_submitted_id_against_generated_id(Context, Generated_Id, Id),
+
+    % Finally, we can descend into the other children, giving it a
+    % path that contains the ID of this document.
+
+    maplist({DB, Context, Id, Next_Path}/[Property-Value,Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)|Next_Path])
+            ),
+            Normal_Fields,
+            New_Id_Lists_2),
+    append(New_Id_Lists_1, New_Id_Lists_2, New_Id_Lists),
+    append(New_Id_Lists, New_Ids),
+    (   key_descriptor(DB, Type, value_hash(_))
+    ->  Ids = [Id-value_hash|New_Ids]
+    ;   is_subdocument(DB, Type)
+    ->  Ids = [Id-subdocument|New_Ids]
+    ;   Ids = [Id-normal|New_Ids]
+    ).
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@set"),
     !,
     get_dict('@value', JSON, Values),
-    maplist({DB,Context,Path}/[Value]>>(
-                json_assign_ids(DB, Context, Value, Path)
+    maplist({DB,Context,Path}/[Value, Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, Path)
             ),
-            Values).
-json_assign_ids(DB,Context,JSON,Path) :-
+            Values,
+            Ids_List),
+    append(Ids_List, Ids).
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@array"),
     !,
     get_dict('@value', JSON, Values),
-    array_assign_ids(Values,DB,Context,Path).
-json_assign_ids(DB,Context,JSON,Path) :-
+    array_assign_ids(Values,DB,Context,Ids,Path).
+json_assign_ids(DB,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, _),
     !,
     get_dict('@value', JSON, Values),
@@ -775,30 +854,33 @@ json_assign_ids(DB,Context,JSON,Path) :-
         numlist(0, Max_Index, Numlist)
     ),
 
-    maplist({DB,Context,Path}/[Value,Index]>>(
+    maplist({DB,Context,Path}/[Value,Index,Ids]>>(
                 New_Path=[index(Index)|Path],
-                json_assign_ids(DB, Context, Value, New_Path)
+                json_assign_ids(DB, Context, Value, Ids, New_Path)
             ),
             Values,
-            Numlist).
-json_assign_ids(_DB,_Context,_JSON,_Path).
+            Numlist,
+            Ids_List),
+    append(Ids_List, Ids).
+json_assign_ids(_DB,_Context,_JSON,[],_Path).
 
-array_assign_ids([],_,_,_) :-
+array_assign_ids([],_,_,[],_) :-
     !.
-array_assign_ids(Values,DB,Context,Path) :-
+array_assign_ids(Values,DB,Context,Ids,Path) :-
     length(Values, Value_Len),
     Max_Index is Value_Len - 1,
     numlist(0, Max_Index, Numlist),
-    array_assign_ids(Values,Numlist,DB,Context,Path).
+    array_assign_ids(Values,Numlist,DB,Context,Ids,Path).
 
-array_assign_ids([], [], _, _, _).
-array_assign_ids([H|T], [I|Idx], DB, Context, Path) :-
+array_assign_ids([], [], _, _, [], _).
+array_assign_ids([H|T], [I|Idx], DB, Context, Ids, Path) :-
     New_Path=[index(I)|Path],
     (   is_list(H)
-    ->  array_assign_ids(H,DB,Context,New_Path)
-    ;   json_assign_ids(DB,Context,H,New_Path)
+    ->  array_assign_ids(H,DB,Context,Sub_Ids,New_Path)
+    ;   json_assign_ids(DB,Context,H,Sub_Ids,New_Path)
     ),
-    array_assign_ids(T,Idx,DB,Context,Path).
+    append(Sub_Ids, More_Ids, Ids),
+    array_assign_ids(T,Idx,DB,Context,More_Ids,Path).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -1513,7 +1595,7 @@ json_schema_triple(JSON,Context,Triple) :-
 json_triples(DB,JSON,Triples) :-
     database_prefixes(DB,Context),
     empty_assoc(Captures),
-    json_elaborate(DB,JSON,Context,Captures,Elaborated,Dependencies,_-_,_Captures_Out),
+    json_elaborate(DB,JSON,Context,Captures,Elaborated,_,Dependencies,_-_,_Captures_Out),
     do_or_die(ground(Dependencies),
               error(unbound_capture_groups(Dependencies),_)),
     findall(Triple,
@@ -2380,6 +2462,7 @@ validate_created_graph(schema, Layer) :-
                                                  descriptor: fake{},
                                                  read: Layer,
                                                  changed: true,
+                                                 force_write: false,
                                                  backlinks: []
                                              }]
                         },
@@ -2395,6 +2478,7 @@ validate_created_graph(instance(Transaction), Layer) :-
                                                  descriptor: fake{},
                                                  read: Layer,
                                                  changed: true,
+                                                 force_write: false,
                                                  backlinks: []
                                              }]
                         },
@@ -2475,7 +2559,7 @@ write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
 write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out) :-
     json_read_term(JSON_Stream, Dict),
     !,
-    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,Dependencies,[]-[],New_Captures_In),
+    json_elaborate(DB,Dict,Context,Captures_In,Elaborated,_,Dependencies,[]-[],New_Captures_In),
 
     when(ground(Dependencies),
          forall(
@@ -2618,11 +2702,9 @@ nuke_schema_documents(Query_Context) :-
     query_default_collection(Query_Context, TO),
     nuke_documents(TO).
 
-check_existing_document_status(Transaction, Document, Status) :-
-    get_dict('@type', Document, Type),
-    get_dict('@id', Document, Id),
+check_existing_document_status(Transaction, Id, Variety, Status) :-
     database_instance(Transaction, Instance),
-    (   key_descriptor(Transaction, Type, value_hash(_))
+    (   Variety = value_hash
     ->  (   xrdf(Instance, Id, _, _)
         ->  Status = equivalent
         ;   Status = not_present)
@@ -2638,6 +2720,9 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
+%% insert_document arity 3 and 4 return only a single ID
+%% as these predicates are internal, and not API predicates.
+%%
 % insert_document/3
 insert_document(Transaction, Document, ID) :-
     insert_document(Transaction, Document, false, ID).
@@ -2645,22 +2730,23 @@ insert_document(Transaction, Document, ID) :-
 % insert_document/4
 insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, ID, _Dependencies, _Captures_Out).
+    insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, _Dependencies, _Captures_Out),
+    Ids = [ID|_].
 
 % insert_document/7
-insert_document(Query_Context, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out) :-
+insert_document(Query_Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Raw_JSON, Captures_In, ID, Dependencies, Captures_Out).
-insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
+    insert_document(TO, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out).
+insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_and_default_prefixes(Transaction, Prefixes),
-    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out).
 
 % insert_document/8
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, T-T, Captures) :-
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -2676,8 +2762,8 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, Id, T-T
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, SH-ST, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, SH-ST, Captures_Out),
+insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2689,21 +2775,30 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, ID, SH-ST, 
 
     % After elaboration, the Elaborated document will have an '@id'
     do_or_die(
-        get_dict('@id', Elaborated, ID),
+        get_dict('@id', Elaborated, _),
         error(missing_field('@id', Elaborated), _)),
 
     ensure_transaction_has_builder(instance, Transaction),
+    extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
          (
-             check_existing_document_status(Transaction, Elaborated, Status),
-             (   Status = not_present
-             ->  insert_document_expanded(Transaction, Elaborated, ID)
-             ;   Status = equivalent
-             ->  true
-             ;   Status = present
-             ->  throw(error(can_not_insert_existing_object_with_id(ID), _))
-             )
+             forall(
+                 member(Id-Variety, Id_Pairs),
+                 (   check_existing_document_status(Transaction, Id, Variety, Status),
+                     die_if(Status = present,
+                            error(can_not_insert_existing_object_with_id(Id), _))
+                 )
+             ),
+             insert_document_expanded(Transaction, Elaborated, _)
          )).
+
+extract_return_ids(Id_Pairs, Ids) :-
+    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Top_Ids),
+    % We can't return nothing, even if we're only a value hash...
+    (   Top_Ids = []
+    ->  Id_Pairs = [Id0-_|_],
+        Ids = [Id0]
+    ;   Ids = Top_Ids).
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
@@ -2712,8 +2807,8 @@ insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T,
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, BLH-BLT, Captures_Out) :-
-    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Dependencies, BLH-BLT, Captures_Out),
+insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids, BLH-BLT, Captures_Out) :-
+    json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-BLT, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
         get_dict('@type', Elaborated, Type),
@@ -2725,6 +2820,7 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Id, 
     do_or_die(
         get_dict('@id', Elaborated, Id),
         error(missing_field('@id', Elaborated), _)),
+    extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
 
@@ -2739,13 +2835,14 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
             insert(Instance, S, P, OC, _))
     ).
 
-run_insert_document(Desc, Commit, Document, ID) :-
+run_insert_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
     with_transaction(
         Context,
-        insert_document(Context, Document, ID),
+        insert_document(Context, Document, Id),
         _).
 
+%% Arity 2/3/5 return a single ID as they are internal
 replace_document(DB, Document) :-
     replace_document(DB, Document, false, false, _).
 
@@ -2754,12 +2851,13 @@ replace_document(DB, Document, Id) :-
 
 replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
     empty_assoc(Captures),
-    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Id, _Dependencies, _Captures_Out).
+    Ids = [Id|_], % We need to be able to compare against input if supplied.
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures, Ids, _Dependencies, _Captures_Out).
 
 is_json_hash(Id) :-
     re_match('^terminusdb:///json/JSON/.*', Id).
 
-replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures) :-
+replace_document(Transaction, Document, Create, true, Captures, [Id], [], Captures) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Prefixes),
@@ -2775,32 +2873,44 @@ replace_document(Transaction, Document, Create, true, Captures, Id, [], Captures
               Create = true,
               error(document_not_found(Id, Document), _))),
     insert_json_object(Transaction, JSON, Id_Ex).
-replace_document(Transaction, Document, Create, false, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Transaction, Document, Create, false, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Context),
-    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Dependencies, BLH-[], Captures_Out),
+    (   nonvar(Ids)
+    ->  Ids = [Id|_] % Bind Id to input if we have it
+    ;   true
+    ),
+    json_elaborate(Transaction, Document, Context, Captures_In, Elaborated, Id_Pairs, Dependencies, BLH-[], Captures_Out),
+    %check_replaceable_has_id(Document, Elaborated, Create, Id),
     die_if(
         BLH \= [],
         error(back_links_not_supported_in_replace, _)),
     get_dict('@id', Elaborated, Elaborated_Id),
     check_submitted_id_against_generated_id(Context, Elaborated_Id, Id),
-    catch(delete_document(Transaction, false, Id),
-          error(document_not_found(_), _),
-          (   Create = true
-          % If we're creating a document, we gotta be sure that it is not a subdocument
-          ->  get_dict('@type', Elaborated, Type),
-              die_if(is_subdocument(Transaction, Type),
-                     error(inserted_subdocument_as_document, _))
-          ;   throw(error(document_not_found(Id, Document), _)))),
+    include([_-normal]>>true, Id_Pairs, Deletions),
+    maplist({Create,Transaction,Document}/[Deletion_Id-Variety]>>(
+                catch(
+                    delete_document(Transaction, false, Deletion_Id),
+                    error(document_not_found(_), _),
+                    (   Create = true
+                    % If we're creating a document, we gotta be sure that it is not a subdocument
+                    ->  die_if(Variety = subdocument,
+                               error(inserted_subdocument_as_document, _))
+                    ;   throw(error(document_not_found(Deletion_Id, Document), _))
+                    )
+                )
+            ),
+            Deletions),
     ensure_transaction_has_builder(instance, Transaction),
+    convlist([Id0-Variety,Id0]>>(Variety \= value_hash),Id_Pairs,Ids),
     when(ground(Dependencies),
          insert_document_expanded(Transaction, Elaborated, Id)).
-replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out) :-
+replace_document(Query_Context, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    replace_document(TO, Document, Create, Raw_JSON, Captures_In, Id, Dependencies, Captures_Out).
+    replace_document(TO, Document, Create, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out).
 
 run_replace_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
@@ -2997,8 +3107,12 @@ class_frame(Transaction, Class, Frame, Options) :-
         Inherits \= []
     ->  Pairs9 = ['@inherits'-Inherits|Pairs8]
     ;   Pairs9 = Pairs8),
+    % Unfoldable
+    (   is_unfoldable(Transaction, Class_Ex)
+    ->  Pairs10 = ['@unfoldable'-[]|Pairs9]
+    ;   Pairs10 = Pairs9),
 
-    sort(Pairs9, Sorted_Pairs),
+    sort(Pairs10, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -3273,44 +3387,42 @@ test(write_json_stream_to_builder, [
         triple(Layer,X,Y,Z),
         Triples),
 
-    Triples = [
-        t("http://terminusdb.com/system/schema#User",
-          "http://terminusdb.com/system/schema#capability",
-          node("http://terminusdb.com/system/schema#User/capability/Set+Capability")),
-        t("http://terminusdb.com/system/schema#User",
-          "http://terminusdb.com/system/schema#key_hash",
-          node("http://terminusdb.com/type#string")),
-        t("http://terminusdb.com/system/schema#User",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Class")),
-        t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
-          "http://terminusdb.com/schema/sys#class",
-          node("http://terminusdb.com/system/schema#Capability")),
-        t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Set")),
-        t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
-          "http://terminusdb.com/schema/sys#prefix",
-          value("\"type\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
-          "http://terminusdb.com/schema/sys#url",
-          value("\"http://terminusdb.com/type#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Prefix")),
-        t("terminusdb://context",
-          "http://terminusdb.com/schema/sys#base",
-          value("\"terminusdb://system/data/\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://context",
-          "http://terminusdb.com/schema/sys#prefix_pair",
-          node("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea")),
-        t("terminusdb://context",
-          "http://terminusdb.com/schema/sys#schema",
-          value("\"http://terminusdb.com/system/schema#\"^^'http://www.w3.org/2001/XMLSchema#string'")),
-        t("terminusdb://context",
-          "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          node("http://terminusdb.com/schema/sys#Context"))
-    ].
+    Triples = [ t("http://terminusdb.com/system/schema#User",
+                  "http://terminusdb.com/system/schema#capability",
+                  node("http://terminusdb.com/system/schema#User/capability/Set+Capability")),
+                t("http://terminusdb.com/system/schema#User",
+                  "http://terminusdb.com/system/schema#key_hash",
+                  node("http://terminusdb.com/type#string")),
+                t("http://terminusdb.com/system/schema#User",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Class")),
+                t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
+                  "http://terminusdb.com/schema/sys#class",
+                  node("http://terminusdb.com/system/schema#Capability")),
+                t("http://terminusdb.com/system/schema#User/capability/Set+Capability",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Set")),
+                t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
+                  "http://terminusdb.com/schema/sys#prefix",
+                  value("type",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
+                  "http://terminusdb.com/schema/sys#url",
+                  value("http://terminusdb.com/type#",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Prefix")),
+                t("terminusdb://context",
+                  "http://terminusdb.com/schema/sys#base",
+                  value("terminusdb://system/data/",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://context",
+                  "http://terminusdb.com/schema/sys#prefix_pair",
+                  node("terminusdb://Prefix_Pair/a0430ae9e26cb0d348e34f4c85800cd44564b201a7feb9974c4a4fbbb6c843ea")),
+                t("terminusdb://context",
+                  "http://terminusdb.com/schema/sys#schema",
+                  value("http://terminusdb.com/system/schema#",'http://www.w3.org/2001/XMLSchema#string')),
+                t("terminusdb://context",
+                  "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                  node("http://terminusdb.com/schema/sys#Context"))].
 
 :- end_tests(json_stream).
 
@@ -3670,6 +3782,7 @@ test(triple_convert,
     json_triples(DB, Document, Triples),
 
     sort(Triples, Sorted),
+
     Sorted = [
         t('http://i/Employee/gavin',
           'http://s/birthdate',
@@ -3742,6 +3855,7 @@ test(extract_json,
 
     get_document(DB,Id,JSON1),
     !,
+
     JSON1 = json{'@id':'Employee/gavin',
                  '@type':'Employee',
                  birthdate:"1977-05-24",
@@ -3752,6 +3866,7 @@ test(extract_json,
 
     get_document(DB,'Employee/jane',JSON2),
     !,
+
     JSON2 = json{ '@id':'Employee/jane',
                   '@type':'Employee',
                   birthdate:"1979-12-28",
@@ -6806,7 +6921,7 @@ test(delete_referenced_object,
     with_transaction(
         Context,
         (   insert_document(Context, Document0, false, Captures_In, _Id1, _, Captures_Out1),
-            insert_document(Context, Document1, false, Captures_Out1, Id2, _, _)
+            insert_document(Context, Document1, false, Captures_Out1, [Id2|_], _, _)
         ),
         _
     ),
@@ -10582,6 +10697,7 @@ test(subdocument_update,
 
     open_descriptor(Desc, DB),
     get_document(DB, 'Organization/somewhere', Organization),
+
     Organization = json{'@id':'Organization/somewhere',
                         '@type':'Organization',
                         creation_date:"2021-05-01T12:10:10Z",
@@ -10663,10 +10779,8 @@ test(subdocument_update,
                          Document,
                          Id),
                      _),
-    writeq(Id),
 
-    get_document(Desc, Id, New_Doc),
-    writeq(New_Doc).
+    get_document(Desc, Id, _New_Doc).
 
 
 :- end_tests(referential_integrity).
@@ -10865,6 +10979,52 @@ test(normalizable_float,
         _{ '@type': "Thing",
            foo: "0.5000000"},
         'Thing/0.5').
+
+nested_document_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Foo",
+  "@key": {"@type":"Lexical", "@fields": ["bar"]},
+  "bar" : "Bar" }
+
+{ "@type" : "Class",
+  "@id" : "Bar",
+  "@key" : {"@type": "Lexical", "@fields": ["x"]},
+  "x" : "xsd:string" }
+').
+
+test(insert_nested_document_with_key_dependency,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(nested_document_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = _{
+        bar: _{x: "hello"}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, Doc, Id)
+    ),
+
+    Expected_Id = 'terminusdb:///data/Foo/terminusdb%3A%2F%2F%2Fdata%2FBar%2Fhello',
+    do_or_die(Id == Expected_Id,
+              error(food_id_mismatch(Id, Expected_Id), _)),
+
+    with_test_transaction(Desc,
+                          C2,
+                          get_document(C2, Id, Inserted)),
+
+    Expected_Bar_Id = 'Bar/hello',
+    Bar_Id = (Inserted.bar),
+    do_or_die(Bar_Id == Expected_Bar_Id,
+              error(bar_id_mismatch(Bar_Id, Expected_Bar_Id), _)).
 
 :- end_tests(document_id_generation).
 
@@ -11126,6 +11286,7 @@ test(cross_reference_required,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11140,6 +11301,7 @@ test(cross_reference_required,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out),
@@ -11169,6 +11331,7 @@ test(cross_reference_optional,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11183,6 +11346,7 @@ test(cross_reference_optional,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out),
@@ -11212,6 +11376,7 @@ test(cross_reference_set_singleton,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11226,6 +11391,7 @@ test(cross_reference_set_singleton,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out),
@@ -11258,6 +11424,7 @@ test(cross_reference_set_multi,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11273,6 +11440,7 @@ test(cross_reference_set_multi,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out_2),
@@ -11287,6 +11455,7 @@ test(cross_reference_set_multi,
                    Context,
                    Out_2,
                    Elmo_Elaborated,
+                   _,
                    _Dependencies_3,
                    _,
                    Out),
@@ -11325,6 +11494,7 @@ test(cross_reference_list_multi,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11340,6 +11510,7 @@ test(cross_reference_list_multi,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out_2),
@@ -11354,6 +11525,7 @@ test(cross_reference_list_multi,
                    Context,
                    Out_2,
                    Elmo_Elaborated,
+                   _,
                    _Dependencies_3,
                    _,
                    Out),
@@ -11392,6 +11564,7 @@ test(cross_reference_array_multi,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11407,6 +11580,7 @@ test(cross_reference_array_multi,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out_2),
@@ -11421,6 +11595,7 @@ test(cross_reference_array_multi,
                    Context,
                    Out_2,
                    Elmo_Elaborated,
+                   _,
                    _Dependencies_3,
                    _,
                    Out),
@@ -11458,6 +11633,7 @@ test(self_reference_required,
                    Context,
                    In,
                    Elmo_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out),
@@ -11492,6 +11668,7 @@ test(deep_reference,
                    Context,
                    In,
                    Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11507,6 +11684,7 @@ test(deep_reference,
                    Context,
                    Out_1,
                    Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    Out_2),
@@ -11548,6 +11726,7 @@ test(double_capture,
                    Context,
                    In,
                    _Bert_Elaborated,
+                   _,
                    _Dependencies_1,
                    _,
                    Out_1),
@@ -11560,6 +11739,7 @@ test(double_capture,
                    Context,
                    Out_1,
                    _Ernie_Elaborated,
+                   _,
                    _Dependencies_2,
                    _,
                    _Out_2).
@@ -13260,6 +13440,77 @@ test(schema_read_class,
          choice:'Choice',
          name:'xsd:string'}.
 
+
+test(schema_update_i18n_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Schema_Document =
+    json{'@documentation':
+         [json{'@comment':"An example class",
+               '@label':"Example",
+               '@language':"en",
+               '@properties':
+               json{choice:json{'@comment':"A thing to choose",
+                                '@label':"choice"},
+                    name:json{'@comment':"The name of the example object",
+                              '@label':"name"}}},
+          json{'@comment':"Foo",
+               '@label':"Bar",
+               '@language':"de",
+               '@properties':
+               json{choice:json{'@comment':"Baz",
+                                '@label':"Zib"},
+                    name:json{'@comment':"Zukunft",
+                              '@label':"Zimmer"}}}],
+         '@id':'Example',
+         '@type':'Class',
+         choice:'Choice',
+         name:'xsd:string'},
+
+    with_test_transaction(Desc,
+                          C1,
+                          replace_schema_document(
+                              C1,
+                              Schema_Document)
+                         ),
+
+    get_schema_document(Desc, 'Example', Example),
+
+    Example = json{ '@documentation':
+                    [ json{ '@comment':"An example class",
+							'@label':"Example",
+							'@language':"en",
+							'@properties':json{ choice:json{ '@comment':"A thing to choose",
+														     '@label':"choice"
+													       },
+												name:json{ '@comment':"The name of the example object",
+													       '@label':"name"
+													     }
+											  }
+						  },
+					  json{ '@comment':"Foo",
+							'@label':"Bar",
+							'@language':"de",
+							'@properties':json{ choice:json{ '@comment':"Baz",
+														     '@label':"Zib"
+													       },
+												name:json{ '@comment':"Zukunft",
+													       '@label':"Zimmer"
+													     }
+											  }
+						  }
+					],
+					'@id':'Example',
+					'@type':'Class',
+					choice:'Choice',
+					name:'xsd:string'
+				  }.
+
 test(schema_read_enum,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
@@ -13494,6 +13745,7 @@ test(schema_metadata,
     write_schema(metadata_schema,Desc),
 
     database_context_object(Desc,Context),
+
     Context =
     _{'@base':"terminusdb:///data/",
       '@documentation':
@@ -13845,14 +14097,14 @@ test(rdf_language_doc_insert_get,
     with_test_transaction(
         Desc,
         C1,
-        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : "en", '@value' : "Me"}}, Id)
+        insert_document(C1, _{ 'rdfs:label' : _{ '@lang' : en, '@value' : "Me"}}, Id)
     ),
 
     get_document(Desc, Id, Doc),
 
     Doc = json{ '@id':_Id,
                 '@type':'LangString',
-                'rdfs:label':json{'@lang':"en",'@value':"Me"}
+                'rdfs:label':json{'@lang':en,'@value':"Me"}
               }.
 
 
@@ -13901,6 +14153,19 @@ abstract_choice_schema('
   "@oneOf" : { "a" : "Abstract",
                "b" : "Alternative" }}
 
+{ "@type": "Class",
+  "@id": "HasUnfoldable",
+  "unfoldable" : "Unfoldable",
+  "not_unfoldable" : "NotUnfoldable" }
+
+{ "@type" : "Class",
+  "@id" : "Unfoldable",
+  "@unfoldable" : [],
+  "data" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "NotUnfoldable",
+  "data" : "xsd:string" }
 ').
 
 test(choice_with_oneof_abstract,
@@ -13915,4 +14180,233 @@ test(choice_with_oneof_abstract,
     Frame = json{'@oneOf':[json{a:['Concrete'],b:'Alternative'}],'@type':'Class'}.
 
 
+test(unfoldable_in_sub_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "HasUnfoldable", Frame),
+    Frame = json{ '@type':'Class',
+			      not_unfoldable:'NotUnfoldable',
+			      unfoldable: 'Unfoldable'
+			    }.
+
+test(unfoldable_in_frame,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    class_frame(Desc, "Unfoldable", Frame),
+    Frame = json{'@type':'Class','@unfoldable':[],data:'xsd:string'}.
+
 :- end_tests(class_frames).
+
+:- begin_tests(typed_store).
+
+:- use_module(core(util/test_utils)).
+
+date_time_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+
+{ "@type" : "Class",
+  "@id" : "DateTime",
+  "dateTime" : "xsd:dateTime" }
+
+').
+
+test(datetime_deletion,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1, _{ 'dateTime' : "2023-01-13T15:29:45.606Z"}, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        delete_document(C2, Id)
+    ),
+
+    findall(
+        t(X,Y,Z),
+        ask(Desc,
+            t(X,Y,Z)),
+        Triples),
+
+    Triples = [].
+
+test(roundtrip_everything,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Schema =
+    _{
+        '@id': 'Everything',
+        '@type': 'Class',
+        anySimpleType: 'xsd:anySimpleType',
+        string: 'xsd:string',
+        boolean: 'xsd:boolean',
+        decimal: 'xsd:decimal',
+        float: 'xsd:float',
+        time: 'xsd:time',
+        date: 'xsd:date',
+        dateTime: 'xsd:dateTime',
+        dateTimeStamp: 'xsd:dateTimeStamp',
+        gYear: 'xsd:gYear',
+        gMonth: 'xsd:gMonth',
+        gDay: 'xsd:gDay',
+        gYearMonth: 'xsd:gYearMonth',
+        duration: 'xsd:duration',
+        yearMonthDuration: 'xsd:yearMonthDuration',
+        dayTimeDuration: 'xsd:dayTimeDuration',
+        byte: 'xsd:byte',
+        short: 'xsd:short',
+        int: 'xsd:int',
+        long: 'xsd:long',
+        unsignedByte: 'xsd:unsignedByte',
+        unsignedShort: 'xsd:unsignedShort',
+        unsignedInt: 'xsd:unsignedInt',
+        unsignedLong: 'xsd:unsignedLong',
+        integer: 'xsd:integer',
+        positiveInteger: 'xsd:positiveInteger',
+        negativeInteger: 'xsd:negativeInteger',
+        nonPositiveInteger: 'xsd:nonPositiveInteger',
+        nonNegativeInteger: 'xsd:nonNegativeInteger',
+        base64nary: 'xsd:base64Binary',
+        hexBinary: 'xsd:hexBinary',
+        anyURI: 'xsd:anyURI',
+        language: 'xsd:language',
+        normalizedString: 'xsd:normalizedString',
+        token: 'xsd:token',
+        'NMTOKEN': 'xsd:NMTOKEN',
+        'Name': 'xsd:Name',
+        'NCName': 'xsd:NCName'
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)
+    ),
+
+    Everything =
+    _{
+        '@type': 'Everything',
+        anySimpleType: 3,
+        string: "string",
+        boolean: true,
+        decimal: 3.2,
+        float: 3.2,
+        time: "23:34:43.0003Z",
+        date: "2021-03-05",
+        dateTime: "2021-03-05T23:34:43.0003Z",
+        dateTimeStamp: "2021-03-05T23:34:43.0003Z",
+        gYear: "-32",
+        gMonth: "--11",
+        gDay: "---29",
+        gYearMonth: "1922-03",
+        duration: "P3Y2DT7M",
+        yearMonthDuration: "P3Y7M",
+        dayTimeDuration: "P1DT10H7M12S",
+        byte: -8,
+        short: -10,
+        int: -32,
+        long: -532,
+        unsignedByte: 3,
+        unsignedShort: 5,
+        unsignedInt: 8,
+        unsignedLong: 10,
+        integer: 20,
+        positiveInteger: "2342423",
+        negativeInteger: "-2348982734",
+        nonPositiveInteger: "-334",
+        nonNegativeInteger: "3243323",
+        base64nary: "VGhpcyBpcyBhIHRlc3Q=",
+        hexBinary: "5468697320697320612074657374",
+        anyURI: "http://this.com",
+        language: "en",
+        normalizedString: "norm",
+        token: "token",
+        'NMTOKEN': "NMTOKEN",
+        'Name': "Name",
+        'NCName': "NCName"
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2, Everything, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C3,
+        delete_document(C3, Id)
+    ),
+
+    findall(
+        t(X,Y,Z),
+        ask(Desc,
+            t(X,Y,Z)),
+        Triples),
+
+    Triples = [].
+
+test(roundtrip_duration,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(date_time_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Schema =
+    _{ '@type' : 'Class',
+       '@id' : 'Duration',
+       duration: 'xsd:duration'
+     },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)
+    ),
+
+    Doc = _{
+        '@type': 'Duration',
+        duration: "PT5558756.00001S"
+    },
+
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_document(C2, Doc, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C3,
+        get_document(C3, Id, New_Doc)
+    ),
+    get_dict(duration, Doc, Duration),
+    get_dict(duration, New_Doc, Duration).
+
+:- end_tests(typed_store).

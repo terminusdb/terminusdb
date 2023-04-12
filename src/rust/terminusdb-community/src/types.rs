@@ -1,6 +1,5 @@
 use crate::swipl::prelude::*;
-use crate::terminus_store::store::sync::*;
-use terminusdb_store_prolog::layer::*;
+use terminusdb_store_prolog::{layer::*, terminus_store::store::sync::SyncStoreLayer};
 
 use crate::swipl::atom;
 

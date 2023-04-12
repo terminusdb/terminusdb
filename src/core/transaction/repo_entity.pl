@@ -6,6 +6,7 @@
               repository_type/3,
               repository_head/3,
               repository_remote_url/3,
+              repository_remote_path/3,
 
               insert_local_repository/3,
               insert_local_repository/4,
@@ -16,7 +17,8 @@
               remove_remote_repository/2,
 
               update_repository_head/3,
-              update_repository_remote_url/3
+              update_repository_remote_url/3,
+              update_repository_remote_path/4
           ]).
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -68,6 +70,12 @@ repository_remote_url(Askable, Repo_Name, Remote_Url) :-
     once(ask(Askable,
              t(Repo_Uri, remote_url, Remote_Url^^xsd:string))).
 
+repository_remote_path(Askable, Repo_Name, Remote_Path) :-
+    repository_name_uri(Askable, Repo_Name, Repo_Uri),
+    once(ask(Askable,
+             t(Repo_Uri, remote_path, Remote_Path_Uri))),
+    get_document(Askable, Remote_Path_Uri, Remote_Path).
+
 insert_local_repository(Context, Repo_Name, Repo_Uri) :-
     insert_local_repository(Context, Repo_Name, _, Repo_Uri).
 
@@ -90,14 +98,30 @@ insert_remote_repository(Context, Repo_Name, Remote_Url, Repo_Uri) :-
     insert_remote_repository(Context, Repo_Name, Remote_Url, _, Repo_Uri).
 
 insert_remote_repository(Context, Repo_Name, Remote_Url, Head_Layer_Id, Repo_Uri) :-
-    insert_document(
-        Context,
-        json{
-            '@type' : "Remote",
-            'remote_url' : Remote_Url,
-            'name' : Repo_Name
-        },
-        Repo_Uri),
+    (   (   string(Remote_Url)
+        ;   atom(Remote_Url))
+    ->  insert_document(
+            Context,
+            json{
+                '@type' : "Remote",
+                'remote_url' : Remote_Url,
+                'name' : Repo_Name
+            },
+            Repo_Uri)
+    ;   Remote_Url = db(Remote_Team, Remote_DB),
+        insert_document(
+            Context,
+            json{
+                '@type' : "Remote",
+                'remote_path' :
+                json{
+                    database : Remote_DB,
+                    organization : Remote_Team
+                },
+                'name' : Repo_Name
+            },
+            Repo_Uri)
+    ),
 
     (   ground(Head_Layer_Id)
     ->  insert_layer_object(Context, Head_Layer_Id, Layer_Uri),
@@ -116,13 +140,36 @@ update_repository_head(Context, Repo_Name, Layer_Id) :-
     once(ask(Context,
              insert(Repo_Uri, head, New_Layer_Uri))).
 
-update_repository_remote_url(Context, Repo_Name, Remote_Url) :-
-    repository_name_uri(Context, Repo_Name, Repo_Uri),
+delete_repository_uri_remote_url(Context, Repo_Uri) :-
     once(ask(Context,
              (   t(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
-                 delete(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
-                 insert(Repo_Uri, remote_url, Remote_Url^^xsd:string)))).
+                 delete(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string)))).
 
+delete_repository_uri_remote_path_uri(Context, Repo_Uri, Remote_Path_Uri) :-
+    once(ask(Context,
+             t(Repo_Uri, remote_path, Remote_Path_Uri))),
+    delete_document(Context, Remote_Path_Uri).
+
+update_repository_remote_url(Context, Repo_Name, Remote_Url) :-
+    repository_name_uri(Context, Repo_Name, Repo_Uri),
+    ignore(delete_repository_uri_remote_path_uri(Context, Repo_Uri, _)),
+    delete_repository_uri_remote_url(Context, Repo_Uri),
+    once(ask(Context,
+             insert(Repo_Uri, remote_url, Remote_Url^^xsd:string))).
+
+update_repository_remote_path(Context, Repo_Name, Organization, Database) :-
+    repository_name_uri(Context, Repo_Name, Repo_Uri),
+    get_document(Context, Repo_Uri, Repository),
+    (   del_dict(remote_url,Repository, _, Repository0)
+    ->  true
+    ;   Repository0 = Repository),
+    put_dict(_{ remote_path :
+                _{ database : Database,
+                   organization: Organization }},
+             Repository0,
+             Repository1),
+
+    insert_document(Context, Repository1, _).
 
 remove_repository_head(Context, Repo_Uri):-
     ignore(ask(Context,
@@ -135,18 +182,12 @@ remove_local_repository(Context, Repo_Name) :-
     remove_repository_head(Context, Repo_Uri),
     once(ask(Context,
              (   delete(Repo_Uri, rdf:type, '@schema':'Local'),
-                 delete(Repo_Uri, name, Repo_Name^^xsd:string) 
+                 delete(Repo_Uri, name, Repo_Name^^xsd:string)
                  ))).
 
 remove_remote_repository(Context, Repo_Name) :-
     repository_name_uri(Context, Repo_Name, Repo_Uri),
-    remove_repository_head(Context, Repo_Uri),
-    once(ask(Context,
-             (   t(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string),
-                 delete(Repo_Uri, rdf:type, '@schema':'Remote'),
-                 delete(Repo_Uri, name, Repo_Name^^xsd:string),
-                 delete(Repo_Uri, remote_url, Old_Remote_Url^^xsd:string)))).
-
+    delete_document(Context, Repo_Uri).
 
 :- begin_tests(local_repo_objects).
 :- use_module(core(util/test_utils)).

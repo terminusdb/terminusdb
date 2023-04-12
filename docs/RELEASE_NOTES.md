@@ -1,3 +1,113 @@
+# TerminusDB Server v11.0.5 Release Notes
+## Bug fixes
+* diff endpoint was mishandling subdocuments
+
+# TerminusDB Server v11.0.4 Release Notes
+## New
+* New history API to find out when an object changed
+
+## Enhancement
+* Keep loaded layers in an LRU cache for faster repeated queries
+* Optimize will now also optimize schema layers
+* Improved memory use during commits and squashes
+
+## Experimental
+* New endpoint for schema migrations which also transforms existing data
+* Support updating a schema from a target branch as long as there is a migration
+
+# TerminusDB Server v11.0.3 Release Notes
+
+## Bug fixes
+
+* Prevent early failure on full schema replace where id is missing
+* Support stringy filters on all stringy types, not just strings
+* Return 204 on doc delete (and disable chunking for non-gets)
+* Fix inversion naming issue. This causes issues when using non-standard GraphQL class names
+
+## New
+
+* Adding Patch Endpoint for Resources
+* Implement pinned organization ENV variable to keep data products of whole organizations/teams in memory
+
+# TerminusDB Server v11.0.2 Release Notes
+
+## Bug fixes
+* On replace, schema documentation entities were not cleaned up properly
+* Fix support for ne (not equal) operator in graphql
+
+# TerminusDB Server v11.0.1 Release Notes
+
+## Backwards-incompatible changes
+* Document replacement allowed insertion of nested documents, even
+  without the create option specified. We decided that this was a bug,
+  and made it so that this now errors, unless the create option is
+  specified. This is backwards-incompatible, but we believe that this
+  is the correct behavior. If your code relies on nested documents
+  being inserted, make sure you specify the create option. Note that
+  this is just about nested documents which are top-level
+  types. Subdocuments are not affected.
+
+## New
+
+* Introduced support for a grpc label store as an alternative to file-based label lookup [terminusdb-labs/terminusdb-grpc-labelstore](https://github.com/terminusdb-labs/terminusdb-grpc-labelstore)
+* Implemented local clone
+* Implement user impersionation in the CLI tool
+* Added a pre-commit hook to allow implementation of custom schema validations
+
+## Enhancements
+
+* Pinned system schema graph so it is only loaded once
+* Reduced amount of hash roundtrips for newly generated passwords to speed up login
+* Disabled authentication on the ok endpoint for faster roundtrip
+* Removed default SWI-Prolog HTTP server welcome message
+* Improved db list speed
+
+## Bug fixes
+* Fixed startup message when no store is present
+* Ensured that all users automatically have all capabilities of anonymous
+* Delete the stale database if a clone fails
+* Fix SSL issues in fetch and push: newer version of openssl errors when a connection is closed unexpectedly
+* Fix accidental insertion of duplicate nested documents
+* Fixed GYear support
+
+# TerminusDB Server v11.0.0 Release Notes
+
+## Backwards-Incompatible Changes
+
+* This release changes the storage format of TerminusDB. After
+  installing this version, you will also need to upgrade your storage
+  directory, or the server will not start. A conversion tool is
+  provided at
+  [terminusdb-10-to-11](https://github.com/terminusdb/terminusdb-10-to-11). This
+  is also bundled with
+  [terminusdb-bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+* TerminusDB 11 now responds to `xsd:integer`, `xsd:decimal`, and all
+  of the unbounded sub-types of these two objects in the document
+  interface with strings. This is because many (even most) JSON
+  libraries can not handle arbitrary precision integers, and (few if
+  any) can handle arbitrary precision floats. It should still be
+  possible to submit documents using integers or floats, but when
+  returned they will be strings.
+
+## Enhancements
+
+* New Storage backend
+  - Added typed storage for a wide variety of XSD types, reducing
+    storage overhead and improving search performance
+  - Introduce a layer archive format reducing storage use and latency
+    and simplifying interchange.
+* GraphQL `_type` added to objects to return the exact rather than subsumed type
+* Added `@unfoldable` document flag to frames
+* Add `@metadata` to frames
+
+## Bug fixes
+
+* Fixed a bug in inverse fields in GraphQL
+* Removed extraneous system objects from GraphQL schema
+* Improved completeness of GraphQL schema handling
+* Added x-method-override header to CORS
+* Fixed GraphQL naming bug leading to GraphQL schema crashes
+
 # TerminusDB Server v10.1.11 Release Notes
 
 ## Enhancements

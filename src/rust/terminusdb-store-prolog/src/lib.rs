@@ -2,6 +2,7 @@ pub mod builder;
 pub mod layer;
 pub mod named_graph;
 pub mod store;
+pub mod value;
 
 pub use swipl;
 pub use terminus_store;
@@ -9,6 +10,8 @@ pub use terminus_store;
 pub fn install(module: Option<&str>) {
     store::register_open_memory_store_in_module(module);
     store::register_open_directory_store_in_module(module);
+    store::register_open_archive_store_in_module(module);
+    store::register_open_grpc_store_in_module(module);
     named_graph::register_create_named_graph_in_module(module);
     named_graph::register_open_named_graph_in_module(module);
     named_graph::register_delete_named_graph_in_module(module);
@@ -19,9 +22,9 @@ pub fn install(module: Option<&str>) {
     named_graph::register_nb_force_set_head_version_in_module(module);
     store::register_open_write_in_module(module);
     builder::register_nb_add_id_triple_in_module(module);
-    builder::register_nb_add_string_triple_in_module(module);
+    builder::register_nb_add_object_triple_in_module(module);
     builder::register_nb_remove_id_triple_in_module(module);
-    builder::register_nb_remove_string_triple_in_module(module);
+    builder::register_nb_remove_object_triple_in_module(module);
     builder::register_builder_committed_in_module(module);
     builder::register_nb_commit_in_module(module);
     builder::register_nb_apply_delta_in_module(module);
@@ -36,6 +39,7 @@ pub fn install(module: Option<&str>) {
     layer::register_id_to_object_in_module(module);
     layer::register_parent_in_module(module);
     layer::register_squash_in_module(module);
+    layer::register_squash_upto_in_module(module);
     layer::register_rollup_in_module(module);
     layer::register_rollup_upto_in_module(module);
     layer::register_imprecise_rollup_upto_in_module(module);

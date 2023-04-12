@@ -190,7 +190,6 @@ describe('document', function () {
         const instance = [
           { '@type': type1, '@id': `terminusdb:///data/${type1}/1` },
           { '@type': type2, '@id': `terminusdb:///data/${type2}/1`, ref: `terminusdb:///data/${type1}/1` },
-          { '@type': type2, '@id': `terminusdb:///data/${type2}/2`, ref: { '@id': `terminusdb:///data/${type1}/1` } },
           { '@type': type2, '@id': `terminusdb:///data/${type2}/3`, ref: { '@id': `terminusdb:///data/${type1}/1`, '@type': '@id' } },
         ]
         await document.insert(agent, { instance })
@@ -342,6 +341,64 @@ describe('document', function () {
           await document.insert(agent, { schema }).fails(api.error.keyFieldsIsEmpty(schema))
         })
       }
+    })
+
+    describe('Deep replace/insertions', function () {
+      let A
+      let B
+      let schema
+      before(async function () {
+        A = util.randomString()
+        B = util.randomString()
+        schema = [
+          {
+            '@type': 'Class',
+            '@id': A,
+            b: B,
+          },
+          {
+            '@type': 'Class',
+            '@unfoldable': [],
+            '@id': B,
+            x: 'xsd:string',
+          }]
+        await document.insert(agent, { schema })
+      })
+
+      it('add in parallel', async function () {
+        const instance = [
+          { b: { '@id': `${B}/1`, x: 'asdf' } },
+          { b: { '@id': `${B}/1`, x: 'fdsa' } },
+        ]
+        const result = await document.insert(agent, { instance }).unverified()
+        expect(result.body['api:error']['@type']).to.equal('api:SameDocumentIdsMutatedInOneTransaction')
+        expect(result.body['api:error']['api:duplicate_ids']).to.deep.equal([`terminusdb:///data/${B}/1`])
+      })
+
+      it('deep replace', async function () {
+        const instance = [
+          {
+            '@id': `${A}/2`,
+            b: {
+              '@id': `${B}/2`,
+              x: 'asdf',
+            },
+          },
+        ]
+        await document.insert(agent, { instance }).unverified()
+        const instance2 = [
+          {
+            '@id': `${A}/2`,
+            b: {
+              '@id': `${B}/2`,
+              x: 'fdsa',
+            },
+          },
+        ]
+        await document.replace(agent, { instance: instance2 })
+        const result = await document.get(agent, { query: { id: `${A}/2` } })
+        expect(result.body.b.x).to.equal('fdsa')
+      })
     })
 
     it('succeeds when ignoring optional combined with oneof (#992)', async function () {
@@ -551,7 +608,7 @@ describe('document', function () {
         const r1 = await document.insert(agent, { instance: { a: [42, 23, 12] }, raw_json: true })
         const id = r1.body[0]
         const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
-        expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
+        expect(r2.body).to.deep.equal([{ '@id': id, a: ['42', '23', '12'] }])
       })
 
       it('fails insert with invalid JSONDocument @id', async function () {

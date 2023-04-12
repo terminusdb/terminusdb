@@ -1,67 +1,62 @@
+use chrono::{NaiveDateTime, NaiveTime};
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
+use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::str::FromStr;
+use terminusdb_store_prolog::terminus_store::structure::*;
+use terminusdb_store_prolog::value::split_lang_string;
 
-use serde_json::*;
-
-use crate::consts::XSD_PREFIX;
-
-const TYPE_PREFIX_LEN: usize = XSD_PREFIX.len();
-// funnily, this type prefix works for both the xsd types, and our own custom terminusdb xdd types, as the prefix is the same length!
-// for terminusdb xdd this is   http://terminusdb.com/schema/xdd#
-
-enum LangOrType<'a> {
-    Lang(&'a str, &'a str),
-    Type(&'a str, &'a str),
-}
-
-// FIXME: this does not currently deal with langstrings
-fn value_string_to_slices(s: &str) -> LangOrType {
-    // The format of these value strings is something like
-    if s.as_bytes()[s.len() - 1] == '\'' as u8 {
-        let pos = s[..s.len() - 1].rfind('\'').unwrap();
-        if s.as_bytes()[pos - 1] == '^' as u8 {
-            assert!(s.as_bytes()[pos - 2] == '^' as u8);
-            LangOrType::Type(&s[0..pos - 2], &s[pos + 1 + TYPE_PREFIX_LEN..s.len() - 1])
-        } else {
-            assert!(s.as_bytes()[pos - 1] == '@' as u8);
-            LangOrType::Lang(&s[..pos - 1], &s[pos..])
+pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
+    let result = match tde.datatype() {
+        Datatype::String => {
+            tde.as_val::<String, String>()
         }
-    } else {
-        let pos = s.rfind('@').unwrap();
-        LangOrType::Lang(&s[..pos], &s[pos + 1..])
-    }
+        Datatype::Token => {
+            tde.as_val::<Token, String>()
+        }
+        Datatype::AnyURI => {
+            tde.as_val::<AnyURI, String>()
+        }
+        Datatype::Language => {
+            tde.as_val::<Language, String>()
+        }
+        Datatype::NormalizedString => {
+            tde.as_val::<NormalizedString, String>()
+        }
+        Datatype::NMToken => {
+            tde.as_val::<NMToken, String>()
+        }
+        Datatype::Name => {
+            tde.as_val::<Name, String>()
+        }
+        Datatype::NCName => {
+            tde.as_val::<NCName, String>()
+        }
+        Datatype::Notation => {
+            tde.as_val::<Notation, String>()
+        }
+        Datatype::QName => {
+            tde.as_val::<QName, String>()
+        }
+        Datatype::ID => {
+            tde.as_val::<ID, String>()
+        }
+        Datatype::IDRef => {
+            tde.as_val::<IDRef, String>()
+        }
+        Datatype::Entity => {
+            tde.as_val::<Entity, String>()
+        }
+        x => panic!("not a stringy type: {:?}", x)
+    };
+
+    Cow::Owned(result)
 }
 
-pub fn value_string_to_string(s: &str) -> Cow<str> {
-    match value_string_to_slices(s) {
-        LangOrType::Lang(s, _) => prolog_string_to_string(s),
-        LangOrType::Type(s, _) => prolog_string_to_string(s),
-    }
-}
-
-pub fn value_string_to_bool(s: &str) -> bool {
-    match value_string_to_slices(s) {
-        LangOrType::Type(s, _) => s == "\"true\"",
-        _ => panic!("This should not be a string, but a bool"),
-    }
-}
-
-pub fn value_string_to_number(s: &str) -> Number {
-    match value_string_to_slices(s) {
-        LangOrType::Type(s, _) => Number::from_str(s).unwrap(),
-        _ => panic!("This should not be a string, but a bool"),
-    }
-}
-
-pub fn value_string_to_bigint(s: &str) -> Integer {
-    match value_string_to_slices(s) {
-        LangOrType::Type(s, _) => s.parse::<Integer>().unwrap(),
-        _ => panic!("This should not be a string, but a bool"),
-    }
+pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
+    tde.as_val::<Integer, Integer>()
 }
 
 lazy_static! {
@@ -85,8 +80,8 @@ lazy_static! {
     ]
     .into_iter()
     .collect();
-    static ref FLOAT_TYPES: HashSet<&'static str> =
-        ["decimal", "double", "float",].into_iter().collect();
+    static ref DECIMAL_TYPES: HashSet<&'static str> = ["decimal",].into_iter().collect();
+    static ref FLOAT_TYPES: HashSet<&'static str> = ["double", "float",].into_iter().collect();
     static ref SMALL_INTEGER_TYPES: HashSet<&'static str> = [
         "byte",
         "short",
@@ -120,6 +115,7 @@ pub enum BaseTypeKind {
     Boolean,
     DateTime,
     Float,
+    Decimal,
 }
 
 pub fn base_type_kind(s: &str) -> BaseTypeKind {
@@ -133,13 +129,11 @@ pub fn base_type_kind(s: &str) -> BaseTypeKind {
         BaseTypeKind::Float
     } else if type_is_datetime(s) {
         BaseTypeKind::DateTime
+    } else if type_is_decimal(s) {
+        BaseTypeKind::Decimal
     } else {
         BaseTypeKind::String
     }
-}
-
-fn type_is_numeric(s: &str) -> bool {
-    NUMERIC_TYPES.contains(s)
 }
 
 pub fn type_is_bool(s: &str) -> bool {
@@ -162,56 +156,222 @@ pub fn type_is_datetime(s: &str) -> bool {
     DATETIME_TYPES.contains(s)
 }
 
-pub fn value_string_to_json(s: &str) -> Value {
-    match value_string_to_slices(s) {
-        LangOrType::Type(val, typ) => {
-            if typ == "boolean" {
-                Value::Bool(val == "\"true\"")
-            } else if typ == "token" && val == "\"null\"" {
+pub fn type_is_decimal(s: &str) -> bool {
+    DECIMAL_TYPES.contains(s)
+}
+
+pub fn value_to_json(tde: &TypedDictEntry) -> Value {
+    match tde.datatype() {
+        Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
+        Datatype::Token => {
+            let x = tde.as_val::<Token, String>();
+            if x == "null" {
                 Value::Null
-            } else if type_is_numeric(typ) {
-                // it will have been saved unquoted
-                //Value::Number(Number::from_string_unchecked(val.to_string())) // undocumented api - we know this is a number, so might as well save parse effort
-                Value::Number(Number::from_str(val).unwrap())
             } else {
-                // it will be something quoted, which we're gonna return as a string
-                Value::String(prolog_string_to_string(val).into_owned())
+                Value::String(x)
             }
         }
-        LangOrType::Lang(val, lang) => {
-            let s = prolog_string_to_string(val);
-            let l = lang[1..lang.len() - 1].to_string();
-            json!({ "@lang" : l, "@value" : s })
+        Datatype::UInt8 => Value::Number(tde.as_val::<u8, u8>().into()),
+        Datatype::Int8 => Value::Number(tde.as_val::<i8, i8>().into()),
+        Datatype::UInt16 => Value::Number(tde.as_val::<u16, u16>().into()),
+        Datatype::Int16 => Value::Number(tde.as_val::<i16, i16>().into()),
+        Datatype::UInt32 => Value::Number(tde.as_val::<u32, u32>().into()),
+        Datatype::Int32 => Value::Number(tde.as_val::<i32, i32>().into()),
+        Datatype::UInt64 => Value::Number(tde.as_val::<u64, u64>().into()),
+        Datatype::Int64 => Value::Number(tde.as_val::<i64, i64>().into()),
+        Datatype::Float32 => {
+            Value::Number(Number::from_f64(tde.as_val::<f32, f32>() as f64).unwrap())
         }
+        Datatype::Float64 => Value::Number(Number::from_f64(tde.as_val::<f64, f64>()).unwrap()),
+        Datatype::String => Value::String(tde.as_val::<String, String>()),
+        Datatype::Decimal => Value::String(tde.as_val::<Decimal, String>()),
+        Datatype::BigInt => Value::String(tde.as_val::<Integer, String>()),
+        Datatype::GYear => Value::String(tde.as_val::<GYear, String>()),
+        Datatype::GMonth => Value::String(tde.as_val::<GMonth, String>()),
+        Datatype::GDay => Value::String(tde.as_val::<GDay, String>()),
+        Datatype::GYearMonth => Value::String(tde.as_val::<GYearMonth, String>()),
+        Datatype::GMonthDay => Value::String(tde.as_val::<GMonthDay, String>()),
+        // Tokens are currently just used for null but may be used for more things in the future
+        //Datatype::Token => Value::String(tde.as_val::<Token, String>()),
+        Datatype::LangString => {
+            let x = tde.as_val::<LangString, String>();
+            let (lang, s) = split_lang_string(&x);
+            json!({ "@lang" : lang, "@value" : s })
+        }
+        Datatype::DateTime => {
+            let ndt = tde.as_val::<NaiveDateTime, NaiveDateTime>();
+            Value::String(ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
+        }
+        Datatype::AnyURI => Value::String(tde.as_val::<AnyURI, String>()),
+        Datatype::Language => Value::String(tde.as_val::<Language, String>()),
+        Datatype::NormalizedString => Value::String(tde.as_val::<NormalizedString, String>()),
+        Datatype::NMToken => Value::String(tde.as_val::<NMToken, String>()),
+        Datatype::Name => Value::String(tde.as_val::<Name, String>()),
+        Datatype::NCName => Value::String(tde.as_val::<NCName, String>()),
+        Datatype::Notation => Value::String(tde.as_val::<Notation, String>()),
+        Datatype::QName => Value::String(tde.as_val::<QName, String>()),
+        Datatype::ID => Value::String(tde.as_val::<ID, String>()),
+        Datatype::IDRef => Value::String(tde.as_val::<IDRef, String>()),
+        Datatype::Entity => Value::String(tde.as_val::<Entity, String>()),
+        Datatype::PositiveInteger => Value::String(tde.as_val::<PositiveInteger, String>()),
+        Datatype::NonNegativeInteger => Value::String(tde.as_val::<NonNegativeInteger, String>()),
+        Datatype::NonPositiveInteger => Value::String(tde.as_val::<NonPositiveInteger, String>()),
+        Datatype::NegativeInteger => Value::String(tde.as_val::<NegativeInteger, String>()),
+        Datatype::Date => Value::String(tde.as_val::<Date, String>()),
+        Datatype::DateTimeStamp => Value::String(tde.as_val::<DateTimeStamp, String>()),
+        Datatype::Time => Value::String(tde.as_val::<NaiveTime, String>()),
+        Datatype::Duration => Value::String(tde.as_val::<Duration, String>()),
+        Datatype::YearMonthDuration => Value::String(tde.as_val::<YearMonthDuration, String>()),
+        Datatype::DayTimeDuration => Value::String(tde.as_val::<DayTimeDuration, String>()),
+        Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
+        Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
+        Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
     }
 }
 
-pub fn value_string_to_graphql(s: &str) -> juniper::Value<DefaultScalarValue> {
-    match value_string_to_slices(s) {
-        LangOrType::Type(val, typ) => {
-            if typ == "boolean" {
-                juniper::Value::Scalar(DefaultScalarValue::Boolean(val == "\"true\""))
-            } else if typ == "token" && val == "\"null\"" {
-                juniper::Value::Null
-            } else if type_is_small_integer(typ) {
-                juniper::Value::Scalar(DefaultScalarValue::Int(i32::from_str(val).unwrap()))
-            } else if type_is_big_integer(typ) {
-                juniper::Value::Scalar(DefaultScalarValue::String(val.to_owned()))
-            } else if type_is_float(typ) {
-                juniper::Value::Scalar(DefaultScalarValue::Float(f64::from_str(val).unwrap()))
-            } else {
-                // it will be something quoted, which we're gonna return as a string
-                juniper::Value::Scalar(DefaultScalarValue::String(
-                    prolog_string_to_string(val).into_owned(),
-                ))
-            }
+pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarValue> {
+    match tde.datatype() {
+        Datatype::Boolean => {
+            juniper::Value::Scalar(DefaultScalarValue::Boolean(tde.as_val::<bool, bool>()))
         }
-        LangOrType::Lang(val, lang) => {
-            // TODO: we need to include language tag here somehow
-            let s = prolog_string_to_string(val);
-            let _l = lang[1..lang.len() - 1].to_string();
-            juniper::Value::Scalar(DefaultScalarValue::String(s.into_owned()))
+        Datatype::String => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<String, String>()))
         }
+        Datatype::UInt32 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<u32, u32>().to_string(),
+        )),
+        Datatype::Int32 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i32, i32>()))
+        }
+        Datatype::UInt64 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<u64, u64>().to_string(),
+        )),
+        Datatype::Int64 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<i64, i64>().to_string(),
+        )),
+        Datatype::Float32 => {
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f32, f32>() as f64))
+        }
+        Datatype::Float64 => {
+            juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>()))
+        }
+        Datatype::Decimal => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Decimal, String>()))
+        }
+        Datatype::BigInt => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Integer, String>()))
+        }
+        Datatype::Token => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Token, String>()))
+        }
+        Datatype::LangString => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<LangString, String>(),
+        )),
+        Datatype::GYear => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<GYear, String>()))
+        }
+        Datatype::GMonth => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<GMonth, String>()))
+        }
+        Datatype::GDay => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<GDay, String>()))
+        }
+        Datatype::GYearMonth => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<GYearMonth, String>(),
+        )),
+        Datatype::GMonthDay => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<GMonthDay, String>(),
+        )),
+        Datatype::DateTime => {
+            let ndt = tde.as_val::<NaiveDateTime, NaiveDateTime>();
+            juniper::Value::Scalar(DefaultScalarValue::String(
+                ndt.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string(),
+            ))
+        }
+        Datatype::AnyURI => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<AnyURI, String>()))
+        }
+        Datatype::Language => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Language, String>()))
+        }
+        Datatype::NormalizedString => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NormalizedString, String>(),
+        )),
+        Datatype::NMToken => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<NMToken, String>()))
+        }
+        Datatype::Name => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Name, String>()))
+        }
+        Datatype::NCName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<NCName, String>()))
+        }
+        Datatype::Notation => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Notation, String>()))
+        }
+        Datatype::QName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<QName, String>()))
+        }
+        Datatype::ID => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<ID, String>()))
+        }
+        Datatype::IDRef => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<IDRef, String>()))
+        }
+        Datatype::Entity => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Entity, String>()))
+        }
+        Datatype::PositiveInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<PositiveInteger, String>(),
+        )),
+        Datatype::NonNegativeInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NonNegativeInteger, String>(),
+        )),
+        Datatype::NonPositiveInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NonPositiveInteger, String>(),
+        )),
+        Datatype::NegativeInteger => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NegativeInteger, String>(),
+        )),
+        Datatype::Date => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Date, String>()))
+        }
+        Datatype::DateTimeStamp => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<DateTimeStamp, String>(),
+        )),
+        Datatype::Time => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<NaiveTime, String>(),
+        )),
+        Datatype::Duration => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Duration, String>()))
+        }
+        Datatype::YearMonthDuration => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<YearMonthDuration, String>(),
+        )),
+        Datatype::DayTimeDuration => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<DayTimeDuration, String>(),
+        )),
+        Datatype::UInt8 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<u8, u8>() as i32))
+        }
+        Datatype::Int8 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i8, i8>() as i32))
+        }
+        Datatype::UInt16 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<u16, u16>() as i32))
+        }
+        Datatype::Int16 => {
+            juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i16, i16>() as i32))
+        }
+        Datatype::Base64Binary => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<Base64Binary, String>(),
+        )),
+        Datatype::HexBinary => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<HexBinary, String>(),
+        )),
+        Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<AnySimpleType, String>(),
+        )),
     }
 }
 
@@ -243,138 +403,8 @@ impl FromInputValue for ScalarInputValue {
     }
 }
 
-pub fn value_string_to_usize(s: &str) -> usize {
-    if let LangOrType::Type(val, typ) = value_string_to_slices(s) {
-        if !type_is_numeric(typ) {
-            panic!("not a numeric type: {}", typ);
-        }
-
-        usize::from_str(val).unwrap()
-    } else {
-        panic!("unexpected lang string");
-    }
-}
-
-const SWIPL_CONTROL_CHAR_A: char = 7 as char;
-const SWIPL_CONTROL_CHAR_B: char = 8 as char;
-const SWIPL_CONTROL_CHAR_E: char = 27 as char;
-const SWIPL_CONTROL_CHAR_F: char = 12 as char;
-const SWIPL_CONTROL_CHAR_V: char = 11 as char;
-
-fn prolog_string_to_string(s: &str) -> Cow<str> {
-    let mut result: Option<String> = None;
-    let mut escaping = false;
-    let mut characters = s.char_indices().skip(1);
-    while let Some((ix, c)) = characters.next() {
-        if escaping {
-            let result = result.as_mut().unwrap();
-            match c {
-                '\\' => result.push('\\'),
-                '\"' => result.push('\"'),
-                'x' => result.push(unescape_legacy_prolog_escape_sequence(&mut characters)),
-                'a' => result.push(SWIPL_CONTROL_CHAR_A),
-                'b' => result.push(SWIPL_CONTROL_CHAR_B),
-                't' => result.push('\t'),
-                'n' => result.push('\n'),
-                'v' => result.push(SWIPL_CONTROL_CHAR_V),
-                'f' => result.push(SWIPL_CONTROL_CHAR_F),
-                'r' => result.push('\r'),
-                _ => panic!("unknown prolog escape code in string"),
-            }
-
-            escaping = false;
-        } else {
-            if c == '\\' {
-                escaping = true;
-                if result.is_none() {
-                    let mut r = String::with_capacity(s.len());
-                    r.push_str(&s[1..ix]);
-                    result = Some(r);
-                }
-            } else if let Some(result) = result.as_mut() {
-                result.push(c);
-            }
-        }
-    }
-
-    match result {
-        Some(mut result) => {
-            assert_eq!(Some('\"'), result.pop());
-            Cow::Owned(result)
-        }
-        None => Cow::Borrowed(&s[1..s.len() - 1]),
-    }
-}
-
-fn unescape_legacy_prolog_escape_sequence(
-    characters: &mut impl Iterator<Item = (usize, char)>,
-) -> char {
-    let mut digits: String = String::new();
-    loop {
-        let (_, digit) = characters.next().unwrap();
-        if digit == '\\' {
-            let hex = u32::from_str_radix(&digits, 16).unwrap();
-            return char::from_u32(hex).unwrap();
-        } else {
-            digits.push(digit);
-        }
-    }
-}
-
-#[allow(unused)]
-fn string_to_prolog_string(s: &str) -> String {
-    // incomplete - lots of control characters gets printed weirdly by prolog.
-    let mut result = String::with_capacity(s.len() + 10);
-    result.push('"');
-
-    for c in s.chars() {
-        match c {
-            '\\' => result.push_str(r#"\\"#),
-            '\n' => result.push_str(r#"\n"#),
-            '\t' => result.push_str(r#"\t"#),
-            '\r' => result.push_str(r#"\r"#),
-            SWIPL_CONTROL_CHAR_A => result.push_str(r#"\\a"#),
-            SWIPL_CONTROL_CHAR_B => result.push_str(r#"\\b"#),
-            SWIPL_CONTROL_CHAR_E => result.push_str(r#"\u001B"#),
-            SWIPL_CONTROL_CHAR_F => result.push_str(r#"\\f"#),
-            SWIPL_CONTROL_CHAR_V => result.push_str(r#"\\v"#),
-            '\"' => result.push_str(r#"\""#),
-            _ => result.push(c),
-        }
-    }
-
-    result.push('"');
-    result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn escape_strings_to_prolog_string() {
-        assert_eq!(r#""hello there""#, string_to_prolog_string("hello there"));
-        assert_eq!(r#""hello\nthere""#, string_to_prolog_string("hello\nthere"));
-    }
-    #[test]
-    fn unescape_prolog_strings() {
-        assert_eq!("hello there", prolog_string_to_string(r#""hello there""#));
-        assert_eq!("hello\"there", prolog_string_to_string(r#""hello\"there""#));
-        assert_eq!("hello\nthere", prolog_string_to_string(r#""hello\nthere""#));
-        assert_eq!("hello\\there", prolog_string_to_string(r#""hello\\there""#));
-        assert_eq!("\"", prolog_string_to_string(r#""\"""#));
-        assert_eq!(
-            "foo\u{5555}bar",
-            prolog_string_to_string(r#""foo\x5555\bar""#)
-        );
-        assert_eq!(
-            "foo\u{5555}bar\u{6666}baz",
-            prolog_string_to_string(r#""foo\x5555\bar\x6666\baz""#)
-        );
-    }
-
-    #[test]
-    fn unescape_prolog_string_with_multibytes() {
-        let result = prolog_string_to_string("\"\u{5555}\\n\"");
-        assert_eq!("\u{5555}\n", result);
-    }
+pub fn value_to_array_index(tde: &TypedDictEntry) -> usize {
+    tde.as_val::<NonNegativeInteger, Integer>()
+        .try_into()
+        .expect("couldn't cast array element index to a usize")
 }
