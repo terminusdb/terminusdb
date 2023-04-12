@@ -1,3 +1,7 @@
+# TerminusDB Server v11.0.5 Release Notes
+## Bug fixes
+* diff endpoint was mishandling subdocuments
+
 # TerminusDB Server v11.0.4 Release Notes
 ## New
 * New history API to find out when an object changed
