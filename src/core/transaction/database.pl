@@ -268,21 +268,8 @@ run_transactions(Transactions, All_Witnesses, Meta_Data) :-
 
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    infer_migrations_for_commit(Validations,Validations0,Options),
+    infer_migrations_for_commit(Validations,Validations0,Inference_Metadata,Options),
     validate_validation_objects(Validations0, All_Witnesses, Witnesses),
-
-    /*
-    with_output_to(
-        user_error,
-        (   format("~n~nXXXXXXXXXXXXXXX~n",[]),
-            maplist(
-                [Askable]>>print_all_triples(Askable,schema),
-                Validations0),
-            format(user_error,"~n~nYYYYYYYYYYYYYYY~n",[]),
-            maplist(
-                [Askable]>>print_all_triples(Askable),
-                Validations0))
-    ),*/
 
     (   Witnesses = []
     ->  true
@@ -298,7 +285,8 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     commit_validation_objects(Validations0, Committed),
     collect_validations_metadata(Validations0, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
-    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data),
+    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data0),
+    put_dict(Inference_Metadata, Meta_Data0, Meta_Data),
     ignore(forall(post_commit_hook(Validations0, Meta_Data), true)).
 
 no_schema_changes_for_validation(Validation) :-
@@ -311,21 +299,22 @@ no_schema_changes(Validations) :-
         no_schema_changes_for_validation(Validation)
     ).
 
-infer_migrations_for_commit(Validations,Validations,_Options) :-
+infer_migrations_for_commit(Validations,Validations,_{},_Options) :-
     no_schema_changes(Validations),
     !.
-infer_migrations_for_commit(Validations0,Validations1,Options) :-
+infer_migrations_for_commit(Validations0,Validations1,Meta_Data,Options) :-
     (   option(require_migration(true), Options)
     ->  do_or_die(
             (   option(allow_destructive_migration(true), Options)
-            ->  infer_arbitrary_migration(Validations0, Validations1)
-            ;   infer_weakening_migration(Validations0, Validations1)),
+            ->  infer_arbitrary_migration(Validations0, Validations1, Meta_Data)
+            ;   infer_weakening_migration(Validations0, Validations1, Meta_Data)),
             error(no_inferrable_migration, _))
     ;   option(allow_destructive_migration(true), Options)
-    ->  infer_arbitrary_migration(Validations0, Validations1)
-    ;   infer_weakening_migration(Validations0, Validations1)
+    ->  infer_arbitrary_migration(Validations0, Validations1, Meta_Data)
+    ;   infer_weakening_migration(Validations0, Validations1, Meta_Data)
     ->  true
-    ;   Validations0 = Validations1
+    ;   Validations0 = Validations1,
+        Meta_Data = _{}
     ).
 
 /* Note: This should not exist */

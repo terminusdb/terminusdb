@@ -1,8 +1,8 @@
 :- module('document/migration', [
               perform_instance_migration/5,
               perform_instance_migration_on_transaction/4,
-              infer_weakening_migration/2,
-              infer_arbitrary_migration/2
+              infer_weakening_migration/3,
+              infer_arbitrary_migration/3
           ]).
 
 :- use_module(instance).
@@ -398,17 +398,25 @@ schema_inference_rule(weakening, Before, After, Operations) :-
 schema_inference_rule(strengthening, Before, After, Operations) :-
     schema_strengthening(Before, After, Operations).
 
-perform_migration_rule(weakening,_Before, After, Operations_List, Validation_Out) :-
+perform_migration_rule(weakening,_Before, After, Operations_List, Validation_Out, Meta_Data) :-
     transaction_objects_to_validation_objects([After], [Validation]),
+    length(Operations_List, Schema_Operations),
+    Meta_Data = _{ instance_operations:0,
+				   schema_operations: Schema_Operations
+                 },
     (   Operations_List = []
     ->  Validation = Validation_Out
     ;   get_dict(schema_objects, Validation, [Schema_Object]),
         put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
         put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation, Validation_Out)
     ).
-perform_migration_rule(strengthening, Before, After, Operations_List, Validation_Out) :-
+perform_migration_rule(strengthening, Before, After, Operations_List, Validation_Out, Meta_Data) :-
     interpret_instance_operations(Operations_List, Before, After, Count),
     transaction_objects_to_validation_objects([After], [Validation]),
+    length(Operations_List, Schema_Operations),
+    Meta_Data = _{ instance_operations: Count,
+				   schema_operations: Schema_Operations
+                 },
     (   Operations_List = []
     ->  Validation = Validation0
     ;   get_dict(schema_objects, Validation, [Schema_Object]),
@@ -422,7 +430,7 @@ perform_migration_rule(strengthening, Before, After, Operations_List, Validation
         put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation0, Validation_Out)
     ).
 
-infer_migration(Rule, [Validation], [New_Validation]) :-
+infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     validation_objects_to_transaction_objects([Validation],[After_Transaction]),
     Descriptor = (Validation.descriptor),
     open_descriptor(Descriptor, Before_Transaction),
@@ -431,7 +439,7 @@ infer_migration(Rule, [Validation], [New_Validation]) :-
     schema_inference_rule(Rule, Before, After, Operations),
     migration_list_to_ast_list(Operations_List,Operations),
     !,
-    perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0),
+    perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
     atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
     (   get_dict(commit_info, Validation, Commit_Info)
     ->  true
@@ -439,11 +447,11 @@ infer_migration(Rule, [Validation], [New_Validation]) :-
     put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
     put_dict(_{commit_info: Commit_Info0}, Validation0, New_Validation).
 
-infer_weakening_migration(Validations,New_Validations) :-
-    infer_migration(weakening, Validations, New_Validations).
+infer_weakening_migration(Validations,New_Validations, Meta_Data) :-
+    infer_migration(weakening, Validations, New_Validations, Meta_Data).
 
-infer_arbitrary_migration(Validations,New_Validations) :-
-    infer_migration(strengthening, Validations, New_Validations).
+infer_arbitrary_migration(Validations,New_Validations, Meta_Data) :-
+    infer_migration(strengthening, Validations, New_Validations, Meta_Data).
 
 /* upcast_class_property(Class, Property, New_Type) */
 upcast_class_property(Class, Property, New_Type, Before, After) :-
@@ -853,6 +861,7 @@ squash_layer(Type,Before,Intermediate,After) :-
  *
  */
 create_class_dictionary(Transaction, Dictionary) :-
+    is_transaction(Transaction),
     Schema_Objects = (Transaction.schema_objects),
     forall(
         member(Schema_Object,Schema_Objects),
@@ -1777,10 +1786,17 @@ test(infer_destructive_migration,
     with_transaction(
         Context,
         delete_schema_document(Context, "F"),
-        _,
+        Meta_Data,
         [require_migration(true), allow_destructive_migration(true)]
     ),
-
+    Meta_Data = meta_data{
+                    data_versions:[],
+					deletes:0,
+					inserts:0,
+					instance_operations:2,
+					schema_operations:1,
+					transaction_retry_count:0
+				},
     findall(
         Doc_Id,
         get_document_uri(Descriptor, false, Doc_Id),
