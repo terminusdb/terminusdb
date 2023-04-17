@@ -35,6 +35,7 @@
 :- use_module(library(random)).
 :- use_module(library(terminus_store)).
 :- use_module(library(aggregate)).
+:- use_module(library(option)).
 
 descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
     system_descriptor{} = Descriptor,
