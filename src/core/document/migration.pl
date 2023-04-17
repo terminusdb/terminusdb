@@ -953,7 +953,8 @@ create_class_dictionary(Transaction, Dictionary) :-
     findall(
         Class-Class_Document,
         (   api_document:api_get_documents(Transaction, schema, Config, Class_Document),
-            get_dict('@id',Class_Document, Class)
+            get_dict('@id',Class_Document, Class_String),
+            atom_string(Class,Class_String)
         ),
         Pairs
     ),
