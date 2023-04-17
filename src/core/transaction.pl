@@ -2,6 +2,7 @@
               % database.pl
               query_context_transaction_objects/2,
               run_transactions/3,
+              run_transactions/4,
               with_transaction/3,
               with_transaction/4,
               graph_inserts_deletes/3,

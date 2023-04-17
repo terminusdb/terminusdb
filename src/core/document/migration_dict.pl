@@ -31,6 +31,9 @@ migration_dict_to_ast(json{ '@type' : "ReplaceClassDocumentation",
                             class: Class,
                             documentation: Documentation},
                       replace_class_documentation(Class, Documentation)).
+migration_dict_to_ast(json{ '@type' : "ReplaceContext",
+                            context : Context },
+                      replace_context(Context)).
 migration_dict_to_ast(json{ '@type' : "DeleteClassProperty",
                             class: Class,
                             property: Property},

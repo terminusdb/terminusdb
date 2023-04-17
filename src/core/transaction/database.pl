@@ -1,6 +1,7 @@
 :- module(database,[
               query_context_transaction_objects/2,
               run_transactions/3,
+              run_transactions/4,
               retry_transaction/2,
               with_transaction/3,
               with_transaction/4,
@@ -266,9 +267,21 @@ with_transaction_(_,
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
     run_transactions(Transactions, All_Witnesses, Meta_Data,[]).
 
+/*
+
+Options include
+* inside_migration: whether we ourselves are a migration transaction
+* require_migration: whether we should throw an error if no migration can be established
+* allow_destructive_migration: whether we should allow strengthening migrations
+
+ */
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    infer_migrations_for_commit(Validations,Validations0,Inference_Metadata,Options),
+    (   option(inside_migration(true), Options)
+    ->  Validations=Validations0,
+        Inference_Metadata=_{}
+    ;   infer_migrations_for_commit(Validations,Validations0,Inference_Metadata,Options)
+    ),
     validate_validation_objects(Validations0, All_Witnesses, Witnesses),
 
     (   Witnesses = []
