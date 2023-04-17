@@ -112,7 +112,7 @@ describe('GraphQL', function () {
   {
     '@id': 'NotThere',
     '@type': 'Class',
-    property:  { '@type': 'Array', '@class': 'xsd:decimal' },
+    property: { '@type': 'Array', '@class': 'xsd:decimal' },
   },
   ]
 
@@ -630,7 +630,7 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.NotThere).to.deep.equal([
-        { "property" : [] },
+        { property: [] },
       ])
     })
   })
