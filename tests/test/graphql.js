@@ -109,6 +109,11 @@ describe('GraphQL', function () {
     '@type': 'Class',
     rocks_opt: { '@type': 'Optional', '@class': 'Rocks' },
   },
+  {
+    '@id': 'NotThere',
+    '@type': 'Class',
+    property: { '@type': 'Array', '@class': 'xsd:decimal' },
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -607,6 +612,25 @@ query EverythingQuery {
         {
           rocks_opt: 'Big',
         },
+      ])
+    })
+
+    it('graphql array property not present', async function () {
+      const testObj = {
+        '@type': 'NotThere',
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query NotThere {
+    NotThere{
+        property
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.NotThere).to.deep.equal([
+        { property: [] },
       ])
     })
   })
