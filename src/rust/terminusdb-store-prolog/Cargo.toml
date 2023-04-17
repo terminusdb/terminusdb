@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 swipl = {version="0.3.13", features=["serde"]}
-terminus-store = {version="0.20.1", features=[]}
+terminus-store = {version="0.21.0", features=[]}
 sha-1 = "0.9.1"
 hex = "0.4.2"
 encoding_rs = "0.8.24"
@@ -19,4 +19,4 @@ chrono = "0.4"
 rug = {version="1.16", default-features=false, features=["integer","rational"]}
 base64 = "0.13"
 
-terminusdb-grpc-labelstore-client = { git="https://github.com/terminusdb-labs/terminusdb-grpc-labelstore", rev="0fad3a896f2fa221af76af4c4325333109345386" }
+terminusdb-grpc-labelstore-client = { git="https://github.com/terminusdb-labs/terminusdb-grpc-labelstore", rev="cb8cf29" }

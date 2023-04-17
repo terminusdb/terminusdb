@@ -157,10 +157,12 @@ replace_class_documentation(Class, Documentation, Before, After) :-
     put_dict('@documentation', Class_Document, Documentation, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
+
 /* replace_context(Context) */
 replace_context(Context, Before, After) :-
     throw(error(not_implemented('replace_context'), _)),
     put_dict(_{'@context' : Context}, Before, After).
+
 
 /* delete_class_property(Class,Property) */
 delete_class_property(Class, Property, Before, After) :-
@@ -867,10 +869,12 @@ interpret_instance_operations(JSONOps, Before, After, Instance_Count) :-
     migration_list_to_ast_list(JSONOps, Ops),
     interpret_instance_operations(Ops, Before, After, 0, Instance_Count).
 
+
 interpret_operations([], After_Transaction, After_Transaction, Instance_Count, Instance_Count).
 interpret_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
     interpret_schema_operation(Operation, Before, Intermediate0),
     cycle_layer(schema,Intermediate0,Intermediate1),
+
     interpret_instance_operation(Operation, Before, Intermediate1, Instance_Count),
     Instance_Count1 is Instance_Count + Instance_Count_In,
     cycle_layer(instance,Intermediate1, Intermediate2),
@@ -1932,6 +1936,5 @@ test(infer_destructive_migration,
     \+ ask(Descriptor,
            t('@schema':'F', rdf:type, sys:'Class', schema)
           ).
-
 
 :- end_tests(migration).

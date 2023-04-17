@@ -532,7 +532,7 @@ api_full_replace_schema(Transaction, Schema) :-
         replace_context_document(Transaction, Context)
     ),
     api_insert_document_from_lazy_list_unsafe(Classes, schema, false, Transaction, Context,
-                                              Captures_In, _Captures_Out, _BackLinks-[], _Ids).
+                                             Captures_In, _Captures_Out, _BackLinks-[], _Ids).
 
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).

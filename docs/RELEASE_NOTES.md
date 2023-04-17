@@ -1,3 +1,20 @@
+# TerminusDB Server v11.0.5 Release Notes
+## Bug fixes
+* diff endpoint was mishandling subdocuments
+
+# TerminusDB Server v11.0.4 Release Notes
+## New
+* New history API to find out when an object changed
+
+## Enhancement
+* Keep loaded layers in an LRU cache for faster repeated queries
+* Optimize will now also optimize schema layers
+* Improved memory use during commits and squashes
+
+## Experimental
+* New endpoint for schema migrations which also transforms existing data
+* Support updating a schema from a target branch as long as there is a migration
+
 # TerminusDB Server v11.0.3 Release Notes
 
 ## Bug fixes
