@@ -541,14 +541,7 @@ get_schema_context_documentation(Schema, ID, Doc) :-
 database_schema_context_object(Schema, Context) :-
     database_schema_prefixes(Schema, Prefixes),
     % This should always exist according to schema correctness criteria?
-    (   xrdf(Schema, ID, rdf:type, sys:'Context')
-    ->  true
-    ;   Schema = [RWO], get_dict(read, RWO, Layer),
-        findall(t(X,P,Y),
-                triple(Layer, X, P, Y),
-                Triples),
-        print_term(Triples, [])
-    ),
+    xrdf(Schema, ID, rdf:type, sys:'Context'),
     xrdf(Schema, ID, sys:base, Base_String^^_),
     xrdf(Schema, ID, sys:schema, Schema_String^^_),
     (   get_schema_context_documentation(Schema, ID, Documentation)

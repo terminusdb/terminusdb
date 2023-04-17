@@ -22,7 +22,6 @@
 
 :- use_module(library(option)).
 :- use_module(library(apply)).
-:- use_module(library(plunit)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
 :- use_module(library(url)).

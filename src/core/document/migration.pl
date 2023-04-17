@@ -1873,18 +1873,9 @@ test(change_context,
                                         '@schema' : "http://a#"
                                       })
         ),
-        Meta_Data,
+        _Meta_Data,
         [require_migration(true), allow_destructive_migration(true)]
-    ),
-
-    print_term(Meta_Data, []),
-
-    findall(
-        DocF,
-        get_document_by_type(Descriptor, "F", DocF),
-        F_Docs),
-
-    print_term(F_Docs, []).
+    ).
 
 test(infer_destructive_migration,
      [setup((setup_temp_store(State),
