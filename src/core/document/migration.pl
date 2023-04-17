@@ -258,6 +258,7 @@ type_weaken(Type1Text, Type2Text) :-
     atom_string(Type, Type2Text).
 
 type_is_optional(Type) :-
+    is_dict(Type),
     get_dict('@type', Type, Family),
     (   memberchk(Family, ["Set", "Optional"])
     ->  true
@@ -1031,6 +1032,21 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
 :- begin_tests(migration).
 
 :- use_module(core(util/test_utils)).
+
+test(property_weakening_optional, [
+         error(
+             weakening_failure(
+                 json{ reason: class_property_addition_not_optional,
+                       message: "The class property which was not added, did not have an optional type",
+                       class: 'Squash',
+                       property: is_a_pumpkin,
+                       candidate: _Weakening}),
+             _)]) :-
+
+    class_property_optional(
+        is_a_pumpkin,
+        json{'@id':'Squash', '@key':json{'@fields':[genus, species], '@type':"Hash"}, '@type':'Class', colour:'xsd:string', genus:'xsd:string', is_a_pumpkin:'xsd:boolean', name:'xsd:string', shape:'xsd:string', species:'xsd:string'},
+        'Squash', _Optional).
 
 test(property_weakening, []) :-
     \+ class_property_weakened(
