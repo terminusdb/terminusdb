@@ -808,8 +808,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 }
             } else {
                 let field_name_expanded = allframes.context.expand_schema(field_name);
-                let field_id = instance.predicate_id(&field_name_expanded)?;
-
+                let field_id_opt = instance.predicate_id(&field_name_expanded);
                 let frame = &allframes.frames[&info.class];
                 let doc_type;
                 let enum_type;
@@ -823,7 +822,16 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     }
                     _ => panic!("expected only a class at this level"),
                 }
-
+                if field_id_opt.is_none() {
+                    match kind {
+                        FieldKind::Array
+                        | FieldKind::List
+                        | FieldKind::Cardinality
+                        | FieldKind::Set => return Some(Ok(graphql_value!([]))),
+                        _ => return None,
+                    }
+                };
+                let field_id = field_id_opt.unwrap();
                 match kind {
                     FieldKind::Required => {
                         let object_id = instance.single_triple_sp(self.id, field_id)?.object;
