@@ -373,7 +373,11 @@ schema_weakening(Schema,Weakened,Operations) :-
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
                 get_dict(Key,Weakened,New_Class),
-                class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                (   Key = '@context'
+                ->  Old_Class :< New_Class, % This can only be adding prefixes
+                    Intermediate_Operations = [replace_context(New_Class)]
+                ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                )
             ),
             Operations_List),
     append(Operations_List, Operations1),
@@ -1927,5 +1931,6 @@ test(infer_destructive_migration,
     \+ ask(Descriptor,
            t('@schema':'F', rdf:type, sys:'Class', schema)
           ).
+
 
 :- end_tests(migration).
