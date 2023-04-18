@@ -10,7 +10,7 @@ use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
-use crate::doc::{retrieve_all_index_ids, ArrayIterator};
+use crate::doc::{retrieve_all_index_ids, ArrayIterator, GetDocumentContext};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
@@ -728,6 +728,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             });
                         collect_into_graphql_list(
                             Some(domain),
+                            None,
+                            false,
                             executor,
                             info,
                             arguments,
@@ -759,6 +761,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             });
                         collect_into_graphql_list(
                             Some(domain),
+                            None,
+                            false,
                             executor,
                             info,
                             arguments,
@@ -777,6 +781,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             .map(|t| t.subject);
                         collect_into_graphql_list(
                             Some(domain),
+                            None,
+                            false,
                             executor,
                             info,
                             arguments,
@@ -791,6 +797,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
                     Some(class),
+                    None,
+                    false,
                     executor,
                     info,
                     arguments,
@@ -819,12 +827,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 let doc_type;
                 let enum_type;
                 let kind;
+                let is_json;
                 match frame {
                     TypeDefinition::Class(c) => {
                         let field = &c.resolve_field(&field_name.to_string());
                         doc_type = field.document_type(allframes);
                         enum_type = field.enum_type(allframes);
                         kind = field.kind();
+                        is_json = field.is_json_type();
                     }
                     _ => panic!("expected only a class at this level"),
                 }
@@ -842,57 +852,18 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 match kind {
                     FieldKind::Required => {
                         let object_id = instance.single_triple_sp(self.id, field_id)?.object;
-                        if let Some(doc_type) = doc_type {
-                            Some(executor.resolve(
-                                &TerminusTypeInfo {
-                                    class: doc_type.to_string(),
-                                    allframes: allframes.clone(),
-                                },
-                                &TerminusType::new(object_id),
-                            ))
-                        } else if let Some(enum_type) = enum_type {
-                            let enum_uri = instance.id_object_node(object_id).unwrap();
-                            let enum_value = enum_node_to_value(enum_type, &enum_uri);
-                            let enum_definition = allframes.frames[enum_type].as_enum_definition();
-                            let value = juniper::Value::Scalar(DefaultScalarValue::String(
-                                enum_definition.name_value(&enum_value).to_string(),
-                            ));
-                            Some(Ok(value))
-                        } else {
-                            let val = instance.id_object_value(object_id).unwrap();
-                            Some(Ok(value_to_graphql(&val)))
-                        }
+                        extract_fragment(
+                            executor, info, instance, object_id, doc_type, enum_type, is_json,
+                        )
                     }
                     FieldKind::Optional => {
                         let object_id = instance
                             .single_triple_sp(self.id, field_id)
                             .map(|t| t.object);
                         match object_id {
-                            Some(object_id) => {
-                                if let Some(doc_type) = doc_type {
-                                    Some(executor.resolve(
-                                        &TerminusTypeInfo {
-                                            class: doc_type.to_string(),
-                                            allframes: info.allframes.clone(),
-                                        },
-                                        &TerminusType::new(object_id),
-                                    ))
-                                } else if let Some(enum_type) = enum_type {
-                                    let enum_uri = instance.id_object_node(object_id).unwrap();
-                                    let enum_value = enum_node_to_value(enum_type, &enum_uri);
-                                    let enum_definition =
-                                        allframes.frames[enum_type].as_enum_definition();
-                                    let value = juniper::Value::Scalar(DefaultScalarValue::String(
-                                        enum_definition.name_value(&enum_value).to_string(),
-                                    ));
-                                    Some(Ok(value))
-                                } else {
-                                    let obj = instance.id_object(object_id)?;
-                                    let val =
-                                        obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
-                                    Some(Ok(value_to_graphql(val)))
-                                }
-                            }
+                            Some(object_id) => extract_fragment(
+                                executor, info, instance, object_id, doc_type, enum_type, is_json,
+                            ),
                             None => Some(Ok(Value::Null)),
                         }
                     }
@@ -901,7 +872,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             instance.triples_sp(self.id, field_id).map(|t| t.object),
                         ));
                         collect_into_graphql_list(
-                            doc_type, executor, info, arguments, object_ids, instance,
+                            doc_type, enum_type, is_json, executor, info, arguments, object_ids,
+                            instance,
                         )
                     }
                     FieldKind::Cardinality => {
@@ -910,7 +882,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             instance.triples_sp(self.id, field_id).map(|t| t.object),
                         ));
                         collect_into_graphql_list(
-                            doc_type, executor, info, arguments, object_ids, instance,
+                            doc_type, enum_type, is_json, executor, info, arguments, object_ids,
+                            instance,
                         )
                     }
                     FieldKind::List => {
@@ -927,7 +900,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                 rdf_nil_id: instance.subject_id(RDF_NIL),
                             }));
                         collect_into_graphql_list(
-                            doc_type, executor, info, arguments, object_ids, instance,
+                            doc_type, enum_type, is_json, executor, info, arguments, object_ids,
+                            instance,
                         )
                     }
                     FieldKind::Array => {
@@ -951,6 +925,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                         ));
                         collect_into_graphql_list(
                             doc_type,
+                            enum_type,
+                            is_json,
                             executor,
                             info,
                             arguments,
@@ -968,6 +944,56 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             None => Ok(Value::Null),
         }
     }
+}
+
+fn extract_fragment<'a, C: QueryableContextType + 'a>(
+    executor: &juniper::Executor<TerminusContext<'a, C>, DefaultScalarValue>,
+    info: &TerminusTypeInfo,
+    instance: &SyncStoreLayer,
+    object_id: u64,
+    doc_type: Option<&str>,
+    enum_type: Option<&str>,
+    is_json: bool,
+) -> Option<Result<juniper::Value, juniper::FieldError>> {
+    if let Some(doc_type) = doc_type {
+        Some(executor.resolve(
+            &TerminusTypeInfo {
+                class: doc_type.to_string(),
+                allframes: info.allframes.clone(),
+            },
+            &TerminusType::new(object_id),
+        ))
+    } else if let Some(enum_type) = enum_type {
+        let value = extract_enum_fragment(info, instance, object_id, enum_type);
+        Some(Ok(value))
+    } else if is_json {
+        let val = extract_json_fragment(instance, object_id);
+        Some(Ok(val))
+    } else {
+        let obj = instance.id_object(object_id)?;
+        let val = obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
+        Some(Ok(value_to_graphql(val)))
+    }
+}
+
+fn extract_enum_fragment(
+    info: &TerminusTypeInfo,
+    instance: &SyncStoreLayer,
+    object_id: u64,
+    enum_type: &str,
+) -> juniper::Value {
+    let enum_uri = instance.id_object_node(object_id).unwrap();
+    let enum_value = enum_node_to_value(enum_type, &enum_uri);
+    let enum_definition = info.allframes.frames[enum_type].as_enum_definition();
+    juniper::Value::Scalar(DefaultScalarValue::String(
+        enum_definition.name_value(&enum_value).to_string(),
+    ))
+}
+
+fn extract_json_fragment(instance: &SyncStoreLayer, object_id: u64) -> juniper::Value {
+    let context = GetDocumentContext::new_json(Some(instance.clone()), true, false);
+    let json = serde_json::Value::Object(context.get_id_document(object_id));
+    juniper::Value::Scalar(DefaultScalarValue::String(json.to_string()))
 }
 
 fn is_path_field_name(field_name: &str) -> bool {
@@ -1119,6 +1145,8 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
 
 fn collect_into_graphql_list<'a, C: QueryableContextType>(
     doc_type: Option<&'a str>,
+    enum_type: Option<&'a str>,
+    is_json: bool,
     executor: &'a juniper::Executor<TerminusContext<C>>,
     info: &'a TerminusTypeInfo,
     arguments: &'a juniper::Arguments,
@@ -1146,6 +1174,16 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
             },
             &subdocs,
         ))
+    } else if let Some(enum_type) = enum_type {
+        let vals: Vec<_> = object_ids
+            .map(|o| extract_enum_fragment(info, instance, o, enum_type))
+            .collect();
+        Some(Ok(Value::List(vals)))
+    } else if is_json {
+        let vals: Vec<_> = object_ids
+            .map(|o| extract_json_fragment(instance, o))
+            .collect();
+        Some(Ok(Value::List(vals)))
     } else {
         let vals: Vec<_> = object_ids
             .map(|o| {

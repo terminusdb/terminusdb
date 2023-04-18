@@ -135,7 +135,7 @@ pub fn type_is_decimal(s: &str) -> bool {
 }
 
 pub fn type_is_json(s: &str) -> bool {
-    s == "JSON"
+    s == "JSON" || s == "JSONObject"
 }
 
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {
