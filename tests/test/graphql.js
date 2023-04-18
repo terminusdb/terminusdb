@@ -115,7 +115,7 @@ describe('GraphQL', function () {
     property: { '@type': 'Array', '@class': 'xsd:decimal' },
   },
   {
-    '@id' : 'JSON',
+    '@id' : 'JSONClass',
     '@type': 'Class',
     json: 'sys:JSON',
   },
@@ -664,49 +664,56 @@ query EverythingQuery {
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-      expect(result.data.NotThere).to.deep.equal([
-        { property: [] },
+      expect(result.data.RockSet[0].rocks).to.have.deep.members([
+          'Big',
+          'Medium',
+          'Small'
       ])
     })
 
     it('graphql json', async function () {
       const testObj = {
-        '@type': 'JSON',
+        '@type': 'JSONClass',
         json: { this : { is : { a : { json : []}}}}
       }
       await document.insert(agent, { instance: testObj })
 
       const TEST_QUERY = gql`
  query JSON {
-    JSON{
+    JSONClass{
         json
     }
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-      expect(result.data.NotThere).to.deep.equal([
-        { property: [] },
+      expect(result.data.JSONClass).to.deep.equal([
+        { json: '{"this":{"is":{"a":{"json":[]}}}}' },
       ])
     })
 
     it('graphql json set', async function () {
       const testObj = {
-        '@type': 'JSONSet',
-        json: [{ this : { is : { a : { json : []}}}}]
+        '@type': 'JSONs',
+        json: [{ this : { is : { a : { json : []}}}},
+               { and : ['another', 'one']},
+              ],
       }
       await document.insert(agent, { instance: testObj })
 
       const TEST_QUERY = gql`
- query JSONSet {
-    JSONSet{
+ query JSONs {
+    JSONs{
         json
     }
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-      expect(result.data.NotThere).to.deep.equal([
-        { property: [] },
-      ])
+      expect(result.data.JSONs[0].json).to.have.deep.members(
+        [
+          '{"and":["another","one"]}',
+          '{"this":{"is":{"a":{"json":[]}}}}',
+        ]
+      )
     })
   })
 })
