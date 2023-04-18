@@ -16,7 +16,7 @@ use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_float,
-    type_is_small_integer, value_to_graphql,
+    type_is_json, type_is_small_integer, value_to_graphql,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
@@ -488,6 +488,13 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                                 &(),
                                 field_definition.kind(),
                             )
+                        } else if type_is_json(base_type) {
+                            Self::register_field::<GraphQLJSON>(
+                                registry,
+                                field_name,
+                                &(),
+                                field_definition.kind(),
+                            )
                         } else {
                             // assume stringy
                             Self::register_field::<String>(
@@ -880,8 +887,10 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     ));
                                     Some(Ok(value))
                                 } else {
-                                    let val = instance.id_object_value(object_id).unwrap();
-                                    Some(Ok(value_to_graphql(&val)))
+                                    let obj = instance.id_object(object_id)?;
+                                    let val =
+                                        obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
+                                    Some(Ok(value_to_graphql(val)))
                                 }
                             }
                             None => Some(Ok(Value::Null)),
