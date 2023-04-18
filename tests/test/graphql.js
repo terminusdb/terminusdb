@@ -114,6 +114,21 @@ describe('GraphQL', function () {
     '@type': 'Class',
     property: { '@type': 'Array', '@class': 'xsd:decimal' },
   },
+  {
+    '@id': 'JSONClass',
+    '@type': 'Class',
+    json: 'sys:JSON',
+  },
+  {
+    '@id': 'JSONs',
+    '@type': 'Class',
+    json: { '@type': 'Set', '@class': 'sys:JSON' },
+  },
+  {
+    '@id': 'RockSet',
+    '@type': 'Class',
+    rocks: { '@type': 'Set', '@class': 'Rocks' },
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -632,6 +647,73 @@ query EverythingQuery {
       expect(result.data.NotThere).to.deep.equal([
         { property: [] },
       ])
+    })
+
+    it('graphql list of enum', async function () {
+      const testObj = {
+        '@type': 'RockSet',
+        rocks: ['Big', 'Medium', 'Small'],
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query NotThere {
+    RockSet{
+        rocks
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.RockSet[0].rocks).to.have.deep.members([
+        'Big',
+        'Medium',
+        'Small',
+      ])
+    })
+
+    it('graphql json', async function () {
+      const testObj = {
+        '@type': 'JSONClass',
+        json: { this: { is: { a: { json: [] } } } },
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query JSON {
+    JSONClass{
+        json
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.JSONClass).to.deep.equal([
+        { json: '{"this":{"is":{"a":{"json":[]}}}}' },
+      ])
+    })
+
+    it('graphql json set', async function () {
+      const testObj = {
+        '@type': 'JSONs',
+        json: [{ this: { is: { a: { json: [] } } } },
+          { and: ['another', 'one'] },
+        ],
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query JSONs {
+    JSONs{
+        json
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.JSONs[0].json).to.have.deep.members(
+        [
+          '{"and":["another","one"]}',
+          '{"this":{"is":{"a":{"json":[]}}}}',
+        ],
+      )
     })
   })
 })
