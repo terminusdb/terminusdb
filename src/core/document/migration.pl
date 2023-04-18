@@ -31,6 +31,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(http/json)).
+:- use_module(library(ordsets)).
 
 :- use_module(config(terminus_config)).
 
@@ -53,6 +54,7 @@ Op := delete_class(Name)
     | replace_context(Context)
     | create_class(ClassDocument)
     | move_class(Old_Name,New_Name)
+    | expand_enum(Class,Values)
     | replace_class_metadata(Class,Metadata)
     | replace_class_documentation(Class,Documentation)
     | delete_class_property(Class,Property)
@@ -142,6 +144,16 @@ move_class(Before_Class, After_Class, Before, After) :-
         ),
         Pairs),
     dict_create(After, json, Pairs).
+
+expand_enum(Class, Values, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    get_dict('@value', Class_Document, Old_Values),
+    list_to_ord_set(Old_Values, Old_Set),
+    list_to_ord_set(Values, New_Set),
+    union(Old_Set,New_Set, New_Values),
+    put_dict(json{ '@value' : New_Values}, Class_Document, After_Document),
+    put_dict(Class_Key, Before, After_Document, After).
 
 /* replace_class_metadata(Class,Metadata) */
 replace_class_metadata(Class, Metadata, Before, After) :-
@@ -290,6 +302,20 @@ get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
+class_property_weakened('@value', Original, Weakening, Class, Operation),
+get_dict('@value',Weakening,New_Value),
+get_dict('@value',Original,Old_Value) =>
+    list_to_ord_set(New_Value,New_Set),
+    list_to_ord_set(Old_Value,Old_Set),
+    (   ord_subset(Old_Set, New_Set)
+    ->  subtract(New_Set, Old_Set, Difference),
+        Operation = expand_enum(Class, Difference)
+    ;   throw(error(weakening_failure(json{reason: class_enum_value_change_not_a_weakening,
+                                           message: "An enum was changed to include a set of values which is not a superset",
+                                           class: Class,
+                                           old: Old_Set,
+                                           new: New_Set}), _))
+    ).
 class_property_weakened(Property, Original, Weakening, Class, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
@@ -360,9 +386,9 @@ schema_weakening(Schema,Weakened,Operations) :-
                                       deleted: Deleted}),_)),
     ord_subtract(New,Old,Added),
     maplist({Weakened}/[Class,Operation]>>(
+                get_dict(Class, Weakened, Definition),
                 (   Class = '@context'
-                ->  get_dict(Class, Weakened, Definition),
-                    Operation = replace_context(Definition)
+                ->  Operation = replace_context(Definition)
                 ;   get_dict(Class, Weakened, Definition),
                     Operation = create_class(Definition)
                 )
@@ -375,8 +401,11 @@ schema_weakening(Schema,Weakened,Operations) :-
                 get_dict(Key,Schema,Old_Class),
                 get_dict(Key,Weakened,New_Class),
                 (   Key = '@context'
-                ->  Old_Class :< New_Class, % This can only be adding prefixes
-                    Intermediate_Operations = [replace_context(New_Class)]
+                ->  (   Old_Class = New_Class % no change
+                    ->  fail
+                    ;   Old_Class :< New_Class, % This can only be adding prefixes
+                        Intermediate_Operations = [replace_context(New_Class)]
+                    )
                 ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
                 )
             ),
@@ -657,6 +686,7 @@ interpret_instance_operation_(replace_context(New_Context), Before, After, Count
         )
     ;   Count = 0
     ).
+interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
 interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
@@ -1055,6 +1085,35 @@ test(property_weakening, []) :-
            json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
            json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
            'D', _Weakened).
+
+
+test(weaken_enum_failure, [
+         error(weakening_failure(json{class:'Team',message:"An enum was changed to include a set of values which is not a superset",new:['Amazing Marketing','Information Technology'],old:['IT','Marketing'],reason:class_enum_value_change_not_a_weakening}), _)
+     ]) :-
+    schema_weakening(json{'@context':_1124{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                      'Team':json{'@id':'Team', '@type':'Enum',
+                                  '@value':['IT', 'Marketing']}},
+                     json{'@context':_1580{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                      'Team':json{'@id':'Team', '@type':'Enum',
+                                  '@value':['Information Technology', 'Amazing Marketing']}}, _8856).
+
+test(weaken_enum_success, []) :-
+    schema_weakening(json{'@context':_1124{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                          'Team':json{'@id':'Team', '@type':'Enum',
+                                      '@value':['IT', 'Marketing']}},
+                     json{'@context':_1580{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                          'Team':json{'@id':'Team', '@type':'Enum',
+                                      '@value':['IT', 'Marketing', 'Finance']}}, Operations),
+
+    Operations = [  expand_enum('Team',['Finance']) ].
 
 before1('
 { "@base": "terminusdb:///data/",
