@@ -114,6 +114,21 @@ describe('GraphQL', function () {
     '@type': 'Class',
     property: { '@type': 'Array', '@class': 'xsd:decimal' },
   },
+  {
+    '@id' : 'JSON',
+    '@type': 'Class',
+    json: 'sys:JSON',
+  },
+  {
+    '@id' : 'JSONs',
+    '@type': 'Class',
+    json: { '@type' : 'Set', '@class' : 'sys:JSON'},
+  },
+  {
+    '@id' : 'RockSet',
+    '@type': 'Class',
+    rocks: { '@type' : 'Set', '@class' : 'Rocks'},
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -625,6 +640,66 @@ query EverythingQuery {
  query NotThere {
     NotThere{
         property
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.NotThere).to.deep.equal([
+        { property: [] },
+      ])
+    })
+
+    it('graphql list of enum', async function () {
+      const testObj = {
+        '@type': 'RockSet',
+        rocks: ['Big', 'Medium', 'Small']
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query NotThere {
+    RockSet{
+        rocks
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.NotThere).to.deep.equal([
+        { property: [] },
+      ])
+    })
+
+    it('graphql json', async function () {
+      const testObj = {
+        '@type': 'JSON',
+        json: { this : { is : { a : { json : []}}}}
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query JSON {
+    JSON{
+        json
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.NotThere).to.deep.equal([
+        { property: [] },
+      ])
+    })
+
+    it('graphql json set', async function () {
+      const testObj = {
+        '@type': 'JSONSet',
+        json: [{ this : { is : { a : { json : []}}}}]
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query JSONSet {
+    JSONSet{
+        json
     }
 }`
 
