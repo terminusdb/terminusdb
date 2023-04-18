@@ -3022,7 +3022,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
                               author: Author,
                               message: Message
                           },
-            (   param_value_search_or_json(Search, JSON, operations, object, Operations)
+            (   param_value_search_or_json(Search, JSON, operations, list, Operations)
             ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
                                      [dry_run(Dry_Run),
                                       verbose(Verbose)]),
