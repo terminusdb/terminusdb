@@ -10,46 +10,20 @@ use terminusdb_store_prolog::value::split_lang_string;
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
     let result = match tde.datatype() {
-        Datatype::String => {
-            tde.as_val::<String, String>()
-        }
-        Datatype::Token => {
-            tde.as_val::<Token, String>()
-        }
-        Datatype::AnyURI => {
-            tde.as_val::<AnyURI, String>()
-        }
-        Datatype::Language => {
-            tde.as_val::<Language, String>()
-        }
-        Datatype::NormalizedString => {
-            tde.as_val::<NormalizedString, String>()
-        }
-        Datatype::NMToken => {
-            tde.as_val::<NMToken, String>()
-        }
-        Datatype::Name => {
-            tde.as_val::<Name, String>()
-        }
-        Datatype::NCName => {
-            tde.as_val::<NCName, String>()
-        }
-        Datatype::Notation => {
-            tde.as_val::<Notation, String>()
-        }
-        Datatype::QName => {
-            tde.as_val::<QName, String>()
-        }
-        Datatype::ID => {
-            tde.as_val::<ID, String>()
-        }
-        Datatype::IDRef => {
-            tde.as_val::<IDRef, String>()
-        }
-        Datatype::Entity => {
-            tde.as_val::<Entity, String>()
-        }
-        x => panic!("not a stringy type: {:?}", x)
+        Datatype::String => tde.as_val::<String, String>(),
+        Datatype::Token => tde.as_val::<Token, String>(),
+        Datatype::AnyURI => tde.as_val::<AnyURI, String>(),
+        Datatype::Language => tde.as_val::<Language, String>(),
+        Datatype::NormalizedString => tde.as_val::<NormalizedString, String>(),
+        Datatype::NMToken => tde.as_val::<NMToken, String>(),
+        Datatype::Name => tde.as_val::<Name, String>(),
+        Datatype::NCName => tde.as_val::<NCName, String>(),
+        Datatype::Notation => tde.as_val::<Notation, String>(),
+        Datatype::QName => tde.as_val::<QName, String>(),
+        Datatype::ID => tde.as_val::<ID, String>(),
+        Datatype::IDRef => tde.as_val::<IDRef, String>(),
+        Datatype::Entity => tde.as_val::<Entity, String>(),
+        x => panic!("not a stringy type: {:?}", x),
     };
 
     Cow::Owned(result)
@@ -158,6 +132,10 @@ pub fn type_is_datetime(s: &str) -> bool {
 
 pub fn type_is_decimal(s: &str) -> bool {
     DECIMAL_TYPES.contains(s)
+}
+
+pub fn type_is_json(s: &str) -> bool {
+    s == "JSON" || s == "JSONObject"
 }
 
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {

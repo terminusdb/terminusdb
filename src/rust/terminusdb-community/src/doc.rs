@@ -185,6 +185,56 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    pub fn new_json(instance: Option<L>, unfold: bool, minimized: bool) -> GetDocumentContext<L> {
+        let rdf_type_id;
+        let rdf_first_id;
+        let rdf_rest_id;
+        let rdf_nil_id;
+        let rdf_list_id;
+        let sys_json_type_id;
+        let sys_json_document_type_id;
+        if let Some(instance) = instance.as_ref() {
+            rdf_type_id = instance.predicate_id(RDF_TYPE);
+            rdf_first_id = instance.predicate_id(RDF_FIRST);
+            rdf_rest_id = instance.predicate_id(RDF_REST);
+            rdf_nil_id = instance.object_node_id(RDF_NIL);
+            rdf_list_id = instance.object_node_id(RDF_LIST);
+            sys_json_type_id = instance.object_node_id(SYS_JSON);
+            sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+        } else {
+            rdf_type_id = None;
+            rdf_first_id = None;
+            rdf_rest_id = None;
+            rdf_nil_id = None;
+            rdf_list_id = None;
+            sys_json_type_id = None;
+            sys_json_document_type_id = None;
+        }
+        Self {
+            layer: instance,
+
+            prefixes: PrefixContracter::new([]),
+            types: HashSet::with_capacity(0),
+            subtypes: HashMap::with_capacity(0),
+            document_types: HashSet::with_capacity(0),
+            unfoldables: HashSet::with_capacity(0),
+            enums: HashMap::with_capacity(0),
+            set_pairs: HashSet::with_capacity(0),
+            rdf_type_id,
+            rdf_first_id,
+            rdf_rest_id,
+            rdf_nil_id,
+            rdf_list_id,
+            sys_json_type_id,
+            sys_json_document_type_id,
+            sys_index_ids: Vec::with_capacity(0),
+            sys_array_id: None,
+            sys_value_id: None,
+            unfold,
+            minimized,
+        }
+    }
+
     fn layer(&self) -> &L {
         self.layer.as_ref().unwrap()
     }
