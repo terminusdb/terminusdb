@@ -504,7 +504,28 @@ infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     ->  true
     ;   Commit_Info = commit_info{}),
     put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
-    put_dict(_{commit_info: Commit_Info0}, Validation0, New_Validation).
+    put_dict(_{commit_info: Commit_Info0}, Validation0, New_Validation),
+    copy_validation_change_status(Validation, New_Validation).
+
+copy_validation_change_status(Old_Validation,New_Validation) :-
+    Old_Schemas = (Old_Validation.schema_objects),
+    sort(descriptor, @<, Old_Schemas, Old_Schemas_Sorted),
+    New_Schemas = (New_Validation.schema_objects),
+    sort(descriptor, @<, New_Schemas, New_Schemas_Sorted),
+    maplist(
+        [Old_Schema, New_Schema]>>(
+            get_dict(changed, Old_Schema, Changed),
+            nb_set_dict(changed, New_Schema, Changed)
+        ),
+        Old_Schemas_Sorted,
+        New_Schemas_Sorted
+    ),
+
+    (   get_dict(parent, Old_Validation, Old_Parent),
+        get_dict(parent, New_Validation, New_Parent)
+    ->  copy_validation_change_status(Old_Parent,New_Parent)
+    ;   true
+    ).
 
 infer_weakening_migration(Validations,New_Validations, Meta_Data) :-
     infer_migration(weakening, Validations, New_Validations, Meta_Data).

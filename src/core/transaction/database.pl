@@ -297,7 +297,8 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
 
     commit_validation_objects(Validations0, Committed),
-    collect_validations_metadata(Validations0, Validation_Meta_Data),
+    % Use the original validations before any potential schema migration
+    collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
     put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data0),
     put_dict(Inference_Metadata, Meta_Data0, Meta_Data),
