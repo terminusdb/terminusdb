@@ -115,19 +115,19 @@ describe('GraphQL', function () {
     property: { '@type': 'Array', '@class': 'xsd:decimal' },
   },
   {
-    '@id' : 'JSONClass',
+    '@id': 'JSONClass',
     '@type': 'Class',
     json: 'sys:JSON',
   },
   {
-    '@id' : 'JSONs',
+    '@id': 'JSONs',
     '@type': 'Class',
-    json: { '@type' : 'Set', '@class' : 'sys:JSON'},
+    json: { '@type': 'Set', '@class': 'sys:JSON' },
   },
   {
-    '@id' : 'RockSet',
+    '@id': 'RockSet',
     '@type': 'Class',
-    rocks: { '@type' : 'Set', '@class' : 'Rocks'},
+    rocks: { '@type': 'Set', '@class': 'Rocks' },
   },
   ]
 
@@ -652,7 +652,7 @@ query EverythingQuery {
     it('graphql list of enum', async function () {
       const testObj = {
         '@type': 'RockSet',
-        rocks: ['Big', 'Medium', 'Small']
+        rocks: ['Big', 'Medium', 'Small'],
       }
       await document.insert(agent, { instance: testObj })
 
@@ -665,16 +665,16 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.RockSet[0].rocks).to.have.deep.members([
-          'Big',
-          'Medium',
-          'Small'
+        'Big',
+        'Medium',
+        'Small',
       ])
     })
 
     it('graphql json', async function () {
       const testObj = {
         '@type': 'JSONClass',
-        json: { this : { is : { a : { json : []}}}}
+        json: { this: { is: { a: { json: [] } } } },
       }
       await document.insert(agent, { instance: testObj })
 
@@ -694,9 +694,9 @@ query EverythingQuery {
     it('graphql json set', async function () {
       const testObj = {
         '@type': 'JSONs',
-        json: [{ this : { is : { a : { json : []}}}},
-               { and : ['another', 'one']},
-              ],
+        json: [{ this: { is: { a: { json: [] } } } },
+          { and: ['another', 'one'] },
+        ],
       }
       await document.insert(agent, { instance: testObj })
 
@@ -712,7 +712,7 @@ query EverythingQuery {
         [
           '{"and":["another","one"]}',
           '{"this":{"is":{"a":{"json":[]}}}}',
-        ]
+        ],
       )
     })
   })
