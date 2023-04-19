@@ -222,7 +222,8 @@ update_system_graph(Label, Path, Predicate, Initialization) :-
     % already current
     ->  true
     % needs an upgrade
-    ;   file_to_predicate(Path, Predicate),
+    ;   json_log_notice_formatted("Upgrading ~s",[Label]),
+        file_to_predicate(Path, Predicate),
         triple_store(Store),
         call(Initialization, Store, true),
         % remove anything already pinned
