@@ -403,8 +403,9 @@ schema_weakening(Schema,Weakened,Operations) :-
                 (   Key = '@context'
                 ->  (   Old_Class = New_Class % no change
                     ->  fail
-                    ;   Old_Class :< New_Class, % This can only be adding prefixes
-                        Intermediate_Operations = [replace_context(New_Class)]
+                    ;   throw(error(
+                                  weakening_failure(json{ reason: not_a_weakening_context_changed,
+                                                          message: "The change of context may cause changes of instance data"}), _)))
                     )
                 ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
                 )
