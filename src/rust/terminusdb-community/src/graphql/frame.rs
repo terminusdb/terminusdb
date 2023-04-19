@@ -2,6 +2,8 @@ use bimap::BiMap;
 use serde::{self, Deserialize};
 use std::collections::{BTreeMap, HashMap};
 
+use crate::value::type_is_json;
+
 use super::sanitize::graphql_sanitize;
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -297,6 +299,10 @@ impl FieldDefinition {
         } else {
             None
         }
+    }
+
+    pub fn is_json_type(&self) -> bool {
+        self.base_type().map(type_is_json).unwrap_or(false)
     }
 
     pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a str> {
