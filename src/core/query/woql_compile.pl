@@ -2156,6 +2156,7 @@ test(added_quad, [
     make_branch_descriptor('admin', 'test', Descriptor),
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(Descriptor, Query_Out, JSON),
+
     (JSON.inserts = 1),
 
     Query_Added = _{'@type' : "AddedTriple",

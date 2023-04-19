@@ -525,10 +525,14 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query,
 
 api_full_replace_schema(Transaction, Schema) :-
     empty_assoc(Captures_In),
-    database_prefixes(Transaction, Prefixes),
     nuke_schema_documents(Transaction),
-    api_insert_document_from_lazy_list_unsafe(Schema, schema, false, Transaction, Prefixes,
-                                              Captures_In, _Captures_Out, _BackLinks-[], _Ids).
+    Schema = [Context|Classes],
+    call_catch_document_mutation(
+        Context,
+        replace_context_document(Transaction, Context)
+    ),
+    api_insert_document_from_lazy_list_unsafe(Classes, schema, false, Transaction, Context,
+                                             Captures_In, _Captures_Out, _BackLinks-[], _Ids).
 
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).
