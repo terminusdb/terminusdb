@@ -214,9 +214,9 @@ update_system_graph(Label, Path, Predicate, Initialization) :-
     open_descriptor(Descriptor, Transaction_Object),
     Commit_Info = commit_info{author:"test",message:"test"},
     create_context(Transaction_Object, Commit_Info, Context),
-    database_context_object(Context, Obj),
 
-    (   get_dict('@metadata', Obj, Metadata),
+    (   database_context_object(Context, Obj),
+        get_dict('@metadata', Obj, Metadata),
         get_dict('schema_version', Metadata, Version),
         current_repository_version(Version)
     % already current
