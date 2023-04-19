@@ -406,7 +406,6 @@ schema_weakening(Schema,Weakened,Operations) :-
                     ;   throw(error(
                                   weakening_failure(json{ reason: not_a_weakening_context_changed,
                                                           message: "The change of context may cause changes of instance data"}), _)))
-                    )
                 ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
                 )
             ),
