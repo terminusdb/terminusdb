@@ -197,6 +197,7 @@ initialize_database_with_store(Key, Store, Force) :-
     initialize_system_instance(Store, System_Schema, Key, Force).
 
 current_repository_version("v1.0.1").
+current_ref_version("v1.0.0").
 
 has_no_store :-
     catch(
@@ -206,11 +207,17 @@ has_no_store :-
         true
     ).
 
+current_schema_version(repo_schema, Version) :-
+    current_repository_version(Version).
+current_schema_version(ref_schema, Version) :-
+    current_ref_version(Version).
+
 update_system_graph(Label, Path, Predicate, Initialization) :-
     Descriptor = label_descriptor{
                      schema:Label,
                      variety:repository_descriptor
                  },
+
     open_descriptor(Descriptor, Transaction_Object),
     Commit_Info = commit_info{author:"test",message:"test"},
     create_context(Transaction_Object, Commit_Info, Context),
@@ -218,7 +225,7 @@ update_system_graph(Label, Path, Predicate, Initialization) :-
     (   database_context_object(Context, Obj),
         get_dict('@metadata', Obj, Metadata),
         get_dict('schema_version', Metadata, Version),
-        current_repository_version(Version)
+        current_schema_version(Predicate, Version)
     % already current
     ->  true
     % needs an upgrade
