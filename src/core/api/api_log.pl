@@ -1,11 +1,13 @@
-:- module(api_log, [api_log/5, format_log/2]).
+:- module(api_log, [api_log/5, format_log/3]).
 
 :- use_module(core(util)).
 :- use_module(core(document)).
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+
 :- use_module(library(lists)).
+:- use_module(library(http/json)).
 
 descriptor_type_has_history(branch_descriptor).
 descriptor_type_has_history(commit_descriptor).
@@ -46,12 +48,17 @@ api_log(System_DB, Auth, Path, Log, Options) :-
 
     findall(Commit_Doc,
             (   member(This_Uri, History_Commit_Uris),
-                get_document(Repository_Descriptor, This_Uri, Commit_Doc)
+                get_document(Repository_Descriptor, This_Uri, Commit_Doc0),
+                (   get_dict(migration, Commit_Doc0, Migration_String)
+                ->  atom_json_dict(Migration_String, Migration, [at(json)]),
+                    put_dict(migration, Commit_Doc0, Migration, Commit_Doc)
+                ;   Commit_Doc0 = Commit_Doc
+                )
             ),
             Rev_Log),
     reverse(Rev_Log, Log).
 
-format_log(Stream, Log) :-
+format_log(Stream, Log, Options) :-
     forall(
         member(Commit_Doc, Log),
         (   get_dict('identifier', Commit_Doc, Id),
@@ -65,6 +72,13 @@ format_log(Stream, Log) :-
             format(Stream,'Author: ~s~n', [Auth]),
             get_dict('message', Commit_Doc, Message),
             format(Stream,'Message: ~s~n', [Message]),
+            (   option(verbose(true), Options),
+                get_dict(migration, Commit_Doc, Migration)
+            ->  format(Stream,'Migration:~n', []),
+                json_write_dict(Stream, Migration, [step(4), width(80)]),
+                format(Stream,'~n', [])
+            ;   true
+            ),
             format(Stream, '~n', [])
         )
     ).

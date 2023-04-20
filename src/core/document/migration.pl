@@ -519,12 +519,6 @@ copy_validation_change_status(Old_Validation,New_Validation) :-
         ),
         Old_Schemas_Sorted,
         New_Schemas_Sorted
-    ),
-
-    (   get_dict(parent, Old_Validation, Old_Parent),
-        get_dict(parent, New_Validation, New_Parent)
-    ->  copy_validation_change_status(Old_Parent,New_Parent)
-    ;   true
     ).
 
 infer_weakening_migration(Validations,New_Validations, Meta_Data) :-
