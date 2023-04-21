@@ -271,7 +271,8 @@ type_weaken(Type1Text, Type2Text) :-
 
 type_is_optional(Type) :-
     is_dict(Type),
-    get_dict('@type', Type, Family),
+    get_dict('@type', Type, FamilyElt),
+    atom_string(FamilyElt, Family),
     (   memberchk(Family, ["Set", "Optional"])
     ->  true
     ;   Family = "Cardinality"
@@ -344,7 +345,7 @@ class_property_optional(Property,Weakening,Class,Operation) :-
                                       class: Class,
                                       property: Property,
                                       candidate: Weakening}),_)),
-    Operation = add_class_property(Class,Property,Type).
+    Operation = create_class_property(Class,Property,Type).
 
 class_weakened(Class, Definition, Weakening, Operations) :-
     dict_keys(Weakening, New),
@@ -519,12 +520,6 @@ copy_validation_change_status(Old_Validation,New_Validation) :-
         ),
         Old_Schemas_Sorted,
         New_Schemas_Sorted
-    ),
-
-    (   get_dict(parent, Old_Validation, Old_Parent),
-        get_dict(parent, New_Validation, New_Parent)
-    ->  copy_validation_change_status(Old_Parent,New_Parent)
-    ;   true
     ).
 
 infer_weakening_migration(Validations,New_Validations, Meta_Data) :-
@@ -2029,5 +2024,27 @@ test(infer_destructive_migration,
            t('@schema':'F', rdf:type, sys:'Class', schema)
           ).
 
+test(infer_class_property_weakening,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, C1),
+    with_transaction(
+        C1,
+        replace_schema_document(C1,
+                                _{ '@type' : "Class",
+                                   '@id' : "A",
+                                   a : "xsd:string",
+                                   b : _{ '@type' : "Optional",
+                                          '@class' : "xsd:boolean"}
+                                 }),
+        Meta_Data
+    ),
+    get_dict(schema_operations, Meta_Data, 1).
 
 :- end_tests(migration).

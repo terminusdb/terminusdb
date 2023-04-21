@@ -38,7 +38,6 @@
 :- use_module(core(triple/casting), [typecast/4]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
-:- use_module(library(plunit)).
 /*
  * date_time_string(-Date_Time,+String) is det.
  * date_time_string(+Date_Time,-String) is det.
