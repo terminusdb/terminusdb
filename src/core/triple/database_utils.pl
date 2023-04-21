@@ -32,7 +32,6 @@
 
 :- use_module(library(apply)).
 :- use_module(library(pcre)).
-:- use_module(library(plunit)).
 :- use_module(library(yall)).
 :- use_module(library(lists)).
 

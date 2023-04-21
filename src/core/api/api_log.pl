@@ -8,6 +8,7 @@
 
 :- use_module(library(lists)).
 :- use_module(library(http/json)).
+:- use_module(library(option)).
 
 descriptor_type_has_history(branch_descriptor).
 descriptor_type_has_history(commit_descriptor).
