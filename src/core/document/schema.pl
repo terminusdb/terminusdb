@@ -594,7 +594,8 @@ type_family_constructor(Type) :-
             sys:'Array',
             sys:'Table',
             sys:'Cardinality',
-            sys:'Optional'
+            sys:'Optional',
+            sys:'Choice'
         ],
         List),
     memberchk(Type,List).
@@ -698,6 +699,10 @@ is_key(Type) :-
 is_documentation(Type) :-
     prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation',
                  sys:'DocumentationLabelComment'], List),
+    memberchk(Type, List).
+
+is_choice_type(Type) :-
+    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
     memberchk(Type, List).
 
 refute_class_key(Validation_Object,Class,Witness) :-
