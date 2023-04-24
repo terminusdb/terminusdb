@@ -701,10 +701,6 @@ is_documentation(Type) :-
                  sys:'DocumentationLabelComment'], List),
     memberchk(Type, List).
 
-is_choice_type(Type) :-
-    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
-    memberchk(Type, List).
-
 refute_class_key(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf_added(Schema, Class, sys:key, Key_Obj),
