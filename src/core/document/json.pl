@@ -8011,6 +8011,30 @@ test(double_choice_error,
                                            message: "foo" },
                         Document, _).
 
+test(delete_choice, [
+          setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C,
+        delete_schema_document(C, 'EnumChoice')
+    ),
+    \+
+        ask(Desc,
+            (
+                t(Id, rdf:type, sys:'Choice', schema),
+                t(Id, a, sys:'Unit', schema),
+                t(Id, b, sys:'Unit', schema),
+                t(Id, c, sys:'Unit', schema),
+                t(Id, d, sys:'Unit', schema))).
+
 test(double_choice_triples,[]) :-
     Document = json{'@id':'http://s/DoubleChoice',
                     '@type':'http://terminusdb.com/schema/sys#Class',
