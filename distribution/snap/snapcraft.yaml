@@ -46,6 +46,8 @@ parts:
       - clang
       - m4
       - diffutils
+      - protobuf-compiler
+      - libprotobuf-dev
     stage-packages:
       - swi-prolog-nox
     override-build: |

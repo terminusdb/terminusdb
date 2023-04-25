@@ -137,7 +137,8 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         Request,
         (   param_value_search_optional(Search, start, integer, 0, Start),
             param_value_search_optional(Search, count, integer, -1, Count),
-            Options = opts{ start: Start, count: Count},
+            param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            Options = opts{ start: Start, count: Count, verbose: Verbose},
             api_log(System_DB, Auth, Path, Log, Options),
             cors_reply_json(Request, Log))).
 
@@ -3022,7 +3023,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
                               author: Author,
                               message: Message
                           },
-            (   param_value_search_or_json(Search, JSON, operations, object, Operations)
+            (   param_value_search_or_json(Search, JSON, operations, list, Operations)
             ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
                                      [dry_run(Dry_Run),
                                       verbose(Verbose)]),

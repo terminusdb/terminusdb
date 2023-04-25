@@ -540,7 +540,13 @@ opt_spec(log,'terminusdb log DB_SPEC',
            longflags([count]),
            shortflags([c]),
            default(-1),
-           help('Number of results to return')]
+           help('Number of results to return')],
+          [opt(verbose),
+           type(boolean),
+           longflags([verbose]),
+           shortflags([v]),
+           default(false),
+           help('Give back additional information on commits')]
          ]).
 opt_spec(history,'terminusdb history DB_SPEC',
          'Get the history for a given document by id in DB_SPEC.',
@@ -585,7 +591,13 @@ opt_spec(history,'terminusdb history DB_SPEC',
            longflags([count]),
            shortflags([c]),
            default(-1),
-           help('Number of results to return')]
+           help('Number of results to return')],
+          [opt(verbose),
+           type(boolean),
+           longflags([verbose]),
+           shortflags([v]),
+           default(false),
+           help('give back schema update information')]
          ]).
 opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
          'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
@@ -1798,7 +1810,7 @@ run_command(log,[Path], Opts) :-
         (   api_log(System_DB, Auth, Path, Log, Opts),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Log, [])
-            ;   format_log(current_output,Log)
+            ;   format_log(current_output,Log,Opts)
             )
         )
     ).
@@ -1816,7 +1828,7 @@ run_command(history,[Path], Opts) :-
         (   api_document_history(System_DB, Auth, Path, Id, History, New_Opts),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, History, [])
-            ;   format_log(current_output,History)
+            ;   format_log(current_output,History, Opts)
             )
         )
     ).

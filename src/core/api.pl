@@ -146,7 +146,7 @@
 
               % api_log.pl
               api_log/5,
-              format_log/2,
+              format_log/3,
 
               % api_access_control.pl
               api_get_roles/3,

@@ -33,4 +33,6 @@ jobs:
           terminusdb store init
           terminusdb serve &
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
+          export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
+          sleep 5 # Sleep a bit to be sure that the server started
           cd tests && npm i && npm run test

@@ -594,7 +594,8 @@ type_family_constructor(Type) :-
             sys:'Array',
             sys:'Table',
             sys:'Cardinality',
-            sys:'Optional'
+            sys:'Optional',
+            sys:'Choice'
         ],
         List),
     memberchk(Type,List).

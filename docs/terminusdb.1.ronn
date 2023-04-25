@@ -389,6 +389,9 @@ Get the log for a branch given by DB_SPEC.
   * `-c`, `--count`=[value]:
   Number of results to return
 
+  * `-v`, `--verbose`=[value]:
+  Give back additional information on commits
+
 ### history
 
 `terminusdb history DB_SPEC`
@@ -418,6 +421,9 @@ Get the history for a given document by id in DB_SPEC.
 
   * `-c`, `--count`=[value]:
   Number of results to return
+
+  * `-v`, `--verbose`=[value]:
+  give back schema update information
 
 ### reset
 

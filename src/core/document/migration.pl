@@ -1,6 +1,8 @@
 :- module('document/migration', [
               perform_instance_migration/5,
-              perform_instance_migration_on_transaction/4
+              perform_instance_migration_on_transaction/4,
+              infer_weakening_migration/3,
+              infer_arbitrary_migration/3
           ]).
 
 :- use_module(instance).
@@ -29,6 +31,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(http/json)).
+:- use_module(library(ordsets)).
 
 :- use_module(config(terminus_config)).
 
@@ -48,8 +51,10 @@ Operations Language:
 Default_Or_Error := error
                  |  default(Default)
 Op := delete_class(Name)
+    | replace_context(Context)
     | create_class(ClassDocument)
     | move_class(Old_Name,New_Name)
+    | expand_enum(Class,Values)
     | replace_class_metadata(Class,Metadata)
     | replace_class_documentation(Class,Documentation)
     | delete_class_property(Class,Property)
@@ -140,6 +145,16 @@ move_class(Before_Class, After_Class, Before, After) :-
         Pairs),
     dict_create(After, json, Pairs).
 
+expand_enum(Class, Values, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    get_dict('@value', Class_Document, Old_Values),
+    list_to_ord_set(Old_Values, Old_Set),
+    list_to_ord_set(Values, New_Set),
+    union(Old_Set,New_Set, New_Values),
+    put_dict(json{ '@value' : New_Values}, Class_Document, After_Document),
+    put_dict(Class_Key, Before, After_Document, After).
+
 /* replace_class_metadata(Class,Metadata) */
 replace_class_metadata(Class, Metadata, Before, After) :-
     atom_string(Class_Key, Class),
@@ -153,6 +168,13 @@ replace_class_documentation(Class, Documentation, Before, After) :-
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@documentation', Class_Document, Documentation, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
+
+
+/* replace_context(Context) */
+replace_context(Context, Before, After) :-
+    throw(error(not_implemented('replace_context'), _)),
+    put_dict(_{'@context' : Context}, Before, After).
+
 
 /* delete_class_property(Class,Property) */
 delete_class_property(Class, Property, Before, After) :-
@@ -248,7 +270,9 @@ type_weaken(Type1Text, Type2Text) :-
     atom_string(Type, Type2Text).
 
 type_is_optional(Type) :-
-    get_dict('@type', Type, Family),
+    is_dict(Type),
+    get_dict('@type', Type, FamilyElt),
+    atom_string(FamilyElt, Family),
     (   memberchk(Family, ["Set", "Optional"])
     ->  true
     ;   Family = "Cardinality"
@@ -274,6 +298,25 @@ class_property_weakened('@metadata', _Original, Weakening, Class, Operation) =>
 class_property_weakened('@documentation', _Original, Weakening, Class, Operation) =>
     get_dict('@documentation',Weakening, New_Docs),
     Operation = replace_class_documentation(Class,New_Docs).
+class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+get_dict(Property,Weakening,New_Value),
+get_dict(Property,Original,Old_Value),
+New_Value = Old_Value =>
+    fail.
+class_property_weakened('@value', Original, Weakening, Class, Operation),
+get_dict('@value',Weakening,New_Value),
+get_dict('@value',Original,Old_Value) =>
+    list_to_ord_set(New_Value,New_Set),
+    list_to_ord_set(Old_Value,Old_Set),
+    (   ord_subset(Old_Set, New_Set)
+    ->  subtract(New_Set, Old_Set, Difference),
+        Operation = expand_enum(Class, Difference)
+    ;   throw(error(weakening_failure(json{reason: class_enum_value_change_not_a_weakening,
+                                           message: "An enum was changed to include a set of values which is not a superset",
+                                           class: Class,
+                                           old: Old_Set,
+                                           new: New_Set}), _))
+    ).
 class_property_weakened(Property, Original, Weakening, Class, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
@@ -302,7 +345,7 @@ class_property_optional(Property,Weakening,Class,Operation) :-
                                       class: Class,
                                       property: Property,
                                       candidate: Weakening}),_)),
-    Operation = add_class_property(Class,Property,Type).
+    Operation = create_class_property(Class,Property,Type).
 
 class_weakened(Class, Definition, Weakening, Operations) :-
     dict_keys(Weakening, New),
@@ -345,7 +388,12 @@ schema_weakening(Schema,Weakened,Operations) :-
     ord_subtract(New,Old,Added),
     maplist({Weakened}/[Class,Operation]>>(
                 get_dict(Class, Weakened, Definition),
-                Operation = create_class(Definition)),
+                (   Class = '@context'
+                ->  Operation = replace_context(Definition)
+                ;   get_dict(Class, Weakened, Definition),
+                    Operation = create_class(Definition)
+                )
+            ),
             Added,
             Operations0),
     ord_intersection(Old,New,Shared),
@@ -353,11 +401,132 @@ schema_weakening(Schema,Weakened,Operations) :-
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
                 get_dict(Key,Weakened,New_Class),
-                class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                (   Key = '@context'
+                ->  (   Old_Class = New_Class % no change
+                    ->  fail
+                    ;   throw(error(
+                                  weakening_failure(json{ reason: not_a_weakening_context_changed,
+                                                          message: "The change of context may cause changes of instance data"}), _)))
+                ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                )
             ),
             Operations_List),
     append(Operations_List, Operations1),
     append(Operations0,Operations1,Operations).
+
+class_strengthened('@context',Old_Class,New_Class,Operations) :-
+    !,
+    \+ Old_Class = New_Class,
+    Operations = [replace_context(New_Class)].
+class_strengthened(Key,Old_Class,New_Class,Operations) :-
+    class_weakened(Key,Old_Class,New_Class,Operations).
+
+schema_strengthening(Schema,Weakened,Operations) :-
+    dict_keys(Schema,Old),
+    dict_keys(Weakened,New),
+    ord_subtract(Old,New,Deleted),
+    maplist([Deleted,delete_class(Deleted)]>>true, Deleted, Operations0),
+    ord_subtract(New,Old,Added),
+    maplist({Weakened}/[Class,Operation]>>(
+                (   Class = '@context'
+                ->  get_dict(Class, Weakened, Definition),
+                    Operation = replace_context(Definition)
+                ;   get_dict(Class, Weakened, Definition),
+                    Operation = create_class(Definition)
+                )
+            ),
+            Added,
+            Operations1),
+    ord_intersection(Old,New,Shared),
+    % We can do more here! Dropped properties should be accepted
+    findall(Intermediate_Operations,
+            (   member(Key, Shared),
+                get_dict(Key,Schema,Old_Class),
+                get_dict(Key,Weakened,New_Class),
+                class_strengthened(Key,Old_Class,New_Class,Intermediate_Operations)
+            ),
+            Operations_List),
+    append(Operations_List, Operations2),
+    append([Operations0,Operations1,Operations2],Operations).
+
+schema_inference_rule(weakening, Before, After, Operations) :-
+    catch(
+        schema_weakening(Before, After, Operations),
+        error(weakening_failure(_),_),
+        fail
+    ).
+schema_inference_rule(strengthening, Before, After, Operations) :-
+    schema_strengthening(Before, After, Operations).
+
+perform_migration_rule(weakening,_Before, After, Operations_List, Validation_Out, Meta_Data) :-
+    transaction_objects_to_validation_objects([After], [Validation]),
+    length(Operations_List, Schema_Operations),
+    Meta_Data = _{ instance_operations:0,
+				   schema_operations: Schema_Operations
+                 },
+    (   Operations_List = []
+    ->  Validation = Validation_Out
+    ;   get_dict(schema_objects, Validation, [Schema_Object]),
+        put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
+        put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation, Validation_Out)
+    ).
+perform_migration_rule(strengthening, Before, After, Operations_List, Validation_Out, Meta_Data) :-
+    interpret_instance_operations(Operations_List, Before, After, Count),
+    transaction_objects_to_validation_objects([After], [Validation]),
+    length(Operations_List, Schema_Operations),
+    Meta_Data = _{ instance_operations: Count,
+				   schema_operations: Schema_Operations
+                 },
+    (   Operations_List = []
+    ->  Validation = Validation0
+    ;   get_dict(schema_objects, Validation, [Schema_Object]),
+        put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
+        put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation, Validation0)
+    ),
+    (   Count > 0
+    ->  Validation0 = Validation_Out
+    ;   get_dict(schema_objects, Validation0, [Schema_Object]),
+        put_dict(_{changed:true}, Schema_Object, Schema_Object_Changed),
+        put_dict(_{schema_objects:[Schema_Object_Changed]}, Validation0, Validation_Out)
+    ).
+
+infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
+    validation_objects_to_transaction_objects([Validation],[After_Transaction]),
+    Descriptor = (Validation.descriptor),
+    open_descriptor(Descriptor, Before_Transaction),
+    create_class_dictionary(Before_Transaction, Before),
+    create_class_dictionary(After_Transaction, After),
+    schema_inference_rule(Rule, Before, After, Operations),
+    migration_list_to_ast_list(Operations_List,Operations),
+    !,
+    perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
+    atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
+    (   get_dict(commit_info, Validation, Commit_Info)
+    ->  true
+    ;   Commit_Info = commit_info{}),
+    put_dict(_{ migration: Migration }, Commit_Info, Commit_Info0),
+    put_dict(_{commit_info: Commit_Info0}, Validation0, New_Validation),
+    copy_validation_change_status(Validation, New_Validation).
+
+copy_validation_change_status(Old_Validation,New_Validation) :-
+    Old_Schemas = (Old_Validation.schema_objects),
+    sort(descriptor, @<, Old_Schemas, Old_Schemas_Sorted),
+    New_Schemas = (New_Validation.schema_objects),
+    sort(descriptor, @<, New_Schemas, New_Schemas_Sorted),
+    maplist(
+        [Old_Schema, New_Schema]>>(
+            get_dict(changed, Old_Schema, Changed),
+            nb_set_dict(changed, New_Schema, Changed)
+        ),
+        Old_Schemas_Sorted,
+        New_Schemas_Sorted
+    ).
+
+infer_weakening_migration(Validations,New_Validations, Meta_Data) :-
+    infer_migration(weakening, Validations, New_Validations, Meta_Data).
+
+infer_arbitrary_migration(Validations,New_Validations, Meta_Data) :-
+    infer_migration(strengthening, Validations, New_Validations, Meta_Data).
 
 /* upcast_class_property(Class, Property, New_Type) */
 upcast_class_property(Class, Property, New_Type, Before, After) :-
@@ -477,6 +646,30 @@ is_list(Document) =>
 rewrite_document_ids(Value, _Class_A, _Class_B, New_Value) =>
     Value = New_Value.
 
+rewrite_uri(Old_Context, New_Context, URI, New_URI) :-
+    atom(URI),
+    get_dict('@base', Old_Context, Old_Base),
+    string_length(Old_Base, Base_Length),
+    sub_atom(URI, 0, Base_Length, _, Old_Base),
+    !,
+    sub_atom(URI, Base_Length, _, 0, Branch),
+    get_dict('@base', New_Context, New_Base),
+    atomic_concat(New_Base, Branch, New_URI).
+rewrite_uri(Old_Context, New_Context, URI, New_URI) :-
+    atom(URI),
+    get_dict('@schema', Old_Context, Old_Schema),
+    string_length(Old_Schema, Schema_Length),
+    sub_atom(URI, 0, Schema_Length, _, Old_Schema),
+    !,
+    sub_atom(URI, Schema_Length, _, 0, Branch),
+    get_dict('@schema', New_Context, New_Schema),
+    atomic_concat(New_Schema, Branch, New_URI).
+rewrite_uri(_Old_Context, _New_Context, URI, URI).
+
+rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO) :-
+    rewrite_uri(Old_Context,New_Context,S,NS),
+    rewrite_uri(Old_Context,New_Context,P,NP),
+    rewrite_uri(Old_Context,New_Context,O,NO).
 
 delete_value(base_class(_),_,_) => true.
 delete_value(unit,_,_) => true.
@@ -487,7 +680,7 @@ delete_value(_, Before, Value) =>
 
 interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
     count_solutions(
-        (   get_document_by_type(Before, Class, Uri),
+        (   get_document_uri_by_type(Before, Class, Uri),
             delete_document(After, Uri)
         ),
         Count
@@ -495,6 +688,21 @@ interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
 interpret_instance_operation_(create_class(_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
+    (   database_context_object(Before,Old_Context)
+    ->  count_solutions(
+            (   ask(Before,
+                    (   t(S, P, O),
+                        delete(S, P, O)),
+                    [compress_prefixes(false)]),
+                rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO),
+                ask(After,
+                    insert(NS,NP,NO))),
+            Count
+        )
+    ;   Count = 0
+    ).
+interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
 interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
@@ -701,6 +909,18 @@ cycle_layer(Type, Before_Transaction, After_Transaction) :-
     ),
     ensure_transaction_has_builder(Type, After_Transaction).
 
+interpret_instance_operations([], _Before, _After, Instance_Count, Instance_Count).
+interpret_instance_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
+    interpret_instance_operation(Operation, Before, After, Instance_Count),
+    Instance_Count1 is Instance_Count + Instance_Count_In,
+
+    interpret_instance_operations(Operations, Before, After, Instance_Count1, Instance_Count_Out).
+
+interpret_instance_operations(JSONOps, Before, After, Instance_Count) :-
+    migration_list_to_ast_list(JSONOps, Ops),
+    interpret_instance_operations(Ops, Before, After, 0, Instance_Count).
+
+
 interpret_operations([], After_Transaction, After_Transaction, Instance_Count, Instance_Count).
 interpret_operations([Operation|Operations], Before, After, Instance_Count_In, Instance_Count_Out) :-
     interpret_schema_operation(Operation, Before, Intermediate0),
@@ -756,6 +976,16 @@ squash_layer(Type,Before,Intermediate,After) :-
  *
  */
 create_class_dictionary(Transaction, Dictionary) :-
+    is_transaction(Transaction),
+    Schema_Objects = (Transaction.schema_objects),
+    forall(
+        member(Schema_Object,Schema_Objects),
+        (   get_dict(read, Schema_Object, Read),
+            var(Read))
+    ),
+    !,
+    Dictionary = json{}.
+create_class_dictionary(Transaction, Dictionary) :-
     Config = config{
                  skip: 0,
                  count: unlimited,
@@ -764,17 +994,22 @@ create_class_dictionary(Transaction, Dictionary) :-
                  unfold: true,
                  minimized: true
              },
+    %test_utils:print_all_triples(Transaction, schema),
+    database_context_object(Transaction, Context),
     findall(
         Class-Class_Document,
         (   api_document:api_get_documents(Transaction, schema, Config, Class_Document),
-            get_dict('@id',Class_Document, Class)
+            get_dict('@id',Class_Document, Class_String),
+            atom_string(Class,Class_String)
         ),
         Pairs
     ),
-    dict_create(Dictionary, json, Pairs).
+    dict_create(Dictionary, json, ['@context'-Context|Pairs]).
 
-class_dictionary_to_schema(Dictionary, Schema) :-
-    dict_pairs(Dictionary, _, Pairs),
+class_dictionary_to_schema(Dictionary, [Context|Schema]) :-
+    del_dict('@context', Dictionary, Context0, Class_Dictionary),
+    put_dict(_{ '@type' : "@context"}, Context0, Context),
+    dict_pairs(Class_Dictionary, _, Pairs),
     maplist([_-Class,Class]>>true, Pairs, Schema).
 
 calculate_schema_migration(Transaction, Ops, Schema) :-
@@ -818,6 +1053,9 @@ perform_instance_migration_retry(_, _, _, _, _) :-
     throw(error(transaction_retry_exceeded, _)).
 
 perform_instance_migration_on_transaction(Before_Transaction, Operations, Result, Options) :-
+    perform_instance_migration_on_transaction(Before_Transaction, Operations, _, Result, Options).
+
+perform_instance_migration_on_transaction(Before_Transaction, Operations, After_Transaction, Result, Options) :-
     ensure_transaction_has_builder(instance, Before_Transaction),
     ensure_transaction_has_builder(schema, Before_Transaction),
     interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
@@ -825,7 +1063,7 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, Result
     % run logic here.
     (   option(dry_run(true), Options)
     ->  true
-    ;   run_transactions([After_Transaction], false, _)
+    ;   run_transactions([After_Transaction], false, _, [inside_migration(true)])
     ),
 
     (   option(verbose(true), Options)
@@ -841,6 +1079,57 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, Result
 :- begin_tests(migration).
 
 :- use_module(core(util/test_utils)).
+
+test(property_weakening_optional, [
+         error(
+             weakening_failure(
+                 json{ reason: class_property_addition_not_optional,
+                       message: "The class property which was not added, did not have an optional type",
+                       class: 'Squash',
+                       property: is_a_pumpkin,
+                       candidate: _Weakening}),
+             _)]) :-
+
+    class_property_optional(
+        is_a_pumpkin,
+        json{'@id':'Squash', '@key':json{'@fields':[genus, species], '@type':"Hash"}, '@type':'Class', colour:'xsd:string', genus:'xsd:string', is_a_pumpkin:'xsd:boolean', name:'xsd:string', shape:'xsd:string', species:'xsd:string'},
+        'Squash', _Optional).
+
+test(property_weakening, []) :-
+    \+ class_property_weakened(
+           d,
+           json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
+           json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
+           'D', _Weakened).
+
+
+test(weaken_enum_failure, [
+         error(weakening_failure(json{class:'Team',message:"An enum was changed to include a set of values which is not a superset",new:['Amazing Marketing','Information Technology'],old:['IT','Marketing'],reason:class_enum_value_change_not_a_weakening}), _)
+     ]) :-
+    schema_weakening(json{'@context':_1124{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                      'Team':json{'@id':'Team', '@type':'Enum',
+                                  '@value':['IT', 'Marketing']}},
+                     json{'@context':_1580{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                      'Team':json{'@id':'Team', '@type':'Enum',
+                                  '@value':['Information Technology', 'Amazing Marketing']}}, _8856).
+
+test(weaken_enum_success, []) :-
+    schema_weakening(json{'@context':_1124{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                          'Team':json{'@id':'Team', '@type':'Enum',
+                                      '@value':['IT', 'Marketing']}},
+                     json{'@context':_1580{'@base':"http://i/",
+                                           '@schema':"http://s/",
+                                           '@type':'Context'},
+                          'Team':json{'@id':'Team', '@type':'Enum',
+                                      '@value':['IT', 'Marketing', 'Finance']}}, Operations),
+
+    Operations = [  expand_enum('Team',['Finance']) ].
 
 before1('
 { "@base": "terminusdb:///data/",
@@ -870,11 +1159,17 @@ test(add_remove_classes,
     ],
     open_descriptor(Before, Transaction),
     create_class_dictionary(Transaction, Dictionary),
-    Dictionary = json{'A':json{'@id':'A','@type':'Class',a:'xsd:string'}},
+    Dictionary = json{'@context':json{'@base':"terminusdb:///data/",
+                                      '@schema':"terminusdb:///schema#",
+                                      '@type':'Context'},
+                      'A':json{'@id':'A', '@type':'Class', a:'xsd:string'}},
 
     interpret_schema_operations(Ops, Dictionary, After),
 
-    After = json{'C':_{'@id':"C",'@type':"Class",c:"xsd:string"}}.
+    After = json{'@context':json{'@base':"terminusdb:///data/",
+                                 '@schema':"terminusdb:///schema#",
+                                 '@type':'Context'},
+                 'C':json{'@id':"C", '@type':"Class", c:"xsd:string"}}.
 
 
 before2('
@@ -1485,7 +1780,11 @@ test(weakening_inference,
       cleanup(teardown_temp_store(State))
      ]) :-
     create_class_dictionary(Descriptor, Before),
-    After = json{'A':json{'@id':'A','@type':'Class', a:json{ '@type' : "Optional",
+    After = json{'@context':_{ '@base':"terminusdb:///data/",
+							   '@schema':"terminusdb:///schema#",
+							   '@type':'Context'
+						     },
+                 'A':json{'@id':'A','@type':'Class', a:json{ '@type' : "Optional",
                                                              '@class' : 'xsd:string'}},
                  'B':json{'@id': 'B', '@type':'Class', b: 'xsd:integer'}},
     schema_weakening(Before, After, Operations),
@@ -1516,7 +1815,12 @@ test(weakening_inference_class_missing,
      ]) :-
 
     create_class_dictionary(Descriptor, Before),
-    After = json{},
+    After = json{
+                '@context':_{ '@base':"terminusdb:///data/",
+							  '@schema':"terminusdb:///schema#",
+							  '@type':'Context'
+							}
+			},
     schema_weakening(Before, After, _Operations).
 
 
@@ -1534,7 +1838,11 @@ test(weakening_inference_property_missing,
      ]) :-
 
     create_class_dictionary(Descriptor, Before),
-    After = json{'A':json{'@id':'A','@type':'Class'}},
+    After = json{ '@context':_{ '@base':"terminusdb:///data/",
+							    '@schema':"terminusdb:///schema#",
+							    '@type':'Context'
+							  },
+                  'A':json{'@id':'A','@type':'Class'}},
     schema_weakening(Before, After, _Operations).
 
 test(dry_run,
@@ -1631,5 +1939,112 @@ test(verbose,
 			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
 
+test(change_context,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      blocked('Not yet implemented')
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, C2),
+    with_transaction(
+        C2,
+        (   replace_context_document(C2,
+                                     _{ '@type' : "@context",
+                                        '@base' : "http://a/",
+                                        '@schema' : "http://a#"
+                                      })
+        ),
+        _Meta_Data,
+        [require_migration(true), allow_destructive_migration(true)]
+    ).
+
+test(infer_destructive_migration,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/1', f : 33.4 },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'F/2', f : 44.3 },
+                            _)
+        )
+    ),
+
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, Context),
+
+    with_transaction(
+        Context,
+        delete_schema_document(Context, "F"),
+        Meta_Data,
+        [require_migration(true), allow_destructive_migration(true)]
+    ),
+    Meta_Data = meta_data{
+                    data_versions:[],
+					deletes:0,
+					inserts:0,
+					instance_operations:2,
+					schema_operations:1,
+					transaction_retry_count:0
+				},
+    findall(
+        Doc_Id,
+        get_document_uri(Descriptor, false, Doc_Id),
+        Docs
+    ),
+    Docs = ['terminusdb:///data/A/1'],
+
+    \+ ask(Descriptor,
+           t('@schema':'F', rdf:type, sys:'Class', schema)
+          ).
+
+test(infer_class_property_weakening,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, C1),
+    with_transaction(
+        C1,
+        replace_schema_document(C1,
+                                _{ '@type' : "Class",
+                                   '@id' : "A",
+                                   a : "xsd:string",
+                                   b : _{ '@type' : "Optional",
+                                          '@class' : "xsd:boolean"}
+                                 }),
+        Meta_Data
+    ),
+    get_dict(schema_operations, Meta_Data, 1).
 
 :- end_tests(migration).
