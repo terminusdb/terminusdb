@@ -864,5 +864,31 @@ test(table_inserts_works, []) :-
                  json{'@at':json{'@height':1,'@width':1,'@x':4,'@y':1},
                       '@found':[['Aerospace']]}].
 
+test(star_wars_films_patch, []) :-
+    Patch = json{'@id':"Starship/12",
+                 film:json{'@op':"CopyList",
+                           '@rest':json{'@after':['Film/5dbdd754d3bb80073fd4a594346f857d44fffaf4b0b82db691ff903c9efebc50'],
+                                        '@before':[],
+                                        '@op':"SwapList",
+                                        '@rest':json{'@op':"KeepList"}},
+                           '@to':3}},
+    Document = json{'@id':'Starship/12',
+                    '@type':'Starship',
+                    'MGLT':"100",
+                    cargo_capacity:110,
+                    consumables:"1 week",
+                    cost_in_credits:149999,
+                    created:"2014-12-12T11:19:05.340Z",
+                    edited:"2014-12-22T17:35:44.491233Z",
+                    film:['Film/1', 'Film/2', 'Film/3'],
+                    url:"http://swapi.co/api/starships/12/"},
+    simple_patch(Patch,
+                 Document,
+                 Result,
+                 [count(inf), keep(json{'@id':true, '_id':true}),
+                  match_final_state(true), start(0), type(squash)]),
+    print_term(Result, []),
+    true.
+
 :- end_tests(simple_patch).
 
