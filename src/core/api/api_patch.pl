@@ -204,7 +204,7 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Dif
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
     coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
-
+    trace(document_diffs_from_commits),
     findall(Diff,
             document_diffs_from_commits(Branch_Descriptor,
                                         Before_Commit_Id,
@@ -219,7 +219,11 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
     coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
     create_context(Branch_Descriptor, Commit_Info, Context),
-    merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
+    merge_options(Options, options{keep:json{'@id':true, '@type':true},
+                                   count:inf,
+                                   start:0}, Merged_Options),
+    trace(document_diffs_from_commits),
+    trace(apply_diff),
     with_transaction(
         Context,
         (   findall(Witness,
