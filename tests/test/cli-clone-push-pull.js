@@ -114,7 +114,6 @@ describe('cli-clone-push-pull', function () {
     this.timeout(200000)
     const agent = new Agent().auth()
     const dbSpec = agent.orgName + '/' + agent.dbName
-    const url = agent.baseUrl + '/' + dbSpec
     // Create the db
     await execEnv(`./terminusdb.sh db create ${dbSpec}`)
     // Add remote
