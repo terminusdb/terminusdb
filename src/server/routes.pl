@@ -523,7 +523,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, full_replace, boolean, false, Full_Replace),
             param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
-            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migraiton),
+            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -559,7 +559,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, nuke, boolean, false, Nuke),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
-            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migraiton),
+            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -600,7 +600,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, create, boolean, false, Create),
             param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
-            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migraiton),
+            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
