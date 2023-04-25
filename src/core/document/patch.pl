@@ -55,7 +55,13 @@ simple_patch_list(Diff,List_In,Result,Options) :-
     promote_list_conflict(List_Out,Result).
 
 promote_list_conflict(List_In,Result) :-
-    (   maplist([success(Patch),Patch]>>true,List_In,List_Out)
+    (   maplist([Pre,Patch]>>
+                (   Pre = success(Patch)
+                ->  true
+                ;   Pre \= conflict(_)
+                ->  Pre = Patch
+                ),
+                List_In,List_Out)
     ->  Result = success(List_Out)
     ;   maplist([Res,Out]>>(   Res = conflict(Con)
                            ->  Out = Con
@@ -622,6 +628,7 @@ test(flat_list_diff, []) :-
              },
 
     simple_patch(Patch,Before,success(After),[]),
+
     After = _{ '@id' : "Person/1",
                '@type' : "Person",
                friends : ["Person/2","Person/4"],
@@ -659,6 +666,7 @@ test(flat_table_diff, []) :-
              },
 
     simple_patch(Patch,Before,success(After),[]),
+
     After = _{ '@id' : "Person/1",
                '@type' : "Person",
                name : "jim",
@@ -864,6 +872,39 @@ test(table_inserts_works, []) :-
                  json{'@at':json{'@height':1,'@width':1,'@x':4,'@y':1},
                       '@found':[['Aerospace']]}].
 
+test(check_before_after_list_empty_empty_full, []) :-
+    check_before_after_list(
+        [],
+        [],
+        ['Film/5dbdd754d3bb80073fd4a594346f857d44fffaf4b0b82db691ff903c9efebc50'],
+        Result,
+        [count(inf), keep(json{'@id':true, '_id':true}),
+         match_final_state(true), start(0), type(squash)]),
+    Result = success(
+                 [ 'Film/5dbdd754d3bb80073fd4a594346f857d44fffaf4b0b82db691ff903c9efebc50' ]
+             ).
+
+test(copy_and_extend_list, []) :-
+    Patch = json{'@op':"CopyList",
+                 '@rest':
+                 json{'@after':
+                      ['Film/5dbdd754d3bb80073fd4a594346f857d44fffaf4b0b82db691ff903c9efebc50'],
+                      '@before':[], '@op':"SwapList", '@rest':json{'@op':"KeepList"}},
+                 '@to':3},
+    List_In = ['Film/1', 'Film/2', 'Film/3'],
+    simple_op_diff_value('CopyList', Patch, List_In, List_Out,
+                         [count(inf),
+                          keep(json{'@id':true, '_id':true}),
+                          match_final_state(true),
+                          start(0),
+                          type(squash)]),
+    !,
+    List_Out = success([ 'Film/1',
+						 'Film/2',
+						 'Film/3',
+						 'Film/5dbdd754d3bb80073fd4a594346f857d44fffaf4b0b82db691ff903c9efebc50'
+					   ]).
+
 test(star_wars_films_patch, []) :-
     Patch = json{'@id':"Starship/12",
                  film:json{'@op':"CopyList",
@@ -887,8 +928,23 @@ test(star_wars_films_patch, []) :-
                  Result,
                  [count(inf), keep(json{'@id':true, '_id':true}),
                   match_final_state(true), start(0), type(squash)]),
-    print_term(Result, []),
-    true.
+
+    Result = success(
+                 json{ '@id':'Starship/12',
+	                   '@type':'Starship',
+	                   'MGLT':"100",
+	                   cargo_capacity:110,
+	                   consumables:"1 week",
+	                   cost_in_credits:149999,
+	                   created:"2014-12-12T11:19:05.340Z",
+	                   edited:"2014-12-22T17:35:44.491233Z",
+	                   film:[ 'Film/1',
+		                      'Film/2',
+		                      'Film/3',
+		                      'Film/5dbdd754d3bb80073fd4a594346f857d44fffaf4b0b82db691ff903c9efebc50'
+		                    ],
+	                   url:"http://swapi.co/api/starships/12/"
+	                 }).
 
 :- end_tests(simple_patch).
 
