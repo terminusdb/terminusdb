@@ -899,6 +899,15 @@ api_error_jsonld_(unpack,error(not_a_repository_descriptor(Descriptor),_), JSON)
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld_(push,error(push_has_no_repository_head(Descriptor),_), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following repository has no head: ~q", [Path]),
+    JSON = _{'@type' : 'api:PushErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:RepositoryHasNoRepositoryHeadError',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(push,error(push_requires_branch(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following absolute resource descriptor string does not specify a branch: ~q", [Path]),
