@@ -1368,6 +1368,8 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       summary: Apply a patch object to a resource
+      x-python-client: Client::patch_resource
+      x-js-client: Client.patchResource
       tags:
         - Change management
       requestBody:
