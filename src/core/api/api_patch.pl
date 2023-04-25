@@ -161,26 +161,32 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     normalize_document(Transaction, After_Document, Normal_Document),
     simple_diff(Before,Normal_Document,Diff,Options).
 
-commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
+commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, Options) :-
     create_context(Branch_Descriptor.repository_descriptor, Context),
     most_recent_common_ancestor(Context, Context,
                                 Before_Commit_Id, After_Commit_Id,
                                 _Shared_Commit_Id, Commit1_Path, Commit2_Path),
 
-    distinct(Changed,
-             (   union(Commit1_Path, Commit2_Path, All_Commits),
-                 member(Commit_Id, All_Commits),
-                 resolve_relative_descriptor(Branch_Descriptor,
-                                             ["commit", Commit_Id],
-                                             Commit_Descriptor),
-                 do_or_die(
-                     open_descriptor(Commit_Descriptor, Transaction),
-                     error(unresolvable_collection(Commit_Descriptor), _)),
-                 changed_document_id(Transaction, Changed)
-             )).
+    option(start(Start), Options),
+    option(count(Count), Options),
+    limit(
+        Count,
+        offset(
+            Start,
+            distinct(Changed,
+                     (   union(Commit1_Path, Commit2_Path, All_Commits),
+                         member(Commit_Id, All_Commits),
+                         resolve_relative_descriptor(Branch_Descriptor,
+                                                     ["commit", Commit_Id],
+                                                     Commit_Descriptor),
+                         do_or_die(
+                             open_descriptor(Commit_Descriptor, Transaction),
+                             error(unresolvable_collection(Commit_Descriptor), _)),
+                         changed_document_id(Transaction, Changed)
+                     )))).
 
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
-    commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
+    commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id, Options),
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
         ->  simple_diff(Before,After,Diff,Options)

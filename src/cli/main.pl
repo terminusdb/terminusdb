@@ -23,7 +23,9 @@
 :- use_module(core(util),
               [do_or_die/2, token_authorization/2,
                basic_authorization/3, intersperse/3,
-               with_memory_file/1, with_memory_file_stream/3]).
+               negative_to_infinity/2,
+               with_memory_file/1,
+               with_memory_file_stream/3]).
 :- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
@@ -464,7 +466,19 @@ or two commits (path required).',
            longflags([after_commit,'after-commit']),
            shortflags([s]),
            default('_'),
-           help('Commit or branch of the *after* document(s)')]
+           help('Commit or branch of the *after* document(s)')],
+          [opt(start),
+           type(integer),
+           longflags([start]),
+           shortflags([n]),
+           default(0),
+           help('How many diff results to skip before returning (ignored if not comparing resources)')],
+          [opt(count),
+           type(integer),
+           longflags([count]),
+           shortflags([l]),
+           default(-1),
+           help('Number of results to return (ignored if not comparing resources)')]
          ]).
 opt_spec(apply,'terminusdb apply [Path] OPTIONS',
          'Apply a diff to path which is obtained from the differences between two commits',
@@ -1757,7 +1771,13 @@ run_command(diff, Args, Opts) :-
         ;   \+ var(After_Commit), \+ var(Before_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            Options = [keep(Keep),copy_value(Copy_Value)],
+            option(start(Start), Opts),
+            option(count(Count_With_Neg), Opts),
+            negative_to_infinity(Count_With_Neg,Count),
+            Options = [keep(Keep),
+                       copy_value(Copy_Value),
+                       start(Start),
+                       count(Count)],
             api_diff_all_documents(System_DB, Auth, Path,
                                    Before_Commit, After_Commit,
                                    Patch, Options)

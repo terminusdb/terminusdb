@@ -2620,7 +2620,10 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
             ->  api_diff_id(System_DB, Auth, Path, Before_Version,
                             After_Version, Doc_ID, Patch, Options)
             ;   Operation = all_documents
-            ->  api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Patch, Options)
+            ->  param_value_json_optional(Document, start, integer, 0, Start),
+                param_value_json_optional(Document, count, integer, inf, Count),
+                put_dict(_{ count: Count, start: Start}, Options, Options_Merged),
+                api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Patch, Options_Merged)
             ;   api_diff_id_document(System_DB, Auth, Path,
                                      Before_Version, After_Document,
                                      Doc_ID, Patch, Options)
