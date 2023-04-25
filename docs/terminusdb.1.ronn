@@ -335,6 +335,12 @@ or two commits (path required).
   * `-s`, `--after_commit`, `--after-commit`=[value]:
   Commit or branch of the *after* document(s)
 
+  * `-n`, `--start`=[value]:
+  How many diff results to skip before returning (ignored if not comparing resources)
+
+  * `-l`, `--count`=[value]:
+  Number of results to return (ignored if not comparing resources)
+
 ### apply
 
 `terminusdb apply [Path] OPTIONS`

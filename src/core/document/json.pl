@@ -13256,7 +13256,7 @@ test(json_diff,
         Commit1,
         Commit2,
         Patch,
-        _{ keep : _{ '@id' : true, '_id' : true }}),
+        _{ count: inf, start:0, keep : _{ '@id' : true, '_id' : true }}),
 
     Patch = [json{'@id':_,
                   prop:json{'@after':"value2",
