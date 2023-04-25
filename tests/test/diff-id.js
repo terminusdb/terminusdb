@@ -341,34 +341,34 @@ describe('diff-id', function () {
             '@insert': {
               '@id': docId1,
               '@type': class1,
-              a: 'pickles and eggs'
+              a: 'pickles and eggs',
             },
-            '@op': 'Insert'
+            '@op': 'Insert',
           },
           {
             '@insert': {
               '@id': docId2,
               '@type': class2,
-              b: 'frog legs'
+              b: 'frog legs',
             },
-            '@op': 'Insert'
+            '@op': 'Insert',
           },
           {
             '@insert': {
               '@id': docId3,
               '@type': class2,
-              b: 'duck soup'
+              b: 'duck soup',
             },
-            '@op': 'Insert'
-          }
+            '@op': 'Insert',
+          },
         ])
 
       const diff03Start0Count1 = await agent.post(path).send(
         {
           before_data_version: dv0,
           after_data_version: dv3,
-          start:0,
-          count:1
+          start: 0,
+          count: 1,
         })
       expect(diff03Start0Count1.status).to.equal(200)
       expect(diff03Start0Count1.body).to.deep.equal(
@@ -377,18 +377,18 @@ describe('diff-id', function () {
             '@insert': {
               '@id': docId1,
               '@type': class1,
-              a: 'pickles and eggs'
+              a: 'pickles and eggs',
             },
-            '@op': 'Insert'
-          }
+            '@op': 'Insert',
+          },
         ])
 
       const diff03Start1Count1 = await agent.post(path).send(
         {
           before_data_version: dv0,
           after_data_version: dv3,
-          start:1,
-          count:1,
+          start: 1,
+          count: 1,
         })
       expect(diff03Start1Count1.status).to.equal(200)
       expect(diff03Start1Count1.body).to.deep.equal(
@@ -397,9 +397,9 @@ describe('diff-id', function () {
             '@insert': {
               '@id': docId2,
               '@type': class2,
-              b: 'frog legs'
+              b: 'frog legs',
             },
-            '@op': 'Insert'
+            '@op': 'Insert',
           },
         ])
 
@@ -407,8 +407,8 @@ describe('diff-id', function () {
         {
           before_data_version: dv0,
           after_data_version: dv3,
-          start:1,
-          count:3,
+          start: 1,
+          count: 3,
         })
       expect(diff03Start1Count3.status).to.equal(200)
       expect(diff03Start1Count3.body).to.deep.equal(
@@ -417,20 +417,19 @@ describe('diff-id', function () {
             '@insert': {
               '@id': docId2,
               '@type': class2,
-              b: 'frog legs'
+              b: 'frog legs',
             },
-            '@op': 'Insert'
+            '@op': 'Insert',
           },
           {
             '@insert': {
               '@id': docId3,
               '@type': class2,
-              b: 'duck soup'
+              b: 'duck soup',
             },
-            '@op': 'Insert'
-          }
+            '@op': 'Insert',
+          },
         ])
-
     })
 
     it('apply squash commit', async function () {
