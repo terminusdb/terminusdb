@@ -623,6 +623,12 @@ Insert documents.
   * `-g`, `--graph_type`, `--graph-type`=[value]:
   graph type (instance or schema)
 
+  * `-r`, `--require-migration`=[value]:
+  require an inferred migration (assuming this is a schema change)
+
+  * `-x`, `--allow-destructive-migration`=[value]:
+  allow inferred migration to be destructive (assuming this is a schema change)
+
   * `-d`, `--data`=[value]:
   document data
 
@@ -653,6 +659,12 @@ Delete documents.
   * `-g`, `--graph_type`, `--graph-type`=[value]:
   graph type (instance or schema)
 
+  * `-r`, `--require-migration`=[value]:
+  require an inferred migration (assuming this is a schema change)
+
+  * `-x`, `--allow-destructive-migration`=[value]:
+  allow inferred migration to be destructive (assuming this is a schema change)
+
   * `-i`, `--id`=[value]:
   document id to delete
 
@@ -682,6 +694,12 @@ Replace documents.
 
   * `-g`, `--graph_type`, `--graph-type`=[value]:
   graph type (instance or schema)
+
+  * `-r`, `--require-migration`=[value]:
+  require an inferred migration (assuming this is a schema change)
+
+  * `-x`, `--allow-destructive-migration`=[value]:
+  allow inferred migration to be destructive (assuming this is a schema change)
 
   * `-d`, `--data`=[value]:
   document data

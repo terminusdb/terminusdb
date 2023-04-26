@@ -326,7 +326,8 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          die_if(Duplicates \= [],
                                 error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
@@ -389,7 +390,8 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                              Ids
                          )
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Options) :-
@@ -401,7 +403,8 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_nuke_documents_(schema, Transaction) :-
@@ -424,7 +427,8 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Ids, Captures_Out):-
@@ -469,7 +473,8 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
                          die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-

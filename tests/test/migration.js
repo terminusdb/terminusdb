@@ -85,5 +85,30 @@ describe('patch', function () {
       const res = await document.get(agent, { query: { id: idD, as_list: true } })
       expect(res.body[0].enum).to.equal('D')
     })
+
+    it('infer destructive migration', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance1 = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'a' }
+      await document.insert(agent, { instance: instance1 })
+      const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1`, a: 'b' }
+      await document.insert(agent, { instance: instance2 })
+      await document.delete(agent,
+        {
+          query: {
+            id,
+            graph_type: 'schema',
+            require_migration: true,
+            allow_destructive_migration: true,
+          },
+        })
+      const logRequest = await agent.get(`/api/log/admin/${agent.dbName}?verbose=true&count=1`)
+      const log = logRequest.body
+      expect(log[0].migration).to.deep.equal([{
+        '@type': 'DeleteClass',
+        class: id,
+      }])
+    })
   })
 })
