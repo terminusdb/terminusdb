@@ -94,7 +94,7 @@ describe('patch', function () {
       await document.insert(agent, { instance: instance1 })
       const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1`, a: 'b' }
       await document.insert(agent, { instance: instance2 })
-      const res = await document.delete(agent,
+      await document.delete(agent,
         {
           query: {
             id,

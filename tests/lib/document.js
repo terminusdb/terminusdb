@@ -120,6 +120,8 @@ function insert (agent, params) {
       author,
       message,
       raw_json: rawJSON,
+      require_migration: requireMigration,
+      allow_destructive_migration: allowDestructiveMigration,
     })
   }
 
@@ -181,6 +183,8 @@ function replace (agent, params) {
       graph_type: schema ? 'schema' : 'instance',
       author,
       message,
+      require_migration: requireMigration,
+      allow_destructive_migration: allowDestructiveMigration,
     })
     if (util.isDefined(create)) {
       request.query({ create })
