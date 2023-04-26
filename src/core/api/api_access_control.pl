@@ -22,7 +22,9 @@
               api_update_user_password/4,
               api_get_organizations_users/4,
               api_get_organizations_users_object/5,
-              api_get_organizations_users_databases/5
+              api_get_organizations_users_databases/5,
+
+              get_user_from_name/4
           ]).
 
 :- use_module(core(util)).
@@ -527,7 +529,7 @@ api_add_user(SystemDB,Auth,User,Id) :-
 
     get_dict(name, User, Name),
     (   get_dict(password, User, Password)
-    ->  crypto_password_hash(Password, Hash)
+    ->  generate_password_hash(Password, Hash)
     ;   Hash = null
     ),
     New_User =
@@ -656,7 +658,7 @@ api_update_user_password(System_DB, Auth, UserName, Password) :-
         ;   get_dict('@id', User, Auth)),
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
 
-    crypto_password_hash(Password, Hash),
+    generate_password_hash(Password, Hash),
     put_dict(_{ key_hash : Hash}, User, New_User),
 
     create_context(System_DB, commit_info{author: "admin", message: "API: Update User Password"},

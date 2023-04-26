@@ -1,8 +1,10 @@
 :- module(terminus_store, [
               terminus_store_version/1,
               open_memory_store/1,
+              open_directory_store/2,
               open_archive_store/2,
-              open_archive_store/2,
+              open_archive_store/3,
+              open_grpc_store/5,
 
               create_named_graph/3,
               open_named_graph/3,
@@ -42,6 +44,7 @@
 
               parent/2,
               squash/2,
+              squash_upto/3,
 
               layer_addition_count/2,
               layer_removal_count/2,
@@ -625,6 +628,10 @@ layer_stack_names(Layer, Stack) :-
     retrieve_layer_stack_names(Layer, Stack).
 layer_stack_names(_Layer, _Stack) :-
     throw(error(domain_error('Layer not bound in layer_stack_names/2'),_)).
+
+open_archive_store(Path, Store) :-
+    % default to 512mb
+    open_archive_store(Path, 512, Store).
 
 :- begin_tests(terminus_store).
 

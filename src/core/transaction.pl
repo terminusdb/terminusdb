@@ -2,7 +2,9 @@
               % database.pl
               query_context_transaction_objects/2,
               run_transactions/3,
+              run_transactions/4,
               with_transaction/3,
+              with_transaction/4,
               graph_inserts_deletes/3,
 
               % descriptor.pl
@@ -28,6 +30,7 @@
               transactions_to_map/2,
               collection_descriptor_graph_filter_graph_descriptor/3,
               ensure_transaction_has_builder/2,
+              ensure_transaction_schema_written/1,
 
               % validate.pl
               transaction_objects_to_validation_objects/2,
@@ -88,6 +91,7 @@
               commit_uri_to_history_commit_uris/3,
               commit_uri_to_history_commit_uris/4,
               layer_uri_for_commit/4,
+              schema_change_for_commit/3,
 
               % repo_entity.pl
               has_repository/2,
@@ -97,6 +101,7 @@
               repository_type/3,
               repository_head/3,
               repository_remote_url/3,
+              repository_remote_path/3,
 
               insert_local_repository/3,
               insert_local_repository/4,
@@ -108,6 +113,7 @@
 
               update_repository_head/3,
               update_repository_remote_url/3,
+              update_repository_remote_path/4,
 
               % system_entity.pl
               database_exists/2,

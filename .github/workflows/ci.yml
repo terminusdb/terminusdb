@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 10.1.11
-  CURRENT_REPO_VERSION: 11.0.0-rc1
+  LAST_RELEASED_VERSION: 11.0.5
+  CURRENT_REPO_VERSION: 11.0.6
 
 jobs:
   openapi_lint:
@@ -119,13 +119,6 @@ jobs:
     with:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}
-
-  benchmark:
-    name: Benchmark
-    if: github.repository == 'terminusdb/terminusdb' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/benchmark.yml
-    secrets: inherit
-
 
  # This is required for status checks.
   all_checks_pass_with_build:

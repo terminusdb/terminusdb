@@ -103,7 +103,33 @@ describe('GraphQL', function () {
       '@fields': ['name'],
     },
     name: 'xsd:string',
-  }]
+  },
+  {
+    '@id': 'MaybeRocks',
+    '@type': 'Class',
+    rocks_opt: { '@type': 'Optional', '@class': 'Rocks' },
+  },
+  {
+    '@id': 'NotThere',
+    '@type': 'Class',
+    property: { '@type': 'Array', '@class': 'xsd:decimal' },
+  },
+  {
+    '@id': 'JSONClass',
+    '@type': 'Class',
+    json: 'sys:JSON',
+  },
+  {
+    '@id': 'JSONs',
+    '@type': 'Class',
+    json: { '@type': 'Set', '@class': 'sys:JSON' },
+  },
+  {
+    '@id': 'RockSet',
+    '@type': 'Class',
+    rocks: { '@type': 'Set', '@class': 'Rocks' },
+  },
+  ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
   const plato = { '@type': 'Person', name: 'Plato', age: '80', order: '2', friend: ['Person/Aristotle'] }
@@ -295,6 +321,26 @@ describe('GraphQL', function () {
           { name: '1', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
           { name: '2', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
           { name: '3', _targets_of_Source: [{ name: '2' }, { name: '1' }] },
+        ],
+      )
+    })
+
+    it('ne query', async function () {
+      const NE_QUERY = gql`
+  query PersonQuery {
+     Person(filter:{name:{ne:"Socrates"}}, orderBy : {order : ASC}){
+          name
+        }
+   }`
+      const result = await client.query({ query: NE_QUERY })
+
+      expect(result.data.Person).to.deep.equal(
+        [
+          { name: 'Plato' },
+          { name: 'Aristotle' },
+          { name: 'Immanuel Kant' },
+          { name: 'Karl Popper' },
+          { name: 'Kurt Gödel' },
         ],
       )
     })
@@ -532,6 +578,142 @@ query EverythingQuery {
             name: 'Joe',
           },
         ])
+    })
+
+    it('graphql meta-tags', async function () {
+      const testObj = {
+        '@id': 'Test',
+        '@key': {
+          '@type': 'Random',
+        },
+        '@metadata': {
+          render_as: {
+            test: 'markdown',
+          },
+        },
+        '@type': 'Class',
+        test: {
+          '@class': 'xsd:string',
+          '@type': 'Optional',
+        },
+      }
+      await document.insert(agent, { schema: testObj })
+      const TEST_QUERY = gql`
+ query TestQuery {
+    Test{
+        test
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.Test).to.deep.equal([])
+    })
+
+    it('graphql optional enum', async function () {
+      const testObj = {
+        '@type': 'MaybeRocks',
+        rocks_opt: 'Big',
+      }
+      await document.insert(agent, { instance: testObj })
+      const TEST_QUERY = gql`
+ query TestRocks {
+    MaybeRocks{
+        rocks_opt
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.MaybeRocks).to.deep.equal([
+        {
+          rocks_opt: 'Big',
+        },
+      ])
+    })
+
+    it('graphql array property not present', async function () {
+      const testObj = {
+        '@type': 'NotThere',
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query NotThere {
+    NotThere{
+        property
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.NotThere).to.deep.equal([
+        { property: [] },
+      ])
+    })
+
+    it('graphql list of enum', async function () {
+      const testObj = {
+        '@type': 'RockSet',
+        rocks: ['Big', 'Medium', 'Small'],
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query NotThere {
+    RockSet{
+        rocks
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.RockSet[0].rocks).to.have.deep.members([
+        'Big',
+        'Medium',
+        'Small',
+      ])
+    })
+
+    it('graphql json', async function () {
+      const testObj = {
+        '@type': 'JSONClass',
+        json: { this: { is: { a: { json: [] } } } },
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query JSON {
+    JSONClass{
+        json
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.JSONClass).to.deep.equal([
+        { json: '{"this":{"is":{"a":{"json":[]}}}}' },
+      ])
+    })
+
+    it('graphql json set', async function () {
+      const testObj = {
+        '@type': 'JSONs',
+        json: [{ this: { is: { a: { json: [] } } } },
+          { and: ['another', 'one'] },
+        ],
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query JSONs {
+    JSONs{
+        json
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.JSONs[0].json).to.have.deep.members(
+        [
+          '{"and":["another","one"]}',
+          '{"this":{"is":{"a":{"json":[]}}}}',
+        ],
+      )
     })
   })
 })

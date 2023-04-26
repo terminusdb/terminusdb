@@ -4,6 +4,7 @@
       "@description" : "This is the Repo schema. It is a specification for repository metadata management.",
       "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
   },
+  "@metadata" : { "schema_version" : "v1.0.1" },
   "@base" : "terminusdb://repository/data/",
   "@schema" : "http://terminusdb.com/schema/repository#",
   "layer" : "http://terminusdb.com/schema/layer#",
@@ -40,6 +41,21 @@
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] } }
 
+{ "@id" : "RemotePath",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Lexical",
+             "@fields" : ["organization","database"] },
+  "@documentation" : {
+      "@comment" : "A remote repository path (sharing local storage).",
+      "@properties" : { "database" : "The database name of the remote repository.",
+                        "organization" : "The organization for this remote."
+                      }
+  },
+  "database" : "xsd:string",
+  "organization" : "xsd:string"
+}
+
 { "@id" : "Remote",
   "@type" : "Class",
   "@documentation" : {
@@ -47,6 +63,7 @@
       "@properties" : { "remote_url" : "The url of the remote repository." }
   },
   "@inherits" : "Repository",
-  "remote_url" : "xsd:string",
+  "@oneOf" : { "remote_url" : "xsd:string",
+               "remote_path" : "RemotePath" },
   "@key" : { "@type" : "Lexical",
              "@fields" : [ "name" ] } }

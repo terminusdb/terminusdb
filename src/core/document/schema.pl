@@ -35,6 +35,7 @@
               concrete_subclass/3,
               is_abstract/2,
               is_subdocument/2,
+              is_unfoldable/2,
               schema_is_subdocument/2,
               schema_class_predicate_conjunctive_type/4,
               class_super/3
@@ -593,7 +594,8 @@ type_family_constructor(Type) :-
             sys:'Array',
             sys:'Table',
             sys:'Cardinality',
-            sys:'Optional'
+            sys:'Optional',
+            sys:'Choice'
         ],
         List),
     memberchk(Type,List).
@@ -695,7 +697,8 @@ is_key(Type) :-
     memberchk(Type, List).
 
 is_documentation(Type) :-
-    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation'], List),
+    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation',
+                 sys:'DocumentationLabelComment'], List),
     memberchk(Type, List).
 
 refute_class_key(Validation_Object,Class,Witness) :-

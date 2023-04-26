@@ -13,6 +13,7 @@
               json_schema_elaborate/3,
               context_triple/2,
               database_prefixes/2,
+              database_schema_prefixes/2,
               database_and_default_prefixes/2,
               run_insert_document/4,
               create_graph_from_json/5,
@@ -23,6 +24,8 @@
               write_json_string_to_instance/2,
               replace_json_schema/2,
 
+              database_context_object/2,
+              database_schema_context_object/2,
               get_document/3,
               get_document/4,
               get_document/5,
@@ -30,6 +33,7 @@
               get_schema_document/3,
               get_schema_document_uri/2,
               get_document_uri_by_type/3,
+              get_document_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
               insert_document/3,
@@ -82,6 +86,7 @@
 
               % apply.pl
               apply_diff/4,
+              apply_diff_ids_captures/7,
 
               % json_rdf.pl
               is_json_document_type/1,
@@ -89,7 +94,13 @@
               json_document_triple/3,
               json_subdocument_triple/4,
               assign_json_document_id/2,
-              get_json_object/3
+              get_json_object/3,
+
+              % migration.pl
+              perform_instance_migration/5,
+              perform_instance_migration_on_transaction/4,
+              infer_weakening_migration/3,
+              infer_arbitrary_migration/3
           ]).
 
 :- use_module('document/validation').
@@ -103,3 +114,4 @@
 :- use_module('document/apply').
 :- use_module('document/inference').
 :- use_module('document/json_rdf').
+:- use_module('document/migration').

@@ -184,7 +184,8 @@ setup_unattached_store(Store-Dir) :-
     random_string(RandomString),
     atomic_list_concat([Folder, '/temporary_terminus_store/', RandomString], Dir),
     make_directory_path(Dir),
-    open_archive_store(Dir, Store),
+    lru_cache_size(Cache_Size),
+    open_archive_store(Dir, Cache_Size, Store),
     set_db_version(Dir),
     initialize_database_with_store('root', Store).
 
@@ -225,6 +226,7 @@ ref_schema_context_from_label_descriptor(Label, Label_Descriptor, Commit_Info, C
 repo_schema_context_from_label_descriptor(Label, Label_Descriptor, Context) :-
     Commit_Info = commit_info{author:"test",message:"test"},
     repo_schema_context_from_label_descriptor(Label, Label_Descriptor, Commit_Info, Context).
+
 repo_schema_context_from_label_descriptor(Label, Label_Descriptor, Commit_Info, Context) :-
     repository_ontology(Repo_Label),
     Label_Descriptor = label_descriptor{
@@ -584,13 +586,15 @@ test_document_label_descriptor(Name, Descriptor) :-
     triple_store(Store),
     atom_concat(Name, '_schema', Schema_Name),
     atom_concat(Name, '_instance', Instance_Name),
-    create_named_graph(Store, Schema_Name, _),
-    create_named_graph(Store, Instance_Name, _),
+    atom_string(Schema_Name, Schema_String),
+    atom_string(Instance_Name, Instance_String),
+    create_named_graph(Store, Schema_String, _),
+    create_named_graph(Store, Instance_String, _),
 
     Descriptor = label_descriptor{
                      variety: branch_descriptor,
-                     schema: Schema_Name,
-                     instance: Instance_Name
+                     schema: Schema_String,
+                     instance: Instance_String
                  }.
 
 test_woql_label_descriptor(Descriptor) :-

@@ -122,6 +122,13 @@ predicates! {
         squashed_layer_term.unify(&WrappedLayer(squashed))
     }
 
+    pub semidet fn squash_upto(context, layer_term, upto_term, squashed_layer_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let upto: WrappedLayer = upto_term.get_ex()?;
+        let squashed = context.try_or_die(layer.squash_upto(&upto))?;
+        squashed_layer_term.unify(&WrappedLayer(squashed))
+    }
+
     pub semidet fn rollup(context, layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         context.try_or_die(layer.rollup())
@@ -178,7 +185,7 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let name = name_to_string(layer.name());
 
-        id_term.unify(&name)
+        id_term.unify(name)
     }
 
     pub semidet fn store_id_layer(context, store_term, id_term, layer_term) {
@@ -196,7 +203,7 @@ predicates! {
             let layer: WrappedLayer = layer_term.get_ex()?;
             let name = name_to_string(layer.name());
 
-            id_term.unify(&name)
+            id_term.unify(name)
         }
     }
 
@@ -269,7 +276,7 @@ predicates! {
                 Ok(iter.peek().is_some())
             }
             else {
-                return Err(PrologError::Failure);
+                Err(PrologError::Failure)
             }
         }
     }
@@ -352,7 +359,7 @@ predicates! {
                 Ok(iter.peek().is_some())
             }
             else {
-                return Err(PrologError::Failure);
+                Err(PrologError::Failure)
             }
         }
     }
@@ -426,7 +433,7 @@ predicates! {
                 Ok(iter.peek().is_some())
             }
             else {
-                return Err(PrologError::Failure);
+                Err(PrologError::Failure)
             }
         }
     }
@@ -436,7 +443,7 @@ predicates! {
 
         let names = context.try_or_die(layer.retrieve_layer_stack_names())?;
         let name_strings: Vec<String> = names.into_iter()
-            .map(|name| name_to_string(name))
+            .map(name_to_string)
             .collect();
 
         layer_stack_term.unify(name_strings.as_slice())

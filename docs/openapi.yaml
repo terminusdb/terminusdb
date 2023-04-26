@@ -1063,14 +1063,26 @@ paths:
     x-python-client: Client::squash
     x-js-client: Client.squashBranch
     parameters:
-        - $ref: '#/components/parameters/branch_path'
-    get:
-      summary: Squash a specific commit
+        - $ref: '#/components/parameters/commit_path'
+    post:
+      summary: Squash a commit history into a new commit
+      description: This squashes a commit history into a single commit. The commit will not be attached to any particular branch.
       tags:
         - Branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "commit_info"
+              properties:
+                "commit_info":
+                  $ref: "#/components/schemas/CommitInfo"
       responses:
         200:
-          description: "Succesfully squashed the branch"
+          description: "Succesfully created a new unattached commit containing the squashed data. This commit can be queried directly, or be assigned to a particular branch using the reset endpoint."
           content:
             application/json:
               schema:
@@ -1082,9 +1094,11 @@ paths:
                       - "api:SquashResponse"
                   "api:commit":
                     type: string
+                    description: the newly generated commit
                     example: admin/test/local/commit/apgatilsa03g4lsa9ra5698wom5wcv7
                   "api:old_commit":
                     type: string
+                    description: the commit that was squashed
                     example: admin/test/local/commit/5jndjh9lexe62q9u1q2vofyjemfnmyt
                   "api:status":
                     type: string
@@ -1095,6 +1109,7 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       summary: Reset branch to a specific commit
+      description: This will set the branch to the submitted commit. The commit is specified as a resource path to either a specific commit, or to a branch, in which case the commit this branch will be set to is going to be the head of that branch.
       x-python-client: Client::reset
       x-js-client: Client.resetBranch
       tags:
@@ -1108,6 +1123,7 @@ paths:
               properties:
                 commit_descriptor:
                   type: string
+                  description: path to a specific commit or to a branch
                   example: admin/test/local/commit/5jndjh9lexe62q9u1q2vofyjemfnmyt
       responses:
         200:
@@ -1121,6 +1137,96 @@ paths:
                     type: string
                     enum:
                       - api:ResetResponse
+                  "api:status":
+                    type: string
+                    enum:
+                      - api:success
+  /rebase/{path}:
+    parameters:
+      - $ref: '#/components/parameters/branch_path'
+    post:
+      summary: Rebase all commits from a source onto this branch
+      description: Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
+
+        If there is no common history, the rebase will take all commits into account.
+      x-python-client: Client::rebase
+      x-js-client: Client.rebase
+      tags:
+        - Branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                author:
+                  type: string
+                  example: Lightning McQueen
+                rebase_from:
+                  type: string
+                  example: admin/test/local/branch/bar
+      responses:
+        200:
+          description: "Succesfully rebased commits"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    enum:
+                      - api:RebaseResponse
+                  "api:forwarded_commits":
+                    type: array
+                    items:
+                      type: string
+                    description: the list of ids that are taken from source
+                    example:
+                      - q0r08e1hjy123tkf0urzjiov7rrnmp7
+                      - 71oqhojpu24a1doftlo9szjkmf22yhy
+                  "api:rebase_report":
+                    description: a report for each rebased commit on how it was reapplied
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        "@type":
+                          type: string
+                          enum:
+                            - api:RebaseReport
+                        "api:origin_commit":
+                          type: string
+                          description: the original commit ID
+                        "api:applied":
+                          type: array
+                          items:
+                            type: string
+                          description: the new commit IDs this commit turned into
+                        "api:commit_type":
+                          type: string
+                          enum:
+                            - api:valid_commit
+                    example:
+                      - '@type': api:RebaseReport
+                        api:applied:
+                          - 1q7oa1tq79w2hbn21b6bp7gojryqdes
+                        api:commit_type: api:valid_commit
+                        api:origin_commit: wguh7angj0wyc7zmolzf8r9p80s6wz6
+                      - '@type': api:RebaseReport
+                        api:applied:
+                          - i2e1wv5pagftoguf70yrk66ufogrejf
+                        api:commit_type: api:valid_commit
+                        api:origin_commit: w1akvg7nvbzgkqj4ycugftk9g1d1ydy
+                      - '@type': api:RebaseReport
+                        api:applied:
+                          - ams38vxkl0yphl9ni0hgkb4802arm3s
+                        api:commit_type: api:valid_commit
+                        api:origin_commit: opk0hv1qk6j0q7auaexlkisd6mf28s9
+                  "api:common_commit_id":
+                    type: string
+                    example: h9m7xx0c4lyhpp6kf728yfcotyxmodn
                   "api:status":
                     type: string
                     enum:
@@ -1207,6 +1313,12 @@ paths:
                 "document_id":
                   type: string
                   example: Person/Jane
+                "start":
+                  type: integer
+                  example: 0
+                "count":
+                  type: integer
+                  example: 10
                 "keep":
                   type: object
                   example: { "@id" : true, "_id" : true }
@@ -1257,6 +1369,62 @@ paths:
               schema:
                 type: object
                 example: { "name" : { "@op" : "ValueSwap", "@before" : "Doug", "@after": "Jane" }}
+  /patch/{path}:
+    parameters:
+      - $ref: '#/components/parameters/branch_path'
+    post:
+      summary: Apply a patch object to a resource
+      x-python-client: Client::patch_resource
+      x-js-client: Client.patchResource
+      tags:
+        - Change management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: 
+                - "patch"
+                - "author"
+                - "message"
+              properties:
+                "patch":
+                  type: object
+                  example:
+                    - '@id': Obj/id1
+                      name:
+                        '@op': SwapValue
+                        '@before': foo
+                        '@after': bar
+                    - '@id': Obj/id2
+                      name:
+                        '@op': SwapValue
+                        '@before': foo
+                        '@after': bar
+                "author": 
+                  type: string
+                  example: me
+                "message": 
+                  type: string
+                  example: message
+      responses:
+        200:
+          description: "Patch applied cleanly"
+          content:
+            application/json:
+              schema:
+                type: array
+                items: 
+                  type: string
+                example: ["Obj/id1", "Obj/id2"]
+        409:
+          description: "Failed to apply patch: returning conflict patch"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: { "@type" : "api:PatchError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /apply/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
@@ -1362,6 +1530,72 @@ paths:
                       type: number
                       example: 1660919664.9129035
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+  /history/{organization}/{database}:
+    get:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Get commits from a specific database or branch"
+      tags:
+        - Change management
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: id
+          description: id of document to report histry of
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "A/0"
+        - name: start
+          description: Index to start from
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 0
+        - name: updated
+          description: Last updated time (excludes history, but can be combined with created)
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: created
+          description: Created date of object (excludes history, but can be combined with updated)
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: count
+          description: Amount of commits to show
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 10
+      responses:
+        200:
+          description: "Successful history request"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    "author":
+                      type: string
+                      example: admin
+                    "identifier":
+                      type: string
+                      example: hpl18q42dbnab4vzq8me4bg1xn8p2a0
+                    "message":
+                      type: string
+                      example: create initial schema
+                    "timestamp":
+                      type: number
+                      example: 1660919664.9129035
+                  example: [{"author":"admin","identifier":"tbn15yq6rw1l4e9bgboyu3vwcoxgri5","message":"cli: document replace","timestamp":1680808874.324928},{"author":"admin","identifier":"3v3naa8jrt8612dg5zryu4vjqwa2w9s","message":"cli: document insert","timestamp":1680808847.4063878}]
   /roles:
     post:
       x-python-client: Client::add_role
@@ -1840,6 +2074,51 @@ paths:
                 example: {'@type':"api:UsersResponse",'api:status' :"api:success"}
         403:
           description: Forbidden
+  /migration/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          example: admin/MyDB
+    post:
+      tags:
+        - Change management
+      summary: Schema migration either by explicit operation, or implicit schema targetting
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "author":
+                  type: string
+                  example: "Jimbo"
+                "message":
+                  type: string
+                  example: "updating schema"
+                "operations":
+                  type: object
+                  example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
+                "target":
+                  type: string
+                  example: "admin/foo"
+      responses:
+        200:
+          description: "Successfully migrated schema"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:MigrationResponse","api:status":"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
   /capabilities:
     post:
       x-python-client: Client::change_capabilities
@@ -1934,6 +2213,18 @@ components:
       schema:
         type: string
         example: admin/test/local/branch/foo
+    commit_path:
+      name: path
+      in: path
+      description: Path for a commit or branch
+      required: true
+      schema:
+        type: string
+      examples:
+        branch:
+          value: admin/test/local/branch/foo
+        commit:
+          value: admin/test/local/commit/q0r08e1hjy123tkf0urzjiov7rrnmp7
     resource_path:
       name: path
       in: path

@@ -1,8 +1,10 @@
 :- module(database,[
               query_context_transaction_objects/2,
               run_transactions/3,
+              run_transactions/4,
               retry_transaction/2,
               with_transaction/3,
+              with_transaction/4,
               graph_inserts_deletes/3
           ]).
 
@@ -20,6 +22,7 @@
 :- use_module(core(util/utils)).
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 :- use_module(core(plugins)).
+:- use_module(core(document/migration)).
 
 :- use_module(config(terminus_config), [max_transaction_retries/1]).
 
@@ -32,6 +35,7 @@
 :- use_module(library(random)).
 :- use_module(library(terminus_store)).
 :- use_module(library(aggregate)).
+:- use_module(library(option)).
 
 descriptor_database_name(Descriptor, 'terminusdb:///system/data/_system') :-
     system_descriptor{} = Descriptor,
@@ -218,31 +222,38 @@ post_transaction_tabling :-
  * The body is assumed semidet.
  */
 :- meta_predicate with_transaction(?,0,?).
+with_transaction(Query_Context,Body,Meta_Data) :-
+    with_transaction(Query_Context,Body,Meta_Data, []).
+
+:- meta_predicate with_transaction(?,0,?,+).
 with_transaction(Query_Context,
                  Body,
-                 Meta_Data) :-
+                 Meta_Data,
+                 Options) :-
     setup_call_cleanup(
         pre_transaction_tabling,
-        with_transaction_(Query_Context,Body,Meta_Data),
+        with_transaction_(Query_Context,Body,Meta_Data,Options),
         post_transaction_tabling % Do some cleanup of schema compilation etc.
     ).
 
-:- meta_predicate with_transaction(?,0,?).
+:- meta_predicate with_transaction(?,0,?,+).
 with_transaction_(Query_Context,
                   Body,
-                  Meta_Data) :-
+                  Meta_Data,
+                  Options) :-
     retry_transaction(Query_Context, Transaction_Retry_Count),
     (   catch(call(Body),
               fail_transaction,
               Fail_Transaction=true)
     ->  Fail_Transaction = false,
         query_context_transaction_objects(Query_Context, Transactions),
-        run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0),
+        run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0,Options),
         !, % No going back now!
         Meta_Data = (Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}))
     ;   !,
         fail).
 with_transaction_(_,
+                  _,
                   _,
                   _) :-
     throw(error(transaction_retry_exceeded, _)).
@@ -255,29 +266,71 @@ with_transaction_(_,
  * Run all transactions and throw errors with witnesses.
  */
 run_transactions(Transactions, All_Witnesses, Meta_Data) :-
+    run_transactions(Transactions, All_Witnesses, Meta_Data,[]).
+
+/*
+
+Options include
+* inside_migration: whether we ourselves are a migration transaction
+* require_migration: whether we should throw an error if no migration can be established
+* allow_destructive_migration: whether we should allow strengthening migrations
+
+ */
+run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
-    validate_validation_objects(Validations, All_Witnesses, Witnesses),
-    /*
-    with_output_to(
-        user_error,
-        (   format("~n~nXXXXXXXXXXXXXXX~n",[]),
-            maplist(
-                [Askable]>>print_all_triples(Askable,schema),
-                Validations),
-            format(user_error,"~n~nYYYYYYYYYYYYYYY~n",[]),
-            maplist(
-                [Askable]>>print_all_triples(Askable),
-                Validations))
-    ),*/
+    (   option(inside_migration(true), Options)
+    ->  Validations=Validations0,
+        Inference_Metadata=_{}
+    ;   infer_migrations_for_commit(Validations,Validations0,Inference_Metadata,Options)
+    ),
+    validate_validation_objects(Validations0, All_Witnesses, Witnesses),
 
     (   Witnesses = []
     ->  true
     ;   throw(error(schema_check_failure(Witnesses),_))),
-    commit_validation_objects(Validations, Committed),
+
+    findall(Witness,
+            pre_commit_hook(Validations0, Witness),
+            Hook_Witnesses),
+    (   Hook_Witnesses = []
+    ->  true
+    ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
+
+    commit_validation_objects(Validations0, Committed),
+    % Use the original validations before any potential schema migration
     collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
-    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data),
-    ignore(forall(post_commit_hook(Validations, Meta_Data), true)).
+    put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data0),
+    put_dict(Inference_Metadata, Meta_Data0, Meta_Data),
+    ignore(forall(post_commit_hook(Validations0, Meta_Data), true)).
+
+no_schema_changes_for_validation(Validation) :-
+    member(Schema_Object,(Validation.schema_objects)),
+    (Schema_Object.changed) = false.
+
+no_schema_changes(Validations) :-
+    forall(
+        member(Validation, Validations),
+        no_schema_changes_for_validation(Validation)
+    ).
+
+infer_migrations_for_commit(Validations,Validations,_{},_Options) :-
+    no_schema_changes(Validations),
+    !.
+infer_migrations_for_commit(Validations0,Validations1,Meta_Data,Options) :-
+    (   option(require_migration(true), Options)
+    ->  do_or_die(
+            (   option(allow_destructive_migration(true), Options)
+            ->  infer_arbitrary_migration(Validations0, Validations1, Meta_Data)
+            ;   infer_weakening_migration(Validations0, Validations1, Meta_Data)),
+            error(no_inferrable_migration, _))
+    ;   option(allow_destructive_migration(true), Options)
+    ->  infer_arbitrary_migration(Validations0, Validations1, Meta_Data)
+    ;   infer_weakening_migration(Validations0, Validations1, Meta_Data)
+    ->  true
+    ;   Validations0 = Validations1,
+        Meta_Data = _{}
+    ).
 
 /* Note: This should not exist */
 graph_inserts_deletes(Graph, I, D) :-

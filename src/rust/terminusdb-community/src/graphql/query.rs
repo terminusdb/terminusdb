@@ -3,6 +3,7 @@ use juniper::{self, DefaultScalarValue, FromInputValue, InputValue, ScalarValue,
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
+use swipl::prelude::QueryableContextType;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType};
 
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -17,7 +18,10 @@ use super::filter::{
     FilterInputObject, FloatFilterInputObject, IntFilterInputObject, StringFilterInputObject,
 };
 use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
-use super::schema::{BigFloat, BigInt, DateTime, TerminusOrderBy, TerminusOrdering};
+use super::schema::{
+    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
+    TerminusOrderBy, TerminusOrdering,
+};
 
 use crate::path::compile::path_to_class;
 
@@ -90,6 +94,7 @@ enum FilterValue {
 
 #[derive(Debug)]
 struct FilterObject {
+    restriction: Option<String>,
     edges: Vec<(String, FilterValue)>,
 }
 
@@ -120,6 +125,8 @@ FilterObject{ edges:
 fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::String(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::String(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::String(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -145,6 +152,8 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
 fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::BigInt(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::BigInt(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::BigInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -161,6 +170,8 @@ fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject
 fn compile_datetime_input_value(string_type: &str, value: DateTimeFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::DateTime(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::DateTime(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::DateTime(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -177,6 +188,8 @@ fn compile_datetime_input_value(string_type: &str, value: DateTimeFilterInputObj
 fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::Float(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::Float(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::Float(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -193,6 +206,8 @@ fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -
 fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::BigFloat(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::BigFloat(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::BigFloat(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -209,6 +224,8 @@ fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObje
 fn compile_small_integer_input_value(string_type: &str, value: IntFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::SmallInt(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::SmallInt(GenericOperation::Ne, val, string_type.to_string())
     } else if let Some(val) = value.lt {
         FilterType::SmallInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
@@ -225,6 +242,8 @@ fn compile_small_integer_input_value(string_type: &str, value: IntFilterInputObj
 fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObject) -> FilterType {
     if let Some(val) = value.eq {
         FilterType::Boolean(GenericOperation::Eq, val, string_type.to_string())
+    } else if let Some(val) = value.ne {
+        FilterType::Boolean(GenericOperation::Ne, val, string_type.to_string())
     } else {
         panic!("Unable to compile string input value to a filter")
     }
@@ -270,8 +289,7 @@ fn compile_typed_filter(
         match &all_frames.frames[range] {
             TypeDefinition::Class(class_definition) => {
                 if let InputValue::Object(edges) = &spanning_input_value.item {
-                    let inner =
-                        compile_edges_to_filter(range, all_frames, class_definition, &edges);
+                    let inner = compile_edges_to_filter(range, all_frames, class_definition, edges);
                     FilterObjectType::Node(Rc::new(inner), range.to_string())
                 } else {
                     panic!()
@@ -316,6 +334,7 @@ fn compile_edges_to_filter(
     edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 ) -> FilterObject {
     let mut result: Vec<(String, FilterValue)> = Vec::with_capacity(edges.len());
+    let mut restriction = None;
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = &spanning_string.item;
         if field_name == "_and" {
@@ -331,7 +350,7 @@ fn compile_edges_to_filter(
                                     class_name,
                                     all_frames,
                                     class_definition,
-                                    &o,
+                                    o,
                                 )))
                             }
                             _ => panic!("We should not have a non object in And-clause"),
@@ -354,7 +373,7 @@ fn compile_edges_to_filter(
                                     class_name,
                                     all_frames,
                                     class_definition,
-                                    &o,
+                                    o,
                                 )))
                             }
                             _ => panic!("We should not have a non object in And-clause"),
@@ -373,20 +392,25 @@ fn compile_edges_to_filter(
                         class_name,
                         all_frames,
                         class_definition,
-                        &o,
+                        o,
                     ))),
                 )),
                 _ => panic!("We should not have a non object in And-clause"),
             }
+        } else if field_name == "_restriction" {
+            let input_value = &spanning_input_value.item;
+            let expected: GeneratedEnum = GeneratedEnum::from_input_value(input_value)
+                .expect("restriction value in filter was not a string");
+            restriction = Some(expected.value);
         } else {
-            let field = class_definition.resolve_field(&field_name);
+            let field = class_definition.resolve_field(field_name);
             let prefixes = &all_frames.context;
-            let property = class_definition.fully_qualified_property_name(&prefixes, field_name);
+            let property = class_definition.fully_qualified_property_name(prefixes, field_name);
             let range = field.range();
             let kind = field.kind();
             match kind {
                 FieldKind::Required | FieldKind::Optional => {
-                    let res = compile_typed_filter(range, all_frames, &spanning_input_value);
+                    let res = compile_typed_filter(range, all_frames, spanning_input_value);
                     result.push((property.to_string(), FilterValue::Required(res)));
                 }
                 FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
@@ -398,7 +422,10 @@ fn compile_edges_to_filter(
             }
         }
     }
-    FilterObject { edges: result }
+    FilterObject {
+        restriction,
+        edges: result,
+    }
 }
 
 fn compile_filter_object(
@@ -408,7 +435,7 @@ fn compile_filter_object(
 ) -> FilterObject {
     let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
     let edges = &filter_input.edges;
-    compile_edges_to_filter(class_name, all_frames, class_definition, &edges)
+    compile_edges_to_filter(class_name, all_frames, class_definition, edges)
 }
 
 pub fn predicate_value_filter<'a>(
@@ -420,8 +447,8 @@ pub fn predicate_value_filter<'a>(
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
-            ObjectType::Value(entry) => g.object_value_id(&entry),
-            ObjectType::Node(node) => g.object_node_id(&node),
+            ObjectType::Value(entry) => g.object_value_id(entry),
+            ObjectType::Node(node) => g.object_node_id(node),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -443,8 +470,8 @@ pub fn predicate_value_iter<'a>(
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
-            ObjectType::Value(entry) => g.object_value_id(&entry),
-            ObjectType::Node(node) => g.object_node_id(&node),
+            ObjectType::Value(entry) => g.object_value_id(entry),
+            ObjectType::Node(node) => g.object_node_id(node),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(
@@ -519,7 +546,7 @@ fn object_type_filter<'a>(
             TextOperation::AnyOfTerms(vec) => {
                 let regexs: Vec<_> = vec.iter().map(|s| regex::escape(s)).collect();
                 let regexset =
-                    RegexSet::new(&regexs).expect("Regex should always be valid due to escaping");
+                    RegexSet::new(regexs).expect("Regex should always be valid due to escaping");
                 let g = g.clone();
                 ClonableIterator::new(iter.filter(move |object| {
                     let string = g
@@ -532,7 +559,7 @@ fn object_type_filter<'a>(
         },
         FilterType::SmallInt(op, i, _) => {
             let op = *op;
-            let i = i.clone();
+            let i = *i;
             let h = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = h.id_object_value(*object).expect("Object value must exist");
@@ -543,7 +570,7 @@ fn object_type_filter<'a>(
         }
         FilterType::Float(op, f, _) => {
             let op = *op;
-            let f = f.clone();
+            let f = *f;
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
@@ -554,7 +581,7 @@ fn object_type_filter<'a>(
         }
         FilterType::Boolean(op, b, _) => {
             let op = *op;
-            let b = b.clone();
+            let b = *b;
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
@@ -623,17 +650,25 @@ fn object_type_filter<'a>(
     }
 }
 
-fn compile_query<'a>(
+fn compile_query<'a, C: QueryableContextType>(
+    context: &'a TerminusContext<'a, C>,
     g: &'a SyncStoreLayer,
     filter: Rc<FilterObject>,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     let mut iter = iter;
+    if let Some(restriction_name) = filter.restriction.clone() {
+        iter = ClonableIterator::new(iter.filter(move |id| {
+            id_matches_restriction(context, &restriction_name, *id)
+                .unwrap()
+                .is_some()
+        }));
+    }
     for (predicate, filter) in filter.edges.iter() {
         match filter {
             FilterValue::And(vec) => {
                 for filter in vec.iter() {
-                    iter = compile_query(g, filter.clone(), iter)
+                    iter = compile_query(context, g, filter.clone(), iter)
                 }
             }
             FilterValue::Or(vec) => {
@@ -645,7 +680,7 @@ fn compile_query<'a>(
                 //or_iter = ClonableIterator::new(std::iter::empty());
                 iter = ClonableIterator::new(vec.clone().into_iter().flat_map(move |filter| {
                     let iter_copy = ClonableIterator::new(initial_vector.clone().into_iter());
-                    compile_query(&g, filter, iter_copy)
+                    compile_query(context, g, filter, iter_copy)
                 }));
             }
             FilterValue::Not(filter) => {
@@ -657,13 +692,13 @@ fn compile_query<'a>(
                     initial_set.clone().into_iter(),
                 ));
                 let sub_iter: HashSet<u64> =
-                    compile_query(&g, filter.clone(), initial_iter).collect();
+                    compile_query(context, g, filter.clone(), initial_iter).collect();
 
                 let result = &initial_set - &sub_iter;
                 iter = ClonableIterator::new(CachedClonableIterator::new(result.into_iter()));
             }
             FilterValue::Required(object_type) => {
-                let maybe_property_id = g.predicate_id(&predicate);
+                let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match object_type {
                         FilterObjectType::Node(sub_filter, _) => {
@@ -674,7 +709,7 @@ fn compile_query<'a>(
                                         .map(|t| t.object)
                                         .into_iter(),
                                 );
-                                compile_query(&g, sub_filter.clone(), objects)
+                                compile_query(context, g, sub_filter.clone(), objects)
                                     .next()
                                     .is_some()
                             }))
@@ -687,7 +722,7 @@ fn compile_query<'a>(
                                         .map(|t| t.object)
                                         .into_iter(),
                                 );
-                                object_type_filter(&g, &filter_type, object_iter)
+                                object_type_filter(g, &filter_type, object_iter)
                                     .next()
                                     .is_some()
                             }))
@@ -698,7 +733,7 @@ fn compile_query<'a>(
                 }
             }
             FilterValue::Collection(op, o) => {
-                let maybe_property_id = g.predicate_id(&predicate);
+                let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
                         CollectionOperation::SomeHave => match o {
@@ -709,7 +744,7 @@ fn compile_query<'a>(
                                         ClonableIterator::new(CachedClonableIterator::new(
                                             g.triples_sp(*subject, property_id).map(|t| t.object),
                                         ));
-                                    compile_query(&g, sub_filter.clone(), objects)
+                                    compile_query(context, g, sub_filter.clone(), objects)
                                         .next()
                                         .is_some()
                                 }));
@@ -721,7 +756,7 @@ fn compile_query<'a>(
                                         ClonableIterator::new(CachedClonableIterator::new(
                                             g.triples_sp(*subject, property_id).map(|t| t.object),
                                         ));
-                                    object_type_filter(&g, &filter_type, objects)
+                                    object_type_filter(g, &filter_type, objects)
                                         .next()
                                         .is_some()
                                 }));
@@ -735,7 +770,8 @@ fn compile_query<'a>(
                                         ClonableIterator::new(CachedClonableIterator::new(
                                             g.triples_sp(*subject, property_id).map(|t| t.object),
                                         ));
-                                    compile_query(&g, sub_filter.clone(), objects).all(|_| true)
+                                    compile_query(context, g, sub_filter.clone(), objects)
+                                        .all(|_| true)
                                 }));
                             }
                             FilterObjectType::Value(filter_type) => {
@@ -745,7 +781,7 @@ fn compile_query<'a>(
                                         ClonableIterator::new(CachedClonableIterator::new(
                                             g.triples_sp(*subject, property_id).map(|t| t.object),
                                         ));
-                                    object_type_filter(&g, &filter_type, objects).all(|_| true)
+                                    object_type_filter(g, &filter_type, objects).all(|_| true)
                                 }));
                             }
                         },
@@ -773,7 +809,7 @@ fn generate_initial_iterator<'a>(
             let mut iter = ClonableIterator::new(std::iter::empty());
             for super_class in subsuming {
                 let super_class = all_frames.fully_qualified_class_name(&super_class);
-                let next = predicate_value_iter(g, &RDF_TYPE, &ObjectType::Node(super_class));
+                let next = predicate_value_iter(g, RDF_TYPE, &ObjectType::Node(super_class));
                 iter = ClonableIterator::new(iter.chain(next))
             }
             (filter_opt, iter)
@@ -782,7 +818,8 @@ fn generate_initial_iterator<'a>(
     }
 }
 
-fn lookup_by_filter<'a>(
+fn lookup_by_filter<'a, C: QueryableContextType>(
+    context: &'a TerminusContext<'a, C>,
     g: &'a SyncStoreLayer,
     class_name: &'a str,
     all_frames: &AllFrames,
@@ -793,13 +830,14 @@ fn lookup_by_filter<'a>(
         generate_initial_iterator(g, class_name, all_frames, filter_opt, zero_iter);
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
-        compile_query(g, continuation_filter, iterator)
+        compile_query(context, g, continuation_filter, iterator)
     } else {
         iterator
     }
 }
 
-pub fn run_filter_query<'a>(
+pub fn run_filter_query<'a, C: QueryableContextType>(
+    context: &'a TerminusContext<'a, C>,
     g: &'a SyncStoreLayer,
     prefixes: &'a Prefixes,
     arguments: &'a juniper::Arguments,
@@ -814,7 +852,7 @@ pub fn run_filter_query<'a>(
                     let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
-                        &RDF_TYPE,
+                        RDF_TYPE,
                         &ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(g.subject_id(&id_string).into_iter()),
                     ))
@@ -828,7 +866,7 @@ pub fn run_filter_query<'a>(
                     let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
                     Some(predicate_value_filter(
                         g,
-                        &RDF_TYPE,
+                        RDF_TYPE,
                         &ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&id))),
                     ))
@@ -872,7 +910,7 @@ pub fn run_filter_query<'a>(
     let it: ClonableIterator<'a, u64> =
         if let Some(TerminusOrderBy { fields }) = arguments.get::<TerminusOrderBy>("orderBy") {
             let mut results: Vec<u64> =
-                lookup_by_filter(g, class_name, all_frames, filter, new_zero_iter)
+                lookup_by_filter(context, g, class_name, all_frames, filter, new_zero_iter)
                     .unique()
                     .collect();
             results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
@@ -885,7 +923,7 @@ pub fn run_filter_query<'a>(
             )
         } else {
             ClonableIterator::new(
-                lookup_by_filter(g, class_name, all_frames, filter, new_zero_iter)
+                lookup_by_filter(context, g, class_name, all_frames, filter, new_zero_iter)
                     .skip(usize::try_from(offset).unwrap_or(0)),
             )
         };

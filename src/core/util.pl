@@ -149,6 +149,8 @@
               with_memory_file_stream/4,
               terminal_slash/2,
               dict_field_verifier/3,
+              count_solutions/2,
+              negative_to_infinity/2,
 
               % speculative_parse.pl
               %guess_date/2,
@@ -248,6 +250,7 @@
               param_value_search_optional/5,
               param_value_json_required/4,
               param_value_json_optional/5,
+              param_value_search_or_json/5,
               param_value_search_or_json_required/5,
               param_value_search_or_json_optional/6,
               param_value_search_author/2,

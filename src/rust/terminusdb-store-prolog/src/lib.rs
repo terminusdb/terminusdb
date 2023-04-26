@@ -11,6 +11,7 @@ pub fn install(module: Option<&str>) {
     store::register_open_memory_store_in_module(module);
     store::register_open_directory_store_in_module(module);
     store::register_open_archive_store_in_module(module);
+    store::register_open_grpc_store_in_module(module);
     named_graph::register_create_named_graph_in_module(module);
     named_graph::register_open_named_graph_in_module(module);
     named_graph::register_delete_named_graph_in_module(module);
@@ -38,6 +39,7 @@ pub fn install(module: Option<&str>) {
     layer::register_id_to_object_in_module(module);
     layer::register_parent_in_module(module);
     layer::register_squash_in_module(module);
+    layer::register_squash_upto_in_module(module);
     layer::register_rollup_in_module(module);
     layer::register_rollup_upto_in_module(module);
     layer::register_imprecise_rollup_upto_in_module(module);
