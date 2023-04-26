@@ -95,15 +95,20 @@ describe('patch', function () {
       const instance2 = { '@type': id, '@id': `terminusdb:///data/${id}/1`, a: 'b' }
       await document.insert(agent, { instance: instance2 })
       const res = await document.delete(agent,
-                                        { query: {id,
-                                                  graph_type: 'schema',
-                                                  require_migration: true,
-                                                  allow_destructive_migration: true
-                                                 }})
+        {
+          query: {
+            id,
+            graph_type: 'schema',
+            require_migration: true,
+            allow_destructive_migration: true,
+          },
+        })
       const logRequest = await agent.get(`/api/log/admin/${agent.dbName}?verbose=true&count=1`)
       const log = logRequest.body
-      expect(log[0].migration).to.deep.equal([{'@type': 'DeleteClass',
-                                               'class' : id}])
+      expect(log[0].migration).to.deep.equal([{
+        '@type': 'DeleteClass',
+        class: id,
+      }])
     })
   })
 })
