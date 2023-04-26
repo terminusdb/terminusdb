@@ -427,7 +427,8 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Ids, Captures_Out):-
