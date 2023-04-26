@@ -1313,6 +1313,12 @@ paths:
                 "document_id":
                   type: string
                   example: Person/Jane
+                "start":
+                  type: integer
+                  example: 0
+                "count":
+                  type: integer
+                  example: 10
                 "keep":
                   type: object
                   example: { "@id" : true, "_id" : true }
