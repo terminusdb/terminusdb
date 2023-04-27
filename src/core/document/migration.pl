@@ -282,6 +282,15 @@ type_is_optional(Type) :-
         Max >= 1
     ).
 
+one_of_subsumed(OriginalOneOf, WeakeningOneOf) :-
+    forall(
+        member(Spec, OriginalOneOf),
+        \+ forall(
+               member(Spec2, WeakeningOneOf),
+               \+ Spec :< Spec2
+           )
+    ).
+
 /* Failure is no-op, success is operation, and no clause head is an error
 
 class_property_weakened(+,+,+,-) is semidet  + error
@@ -291,6 +300,18 @@ memberchk(Property,['@type','@key','@subdocument','@inherits','@id','@unfoldable
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
+    fail.
+class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
+    get_dict('@oneOf', Original, OriginalOneOf),
+    get_dict('@oneOf', Weakening, WeakeningOneOf),
+    do_or_die(
+        one_of_subsumed(OriginalOneOf,WeakeningOneOf),
+        error(weakening_failure(json{reason: class_enum_value_change_not_a_weakening,
+                                     message: "An enum was changed to include a @oneOf specification which did not subsume the original",
+                                     class: Class,
+                                     old: OriginalOneOf,
+                                     new: WeakeningOneOf}), _)
+    ),
     fail.
 class_property_weakened('@metadata', _Original, Weakening, Class, Operation) =>
     get_dict('@metadata',Weakening, New_Metadata),
@@ -336,6 +357,12 @@ class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
                                         value: Value,
                                         candidate: Weakening}),_)).
 
+class_property_optional('@oneOf',Weakening,Class,_) :-
+    throw(error(weakening_failure(json{ reason: class_property_addition_not_optional,
+                                        message: "@oneOf can not include optionals",
+                                        class: Class,
+                                        property: '@oneOf',
+                                        candidate: Weakening}),_)).
 class_property_optional(Property,Weakening,Class,Operation) :-
     get_dict(Property,Weakening,Type),
     do_or_die(
@@ -2046,5 +2073,26 @@ test(infer_class_property_weakening,
         Meta_Data
     ),
     get_dict(schema_operations, Meta_Data, 1).
+
+test(subsumes_oneof, []) :-
+    New = [json{parameters:json{'@class':'Parameter','@type':'List'},
+                receives:json{'@class':'Parameter','@type':'List'}},
+           json{returns:'Returns',
+                returns_multiple:json{'@class':'Returns','@type':'List'},
+                yields:'Returns'}],
+    Old = [json{parameters:json{'@class':'Parameter','@type':'List'},
+                receives:json{'@class':'Parameter','@type':'List'}},
+           json{returns:'Returns',
+                returns_multiple:json{'@class':'Returns','@type':'List'},
+                void:'sys:Unit',yields:'Returns'}],
+    one_of_subsumed(New, Old),
+    \+ one_of_subsumed(Old, New).
+
+test(weaken_oneof, [
+         error(weakening_failure(json{class:'Definition',message:"An enum was changed to include a @oneOf specification which did not subsume the original",new:[json{parameters:json{'@class':'Parameter','@type':'List'},receives:json{'@class':'Parameter','@type':'List'}},json{returns:'Returns',returns_multiple:json{'@class':'Returns','@type':'List'},yields:'Returns'}],old:[json{parameters:json{'@class':'Parameter','@type':'List'},receives:json{'@class':'Parameter','@type':'List'}},json{returns:'Returns',returns_multiple:json{'@class':'Returns','@type':'List'},void:'sys:Unit',yields:'Returns'}],reason:class_enum_value_change_not_a_weakening}), _)
+     ]) :-
+    Before = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, void:'sys:Unit', yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
+    After = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
+    class_weakened('Definition', Before, After, _5762).
 
 :- end_tests(migration).
