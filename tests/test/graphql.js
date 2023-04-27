@@ -129,6 +129,15 @@ describe('GraphQL', function () {
     '@type': 'Class',
     rocks: { '@type': 'Set', '@class': 'Rocks' },
   },
+  {
+    '@id' : 'OneOf',
+    '@type': 'Class',
+    '@oneOf' : [
+      { 'a' : 'xsd:string',
+        'b' : 'xsd:string'
+      }
+    ]
+  }
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -626,6 +635,30 @@ query EverythingQuery {
       expect(result.data.MaybeRocks).to.deep.equal([
         {
           rocks_opt: 'Big',
+        },
+      ])
+    })
+
+    it('graphql oneOf treated as optional', async function () {
+      const testObj = {
+        '@type': 'OneOf',
+        '@id': 'OneOf/1',
+        'a' : 'a',
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query  {
+    OneOf{
+        a,
+        b
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.OneOf).to.deep.equal([
+        { a: "a",
+          b: null
         },
       ])
     })
