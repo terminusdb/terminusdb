@@ -2,7 +2,8 @@
               perform_instance_migration/5,
               perform_instance_migration_on_transaction/4,
               infer_weakening_migration/3,
-              infer_arbitrary_migration/3
+              infer_arbitrary_migration/3,
+              type_weaken/3
           ]).
 
 :- use_module(instance).
@@ -219,12 +220,17 @@ family_weaken("Optional", "Optional").
 family_weaken("Cardinality", "Set").
 family_weaken("Optional", "Set").
 
-class_weaken(Class, Class) :-
+class_weaken(Class, Class, _Supermap) :-
     !.
+class_weaken(ClassA, ClassB, Supermap) :-
+    atom_string(ClassA_Atom,CLassA),
+    atom_string(ClassB_Atom,CLassB),
+    get_dict(ClassA_Atom, Supermap, Supers),
+    memberchk(ClassB_Atom, Supers).
 class_weaken(ClassA, ClassB) :-
     basetype_subsumption_of(ClassA, ClassB).
 
-type_weaken(Type1, Type2) :-
+type_weaken(Type1, Type2, SuperMap) :-
     is_dict(Type1),
     is_dict(Type2),
     !,
@@ -250,8 +256,8 @@ type_weaken(Type1, Type2) :-
     get_dict('@class', Type2, Class2Text),
     atom_string(Class1, Class1Text),
     atom_string(Class2, Class2Text),
-    class_weaken(Class1, Class2).
-type_weaken(Type1Text, Type2) :-
+    class_weaken(Class1, Class2, SuperMap).
+type_weaken(Type1Text, Type2, SuperMap) :-
     is_dict(Type2),
     text(Type1Text),
     !,
@@ -259,15 +265,18 @@ type_weaken(Type1Text, Type2) :-
     type_is_optional(Type2),
     get_dict('@class', Type2, Class2Text),
     atom_string(Class2, Class2Text),
-    class_weaken(Type1, Class2).
-type_weaken(Type1, Type2) :-
+    class_weaken(Type1, Class2, SuperMap).
+type_weaken(Type1Text, Type2Text) :-
+    text(Type1Text),
+    text(Type2Text),
+    !,
+    atom_string(Type, Type1Text),
+    atom_string(Type, Type2Text).
+type_weaken(Type1, Type2, _) :-
     is_dict(Type1),
     text(Type2),
     !,
     fail.
-type_weaken(Type1Text, Type2Text) :-
-    atom_string(Type, Type1Text),
-    atom_string(Type, Type2Text).
 
 type_is_optional(Type) :-
     is_dict(Type),
@@ -295,13 +304,13 @@ one_of_subsumed(OriginalOneOf, WeakeningOneOf) :-
 
 class_property_weakened(+,+,+,-) is semidet  + error
 */
-class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 memberchk(Property,['@type','@key','@subdocument','@inherits','@id','@unfoldable']),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
-class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
+class_property_weakened('@oneOf', Original, Weakening, Class, _SuperMap, _Operation) =>
     get_dict('@oneOf', Original, OriginalOneOf),
     get_dict('@oneOf', Weakening, WeakeningOneOf),
     do_or_die(
@@ -313,18 +322,18 @@ class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
                                      new: WeakeningOneOf}), _)
     ),
     fail.
-class_property_weakened('@metadata', _Original, Weakening, Class, Operation) =>
+class_property_weakened('@metadata', _Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@metadata',Weakening, New_Metadata),
     Operation = replace_class_metadata(Class,New_Metadata).
-class_property_weakened('@documentation', _Original, Weakening, Class, Operation) =>
+class_property_weakened('@documentation', _Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@documentation',Weakening, New_Docs),
     Operation = replace_class_documentation(Class,New_Docs).
-class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
-class_property_weakened('@value', Original, Weakening, Class, Operation),
+class_property_weakened('@value', Original, Weakening, Class, _SuperMap, Operation),
 get_dict('@value',Weakening,New_Value),
 get_dict('@value',Original,Old_Value) =>
     list_to_ord_set(New_Value,New_Set),
@@ -338,10 +347,10 @@ get_dict('@value',Original,Old_Value) =>
                                            old: Old_Set,
                                            new: New_Set}), _))
     ).
-class_property_weakened(Property, Original, Weakening, Class, Operation),
+class_property_weakened(Property, Original, Weakening, Class, SuperMap, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
-    do_or_die(type_weaken(Original_Type, Weakening_Type),
+    do_or_die(type_weaken(Original_Type, Weakening_Type, SuperMap),
               error(weakening_failure(json{ reason: class_property_change_not_a_weakening,
                                             message: "The class property was changed to a type which was not weaker",
                                             class: Class,
@@ -349,7 +358,7 @@ get_dict(Property, Weakening, Weakening_Type) =>
                                             original: Original,
                                             candidate: Weakening}),_)),
     Operation = upcast_class_property(Class,Property,Weakening).
-class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
+class_property_weakened(Property, Value, Weakening, Class, _SuperMap, _Operation) =>
     throw(error(weakening_failure(json{ reason: class_definition_not_a_weakening,
                                         message: "The class definition was not a weakening of the original",
                                         class: Class,
@@ -357,7 +366,7 @@ class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
                                         value: Value,
                                         candidate: Weakening}),_)).
 
-class_property_optional('@oneOf',Weakening,Class,_) :-
+class_property_optional('@oneOf', Weakening, Class, _) :-
     throw(error(weakening_failure(json{ reason: class_property_addition_not_optional,
                                         message: "@oneOf can not include optionals",
                                         class: Class,
@@ -374,7 +383,7 @@ class_property_optional(Property,Weakening,Class,Operation) :-
                                       candidate: Weakening}),_)),
     Operation = create_class_property(Class,Property,Type).
 
-class_weakened(Class, Definition, Weakening, Operations) :-
+class_weakened(Class, Definition, Weakening, SuperMap, Operations) :-
     dict_keys(Weakening, New),
     dict_keys(Definition, Old),
     ord_subtract(Old,New,Dropped),
@@ -403,6 +412,12 @@ class_weakened(Class, Definition, Weakening, Operations) :-
             Operations1),
     append(Operations0,Operations1,Operations).
 
+supermap(Schema,Supermap) :-
+    dict_keys(Schema, Classes),
+    maplist([Class]>>(
+    (   get_dict('@inherits', Class, Supers)
+    ->  maplist(supermap
+
 schema_weakening(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
     dict_keys(Weakened,New),
@@ -424,6 +439,9 @@ schema_weakening(Schema,Weakened,Operations) :-
             Added,
             Operations0),
     ord_intersection(Old,New,Shared),
+    (   Shared \= []
+    ->  supermap(Schema,SuperMap),
+    ;   SuperMap = supermap{}),
     findall(Intermediate_Operations,
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
@@ -434,7 +452,7 @@ schema_weakening(Schema,Weakened,Operations) :-
                     ;   throw(error(
                                   weakening_failure(json{ reason: not_a_weakening_context_changed,
                                                           message: "The change of context may cause changes of instance data"}), _)))
-                ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                ;   class_weakened(Key,Old_Class,New_Class,SuperMap,Intermediate_Operations)
                 )
             ),
             Operations_List),

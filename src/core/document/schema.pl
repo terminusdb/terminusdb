@@ -255,12 +255,15 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_type(Schema, Class, Predicate, Type).
 
-:- table schema_class_predicate_type/4 as private.
 schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+    schema_class_predicate_type(Schema,Class,_,Predicate,Type).
+
+:- table schema_class_predicate_type/5 as private.
+schema_class_predicate_type(Schema,Class, Class, Predicate,Type) :-
     schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
-schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+schema_class_predicate_type(Schema,Class,Class,Predicate,Type) :-
     schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type).
-schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+schema_class_predicate_type(Schema,Class,Super,Predicate,Type) :-
     schema_class_super(Schema,Class,Super),
     schema_class_predicate_type(Schema,Super,Predicate,Type).
 
