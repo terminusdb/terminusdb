@@ -239,7 +239,7 @@ enum StructuralFieldDefinition {
     ContainerField(ComplexFieldDefinition),
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(from = "StructuralFieldDefinition")]
 pub enum FieldDefinition {
     Required(String),
@@ -351,6 +351,13 @@ impl FieldDefinition {
             },
         }
     }
+
+    pub fn optionalize(self) -> FieldDefinition {
+        match self {
+            FieldDefinition::Required(df) => FieldDefinition::Optional(df),
+            res => res,
+        }
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -440,7 +447,7 @@ impl ClassDefinition {
                                 panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
                             }
                         }
-                        choices.insert(sanitized_field.clone(), fd.sanitize());
+                        choices.insert(sanitized_field.clone(), fd.sanitize().optionalize());
                     }
                     OneOf { choices }
                 })
