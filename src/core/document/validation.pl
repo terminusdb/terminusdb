@@ -5,11 +5,14 @@
 :- use_module(core(util), [exists/2]).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(core(document/migration), [operations_are_weakening/1]).
 :- use_module(config(terminus_config), [ignore_ref_and_repo_schema/0]).
+
 :- use_module(instance).
 :- use_module(schema).
 
 :- use_module(library(lists)).
+:- use_module(library(http/json)).
 
 validation_triple_update(Object) :-
     get_dict(triple_update, Object, true).
@@ -41,7 +44,13 @@ needs_schema_instance_validation(Validation_Object) :-
     } :< Validation_Object,
     exists(validation_object_has_layer, Instance_Objects),
     exists(validation_object_changed, Schema_Objects),
-    \+ is_schemaless(Validation_Object).
+    \+ is_schemaless(Validation_Object),
+    \+ (   get_dict(commit_info, Validation_Object, CI),
+           ground(CI),
+           % existance of a migration should be proof
+           % that we don't need to check
+           get_dict(migration, CI, _Migration)
+       ).
 
 /*
  * needs_local_instance_validation(Validation_Object) is det.

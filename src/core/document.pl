@@ -100,7 +100,8 @@
               perform_instance_migration/5,
               perform_instance_migration_on_transaction/4,
               infer_weakening_migration/3,
-              infer_arbitrary_migration/3
+              infer_arbitrary_migration/3,
+              operations_are_weakening/1
           ]).
 
 :- use_module('document/validation').
