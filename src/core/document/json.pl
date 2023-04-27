@@ -70,6 +70,7 @@
 
 :- use_module(instance).
 :- use_module(schema).
+:- use_module(migration, [type_weaken/3]).
 
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
@@ -3052,7 +3053,9 @@ class_frame(Transaction, Class, Frame, Options) :-
             type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Subframe, Options),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp, Options)
         ),
-        Pairs),
+        Pre_Pairs),
+    supermap(Transaction,Supermap,Options),
+    pairs_satisfying_diamond_property(Pre_Pairs, Class, Supermap, Pairs),
     % Subdocument
     (   is_subdocument(Transaction, Class_Ex)
     ->  Pairs2 = ['@subdocument'-[]|Pairs]
@@ -3132,70 +3135,39 @@ class_frame(Desc, Class, Frame, Options) :-
 class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
     prefix_expand_schema(Class, Prefixes, Class_Ex),
     findall(
-        Predicate_Comp-Result-Super,
-        (   class_predicate_type(Transaction, Class_Ex, Super, Predicate, Type_Desc),
+        Predicate_Comp-Result,
+        (   class_predicate_type(Transaction, Class_Ex, Predicate, Type_Desc),
             type_descriptor_json(Type_Desc, Prefixes, Result),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
         Pairs),
     sort(Pairs, Sorted_Pairs),
-    dictionary_satisfying_diamond_property(Transaction,Class, Sorted_Pairs, Frame).
+    dictionary_satisfying_diamond_property(Transaction,Class,Sorted_Pairs,Frame).
 
-dictionary_satisfying_diamond_property(Transaction,Pairs,Dictionary) :-
-    database_schema(Transaction, Schema),
-    pairs_satisfying_diamond_property(Schema,Pairs,Results),
-    json_dict_create(Dictionary,Results).
+dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Dictionary) :-
+    supermap(Transaction, Supermap,[compress_ids(true)]),
+    pairs_satisfying_diamond_property(Pairs,Class,Supermap,Results),
+    dict_create(Dictionary,json,Results).
 
-pairs_satisfying_diamond_property(_,[],[]).
-pairs_satisfying_diamond_property(_,[Predicate-Type-_Super],[Predicate-Type]).
-pairs_satisfying_diamond_property(Schema,[Predicate-T1-C1,Predicate-T2-C2|Rest],[Predicate-Type|Result]) :-
+pairs_satisfying_diamond_property([],_,_,[]).
+pairs_satisfying_diamond_property([Predicate-Type],_,_,[Predicate-Type]).
+pairs_satisfying_diamond_property([Predicate-T1,Predicate-T2|Rest],Class,Supermap,Result) :-
     !,
-    super_range_is_subsumed(Schema,C1,T1,C2,T2,Predicate,Type),
-    pairs_satisfying_diamond_property(Schema,[Predicate-T2-C2|Rest],Result).
-pairs_satisfying_diamond_property(Schema,[P1-T1-_,P2-T2-_],[P1-T1|Result]) :-
-    pairs_satisfying_diamond_property(Schema,[P2-T2-C2|Rest],Result).
+    range_is_subsumed(Class,Supermap,T1,T2,Predicate,Type),
+    pairs_satisfying_diamond_property([Predicate-Type|Rest],Class,Supermap,Result).
+pairs_satisfying_diamond_property([P1-T1,P2-T2|Rest],Class,Supermap,[P1-T1|Result]) :-
+    pairs_satisfying_diamond_property([P2-T2|Rest],Class,Supermap,Result).
 
-super_range_is_subsumed(Schema,C1,T2,C2,T2,Predicate,Type) :-
+range_is_subsumed(Class,Supermap,T1,T2,Predicate,Type) :-
     do_or_die(
-        (   schema_class_subsumed(Schema,C1,C2)
-        ->  range_subsumed(Schema,T2,T1)
-        ;   schema_class_subsumed(Schema,C2,C1)
-        ->  range_subsumed(Schema,T1,T2)
-        ;   throw(error(violation_of_diamond_property(C1,Predicate),_))
+        (   type_weaken(T2,T1,Supermap)
+        ->  Type = T1
+        ;   type_weaken(T1,T2,Supermap)
+        ->  Type = T2
+        ;   throw(error(violation_of_diamond_property(Class,Predicate),_))
         ),
-        error(violation_of_diamond_property(C1,Predicate),_)
+        error(violation_of_diamond_property(Class,Predicate),_)
     ).
-
-range_class_subsumed(Schema,C1,C2) :-
-    is_base_type(C1),
-    is_base_type(C2),
-    !,
-    basetype_subsumption_of(C1,C2).
-
-familycontained(F1,F2) :-
-    get_dict('@type', F1, Family1),
-    get_dict('@type', F2, Family2),
-    family_weaken(Family1,Family2).
-
-range_subsumed(Schema,T1,T2) :-
-    dict(T1),
-    dict(T2),
-    !,
-    delete_dict('@class',T1,C1,F1),
-    delete_dict('@class',T2,C2,F2),
-    family_contained(F1,F2)
-    schema_class_subumed(Schema,C1,C2).
-range_subsumed(Schema,T1,T2) :-
-    dict(T2),
-    !,
-    optional_family(T2),
-    get_dict('@class',T2,C2),
-    range_class_subsumed(Schema,T1,C2).
-range_subsumed(Schema,T1,T2) :-
-    text(T1),
-    text(T2),
-    !,
-    schema_class_subsumed(Schema,T1,T2).
 
 class_property_dictionary(Transaction, Class, Frame) :-
     (   is_transaction(Transaction)
@@ -14506,16 +14478,37 @@ diamond_schema('
   "@inherits" : ["Super"],
   "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime"}
 }
+
+{ "@type" : "Class",
+  "@id" : "Duper",
+  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime"}
+}
+
+{ "@type" : "Class",
+  "@id" : "Bub",
+  "@inherits" : ["Super", "Duper"],
+  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime"}
+}
+
 ').
 
 test(diamond_calculated,
      [setup((setup_temp_store(State),
-             test_document_label_descriptor(Desc),
-             write_schema(diamond_schema,Desc)
+             test_document_label_descriptor(Desc)
             )),
       cleanup(teardown_temp_store(State))
      ]) :-
 
-    true.
+    write_schema(diamond_schema,Desc),
+    class_frame(Desc, 'Sub', Sub, [compress_ids(true)]),
+    Sub = json{ '@inherits':['Super'],
+                '@type':'Class',
+                dateTime:json{'@class':'xsd:dateTime','@type':'Set'}
+              },
+    class_frame(Desc, 'Bub', Bub, [compress_ids(true)]),
+    Bub = json{ '@inherits':['Duper','Super'],
+                '@type':'Class',
+                dateTime:json{'@class':'xsd:dateTime','@type':'Set'}
+              }.
 
 :- end_tests(diamond_property).
