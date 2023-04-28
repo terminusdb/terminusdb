@@ -628,7 +628,7 @@ type_context(_DB, Base_Type, _, json{}) :-
     !.
 type_context(DB,Type,Prefixes,Context) :-
     prefix_expand_schema(Type,Prefixes,TypeEx),
-    is_simple_class(DB, TypeEx),
+    once(is_simple_class(DB, TypeEx)),
     findall(P - C,
           (
               class_predicate_type(DB, TypeEx, P, Desc),
