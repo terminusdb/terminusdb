@@ -827,7 +827,8 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let count: Option<u64> = attempt_opt(count_term.get())?;
     let as_list: bool = as_list_term.get_ex()?;
 
-    let (sender, receiver) = mpsc::channel();
+    let channel_size = rayon::current_num_threads() * 2;
+    let (sender, receiver) = mpsc::sync_channel(channel_size);
 
     // cloning here cause we need to use the doc context from two places.
     // Since we are dealing with an arc, the clone is cheap.
