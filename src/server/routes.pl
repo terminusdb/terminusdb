@@ -3184,6 +3184,7 @@ cors_handler(Method, Goal, Options, R) :-
                                    'api:message' : 'Incorrect authentication information'
                                   },
                                  [width(0), status(401)]))))),
+    abolish_private_tables,
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
