@@ -3616,6 +3616,7 @@ http_read_utf8(stream(Stream), Request) :-
     ->  memberchk(input(Input_Stream), Request),
         zopen(Input_Stream, Uncompressed_Stream, [format(Encoding), multi_part(false)]),
         read_string(Uncompressed_Stream, _, S1),
+        close(Uncompressed_Stream),
         open_string(S1, Stream)
     ;   http_read_data(Request, String, [to(string), input_encoding(utf8)]),
         open_string(String, Stream)
