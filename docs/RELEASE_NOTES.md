@@ -19,9 +19,6 @@
 ## Enhancement
 * diff endpoint now has `start` and `count` options for paged results
 * Improve memory footprint when retrieving lots of documents through the document API
-
-
-## Enhancement
 * Support JSON objects in GraphQL
 
 # TerminusDB Server v11.0.5 Release Notes
