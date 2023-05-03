@@ -1,3 +1,29 @@
+# TerminusDB Server v11.0.6 Release Notes
+## Bug fixes
+* Unused optional properties would cause GraphQL to fail
+* Enums were not working properly for collection types in GraphQL
+* Incorrect version checking on system graphs caused superfluous graph updates on startup
+* Modifications of classes with `@oneOf` would leave stale objects in the schema graph
+* Diffing sets now works
+* Fix error reporting when pushing nonexistent remotes
+* GraphQL did not work properly with `@oneOf` properties
+* Memory leak in document API
+* Crash when processing several compressed requests in the same session
+
+## New
+* On schema modifications, a migration will be inferred when possible.
+* New options added to document interface
+** `allow_destructive_migration`: Allow for inference of migrations that will also modify instance data. If set, the schema modification will also automatically transform any instance objects already in the database.
+** `require_migration`: This will cause the request to fail for schema changes for which no migration can be inferred.
+
+## Enhancement
+* diff endpoint now has `start` and `count` options for paged results
+* Improve memory footprint when retrieving lots of documents through the document API
+
+
+## Enhancement
+* Support JSON objects in GraphQL
+
 # TerminusDB Server v11.0.5 Release Notes
 ## Bug fixes
 * diff endpoint was mishandling subdocuments
