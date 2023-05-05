@@ -45,7 +45,8 @@ needs_schema_instance_validation(Validation_Object) :-
     exists(validation_object_has_layer, Instance_Objects),
     exists(validation_object_changed, Schema_Objects),
     \+ is_schemaless(Validation_Object),
-    \+ (   get_dict(commit_info, Validation_Object, CI),
+    \+ (   config:trust_migrations,
+           get_dict(commit_info, Validation_Object, CI),
            ground(CI),
            % existance of a migration should be proof
            % that we don't need to check
