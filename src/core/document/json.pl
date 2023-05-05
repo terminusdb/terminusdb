@@ -3161,9 +3161,9 @@ pairs_satisfying_diamond_property([P1-T1,P2-T2|Rest],Class,Supermap,[P1-T1|Resul
 range_is_subsumed(Class,Supermap,T1,T2,Predicate,Type) :-
     do_or_die(
         (   type_weaken(T2,T1,Supermap)
-        ->  Type = T1
-        ;   type_weaken(T1,T2,Supermap)
         ->  Type = T2
+        ;   type_weaken(T1,T2,Supermap)
+        ->  Type = T1
         ;   throw(error(violation_of_diamond_property(Class,Predicate),_))
         ),
         error(violation_of_diamond_property(Class,Predicate),_)
