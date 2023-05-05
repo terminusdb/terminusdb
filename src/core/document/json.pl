@@ -14501,14 +14501,16 @@ test(diamond_calculated,
 
     write_schema(diamond_schema,Desc),
     class_frame(Desc, 'Sub', Sub, [compress_ids(true)]),
+
     Sub = json{ '@inherits':['Super'],
                 '@type':'Class',
-                dateTime:json{'@class':'xsd:dateTime','@type':'Set'}
+                dateTime:'xsd:dateTime'
               },
     class_frame(Desc, 'Bub', Bub, [compress_ids(true)]),
+
     Bub = json{ '@inherits':['Duper','Super'],
                 '@type':'Class',
-                dateTime:json{'@class':'xsd:dateTime','@type':'Set'}
+                dateTime:'xsd:dateTime'
               }.
 
 :- end_tests(diamond_property).
