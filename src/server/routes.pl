@@ -3184,6 +3184,7 @@ cors_handler(Method, Goal, Options, R) :-
                                    'api:message' : 'Incorrect authentication information'
                                   },
                                  [width(0), status(401)]))))),
+    abolish_private_tables,
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
@@ -3613,8 +3614,9 @@ read_json_dict(AtomOrText, JSON) :-
 http_read_utf8(stream(Stream), Request) :-
     (   content_encoded(Request, Encoding)
     ->  memberchk(input(Input_Stream), Request),
-        zopen(Input_Stream, Uncompressed_Stream, [format(Encoding), multi_part(false)]),
+        zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
         read_string(Uncompressed_Stream, _, S1),
+        close(Uncompressed_Stream),
         open_string(S1, Stream)
     ;   http_read_data(Request, String, [to(string), input_encoding(utf8)]),
         open_string(String, Stream)
