@@ -3056,6 +3056,16 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,get,post,put])]).
+
+index_handler(post,Path,Request,System_DB,Auth) :-
+    fail.
+
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
 :- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),

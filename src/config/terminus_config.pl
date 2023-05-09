@@ -319,3 +319,7 @@ crypto_password_cost(10).
 :- table lru_cache_size/1.
 lru_cache_size(Cache_Size) :-
     getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).
+
+:- table semantic_indexer_endpoint/1.
+semantic_indexer_endpoint(Endpoint) :-
+    getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).

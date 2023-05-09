@@ -2,7 +2,8 @@
               document_created_at/3,
               document_updated_at/3,
               document_history/5,
-              changed_document_id/2
+              changed_document_id/2,
+              commits_changed_id/5
           ]).
 
 :- use_module(library(yall)).
@@ -78,7 +79,8 @@ document_updated_at(Descriptor, Id, Info) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     history_to_updated_at(LL,Repo,Id_Ex,Info).
 
-document_created(Askable, Id) :-
+document_created(Askable, Id, Options) :-
+    ignore(option(type(Type), Options)),
     ask(Askable,
         (   addition(Id, rdf:type, Type),
             once(((   t(Type,rdf:type,sys:'Class',schema)
@@ -86,7 +88,8 @@ document_created(Askable, Id) :-
                   ;   Type = sys:'JSONDocument'),
                   not(t(Type,sys:subdocument, _,schema)))))).
 
-document_deleted(Askable, Id) :-
+document_deleted(Askable, Id, Options) :-
+    ignore(option(type(Type), Options)),
     ask(Askable,
         (   removal(Id, rdf:type, Type),
             once(((   t(Type,rdf:type,sys:'Class',schema)
@@ -94,7 +97,8 @@ document_deleted(Askable, Id) :-
                   ;   Type = sys:'JSONDocument'),
                   not(t(Type,sys:subdocument, _,schema)))))).
 
-document_modified(Askable, Containing) :-
+document_modified(Askable, Containing, Options) :-
+    ignore(option(type(Type), Options)),
     ask(Askable,
         (   distinct(Id, (   addition(Id, _, _)
                          ;   removal(Id, _, _),
@@ -108,10 +112,32 @@ document_modified(Askable, Containing) :-
                   not(t(Type,sys:subdocument, _,schema)))))).
 
 changed_document_id(Askable,Containing) :-
+    changed_document_id(Askable,Containing,options{})
+
+changed_document_id(Askable,Containing,Options) :-
     distinct(Containing,
-             (   document_modified(Askable, Containing)
-             ;   document_created(Askable, Containing)
-             ;   document_deleted(Askable, Containing))).
+             (   document_modified(Askable, Containing, Options)
+             ;   document_created(Askable, Containing, Options)
+             ;   document_deleted(Askable, Containing, Options))).
+
+commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, Options) :-
+    create_context(Branch_Descriptor.repository_descriptor, Context),
+    most_recent_common_ancestor(Context, Context,
+                                Before_Commit_Id, After_Commit_Id,
+                                _Shared_Commit_Id, Commit1_Path, Commit2_Path),
+
+    distinct(Changed,
+             (   union(Commit1_Path, Commit2_Path, All_Commits),
+                 member(Commit_Id, All_Commits),
+                 resolve_relative_descriptor(Branch_Descriptor,
+                                             ["commit", Commit_Id],
+                                             Commit_Descriptor),
+                 do_or_die(
+                     open_descriptor(Commit_Descriptor, Transaction),
+                     error(unresolvable_collection(Commit_Descriptor), _)),
+                 changed_document_id(Transaction, Changed, Options)
+             )
+            ).
 
 commit_generator(Repo, state(name(Branch_Name)), state(commit(Head_Commit)), Commit_Id) :-
     ask(Repo,
