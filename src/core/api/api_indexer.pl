@@ -1,15 +1,20 @@
 :- module(api_indexer, [
-              api_start_job/4,
+              api_start_job/3,
               api_check_job/2,
-              api_index/5,
-              api_query/5,
-              api_index_jobs/5
+              %api_index/5,
+              %api_query/5,
+              api_index_jobs/6
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
+:- use_module(core(document),[get_document/3]).
+:- use_module(core(query)).
+:- use_module(library(http/json)).
+:- use_module(library(http/http_client)).
 
-% api_start_job(+System,+Domain:string,+Commit:string,-Task_id, +Options) is det.
-api_start_job(System, Domain, Commit, Task_Id) :-
+
+% api_start_job(+Domain:string,+Commit:string,-Task_id, +Options) is det.
+api_start_job(Domain, Commit, Task_Id) :-
     config:semantic_indexer_endpoint(Endpoint),
     http_get(
         [ host(Endpoint),
@@ -24,8 +29,7 @@ api_check_job(Task_Id, Status) :-
     http_get(
         [ host(Endpoint),
           path('/check'),
-          search([ domain=Domain,
-                   task_id=Task_Id])],
+          search([ task_id=Task_Id ])],
         Status,
         []).
 
@@ -33,9 +37,9 @@ embedding_type_queries(Commit_Descriptor, TypeQueries) :-
     findall(
         Type-Query,
         ask(Commit_Descriptor,
-            (   t(Embedding, json:query,  Query),
-                t(Meta, json:embedding,  Embedding),
-                t(Type, sys:metadata, Meta))),
+            (   t(Embedding, json:query,  Query, schema),
+                t(Meta, json:embedding,  Embedding, schema),
+                t(Type, sys:metadata, Meta, schema))),
         TypeQueries
     ).
 
@@ -74,12 +78,14 @@ api_indexable(none, Descriptor, Commit_Id, Type, Operation) :-
 { "op" : "Changed", "id" : "Doc/2", "string" : "this is new in doc 2" }
 { "op" : "Deleted", "id" : "Doc/3"}
 */
-api_index_jobs(Stream, Path, Commit_Id, Maybe_Previous_Commit_Id, Options) :-
+:- meta_predicate api_index_jobs(+, 1, +, +, +, +).
+api_index_jobs(Stream, Prelude, Path, Commit_Id, Maybe_Previous_Commit_Id, _Options) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     resolve_relative_descriptor(Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
     embedding_type_queries(Commit_Descriptor, TypeQueries),
+    call(Prelude,Stream),
     forall(
         (   member(Type-_Query, TypeQueries),
             api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
@@ -97,7 +103,7 @@ api_index_jobs(Stream, Path, Commit_Id, Maybe_Previous_Commit_Id, Options) :-
                 nl(Stream)
             ;   atom_json_dict(Operation_Atom, Operation, [width(0)]),
                 write(Stream, Operation_Atom),
-                nl(Steram)
+                nl(Stream)
             )
         )
     ).

@@ -10,7 +10,7 @@
 :- use_module(library(lists)).
 :- use_module(library(lazy_lists)).
 :- use_module(library(solution_sequences)).
-
+:- use_module(core(util)).
 :- use_module(core(document/json), [
                   database_prefixes/2
               ]).
@@ -37,7 +37,7 @@ Returns a list `Result` of the form:
 
 history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
-    document_created(Commit_Descriptor, Id),
+    document_created(Commit_Descriptor, Id, []),
     !,
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
@@ -59,7 +59,7 @@ document_created_at(Descriptor, Id, Info) :-
 
 history_to_updated_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
-    document_modified(Commit_Descriptor, Id),
+    document_modified(Commit_Descriptor, Id, []),
     !,
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
@@ -112,7 +112,7 @@ document_modified(Askable, Containing, Options) :-
                   not(t(Type,sys:subdocument, _,schema)))))).
 
 changed_document_id(Askable,Containing) :-
-    changed_document_id(Askable,Containing,options{})
+    changed_document_id(Askable,Containing,options{}).
 
 changed_document_id(Askable,Containing,Options) :-
     distinct(Containing,

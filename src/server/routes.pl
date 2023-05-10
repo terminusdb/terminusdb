@@ -3063,8 +3063,34 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
                  time_limit(infinite),
                  methods([options,get,post,put])]).
 
-index_handler(post,Path,Request,System_DB,Auth) :-
-    fail.
+index_handler(get,Path,Request,_System_DB,_Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    api_report_errors(
+        history,
+        Request,
+        (
+            param_value_search_required(Search, commit_id, text, Commit_Id),
+            param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
+            (   Previous_Commit_Id = none
+            ->  Maybe_Previous_Commit_Id = Previous_Commit_Id
+            ;   Maybe_Previous_Commit_Id = some(Previous_Commit_Id)
+            ),
+            api_index_jobs(
+                current_output,
+                [Stream]>>(
+                    write(Stream,'Status: 200'),nl(Stream),
+                    write(Stream,'Content-Type: application/json'),nl(Stream),
+                    nl(Stream)),
+                Path,
+                Commit_Id,
+                Maybe_Previous_Commit_Id,
+                [])
+        )
+    ).
+
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
