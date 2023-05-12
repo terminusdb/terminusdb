@@ -47,7 +47,7 @@ simple_diff(Before,After,Keep,Cost,Diff,Options) :-
     (   simple_diff(Before,After,Keep,New_Diff,State,0,New_Cost,Options),
         nb_setarg(1,State,New_Cost),
         nb_setarg(2,State,New_Diff),
-        %format(user_error,'~nNew_Cost: ~q', [New_Cost]),
+        format(user_error,'~nNew_Diff: ~q~nNew_Cost: ~q', [New_Diff, New_Cost]),
         fail
     ;   best_cost(State, Cost),
         best_diff(State, Diff)
@@ -79,7 +79,7 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     !,
     is_list(After),
     simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options).
-simple_diff(Before,After,_,_,_,_,_,_) :-
+simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     % Copy is implicit
     string_normalise(Before, Value),
     string_normalise(After, Value),
@@ -127,10 +127,12 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     get_dict(Key,Before,Sub_Before),
     get_dict(Key,After,Sub_After),
     !,
+    nl,writeq(xxxxxxxxxxxxxxxxxxxx),nl,
     (   get_dict(Key,Keep,Sub_Keep)
     ->  true
     ;   Sub_Keep = json{}),
     best_cost(State,Best_Cost),
+    format(user_error, '~nsimple_key_diff Best_Cost: ~q', [Best_Cost]),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
     (   merge_options(_{subdocument:true}, Options, New_Options),
@@ -141,8 +143,12 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
         ;   New_Keys = Rest
         )
     ;   New_Keys = Rest,
-        Cost = Cost1
+        Cost = Cost1,
+        format(user_error, '~nIn bailout', [])
     ),
+    format(user_error, '~nsimple_key_diff Cost1: ~q', [Cost1]),
+    format(user_error, '~nsimple_key_diff New_Keys: ~q', [New_Keys]),
+    format(user_error, '~nsimple_key_diff Rest: ~q', [Rest]),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost,Options) :-
     get_dict(Key,Before,Sub_Before),
@@ -850,5 +856,40 @@ test(subdocument_patch, []) :-
     simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
     Result = json{'@id':"1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244", b:json{c:json{'@after':3, '@before':4, '@op':"SwapValue"}}}.
 
+test(basetype_set, []) :-
+    Old  = _{
+               '@id': "People/1",
+               '@type': "People",
+               desc: [
+                   "In 2015.",
+                   "Luke Skywalker"
+               ],
+               vehicle: [
+                   "Vehicle/14",
+                   "Vehicle/30"
+               ]
+           },
+    New = _{
+              '@id': "People/1",
+              '@type': "People",
+              desc: [
+                  "In 2015.",
+                  "Luke Skywalker"
+              ],
+              vehicle: [
+                  "Vehicle/14",
+                  "Vehicle/24",
+                  "Vehicle/30"
+              ]
+          },
+    simple_diff(Old, New, Result, [keep(json{'@id' : true})]),
+    print_term(Result, []),
+    Result = json{'@id':"People/1",
+                  vehicle:json{'@op':"CopyList",
+                               '@rest':json{'@after':["Vehicle/24"],
+                                            '@before':[],
+                                            '@op':"SwapList",
+                                            '@rest':json{'@op':"KeepList"}},
+                               '@to':1}}.
 
 :- end_tests(simple_diff).
