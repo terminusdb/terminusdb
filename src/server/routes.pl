@@ -3063,7 +3063,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
                  time_limit(infinite),
                  methods([options,get,post,put])]).
 
-index_handler(get,Path,Request,_System_DB,_Auth) :-
+index_handler(get,Path,Request,System_DB,Auth) :-
     (   memberchk(search(Search), Request)
     ->  true
     ;   Search = []),
@@ -3079,6 +3079,8 @@ index_handler(get,Path,Request,_System_DB,_Auth) :-
             ;   Maybe_Previous_Commit_Id = some(Previous_Commit_Id)
             ),
             api_index_jobs(
+                System_DB,
+                Auth,
                 current_output,
                 [Stream]>>(
                     write(Stream,'Status: 200'),nl(Stream),
