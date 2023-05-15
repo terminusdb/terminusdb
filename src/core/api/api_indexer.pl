@@ -72,7 +72,7 @@ api_indexable(none, Descriptor, Commit_Id, Type, Operation) :-
     resolve_relative_descriptor(Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
-    ask(Commit_Descriptor, t(Id, rdf:type, Type)),
+    ask(Commit_Descriptor, t(Id, rdf:type, Type),[compress_prefixes(false)]),
     Operation = json{ op: 'Inserted',
                       id: Id }.
 
@@ -97,12 +97,20 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
         (   get_dict(op, Operation, Op),
             (   member(Op, ['Inserted', 'Changed'])
             ->  get_dict(id, Operation, Id),
-                GraphQL_Query = json{ query: Query, variables: [json{id: Id}]},
+                GraphQL_Query = json{ query: Query, variables: json{id: Id}},
                 atom_json_dict(Id_Query, GraphQL_Query, [width(0)]),
                 string_length(Id_Query, Content_Length),
                 open_string(Id_Query, Query_Stream),
-                handle_graphql_request(System_DB, Auth, open_source_swearword, Path, Query_Stream, Response, string, Content_Length),
-                put_dict(_{string : Response }, Operation, Final_Operation),
+                handle_graphql_request(System_DB, Auth, arbitrary, Path, Query_Stream, Response, string, Content_Length),
+                atom_json_dict(Response, GraphQL_Response, [width(0)]),
+                get_dict(data, GraphQL_Response, Type_Query),
+                once(get_dict(_, Type_Query, [GraphQL_Document])),
+                stringify_document(GraphQL_Document, String_Document),
+                %get_document(Commit_Descriptor, Id, GraphQL_Document),
+                %atom_json_dict(String_Document, GraphQL_Document, [width(0)]),
+                %stringify_document(GraphQL_Document, String_Document),
+                %print_term(String_Document, []),
+                put_dict(_{string : String_Document }, Operation, Final_Operation),
                 atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
                 write(Stream, Operation_Atom),
                 nl(Stream)
@@ -127,7 +135,7 @@ stringify_document(Document, Atom) :-
         ),
         KeyValues
     ),
-    maplist([Key-Value,String]>>format(atom(String), "~q: ~q", [Key-Value]), KeyValues, List),
+    maplist([Key-Value,String]>>format(atom(String), "Its ~s is ~s. ", [Key,Value]), KeyValues, List),
     atomic_list_concat(List, Atom).
 
 stringify_value(Value, Atom) :-
@@ -135,7 +143,9 @@ stringify_value(Value, Atom) :-
     ->  stringify_document(Value, Atom)
     ;   is_list(Value)
     ->  maplist(stringify_value, Value, Atom_List),
-        atomic_list_concat(Atom_List, Atom)
+        format(atom(NLBullet), '~n* ',[]),
+        intersperse(NLBullet, Atom_List, Full_List),
+        atomic_list_concat(['containing: '|Full_List], Atom)
     ;   number(Value)
     ->  format(atom(Atom), "~q", [Value])
     ;   text(Value)
@@ -168,3 +178,25 @@ Return all Ids with Insert/Delete/Update for type Type
 
 
 */
+
+:- begin_tests(stringify).
+
+test(stringify_list, []) :-
+    stringify_value([a,b,c], 'a, b, c').
+
+test(stringify_bookclub, []) :-
+
+    JSON = json{'@type':'BookClub',
+                name: "Marxist book club",
+                book_list : [
+                    json{ name : "Das Kapital" },
+                    json{ name : "Der Ursprung des Christentums" }
+                ]
+               },
+
+    stringify_document(JSON, Output),
+
+    print_term(Output, []).
+
+:- end_tests(stringify).
+
