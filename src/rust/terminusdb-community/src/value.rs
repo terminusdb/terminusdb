@@ -47,6 +47,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
 
 pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
     match tde.datatype() {
+        Datatype::BigInt => tde.as_val::<Integer, Integer>(),
         Datatype::PositiveInteger => tde.as_val::<PositiveInteger, Integer>(),
         Datatype::NonNegativeInteger => tde.as_val::<NonNegativeInteger, Integer>(),
         Datatype::NegativeInteger => tde.as_val::<NegativeInteger, Integer>(),
