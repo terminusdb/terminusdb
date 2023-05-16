@@ -139,6 +139,11 @@ describe('GraphQL', function () {
       },
     ],
   },
+  {
+    '@id': 'Integer',
+    '@type': 'Class',
+    int: 'xsd:integer',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -151,7 +156,12 @@ describe('GraphQL', function () {
   const pickles = { '@type': 'Cat', name: 'Pickles' }
   const toots = { '@type': 'Cat', name: 'Toots' }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots]
+  const int1 = { int: 1 }
+  const int2 = { int: 100 }
+  const int3 = { int: 11 }
+  const int4 = { int: 2 }
+
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -233,6 +243,33 @@ describe('GraphQL', function () {
         { name: 'Karl Popper', age: '92', order: '5' },
         { name: 'Kurt Gödel', age: '71', order: '5' },
       ])
+    })
+
+    it('graphql order by stringy num', async function () {
+      const INTEGER_QUERY = gql`
+ query IntegerQuery {
+    Integer(orderBy: {int: ASC}) {
+        int
+    }
+}`
+      const result = await client.query({ query: INTEGER_QUERY })
+      expect(result.data.Integer).to.deep.equal(
+        [
+          {
+            int: '1',
+          },
+          {
+            int: '2',
+          },
+          {
+            int: '11',
+          },
+          {
+            int: '100',
+          },
+
+        ],
+      )
     })
 
     it('back-link query', async function () {

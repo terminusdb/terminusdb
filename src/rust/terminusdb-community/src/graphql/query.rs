@@ -1,10 +1,10 @@
 use itertools::Itertools;
-use juniper::{self, DefaultScalarValue, FromInputValue, InputValue, ScalarValue, ID};
+use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
 use swipl::prelude::QueryableContextType;
-use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType};
+use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::terminus_store::store::sync::SyncStoreLayer;
@@ -24,8 +24,6 @@ use super::schema::{
 };
 
 use crate::path::compile::path_to_class;
-
-use float_ord::FloatOrd;
 
 use std::cmp::*;
 use std::collections::HashSet;
@@ -953,7 +951,7 @@ fn create_query_order_key(
                     .value()
                     .unwrap();
                 match value_to_graphql(&db_value) {
-                    juniper::Value::Scalar(s) => Some(s),
+                    juniper::Value::Scalar(_) => Some(db_value),
                     juniper::Value::Null => None,
                     _ => panic!("Scalar value or null expected"),
                 }
@@ -966,49 +964,7 @@ fn create_query_order_key(
 }
 
 struct QueryOrderKey {
-    vec: Vec<(Option<DefaultScalarValue>, TerminusOrdering)>,
-}
-
-fn compare_int(i: i32, other_value: &Option<DefaultScalarValue>) -> Ordering {
-    match other_value {
-        None => Ordering::Greater,
-        Some(value) => {
-            let j = value.as_int().expect("This should have been an int");
-            i.cmp(&j)
-        }
-    }
-}
-
-fn compare_float(f: f64, other_value: &Option<DefaultScalarValue>) -> Ordering {
-    match other_value {
-        None => Ordering::Greater,
-        Some(value) => {
-            let g = value.as_float().expect("This should have been a float");
-            let fp = FloatOrd(f);
-            let gp = FloatOrd(g);
-            fp.cmp(&gp)
-        }
-    }
-}
-
-fn compare_string(s: &str, other_value: &Option<DefaultScalarValue>) -> Ordering {
-    match other_value {
-        None => Ordering::Greater,
-        Some(value) => {
-            let t = value.as_string().expect("This should have been a string");
-            s.cmp(&t)
-        }
-    }
-}
-
-fn compare_bool(b: bool, other_value: &Option<DefaultScalarValue>) -> Ordering {
-    match other_value {
-        None => Ordering::Greater,
-        Some(value) => {
-            let c = value.as_boolean().expect("This should have been a bool");
-            b.cmp(&c)
-        }
-    }
+    vec: Vec<(Option<TypedDictEntry>, TerminusOrdering)>,
 }
 
 impl PartialOrd for QueryOrderKey {
@@ -1017,10 +973,10 @@ impl PartialOrd for QueryOrderKey {
             let (option_value, order) = &self.vec[i];
             let (other_value, _) = &other.vec[i];
             let res = match option_value {
-                Some(DefaultScalarValue::Int(i)) => compare_int(*i, other_value),
-                Some(DefaultScalarValue::Float(f)) => compare_float(*f, other_value),
-                Some(DefaultScalarValue::String(s)) => compare_string(s, other_value),
-                Some(DefaultScalarValue::Boolean(b)) => compare_bool(*b, other_value),
+                Some(tde) => match other_value {
+                    None => Ordering::Greater,
+                    Some(value) => tde.cmp(value),
+                },
                 None => match other_value {
                     Some(_) => Ordering::Less,
                     None => Ordering::Equal,
@@ -1046,8 +1002,12 @@ impl PartialEq for QueryOrderKey {
             let (option_value, _) = &self.vec[i];
             let (other_value, _) = &other.vec[i];
             let res = match option_value {
-                Some(DefaultScalarValue::Float(f)) => {
-                    Ordering::Equal == compare_float(*f, other_value)
+                Some(tde) => {
+                    Ordering::Equal
+                        == (match other_value {
+                            None => Ordering::Greater,
+                            Some(value) => tde.cmp(value),
+                        })
                 }
                 x => x == other_value,
             };
