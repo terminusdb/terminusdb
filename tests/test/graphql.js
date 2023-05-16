@@ -147,7 +147,7 @@ describe('GraphQL', function () {
   {
     '@id': 'NonNegativeInteger',
     '@type': 'Class',
-    non_neg_int: 'xsd:nonNegativeInteger',
+    nonnegint: 'xsd:nonNegativeInteger',
   },
   {
     '@id': 'DateAndTime',
@@ -176,10 +176,10 @@ describe('GraphQL', function () {
   const int3 = { int: 11 }
   const int4 = { int: 2 }
 
-  const non_neg_int = { non_neg_int: 300 }
+  const nonnegint = { nonnegint: 300 }
   const datetime = { datetime: '2021-03-05T23:34:43.0003Z' }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, non_neg_int, datetime]
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, nonnegint, datetime]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -293,8 +293,8 @@ describe('GraphQL', function () {
     it('graphql filter nonNegativeInteger', async function () {
       const NON_NEGATIVE_INTEGER_QUERY = gql`
  query NonNegativeIntegerQuery {
-    NonNegativeInteger(filter: {non_neg_int: {ge: "4"}}, orderBy: {non_neg_int: ASC}) {
-        non_neg_int
+    NonNegativeInteger(filter: {nonnegint: {ge: "4"}}, orderBy: {nonnegint: ASC}) {
+        nonnegint
     }
 }`
       const result = await client.query({ query: NON_NEGATIVE_INTEGER_QUERY })
