@@ -147,7 +147,7 @@ describe('GraphQL', function () {
   {
     '@id': 'BadlyNamedOptional',
     '@type': 'Class',
-    'is-it-ok': { '@type' : 'Optional', '@class' : 'xsd:string'},
+    'is-it-ok': { '@type': 'Optional', '@class': 'xsd:string' },
   },
   ]
 
@@ -796,7 +796,7 @@ query EverythingQuery {
     it('graphql optional rename', async function () {
       const testObj = {
         '@type': 'BadlyNamedOptional',
-        'is-it-ok': "something",
+        'is-it-ok': 'something',
       }
       await document.insert(agent, { instance: testObj })
 
@@ -809,7 +809,7 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.BadlyNamedOptional).to.deep.equal([
-        { is_it_ok: "something" },
+        { is_it_ok: 'something' },
       ])
     })
   })
