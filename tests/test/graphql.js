@@ -301,7 +301,7 @@ describe('GraphQL', function () {
       expect(result.data.NonNegativeInteger).to.deep.equal(
         [
           {
-            int: '300',
+            nonnegint: '300',
           },
 
         ],
