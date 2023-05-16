@@ -7,6 +7,7 @@ mod graphql;
 mod path;
 mod prefix;
 mod schema;
+mod template;
 mod types;
 mod value;
 
@@ -68,6 +69,7 @@ predicates! {
 
         s_term.unify(s)
     }
+
 }
 
 pub fn install() {
@@ -75,4 +77,5 @@ pub fn install() {
     register_random_string();
     doc::register();
     graphql::register();
+    template::register();
 }

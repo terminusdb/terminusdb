@@ -30,3 +30,4 @@ gmp-mpfr-sys = {version = "1.4", default-features = false, features=["use-system
 regex-lexer = "0.2"
 nom = "7.1"
 chrono = { version="0.4", features=["serde"]}
+handlebars = "4.3"
