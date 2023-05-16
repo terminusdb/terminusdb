@@ -23,6 +23,22 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
         Datatype::ID => tde.as_val::<ID, String>(),
         Datatype::IDRef => tde.as_val::<IDRef, String>(),
         Datatype::Entity => tde.as_val::<Entity, String>(),
+        // Not stringy types, but has a string cast
+        Datatype::Decimal => tde.as_val::<Decimal, String>(),
+        Datatype::DateTime => tde.as_val::<NaiveDateTime, String>(),
+        Datatype::DateTimeStamp => tde.as_val::<DateTimeStamp, String>(),
+        Datatype::Time => tde.as_val::<NaiveTime, String>(),
+        Datatype::Date => tde.as_val::<Date, String>(),
+        Datatype::GYear => tde.as_val::<GYear, String>(),
+        Datatype::GMonth => tde.as_val::<GMonth, String>(),
+        Datatype::GDay => tde.as_val::<GDay, String>(),
+        Datatype::GYearMonth => tde.as_val::<GYearMonth, String>(),
+        Datatype::GMonthDay => tde.as_val::<GMonthDay, String>(),
+        Datatype::Duration => tde.as_val::<Duration, String>(),
+        Datatype::YearMonthDuration => tde.as_val::<YearMonthDuration, String>(),
+        Datatype::DayTimeDuration => tde.as_val::<DayTimeDuration, String>(),
+        Datatype::Base64Binary => tde.as_val::<Base64Binary, String>(),
+        Datatype::HexBinary => tde.as_val::<HexBinary, String>(),
         x => panic!("not a stringy type: {:?}", x),
     };
 
@@ -30,7 +46,13 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
 }
 
 pub fn value_to_bigint(tde: &TypedDictEntry) -> Integer {
-    tde.as_val::<Integer, Integer>()
+    match tde.datatype() {
+        Datatype::PositiveInteger => tde.as_val::<PositiveInteger, Integer>(),
+        Datatype::NonNegativeInteger => tde.as_val::<NonNegativeInteger, Integer>(),
+        Datatype::NegativeInteger => tde.as_val::<NegativeInteger, Integer>(),
+        Datatype::NonPositiveInteger => tde.as_val::<NonPositiveInteger, Integer>(),
+        x => panic!("not a biginty type: {:?}", x),
+    }
 }
 
 lazy_static! {

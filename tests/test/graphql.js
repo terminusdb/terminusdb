@@ -145,6 +145,16 @@ describe('GraphQL', function () {
     int: 'xsd:integer',
   },
   {
+    '@id': 'NonNegativeInteger',
+    '@type': 'Class',
+    non_neg_int: 'xsd:nonNegativeInteger',
+  },
+  {
+    '@id': 'DateAndTime',
+    '@type': 'Class',
+    datetime: 'xsd:dateTime',
+  },
+  {
     '@id': 'BadlyNamedOptional',
     '@type': 'Class',
     'is-it-ok': { '@type': 'Optional', '@class': 'xsd:string' },
@@ -166,7 +176,10 @@ describe('GraphQL', function () {
   const int3 = { int: 11 }
   const int4 = { int: 2 }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4]
+  const non_neg_int = { non_neg_int: 300 }
+  const datetime = { datetime: '2021-03-05T23:34:43.0003Z' }
+
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, non_neg_int, datetime]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -273,6 +286,63 @@ describe('GraphQL', function () {
             int: '100',
           },
 
+        ],
+      )
+    })
+
+    it('graphql filter nonNegativeInteger', async function () {
+      const NON_NEGATIVE_INTEGER_QUERY = gql`
+ query NonNegativeIntegerQuery {
+    NonNegativeInteger(filter: {non_neg_int: {ge: "4"}}, orderBy: {non_neg_int: ASC}) {
+        non_neg_int
+    }
+}`
+      const result = await client.query({ query: NON_NEGATIVE_INTEGER_QUERY })
+      expect(result.data.NonNegativeInteger).to.deep.equal(
+        [
+          {
+            int: '300',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter dateTime', async function () {
+      const DATETIME_QUERY = gql`
+ query dateTimeQuery {
+    DateAndTime(filter: {datetime: {ge: "2021-03-05T23:34:43.0003Z" }},
+                orderBy: {datetime: ASC}) {
+        datetime
+    }
+}`
+      const result = await client.query({ query: DATETIME_QUERY })
+      expect(result.data.DateAndTime).to.deep.equal(
+        [
+          {
+            datetime: '300',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter stringy num', async function () {
+      const INTEGER_QUERY = gql`
+ query IntegerQuery {
+    Integer(filter: {int: {ge : "4"}}, orderBy: {int: ASC}) {
+        int
+    }
+}`
+      const result = await client.query({ query: INTEGER_QUERY })
+      expect(result.data.Integer).to.deep.equal(
+        [
+          {
+            int: '11',
+          },
+          {
+            int: '100',
+          },
         ],
       )
     })
