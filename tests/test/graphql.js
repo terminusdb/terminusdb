@@ -320,7 +320,7 @@ describe('GraphQL', function () {
       expect(result.data.DateAndTime).to.deep.equal(
         [
           {
-            datetime: '300',
+            datetime: '2021-03-05T23:34:43.000300Z',
           },
 
         ],
