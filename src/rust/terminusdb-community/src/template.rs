@@ -5,7 +5,7 @@ use swipl::prelude::*;
 use std::sync::Arc;
 
 predicates! {
-    #[module("handlebars")]
+    #[module("$handlebars")]
     semidet fn handlebars_context(context, template_list_term, output_term) {
         let mut handlebars = Handlebars::new();
 
@@ -24,7 +24,7 @@ predicates! {
 
         output_term.unify(WrappedHandlebars(Arc::new(handlebars)))
     }
-    #[module("handlebars")]
+    #[module("$handlebars")]
     semidet fn handlebars_render_template(context, handlebars_term, type_name_term, json_string_term, output_term) {
         let handlebars: WrappedHandlebars = handlebars_term.get_ex()?;
         let type_name: PrologText = type_name_term.get_ex()?;

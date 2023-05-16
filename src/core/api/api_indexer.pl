@@ -37,12 +37,16 @@ api_check_job(Task_Id, Status) :-
 
 embedding_type_queries(Commit_Descriptor, TypeQueries) :-
     findall(
-        Type-Query,
+        Type-Query-Template,
         (   ask(Commit_Descriptor,
                 (   t(Embedding, json:query,  Query_Point, schema),
+                    opt(t(Embedding, json:template, Template_Point, schema)),
                     t(Meta, json:embedding,  Embedding, schema),
                     t(Type, sys:metadata, Meta, schema))),
-            Query_Point = Query^^xsd:string),
+            Query_Point = Query^^xsd:string,
+            (   ground(Template_Point)
+            ->  Template_Point = Template^^_
+            ;   true)),
         TypeQueries
     ).
 
@@ -89,9 +93,13 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
     embedding_type_queries(Commit_Descriptor, TypeQueries),
+    convlist([Type-_-Template, Type-Template]>>ground(Template),
+            TypeQueries,
+            Templates),
+    '$handlebars':handlebars_context(Templates, Handlebars),
     call(Prelude,Stream),
     forall(
-        (   member(Type-Query, TypeQueries),
+        (   member(Type-Query-Template, TypeQueries),
             api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
                           Type, Operation)),
         (   get_dict(op, Operation, Op),
@@ -104,10 +112,13 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
                 handle_graphql_request(System_DB, Auth, arbitrary, Path, Query_Stream, Response, string, Content_Length),
                 atom_json_dict(Response, GraphQL_Response, [width(0)]),
                 get_dict(data, GraphQL_Response, Type_Query),
-                once(get_dict(_, Type_Query, [GraphQL_Document])),
+                once(get_dict(_, Type_Query, [GraphQL_Document|_])),
                 %stringify_document(GraphQL_Document, String_Document),
                 atom_json_dict(String_Document, GraphQL_Document, [width(0)]),
-                put_dict(_{string : String_Document }, Operation, Final_Operation),
+                (   ground(Template)
+                ->  '$handlebars':handlebars_render_template(Handlebars, Type, String_Document, Rendered_String_Document)
+                ;   Rendered_String_Document = String_Document),
+                put_dict(_{string : Rendered_String_Document }, Operation, Final_Operation),
                 atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
                 write(Stream, Operation_Atom),
                 nl(Stream)
