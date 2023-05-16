@@ -144,6 +144,11 @@ describe('GraphQL', function () {
     '@type': 'Class',
     int: 'xsd:integer',
   },
+  {
+    '@id': 'BadlyNamedOptional',
+    '@type': 'Class',
+    'is-it-ok': { '@type' : 'Optional', '@class' : 'xsd:string'},
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -786,6 +791,26 @@ query EverythingQuery {
           '{"this":{"is":{"a":{"json":[]}}}}',
         ],
       )
+    })
+
+    it('graphql optional rename', async function () {
+      const testObj = {
+        '@type': 'BadlyNamedOptional',
+        'is-it-ok': "something",
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    BadlyNamedOptional{
+        is_it_ok
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.BadlyNamedOptional).to.deep.equal([
+        { is_it_ok: "something" },
+      ])
     })
   })
 })
