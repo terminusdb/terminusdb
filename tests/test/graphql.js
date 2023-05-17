@@ -162,7 +162,7 @@ describe('GraphQL', function () {
   {
     '@id': 'MyBigFloat',
     '@type': 'Class',
-    'bigfloat': 'xsd:decimal',
+    bigfloat: 'xsd:decimal',
   },
   ]
 
@@ -184,9 +184,9 @@ describe('GraphQL', function () {
   const nonnegint = { nonnegint: 300 }
   const datetime = { datetime: '2021-03-05T23:34:43.0003Z' }
 
-  const bigfloat1 = { bigfloat : "0.0" }
-  const bigfloat2 = { bigfloat : "10096.757" }
-  const bigfloat3 = { bigfloat : "101.0" }
+  const bigfloat1 = { bigfloat: '0.0' }
+  const bigfloat2 = { bigfloat: '10096.757' }
+  const bigfloat3 = { bigfloat: '101.0' }
 
   const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, nonnegint, datetime, bigfloat1, bigfloat2, bigfloat3]
 
@@ -366,16 +366,16 @@ describe('GraphQL', function () {
       const result = await client.query({ query: BIGFLOAT_QUERY })
       expect(result.data.MyBigFloat).to.deep.equal(
         [
-         {
-           "bigfloat": "0.0"
-         },
-         {
-           "bigfloat": "101.0"
-         },
-         {
-           "bigfloat": "10096.757"
-         }
-       ]
+          {
+            bigfloat: '0.0',
+          },
+          {
+            bigfloat: '101.0',
+          },
+          {
+            bigfloat: '10096.757',
+          },
+        ],
       )
     })
 
