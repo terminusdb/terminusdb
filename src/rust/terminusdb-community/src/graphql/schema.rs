@@ -15,8 +15,8 @@ use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
-    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_float,
-    type_is_json, type_is_small_integer, value_to_graphql,
+    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_decimal,
+    type_is_float, type_is_json, type_is_small_integer, value_to_graphql,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
@@ -483,6 +483,13 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             )
                         } else if type_is_datetime(base_type) {
                             Self::register_field::<DateTime>(
+                                registry,
+                                field_name,
+                                &(),
+                                field_definition.kind(),
+                            )
+                        } else if type_is_decimal(base_type) {
+                            Self::register_field::<BigFloat>(
                                 registry,
                                 field_name,
                                 &(),
