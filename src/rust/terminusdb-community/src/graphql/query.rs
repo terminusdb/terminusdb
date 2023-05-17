@@ -10,7 +10,7 @@ use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::value::{base_type_kind, value_to_bigint, value_to_string, BaseTypeKind};
-use crate::{consts::RDF_TYPE, terminus_store::*, value::value_to_graphql};
+use crate::{consts::RDF_TYPE, terminus_store::*};
 
 use super::filter::{
     BigFloatFilterInputObject, BigIntFilterInputObject, BooleanFilterInputObject,
@@ -944,17 +944,11 @@ fn create_query_order_key(
         .filter_map(|(property, ordering)| {
             let predicate = p.expand_schema(property);
             let predicate_id = g.predicate_id(&predicate)?;
-            let res = g.single_triple_sp(id, predicate_id).and_then(move |t| {
-                let db_value = g
-                    .id_object(t.object)
+            let res = g.single_triple_sp(id, predicate_id).map(move |t| {
+                g.id_object(t.object)
                     .expect("This object must exist")
                     .value()
-                    .unwrap();
-                match value_to_graphql(&db_value) {
-                    juniper::Value::Scalar(_) => Some(db_value),
-                    juniper::Value::Null => None,
-                    _ => panic!("Scalar value or null expected"),
-                }
+                    .unwrap()
             });
             Some((res, *ordering))
         })
