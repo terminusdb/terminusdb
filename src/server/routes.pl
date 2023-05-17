@@ -3069,7 +3069,7 @@ index_handler(get,Path,Request,System_DB,Auth) :-
     ;   Search = []),
 
     api_report_errors(
-        history,
+        index,
         Request,
         (
             param_value_search_required(Search, commit_id, text, Commit_Id),

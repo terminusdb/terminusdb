@@ -104,24 +104,36 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
                           Type, Operation)),
         (   get_dict(op, Operation, Op),
             (   member(Op, ['Inserted', 'Changed'])
-            ->  get_dict(id, Operation, Id),
-                GraphQL_Query = json{ query: Query, variables: json{id: Id}},
-                atom_json_dict(Id_Query, GraphQL_Query, [width(0)]),
-                string_length(Id_Query, Content_Length),
-                open_string(Id_Query, Query_Stream),
-                handle_graphql_request(System_DB, Auth, arbitrary, Path, Query_Stream, Response, string, Content_Length),
-                atom_json_dict(Response, GraphQL_Response, [width(0)]),
-                get_dict(data, GraphQL_Response, Type_Query),
-                once(get_dict(_, Type_Query, [GraphQL_Document|_])),
-                %stringify_document(GraphQL_Document, String_Document),
-                atom_json_dict(String_Document, GraphQL_Document, [width(0)]),
-                (   ground(Template)
-                ->  '$handlebars':handlebars_render_template(Handlebars, Type, String_Document, Rendered_String_Document)
-                ;   Rendered_String_Document = String_Document),
-                put_dict(_{string : Rendered_String_Document }, Operation, Final_Operation),
-                atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
-                write(Stream, Operation_Atom),
-                nl(Stream)
+            ->  (   get_dict(id, Operation, Id),
+                    GraphQL_Query = json{ query: Query, variables: json{id: Id}},
+                    atom_json_dict(Id_Query, GraphQL_Query, [width(0)]),
+                    string_length(Id_Query, Content_Length),
+                    open_string(Id_Query, Query_Stream),
+                    handle_graphql_request(System_DB, Auth, arbitrary, Path, Query_Stream, Response, string, Content_Length),
+                    atom_json_dict(Response, GraphQL_Response, [width(0)]),
+                    die_if(get_dict(error, GraphQL_Response, Error),
+                           error(graphql_error(Error))),
+                    get_dict(data, GraphQL_Response, Type_Query),
+                    once(get_dict(_, Type_Query, [GraphQL_Document|_])),
+                    %stringify_document(GraphQL_Document, String_Document),
+                    atom_json_dict(String_Document, GraphQL_Document, [width(0)]),
+                    (   ground(Template)
+                    ->  catch(
+                            '$handlebars':handlebars_render_template(Handlebars, Type, String_Document, Rendered_String_Document),
+                            error(handlebars_render_error(Msg,_Line,_Char)),
+                            format(Stream, '{ "op" : "Error", "message" : ~q}~n', [Msg])
+                        ),
+                        fail
+                    ;   Rendered_String_Document = String_Document
+                    ),
+                    put_dict(_{string : Rendered_String_Document }, Operation, Final_Operation),
+                    atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
+                    write(Stream, Operation_Atom),
+                    nl(Stream)
+                ;   get_dict(id, Operation, Id),
+                    format(Stream, '{ "op" : "Error", "message" : "Failed to process embedding operation for id ~s"}~n',
+                           [Id])
+                )
             ;   atom_json_dict(Operation_Atom, Operation, [width(0)]),
                 write(Stream, Operation_Atom),
                 nl(Stream)

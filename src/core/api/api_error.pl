@@ -1606,6 +1606,15 @@ api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation)
                               'api:operation' : Operation
                             }
             }.
+api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)), JSON) :-
+    JSON = _{'@type' : 'api:IndexErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:HandlebarsTemplateError",
+                              'api:line' : Line,
+                              'api:character': Character
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
