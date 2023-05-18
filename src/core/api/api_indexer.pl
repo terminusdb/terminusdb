@@ -18,6 +18,7 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(yall)).
 :- use_module(library(lists)).
+:- use_module(library(dicts)).
 
 % api_start_job(+Domain:string,+Commit:string,-Task_id, +Options) is det.
 api_start_job(Domain, Commit, Task_Id) :-
@@ -146,83 +147,3 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
             )
         )
     ).
-
-stringify_document(Document, Atom) :-
-    do_or_die(
-        is_dict(Document),
-        error(not_a_document, _)),
-    dict_keys(Document, Keys),
-    findall(
-        Key-Value_Atom,
-        (   member(Key, Keys),
-            \+ atom_concat('@', _, Key),
-            get_dict(Key, Document, Value),
-            stringify_value(Value, Value_Atom)
-        ),
-        KeyValues
-    ),
-    maplist([Key-Value,String]>>format(atom(String), "Its ~s is ~s. ", [Key,Value]), KeyValues, List),
-    atomic_list_concat(List, Atom).
-
-stringify_value(Value, Atom) :-
-    (   is_dict(Value)
-    ->  stringify_document(Value, Atom)
-    ;   is_list(Value)
-    ->  maplist(stringify_value, Value, Atom_List),
-        format(atom(NLBullet), '~n* ',[]),
-        intersperse(NLBullet, Atom_List, Full_List),
-        atomic_list_concat(['containing: '|Full_List], Atom)
-    ;   number(Value)
-    ->  format(atom(Atom), "~q", [Value])
-    ;   text(Value)
-    ->  atom_string(Atom, Value)
-    ).
-
-/*
-Options:
-* last_commit(Commit_Id)
-  1. If no last_commit id is specified then we will reindex from the head commit.
-  2. If a last_commit_id is specified, we will re-use the index for this commit
-     if it has an index.
-
-api_index(System, Path, Options) :-
-
-
-{ "@type" : "Class",
-  "@id" : "MyClass",
-  "@metadata" : { "embedding" : { "type" : "openAI",
-                                  "GraphQLQuery" : "query{ }" } } }
-
-{ "@type" : "Commit",
-  "metadata" : "sys:JSON"
-}
-
-Between commit A, B
-
-Return all Ids with Insert/Delete/Update for type Type
-
-
-
-*/
-
-:- begin_tests(stringify).
-
-test(stringify_list, []) :-
-    stringify_value([a,b,c], 'a, b, c').
-
-test(stringify_bookclub, []) :-
-
-    JSON = json{'@type':'BookClub',
-                name: "Marxist book club",
-                book_list : [
-                    json{ name : "Das Kapital" },
-                    json{ name : "Der Ursprung des Christentums" }
-                ]
-               },
-
-    stringify_document(JSON, Output),
-
-    print_term(Output, []).
-
-:- end_tests(stringify).
-
