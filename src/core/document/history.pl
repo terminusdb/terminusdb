@@ -16,6 +16,7 @@
               ]).
 :- use_module(core(query)).
 :- use_module(core(transaction/ref_entity)).
+:- use_module(library(option)).
 
 /*
 

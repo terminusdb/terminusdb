@@ -14,6 +14,9 @@
 :- use_module(library(http/http_client)).
 :- use_module(core(api/api_graphql)).
 :- use_module(core(triple), [super_user_authority/1]).
+:- use_module(library(apply)).
+:- use_module(library(apply_macros)).
+:- use_module(library(yall)).
 
 % api_start_job(+Domain:string,+Commit:string,-Task_id, +Options) is det.
 api_start_job(Domain, Commit, Task_Id) :-
