@@ -17,6 +17,7 @@
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(yall)).
+:- use_module(library(lists)).
 
 % api_start_job(+Domain:string,+Commit:string,-Task_id, +Options) is det.
 api_start_job(Domain, Commit, Task_Id) :-
