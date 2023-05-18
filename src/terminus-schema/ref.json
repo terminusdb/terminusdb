@@ -44,7 +44,7 @@
                         "message" : "The message associated with the commit.",
                         "identifier" : "The identifier of the commit.",
                         "timestamp" : "The timestamp for the commit.",
-                        "metadata" : "User supplied metadata for commit as JSON."
+                        "metadata" : "User supplied metadata for commit as JSON.",
                         "parent" : "The previous commit (if one exists).",
                         "migration" : "The schema migration script (if one exists)."
                       }
