@@ -121,16 +121,18 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
                     ->  catch(
                             '$handlebars':handlebars_render_template(Handlebars, Type, String_Document, Rendered_String_Document),
                             error(handlebars_render_error(Msg,_Line,_Char)),
-                            format(Stream, '{ "op" : "Error", "message" : ~q}~n', [Msg])
-                        ),
-                        fail
+                            (   format(Stream, '{ "op" : "Error", "message" : ~q}~n', [Msg]),
+                                fail
+                            )
+                        )
                     ;   Rendered_String_Document = String_Document
                     ),
                     put_dict(_{string : Rendered_String_Document }, Operation, Final_Operation),
                     atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
                     write(Stream, Operation_Atom),
                     nl(Stream)
-                ;   get_dict(id, Operation, Id),
+                ;   throw(error(some_terrible_error, _)),
+                    get_dict(id, Operation, Id),
                     format(Stream, '{ "op" : "Error", "message" : "Failed to process embedding operation for id ~s"}~n',
                            [Id])
                 )
