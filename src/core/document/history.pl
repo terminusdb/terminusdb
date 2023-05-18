@@ -15,7 +15,7 @@
                   database_prefixes/2
               ]).
 :- use_module(core(query)).
-:- use_module(core(transaction/ref_entity)).
+:- use_module(core(transaction)).
 :- use_module(library(option)).
 
 /*
