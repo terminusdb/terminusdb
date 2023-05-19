@@ -139,6 +139,31 @@ describe('GraphQL', function () {
       },
     ],
   },
+  {
+    '@id': 'Integer',
+    '@type': 'Class',
+    int: 'xsd:integer',
+  },
+  {
+    '@id': 'NonNegativeInteger',
+    '@type': 'Class',
+    nonnegint: 'xsd:nonNegativeInteger',
+  },
+  {
+    '@id': 'DateAndTime',
+    '@type': 'Class',
+    datetime: 'xsd:dateTime',
+  },
+  {
+    '@id': 'BadlyNamedOptional',
+    '@type': 'Class',
+    'is-it-ok': { '@type': 'Optional', '@class': 'xsd:string' },
+  },
+  {
+    '@id': 'MyBigFloat',
+    '@type': 'Class',
+    bigfloat: 'xsd:decimal',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -151,7 +176,19 @@ describe('GraphQL', function () {
   const pickles = { '@type': 'Cat', name: 'Pickles' }
   const toots = { '@type': 'Cat', name: 'Toots' }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots]
+  const int1 = { int: 1 }
+  const int2 = { int: 100 }
+  const int3 = { int: 11 }
+  const int4 = { int: 2 }
+
+  const nonnegint = { nonnegint: 300 }
+  const datetime = { datetime: '2021-03-05T23:34:43.0003Z' }
+
+  const bigfloat1 = { bigfloat: '0.0' }
+  const bigfloat2 = { bigfloat: '10096.757' }
+  const bigfloat3 = { bigfloat: '101.0' }
+
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, nonnegint, datetime, bigfloat1, bigfloat2, bigfloat3]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -233,6 +270,113 @@ describe('GraphQL', function () {
         { name: 'Karl Popper', age: '92', order: '5' },
         { name: 'Kurt Gödel', age: '71', order: '5' },
       ])
+    })
+
+    it('graphql order by stringy num', async function () {
+      const INTEGER_QUERY = gql`
+ query IntegerQuery {
+    Integer(orderBy: {int: ASC}) {
+        int
+    }
+}`
+      const result = await client.query({ query: INTEGER_QUERY })
+      expect(result.data.Integer).to.deep.equal(
+        [
+          {
+            int: '1',
+          },
+          {
+            int: '2',
+          },
+          {
+            int: '11',
+          },
+          {
+            int: '100',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter nonNegativeInteger', async function () {
+      const NON_NEGATIVE_INTEGER_QUERY = gql`
+ query NonNegativeIntegerQuery {
+    NonNegativeInteger(filter: {nonnegint: {ge: "4"}}, orderBy: {nonnegint: ASC}) {
+        nonnegint
+    }
+}`
+      const result = await client.query({ query: NON_NEGATIVE_INTEGER_QUERY })
+      expect(result.data.NonNegativeInteger).to.deep.equal(
+        [
+          {
+            nonnegint: '300',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter dateTime', async function () {
+      const DATETIME_QUERY = gql`
+ query dateTimeQuery {
+    DateAndTime(filter: {datetime: {ge: "2021-03-05T23:34:43.0003Z" }},
+                orderBy: {datetime: ASC}) {
+        datetime
+    }
+}`
+      const result = await client.query({ query: DATETIME_QUERY })
+      expect(result.data.DateAndTime).to.deep.equal(
+        [
+          {
+            datetime: '2021-03-05T23:34:43.000300Z',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter stringy num', async function () {
+      const INTEGER_QUERY = gql`
+ query IntegerQuery {
+    Integer(filter: {int: {ge : "4"}}, orderBy: {int: ASC}) {
+        int
+    }
+}`
+      const result = await client.query({ query: INTEGER_QUERY })
+      expect(result.data.Integer).to.deep.equal(
+        [
+          {
+            int: '11',
+          },
+          {
+            int: '100',
+          },
+        ],
+      )
+    })
+
+    it('graphql order BigFloat', async function () {
+      const BIGFLOAT_QUERY = gql`
+ query BigFloat {
+    MyBigFloat(orderBy: {bigfloat: ASC}) {
+        bigfloat
+    }
+}`
+      const result = await client.query({ query: BIGFLOAT_QUERY })
+      expect(result.data.MyBigFloat).to.deep.equal(
+        [
+          {
+            bigfloat: '0.0',
+          },
+          {
+            bigfloat: '101.0',
+          },
+          {
+            bigfloat: '10096.757',
+          },
+        ],
+      )
     })
 
     it('back-link query', async function () {
@@ -749,6 +893,26 @@ query EverythingQuery {
           '{"this":{"is":{"a":{"json":[]}}}}',
         ],
       )
+    })
+
+    it('graphql optional rename', async function () {
+      const testObj = {
+        '@type': 'BadlyNamedOptional',
+        'is-it-ok': 'something',
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    BadlyNamedOptional{
+        is_it_ok
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.BadlyNamedOptional).to.deep.equal([
+        { is_it_ok: 'something' },
+      ])
     })
   })
 })
