@@ -15,8 +15,8 @@ use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
-    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_float,
-    type_is_json, type_is_small_integer, value_to_graphql,
+    enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_decimal,
+    type_is_float, type_is_json, type_is_small_integer, value_to_graphql,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
@@ -238,8 +238,8 @@ pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
 }
 
-fn result_to_execution_result<'a, C: QueryableContextType, T>(
-    context: &Context<'a, C>,
+fn result_to_execution_result<C: QueryableContextType, T>(
+    context: &Context<C>,
     result: PrologResult<T>,
 ) -> Result<T, juniper::FieldError> {
     result_to_string_result(context, result).map_err(|e| match e {
@@ -248,15 +248,15 @@ fn result_to_execution_result<'a, C: QueryableContextType, T>(
     })
 }
 
-fn pl_ids_from_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+fn pl_ids_from_restriction<C: QueryableContextType>(
+    context: &TerminusContext<C>,
     restriction: &RestrictionDefinition,
 ) -> PrologResult<Vec<u64>> {
     let mut result = Vec::new();
     let prolog_context = &context.context;
     let frame = prolog_context.open_frame();
     let [restriction_term, id_term, reason_term] = frame.new_term_refs();
-    restriction_term.unify(&restriction.original_id.as_ref().unwrap())?;
+    restriction_term.unify(restriction.original_id.as_ref().unwrap())?;
     let open_call = frame.open(
         pred!("query:ids_for_restriction/4"),
         [
@@ -274,8 +274,8 @@ fn pl_ids_from_restriction<'a, C: QueryableContextType>(
     Ok(result)
 }
 
-fn ids_from_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+fn ids_from_restriction<C: QueryableContextType>(
+    context: &TerminusContext<C>,
     restriction: &RestrictionDefinition,
 ) -> Result<Vec<u64>, juniper::FieldError> {
     let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
@@ -284,7 +284,7 @@ fn ids_from_restriction<'a, C: QueryableContextType>(
 
         r
     });
-    result_to_execution_result(&context.context, result)
+    result_to_execution_result(context.context, result)
 }
 
 fn pl_id_matches_restriction<'a, C: QueryableContextType>(
@@ -483,6 +483,13 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                             )
                         } else if type_is_datetime(base_type) {
                             Self::register_field::<DateTime>(
+                                registry,
+                                field_name,
+                                &(),
+                                field_definition.kind(),
+                            )
+                        } else if type_is_decimal(base_type) {
+                            Self::register_field::<BigFloat>(
                                 registry,
                                 field_name,
                                 &(),
@@ -822,8 +829,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     Err(e) => Some(Err(e)),
                 }
             } else {
-                let field_name_expanded = allframes.context.expand_schema(field_name);
                 let frame = &allframes.frames[&info.class];
+                let field_name_expanded: String;
                 let doc_type;
                 let enum_type;
                 let kind;
@@ -831,6 +838,11 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 match frame {
                     TypeDefinition::Class(c) => {
                         let field = &c.resolve_field(&field_name.to_string());
+                        field_name_expanded = c.fully_qualified_property_name(
+                            &allframes.context,
+                            &field_name.to_string(),
+                        );
+
                         doc_type = field.document_type(allframes);
                         enum_type = field.enum_type(allframes);
                         kind = field.kind();
