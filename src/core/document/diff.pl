@@ -78,7 +78,7 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     !,
     is_list(After),
     simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options).
-simple_diff(Before,After,_Keep,null,_State,Cost,Cost,_Options) :-
+simple_diff(Before,After,_Keep,matches,_State,Cost,Cost,_Options) :-
     % Copy is implicit
     string_normalise(Before, Value),
     string_normalise(After, Value),
@@ -137,7 +137,7 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,New_Options),
     (   \+ (   is_dict(Sub_Diff),
                get_dict('@op', Sub_Diff, "KeepList")
-           ;   Sub_Diff = null
+           ;   Sub_Diff = matches
            )
     ->  New_Keys = [Key-Sub_Diff|Rest]
     ;   New_Keys = Rest
@@ -218,7 +218,10 @@ deep_list_diff_base(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     length(Before, Length),
     length(After, Length),
     mapm({State,Keep,Options}/
-         [B,A,D,Cost,New_Cost]>>simple_diff(B,A,Keep,D,State,Cost,New_Cost,Options),
+         [B,A,D,Cost,New_Cost]>>(
+             simple_diff(B,A,Keep,D,State,Cost,New_Cost,Options),
+             D \= matches
+         ),
          Before,
          After,
          Diff,
@@ -910,6 +913,75 @@ test(basetype_set, []) :-
                                '@to':1}}.
 
 
+
+
+test(mixed, []) :-
+    OldVal = json{
+                 '@id': "People/1",
+                 '@type': "People",
+                 desc: [
+                     "In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+                     "Luke Skywalker is a fictional character and the main protagonist of the original film trilogy of the Star Wars franchise created by George Lucas. The character, portrayed by Mark Hamill, is an important figure in the Rebel Alliance's struggle against the Galactic Empire. He is the twin brother of Rebellion leader Princess Leia Organa of Alderaan, a friend and brother-in-law of smuggler Han Solo, an apprentice to Jedi Masters Obi-Wan \"Ben\" Kenobi and Yoda, the son of fallen Jedi Anakin Skywalker (Darth Vader) and Queen of Naboo/Republic Senator Padmé Amidala and maternal uncle of Kylo Ren / Ben Solo. The now non-canon Star Wars expanded universe depicts him as a powerful Jedi Master, husband of Mara Jade, the father of Ben Skywalker and maternal uncle of Jaina, Jacen and Anakin Solo.\n\nHappy go lucky."
+                 ],
+                 vehicle: [
+                     "Vehicle/14",
+                     "Vehicle/30"
+                 ]
+             },
+    NewVal = json{
+                 '@id': "People/1",
+                 '@type': "People",
+                 desc: [
+                     "KITTY In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+                     "Luke Skywalker is a fictional character and the main protagonist of the original film trilogy of the Star Wars franchise created by George Lucas. The character, portrayed by Mark Hamill, is an important figure in the Rebel Alliance's struggle against the Galactic Empire. He is the twin brother of Rebellion leader Princess Leia Organa of Alderaan, a friend and brother-in-law of smuggler Han Solo, an apprentice to Jedi Masters Obi-Wan \"Ben\" Kenobi and Yoda, the son of fallen Jedi Anakin Skywalker (Darth Vader) and Queen of Naboo/Republic Senator Padmé Amidala and maternal uncle of Kylo Ren / Ben Solo. The now non-canon Star Wars expanded universe depicts him as a powerful Jedi Master, husband of Mara Jade, the father of Ben Skywalker and maternal uncle of Jaina, Jacen and Anakin Solo.\n\nHappy go lucky."
+                 ],
+                 vehicle: [
+                     "Vehicle/14",
+                     "Vehicle/24",
+                     "Vehicle/30"
+                 ]
+             },
+    simple_diff(OldVal, NewVal, Result, [keep(json{'@id' : true})]),
+
+    Result = json{ '@id':"People/1",
+				   desc:json{ '@op':"PatchList",
+					      '@patch':[ json{ '@after':"KITTY In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+							       '@before':"In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+							       '@op':"SwapValue"
+							     }
+						       ],
+					      '@rest':json{'@op':"KeepList"}
+					    },
+				   vehicle:json{ '@op':"CopyList",
+						 '@rest':json{ '@after':[ "Vehicle/24"
+									],
+							       '@before':[],
+							       '@op':"SwapList",
+							       '@rest':json{ '@op':"KeepList"
+									   }
+							     },
+						 '@to':1
+					       }
+				 }.
+
+
+test(simple_list_diff_strings, []) :-
+    State = best(6, something),
+    Before = ["In 2015","Luke Skywalker"],
+    After = ["KITTY In 2015", "Luke Skywalker"],
+    simple_list_diff(Before, After, json{}, Result, State, 0, New_Cost,
+                     [keep(json{'@id':true}),
+                      subdocument(true)]),
+    New_Cost = 4,
+    Result = json{ '@op':"PatchList",
+		           '@patch':[ json{ '@after':"KITTY In 2015",
+									'@before':"In 2015",
+									'@op':"SwapValue"
+								  }
+							],
+				   '@rest':json{ '@op':"KeepList"
+							   }
+				 }.
 
 
 :- end_tests(simple_diff).
