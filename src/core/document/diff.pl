@@ -133,15 +133,14 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
-    (   merge_options(_{subdocument:true}, Options, New_Options),
-        simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,New_Options),
-        (   \+ (   is_dict(Sub_Diff),
-                   get_dict('@op', Sub_Diff, "KeepList")
-               ;   Sub_Diff = null
-               )
-        ->  New_Keys = [Key-Sub_Diff|Rest]
-        ;   New_Keys = Rest
-        )
+    merge_options(_{subdocument:true}, Options, New_Options),
+    simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,New_Options),
+    (   \+ (   is_dict(Sub_Diff),
+               get_dict('@op', Sub_Diff, "KeepList")
+           ;   Sub_Diff = null
+           )
+    ->  New_Keys = [Key-Sub_Diff|Rest]
+    ;   New_Keys = Rest
     ),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost,Options) :-
