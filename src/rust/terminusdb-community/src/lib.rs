@@ -1,6 +1,7 @@
 #[macro_use]
 mod log;
 
+mod changes;
 mod consts;
 mod doc;
 mod graphql;
@@ -78,4 +79,5 @@ pub fn install() {
     doc::register();
     graphql::register();
     template::register();
+    changes::register();
 }
