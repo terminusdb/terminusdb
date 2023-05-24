@@ -1,4 +1,4 @@
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     graphql::{
@@ -91,9 +91,6 @@ predicates! {
     semidet fn embedding_string_for(context, system_term, transaction_term, embedding_context_term, type_term, iri_term, output_term) {
         let type_name: PrologText = type_term.get_ex()?;
         let embedding_context: Arc<EmbeddingContext> = embedding_context_term.get_ex()?;
-        if !embedding_context.templates.has_template(&type_name) {
-            return Err(PrologError::Failure);
-        }
         let iri: PrologText = iri_term.get_ex()?;
 
         let none_term = context.new_term_ref();
@@ -111,16 +108,22 @@ predicates! {
         assert!(!docs.is_empty());
 
         let single_doc = &docs[0];
-        match embedding_context.templates.render(&*type_name, single_doc) {
-            Ok(result) => {
-                output_term.unify(result)
+        if embedding_context.templates.has_template(&type_name) {
+            match embedding_context.templates.render(&*type_name, single_doc) {
+                Ok(result) => {
+                    output_term.unify(result)
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    let line = e.line_no.unwrap_or(0) as u64;
+                    let column = e.column_no.unwrap_or(0) as u64;
+                    context.raise_exception(&term!{context: error(handlebars_render_error(#msg, #line, #column))}?)
+                }
             }
-            Err(e) => {
-                let msg = e.to_string();
-                let line = e.line_no.unwrap_or(0) as u64;
-                let column = e.column_no.unwrap_or(0) as u64;
-                context.raise_exception(&term!{context: error(handlebars_render_error(#msg, #line, #column))}?)
-            }
+        } else {
+            let result = serde_json::to_string(single_doc).unwrap();
+
+            output_term.unify(result)
         }
     }
 }
