@@ -3085,6 +3085,7 @@ index_handler(get,Path,Request,System_DB,Auth) :-
                 [Stream]>>(
                     write(Stream,'Status: 200'),nl(Stream),
                     write(Stream,'Content-Type: application/json'),nl(Stream),
+                    format("Transfer-Encoding: chunked~n"),
                     nl(Stream)),
                 Path,
                 Commit_Id,
