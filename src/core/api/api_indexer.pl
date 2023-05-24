@@ -7,8 +7,9 @@
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
-:- use_module(core(document),[get_document/3]).
+:- use_module(core(document),[get_document/3, all_class_frames/3]).
 :- use_module(core(query)).
+:- use_module(core(transaction)).
 :- use_module(core(util)).
 :- use_module(library(http/json)).
 :- use_module(library(http/http_client)).
@@ -92,47 +93,30 @@ api_indexable(none, Descriptor, Commit_Id, Type, Operation) :-
 */
 :- meta_predicate api_index_jobs(+, +, +, 1, +, +, +, +).
 api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous_Commit_Id, _Options) :-
-    super_user_authority(Auth),
+    %super_user_authority(Auth),
     resolve_absolute_string_descriptor(Path, Descriptor),
     resolve_relative_descriptor(Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
     embedding_type_queries(Commit_Descriptor, TypeQueries),
-    convlist([Type-_-Template, Type-Template]>>ground(Template),
+    convlist([Type-Query-Template, Type-Template, Type-Query]>>ground(Template),
             TypeQueries,
-            Templates),
-    '$handlebars':handlebars_context(Templates, Handlebars),
+            Templates,
+            Queries),
+    % '$handlebars':handlebars_context(Templates, Handlebars),
+    open_descriptor(Commit_Descriptor, Transaction),
+    all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
+    '$index':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
     call(Prelude,Stream),
     forall(
-        (   member(Type-Query-Template, TypeQueries),
+        (   member(Type-_Query-_Template, TypeQueries),
             api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
                           Type, Operation)),
         (   get_dict(op, Operation, Op),
             (   member(Op, ['Inserted', 'Changed'])
             ->  (   get_dict(id, Operation, Id),
-                    GraphQL_Query = json{ query: Query, variables: json{id: Id}},
-                    atom_json_dict(Id_Query, GraphQL_Query, [width(0)]),
-                    string_length(Id_Query, Content_Length),
-                    open_string(Id_Query, Query_Stream),
-                    handle_graphql_request(System_DB, Auth, arbitrary, Path, Query_Stream, Response, string, Content_Length),
-                    atom_json_dict(Response, GraphQL_Response, [width(0)]),
-                    die_if(get_dict(error, GraphQL_Response, Error),
-                           error(graphql_error(Error))),
-                    get_dict(data, GraphQL_Response, Type_Query),
-                    once(get_dict(_, Type_Query, [GraphQL_Document|_])),
-                    %stringify_document(GraphQL_Document, String_Document),
-                    atom_json_dict(String_Document, GraphQL_Document, [width(0)]),
-                    (   ground(Template)
-                    ->  catch(
-                            '$handlebars':handlebars_render_template(Handlebars, Type, String_Document, Rendered_String_Document),
-                            error(handlebars_render_error(Msg,_Line,_Char)),
-                            (   format(Stream, '{ "op" : "Error", "message" : ~q}~n', [Msg]),
-                                fail
-                            )
-                        )
-                    ;   Rendered_String_Document = String_Document
-                    ),
-                    put_dict(_{string : Rendered_String_Document }, Operation, Final_Operation),
+                    '$index':embedding_string_for(System_DB, Transaction, Embedding_Context, Type, Id, Embedding_String),
+                    put_dict(_{string : Embedding_String }, Operation, Final_Operation),
                     atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
                     write(Stream, Operation_Atom),
                     nl(Stream)

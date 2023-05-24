@@ -4,23 +4,34 @@ use swipl::prelude::*;
 
 use std::sync::Arc;
 
+pub fn handlebars_from_term<'a, C: QueryableContextType>(
+    context: &Context<'a, C>,
+    template_list_term: &Term,
+) -> Result<Handlebars<'static>, PrologError> {
+    let mut handlebars = Handlebars::new();
+
+    for template_pair_term in context.term_list_iter(template_list_term) {
+        let [type_name_term, template_term] = context.compound_terms(&template_pair_term)?;
+        let type_name: PrologText = type_name_term.get_ex()?;
+        let template: PrologText = template_term.get_ex()?;
+        if let Err(e) = handlebars.register_template_string(&*type_name, &*template) {
+            let msg = e.to_string();
+            let line = e.line_no.unwrap_or(0) as u64;
+            let column = e.column_no.unwrap_or(0) as u64;
+
+            context.raise_exception(
+                &term! {context: error(handlebars_template_error(#msg, #line, #column))}?,
+            )?;
+        }
+    }
+
+    Ok(handlebars)
+}
+
 predicates! {
     #[module("$handlebars")]
     semidet fn handlebars_context(context, template_list_term, output_term) {
-        let mut handlebars = Handlebars::new();
-
-        for template_pair_term in context.term_list_iter(template_list_term) {
-            let [type_name_term, template_term] = context.compound_terms(&template_pair_term)?;
-            let type_name: PrologText = type_name_term.get_ex()?;
-            let template: PrologText = template_term.get_ex()?;
-            if let Err(e) = handlebars.register_template_string(&*type_name, &*template) {
-                let msg = e.to_string();
-                let line = e.line_no.unwrap_or(0) as u64;
-                let column = e.column_no.unwrap_or(0) as u64;
-
-                context.raise_exception(&term!{context: error(handlebars_template_error(#msg, #line, #column))}?)?;
-            }
-        }
+        let handlebars = handlebars_from_term(context, template_list_term)?;
 
         output_term.unify(WrappedHandlebars(Arc::new(handlebars)))
     }
