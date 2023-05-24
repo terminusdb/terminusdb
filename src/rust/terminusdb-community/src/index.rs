@@ -30,11 +30,8 @@ impl EmbeddingContext {
         queries_term: &Term,
         frames_term: &Term,
     ) -> PrologResult<Self> {
-        eprintln!("hi hello");
         let templates = handlebars_from_term(context, templates_term)?;
-        eprintln!("got my templates");
         let types = type_collection_from_term(context, frames_term)?;
-        eprintln!("got my types");
 
         let mut queries = HashMap::new();
         let none_term = context.new_term_ref();
@@ -49,9 +46,7 @@ impl EmbeddingContext {
             &transaction_term,
         )?;
 
-        eprintln!("still here");
         for type_tuple_term in context.term_list_iter(queries_term) {
-            eprintln!("and still here");
             // TODO seriously error handle here
             let [type_name_term, query_term] = context.compound_terms(&type_tuple_term)?;
             let type_name: PrologText = type_name_term.get_ex()?;
@@ -68,7 +63,6 @@ impl EmbeddingContext {
             queries.insert(type_name.to_string(), (source, lifetime_erased_document));
         }
 
-        eprintln!("constructed");
         Ok(Self {
             templates,
             types,
@@ -109,7 +103,6 @@ predicates! {
         let id_value: InputValue<DefaultScalarValue> = InputValue::scalar(&*iri.as_str());
         let mut parameters = HashMap::with_capacity(1);
         parameters.insert("id".to_string(), id_value);
-        eprintln!("about to call!!");
 
         let (docs, errs) = execution_context.execute_query_document(document, &parameters).unwrap();
         assert!(errs.is_empty());
