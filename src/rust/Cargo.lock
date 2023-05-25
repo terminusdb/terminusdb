@@ -2044,6 +2044,7 @@ dependencies = [
  "serde_json",
  "swipl",
  "terminusdb-store-prolog",
+ "thiserror",
  "urlencoding 2.1.2",
 ]
 

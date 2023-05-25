@@ -15,6 +15,100 @@ use juniper::{
 use serde::Serialize;
 use swipl::prelude::*;
 
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+enum EmbeddingError {
+    #[error("prolog error")]
+    PrologError(#[from] PrologError),
+    #[error(transparent)]
+    Limited(#[from] LimitedEmbeddingError),
+}
+
+#[derive(Error, Debug)]
+enum LimitedEmbeddingError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("embedding query could not be parsed for type {type_name}")]
+    QueryParseFailed { type_name: String },
+    #[error("embedding query could not be validated for type {type_name}")]
+    QueryValidationFailed { type_name: String },
+    #[error("no embedding query for type {type_name}")]
+    NoQueryForType { type_name: String },
+    #[error("GraphQL error while retrieving embedding document for type {type_name} and iri {iri}: {error}")]
+    GraphQLError {
+        type_name: String,
+        iri: String,
+        error: String,
+    },
+    #[error("GraphQL query for embedding had no result for type {type_name} and iri {iri}")]
+    NoResult { type_name: String, iri: String },
+    #[error("Handlebars render error for type {type_name} and iri {iri}: {msg} ({line}:{col})")]
+    HandlebarsRenderError {
+        type_name: String,
+        iri: String,
+        msg: String,
+        line: u64,
+        col: u64,
+    },
+}
+
+impl From<EmbeddingError> for LimitedEmbeddingError {
+    fn from(value: EmbeddingError) -> Self {
+        match value {
+            EmbeddingError::PrologError(_) => panic!("cannot convert prolog errors"),
+            EmbeddingError::Limited(e) => e,
+        }
+    }
+}
+
+fn as_prolog_result<T>(
+    r: Result<T, EmbeddingError>,
+) -> PrologResult<Result<T, LimitedEmbeddingError>> {
+    match r {
+        Ok(x) => Ok(Ok(x)),
+        Err(EmbeddingError::PrologError(p)) => Err(p),
+        Err(e) => Ok(Err(e.into())),
+    }
+}
+
+impl IntoPrologException for LimitedEmbeddingError {
+    fn into_prolog_exception<'a, 'b, T: QueryableContextType>(
+        self,
+        context: &'a Context<'b, T>,
+    ) -> PrologResult<Term<'a>> {
+        match self {
+            Self::Io(e) => e.into_prolog_exception(context),
+            Self::QueryParseFailed { type_name } => {
+                term! {context: error(embedding_query_parsing_failed(#&*type_name),_)}
+            }
+            Self::QueryValidationFailed { type_name } => {
+                term! {context: error(embedding_query_validation_failed(#&*type_name),_)}
+            }
+            Self::NoQueryForType { type_name } => {
+                term! {context: error(no_embedding_query_for_type(#type_name),_)}
+            }
+            Self::GraphQLError {
+                type_name,
+                iri,
+                error,
+            } => term! {context: error(graphql_error_for_embedding(#type_name, #iri, #error),_)},
+            Self::NoResult { type_name, iri } => {
+                term! {context: error(no_result_for_embedding(#type_name, #iri),_)}
+            }
+            Self::HandlebarsRenderError {
+                type_name,
+                iri,
+                msg,
+                line,
+                col,
+            } => {
+                term! {context: error(handlebars_render_error_for_embedding(#&*type_name, #&*iri, #msg, #line, #col))}
+            }
+        }
+    }
+}
+
 #[arc_blob("embedding_context", defaults)]
 struct EmbeddingContext {
     templates: Handlebars<'static>,
@@ -30,7 +124,7 @@ impl EmbeddingContext {
         templates_term: &Term,
         queries_term: &Term,
         frames_term: &Term,
-    ) -> PrologResult<Self> {
+    ) -> Result<Self, EmbeddingError> {
         let templates = handlebars_from_term(context, templates_term)?;
         let types = type_collection_from_term(context, frames_term)?;
 
@@ -48,15 +142,15 @@ impl EmbeddingContext {
         )?;
 
         for type_tuple_term in context.term_list_iter(queries_term) {
-            // TODO seriously error handle here
             let [type_name_term, query_term] = context.compound_terms(&type_tuple_term)?;
             let type_name: PrologText = type_name_term.get_ex()?;
             let source: Box<String> = Box::new(query_term.get_ex()?);
+            // TODO - if there's a parser or validation error we should say what it was
             let document = parse_document_source(&source, &execution_context.root_node.schema);
             if document.is_err() {
-                return context.raise_exception(
-                    &term! {context: error(embedding_query_parsing_failed(#&*type_name),_)}?,
-                );
+                return Err(LimitedEmbeddingError::QueryParseFailed {
+                    type_name: type_name.to_string(),
+                })?;
             }
             let document = document.unwrap();
             let mut ctx = ValidatorContext::new(&execution_context.root_node.schema, &document);
@@ -64,9 +158,9 @@ impl EmbeddingContext {
 
             let errors = ctx.into_errors();
             if !errors.is_empty() {
-                return context.raise_exception(
-                    &term! {context: error(embedding_query_validation_failed(#&*type_name),_)}?,
-                );
+                return Err(LimitedEmbeddingError::QueryValidationFailed {
+                    type_name: type_name.to_string(),
+                })?;
             }
             // since the document makes use of the boxed string this should be ok, as long as we never expose the static lifetime outside the struct and make sure to drop the document before the source.
             let lifetime_erased_document = unsafe { std::mem::transmute(document) };
@@ -95,7 +189,7 @@ impl EmbeddingContext {
         transaction_term: &Term,
         type_name: &str,
         iri: &str,
-    ) -> PrologResult<Value<DefaultScalarValue>> {
+    ) -> Result<Value<DefaultScalarValue>, EmbeddingError> {
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
         let execution_context = GraphQLExecutionContext::new_from_context_terms(
@@ -109,9 +203,9 @@ impl EmbeddingContext {
         )?;
         let document = self.get_query_document(&type_name);
         if document.is_none() {
-            return context.raise_exception(
-                &term! {context: error(no_embedding_query_for_type(#&*type_name),_)}?,
-            );
+            return Err(LimitedEmbeddingError::NoQueryForType {
+                type_name: type_name.to_string(),
+            })?;
         }
         let document = document.unwrap();
         let id_value: InputValue<DefaultScalarValue> = InputValue::scalar(iri);
@@ -121,14 +215,20 @@ impl EmbeddingContext {
         let result = execution_context.execute_query_document(document, &parameters);
         if result.is_err() {
             let error = result.err().unwrap().to_string();
-            return context.raise_exception(
-                &term! {context: error(graphql_error_for_embedding(#type_name, #iri, #error),_)}?,
-            );
+            return Err(LimitedEmbeddingError::GraphQLError {
+                type_name: type_name.to_string(),
+                iri: iri.to_string(),
+                error,
+            })?;
         }
         let (docs, errs) = result.unwrap();
         if !errs.is_empty() {
             let error_string = format!("{:?}", errs);
-            return context.raise_exception(&term!{context: error(graphql_error_for_embedding(#type_name, #iri, #error_string),_)}?);
+            return Err(LimitedEmbeddingError::GraphQLError {
+                type_name: type_name.to_string(),
+                iri: iri.to_string(),
+                error: error_string,
+            })?;
         }
         let (_, docs) = docs
             .into_object()
@@ -141,9 +241,10 @@ impl EmbeddingContext {
             _ => panic!("graphql result field was expected to be a list"),
         };
         if docs.is_empty() {
-            return context.raise_exception(
-                &term! {context: error(no_result_for_embedding(#type_name, #iri),_)}?,
-            );
+            return Err(LimitedEmbeddingError::NoResult {
+                type_name: type_name.to_string(),
+                iri: iri.to_string(),
+            })?;
         }
 
         let first = docs.into_iter().next().unwrap();
@@ -156,7 +257,7 @@ impl EmbeddingContext {
         transaction_term: &Term,
         type_name: &str,
         iri: &str,
-    ) -> PrologResult<String> {
+    ) -> Result<String, EmbeddingError> {
         let doc =
             self.embedding_doc_for(context, system_term, transaction_term, &*type_name, &*iri)?;
 
@@ -166,8 +267,14 @@ impl EmbeddingContext {
                 Err(e) => {
                     let msg = e.to_string();
                     let line = e.line_no.unwrap_or(0) as u64;
-                    let column = e.column_no.unwrap_or(0) as u64;
-                    context.raise_exception(&term!{context: error(handlebars_render_error_for_embedding(#&*type_name, #&*iri, #msg, #line, #column))}?)
+                    let col = e.column_no.unwrap_or(0) as u64;
+                    return Err(LimitedEmbeddingError::HandlebarsRenderError {
+                        type_name: type_name.to_string(),
+                        iri: iri.to_string(),
+                        msg,
+                        line,
+                        col,
+                    })?;
                 }
             }
         } else {
@@ -223,7 +330,7 @@ struct IndexOperation<'a> {
 predicates! {
     #[module("$embedding")]
     semidet fn embedding_context(context, system_term, transaction_term, templates_term, queries_term, frames_term, embedding_context_term) {
-        let embedding_context = EmbeddingContext::new(context, system_term, transaction_term, templates_term, queries_term, frames_term)?;
+        let embedding_context = context.try_or_die(as_prolog_result(EmbeddingContext::new(context, system_term, transaction_term, templates_term, queries_term, frames_term))?)?;
 
         embedding_context_term.unify(Arc::new(embedding_context))
     }
@@ -234,7 +341,7 @@ predicates! {
         let embedding_context: Arc<EmbeddingContext> = embedding_context_term.get_ex()?;
         let iri: PrologText = iri_term.get_ex()?;
 
-        let result = embedding_context.embedding_string_for(context, system_term, transaction_term, &*type_name, &*iri)?;
+        let result = context.try_or_die(as_prolog_result(embedding_context.embedding_string_for(context, system_term, transaction_term, &*type_name, &*iri))?)?;
 
         output_term.unify(result)
     }
@@ -249,13 +356,12 @@ predicates! {
         let mut message = None;
         let string = match op {
             IndexOperationType::Inserted | IndexOperationType::Changed => {
-                match embedding_context.embedding_string_for(context, system_term, transaction_term, &*type_name, &*iri) {
+                match as_prolog_result(embedding_context.embedding_string_for(context, system_term, transaction_term, &*type_name, &*iri))? {
                     Ok(result) => Some(result),
-                    Err(_e) => {
+                    Err(e) => {
                         // janky error handling
-                        // TODO actually embed reason for failure. should probably trickle down here without being converted into a prolog error right away.
                         op = IndexOperationType::Error;
-                        message = Some(format!("Failed to process embedding operation for id {}", &*iri));
+                        message = Some(format!("Failed to process embedding operation for id {}: {}", &*iri, e));
 
                         None
                     }
