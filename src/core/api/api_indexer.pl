@@ -115,6 +115,9 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
             api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
                           Type, Operation)),
         (   get_dict(op, Operation, Op),
+            ignore(get_dict(id, Operation, Id)),
+            '$embedding':write_op_for(current_output, System_DB, Transaction, Embedding_Context, Type, Id, Op)
+        /*
             (   member(Op, ['Inserted', 'Changed'])
             ->  (   get_dict(id, Operation, Id),
                     '$embedding':embedding_string_for(System_DB, Transaction, Embedding_Context, Type, Id, Embedding_String),
@@ -131,5 +134,6 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
                 write(Stream, Operation_Atom),
                 nl(Stream)
             )
+        */
         )
     ).
