@@ -29,10 +29,10 @@ enum EmbeddingError {
 enum LimitedEmbeddingError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("embedding query could not be parsed for type {type_name}")]
-    QueryParseFailed { type_name: String },
-    #[error("embedding query could not be validated for type {type_name}")]
-    QueryValidationFailed { type_name: String },
+    #[error("embedding query could not be parsed for type {type_name}: {error}")]
+    QueryParseFailed { type_name: String, error: String },
+    #[error("embedding query could not be validated for type {type_name}:{error}")]
+    QueryValidationFailed { type_name: String, error: String },
     #[error("no embedding query for type {type_name}")]
     NoQueryForType { type_name: String },
     #[error("GraphQL error while retrieving embedding document for type {type_name} and iri {iri}: {error}")]
@@ -79,11 +79,11 @@ impl IntoPrologException for LimitedEmbeddingError {
     ) -> PrologResult<Term<'a>> {
         match self {
             Self::Io(e) => e.into_prolog_exception(context),
-            Self::QueryParseFailed { type_name } => {
-                term! {context: error(embedding_query_parsing_failed(#&*type_name),_)}
+            Self::QueryParseFailed { type_name, error } => {
+                term! {context: error(embedding_query_parsing_failed(#type_name, #error),_)}
             }
-            Self::QueryValidationFailed { type_name } => {
-                term! {context: error(embedding_query_validation_failed(#&*type_name),_)}
+            Self::QueryValidationFailed { type_name, error } => {
+                term! {context: error(embedding_query_validation_failed(#type_name, #error),_)}
             }
             Self::NoQueryForType { type_name } => {
                 term! {context: error(no_embedding_query_for_type(#type_name),_)}
@@ -145,11 +145,12 @@ impl EmbeddingContext {
             let [type_name_term, query_term] = context.compound_terms(&type_tuple_term)?;
             let type_name: PrologText = type_name_term.get_ex()?;
             let source: Box<String> = Box::new(query_term.get_ex()?);
-            // TODO - if there's a parser or validation error we should say what it was
             let document = parse_document_source(&source, &execution_context.root_node.schema);
             if document.is_err() {
+                let error_string = document.err().unwrap().to_string();
                 return Err(LimitedEmbeddingError::QueryParseFailed {
                     type_name: type_name.to_string(),
+                    error: error_string,
                 })?;
             }
             let document = document.unwrap();
@@ -158,8 +159,14 @@ impl EmbeddingContext {
 
             let errors = ctx.into_errors();
             if !errors.is_empty() {
+                let mut error_string = String::new();
+                for error in errors {
+                    error_string.push('\n');
+                    error_string.push_str(&error.to_string());
+                }
                 return Err(LimitedEmbeddingError::QueryValidationFailed {
                     type_name: type_name.to_string(),
+                    error: error_string,
                 })?;
             }
             // since the document makes use of the boxed string this should be ok, as long as we never expose the static lifetime outside the struct and make sure to drop the document before the source.
