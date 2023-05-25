@@ -51,14 +51,23 @@ impl EmbeddingContext {
             let [type_name_term, query_term] = context.compound_terms(&type_tuple_term)?;
             let type_name: PrologText = type_name_term.get_ex()?;
             let source: Box<String> = Box::new(query_term.get_ex()?);
-            let document =
-                parse_document_source(&source, &execution_context.root_node.schema).unwrap();
+            let document = parse_document_source(&source, &execution_context.root_node.schema);
+            if document.is_err() {
+                return context.raise_exception(
+                    &term! {context: error(embedding_query_parsing_failed(#&*type_name),_)}?,
+                );
+            }
+            let document = document.unwrap();
             let mut ctx = ValidatorContext::new(&execution_context.root_node.schema, &document);
             visit_all_rules(&mut ctx, &document);
 
             let errors = ctx.into_errors();
-            assert!(errors.is_empty());
-            // since the document makes use of the pinned string this should be ok, as long as we never expose the static lifetime outside the struct.
+            if !errors.is_empty() {
+                return context.raise_exception(
+                    &term! {context: error(embedding_query_validation_failed(#&*type_name),_)}?,
+                );
+            }
+            // since the document makes use of the boxed string this should be ok, as long as we never expose the static lifetime outside the struct and make sure to drop the document before the source.
             let lifetime_erased_document = unsafe { std::mem::transmute(document) };
             queries.insert(type_name.to_string(), (source, lifetime_erased_document));
         }
@@ -108,16 +117,30 @@ predicates! {
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
         let execution_context = GraphQLExecutionContext::new_from_context_terms(embedding_context.types.clone(), context, &none_term, &system_term, &none_term, &none_term, &transaction_term)?;
-        let document = embedding_context.get_query_document(&type_name).unwrap();
+        let document = embedding_context.get_query_document(&type_name);
+        if document.is_none() {
+            return context.raise_exception(&term!{context: error(no_embedding_query_for_type(#&*type_name),_)}?);
+        }
+        let document = document.unwrap();
         let id_value: InputValue<DefaultScalarValue> = InputValue::scalar(&*iri.as_str());
         let mut parameters = HashMap::with_capacity(1);
         parameters.insert("id".to_string(), id_value);
 
-        let (docs, errs) = execution_context.execute_query_document(document, &parameters).unwrap();
-        assert!(errs.is_empty());
-        let (_, docs) = docs.into_object().unwrap().into_iter().next().unwrap();
-        let docs = docs.as_list_value().unwrap();
-        assert!(!docs.is_empty());
+        let result = execution_context.execute_query_document(document, &parameters);
+        if result.is_err() {
+            let error = result.err().unwrap().to_string();
+            return context.raise_exception(&term!{context: error(graphql_error_for_embedding(#&*type_name, #&*iri, #error),_)}?);
+        }
+        let (docs, errs) = result.unwrap();
+        if !errs.is_empty() {
+            let error_string = format!("{:?}", errs);
+            return context.raise_exception(&term!{context: error(graphql_error_for_embedding(#&*type_name, #&*iri, #error_string),_)}?);
+        }
+        let (_, docs) = docs.into_object().expect("graphql result was expected to be an object").into_iter().next().expect("graphql result object was expected to have one field");
+        let docs = docs.as_list_value().expect("graphql result field was expected to be a list");
+        if docs.is_empty() {
+            return context.raise_exception(&term!{context: error(no_result_for_embedding(#&*type_name, #&*iri),_)}?);
+        }
 
         let single_doc = &docs[0];
         if embedding_context.templates.has_template(&type_name) {
@@ -129,11 +152,11 @@ predicates! {
                     let msg = e.to_string();
                     let line = e.line_no.unwrap_or(0) as u64;
                     let column = e.column_no.unwrap_or(0) as u64;
-                    context.raise_exception(&term!{context: error(handlebars_render_error(#msg, #line, #column))}?)
+                    context.raise_exception(&term!{context: error(handlebars_render_error_for_embedding(#&*type_name, #&*iri, #msg, #line, #column))}?)
                 }
             }
         } else {
-            let result = serde_json::to_string(single_doc).unwrap();
+            let result = serde_json::to_string(single_doc).expect("Couldn't turn a graphql result document into a json string");
 
             output_term.unify(result)
         }
