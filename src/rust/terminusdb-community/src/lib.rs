@@ -4,8 +4,8 @@ mod log;
 mod changes;
 mod consts;
 mod doc;
+mod embedding;
 mod graphql;
-mod index;
 mod path;
 mod prefix;
 mod schema;
@@ -81,5 +81,5 @@ pub fn install() {
     graphql::register();
     template::register();
     changes::register();
-    index::register();
+    embedding::register();
 }

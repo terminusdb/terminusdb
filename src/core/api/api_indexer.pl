@@ -108,7 +108,7 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
     % '$handlebars':handlebars_context(Templates, Handlebars),
     open_descriptor(Commit_Descriptor, Transaction),
     all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-    '$index':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
+    '$embedding':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
     call(Prelude,Stream),
     forall(
         (   member(Type-_Query-_Template, TypeQueries),
@@ -117,7 +117,7 @@ api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previou
         (   get_dict(op, Operation, Op),
             (   member(Op, ['Inserted', 'Changed'])
             ->  (   get_dict(id, Operation, Id),
-                    '$index':embedding_string_for(System_DB, Transaction, Embedding_Context, Type, Id, Embedding_String),
+                    '$embedding':embedding_string_for(System_DB, Transaction, Embedding_Context, Type, Id, Embedding_String),
                     put_dict(_{string : Embedding_String }, Operation, Final_Operation),
                     atom_json_dict(Operation_Atom, Final_Operation, [width(0)]),
                     write(Stream, Operation_Atom),

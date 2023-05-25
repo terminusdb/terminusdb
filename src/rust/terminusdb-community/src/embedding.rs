@@ -80,14 +80,14 @@ impl EmbeddingContext {
 }
 
 predicates! {
-    #[module("$index")]
+    #[module("$embedding")]
     semidet fn embedding_context(context, system_term, transaction_term, templates_term, queries_term, frames_term, embedding_context_term) {
         let embedding_context = EmbeddingContext::new(context, system_term, transaction_term, templates_term, queries_term, frames_term)?;
 
         embedding_context_term.unify(Arc::new(embedding_context))
     }
 
-    #[module("$index")]
+    #[module("$embedding")]
     semidet fn embedding_string_for(context, system_term, transaction_term, embedding_context_term, type_term, iri_term, output_term) {
         let type_name: PrologText = type_term.get_ex()?;
         let embedding_context: Arc<EmbeddingContext> = embedding_context_term.get_ex()?;
