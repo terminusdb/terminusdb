@@ -79,6 +79,18 @@ impl EmbeddingContext {
     }
 }
 
+impl Drop for EmbeddingContext {
+    fn drop(&mut self) {
+        // out of an abundance of caution, we should make sure that
+        // the documents get dropped before their source strings do,
+        // as the documments contain borrows to this source even
+        // though its lifetime was erased.
+        for (_source, doc) in self.queries.drain() {
+            std::mem::drop(doc);
+        }
+    }
+}
+
 predicates! {
     #[module("$embedding")]
     semidet fn embedding_context(context, system_term, transaction_term, templates_term, queries_term, frames_term, embedding_context_term) {
