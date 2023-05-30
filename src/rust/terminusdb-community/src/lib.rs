@@ -68,11 +68,32 @@ predicates! {
 
         s_term.unify(s)
     }
+
+    #[module("utils")]
+    semidet fn random_base62(_context, size_term, s_term) {
+        let size: u64 = size_term.get()?;
+        let mut buf = Vec::with_capacity(size as usize);
+        let mut rng = thread_rng();
+
+        for _ in 0..size {
+            let r = rng.gen_range(0..62);
+            let item = if r < 10 { b'0' + r }
+            else if r < 36 { b'A' - 10 + r }
+            else { b'a' - 36 + r };
+            buf.push(item)
+        }
+
+        let s = unsafe { std::str::from_utf8_unchecked(&buf) };
+
+        s_term.unify(s)
+    }
+
 }
 
 pub fn install() {
     register_list_diff();
     register_random_string();
+    register_random_base62();
     doc::register();
     graphql::register();
 }
