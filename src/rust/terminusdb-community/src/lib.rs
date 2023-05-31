@@ -96,7 +96,7 @@ fn base64char(r: u8) -> u8 {
         b'A' - 10 + r
     } else if r < 62 {
         b'a' - 36 + r
-    } else if r == 6 {
+    } else if r == 62 {
         b'-'
     } else {
         b'+'
