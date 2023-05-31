@@ -88,18 +88,19 @@ predicates! {
 
 }
 
+// implements RFC4648 encoding
 #[inline]
 fn base64char(r: u8) -> u8 {
-    if r < 10 {
-        b'0' + r
-    } else if r < 36 {
-        b'A' - 10 + r
+    if r < 26 {
+        b'A' + r
+    } else if r < 52 {
+        b'a' + (r - 26)
     } else if r < 62 {
-        b'a' - 36 + r
+        b'0' + (r - 52)
     } else if r == 62 {
         b'-'
     } else {
-        b'+'
+        b'_'
     }
 }
 
