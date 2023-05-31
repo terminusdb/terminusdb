@@ -319,11 +319,3 @@ crypto_password_cost(10).
 :- table lru_cache_size/1.
 lru_cache_size(Cache_Size) :-
     getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).
-
-:- table legacy_identifier/1.
-legacy_identifier :-
-    getenv('TERMINUSDB_LEGACY_IDENTIFIER', true).
-
-:- table random_string_length/1.
-random_string_length(Length) :-
-    getenv_default_number('TERMINUSDB_IDENTIFIER_LENGTH', 16, Length).

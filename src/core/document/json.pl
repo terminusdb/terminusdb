@@ -373,13 +373,8 @@ idgen_path_values_hash(Base,Path,ID) :-
     format(string(ID), "~w~w", [Base,Hash]).
 
 idgen_random(Base,ID) :-
-    (   config:legacy_identifier
-    ->  random(X),
-        format(string(S), '~w', [X]),
-        crypto_data_hash(S, Hash, [algorithm(sha256)])
-    ;   config:random_string_length(Length),
-        utils:random_base62(Length, Hash)
-    ),
+    config:random_string_length(Length),
+    utils:random_base62(Length, Hash),
     format(string(ID),'~w~w',[Base,Hash]).
 
 path_strings_([], _Prefixes, []).
