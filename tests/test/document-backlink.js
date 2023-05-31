@@ -48,7 +48,7 @@ describe('backlinks', function () {
       { '@type': 'Subdoc', '@linked-by': { '@ref': 'doc', '@property': 'subdoc' } }]
 
     const r = await document.insert(agent, { instance })
-    const docId = r.body[0]
+    const docId = r.body[0].replace('+','\+')
     const subdocId = r.body[1]
 
     expect(subdocId).to.match(new RegExp(`^${docId}/subdoc/Subdoc/.*`))
@@ -61,12 +61,12 @@ describe('backlinks', function () {
     ]
 
     const r = await document.insert(agent, { instance })
-    const docId = r.body[0]
+    const docId = r.body[0].replace('+','\+')
     const subdocId1 = r.body[1]
     const subdocId2 = r.body[2]
 
     expect(subdocId1).to.match(new RegExp(`^${docId}/subdoc/Subdoc/.*`))
-    expect(subdocId2).to.match(new RegExp(`^${subdocId1}/subdoc/Subdoc/.*`))
+    expect(subdocId2).to.match(new RegExp(`^${subdocId1.replace('+','\+')}/subdoc/Subdoc/.*`))
   })
 
   it('succeed on a backlinked subdocument with a future ref', async function () {
