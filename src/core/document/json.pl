@@ -378,7 +378,7 @@ idgen_random(Base,ID) :-
     idgen_random(Base, Length, ID).
 
 idgen_random(Base,Length, ID) :-
-    utils:random_base62(Length, Hash),
+    utils:random_base64(Length, Hash),
     format(string(ID),'~w~w',[Base,Hash]).
 
 path_strings_([], _Prefixes, []).

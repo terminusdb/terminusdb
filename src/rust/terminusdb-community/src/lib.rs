@@ -70,16 +70,14 @@ predicates! {
     }
 
     #[module("utils")]
-    semidet fn random_base62(_context, size_term, s_term) {
+    semidet fn random_base64(_context, size_term, s_term) {
         let size: u64 = size_term.get()?;
         let mut buf = Vec::with_capacity(size as usize);
         let mut rng = thread_rng();
 
         for _ in 0..size {
-            let r = rng.gen_range(0..62);
-            let item = if r < 10 { b'0' + r }
-            else if r < 36 { b'A' - 10 + r }
-            else { b'a' - 36 + r };
+            let r = rng.gen_range(0..64);
+            let item = base64char(r);
             buf.push(item)
         }
 
@@ -90,10 +88,25 @@ predicates! {
 
 }
 
+#[inline]
+fn base64char(r: u8) -> u8 {
+    if r < 10 {
+        b'0' + r
+    } else if r < 36 {
+        b'A' - 10 + r
+    } else if r < 62 {
+        b'a' - 36 + r
+    } else if r == 6 {
+        b'-'
+    } else {
+        b'+'
+    }
+}
+
 pub fn install() {
     register_list_diff();
     register_random_string();
-    register_random_base62();
+    register_random_base64();
     doc::register();
     graphql::register();
 }
