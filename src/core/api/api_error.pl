@@ -1655,6 +1655,7 @@ error_type_(apply, 'api:ApplyErrorResponse').
 error_type_(toplevel, 'api:TopLevelResponse').
 error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
+error_type_(merge, 'api:MergeErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

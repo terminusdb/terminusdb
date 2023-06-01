@@ -25,6 +25,7 @@
                basic_authorization/3, intersperse/3,
                negative_to_infinity/2,
                with_memory_file/1,
+               alternate/2,
                with_memory_file_stream/3]).
 :- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
@@ -666,6 +667,33 @@ opt_spec(migration,'terminusdb migration BRANCH_SPEC',
            shortflags([d]),
            default(false),
            help('provide information about what would occur if the operations were performed')]
+         ]).
+opt_spec(merge,'terminusdb merge DB_SPEC',
+         'Merge any number of space-separated COMMIT_SPEC or BRANCH_SPEC passed on standard-input into a commit on DB_SPEC',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `merge` command')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: merge'),
+           help('message to associate with the commit')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON readable commit identifier')]
          ]).
 
 % subcommands
@@ -1925,6 +1953,27 @@ run_command(migration,[Path], Opts) :-
             json_write_dict(current_output, Result),
             nl
         ;   throw(error(missing_parameter(operations), _)))
+    ).
+run_command(merge,[Target], Opts) :-
+    opt_authority(Opts, Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        merge,
+        (   read_string(current_input, _, Source_String),
+            re_split('\\s+', Source_String, Splits),
+            print_term(Splits, []),
+            alternate(Splits,Sources_Candidates),
+            reverse(Sources_Candidates, [First|Sources_Tail]),
+            (   First = ""
+            ->  Sources = Sources_Tail
+            ;   Sources = [First|Sources_Tail]
+            ),
+            api_merge(System_DB, Auth, Sources, Target, Commit_Id, Opts),
+            (   option(json(true), Opts)
+            ->  json_write(current_output, Commit_Id)
+            ;   format(current_output, '~nSuccessfully merged layers into commit_id: ~q~n', [Commit_Id])
+            )
+        )
     ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
