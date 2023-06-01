@@ -21,6 +21,7 @@ pub fn install(module: Option<&str>) {
     named_graph::register_nb_force_set_head_in_module(module);
     named_graph::register_nb_force_set_head_version_in_module(module);
     store::register_open_write_in_module(module);
+    store::register_merge_base_layers_in_module(module);
     builder::register_nb_add_id_triple_in_module(module);
     builder::register_nb_add_object_triple_in_module(module);
     builder::register_nb_remove_id_triple_in_module(module);
