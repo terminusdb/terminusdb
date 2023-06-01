@@ -231,7 +231,9 @@ jobs:
           # Tag and push the latest image when a version tag is pushed
           # We also make sure that rc and beta are not pushed to the latest tag!
           if [ $(echo "$GITHUB_REF" | grep "refs/tags/v" | grep -v "rc" | grep -v "beta") ]; then
-            TAGS="${TAGS},${LATEST_IMAGE}"
+            # Get the major tag, for instance v11 if the version is v11.0.4
+            VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
+            TAGS="${TAGS},${LATEST_IMAGE},terminusdb/terminusdb-server:${VERSION_MAJOR}"
           fi
 
           echo "docker_tags=${TAGS}" >> $GITHUB_ENV
