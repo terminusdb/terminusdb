@@ -41,6 +41,7 @@
               triple_removal/4,
 
               sp_card/4,
+              op_card/4,
 
               parent/2,
               squash/2,
@@ -1276,6 +1277,17 @@ test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     subject_id(Layer, "A", A_Id),
     predicate_id(Layer, "B", B_Id),
     sp_card(Layer, A_Id, B_Id, Count),
+    Count = 2.
+
+test(op_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "1", "B", node("C")),
+    nb_add_triple(Builder, "2", "B", node("C")),
+    nb_commit(Builder, Layer),
+    object_id(Layer, node("C"), C_Id),
+    predicate_id(Layer, "B", B_Id),
+    op_card(Layer, C_Id, B_Id, Count),
     Count = 2.
 
 setup_object_id_test_layer(TestDir, Layer) :-
