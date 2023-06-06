@@ -1961,7 +1961,6 @@ run_command(merge,[Target], Opts) :-
         merge,
         (   read_string(current_input, _, Source_String),
             re_split('\\s+', Source_String, Splits),
-            print_term(Splits, []),
             alternate(Splits,Sources_Candidates),
             reverse(Sources_Candidates, [First|Sources_Tail]),
             (   First = ""
