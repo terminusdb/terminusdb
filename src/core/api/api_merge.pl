@@ -50,7 +50,20 @@ api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
     [Schema_Layer_Id|_] = Schema_Layer_Ids,
     triple_store(Store),
 
-    merge_base_layers(Store, Instance_Layer_Ids, Target_Instance_Layer_Id),
+    catch(
+        merge_base_layers(Store, Instance_Layer_Ids, Target_Instance_Layer_Id),
+        error(rust_io_error('Other', Error_Message), _),
+        (   re_matchsub('given layer is not a base layer: (?<layerid>[a-f0-9]*)',
+                        Error_Message, Dict, [])
+        ->  get_dict(layerid, Dict, LayerId),
+            print_term(Instance_Layer_Ids, []),
+            nth0(N, Instance_Layer_Ids, LayerId),
+            nth0(N, Sources, LayerSource),
+            resolve_absolute_string_descriptor(LayerSource, LayerDescriptor),
+            throw(error(not_a_base_layer(LayerId, LayerDescriptor), _))
+        ;   throw(error(rust_io_error('Other', Error_Message),_))
+        )
+    ),
 
     option(author(Author), Options),
     option(message(Message), Options),

@@ -1616,6 +1616,17 @@ api_error_jsonld_(merge, error(instance_layer_missing_in_merged_data(Descriptor)
                               'api:descriptor' : String
                             }
             }.
+api_error_jsonld_(merge, error(not_a_base_layer(Layer, Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(String, Descriptor),
+    format(string(Msg), "One of the descriptors (~s) used in the merge operation had an instance layer which is not a base layer: ~s", [String, Layer]),
+    JSON = _{'@type' : 'api:MergeErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NotABaseLayer",
+                              'api:descriptor' : String,
+                              'api:layer' : Layer
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
