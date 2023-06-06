@@ -120,8 +120,8 @@ describe('cli-merge', function () {
     const docs = JSON.parse(docResults.stdout)
     expect(docs).length(2)
     expect(docs).to.deep.equal([
-      {"@id":"Thing/doc1","@type":"Thing","name":"doc1"},
-      {"@id":"Thing/doc2","@type":"Thing","name":"doc2"}
+      { '@id': 'Thing/doc1', '@type': 'Thing', name: 'doc1' },
+      { '@id': 'Thing/doc2', '@type': 'Thing', name: 'doc2' },
     ])
   })
 })
