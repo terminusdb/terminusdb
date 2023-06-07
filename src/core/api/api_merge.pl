@@ -6,6 +6,11 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(library(terminus_store)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(regex)).
+:- use_module(library(lists)).
+:- use_module(library(option)).
 
 api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
     do_or_die(
@@ -56,7 +61,6 @@ api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
         (   re_matchsub('given layer is not a base layer: (?<layerid>[a-f0-9]*)',
                         Error_Message, Dict, [])
         ->  get_dict(layerid, Dict, LayerId),
-            print_term(Instance_Layer_Ids, []),
             nth0(N, Instance_Layer_Ids, LayerId),
             nth0(N, Sources, LayerSource),
             resolve_absolute_string_descriptor(LayerSource, LayerDescriptor),
