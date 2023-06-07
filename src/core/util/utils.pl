@@ -6,6 +6,7 @@
               zip/3,
               intersperse/3,
               interpolate/2,
+              alternate/2,
               interpolate_string/2,
               unique_solutions/3,
               repeat_term/3,
@@ -230,6 +231,11 @@ intersperse(Item, List, Output) :-
 intersperse_([], X, _, [X]).
 intersperse_([Y| Xs], X, Item, [X, Item| Tail]) :-
     intersperse_(Xs, Y, Item, Tail).
+
+
+alternate([X], [X]).
+alternate([X,_|Rest], [X|Tail]) :-
+    alternate(Rest, Tail).
 
 /**
  * interpolate(L:list,A:atom) is det.

@@ -133,11 +133,11 @@ or our [community Subreddit](https://www.reddit.com/r/TerminusDB/). On Twitter, 
 
 ## Documentation
 
-Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website. 
-  
-We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs). 
+Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website.
 
-White paper on our [delta-encoding approach](https://github.com/terminusdb/terminusdb/blob/dev/docs/whitepaper/terminusdb.pdf) to data mangement. 
+We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs).
+
+White paper on our [delta-encoding approach](https://github.com/terminusdb/terminusdb/blob/dev/docs/whitepaper/terminusdb.pdf) to data mangement.
 
 Check the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍. Or the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐.
 
