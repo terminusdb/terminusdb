@@ -313,11 +313,15 @@ class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
                                      new: WeakeningOneOf}), _)
     ),
     fail.
-class_property_weakened('@metadata', _Original, Weakening, Class, Operation) =>
+class_property_weakened('@metadata', Original, Weakening, Class, Operation) =>
+    get_dict('@metadata',Original, Old_Metadata),
     get_dict('@metadata',Weakening, New_Metadata),
+    \+ Old_Metadata = New_Metadata,
     Operation = replace_class_metadata(Class,New_Metadata).
-class_property_weakened('@documentation', _Original, Weakening, Class, Operation) =>
+class_property_weakened('@documentation', Original, Weakening, Class, Operation) =>
+    get_dict('@documentation',Original, Old_Docs),
     get_dict('@documentation',Weakening, New_Docs),
+    \+ Old_Docs = New_Docs,
     Operation = replace_class_documentation(Class,New_Docs).
 class_property_weakened(Property, Original, Weakening, _Class, _Operation),
 get_dict(Property,Weakening,New_Value),
@@ -2153,5 +2157,42 @@ test(weaken_oneof, [
     Before = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, void:'sys:Unit', yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
     After = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
     class_weakened('Definition', Before, After, _5762).
+
+
+test(same_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        replace_class_metadata("F", _{ asdf : "fdsa" })
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []),
+
+    get_schema_document(Descriptor, "F", F),
+    F = json{ '@id':'F',
+              '@metadata':json{asdf:"fdsa"},
+              '@type':'Class',
+              f:json{'@class':'xsd:float','@type':'Optional'}
+            },
+
+    create_class_dictionary(Descriptor, Dictionary),
+
+    schema_inference_rule(
+        weakening,
+        Dictionary,
+        Dictionary,
+        Operations
+    ),
+    Operations = [].
 
 :- end_tests(migration).
