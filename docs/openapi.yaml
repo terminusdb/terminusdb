@@ -2102,6 +2102,12 @@ paths:
                 "operations":
                   type: object
                   example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
+                "dry_run":
+                  type: boolean
+                  example: true
+                "verbose":
+                  type: boolean
+                  example: true
                 "target":
                   type: string
                   example: "admin/foo"
