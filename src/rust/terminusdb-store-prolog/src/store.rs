@@ -27,6 +27,12 @@ predicates! {
         out_term.unify(&WrappedStore(store))
     }
 
+    pub semidet fn open_raw_archive_store(_context, dir_term, out_term) {
+        let dir: PrologText = dir_term.get_ex()?;
+        let store = open_sync_raw_archive_store(&*dir);
+        out_term.unify(&WrappedStore(store))
+    }
+
     pub semidet fn open_archive_store(_context, dir_term, cache_size_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;

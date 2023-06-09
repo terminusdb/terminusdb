@@ -2,6 +2,7 @@
               terminus_store_version/1,
               open_memory_store/1,
               open_directory_store/2,
+              open_raw_archive_store/2,
               open_archive_store/2,
               open_archive_store/3,
               open_grpc_store/5,

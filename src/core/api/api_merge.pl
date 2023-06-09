@@ -53,7 +53,9 @@ api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
            ),
     % todo, check all schema layers are compatible
     [Schema_Layer_Id|_] = Schema_Layer_Ids,
-    triple_store(Store),
+    % todo: we should do something clever here to ensure this also works in tests
+    config:db_path(Store_Path),
+    open_raw_archive_store(Store_Path, Store),
 
     catch(
         merge_base_layers(Store, Instance_Layer_Ids, Target_Instance_Layer_Id),
