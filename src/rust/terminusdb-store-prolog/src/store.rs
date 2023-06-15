@@ -2,6 +2,7 @@ use crate::builder::*;
 use crate::layer::*;
 use crate::named_graph::*;
 use std::io::{self, Cursor};
+use std::path::PathBuf;
 use swipl::prelude::*;
 use terminus_store::storage::archive::DirectoryArchiveBackend;
 use terminus_store::storage::archive::LruArchiveBackend;
@@ -147,8 +148,10 @@ predicates! {
         context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))
     }
 
-    pub semidet fn merge_base_layers(context, store_term, layer_ids_term, output_id_term) {
+    pub semidet fn merge_base_layers(context, store_term, temp_dir_term, layer_ids_term, output_id_term) {
         let store: WrappedStore = store_term.get_ex()?;
+        let temp_dir: PrologText = temp_dir_term.get_ex()?;
+        let temp_dir_path: PathBuf = (&*temp_dir).into();
 
         let layer_id_strings: Vec<String> = layer_ids_term.get_ex()?;
         let mut layer_ids = Vec::with_capacity(layer_id_strings.len());
@@ -157,7 +160,7 @@ predicates! {
             layer_ids.push(name);
         }
 
-        let result = context.try_or_die(store.merge_base_layers(&layer_ids))?;
+        let result = context.try_or_die(store.merge_base_layers(&layer_ids, &temp_dir_path))?;
         let result_string = name_to_string(result);
 
         output_id_term.unify(result_string)

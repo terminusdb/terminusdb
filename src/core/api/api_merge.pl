@@ -53,12 +53,11 @@ api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
            ),
     % todo, check all schema layers are compatible
     [Schema_Layer_Id|_] = Schema_Layer_Ids,
-    % todo: we should do something clever here to ensure this also works in tests
-    config:db_path(Store_Path),
-    open_raw_archive_store(Store_Path, Store),
+    config:tmp_path(Tmp_Path),
+    triple_store(Store),
 
     catch(
-        merge_base_layers(Store, Instance_Layer_Ids, Target_Instance_Layer_Id),
+        merge_base_layers(Store, Tmp_Path, Instance_Layer_Ids, Target_Instance_Layer_Id),
         error(rust_io_error('Other', Error_Message), _),
         (   re_matchsub('given layer is not a base layer: (?<layerid>[a-f0-9]*)',
                         Error_Message, Dict, [])

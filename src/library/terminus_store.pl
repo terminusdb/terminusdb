@@ -18,7 +18,7 @@
               nb_force_set_head/3,
 
               open_write/2,
-              merge_base_layers/3,
+              merge_base_layers/4,
 
               nb_add_triple/4,
               nb_remove_triple/4,
