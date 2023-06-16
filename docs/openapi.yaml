@@ -2316,7 +2316,7 @@ components:
           example: A comment for my database
         creation_date:
           type: string
-          example: 2021-12-13T14:27:46.202Z
+          example: '2021-12-13T14:27:46.202Z'
         label:
           type: string
           example: MyDatabaseLabel
