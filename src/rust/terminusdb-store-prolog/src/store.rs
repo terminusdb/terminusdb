@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use swipl::prelude::*;
 use terminus_store::storage::archive::DirectoryArchiveBackend;
 use terminus_store::storage::archive::LruArchiveBackend;
-use terminus_store::storage::archive::LruMetadataArchiveBackend;
 use terminus_store::storage::CachedLayerStore;
 use terminus_store::storage::LockingHashMapLayerCache;
 use terminus_store::storage::{
@@ -47,9 +46,8 @@ predicates! {
         let pool_size: u64 = initial_pool_term.get_ex()?;
         let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;
         let directory_layer_backend = DirectoryArchiveBackend::new((&*dir).into());
-        let layer_backend = LruArchiveBackend::new(directory_layer_backend.clone(), cache_size);
-        let layer_metadata_backend = LruMetadataArchiveBackend::new(directory_layer_backend, layer_backend.clone());
-        let layer_store = CachedLayerStore::new(ArchiveLayerStore::new(layer_metadata_backend, layer_backend), LockingHashMapLayerCache::new());
+        let layer_backend = LruArchiveBackend::new(directory_layer_backend.clone(), directory_layer_backend, cache_size);
+        let layer_store = CachedLayerStore::new(ArchiveLayerStore::new(layer_backend.clone(), layer_backend), LockingHashMapLayerCache::new());
 
         let label_store = context.try_or_die_generic(task_sync(GrpcLabelStore::new(address.to_string(), pool_size as usize)))?;
 
