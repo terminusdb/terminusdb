@@ -919,7 +919,7 @@ query EverythingQuery {
       const collision = {
         '@type': 'Class',
         '@id': 'BigInt',
-        'bigint': 'xsd:integer',
+        bigint: 'xsd:integer',
       }
       await document.insert(agent, { schema: collision })
 
@@ -931,11 +931,10 @@ query EverythingQuery {
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-            .catch((error) =>
-              {
-                const nwe = error.networkError
-                expect(nwe.statusCode).to.equal(500)
-              })
+        .catch((error) => {
+          const nwe = error.networkError
+          expect(nwe.statusCode).to.equal(500)
+        })
       expect(result).to.equal(undefined)
     })
   })
