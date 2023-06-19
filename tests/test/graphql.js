@@ -914,5 +914,29 @@ query EverythingQuery {
         { is_it_ok: 'something' },
       ])
     })
+
+    it('shadows a graphql type and fails', async function () {
+      const collision = {
+        '@type': 'Class',
+        '@id': 'BigInt',
+        'bigint': 'xsd:integer',
+      }
+      await document.insert(agent, { schema: collision })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    BigInt{
+        bigint
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+            .catch((error) =>
+              {
+                const nwe = error.networkError
+                expect(nwe.statusCode).to.equal(500)
+              })
+      expect(result).to.equal(undefined)
+    })
   })
 })
