@@ -1954,11 +1954,11 @@ run_command(migration,[Path], Opts) :-
             nl
         ;   throw(error(missing_parameter(operations), _)))
     ).
-run_command(merge,[Target], Opts) :-
+run_command(concat,[Target], Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
-        merge,
+        concat,
         (   read_string(current_input, _, Source_String),
             re_split('\\s+', Source_String, Splits),
             alternate(Splits,Sources_Candidates),
@@ -1967,7 +1967,7 @@ run_command(merge,[Target], Opts) :-
             ->  Sources = Sources_Tail
             ;   Sources = [First|Sources_Tail]
             ),
-            api_merge(System_DB, Auth, Sources, Target, Commit_Id, Opts),
+            api_concat(System_DB, Auth, Sources, Target, Commit_Id, Opts),
             (   option(json(true), Opts)
             ->  json_write(current_output, Commit_Id)
             ;   format(current_output, '~nSuccessfully merged layers into commit_id: ~q~n', [Commit_Id])
