@@ -1,4 +1,4 @@
-:- module(api_merge, [api_merge/6]).
+:- module(api_merge, [api_concat/6]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -12,7 +12,7 @@
 :- use_module(library(lists)).
 :- use_module(library(option)).
 
-api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
+api_concat(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
     do_or_die(
         (   resolve_absolute_string_descriptor(Target, Target_Descriptor),
             resolve_relative_descriptor(Target_Descriptor, ["_commits"], Target_Repo)
