@@ -1619,7 +1619,8 @@ api_error_jsonld_(index, error(indexing_requires_superuser), JSON) :-
     JSON = _{'@type' : 'api:IndexErrorResponse',
              'api:status' : "api:failure",
              'api:message' : "Indexing requires superuser authority",
-             'api:error' : _{ '@type' : "api:IndexingRequiresSuperuserAuthorityError"
+             'api:error' : _{ '@type' : "api:IndexingRequiresSuperuserAuthorityError"}
+            }.
 api_error_jsonld_(merge, error(instance_layer_missing_in_merged_data(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(String, Descriptor),
     format(string(Msg), "One of the descriptors used in the merge operation did not have an associated instance layer: ~s", [String]),
