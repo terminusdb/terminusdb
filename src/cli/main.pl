@@ -1970,7 +1970,7 @@ run_command(concat,[Target], Opts) :-
             api_concat(System_DB, Auth, Sources, Target, Commit_Id, Opts),
             (   option(json(true), Opts)
             ->  json_write(current_output, Commit_Id)
-            ;   format(current_output, '~nSuccessfully merged layers into commit_id: ~q~n', [Commit_Id])
+            ;   format(current_output, '~nSuccessfully concatenated layers into commit_id: ~q~n', [Commit_Id])
             )
         )
     ).
