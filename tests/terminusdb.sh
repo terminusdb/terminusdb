@@ -29,6 +29,7 @@ if [[ $use_docker -eq 0 ]]; then
     docker exec -i \
       --user $user \
       --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
+      --env TERMINUSDB_LOG_LEVEL="ERROR" \
       --workdir /app/terminusdb/tests \
       "$TERMINUSDB_DOCKER_CONTAINER" \
       /app/terminusdb/terminusdb \
@@ -43,5 +44,5 @@ elif [[ $use_exec -eq 0 ]]; then
   if [ -t 1 ]; then
     set -x
   fi
-  "$TERMINUSDB_EXEC_PATH" "$@"
+  TERMINUSDB_LOG_LEVEL="ERROR" "$TERMINUSDB_EXEC_PATH" "$@"
 fi
