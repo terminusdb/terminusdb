@@ -140,6 +140,22 @@ predicates! {
 
         context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))
     }
+
+    pub semidet fn merge_base_layers(context, store_term, layer_ids_term, output_id_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+
+        let layer_id_strings: Vec<String> = layer_ids_term.get_ex()?;
+        let mut layer_ids = Vec::with_capacity(layer_id_strings.len());
+        for layer_id_string in layer_id_strings {
+            let name = context.try_or_die(string_to_name(&layer_id_string))?;
+            layer_ids.push(name);
+        }
+
+        let result = context.try_or_die(store.merge_base_layers(&layer_ids))?;
+        let result_string = name_to_string(result);
+
+        output_id_term.unify(result_string)
+    }
 }
 
 wrapped_clone_blob!("store", pub WrappedStore, SyncStore, defaults);

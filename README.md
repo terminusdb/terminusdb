@@ -18,13 +18,13 @@ The building blocks of the model are -
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
   - Query: You can query any state of the database at any commit.
 
-TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/guides/reference-guides/document-interface). TerminusDB is available as a standalone server, or you can use our headless content and knowledge management system [TerminusCMS](https://dashboard.terminusdb.com/).
+TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/document-insertion). TerminusDB is available as a standalone server, or you can use our headless content and knowledge management system [TerminusCMS](https://dashboard.terminusdb.com/).
 
 ### TerminusDB Version 11
 
 [TerminusDB 11](https://github.com/terminusdb/terminusdb/releases/tag/v11.0.0) features a new Rustified storage backend that reduces storage overhead and latency, improves search performance, and simplifies interchange. TerminusDB 11 also comes with some exciting features to make building easier and faster -
 
-- [GraphQL](https://terminusdb.com/docs/guides/how-to-guides/query-using-graphql/graphql-basics) - Use GraphQL as a proper graph query language with deep link discover and path queries
+- [GraphQL](https://terminusdb.com/docs/graphql-basics) - Use GraphQL as a proper graph query language with deep link discover and path queries
 - Added '@unfoldable' document flag to frames - Making data curation easier by unfolding subdocuments within a frame to add all relevant data in one place
 - Add '@metadata' to frames - Include additional metadata to document frames including data formatted as Markdown. 
 
@@ -35,7 +35,7 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 
 The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB. 
 
-For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/get-started/install/install-as-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
+For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/install-terminusdb-as-a-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
 
 > If you're installing TerminusDB on Windows with Docker, our friends at DFRNT wrote this [comprehensive guide](https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/).
 
@@ -80,10 +80,10 @@ USAGE:
   rm          remove volumes
 ```
 
-More information in the [docs](https://terminusdb.com/docs/get-started/install/install-as-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
+More information in the [docs](https://terminusdb.com/docs/install-terminusdb-as-a-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
 
 
-You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/get-started/install/install-from-source-code).
+You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/install-terminusdb-from-source-code).
 
 
 ## TerminusDB CLI
@@ -133,15 +133,15 @@ or our [community Subreddit](https://www.reddit.com/r/TerminusDB/). On Twitter, 
 
 ## Documentation
 
-Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website. 
-  
-We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs). 
+Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website.
 
-White paper on our [delta-encoding approach](https://github.com/terminusdb/terminusdb/blob/dev/docs/whitepaper/terminusdb.pdf) to data mangement. 
+We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs).
+
+White paper on our [delta-encoding approach](https://terminusdb.com/blog/succinct-data-structures-for-modern-databases/) to data management.
 
 Check the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍. Or the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐.
 
-WOQL is a powerful query language which allows you to concisely express complex patterns over arbitrary data structures. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.com/blog/the-power-of-web-object-query-language/).
+WOQL is a powerful query language that allows you to express complex patterns over arbitrary data structures concisely. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.com/blog/the-power-of-web-object-query-language/).
 
 ## Changes in this Version
 

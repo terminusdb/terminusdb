@@ -423,6 +423,8 @@ pub struct ClassDefinition {
     pub field_renaming: Option<HashMap<String, String>>,
 }
 
+static RESERVED_CLASSES: [&str; 5] = ["BigFloat", "BigFloat", "DateTime", "BigInt", "JSON"];
+
 impl ClassDefinition {
     pub fn sanitize(self) -> ClassDefinition {
         let mut field_map: HashMap<String, String> = HashMap::new();
@@ -702,14 +704,18 @@ impl PreAllFrames {
         BiMap<String, String>,
         Prefixes,
     ) {
-        let mut class_renaming: BiMap<String, String> = BiMap::new();
+        let mut class_renaming: BiMap<String, String> = BiMap::from_iter(
+            RESERVED_CLASSES
+                .iter()
+                .map(|x| (x.to_string(), x.to_string())),
+        );
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
         for (class_name, typedef) in self.frames.into_iter() {
             let sanitized_class = graphql_sanitize(&class_name);
             let res =
                 class_renaming.insert_no_overwrite(sanitized_class.clone(), class_name.clone());
             if let Err((left, right)) = res {
-                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your classes to remove the following duplicate pair: ({left},{right}) != ({sanitized_class},{class_name})")
+                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]' and which do not overlap with reserved type names. Please rename your classes to remove the following duplicate pair: ({left},{right}) == ({sanitized_class},{class_name})")
             }
             let new_typedef = match typedef {
                 TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),

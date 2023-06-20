@@ -26,7 +26,7 @@ if [[ $use_docker -eq 0 ]]; then
     if [ -t 1 ]; then
       set -x
     fi
-    docker exec \
+    docker exec -i \
       --user $user \
       --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
       --env TERMINUSDB_LOG_LEVEL="ERROR" \
