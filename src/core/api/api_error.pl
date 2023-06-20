@@ -1615,6 +1615,13 @@ api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)),
                               'api:character': Character
                             }
             }.
+api_error_jsonld_(index, error(indexing_requires_superuser), JSON) :-
+    JSON = _{'@type' : 'api:IndexErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : "Indexing requires superuser authority",
+             'api:error' : _{ '@type' : "api:IndexingRequiresSuperuserAuthorityError"
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(

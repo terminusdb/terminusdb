@@ -92,8 +92,11 @@ api_indexable(none, Descriptor, Commit_Id, Type, Operation) :-
 { "op" : "Deleted", "id" : "Doc/3"}
 */
 :- meta_predicate api_index_jobs(+, +, +, 1, +, +, +, +).
-api_index_jobs(System_DB, _Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous_Commit_Id, _Options) :-
-    %super_user_authority(Auth),
+api_index_jobs(System_DB, Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous_Commit_Id, _Options) :-
+    do_or_die(
+        is_super_user(Auth),
+        error(indexing_requires_superuser)
+    ),
     resolve_absolute_string_descriptor(Path, Descriptor),
     resolve_relative_descriptor(Descriptor,
                                 ["commit", Commit_Id],
