@@ -192,7 +192,7 @@
               api_migrate_resource_to/7,
 
               % api_indexer
-              api_index_jobs/8
+              api_index_jobs/8,
 
               % api_merge
               api_merge/6
