@@ -1,12 +1,15 @@
 #[macro_use]
 mod log;
 
+mod changes;
 mod consts;
 mod doc;
+mod embedding;
 mod graphql;
 mod path;
 mod prefix;
 mod schema;
+mod template;
 mod types;
 mod value;
 
@@ -110,4 +113,7 @@ pub fn install() {
     register_random_base64();
     doc::register();
     graphql::register();
+    template::register();
+    changes::register();
+    embedding::register();
 }

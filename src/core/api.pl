@@ -191,6 +191,9 @@
               api_migrate_resource/7,
               api_migrate_resource_to/7,
 
+              % api_indexer
+              api_index_jobs/8,
+
               % api_merge
               api_merge/6
           ]).
@@ -231,4 +234,5 @@
 :- use_module(api/api_graphql).
 :- use_module(api/api_history).
 :- use_module(api/api_migration).
+:- use_module(api/api_indexer).
 :- use_module(api/api_merge).
