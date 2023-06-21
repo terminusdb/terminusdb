@@ -11,6 +11,7 @@
 :- use_module(core(transaction)).
 :- use_module(db_pack).
 :- use_module(library(ssl)).
+:- use_module(library(uri)).
 :- use_module(library(http/http_client)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
@@ -69,10 +70,34 @@ remote_pack_url(URL, Pack_URL) :-
     append(Pre, ["api", "pack", Organization, Database], All_Parts),
     merge_separator_split(Pack_URL,'/',All_Parts).
 
+get_fetch_payload(URL, Resource_Id, Payload) :-
+    get_fetch_payload(URL, Resource_Id, 0, Payload).
+
+get_fetch_payload(URL, Resource_Id, Count, Payload) :-
+    uri_encoded(query_value, Resource_Id, Encoded_Resource_Id),
+    atomic_list_concat([URL, '?', 'resource_id=', Encoded_Resource_Id], Resource_URL),
+    http_get(Resource_URL, _, [status_code(Status_Code), method(head)]),
+    (   Status_Code = 200
+    ->  http_get(Resource_URL, Data, [status(Status_Code), size(Length)]),
+        (   Length = 0
+        ->  Payload = none
+        ;   Status_Code = 200
+        ->  Payload = some(Data)
+        ;   throw(error(existence_error(url, Resource_URL)))
+        )
+    ;   config:fetch_timeout(Timeout),
+        Timeout < Count
+    ->  throw(error(time_limit_exceeded, _))
+    ;   sleep(5),
+        New_Count is Count + 5,
+        get_fetch_payload(URL, Resource_Id, New_Count, Payload)
+    ).
+
+
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
-    ->  Document = _{ repository_head: Repository_Head }
-    ;   Document = _{}),
+    ->  Document = _{ repository_head: Repository_Head, resource_id: true }
+    ;   Document = _{ resource_id: true }),
 
     remote_pack_url(URL,Pack_URL),
     terminusdb_version(Version),
@@ -87,7 +112,15 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
         throw(error(http_open_error(Err), _))
     ),
 
-    (   Status = 200
+    (   Status = 401
+    ->  throw(error(remote_connection_failure(Status, Payload), _))
+    ;   Status = 403
+    ->  throw(error(remote_connection_failure(Status, Payload), _))
+    ;   is_dict(Payload)
+    ->  do_or_die(_{ resource_id: Resource_ID } :< Payload,
+                  error(missing_parameter(resource_id), _)),
+        get_fetch_payload(Pack_URL, Resource_ID, Payload_Option)
+    ;   Status = 200
     ->  Payload_Option = some(Payload)
     ;   Status = 204
     ->  Payload_Option = none

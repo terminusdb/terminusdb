@@ -35,7 +35,10 @@
               unpack/1,
               pack/5,
               pack_from_context/3,
+              pack_in_background/5,
               layer_layerids/2,
+              check_pack_status/2,
+              try_open_pack/3,
 
               % db_fetch.pl
               remote_fetch/6,
