@@ -11,6 +11,7 @@
 :- use_module(core(transaction)).
 :- use_module(db_pack).
 :- use_module(library(ssl)).
+:- use_module(library(uri)).
 :- use_module(library(http/http_client)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
@@ -84,7 +85,7 @@ get_fetch_payload(URL, Resource_Id, Count, Payload) :-
         ->  Payload = some(Data)
         ;   throw(error(existence_error(url, Resource_URL)))
         )
-    ;   fetch_timeout(Timeout),
+    ;   config:fetch_timeout(Timeout),
         Timeout < Count
     ->  throw(error(time_limit_exceeded, _))
     ;   sleep(5),
