@@ -18,7 +18,10 @@
                   nonground_captures/2
               ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
-:- use_module(core(document/history), [changed_document_id/2]).
+:- use_module(core(document/history),
+              [changed_document_id/2,
+               commits_changed_id/5
+              ]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
@@ -162,23 +165,7 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     simple_diff(Before,Normal_Document,Diff,Options).
 
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
-    create_context(Branch_Descriptor.repository_descriptor, Context),
-    most_recent_common_ancestor(Context, Context,
-                                Before_Commit_Id, After_Commit_Id,
-                                _Shared_Commit_Id, Commit1_Path, Commit2_Path),
-
-    distinct(Changed,
-             (   union(Commit1_Path, Commit2_Path, All_Commits),
-                 member(Commit_Id, All_Commits),
-                 resolve_relative_descriptor(Branch_Descriptor,
-                                             ["commit", Commit_Id],
-                                             Commit_Descriptor),
-                 do_or_die(
-                     open_descriptor(Commit_Descriptor, Transaction),
-                     error(unresolvable_collection(Commit_Descriptor), _)),
-                 changed_document_id(Transaction, Changed)
-             )
-            ).
+    commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, options{}).
 
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
     option(start(Start), Options),

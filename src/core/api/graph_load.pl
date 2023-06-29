@@ -10,8 +10,12 @@ graph_update(System_DB, Auth, Path, Commit_Info, Format, String) :-
         resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path), _)),
 
+    do_or_die(
+        open_descriptor(Descriptor, Transaction),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
+
     askable_settings_context(
-        Descriptor,
+        Transaction,
         _{  commit_info : Commit_Info,
             system: System_DB,
             authorization : Auth,
@@ -31,8 +35,12 @@ graph_insert(System_DB, Auth, Path, Commit_Info, Format, String) :-
         resolve_absolute_string_descriptor_and_graph(Path, Descriptor, Graph),
         error(invalid_graph_descriptor(Path), _)),
 
+    do_or_die(
+        open_descriptor(Descriptor, Transaction),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
+
     askable_settings_context(
-        Descriptor,
+        Transaction,
         _{  commit_info : Commit_Info,
             system: System_DB,
             authorization : Auth,

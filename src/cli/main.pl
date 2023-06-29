@@ -25,6 +25,7 @@
                basic_authorization/3, intersperse/3,
                negative_to_infinity/2,
                with_memory_file/1,
+               alternate/2,
                with_memory_file_stream/3]).
 :- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
@@ -666,6 +667,33 @@ opt_spec(migration,'terminusdb migration BRANCH_SPEC',
            shortflags([d]),
            default(false),
            help('provide information about what would occur if the operations were performed')]
+         ]).
+opt_spec(concat,'terminusdb concat DB_SPEC',
+         'Concatenate any number of space-separated COMMIT_SPEC or BRANCH_SPEC (provided they are base layers only) passed on standard-input into a commit on DB_SPEC',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `concat` command')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: concat'),
+           help('message to associate with the commit')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON readable commit identifier')]
          ]).
 
 % subcommands
@@ -1926,6 +1954,26 @@ run_command(migration,[Path], Opts) :-
             nl
         ;   throw(error(missing_parameter(operations), _)))
     ).
+run_command(concat,[Target], Opts) :-
+    opt_authority(Opts, Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        concat,
+        (   read_string(current_input, _, Source_String),
+            re_split('\\s+', Source_String, Splits),
+            alternate(Splits,Sources_Candidates),
+            reverse(Sources_Candidates, [First|Sources_Tail]),
+            (   First = ""
+            ->  Sources = Sources_Tail
+            ;   Sources = [First|Sources_Tail]
+            ),
+            api_concat(System_DB, Auth, Sources, Target, Commit_Id, Opts),
+            (   option(json(true), Opts)
+            ->  json_write(current_output, Commit_Id)
+            ;   format(current_output, '~nSuccessfully concatenated layers into commit_id: ~q~n', [Commit_Id])
+            )
+        )
+    ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
 
@@ -2600,7 +2648,10 @@ api_error_cli(API, Error) :-
     (   api_error_jsonld(API,Error,JSON)
     ;   Error=error(Inner_Error,_), generic_exception_jsonld(Inner_Error, JSON)),
     json_cli_code(JSON,Status),
-    Msg = (JSON.'api:message'),
+    (   get_dict('api:message', JSON, Msg)
+    ->  true
+    ;   atom_json_term(Msg, JSON, [width(0)])
+    ),
     format(user_error,"Error: ~s~n",[Msg]),
     json_write_dict(user_error,JSON, [serialize_unknown(true)]),
     halt(Status).

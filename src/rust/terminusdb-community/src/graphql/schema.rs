@@ -24,6 +24,7 @@ use super::frame::*;
 use super::query::run_filter_query;
 use super::top::System;
 
+#[derive(Clone)]
 pub struct SystemInfo {
     pub user: Atom,
     pub system: SyncStoreLayer,
@@ -31,6 +32,7 @@ pub struct SystemInfo {
     pub meta: Option<SyncStoreLayer>,
 }
 
+#[derive(Clone)]
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
     pub transaction_term: Term<'a>,
@@ -234,6 +236,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
     }
 }
 
+#[derive(Clone)]
 pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
 }

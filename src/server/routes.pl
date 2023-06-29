@@ -1291,8 +1291,52 @@ test(rebase_divergent_history, [
                 [method(Method),
                  time_limit(infinite),
                  chunked,
-                 methods([options,post])]).
+                 methods([get,head,options,post])]).
 
+pack_handler(head, _ ,Request, _, _) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    do_or_die(
+        memberchk(resource_id=Resource_Id, Search),
+        error(missing_parameter(resource_id), _)
+    ),
+
+    api_report_errors(
+        pack,
+        Request,
+        (   check_pack_status(Resource_Id, Status),
+            (   Status = complete
+            ->  format('Status: 200 OK~n~n', [])
+            ;   Status = busy
+            ->  format('Status: 202 Accepted~n~n', [])
+            ;   Status = unknown
+            ->  format('Status: 404 Not Found~n~n', [])
+            )
+        )
+    ).
+pack_handler(get, _ ,Request, _, _) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    do_or_die(
+        memberchk(resource_id=Resource_Id, Search),
+        error(missing_parameter(resource_id), _)
+    ),
+
+    api_report_errors(
+        pack,
+        Request,
+        (    try_open_pack(Resource_Id, Length, Stream)
+        ->   format('Content-Type: application/octets~n', []),
+             format('Content-Length: ~d~n', [Length]),
+             format('Status: 200 OK~n~n', []),
+             copy_stream_data(Stream, current_output)
+        ;    format('Status: 404 Not Found~n~n', [])
+        )
+    ).
 pack_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Document,Request),
 
@@ -1300,19 +1344,30 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
     ->  Repo_Head_Option = some(Layer_ID)
     ;   Repo_Head_Option = none),
 
-    api_report_errors(
-        pack,
-        Request,
-        pack(System_DB, Auth,
-             Path, Repo_Head_Option, Payload_Option)),
+    (   _{ resource_id : true } :< Document
+    ->  api_report_errors(
+            pack,
+            Request,
+            pack_in_background(System_DB, Auth,
+                               Path, Repo_Head_Option, Resource_ID)
+        ),
+        cors_reply_json(Request, _{resource_id: Resource_ID}, [status(200), width(0)])
 
-    (   Payload_Option = some(Payload)
-    ->  format('Content-type: application/octets~n', []),
-        format('Status: 200 OK~n~n', []),
-        format('~s', [Payload])
-    ;   format('Content-type: application/octets~n', []),
-        format('Status: 204 No Response~n~n', [])
+    ;   api_report_errors(
+            pack,
+            Request,
+            pack(System_DB, Auth,
+                 Path, Repo_Head_Option, Payload_Option)),
+
+        (   Payload_Option = some(Payload)
+        ->  format('Content-type: application/octets~n', []),
+            format('Status: 200 OK~n~n', []),
+            format('~s', [Payload])
+        ;   format('Content-type: application/octets~n', []),
+            format('Status: 204 No Response~n~n', [])
+        )
     ).
+
 
 % Currently just sending binary around...
 :- begin_tests(pack_endpoint).
@@ -3055,6 +3110,45 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
             ;   throw(error(missing_parameter(operations), _)))
         )
     ).
+
+%%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,get,post,put])]).
+
+index_handler(get,Path,Request,System_DB,Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    api_report_errors(
+        index,
+        Request,
+        (
+            param_value_search_required(Search, commit_id, text, Commit_Id),
+            param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
+            (   Previous_Commit_Id = none
+            ->  Maybe_Previous_Commit_Id = Previous_Commit_Id
+            ;   Maybe_Previous_Commit_Id = some(Previous_Commit_Id)
+            ),
+            api_index_jobs(
+                System_DB,
+                Auth,
+                current_output,
+                [Stream]>>(
+                    write(Stream,'Status: 200'),nl(Stream),
+                    write(Stream,'Content-Type: application/json'),nl(Stream),
+                    format("Transfer-Encoding: chunked~n"),
+                    nl(Stream)),
+                Path,
+                Commit_Id,
+                Maybe_Previous_Commit_Id,
+                [])
+        )
+    ).
+
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).

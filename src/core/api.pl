@@ -35,7 +35,10 @@
               unpack/1,
               pack/5,
               pack_from_context/3,
+              pack_in_background/5,
               layer_layerids/2,
+              check_pack_status/2,
+              try_open_pack/3,
 
               % db_fetch.pl
               remote_fetch/6,
@@ -187,9 +190,15 @@
               % api_history.pl
               api_document_history/6,
 
-              % api_migration
+              % api_migration.pl
               api_migrate_resource/7,
-              api_migrate_resource_to/7
+              api_migrate_resource_to/7,
+
+              % api_merge.pl
+              api_concat/6,
+
+              % api_indexer
+              api_index_jobs/8
           ]).
 
 :- use_module(api/api_init).
@@ -228,3 +237,5 @@
 :- use_module(api/api_graphql).
 :- use_module(api/api_history).
 :- use_module(api/api_migration).
+:- use_module(api/api_indexer).
+:- use_module(api/api_merge).

@@ -2102,6 +2102,12 @@ paths:
                 "operations":
                   type: object
                   example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
+                "dry_run":
+                  type: boolean
+                  example: true
+                "verbose":
+                  type: boolean
+                  example: true
                 "target":
                   type: string
                   example: "admin/foo"
@@ -2310,7 +2316,7 @@ components:
           example: A comment for my database
         creation_date:
           type: string
-          example: 2021-12-13T14:27:46.202Z
+          example: '2021-12-13T14:27:46.202Z'
         label:
           type: string
           example: MyDatabaseLabel
