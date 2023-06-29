@@ -2,6 +2,7 @@
               terminus_store_version/1,
               open_memory_store/1,
               open_directory_store/2,
+              open_raw_archive_store/2,
               open_archive_store/2,
               open_archive_store/3,
               open_grpc_store/5,
@@ -17,6 +18,7 @@
               nb_force_set_head/3,
 
               open_write/2,
+              merge_base_layers/4,
 
               nb_add_triple/4,
               nb_remove_triple/4,
@@ -41,6 +43,7 @@
               triple_removal/4,
 
               sp_card/4,
+              op_card/4,
 
               parent/2,
               squash/2,
@@ -1278,6 +1281,17 @@ test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     sp_card(Layer, A_Id, B_Id, Count),
     Count = 2.
 
+test(op_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "1", "B", node("C")),
+    nb_add_triple(Builder, "2", "B", node("C")),
+    nb_commit(Builder, Layer),
+    object_id(Layer, node("C"), C_Id),
+    predicate_id(Layer, "B", B_Id),
+    op_card(Layer, C_Id, B_Id, Count),
+    Count = 2.
+
 setup_object_id_test_layer(TestDir, Layer) :-
     open_archive_store(TestDir, Store),
     open_write(Store, Builder),
@@ -1341,5 +1355,102 @@ test(object_id_iterates_when_called_with_correct_functor,
             object_id(Layer, _Object, _Id3),
             L3),
     length(L3, 5).
+
+test(merge_single_base_layer,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "foo", "bar", node("baz")),
+    nb_add_triple(Builder, "foo", "bar", value("baz", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    layer_to_id(Layer, Id),
+    config:tmp_path(Tmp),
+    merge_base_layers(Store, Tmp, [Id], Result_Id),
+    store_id_layer(Store, Result_Id, Result_Layer),
+
+    findall(t(S,P,O),
+            triple(Result_Layer, S, P, O),
+            Triples),
+    Expected = [ t("foo","bar",node("baz")),
+                 t("foo",
+                   "bar",
+                   value("baz",
+                         'http://www.w3.org/2001/XMLSchema#string'))
+               ],
+
+    Expected = Triples.
+
+test(merge_same_base_layer_several_times,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "foo", "bar", node("baz")),
+    nb_add_triple(Builder, "foo", "bar", value("baz", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    layer_to_id(Layer, Id),
+    config:tmp_path(Tmp),
+    merge_base_layers(Store, Tmp, [Id, Id, Id, Id, Id, Id, Id, Id, Id, Id], Result_Id),
+    store_id_layer(Store, Result_Id, Result_Layer),
+    findall(t(S,P,O),
+            triple(Result_Layer, S, P, O),
+            Triples),
+
+    Expected = [ t("foo","bar",node("baz")),
+                 t("foo",
+                   "bar",
+                   value("baz",
+                         'http://www.w3.org/2001/XMLSchema#string'))
+               ],
+
+    Expected = Triples.
+
+test(merge_two_base_layers,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder1),
+    nb_add_triple(Builder1, "foo", "bar", node("baz")),
+    nb_add_triple(Builder1, "foo", "bar", value("baz", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder1, Layer1),
+    layer_to_id(Layer1, Id1),
+    open_write(Store, Builder2),
+    nb_add_triple(Builder2, "foo", "baa", node("baz")),
+    nb_add_triple(Builder2, "foo", "bar", value("aaa", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder2, "foo", "bar", value(42, 'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder2, Layer2),
+    layer_to_id(Layer2, Id2),
+    config:tmp_path(Tmp),
+    merge_base_layers(Store, Tmp, [Id1, Id2], Result_Id),
+    store_id_layer(Store, Result_Id, Result_Layer),
+
+    findall(t(S,P,O),
+            triple(Result_Layer, S, P, O),
+            Triples),
+
+    Expected = [ t("foo","baa",node("baz")),
+                 t("foo","bar",node("baz")),
+                 t("foo",
+                   "bar",
+                   value("aaa",
+                         'http://www.w3.org/2001/XMLSchema#string')),
+                 t("foo",
+                   "bar",
+                   value("baz",
+                         'http://www.w3.org/2001/XMLSchema#string')),
+                 t("foo",
+                   "bar",
+                   value(42,
+                         'http://www.w3.org/2001/XMLSchema#int'))
+               ],
+
+    Expected = Triples.
 
 :- end_tests(terminus_store).

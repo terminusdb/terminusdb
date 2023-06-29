@@ -2,19 +2,21 @@
               document_created_at/3,
               document_updated_at/3,
               document_history/5,
-              changed_document_id/2
+              changed_document_id/2,
+              commits_changed_id/5
           ]).
 
 :- use_module(library(yall)).
 :- use_module(library(lists)).
 :- use_module(library(lazy_lists)).
 :- use_module(library(solution_sequences)).
-
+:- use_module(core(util)).
 :- use_module(core(document/json), [
                   database_prefixes/2
               ]).
 :- use_module(core(query)).
-:- use_module(core(transaction/ref_entity)).
+:- use_module(core(transaction)).
+:- use_module(library(option)).
 
 /*
 
@@ -36,7 +38,7 @@ Returns a list `Result` of the form:
 
 history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
-    document_created(Commit_Descriptor, Id),
+    document_created(Commit_Descriptor, Id, []),
     !,
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
@@ -58,7 +60,7 @@ document_created_at(Descriptor, Id, Info) :-
 
 history_to_updated_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
-    document_modified(Commit_Descriptor, Id),
+    document_modified(Commit_Descriptor, Id, []),
     !,
     commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
     Info = json{
@@ -78,7 +80,8 @@ document_updated_at(Descriptor, Id, Info) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     history_to_updated_at(LL,Repo,Id_Ex,Info).
 
-document_created(Askable, Id) :-
+document_created(Askable, Id, Options) :-
+    ignore(option(type(Type), Options)),
     ask(Askable,
         (   addition(Id, rdf:type, Type),
             once(((   t(Type,rdf:type,sys:'Class',schema)
@@ -86,7 +89,8 @@ document_created(Askable, Id) :-
                   ;   Type = sys:'JSONDocument'),
                   not(t(Type,sys:subdocument, _,schema)))))).
 
-document_deleted(Askable, Id) :-
+document_deleted(Askable, Id, Options) :-
+    ignore(option(type(Type), Options)),
     ask(Askable,
         (   removal(Id, rdf:type, Type),
             once(((   t(Type,rdf:type,sys:'Class',schema)
@@ -94,7 +98,8 @@ document_deleted(Askable, Id) :-
                   ;   Type = sys:'JSONDocument'),
                   not(t(Type,sys:subdocument, _,schema)))))).
 
-document_modified(Askable, Containing) :-
+document_modified(Askable, Containing, Options) :-
+    ignore(option(type(Type), Options)),
     ask(Askable,
         (   distinct(Id, (   addition(Id, _, _)
                          ;   removal(Id, _, _),
@@ -108,10 +113,32 @@ document_modified(Askable, Containing) :-
                   not(t(Type,sys:subdocument, _,schema)))))).
 
 changed_document_id(Askable,Containing) :-
+    changed_document_id(Askable,Containing,options{}).
+
+changed_document_id(Askable,Containing,Options) :-
     distinct(Containing,
-             (   document_modified(Askable, Containing)
-             ;   document_created(Askable, Containing)
-             ;   document_deleted(Askable, Containing))).
+             (   document_modified(Askable, Containing, Options)
+             ;   document_created(Askable, Containing, Options)
+             ;   document_deleted(Askable, Containing, Options))).
+
+commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, Options) :-
+    create_context(Branch_Descriptor.repository_descriptor, Context),
+    most_recent_common_ancestor(Context, Context,
+                                Before_Commit_Id, After_Commit_Id,
+                                _Shared_Commit_Id, Commit1_Path, Commit2_Path),
+
+    distinct(Changed,
+             (   union(Commit1_Path, Commit2_Path, All_Commits),
+                 member(Commit_Id, All_Commits),
+                 resolve_relative_descriptor(Branch_Descriptor,
+                                             ["commit", Commit_Id],
+                                             Commit_Descriptor),
+                 do_or_die(
+                     open_descriptor(Commit_Descriptor, Transaction),
+                     error(unresolvable_collection(Commit_Descriptor), _)),
+                 changed_document_id(Transaction, Changed, Options)
+             )
+            ).
 
 commit_generator(Repo, state(name(Branch_Name)), state(commit(Head_Commit)), Commit_Id) :-
     ask(Repo,
@@ -325,10 +352,208 @@ test(subdocument_apply,
             original_changed_document_id(Desc, Id),
             Original_Ids),
 
+    open_descriptor(Desc, Transaction),
+    findall(Id,
+            (   '$changes':changed_document_id(Transaction, Id_String, _Change_Type),
+                atom_string(Id, Id_String)),
+            Rust_Ids),
+
     sort(Ids, Sorted_Ids),
     sort(Original_Ids, Original_Sorted_Ids),
+    sort(Rust_Ids, Rust_Sorted_Ids),
 
     length(Original_Ids, 1),
-    Sorted_Ids = Original_Sorted_Ids.
+    Sorted_Ids = Original_Sorted_Ids,
+    Sorted_Ids = Rust_Sorted_Ids.
 
 :- end_tests(history).
+
+:- begin_tests(rust_changes).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(util)).
+:- use_module(core(document/json)).
+schema('
+{
+  "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"
+}
+{
+  "@id": "Top",
+  "@type": "Class",
+  "subs": {
+    "@class": "Sub",
+    "@type": "Set"
+  },
+  "x": {
+    "@class": "X",
+    "@type": "Set"
+  }
+}
+{
+  "@id": "Sub",
+  "@key": {
+    "@type": "Random"
+  },
+  "@subdocument": [],
+  "@type": "Class",
+  "foo": "xsd:string"
+}
+{
+  "@id": "X",
+  "@type": "Class",
+  "bar": "xsd:string"
+}
+
+{
+  "@id": "Top2",
+  "@type": "Class",
+  "a": "A"
+}
+{
+  "@id": "A",
+  "@key": {
+    "@type": "Random"
+  },
+  "@subdocument": [],
+  "@type": "Class",
+  "b": "B"
+}
+{
+  "@id": "B",
+  "@key": {
+    "@type": "Random"
+  },
+  "@subdocument": [],
+  "@type": "Class",
+  "c": "C"
+}
+{
+  "@id": "C",
+  "@key": {
+    "@type": "Random"
+  },
+  "@subdocument": [],
+  "@type": "Class",
+  "d": {
+    "@class": "D",
+    "@type": "Set"
+  }
+}
+{
+  "@id": "D",
+  "@key": {
+    "@type": "Random"
+  },
+  "@subdocument": [],
+  "@type": "Class",
+  "e": "xsd:string"
+}
+').
+test(insert_toplevel,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(Desc,T,
+                          (   insert_document(T, _{
+                                                     a: _{b: _{c: _{d: _{e: "hello"}}}}
+                                                 }, Inserted_Id1),
+                              insert_document(T, _{
+                                                     a: _{b: _{c: _{d: _{e: "how"}}}}
+                                                 }, Inserted_Id2),
+                              insert_document(T, _{
+                                                     a: _{b: _{c: _{d: _{e: "are"}}}}
+                                                 }, Inserted_Id3),
+                              insert_document(T, _{
+                                                     a: _{b: _{c: _{d: _{e: "you"}}}}
+                                                 }, Inserted_Id4)
+                          ),
+                          _),
+    open_descriptor(Desc, T2),
+    findall(Id-Change,
+            (   '$changes':changed_document_id(T2, Id_String, Change),
+                atom_string(Id, Id_String)),
+            Changes),
+    sort(Changes, Sorted),
+    Expected = [Inserted_Id1-added,
+                Inserted_Id2-added,
+                Inserted_Id3-added,
+                Inserted_Id4-added],
+    sort(Expected, Expected_Sorted),
+
+    Expected_Sorted = Sorted,
+
+    with_test_transaction(Desc,T3,
+                          delete_document(T3, Inserted_Id4),
+                          _),
+
+    open_descriptor(Desc, T4),
+
+    findall(Id-Change,
+            (   '$changes':changed_document_id(T4, Id_String, Change),
+                atom_string(Id, Id_String)),
+            Changes2),
+    Expected2 = [Inserted_Id4-deleted],
+    Expected2 = Changes2,
+
+    with_test_transaction(Desc, T5,
+                          replace_document(T5,
+                                           _{'@id': Inserted_Id2,
+                                             a: _{b: _{c: _{d: _{e: "why"}}}}},
+                                           _),
+                          _),
+    open_descriptor(Desc, T6),
+
+    findall(Id-Change,
+            (   '$changes':changed_document_id(T6, Id_String, Change),
+                atom_string(Id, Id_String)),
+            Changes3),
+    Expected3 = [Inserted_Id2-changed],
+    Expected3 = Changes3,
+
+    get_document(Desc, Inserted_Id1, Doc1),
+    Inner_Dict=(Doc1.a.b.c),
+    b_set_dict(d, Inner_Dict, [_{e:"hi"}|(Inner_Dict.d)]),
+    with_test_transaction(Desc, T7,
+                          replace_document(T7,
+                                           Doc1,
+                                           _),
+                          _),
+
+    open_descriptor(Desc, T8),
+
+    findall(Id-Change,
+            (   '$changes':changed_document_id(T8, Id_String, Change),
+                atom_string(Id, Id_String)),
+            Changes4),
+    Expected4 = [Inserted_Id1-changed],
+    Expected4 = Changes4,
+
+    get_document(Desc, Inserted_Id1, Doc2),
+    Inner_Dict2=(Doc2.a.b.c),
+    [Single_E|_] = (Inner_Dict2.d),
+    b_set_dict(d, Inner_Dict2, [Single_E]),
+    with_test_transaction(Desc, T9,
+                          replace_document(T9,
+                                           Doc2,
+                                           _),
+                          _),
+
+    open_descriptor(Desc, T10),
+
+    findall(Id-Change,
+            (   '$changes':changed_document_id(T10, Id_String, Change),
+                atom_string(Id, Id_String)),
+            Changes5),
+    Expected5 = [Inserted_Id1-changed],
+    Expected5 = Changes5,
+
+    true.
+
+
+:- end_tests(rust_changes).
+

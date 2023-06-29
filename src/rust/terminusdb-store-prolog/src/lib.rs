@@ -10,6 +10,7 @@ pub use terminus_store;
 pub fn install(module: Option<&str>) {
     store::register_open_memory_store_in_module(module);
     store::register_open_directory_store_in_module(module);
+    store::register_open_raw_archive_store_in_module(module);
     store::register_open_archive_store_in_module(module);
     store::register_open_grpc_store_in_module(module);
     named_graph::register_create_named_graph_in_module(module);
@@ -21,6 +22,7 @@ pub fn install(module: Option<&str>) {
     named_graph::register_nb_force_set_head_in_module(module);
     named_graph::register_nb_force_set_head_version_in_module(module);
     store::register_open_write_in_module(module);
+    store::register_merge_base_layers_in_module(module);
     builder::register_nb_add_id_triple_in_module(module);
     builder::register_nb_add_object_triple_in_module(module);
     builder::register_nb_remove_id_triple_in_module(module);
@@ -59,4 +61,5 @@ pub fn install(module: Option<&str>) {
     layer::register_id_triple_addition_in_module(module);
     layer::register_id_triple_removal_in_module(module);
     layer::register_sp_card_in_module(module);
+    layer::register_op_card_in_module(module);
 }

@@ -336,10 +336,14 @@ class_property_weakened('@oneOf', Original, Weakening, Class, _SuperMap, _Operat
     ),
     fail.
 class_property_weakened('@metadata', _Original, Weakening, Class, _SuperMap, Operation) =>
+    get_dict('@metadata',Original, Old_Metadata),
     get_dict('@metadata',Weakening, New_Metadata),
+    \+ Old_Metadata = New_Metadata,
     Operation = replace_class_metadata(Class,New_Metadata).
 class_property_weakened('@documentation', _Original, Weakening, Class, _SuperMap, Operation) =>
+    get_dict('@documentation',Original, Old_Docs),
     get_dict('@documentation',Weakening, New_Docs),
+    \+ Old_Docs = New_Docs,
     Operation = replace_class_documentation(Class,New_Docs).
 class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 get_dict(Property,Weakening,New_Value),
@@ -608,9 +612,16 @@ infer_arbitrary_migration(Validations,New_Validations, Meta_Data) :-
     infer_migration(strengthening, Validations, New_Validations, Meta_Data).
 
 /* upcast_class_property(Class, Property, New_Type) */
-upcast_class_property(Class, Property, New_Type, Before, After) :-
+upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
     atom_string(Class_Key, Class),
     atom_string(Property_Key, Property),
+
+    % Backward compatible fix for bug https://github.com/terminusdb/terminusdb/issues/1853
+    (   is_dict(New_Type_Candidate),
+        get_dict('@type', New_Type_Candidate, 'Class')
+    ->  get_dict(Property_Key, New_Type_Candidate, New_Type)
+    ;   New_Type = New_Type_Candidate
+    ),
 
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, Type_Definition),
@@ -913,7 +924,15 @@ interpret_instance_operation_(create_class_property(Class, Property, Type), _Bef
             error(
                 unknown_irrefutable_property_creation(Class,Property,Type)))
     ).
-interpret_instance_operation_(upcast_class_property(Class, Property, New_Type), _Before, After, Count) :-
+interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Candidate), _Before, After, Count) :-
+    % Backward compatible fix for bug https://github.com/terminusdb/terminusdb/issues/1853
+    (   is_dict(New_Type_Candidate),
+        get_dict('@type', New_Type_Candidate, 'Class'),
+        atom_string(Property_Key, Property)
+    ->  get_dict(Property_Key, New_Type_Candidate, New_Type)
+    ;   New_Type = New_Type_Candidate
+    ),
+
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
             (   default_prefixes(Prefixes),
@@ -1365,6 +1384,53 @@ test(move_and_weaken_with_instance_data,
 	           json{'@id':'B/2','@type':'B',a:"bar"}
 	         ].
 
+test(move_and_weaken_with_deformed_upcast,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'A/2', a : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        move_class("A", "B"),
+        upcast_class_property("B", "a", json{ '@id' : "B",
+                                              '@type' : 'Class',
+                                              a:json{ '@type' : "Optional",
+                                                      '@class' : "xsd:string"}})
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+    Result = metadata{instance_operations:4,schema_operations:2},
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+    A_Docs = [],
+    findall(
+        DocB,
+        get_document_by_type(Descriptor, "B", DocB),
+        B_Docs),
+
+    B_Docs = [ json{'@id':'B/1','@type':'B',a:"foo"},
+	           json{'@id':'B/2','@type':'B',a:"bar"}
+	         ].
 
 test(delete_class_property,
      [setup((setup_temp_store(State),
@@ -2165,5 +2231,42 @@ test(weaken_subsumed_and_optional_range, []) :-
 										   '@type':'Optional'
 										 })
 			 ].
+
+
+test(same_metadata,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        replace_class_metadata("F", _{ asdf : "fdsa" })
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []),
+
+    get_schema_document(Descriptor, "F", F),
+    F = json{ '@id':'F',
+              '@metadata':json{asdf:"fdsa"},
+              '@type':'Class',
+              f:json{'@class':'xsd:float','@type':'Optional'}
+            },
+
+    create_class_dictionary(Descriptor, Dictionary),
+
+    schema_inference_rule(
+        weakening,
+        Dictionary,
+        Dictionary,
+        Operations
+    ),
+    Operations = [].
 
 :- end_tests(migration).

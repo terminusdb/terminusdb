@@ -35,7 +35,8 @@
               parallelize_enabled/0,
               grpc_label_endpoint/1,
               crypto_password_cost/1,
-              lru_cache_size/1
+              lru_cache_size/1,
+              fetch_timeout/1
           ]).
 
 :- use_module(library(pcre)).
@@ -134,12 +135,20 @@ registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
     getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
 
+:- table tmp_path/1 as shared.
 tmp_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', '/tmp', Value).
 
 :- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-
     getenv('TERMINUSDB_FILE_STORAGE_PATH', Path).
+
+:- table fetch_timeout/1 as shared.
+fetch_timeout(Timeout) :-
+    (   getenv('TERMINUSDB_FETCH_TIMEOUT', TimeOutEnv)
+    ->  atom_number(TimeOutEnv, Timeout)
+    ;   Timeout = inf
+    ).
 
 server(Server) :-
     server_protocol(Protocol),
@@ -319,3 +328,7 @@ crypto_password_cost(10).
 :- table lru_cache_size/1.
 lru_cache_size(Cache_Size) :-
     getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).
+
+:- table semantic_indexer_endpoint/1.
+semantic_indexer_endpoint(Endpoint) :-
+    getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).

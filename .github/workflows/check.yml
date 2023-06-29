@@ -39,7 +39,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -65,7 +65,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -113,7 +113,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -166,7 +166,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -219,7 +219,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -274,7 +274,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -335,7 +335,7 @@ jobs:
           platforms: 'arm64'
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 

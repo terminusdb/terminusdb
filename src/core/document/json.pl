@@ -374,9 +374,12 @@ idgen_path_values_hash(Base,Path,ID) :-
     format(string(ID), "~w~w", [Base,Hash]).
 
 idgen_random(Base,ID) :-
-    random(X),
-    format(string(S), '~w', [X]),
-    crypto_data_hash(S, Hash, [algorithm(sha256)]),
+    % Make configurable as part of random key generation strategy later.
+    Length = 16,
+    idgen_random(Base, Length, ID).
+
+idgen_random(Base,Length, ID) :-
+    utils:random_base64(Length, Hash),
     format(string(ID),'~w~w',[Base,Hash]).
 
 path_strings_([], _Prefixes, []).
