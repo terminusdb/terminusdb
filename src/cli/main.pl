@@ -2648,7 +2648,10 @@ api_error_cli(API, Error) :-
     (   api_error_jsonld(API,Error,JSON)
     ;   Error=error(Inner_Error,_), generic_exception_jsonld(Inner_Error, JSON)),
     json_cli_code(JSON,Status),
-    Msg = (JSON.'api:message'),
+    (   get_dict('api:message', JSON, Msg)
+    ->  true
+    ;   atom_json_term(Msg, JSON, [width(0)])
+    ),
     format(user_error,"Error: ~s~n",[Msg]),
     json_write_dict(user_error,JSON, [serialize_unknown(true)]),
     halt(Status).
