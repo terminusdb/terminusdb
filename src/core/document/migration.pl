@@ -335,7 +335,7 @@ class_property_weakened('@oneOf', Original, Weakening, Class, _SuperMap, _Operat
                                      new: WeakeningOneOf}), _)
     ),
     fail.
-class_property_weakened('@metadata', _Original, Weakening, Class, _SuperMap, Operation) =>
+class_property_weakened('@metadata', Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@metadata',Original, Old_Metadata),
     get_dict('@metadata',Weakening, New_Metadata),
     \+ Old_Metadata = New_Metadata,
