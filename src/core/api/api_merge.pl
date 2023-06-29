@@ -1,4 +1,4 @@
-:- module(api_merge, [api_merge/6]).
+:- module(api_merge, [api_concat/6]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -12,7 +12,7 @@
 :- use_module(library(lists)).
 :- use_module(library(option)).
 
-api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
+api_concat(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
     do_or_die(
         (   resolve_absolute_string_descriptor(Target, Target_Descriptor),
             resolve_relative_descriptor(Target_Descriptor, ["_commits"], Target_Repo)
@@ -53,10 +53,13 @@ api_merge(System_DB, Auth, Sources, Target, Commit_Id, Options) :-
            ),
     % todo, check all schema layers are compatible
     [Schema_Layer_Id|_] = Schema_Layer_Ids,
-    triple_store(Store),
+    % todo: we should do something clever here to ensure this also works in tests
+    config:db_path(Store_Path),
+    open_raw_archive_store(Store_Path, Store),
+    config:tmp_path(Tmp_Path),
 
     catch(
-        merge_base_layers(Store, Instance_Layer_Ids, Target_Instance_Layer_Id),
+        merge_base_layers(Store, Tmp_Path, Instance_Layer_Ids, Target_Instance_Layer_Id),
         error(rust_io_error('Other', Error_Message), _),
         (   re_matchsub('given layer is not a base layer: (?<layerid>[a-f0-9]*)',
                         Error_Message, Dict, [])

@@ -42,7 +42,7 @@ describe('cli-merge', function () {
     const db2 = util.randomString()
     await execEnv(`./terminusdb.sh db create admin/${db2}`)
 
-    const result = await execEnv(`echo "admin/${db}" | ./terminusdb.sh merge admin/${db2} || true`)
+    const result = await execEnv(`echo "admin/${db}" | ./terminusdb.sh concat admin/${db2} || true`)
     expect(result.stderr).to.match(/Error: One of the descriptors used in the merge operation did not have an associated instance layer/)
   })
 
@@ -80,7 +80,7 @@ describe('cli-merge', function () {
 
     const mergeDB = util.randomString()
     await execEnv(`./terminusdb.sh db create admin/${mergeDB}`)
-    const result = await execEnv(`echo "admin/${db}" "admin/${db2}" | ./terminusdb.sh merge admin/${mergeDB} || true`)
+    const result = await execEnv(`echo "admin/${db}" "admin/${db2}" | ./terminusdb.sh concat admin/${mergeDB} || true`)
     expect(result.stderr).to.match(/^Error: One of the descriptors/)
   })
 
@@ -111,9 +111,9 @@ describe('cli-merge', function () {
 
     const mergeDB = util.randomString()
     await execEnv(`./terminusdb.sh db create admin/${mergeDB}`)
-    const result = await execEnv(`echo "admin/${db}" "admin/${db2}" | ./terminusdb.sh merge admin/${mergeDB}`)
+    const result = await execEnv(`echo "admin/${db}" "admin/${db2}" | ./terminusdb.sh concat admin/${mergeDB}`)
 
-    const matchResult = result.stdout.match(/^\nSuccessfully merged layers into commit_id: "(?<commit>[a-z0-9]+)"/)
+    const matchResult = result.stdout.match(/^\nSuccessfully concatenated layers into commit_id: "(?<commit>[a-z0-9]+)"/)
 
     const docResults = await execEnv(`./terminusdb.sh doc get -l admin/${mergeDB}/local/commit/${matchResult.groups.commit}`)
 

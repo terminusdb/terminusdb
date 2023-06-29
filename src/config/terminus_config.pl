@@ -135,6 +135,7 @@ registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
     getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
 
+:- table tmp_path/1 as shared.
 tmp_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', '/tmp', Value).
 

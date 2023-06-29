@@ -1621,20 +1621,20 @@ api_error_jsonld_(index, error(indexing_requires_superuser), JSON) :-
              'api:message' : "Indexing requires superuser authority",
              'api:error' : _{ '@type' : "api:IndexingRequiresSuperuserAuthorityError"}
             }.
-api_error_jsonld_(merge, error(instance_layer_missing_in_merged_data(Descriptor), _), JSON) :-
+api_error_jsonld_(concat, error(instance_layer_missing_in_merged_data(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(String, Descriptor),
     format(string(Msg), "One of the descriptors used in the merge operation did not have an associated instance layer: ~s", [String]),
-    JSON = _{'@type' : 'api:MergeErrorResponse',
+    JSON = _{'@type' : 'api:ConcatErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,
-             'api:error' : _{ '@type' : "api:InstanceLayerMissingInMerge",
+             'api:error' : _{ '@type' : "api:InstanceLayerMissingInConcat",
                               'api:descriptor' : String
                             }
             }.
-api_error_jsonld_(merge, error(not_a_base_layer(Layer, Descriptor), _), JSON) :-
+api_error_jsonld_(concat, error(not_a_base_layer(Layer, Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(String, Descriptor),
     format(string(Msg), "One of the descriptors (~s) used in the merge operation had an instance layer which is not a base layer: ~s", [String, Layer]),
-    JSON = _{'@type' : 'api:MergeErrorResponse',
+    JSON = _{'@type' : 'api:ConcatErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:NotABaseLayer",
@@ -1691,7 +1691,7 @@ error_type_(apply, 'api:ApplyErrorResponse').
 error_type_(toplevel, 'api:TopLevelResponse').
 error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
-error_type_(merge, 'api:MergeErrorResponse').
+error_type_(concat, 'api:ConcatErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

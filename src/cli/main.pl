@@ -668,14 +668,14 @@ opt_spec(migration,'terminusdb migration BRANCH_SPEC',
            default(false),
            help('provide information about what would occur if the operations were performed')]
          ]).
-opt_spec(merge,'terminusdb merge DB_SPEC',
-         'Merge any number of space-separated COMMIT_SPEC or BRANCH_SPEC passed on standard-input into a commit on DB_SPEC',
+opt_spec(concat,'terminusdb concat DB_SPEC',
+         'Concatenate any number of space-separated COMMIT_SPEC or BRANCH_SPEC (provided they are base layers only) passed on standard-input into a commit on DB_SPEC',
          [[opt(help),
            type(boolean),
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `merge` command')],
+           help('print help for the `concat` command')],
           [opt(author),
            type(atom),
            longflags([author]),
@@ -686,7 +686,7 @@ opt_spec(merge,'terminusdb merge DB_SPEC',
            type(atom),
            longflags([message]),
            shortflags([m]),
-           default('cli: merge'),
+           default('cli: concat'),
            help('message to associate with the commit')],
           [opt(json),
            type(boolean),
@@ -1954,11 +1954,11 @@ run_command(migration,[Path], Opts) :-
             nl
         ;   throw(error(missing_parameter(operations), _)))
     ).
-run_command(merge,[Target], Opts) :-
+run_command(concat,[Target], Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     api_report_errors(
-        merge,
+        concat,
         (   read_string(current_input, _, Source_String),
             re_split('\\s+', Source_String, Splits),
             alternate(Splits,Sources_Candidates),
@@ -1967,10 +1967,10 @@ run_command(merge,[Target], Opts) :-
             ->  Sources = Sources_Tail
             ;   Sources = [First|Sources_Tail]
             ),
-            api_merge(System_DB, Auth, Sources, Target, Commit_Id, Opts),
+            api_concat(System_DB, Auth, Sources, Target, Commit_Id, Opts),
             (   option(json(true), Opts)
             ->  json_write(current_output, Commit_Id)
-            ;   format(current_output, '~nSuccessfully merged layers into commit_id: ~q~n', [Commit_Id])
+            ;   format(current_output, '~nSuccessfully concatenated layers into commit_id: ~q~n', [Commit_Id])
             )
         )
     ).
