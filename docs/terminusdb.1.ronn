@@ -473,17 +473,17 @@ Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
   * `-d`, `--dry_run`=[value]:
   provide information about what would occur if the operations were performed
 
-### merge
+### concat
 
-`terminusdb merge DB_SPEC`
+`terminusdb concat DB_SPEC`
 
-Merge any number of space-separated COMMIT_SPEC or BRANCH_SPEC passed on standard-input into a commit on DB_SPEC
+Concatenate any number of space-separated COMMIT_SPEC or BRANCH_SPEC (provided they are base layers only) passed on standard-input into a commit on DB_SPEC
 
   * `--impersonate`=[value]:
   impersonate a particular user
 
   * `-h`, `--help`=[value]:
-  print help for the `merge` command
+  print help for the `concat` command
 
   * `-a`, `--author`=[value]:
   author to place on the commit

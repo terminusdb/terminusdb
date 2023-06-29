@@ -26,14 +26,14 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 
 - [GraphQL](https://terminusdb.com/docs/graphql-basics) - Use GraphQL as a proper graph query language with deep link discover and path queries
 - Added '@unfoldable' document flag to frames - Making data curation easier by unfolding subdocuments within a frame to add all relevant data in one place
-- Add '@metadata' to frames - Include additional metadata to document frames including data formatted as Markdown. 
+- Add '@metadata' to frames - Include additional metadata to document frames including data formatted as Markdown.
 
 
 ## Installation Guide
 
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/terminusdb)
 
-The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB. 
+The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB.
 
 For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/install-terminusdb-as-a-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
 
