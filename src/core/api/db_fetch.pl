@@ -70,15 +70,19 @@ remote_pack_url(URL, Pack_URL) :-
     append(Pre, ["api", "pack", Organization, Database], All_Parts),
     merge_separator_split(Pack_URL,'/',All_Parts).
 
-get_fetch_payload(URL, Resource_Id, Payload) :-
-    get_fetch_payload(URL, Resource_Id, 0, Payload).
+get_fetch_payload(URL, Resource_Id, Authorization, Version, Payload) :-
+    get_fetch_payload(URL, Resource_Id, Authorization, Version, 0, Payload).
 
-get_fetch_payload(URL, Resource_Id, Count, Payload) :-
+get_fetch_payload(URL, Resource_Id, Authorization, Version, Count, Payload) :-
     uri_encoded(query_value, Resource_Id, Encoded_Resource_Id),
     atomic_list_concat([URL, '?', 'resource_id=', Encoded_Resource_Id], Resource_URL),
-    http_get(Resource_URL, _, [status_code(Status_Code), method(head)]),
+    http_get(Resource_URL, _, [request_header('Authorization'=Authorization),
+                               request_header('TerminusDB-Version'=Version),
+                               status_code(Status_Code), method(head)]),
     (   Status_Code = 200
-    ->  http_get(Resource_URL, Data, [status(Status_Code), size(Length)]),
+    ->  http_get(Resource_URL, Data, [request_header('Authorization'=Authorization),
+                                      request_header('TerminusDB-Version'=Version),
+                                      status(Status_Code), size(Length)]),
         (   Length = 0
         ->  Payload = none
         ;   Status_Code = 200
@@ -126,7 +130,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     ;   is_dict(Payload)
     ->  do_or_die(_{ resource_id: Resource_ID } :< Payload,
                   error(missing_parameter(resource_id), _)),
-        get_fetch_payload(Pack_URL, Resource_ID, Payload_Option)
+        get_fetch_payload(Pack_URL, Resource_ID, Authorization, Version, Payload_Option)
     ;   Status = 200
     ->  Payload_Option = some(Payload)
     ;   Status = 204
