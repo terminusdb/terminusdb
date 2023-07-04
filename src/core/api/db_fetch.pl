@@ -94,7 +94,7 @@ get_fetch_payload(URL, Resource_Id, Authorization, Version, Count, Payload) :-
     ->  throw(error(time_limit_exceeded, _))
     ;   sleep(5),
         New_Count is Count + 5,
-        get_fetch_payload(URL, Resource_Id, New_Count, Payload)
+        get_fetch_payload(URL, Resource_Id, Authorization, Version, New_Count, Payload)
     ).
 
 
