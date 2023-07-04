@@ -71,7 +71,7 @@ pack_in_background(System_DB, Auth, Path, Repo_Head_Option, Resource_ID) :-
     thread_create(
         (    json_log_debug_formatted('~N[Debug] Generating pack for ~q', [Processed_Filename]),
              pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option),
-             json_log_debug_formatted('~N[Debug] Pack created on ~q', [Path]),
+             json_log_debug_formatted('~N[Debug] Pack created for db ~q', [Path]),
              (   Payload_Option = some(Payload)
              ->  write(FileStream, Payload)
              ;   true
