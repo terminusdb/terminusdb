@@ -94,6 +94,7 @@ get_fetch_payload(URL, Resource_Id, Count, Payload) :-
     ).
 
 
+:- use_module(library(http/json)).
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head, resource_id: true }
@@ -111,8 +112,14 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
         error(Err, _),
         throw(error(http_open_error(Err), _))
     ),
-
-    (   Status = 401
+    json_write_dict(user_error, Payload, []),
+    (   Status = 400
+    ->  (   get_dict('api:error', Payload, Error),
+            get_dict('api:file_name', Error, File_Name)
+        ->  throw(error(missing_file(File_Name), _))
+        ;   throw(error(remote_connection_failure(400, Payload), _))
+        )
+    ;   Status = 401
     ->  throw(error(remote_connection_failure(Status, Payload), _))
     ;   Status = 403
     ->  throw(error(remote_connection_failure(Status, Payload), _))
