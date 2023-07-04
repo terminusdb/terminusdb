@@ -68,13 +68,18 @@ pack_in_background(System_DB, Auth, Path, Repo_Head_Option, Resource_ID) :-
     pack_processed_filename(Random, Processed_Filename),
     open(Part_Filename, write, FileStream),
     thread_create(
-        (    pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option),
+        (    json_log_debug_formatted('~N[Debug] Generating pack for ~q', [Processed_Filename]),
+             pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option),
+             json_log_debug_formatted('~N[Debug] Pack created on ~q', [Path]),
              (   Payload_Option = some(Payload)
              ->  write(FileStream, Payload)
              ;   true
              ),
+             json_log_debug_formatted('~N[Debug] Closing filestream', []),
              close(FileStream),
-             mv(Part_Filename, Processed_Filename)
+             json_log_debug_formatted('~N[Debug] Moving to processed filename', []),
+             mv(Part_Filename, Processed_Filename),
+             json_log_debug_formatted('~N[Debug] Moved', [])
         ), _, [detached(true)]),
     Resource_ID = Random.
 
