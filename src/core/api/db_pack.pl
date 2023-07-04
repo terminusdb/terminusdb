@@ -66,6 +66,7 @@ pack_in_background(System_DB, Auth, Path, Repo_Head_Option, Resource_ID) :-
     uri_encoded(segment, Unsafe_Random, Random),
     pack_partial_filename(Random, Part_Filename),
     pack_processed_filename(Random, Processed_Filename),
+    json_log_debug_formatted('~N[Debug] Opening file ~q', [Part_Filename]),
     open(Part_Filename, write, FileStream),
     thread_create(
         (    json_log_debug_formatted('~N[Debug] Generating pack for ~q', [Processed_Filename]),
