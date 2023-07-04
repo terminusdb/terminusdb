@@ -112,7 +112,7 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
         error(Err, _),
         throw(error(http_open_error(Err), _))
     ),
-    json_write_dict(user_error, Payload, []),
+
     (   Status = 400
     ->  (   get_dict('api:error', Payload, Error),
             get_dict('api:file_name', Error, File_Name)
