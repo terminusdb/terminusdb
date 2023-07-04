@@ -1453,4 +1453,11 @@ test(merge_two_base_layers,
 
     Expected = Triples.
 
+test(big_float,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "foo", "bar",
+                  value(1.6021766208e-19,'http://www.w3.org/2001/XMLSchema#decimal')).
+
+
 :- end_tests(terminus_store).
