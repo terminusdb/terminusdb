@@ -1,8 +1,5 @@
 :- module(db_pack, [
               payload_repository_head_and_pack/3,
-              pack_in_background/5,
-              check_pack_status/2,
-              try_open_pack/3,
               repository_head_layerid/2,
               pack/5,
               pack_from_context/3,
@@ -16,12 +13,9 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(account)).
-:- use_module(core(document), [idgen_random/2]).
 
 :- use_module(library(lists)).
-:- use_module(library(uri)).
 :- use_module(library(apply)).
-:- use_module(library(shell), [mv/2]).
 :- use_module(library(plunit)).
 
 payload_repository_head_and_pack(Data, Head, Pack) :-
@@ -46,58 +40,6 @@ repository_context__previous_head_option__current_repository_head__pack(Reposito
         storage(Store),
         pack_export(Store,Layer_Ids,Pack),
         Pack_Option = some(Pack)).
-
-get_pack_storage_path(FilePath) :-
-    (   config:file_upload_storage_path(FilePath)
-    ->  true
-    ;   config:tmp_path(FilePath)
-    ).
-
-pack_partial_filename(Random, Part_Filename) :-
-    get_pack_storage_path(FilePath),
-    atomic_list_concat([FilePath, '/', Random, '.part'], Part_Filename).
-
-pack_processed_filename(Random, Processed_Filename) :-
-    get_pack_storage_path(FilePath),
-    atomic_list_concat([FilePath, '/', Random], Processed_Filename).
-
-pack_in_background(System_DB, Auth, Path, Repo_Head_Option, Resource_ID) :-
-    idgen_random(Path, Unsafe_Random),
-    uri_encoded(segment, Unsafe_Random, Random),
-    pack_partial_filename(Random, Part_Filename),
-    pack_processed_filename(Random, Processed_Filename),
-    open(Part_Filename, write, FileStream),
-    thread_create(
-        (    pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option),
-             (   Payload_Option = some(Payload)
-             ->  write(FileStream, Payload)
-             ;   true
-             ),
-             close(FileStream),
-             mv(Part_Filename, Processed_Filename)
-        ), _, [detached(true)]),
-    Resource_ID = Random.
-
-check_pack_status(Resource_Id, Status) :-
-    pack_processed_filename(Resource_Id, Processed_Filename),
-    pack_partial_filename(Resource_Id, Partial_Filename),
-
-    (   exists_file(Partial_Filename)
-    ->  Status = busy
-    ;   exists_file(Processed_Filename)
-    ->  Status = complete
-    ;   Status = unknown
-    ).
-
-try_open_pack(Resource_Id, Size, Stream) :-
-    pack_processed_filename(Resource_Id, Processed_Filename),
-    catch(
-        (    open(Processed_Filename, read, Stream),
-             size_file(Processed_Filename, Size)
-        ),
-        error(existence_error(source_sink, _), _),
-        fail
-    ).
 
 pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option) :-
     atomic_list_concat([Path, '/local/_commits'], Repository_Path),
