@@ -17,7 +17,9 @@
 :- use_module(core(triple)).
 :- use_module(core(account)).
 :- use_module(core(document), [idgen_random/2]).
+:- use_module(core(api), [api_error_jsonld/3]).
 
+:- use_module(library(http/json), [atom_json_dict/3]).
 :- use_module(library(lists)).
 :- use_module(library(uri)).
 :- use_module(library(apply)).
