@@ -70,19 +70,15 @@ remote_pack_url(URL, Pack_URL) :-
     append(Pre, ["api", "pack", Organization, Database], All_Parts),
     merge_separator_split(Pack_URL,'/',All_Parts).
 
-get_fetch_payload(URL, Resource_Id, Authorization, Version, Payload) :-
-    get_fetch_payload(URL, Resource_Id, Authorization, Version, 0, Payload).
+get_fetch_payload(URL, Resource_Id, Payload) :-
+    get_fetch_payload(URL, Resource_Id, 0, Payload).
 
-get_fetch_payload(URL, Resource_Id, Authorization, Version, Count, Payload) :-
+get_fetch_payload(URL, Resource_Id, Count, Payload) :-
     uri_encoded(query_value, Resource_Id, Encoded_Resource_Id),
     atomic_list_concat([URL, '?', 'resource_id=', Encoded_Resource_Id], Resource_URL),
-    http_get(Resource_URL, _, [request_header('Authorization'=Authorization),
-                               request_header('TerminusDB-Version'=Version),
-                               status_code(Status_Code), method(head)]),
+    http_get(Resource_URL, _, [status_code(Status_Code), method(head)]),
     (   Status_Code = 200
-    ->  http_get(Resource_URL, Data, [request_header('Authorization'=Authorization),
-                                      request_header('TerminusDB-Version'=Version),
-                                      status(Status_Code), size(Length)]),
+    ->  http_get(Resource_URL, Data, [status(Status_Code), size(Length)]),
         (   Length = 0
         ->  Payload = none
         ;   Status_Code = 200
@@ -94,11 +90,10 @@ get_fetch_payload(URL, Resource_Id, Authorization, Version, Count, Payload) :-
     ->  throw(error(time_limit_exceeded, _))
     ;   sleep(5),
         New_Count is Count + 5,
-        get_fetch_payload(URL, Resource_Id, Authorization, Version, New_Count, Payload)
+        get_fetch_payload(URL, Resource_Id, New_Count, Payload)
     ).
 
 
-:- use_module(library(http/json)).
 authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
     (   some(Repository_Head) = Repository_Head_Option
     ->  Document = _{ repository_head: Repository_Head, resource_id: true }
@@ -117,20 +112,14 @@ authorized_fetch(Authorization, URL, Repository_Head_Option, Payload_Option) :-
         throw(error(http_open_error(Err), _))
     ),
 
-    (   Status = 400
-    ->  (   get_dict('api:error', Payload, Error),
-            get_dict('api:file_name', Error, File_Name)
-        ->  throw(error(missing_file(File_Name), _))
-        ;   throw(error(remote_connection_failure(400, Payload), _))
-        )
-    ;   Status = 401
+    (   Status = 401
     ->  throw(error(remote_connection_failure(Status, Payload), _))
     ;   Status = 403
     ->  throw(error(remote_connection_failure(Status, Payload), _))
     ;   is_dict(Payload)
     ->  do_or_die(_{ resource_id: Resource_ID } :< Payload,
                   error(missing_parameter(resource_id), _)),
-        get_fetch_payload(Pack_URL, Resource_ID, Authorization, Version, Payload_Option)
+        get_fetch_payload(Pack_URL, Resource_ID, Payload_Option)
     ;   Status = 200
     ->  Payload_Option = some(Payload)
     ;   Status = 204
