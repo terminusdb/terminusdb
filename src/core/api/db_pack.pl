@@ -69,18 +69,26 @@ pack_in_background(System_DB, Auth, Path, Repo_Head_Option, Resource_ID) :-
     json_log_debug_formatted('~N[Debug] Opening file ~q', [Part_Filename]),
     open(Part_Filename, write, FileStream),
     thread_create(
-        (    json_log_debug_formatted('~N[Debug] Generating pack for ~q', [Processed_Filename]),
-             pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option),
-             json_log_debug_formatted('~N[Debug] Pack created for db ~q', [Path]),
-             (   Payload_Option = some(Payload)
-             ->  write(FileStream, Payload)
-             ;   true
-             ),
-             json_log_debug_formatted('~N[Debug] Closing filestream', []),
-             close(FileStream),
-             json_log_debug_formatted('~N[Debug] Moving to processed filename', []),
-             mv(Part_Filename, Processed_Filename),
-             json_log_debug_formatted('~N[Debug] Moved', [])
+        (   catch_with_backtrace(
+                (   json_log_debug_formatted('~N[Debug] Generating pack for ~q', [Processed_Filename]),
+                    pack(System_DB, Auth, Path, Repo_Head_Option, Payload_Option),
+                    json_log_debug_formatted('~N[Debug] Pack created for db ~q', [Path]),
+                    (   Payload_Option = some(Payload)
+                    ->  write(FileStream, Payload)
+                    ;   true
+                    ),
+                    json_log_debug_formatted('~N[Debug] Closing filestream', []),
+                    close(FileStream),
+                    json_log_debug_formatted('~N[Debug] Moving to processed filename', []),
+                    mv(Part_Filename, Processed_Filename),
+                    json_log_debug_formatted('~N[Debug] Moved', [])
+                ),
+                Error,
+                (   api_error_jsonld(pack,Error,JSONLD),
+                    atom_json_dict(Atom, JSONLD, [width(0)]),
+                    json_log_error_formatted('~N[Error] ~q', [Atom])
+                )
+            )
         ), _, [detached(true)]),
     Resource_ID = Random.
 
