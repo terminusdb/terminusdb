@@ -11,7 +11,7 @@
 ## New
 
 * Add support for the TerminusDB semantic indexer for AI search capabilities
-* Add ability to merge base layers with the `merge` command
+* Add ability to merge base layers with the `concat` command
 
 ## Enhancement
 
