@@ -30,6 +30,8 @@ services:
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT}"]
   change-request-api:
     image: terminusdb/terminusdb-change-request-api:v0.0.1
+    ports:
+      - 3035:3035
     environment:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
 
