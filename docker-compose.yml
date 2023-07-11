@@ -38,6 +38,7 @@ services:
       - USER_KEY=${TERMINUSDB_USER_KEY}
       - USER_NAME=${TERMINUSDB_USER_NAME}
       - OPENAI_SERVER_URL=http://vectorlink:8080
+      - CR_TEAM_NAME=terminusCR
 
       # There are multiple ways to configure TerminusDB security through
       # environment variables. Several reasonable options are included below.
