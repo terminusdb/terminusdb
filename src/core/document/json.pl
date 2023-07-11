@@ -65,7 +65,8 @@
               schema_document_exists/2,
               document_exists/2,
               compress_schema_uri/4,
-              compress_dict_uri/4
+              compress_dict_uri/4,
+              pairs_satisfying_diamond_property/4
           ]).
 
 :- use_module(instance).

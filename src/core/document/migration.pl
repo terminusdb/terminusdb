@@ -651,13 +651,9 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
 
 /* change_parents(Class, [Parent1,...ParentN], [property_default(Property1, Default1)])
  */
-change_parents(Class, ParentList, PropertyDefaults, Frames, Before, After) :-
+change_parents(Class, Parent_List, _Property_Defaults, Before, After) :-
     atom_string(Class_Key, Class),
     get_dict(Class_Key, Before, Before_Class_Document),
-    (   get_dict('@inherits', Before_Class_Document, Before_Parent_List)
-    ->  true
-    ;   Before_Parent_List = []
-    ),
     put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
     frame_supermap(After, Supermap),
@@ -705,17 +701,17 @@ class_properties_valid(Class_Key, Supermap, After) :-
             ;   member(Parent, Parents),
                 atom_string(Current_Class, Parent)
             ),
-            get_dict(Current_Key, After, Class_Document),
+            get_dict(Current_Class, After, Class_Document),
             get_dict(Property, Class_Document, Range),
             \+ has_at(Property)
         ),
         Pairs
     ),
-    pairs_satisfying_diamond_property(Pairs, Class, Supermap, Collapsed_Pairs),
+    pairs_satisfying_diamond_property(Pairs, Class_Key, Supermap, Collapsed_Pairs),
     get_dict(Class_Key, After, Class_Document),
     check_class_document_pairs(Class_Document, Collapsed_Pairs).
 
-check_class_document_Pairs(Class_Document, Pairs) :-
+check_class_document_pairs(Class_Document, Pairs) :-
     get_dict('@id', Class_Document, Class),
     forall(
         (   get_dict(Property, Class_Document, Range),
