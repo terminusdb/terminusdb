@@ -1256,7 +1256,7 @@ oneof_descriptor(Validation_Object, Type, Descriptor) :-
 
 refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
-        (   class_property_dictionary(Validation_Object, Prefixes, Class, _),
+        (   class_property_dictionary(Validation_Object, Prefixes, Class, _Frame),
             fail
         ),
         error(violation_of_diamond_property(Class,Predicate),_),

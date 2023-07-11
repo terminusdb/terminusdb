@@ -3144,7 +3144,22 @@ class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
         Pairs),
-    dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Frame).
+    dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Frame),
+    frame_matches_class_dictionary(Transaction,Prefixes,Frame,Class).
+
+frame_matches_class_dictionary(DB,Prefixes,Frame,Class) :-
+    database_schema(DB,Schema),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    id_schema_json(Schema, Prefixes, Class_Ex, Class_Document),
+    forall(
+        (   get_dict(Property, Class_Document, Type),
+            \+ has_at(Property)
+        ),
+        do_or_die(
+            get_dict(Property, Frame, Type),
+            error(violation_of_diamond_property(Class,Property),_)
+        )
+    ).
 
 dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Dictionary) :-
     supermap(Transaction, Supermap,[compress_ids(true)]),
@@ -14476,24 +14491,36 @@ diamond_schema('
 
 
 { "@type" : "Class",
-  "@id" : "Super",
-  "dateTime" : "xsd:dateTime" }
+  "@id" : "Super1",
+  "dateTime" : { "@type" : "Optional", "@class" : "xsd:dateTime"}
+}
+
+{ "@type" : "Class",
+  "@id" : "Super2",
+  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime" }
+}
 
 { "@type" : "Class",
   "@id" : "Sub",
-  "@inherits" : ["Super"],
-  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime"}
+  "@inherits" : ["Super2"],
+  "dateTime" : "xsd:dateTime"
 }
 
 { "@type" : "Class",
-  "@id" : "Duper",
-  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime"}
+  "@id" : "Collide",
+  "@inherits" : ["Super1", "Super2"],
 }
 
 { "@type" : "Class",
-  "@id" : "Bub",
-  "@inherits" : ["Super", "Duper"],
-  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime"}
+  "@id" : "SubStrong",
+  "@inherits" : ["Super1", "Super2"],
+  "dateTime" : "xsd:dateTime"
+}
+
+{ "@type" : "Class",
+  "@id" : "SubSame",
+  "@inherits" : ["Super1", "Super2"],
+  "dateTime" : {"@type" : "Optional", "@class" : "xsd:dateTime"}
 }
 
 ').
@@ -14507,16 +14534,162 @@ test(diamond_calculated,
 
     write_schema(diamond_schema,Desc),
     class_frame(Desc, 'Sub', Sub, [compress_ids(true)]),
-
-    Sub = json{ '@inherits':['Super'],
+    Sub = json{ '@inherits':['Super2'],
                 '@type':'Class',
                 dateTime:'xsd:dateTime'
               },
-    class_frame(Desc, 'Bub', Bub, [compress_ids(true)]),
 
-    Bub = json{ '@inherits':['Duper','Super'],
-                '@type':'Class',
-                dateTime:'xsd:dateTime'
+    class_frame(Desc, 'SubStrong', SubStrong, [compress_ids(true)]),
+    SubStrong = json{ '@inherits':['Super1','Super2'],
+                      '@type':'Class',
+                      dateTime:'xsd:dateTime'
+                    },
+
+    class_frame(Desc, 'SubSame', SubSame, [compress_ids(true)]),
+    SubSame = json{ '@inherits':['Super1','Super2'],
+                    '@type':'Class',
+                    dateTime: _{ '@type': 'Optional', '@class' : 'xsd:dateTime' }
               }.
+
+diamond_schema_fails1('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+
+{ "@type" : "Class",
+  "@id" : "Super1",
+  "dateTime" : "xsd:dateTime"
+}
+
+{ "@type" : "Class",
+  "@id" : "Super2",
+  "dateTime" : { "@type" : "Set", "@class" : "xsd:dateTime" }
+}
+
+{ "@type" : "Class",
+  "@id" : "Collide",
+  "@inherits" : ["Super1", "Super2"],
+  "dateTime" : {"@type" : "Optional", "@class" : "xsd:dateTime"}
+}
+').
+
+test(too_weak,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure([witness{'@type':violation_of_diamond_property,
+                                        class:'terminusdb:///schema#Collide',
+                                        predicate:dateTime}])
+      )
+     ]) :-
+
+    write_schema(diamond_schema_fails1,Desc).
+
+
+diamond_schema_fails2('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+
+{ "@type" : "Class",
+  "@id" : "Super1",
+  "dateTime" : "xsd:dateTime"
+}
+
+{ "@type" : "Class",
+  "@id" : "Super2",
+  "dateTime" : "xsd:string"
+}
+
+{ "@type" : "Class",
+  "@id" : "Collide",
+  "@inherits" : ["Super1", "Super2"]
+}
+').
+
+test(incompatible,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure([witness{'@type':violation_of_diamond_property,
+                                        class:'terminusdb:///schema#Collide',
+                                        predicate:dateTime}])
+      )
+     ]) :-
+
+    write_schema(diamond_schema_fails2,Desc).
+
+diamond_schema_fails3('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Super",
+  "dateTime" : "xsd:dateTime"
+}
+
+{ "@type" : "Class",
+  "@id" : "Bad",
+  "@inherits" : "Super",
+  "dateTime" : "xsd:string"
+}
+
+').
+
+test(incompatible,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure([witness{'@type':violation_of_diamond_property,
+                                        class:'terminusdb:///schema#Bad',
+                                        predicate:dateTime}])
+      )
+     ]) :-
+
+    write_schema(diamond_schema_fails3,Desc).
+
+
+diamond_schema_fails4('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Super",
+  "dateTime" : "xsd:dateTime"
+}
+
+{ "@type" : "Class",
+  "@id" : "Bad",
+  "@inherits" : "Super",
+  "dateTime" : { "@type" : "Optional", "@class" : "xsd:dateTime" }
+}
+
+').
+
+test(class_weakens,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(
+          schema_check_failure([witness{'@type':violation_of_diamond_property,
+                                        class:'terminusdb:///schema#Bad',
+                                        predicate:dateTime}])
+      )
+     ]) :-
+
+    write_schema(diamond_schema_fails4,Desc).
+
+
 
 :- end_tests(diamond_property).
