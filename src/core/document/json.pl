@@ -3144,22 +3144,25 @@ class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp)
         ),
         Pairs),
-    sort(Pairs, Sorted_Pairs),
-    dictionary_satisfying_diamond_property(Transaction,Class,Sorted_Pairs,Frame).
+    dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Frame).
 
 dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Dictionary) :-
     supermap(Transaction, Supermap,[compress_ids(true)]),
     pairs_satisfying_diamond_property(Pairs,Class,Supermap,Results),
     dict_create(Dictionary,json,Results).
 
-pairs_satisfying_diamond_property([],_,_,[]).
-pairs_satisfying_diamond_property([Predicate-Type],_,_,[Predicate-Type]).
-pairs_satisfying_diamond_property([Predicate-T1,Predicate-T2|Rest],Class,Supermap,Result) :-
+pairs_satisfying_diamond_property(Pairs,Class,Supermap,Result) :-
+    sort(Pairs, Sorted_Pairs),
+    pairs_satisfying_diamond_property_(Sorted_Pairs,Class,Supermap,Result).
+
+pairs_satisfying_diamond_property_([],_,_,[]).
+pairs_satisfying_diamond_property_([Predicate-Type],_,_,[Predicate-Type]).
+pairs_satisfying_diamond_property_([Predicate-T1,Predicate-T2|Rest],Class,Supermap,Result) :-
     !,
     range_is_subsumed(Class,Supermap,T1,T2,Predicate,Type),
-    pairs_satisfying_diamond_property([Predicate-Type|Rest],Class,Supermap,Result).
-pairs_satisfying_diamond_property([P1-T1,P2-T2|Rest],Class,Supermap,[P1-T1|Result]) :-
-    pairs_satisfying_diamond_property([P2-T2|Rest],Class,Supermap,Result).
+    pairs_satisfying_diamond_property_([Predicate-Type|Rest],Class,Supermap,Result).
+pairs_satisfying_diamond_property_([P1-T1,P2-T2|Rest],Class,Supermap,[P1-T1|Result]) :-
+    pairs_satisfying_diamond_property_([P2-T2|Rest],Class,Supermap,Result).
 
 range_is_subsumed(Class,Supermap,T1,T2,Predicate,Type) :-
     do_or_die(
