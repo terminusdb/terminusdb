@@ -17,6 +17,9 @@ services:
       # OR PUT AN AUTHENTICATION GATEWAY IN FRONT OF TERMINUSDB
       - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
       - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
+# For the use of a local dashboard
+#    volumes:
+#      - ./dashboard:/app/terminusdb/dashboard
   vectorlink:
     image: terminusdb/vectorlink:v0.0.5-1
     environment:
