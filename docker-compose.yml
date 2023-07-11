@@ -34,6 +34,10 @@ services:
       - 3035:3035
     environment:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
+      - USE_CHANGE_REQUEST=true
+      - USER_KEY=${TERMINUSDB_USER_KEY}
+      - USER_NAME=${TERMINUSDB_USER_NAME}
+      - OPENAI_SERVER_URL=http://vectorlink:8080
 
       # There are multiple ways to configure TerminusDB security through
       # environment variables. Several reasonable options are included below.
