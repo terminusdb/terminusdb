@@ -53,7 +53,6 @@ Default_Or_Error := error
 Op := delete_class(Name)
     | replace_context(Context)
     | create_class(ClassDocument)
-    | move_class(Old_Name,New_Name)
     | expand_enum(Class,Values)
     | replace_class_metadata(Class,Metadata)
     | replace_class_documentation(Class,Documentation)
@@ -63,6 +62,8 @@ Op := delete_class(Name)
     | move_class_property(Class, Old_Property, New_Property)
     | upcast_class_property(Class, Property, New_Type)
     | cast_class_property(Class, Property, New_Type, Default_Or_Error)
+%----- Not yet implemented
+    | move_class(Old_Name,New_Name)
     | change_key(Class, KeyType, [Property1, ..., PropertyN])
     | change_parents(Class,
            [Parent1,...ParentN],
