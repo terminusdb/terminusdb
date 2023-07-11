@@ -2,12 +2,14 @@
               perform_instance_migration/5,
               perform_instance_migration_on_transaction/4,
               infer_weakening_migration/3,
-              infer_arbitrary_migration/3
+              infer_arbitrary_migration/3,
+              type_weaken/3
           ]).
 
 :- use_module(instance).
 :- use_module(schema).
 :- use_module(json).
+:- use_module(core(triple/base_type)).
 
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
@@ -213,35 +215,45 @@ move_class_property(Class, Old_Property, New_Property, Before, After) :-
     put_dict(New_Property_Key, Class_Document0, Type_Definition, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After).
 
-family_weaken("List","List").
-family_weaken("Set","Set").
-family_weaken("Optional", "Optional").
-family_weaken("Cardinality", "Set").
-family_weaken("Optional", "Set").
+family_weaken('List','List').
+family_weaken('Set','Set').
+family_weaken('Optional', 'Optional').
+family_weaken('Cardinality', 'Set').
+family_weaken('Optional', 'Set').
 
-class_weaken(Class, Class) :-
+class_weaken(Class, Class, _Supermap) :-
     !.
-class_weaken(ClassA, ClassB) :-
+class_weaken(ClassA, ClassB, _Supermap) :-
+    base_type(ClassA),
+    !,
+    base_type(ClassB),
     basetype_subsumption_of(ClassA, ClassB).
+class_weaken(ClassA, ClassB, Supermap) :-
+    atom_string(ClassA_Atom,ClassA),
+    atom_string(ClassB_Atom,ClassB),
+    get_dict(ClassA_Atom, Supermap, Supers),
+    memberchk(ClassB_Atom, Supers).
 
-type_weaken(Type1, Type2) :-
+type_weaken(Type1, Type2, SuperMap) :-
     is_dict(Type1),
     is_dict(Type2),
     !,
-    get_dict('@type', Type1, Family1),
-    get_dict('@type', Type2, Family2),
+    get_dict('@type', Type1, FamilyString1),
+    get_dict('@type', Type2, FamilyString2),
+    atom_string(Family1,FamilyString1),
+    atom_string(Family2,FamilyString2),
     (   family_weaken(Family1, Family2)
     ->  true
-    ;   Family1 = "Cardinality",
-        Family2 = "Cardinality"
+    ;   Family1 = 'Cardinality',
+        Family2 = 'Cardinality'
     ->  get_dict('@min_cardinality', Type1, Min1),
         get_dict('@max_cardinality', Type1, Max1),
         get_dict('@min_cardinality', Type2, Min2),
         get_dict('@max_cardinality', Type2, Max2),
         Min2 =< Min1,
         Max2 >= Max1
-    ;   Family1 = "Array",
-        Family2 = "Array"
+    ;   Family1 = 'Array',
+        Family2 = 'Array'
     ->  get_dict('@dimensions', Type1, Dim1),
         get_dict('@dimensions', Type2, Dim2),
         Dim1 = Dim2
@@ -250,8 +262,8 @@ type_weaken(Type1, Type2) :-
     get_dict('@class', Type2, Class2Text),
     atom_string(Class1, Class1Text),
     atom_string(Class2, Class2Text),
-    class_weaken(Class1, Class2).
-type_weaken(Type1Text, Type2) :-
+    class_weaken(Class1, Class2, SuperMap).
+type_weaken(Type1Text, Type2, SuperMap) :-
     is_dict(Type2),
     text(Type1Text),
     !,
@@ -259,23 +271,33 @@ type_weaken(Type1Text, Type2) :-
     type_is_optional(Type2),
     get_dict('@class', Type2, Class2Text),
     atom_string(Class2, Class2Text),
-    class_weaken(Type1, Class2).
-type_weaken(Type1, Type2) :-
+    class_weaken(Type1, Class2, SuperMap).
+type_weaken(Type1Text, Type2Text, Supermap) :-
+    text(Type1Text),
+    text(Type2Text),
+    !,
+    atom_string(Type1, Type1Text),
+    atom_string(Type2, Type2Text),
+    supermap_class_subsumes(Supermap, Type1, Type2).
+type_weaken(Type1, Type2, _) :-
     is_dict(Type1),
     text(Type2),
     !,
     fail.
-type_weaken(Type1Text, Type2Text) :-
-    atom_string(Type, Type1Text),
-    atom_string(Type, Type2Text).
+
+supermap_class_subsumes(_, Type,Type) :-
+    !.
+supermap_class_subsumes(Supermap, Type1, Type2) :-
+    get_dict(Type1, Supermap, Supers),
+    memberchk(Type2, Supers).
 
 type_is_optional(Type) :-
     is_dict(Type),
     get_dict('@type', Type, FamilyElt),
-    atom_string(FamilyElt, Family),
-    (   memberchk(Family, ["Set", "Optional"])
+    atom_string(Family, FamilyElt),
+    (   memberchk(Family, ['Set', 'Optional'])
     ->  true
-    ;   Family = "Cardinality"
+    ;   Family = 'Cardinality'
     ->  get_dict('@min_cardinality', Type, Min),
         get_dict('@max_cardinality', Type, Max),
         Min =< 1,
@@ -295,13 +317,13 @@ one_of_subsumed(OriginalOneOf, WeakeningOneOf) :-
 
 class_property_weakened(+,+,+,-) is semidet  + error
 */
-class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 memberchk(Property,['@type','@key','@subdocument','@inherits','@id','@unfoldable']),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
-class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
+class_property_weakened('@oneOf', Original, Weakening, Class, _SuperMap, _Operation) =>
     get_dict('@oneOf', Original, OriginalOneOf),
     get_dict('@oneOf', Weakening, WeakeningOneOf),
     do_or_die(
@@ -313,22 +335,22 @@ class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
                                      new: WeakeningOneOf}), _)
     ),
     fail.
-class_property_weakened('@metadata', Original, Weakening, Class, Operation) =>
+class_property_weakened('@metadata', Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@metadata',Original, Old_Metadata),
     get_dict('@metadata',Weakening, New_Metadata),
     \+ Old_Metadata = New_Metadata,
     Operation = replace_class_metadata(Class,New_Metadata).
-class_property_weakened('@documentation', Original, Weakening, Class, Operation) =>
+class_property_weakened('@documentation', Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@documentation',Original, Old_Docs),
     get_dict('@documentation',Weakening, New_Docs),
     \+ Old_Docs = New_Docs,
     Operation = replace_class_documentation(Class,New_Docs).
-class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
-class_property_weakened('@value', Original, Weakening, Class, Operation),
+class_property_weakened('@value', Original, Weakening, Class, _SuperMap, Operation),
 get_dict('@value',Weakening,New_Value),
 get_dict('@value',Original,Old_Value) =>
     list_to_ord_set(New_Value,New_Set),
@@ -342,10 +364,10 @@ get_dict('@value',Original,Old_Value) =>
                                            old: Old_Set,
                                            new: New_Set}), _))
     ).
-class_property_weakened(Property, Original, Weakening, Class, Operation),
+class_property_weakened(Property, Original, Weakening, Class, SuperMap, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
-    do_or_die(type_weaken(Original_Type, Weakening_Type),
+    do_or_die(type_weaken(Original_Type, Weakening_Type, SuperMap),
               error(weakening_failure(json{ reason: class_property_change_not_a_weakening,
                                             message: "The class property was changed to a type which was not weaker",
                                             class: Class,
@@ -353,7 +375,7 @@ get_dict(Property, Weakening, Weakening_Type) =>
                                             original: Original,
                                             candidate: Weakening}),_)),
     Operation = upcast_class_property(Class,Property,Weakening_Type).
-class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
+class_property_weakened(Property, Value, Weakening, Class, _SuperMap, _Operation) =>
     throw(error(weakening_failure(json{ reason: class_definition_not_a_weakening,
                                         message: "The class definition was not a weakening of the original",
                                         class: Class,
@@ -361,7 +383,7 @@ class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
                                         value: Value,
                                         candidate: Weakening}),_)).
 
-class_property_optional('@oneOf',Weakening,Class,_) :-
+class_property_optional('@oneOf', Weakening, Class, _) :-
     throw(error(weakening_failure(json{ reason: class_property_addition_not_optional,
                                         message: "@oneOf can not include optionals",
                                         class: Class,
@@ -378,7 +400,7 @@ class_property_optional(Property,Weakening,Class,Operation) :-
                                       candidate: Weakening}),_)),
     Operation = create_class_property(Class,Property,Type).
 
-class_weakened(Class, Definition, Weakening, Operations) :-
+class_weakened(Class, Definition, Weakening, Supermap, Operations) :-
     dict_keys(Weakening, New),
     dict_keys(Definition, Old),
     ord_subtract(Old,New,Dropped),
@@ -402,10 +424,32 @@ class_weakened(Class, Definition, Weakening, Operations) :-
     ord_intersection(New,Old,Shared),
     findall(Operation1,
             (   member(Property,Shared),
-                class_property_weakened(Property,Definition,Weakening,Class,Operation1)
+                class_property_weakened(Property,Definition,Weakening,Class,Supermap,Operation1)
             ),
             Operations1),
     append(Operations0,Operations1,Operations).
+
+immediate_class_supers(Class, Schema, Immediate) :-
+    get_dict(Class, Schema, Record),
+    (   get_dict('@inherits', Record, Immediate)
+    ->  true
+    ;   Immediate = []
+    ).
+
+class_supers(Class, Schema, Supers) :-
+    immediate_class_supers(Class, Schema, Immediate),
+    maplist({Schema}/[I,Sups]>>class_supers(I,Schema,Sups), Immediate, Transitive),
+    append(Transitive, Upper),
+    append(Immediate, Upper, Supers).
+
+frame_supermap(Schema,Supermap) :-
+    dict_keys(Schema, Classes),
+    findall(
+        Class-Supers,
+        (   member(Class, Classes),
+            class_supers(Class, Schema, Supers)),
+        Class_Supers),
+    dict_create(Supermap, supermap, Class_Supers).
 
 schema_weakening(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
@@ -428,6 +472,10 @@ schema_weakening(Schema,Weakened,Operations) :-
             Added,
             Operations0),
     ord_intersection(Old,New,Shared),
+    (   Shared \= []
+    ->  frame_supermap(Schema,Supermap)
+    ;   Supermap = supermap{}
+    ),
     findall(Intermediate_Operations,
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
@@ -438,19 +486,19 @@ schema_weakening(Schema,Weakened,Operations) :-
                     ;   throw(error(
                                   weakening_failure(json{ reason: not_a_weakening_context_changed,
                                                           message: "The change of context may cause changes of instance data"}), _)))
-                ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                ;   class_weakened(Key,Old_Class,New_Class,Supermap,Intermediate_Operations)
                 )
             ),
             Operations_List),
     append(Operations_List, Operations1),
     append(Operations0,Operations1,Operations).
 
-class_strengthened('@context',Old_Class,New_Class,Operations) :-
+class_strengthened('@context',Old_Class,New_Class,_Supermap,Operations) :-
     !,
     \+ Old_Class = New_Class,
     Operations = [replace_context(New_Class)].
-class_strengthened(Key,Old_Class,New_Class,Operations) :-
-    class_weakened(Key,Old_Class,New_Class,Operations).
+class_strengthened(Key,Old_Class,New_Class,Supermap,Operations) :-
+    class_weakened(Key,Old_Class,New_Class,Supermap,Operations).
 
 schema_strengthening(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
@@ -469,12 +517,16 @@ schema_strengthening(Schema,Weakened,Operations) :-
             Added,
             Operations1),
     ord_intersection(Old,New,Shared),
+    (   Shared \= []
+    ->  frame_supermap(Schema,Supermap)
+    ;   Supermap = supermap{}
+    ),
     % We can do more here! Dropped properties should be accepted
     findall(Intermediate_Operations,
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
                 get_dict(Key,Weakened,New_Class),
-                class_strengthened(Key,Old_Class,New_Class,Intermediate_Operations)
+                class_strengthened(Key,Old_Class,New_Class,Supermap,Intermediate_Operations)
             ),
             Operations_List),
     append(Operations_List, Operations2),
@@ -573,8 +625,9 @@ upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
 
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, Type_Definition),
+    frame_supermap(Before, Supermap),
     do_or_die(
-        type_weaken(Type_Definition, New_Type),
+        type_weaken(Type_Definition, New_Type, Supermap),
         error(not_an_irrefutable_weakening_operation(
                   upcast_class_property,
                   Class,
@@ -1146,8 +1199,9 @@ test(property_weakening, []) :-
            d,
            json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
            json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
-           'D', _Weakened).
-
+           'D',
+           json{'D' : []},
+           _Weakened).
 
 test(weaken_enum_failure, [
          error(weakening_failure(json{class:'Team',message:"An enum was changed to include a set of values which is not a superset",new:['Amazing Marketing','Information Technology'],old:['IT','Marketing'],reason:class_enum_value_change_not_a_weakening}), _)
@@ -2156,7 +2210,27 @@ test(weaken_oneof, [
      ]) :-
     Before = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, void:'sys:Unit', yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
     After = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
-    class_weakened('Definition', Before, After, _5762).
+    class_weakened('Definition', Before, After, supermap{}, _5762).
+
+test(weaken_subsumed_range, []) :-
+    Before = json{'@id':'A', '@type':'Class', b : 'B1'},
+    After = json{'@id':'A', '@type':'Class', b : 'B2'},
+    class_weakened('A', Before, After, supermap{'B1' : ['B2']}, Result),
+    Result = [ upcast_class_property('A',b,'B2')].
+
+test(double_type_weaken, []) :-
+    type_weaken('B1', json{'@type':'Optional', '@class':'B2'}, supermap{'B1':['B2']}).
+
+test(weaken_subsumed_and_optional_range, []) :-
+    Before = json{'@id':'A', '@type':'Class', b : 'B1'},
+    After = json{'@id':'A', '@type':'Class', b : json{'@type' : 'Optional', '@class' : 'B2'}},
+    class_weakened('A', Before, After, supermap{'B1' : ['B2']}, Result),
+    Result = [ upcast_class_property('A',
+									 b,
+									 json{ '@class':'B2',
+										   '@type':'Optional'
+										 })
+			 ].
 
 
 test(same_metadata,

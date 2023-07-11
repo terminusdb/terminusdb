@@ -38,7 +38,8 @@
               is_unfoldable/2,
               schema_is_subdocument/2,
               schema_class_predicate_conjunctive_type/4,
-              class_super/3
+              class_super/3,
+              supermap/3
           ]).
 
 /*
@@ -199,11 +200,34 @@ class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
     schema_class_super(Schema,Class,Super).
 
+:- table schema_class_super/2 as private.
 schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Super).
 schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Intermediate),
     schema_class_super(Schema,Intermediate,Super).
+
+schema_all_class_supers(Schema,Class,Prefixes,Supers,Options) :-
+    findall(
+        S,
+        (   schema_class_super(Schema, Class, Super),
+            compress_schema_uri(Super,Prefixes,S,Options)),
+        Supers
+    ).
+
+supermap(Transaction, Supermap, Options) :-
+    database_schema(Transaction, Schema),
+    database_prefixes(Transaction, Prefixes),
+    schema_supermap(Schema, Prefixes, Supermap, Options).
+
+:- table schema_supermap/4 as private.
+schema_supermap(Schema, Prefixes, Supermap, Options) :-
+    findall(C-Supers,
+            (   is_schema_simple_class(Schema,Class),
+                compress_schema_uri(Class,Prefixes,C,Options),
+                schema_all_class_supers(Schema,Class,Prefixes,Supers,Options)),
+            Pairs),
+    dict_create(Supermap, supermap, Pairs).
 
 class_predicate_conjunctive_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
@@ -1232,7 +1256,7 @@ oneof_descriptor(Validation_Object, Type, Descriptor) :-
 
 refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
-        (   class_property_dictionary(Validation_Object, Prefixes, Class, _),
+        (   class_property_dictionary(Validation_Object, Prefixes, Class, _Frame),
             fail
         ),
         error(violation_of_diamond_property(Class,Predicate),_),
