@@ -29,7 +29,7 @@ services:
       - ./vector_storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT}"]
   change-request-api:
-    image: terminusdb/terminusdb/terminusdb-change-request-api:v0.0.1
+    image: terminusdb/terminusdb-change-request-api:v0.0.1
     environment:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
 
