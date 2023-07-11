@@ -340,7 +340,7 @@ class_property_weakened('@metadata', Original, Weakening, Class, _SuperMap, Oper
     get_dict('@metadata',Weakening, New_Metadata),
     \+ Old_Metadata = New_Metadata,
     Operation = replace_class_metadata(Class,New_Metadata).
-class_property_weakened('@documentation', _Original, Weakening, Class, _SuperMap, Operation) =>
+class_property_weakened('@documentation', Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@documentation',Original, Old_Docs),
     get_dict('@documentation',Weakening, New_Docs),
     \+ Old_Docs = New_Docs,
