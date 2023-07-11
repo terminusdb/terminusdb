@@ -13,6 +13,25 @@ services:
       - 6363:6363
     environment:
       - TERMINUSDB_SERVER_PORT=6363
+      # DISABLE THESE ENV VARIABLES WHEN RUNNING TERMINUSDB IN PRODUCTION
+      # OR PUT AN AUTHENTICATION GATEWAY IN FRONT OF TERMINUSDB
+      - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
+      - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
+  vectorlink:
+    image: terminusdb/vectorlink:v0.0.5-1
+    environment:
+      - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363
+      - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
+      # Add your OpenAI key in a .env file
+      - OPENAI_KEY=${OPENAI_KEY}
+      - BUFFER_AMOUNT=1200000
+    volumes:
+      - ./vector_storage:/app/storage
+    command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT}"]
+  change-request-api:
+    image: terminusdb/terminusdb/terminusdb-change-request-api:v0.0.1
+    environment:
+      - SERVER_ENDPOINT=http://terminusdb-server:6363
 
       # There are multiple ways to configure TerminusDB security through
       # environment variables. Several reasonable options are included below.
