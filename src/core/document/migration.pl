@@ -649,6 +649,84 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After).
 
+/* change_parents(Class, [Parent1,...ParentN], [property_default(Property1, Default1)])
+ */
+change_parents(Class, ParentList, PropertyDefaults, Frames, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Before_Class_Document),
+    (   get_dict('@inherits', Before_Class_Document, Before_Parent_List)
+    ->  true
+    ;   Before_Parent_List = []
+    ),
+    put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    frame_supermap(After, Supermap),
+    invert_supermap(Supermap, Childmap),
+    class_children_valid(Class_Key, Supermap, Childmap, After).
+
+invert_supermap(Supermap, Childmap) :-
+    findall(
+        Parent-Child,
+        (   get_dict(Child, Supermap, Parents),
+            member(Parent, Parents)
+        ),
+        Pairs
+    ),
+    sort(Pairs, Sorted_Pairs),
+    create_childmap(Sorted_Pairs, Childmap).
+
+create_childmap(Pairs, Childmap) :-
+    maplist([Key-Value,Key-[Value]]>>true, Pairs, List_Pairs),
+    create_child_lists(List_Pairs, Lists),
+    dict_create(Childmap, children, Lists).
+
+create_child_lists([], []).
+create_child_lists([Key-Value], [Key-Value]).
+create_child_lists([Key-Value1, Key-Value2|Rest], Result) :-
+    !,
+    append(Value1,Value2,Value),
+    create_child_lists([Key-Value|Rest], Result).
+create_child_lists([Key-Value|Rest], [Key-Value|Result]) :-
+    create_child_lists(Rest, Result).
+
+class_children_valid(Class_Key, Supermap, Childmap, After) :-
+    class_properties_valid(Class_Key, Supermap, After),
+    get_dict(Class_Key, Childmap, Children),
+    maplist({Supermap, Childmap, After}/[Child]>>(
+                atom_string(Child_Key, Child),
+                class_children_valid(Child_Key, Supermap, Childmap, After)
+            ), Children).
+
+class_properties_valid(Class_Key, Supermap, After) :-
+    get_dict(Class_Key, Supermap, Parents),
+    findall(
+        Property-Range,
+        (   (   Current_Class = Class_Key
+            ;   member(Parent, Parents),
+                atom_string(Current_Class, Parent)
+            ),
+            get_dict(Current_Key, After, Class_Document),
+            get_dict(Property, Class_Document, Range),
+            \+ has_at(Property)
+        ),
+        Pairs
+    ),
+    pairs_satisfying_diamond_property(Pairs, Class, Supermap, Collapsed_Pairs),
+    get_dict(Class_Key, After, Class_Document),
+    check_class_document_pairs(Class_Document, Collapsed_Pairs).
+
+check_class_document_Pairs(Class_Document, Pairs) :-
+    get_dict('@id', Class_Document, Class),
+    forall(
+        (   get_dict(Property, Class_Document, Range),
+            \+ has_at(Property)
+        ),
+        do_or_die(
+            member(Property-Range, Pairs),
+            error(violation_of_diamond_property(Class, Property), _)
+        )
+    ).
+
 /***********************************
  *                                 *
  *  The schema update interpreter  *

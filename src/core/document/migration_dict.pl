@@ -84,6 +84,11 @@ migration_dict_to_ast(json{ '@type' : "ChangeKey",
                       change_key(Class, KeyType, Fields)).
 migration_dict_to_ast(json{ '@type' : "ChangeParents",
                             class: Class,
+                            parents: Parents},
+                      change_parents(Class, Parents, [])) :-
+    !.
+migration_dict_to_ast(json{ '@type' : "ChangeParents",
+                            class: Class,
                             parents: Parents,
                             properties: Defaults},
                       change_parents(Class, Parents, Property_Defaults)) :-
