@@ -64,14 +64,14 @@ Op := delete_class(Name)
     | move_class_property(Class, Old_Property, New_Property)
     | upcast_class_property(Class, Property, New_Type)
     | cast_class_property(Class, Property, New_Type, Default_Or_Error)
-%----- Not yet implemented
-    | move_class(Old_Name,New_Name)
-    | change_key(Class, KeyType, [Property1, ..., PropertyN])
     | change_parents(Class,
            [Parent1,...ParentN],
            [property_default(Property1,Default1),
             ...,
             property_default(PropertyN,DefaultN)])
+%----- Not yet implemented
+    | move_class(Old_Name,New_Name)
+    | change_key(Class, KeyType, [Property1, ..., PropertyN])
 
 */
 
@@ -681,8 +681,66 @@ change_parents(Class, Parent_List, Property_Defaults, Before, After) :-
     get_dict(Class_Key, Before, Before_Class_Document),
     put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
-    class_children_valid_properties(Class_Key, After, Properties),
-    check_property_defaults(Property_Defaults, Properties).
+    check_children_property_defaults(Before, After, Class_Key, Property_Defaults).
+
+check_children_property_defaults(Before, After, Class_Key, Property_Defaults) :-
+    frame_supermap(After, After_Supermap),
+    frame_supermap(Before, Before_Supermap),
+    invert_supermap(After_Supermap, Childmap),
+    check_children_property_defaults(Before, After, Class_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults).
+
+check_children_property_defaults(Before, After, Class_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults) :-
+    class_properties_valid_properties(Class_Key, After_Supermap, After, After_Properties),
+    class_properties_valid_properties(Class_Key, Before_Supermap, Before, Before_Properties),
+    findall(
+        Property-Type,
+        (   get_dict(Property, After_Properties, Type),
+            \+ get_dict(Property, Before_Properties, _)
+        ),
+        Added
+    ),
+    forall(
+        member(Property-Type, Added),
+        (   type_is_optional(Type)
+        ;   is_dict(Type),
+            get_dict('@type', Type, "List")
+        ->  true
+        ;   atom_string(Property, Property_String),
+            do_or_die(
+                member(property_default(Property_String, _), Property_Defaults),
+                error(required_property_has_no_default(Class_Key,Property_String), _)
+            )
+        )
+    ),
+    forall(
+        (   get_dict(Property, After_Properties, Type2),
+            get_dict(Property, Before_Properties, Type1)
+        ),
+        (   do_or_die(
+                Type1 = Type2,
+                error(property_type_changed_due_to_parent_change(Class_Key, Property, Type1, Type2), _)
+            )
+        )
+    ),
+    forall(
+        member(property_default(Property_String, _), Property_Defaults),
+        (   atom_string(Property, Property_String),
+            print_term(Added, []),
+            do_or_die(
+                memberchk(Property-_, Added),
+                error(unused_property_default(Class_Key, Property), _)
+            )
+        )
+    ),
+    (   get_dict(Class_Key, Childmap, Child_Classes)
+    ->  forall(
+            member(Child, Child_Classes),
+            (   atom_string(Child_Key, Child),
+                check_children_property_defaults(Before, After, Child_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults)
+            )
+        )
+    ;   true
+    ).
 
 check_property_defaults([], _Properties).
 check_property_defaults([property_default(Property, _Default)|Rest], Properties) :-
@@ -2546,6 +2604,70 @@ test(change_a_parent_with_optional,
 					 c:"bar"
 				   }
 			 ].
+
+test(change_a_parent_with_unused_default,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(unused_property_default('C',d), _)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'C/1', c : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'C/2', c : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("C", ["F"], [property_default("d", "foo")])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []).
+
+test(change_a_parent_with_default_for_existing_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(unused_property_default('C',c), _)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'C/1', c : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'C/2', c : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("C", ["F"], [property_default("c", "baz")])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []).
 
 test(move_class_property,
      [setup((setup_temp_store(State),
