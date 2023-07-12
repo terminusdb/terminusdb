@@ -2091,7 +2091,7 @@ get_document_uri_by_type(DB, Type, Uri) :-
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
     prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
 
-    is_instance2(DB, Uri, Type_Ex).
+    is_instance_class(DB, Uri, Type_Ex).
 
 get_document_by_type(Query_Context, Type, Document) :-
     is_query_context(Query_Context),
@@ -2110,7 +2110,7 @@ get_document_by_type(DB, Type, Document) :-
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
     prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
 
-    is_instance2(DB, Document_Uri, Type_Ex),
+    is_instance_class(DB, Document_Uri, Type_Ex),
 
     get_document(DB, Document_Uri, Document).
 

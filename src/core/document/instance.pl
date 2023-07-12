@@ -4,7 +4,7 @@
               refute_existing_object_keys/3,
               refute_referential_integrity/2,
               is_instance/3,
-              is_instance2/3,
+              is_instance_class/3,
               instance_of/3
           ]).
 
@@ -64,11 +64,6 @@ is_instance(_, Literal, _) :-
     ;   Literal = _@_),
     !,
     fail.
-is_instance(Validation_Object, X, C) :-
-    database_instance(Validation_Object, Instance),
-    xrdf(Instance, X, rdf:type, Class),
-    is_simple_class(Validation_Object, Class),
-    class_subsumed(Validation_Object, Class, C).
 % NOTE: Need a clause here for enumerated types!
 is_instance(Validation_Object, X, C) :-
     ground(C),
@@ -79,12 +74,23 @@ is_instance(Validation_Object, X, C) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, C, sys:value, Cons),
     graph_member_list(Schema, X, Cons).
+is_instance(Validation_Object, X, C) :-
+    is_instance_class(Validation_Object, X, C).
 
-is_instance2(Validation_Object, X, C) :-
+is_instance_class(Validation_Object, X, C) :-
+    nonvar(X),
+    ground(C),
+    !,
+    database_instance(Validation_Object, Instance),
+    is_simple_class(Validation_Object, C),
+    class_subsumed(Validation_Object, Class, C),
+    xrdf(Instance, X, rdf:type, Class).
+is_instance_class(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X, rdf:type, Class),
     is_simple_class(Validation_Object, Class),
     class_subsumed(Validation_Object, Class,C).
+
 
 instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),

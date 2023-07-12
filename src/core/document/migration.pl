@@ -187,7 +187,6 @@ delete_class_property(Class, Property, Before, After) :-
     del_dict(Property_Key, Class_Document, _, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
-
 /* create_class_property(Class,Property,Type) */
 create_class_property(Class, Property, Type, Before, After) :-
     atom_string(Class_Key, Class),
@@ -195,7 +194,8 @@ create_class_property(Class, Property, Type, Before, After) :-
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
     put_dict(Property_Key, Class_Document, Type, Final_Document),
-    put_dict(Class_Key, Before, Final_Document, After).
+    put_dict(Class_Key, Before, Final_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* create_class_property(Class,Property,Type,Default) */
 create_class_property(Class, Property, Type, _Default, Before, After) :-
@@ -204,7 +204,8 @@ create_class_property(Class, Property, Type, _Default, Before, After) :-
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
     put_dict(Property_Key, Class_Document, Type, Final_Document),
-    put_dict(Class_Key, Before, Final_Document, After).
+    put_dict(Class_Key, Before, Final_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* move_class_property(Class, Old_Property, New_Property) */
 move_class_property(Class, Old_Property, New_Property, Before, After) :-
@@ -214,7 +215,28 @@ move_class_property(Class, Old_Property, New_Property, Before, After) :-
     get_dict(Class_Key, Before, Before_Class_Document),
     del_dict(Old_Property_Key, Before_Class_Document, Type_Definition, Class_Document0),
     put_dict(New_Property_Key, Class_Document0, Type_Definition, After_Class_Document),
-    put_dict(Class_Key, Before, After_Class_Document, After).
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    class_children_valid_properties(Class_Key, After),
+    ensure_properties_not_defined_elsewhere(Class_Key, Old_Property_Key, After).
+
+ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, After) :-
+    frame_supermap(After, Supermap),
+    invert_supermap(Supermap, Childmap),
+    ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, Supermap, Childmap, After).
+
+ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, Supermap, Childmap, After) :-
+    class_properties_valid_properties(Class_Key, Supermap, After, Properties),
+    die_if(
+        get_dict(Old_Property,Properties, _),
+        error(immovable_property(Old_Property, Class_Key), _)
+    ),
+    (   get_dict(Class_Key, Childmap, Children)
+    ->  maplist({Old_Property, Supermap, Childmap, After}/[Child]>>(
+                    atom_string(Child_Key, Child),
+                    ensure_properties_not_defined_elsewhere(Child_Key, Old_Property, Supermap, Childmap, After)
+                ), Children)
+    ;   true
+    ).
 
 family_weaken('List','List').
 family_weaken('Set','Set').
@@ -432,8 +454,8 @@ class_weakened(Class, Definition, Weakening, Supermap, Operations) :-
 
 immediate_class_supers(Class, Schema, Immediate) :-
     get_dict(Class, Schema, Record),
-    (   get_dict('@inherits', Record, Immediate)
-    ->  true
+    (   get_dict('@inherits', Record, Immediate_Parents)
+    ->  maplist(atom_string, Immediate, Immediate_Parents)
     ;   Immediate = []
     ).
 
@@ -446,9 +468,10 @@ class_supers(Class, Schema, Supers) :-
 frame_supermap(Schema,Supermap) :-
     dict_keys(Schema, Classes),
     findall(
-        Class-Supers,
+        Class_Key-Supers,
         (   member(Class, Classes),
-            class_supers(Class, Schema, Supers)),
+            atom_string(Class_Key, Class),
+            class_supers(Class_Key, Schema, Supers)),
         Class_Supers),
     dict_create(Supermap, supermap, Class_Supers).
 
@@ -637,7 +660,8 @@ upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
               _)
     ),
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
-    put_dict(Class_Key, Before, After_Class_Document, After).
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* cast_class_property(Class, Property, New_Type, Default_Or_Error) */
 cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After) :-
@@ -647,7 +671,8 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, _Type_Definition),
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
-    put_dict(Class_Key, Before, After_Class_Document, After).
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* change_parents(Class, [Parent1,...ParentN], [property_default(Property1, Default1)])
  */
@@ -656,9 +681,7 @@ change_parents(Class, Parent_List, Property_Defaults, Before, After) :-
     get_dict(Class_Key, Before, Before_Class_Document),
     put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
-    frame_supermap(After, Supermap),
-    invert_supermap(Supermap, Childmap),
-    class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties),
+    class_children_valid_properties(Class_Key, After, Properties),
     check_property_defaults(Property_Defaults, Properties).
 
 check_property_defaults([], _Properties).
@@ -693,13 +716,23 @@ create_child_lists([Key-Value1, Key-Value2|Rest], Result) :-
 create_child_lists([Key-Value|Rest], [Key-Value|Result]) :-
     create_child_lists(Rest, Result).
 
+class_children_valid_properties(Class_Key, After) :-
+    class_children_valid_properties(Class_Key, After, _).
+
+class_children_valid_properties(Class_Key, After, Properties) :-
+    frame_supermap(After, Supermap),
+    invert_supermap(Supermap, Childmap),
+    class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties).
+
 class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties) :-
     class_properties_valid_properties(Class_Key, Supermap, After, Properties),
-    get_dict(Class_Key, Childmap, Children),
-    maplist({Supermap, Childmap, After}/[Child]>>(
-                atom_string(Child_Key, Child),
-                class_children_valid_properties(Child_Key, Supermap, Childmap, After, _)
-            ), Children).
+    (   get_dict(Class_Key, Childmap, Children)
+    ->  maplist({Supermap, Childmap, After}/[Child]>>(
+                    atom_string(Child_Key, Child),
+                    class_children_valid_properties(Child_Key, Supermap, Childmap, After, _)
+                ), Children)
+    ;   true
+    ).
 
 class_properties_valid_properties(Class_Key, Supermap, After, Valid) :-
     get_dict(Class_Key, Supermap, Parents),
@@ -853,69 +886,8 @@ delete_value(_, Before, Value) =>
     database_prefixes(Before, Prefixes),
     delete_subdocument(Before, Prefixes, Value).
 
-interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
-    count_solutions(
-        (   get_document_uri_by_type(Before, Class, Uri),
-            delete_document(After, Uri)
-        ),
-        Count
-    ).
-interpret_instance_operation_(create_class(_), _Before, _After, 0).
-interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
-interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
-interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
-    (   database_context_object(Before,Old_Context)
-    ->  count_solutions(
-            (   ask(Before,
-                    (   t(S, P, O),
-                        delete(S, P, O)),
-                    [compress_prefixes(false)]),
-                rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO),
-                ask(After,
-                    insert(NS,NP,NO))),
-            Count
-        )
-    ;   Count = 0
-    ).
-interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
-interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
-    database_prefixes(Before, Prefixes),
-    prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
-    count_solutions(
-        (   ask(Before,
-                t(Uri, rdf:type, Old_Class_Ex)),
-            once(
-                (   get_document(Before, Uri, Document),
-                    delete_document(Before, Uri),
-                    rewrite_document_ids(Document, Old_Class, New_Class, Final_Document),
-                    insert_document(After, Final_Document, New_Uri),
-                    forall(
-                        ask(After,
-                            (   t(X, P, Uri),
-                                delete(X, P, Uri),
-                                insert(X, P, New_Uri))),
-                        true)
-                )
-            )
-        ),
-        Count
-    ).
-interpret_instance_operation_(delete_class_property(Class, Property), Before, _After, Count) :-
-    % Todo: Tagged Union
-    database_prefixes(Before, Prefixes),
-    prefix_expand_schema(Class, Prefixes, Class_Ex),
-    prefix_expand_schema(Property, Prefixes, P),
-    once(class_predicate_type(Before,Class_Ex, P, Type)),
-    count_solutions(
-        (   ask(Before,
-                (   isa(X, Class_Ex),
-                    t(X, P, Value),
-                    delete(X, P, Value))),
-            delete_value(Type,Before,Value)
-        ),
-        Count
-    ).
-interpret_instance_operation_(create_class_property(Class, Property, Type, Default), _Before, After, Count) :-
+
+create_class_property_default_operation(Class, Property, Type, Default, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
     ->  database_prefixes(After, Prefixes),
@@ -992,7 +964,8 @@ interpret_instance_operation_(create_class_property(Class, Property, Type, Defau
             error(
                 not_irrefutable_property_creation(Class,Property,Type)))
     ).
-interpret_instance_operation_(create_class_property(Class, Property, Type), _Before, After, Count) :-
+
+create_class_property_operation(Class, Property, Type, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
     ->  count_solutions(
@@ -1008,6 +981,96 @@ interpret_instance_operation_(create_class_property(Class, Property, Type), _Bef
             error(
                 unknown_irrefutable_property_creation(Class,Property,Type)))
     ).
+
+delete_class_property_operation(Before, Class, Property, Type, Count) :-
+    count_solutions(
+        (   ask(Before,
+                (   isa(X, Class),
+                    t(X, Property, Value),
+                    delete(X, Property, Value))),
+            delete_value(Type,Before,Value)
+        ),
+        Count
+    ).
+
+class_properties_deleted_and_added(Before, After, C, Deleted, Added) :-
+    class_frame(Before, C, Before_Frame),
+    class_frame(After, C, After_Frame),
+    findall(
+        Prop-Type,
+        (   get_dict(Prop, Before_Frame, Type),
+            \+ has_at(Prop),
+            \+ get_dict(Prop, After_Frame, _)
+        ),
+        Deleted
+    ),
+    findall(
+        Prop-Type,
+        (   get_dict(Prop, After_Frame, Type),
+            \+ has_at(Prop),
+            \+ get_dict(Prop, Before_Frame, _)
+        ),
+        Added
+    ).
+
+interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
+    count_solutions(
+        (   get_document_uri_by_type(Before, Class, Uri),
+            delete_document(After, Uri)
+        ),
+        Count
+    ).
+interpret_instance_operation_(create_class(_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
+    (   database_context_object(Before,Old_Context)
+    ->  count_solutions(
+            (   ask(Before,
+                    (   t(S, P, O),
+                        delete(S, P, O)),
+                    [compress_prefixes(false)]),
+                rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO),
+                ask(After,
+                    insert(NS,NP,NO))),
+            Count
+        )
+    ;   Count = 0
+    ).
+interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
+interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
+    count_solutions(
+        (   ask(Before,
+                t(Uri, rdf:type, Old_Class_Ex)),
+            once(
+                (   get_document(Before, Uri, Document),
+                    delete_document(Before, Uri),
+                    rewrite_document_ids(Document, Old_Class, New_Class, Final_Document),
+                    insert_document(After, Final_Document, New_Uri),
+                    forall(
+                        ask(After,
+                            (   t(X, P, Uri),
+                                delete(X, P, Uri),
+                                insert(X, P, New_Uri))),
+                        true)
+                )
+            )
+        ),
+        Count
+    ).
+interpret_instance_operation_(delete_class_property(Class, Property), Before, _After, Count) :-
+    % Todo: Tagged Union
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    prefix_expand_schema(Property, Prefixes, P),
+    once(class_predicate_type(Before,Class_Ex, P, Type)),
+    delete_class_property_operation(Before, Class_Ex, P, Type, Count).
+interpret_instance_operation_(create_class_property(Class, Property, Type, Default), _Before, After, Count) :-
+    create_class_property_default_operation(Class, Property, Type, Default, After, Count).
+interpret_instance_operation_(create_class_property(Class, Property, Type), _Before, After, Count) :-
+    create_class_property_operation(Class, Property, Type, After, Count).
 interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Candidate), _Before, After, Count) :-
     % Backward compatible fix for bug https://github.com/terminusdb/terminusdb/issues/1853
     (   is_dict(New_Type_Candidate),
@@ -1066,9 +1129,40 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
         operation_string(cast_class_property(Class, Property, New_Type, Default_or_Error), Op_String),
         throw(error(not_implemented(Op_String), _))
     ).
-interpret_instance_operation_(change_parents(Class,Parents,Property_Defaults), _Before, _After,_Count) :-
-    operation_string(change_parents(Class,Parents,Property_Defaults), Op_String),
-    throw(error(not_implemented(Op_String), _)).
+interpret_instance_operation_(move_class_property(Class,Old_Property,New_Property), _Before, After, Count) :-
+    count_solutions(
+        ask(After,
+            (   isa(X, Class),
+                t(X, Old_Property, Y),
+                delete(X, Old_Property, Y),
+                insert(X, New_Property, Y))),
+        Count
+    ).
+interpret_instance_operation_(change_parents(Class,_,Property_Defaults), Before, After, Count) :-
+    findall(C,
+            class_subsumed(Before, C, Class),
+            Before_Classes),
+    findall(C,
+            class_subsumed(After, C, Class),
+            After_Classes),
+    append(Before_Classes, After_Classes, Changed_Classes_Unsorted),
+    sort(Changed_Classes_Unsorted, Changed_Classes),
+    findall(
+        Count,
+        (   member(C, Changed_Classes),
+            class_properties_deleted_and_added(Before, After, C, Deleted, Added),
+            (   member(P-T, Deleted),
+                delete_class_property_operation(Before, C, P, T, Count)
+            ;   member(P-T, Added),
+                atom_string(P, PString),
+                (   memberchk(property_default(PString,Default), Property_Defaults)
+                ->  create_class_property_default_operation(C, P, T, Default, After, Count)         ;   create_class_property_operation(C, P, T, After, Count)
+                )
+            )
+        ),
+        Counts
+    ),
+    sumlist(Counts, Count).
 
 interpret_instance_operation(Op, Before, After, Count) :-
     interpret_instance_operation_(Op, Before, After, Count),
@@ -2352,5 +2446,254 @@ test(same_metadata,
         Operations
     ),
     Operations = [].
+
+test(change_a_parent,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'D/1', d : ["foo"] },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'D/2', d : ["bar"] },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("D", ["A"], [property_default("a", "Some data")])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+    Result = metadata{
+                 instance_operations:2,
+				 schema_operations:1
+			 },
+
+    findall(
+        DocD,
+        get_document_by_type(Descriptor, "D", DocD),
+        D_Docs),
+    D_Docs = [ json{ '@id':'D/1',
+					 '@type':'D',
+					 a:"Some data",
+					 d:["foo"]
+				   },
+			   json{ '@id':'D/2',
+					 '@type':'D',
+					 a:"Some data",
+					 d:["bar"]
+				   }
+			 ].
+
+test(change_a_parent_with_optional,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'C/1', c : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'C/2', c : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("C", ["F"], [])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+    Result = metadata{
+                 instance_operations:0,
+				 schema_operations:1
+			 },
+
+    findall(
+        DocC,
+        get_document_by_type(Descriptor, "C", DocC),
+        C_Docs),
+    C_Docs = [ json{ '@id':'C/1',
+					 '@type':'C',
+					 c:"foo"
+				   },
+			   json{ '@id':'C/2',
+					 '@type':'C',
+					 c:"bar"
+				   }
+			 ].
+
+test(move_class_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        move_class_property("A", "a", "b")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []).
+
+before3('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Sub",
+  "@inherits" : ["A", "B"] }
+').
+
+test(move_class_property_inheritance_conflict,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before3,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(immovable_property(a,'Sub'), _)
+     ]) :-
+
+    Term_Ops = [
+        move_class_property("B", "a", "b")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _,
+                               []).
+
+before4('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "@inherits" : "A" }
+').
+
+test(move_class_property_inheritance_no_conflict,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "A", '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@type' : "B", '@id' : 'B/2', a : "bar" },
+                            _)
+        )
+    ),
+
+
+    Term_Ops = [
+        move_class_property("A", "a", "b")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+
+    Result = metadata{ instance_operations:2,
+					   schema_operations:1
+					 },
+
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+
+    A_Docs = [ json{ '@id':'A/1',
+					 '@type':'A',
+					 b:"foo"
+				   },
+			   json{ '@id':'B/2',
+					 '@type':'B',
+					 b:"bar"
+				   }
+			 ].
+
+
+test(move_class_property_which_doesnt_exist,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_operation_failed(
+                '{"@type":"MoveClassProperty", "class":"A", "from":"b", "to":"c"}',
+                json{'@context':_{'@base':"terminusdb:///data/",'@schema':"terminusdb:///schema#",'@type':'Context'},
+                     'A':json{'@id':'A','@type':'Class',a:'xsd:string'},
+                     'B':json{'@id':'B','@inherits':'A','@type':'Class'}}), _)
+     ]) :-
+
+    Term_Ops = [
+        move_class_property("A", "b", "c")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _,
+                               []).
+
+
 
 :- end_tests(migration).
