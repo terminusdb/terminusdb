@@ -651,14 +651,22 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
 
 /* change_parents(Class, [Parent1,...ParentN], [property_default(Property1, Default1)])
  */
-change_parents(Class, Parent_List, _Property_Defaults, Before, After) :-
+change_parents(Class, Parent_List, Property_Defaults, Before, After) :-
     atom_string(Class_Key, Class),
     get_dict(Class_Key, Before, Before_Class_Document),
     put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
     frame_supermap(After, Supermap),
     invert_supermap(Supermap, Childmap),
-    class_children_valid(Class_Key, Supermap, Childmap, After).
+    class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties),
+    check_property_defaults(Property_Defaults, Properties).
+
+check_property_defaults([], _Properties).
+check_property_defaults([property_default(Property, _Default)|Rest], Properties) :-
+    atom_string(Prop_Key, Property),
+    % The actual data should probably be checked to be of the appropriate type here.
+    get_dict(Prop_Key, Properties, _),
+    check_property_defaults(Rest, Properties).
 
 invert_supermap(Supermap, Childmap) :-
     findall(
@@ -685,15 +693,15 @@ create_child_lists([Key-Value1, Key-Value2|Rest], Result) :-
 create_child_lists([Key-Value|Rest], [Key-Value|Result]) :-
     create_child_lists(Rest, Result).
 
-class_children_valid(Class_Key, Supermap, Childmap, After) :-
-    class_properties_valid(Class_Key, Supermap, After),
+class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties) :-
+    class_properties_valid_properties(Class_Key, Supermap, After, Properties),
     get_dict(Class_Key, Childmap, Children),
     maplist({Supermap, Childmap, After}/[Child]>>(
                 atom_string(Child_Key, Child),
-                class_children_valid(Child_Key, Supermap, Childmap, After)
+                class_children_valid_properties(Child_Key, Supermap, Childmap, After, _)
             ), Children).
 
-class_properties_valid(Class_Key, Supermap, After) :-
+class_properties_valid_properties(Class_Key, Supermap, After, Valid) :-
     get_dict(Class_Key, Supermap, Parents),
     findall(
         Property-Range,
@@ -709,7 +717,8 @@ class_properties_valid(Class_Key, Supermap, After) :-
     ),
     pairs_satisfying_diamond_property(Pairs, Class_Key, Supermap, Collapsed_Pairs),
     get_dict(Class_Key, After, Class_Document),
-    check_class_document_pairs(Class_Document, Collapsed_Pairs).
+    check_class_document_pairs(Class_Document, Collapsed_Pairs),
+    dict_create(Valid, frame, Collapsed_Pairs).
 
 check_class_document_pairs(Class_Document, Pairs) :-
     get_dict('@id', Class_Document, Class),
