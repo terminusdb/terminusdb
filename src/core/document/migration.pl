@@ -16,6 +16,7 @@
 :- use_module(library(uri)).
 :- use_module(library(when)).
 :- use_module(library(option)).
+:- use_module(library(list)).
 
 % performance
 :- use_module(library(apply)).
@@ -725,7 +726,6 @@ check_children_property_defaults(Before, After, Class_Key, Before_Supermap, Afte
     forall(
         member(property_default(Property_String, _), Property_Defaults),
         (   atom_string(Property, Property_String),
-            print_term(Added, []),
             do_or_die(
                 memberchk(Property-_, Added),
                 error(unused_property_default(Class_Key, Property), _)
