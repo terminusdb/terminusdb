@@ -2,7 +2,7 @@ version: "3"
 
 services:
   terminusdb-server:
-    image: terminusdb/terminusdb-server:latest
+    image: terminusdb/terminusdb-server:add_vectorlink
     container_name: terminusdb-server
     hostname: terminusdb-server
     tty: true
