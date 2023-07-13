@@ -16,7 +16,7 @@
 :- use_module(library(uri)).
 :- use_module(library(when)).
 :- use_module(library(option)).
-:- use_module(library(list)).
+:- use_module(library(lists)).
 
 % performance
 :- use_module(library(apply)).
