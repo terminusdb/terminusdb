@@ -734,6 +734,28 @@ query EverythingQuery {
         ])
     })
 
+    it('graphql no subsumption', async function () {
+      const members = [{ name: 'Joe', number: 3 },
+        { name: 'Jim', number: 5 },
+        { '@type': 'Parent', name: 'Dad' }]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(include_children: false, orderBy: {name : ASC}){
+        _type
+        name
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            _type: 'Parent',
+            name: 'Dad',
+          },
+        ])
+    })
+
     it('graphql meta-tags', async function () {
       const testObj = {
         '@id': 'Test',
