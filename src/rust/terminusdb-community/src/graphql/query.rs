@@ -799,11 +799,16 @@ fn generate_initial_iterator<'a>(
     all_frames: &AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<ClonableIterator<'a, u64>>,
+    includes_children: bool,
 ) -> (Option<FilterObject>, ClonableIterator<'a, u64>) {
     match zero_iter {
         None => {
             // If we have a filter here, we probably need to use it.
-            let subsuming = all_frames.subsumed(class_name);
+            let subsuming = if includes_children {
+                all_frames.subsumed(class_name)
+            } else {
+                vec![class_name.to_string()]
+            };
             let mut iter = ClonableIterator::new(std::iter::empty());
             for super_class in subsuming {
                 let super_class = all_frames.fully_qualified_class_name(&super_class);
@@ -823,9 +828,16 @@ fn lookup_by_filter<'a, C: QueryableContextType>(
     all_frames: &AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<ClonableIterator<'a, u64>>,
+    includes_children: bool,
 ) -> ClonableIterator<'a, u64> {
-    let (continuation_filter_opt, iterator) =
-        generate_initial_iterator(g, class_name, all_frames, filter_opt, zero_iter);
+    let (continuation_filter_opt, iterator) = generate_initial_iterator(
+        g,
+        class_name,
+        all_frames,
+        filter_opt,
+        zero_iter,
+        includes_children,
+    );
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
         compile_query(context, g, continuation_filter, iterator)
@@ -905,12 +917,20 @@ pub fn run_filter_query<'a, C: QueryableContextType>(
     let filter_arg_opt: Option<FilterInputObject> = arguments.get("filter");
     let filter = filter_arg_opt
         .map(|filter_input| compile_filter_object(class_name, all_frames, &filter_input));
+    let includes_children = include_children(arguments);
     let it: ClonableIterator<'a, u64> =
         if let Some(TerminusOrderBy { fields }) = arguments.get::<TerminusOrderBy>("orderBy") {
-            let mut results: Vec<u64> =
-                lookup_by_filter(context, g, class_name, all_frames, filter, new_zero_iter)
-                    .unique()
-                    .collect();
+            let mut results: Vec<u64> = lookup_by_filter(
+                context,
+                g,
+                class_name,
+                all_frames,
+                filter,
+                new_zero_iter,
+                includes_children,
+            )
+            .unique()
+            .collect();
             results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
             // better to borrow in the other branch?
@@ -921,8 +941,16 @@ pub fn run_filter_query<'a, C: QueryableContextType>(
             )
         } else {
             ClonableIterator::new(
-                lookup_by_filter(context, g, class_name, all_frames, filter, new_zero_iter)
-                    .skip(usize::try_from(offset).unwrap_or(0)),
+                lookup_by_filter(
+                    context,
+                    g,
+                    class_name,
+                    all_frames,
+                    filter,
+                    new_zero_iter,
+                    includes_children,
+                )
+                .skip(usize::try_from(offset).unwrap_or(0)),
             )
         };
 
@@ -931,6 +959,10 @@ pub fn run_filter_query<'a, C: QueryableContextType>(
     } else {
         it.collect()
     }
+}
+
+fn include_children(arguments: &juniper::Arguments) -> bool {
+    arguments.get("include_children").unwrap_or(true)
 }
 
 fn create_query_order_key(
