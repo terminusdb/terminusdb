@@ -1291,7 +1291,7 @@ interpret_instance_operation_(change_parents(Class,_,Property_Defaults), Before,
         ),
         Counts
     ),
-    sumlist(Counts, Count).
+    sum_list(Counts, Count).
 
 interpret_instance_operation(Op, Before, After, Count) :-
     interpret_instance_operation_(Op, Before, After, Count),
