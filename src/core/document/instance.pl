@@ -456,9 +456,11 @@ refute_existing_object_keys(Validation_Object,Class,Witness) :-
     'document/json':get_document(Validation_Object, Subject_String, Document),
     catch(
         'document/json':json_elaborate(Validation_Object, Document, _),
-        error(unable_to_assign_ids),
+        error(submitted_id_does_not_match_generated_id(Submitted,Generated),_),
         Witness = json{ '@type' : key_change_invalid,
-                        subject: Subject_String }
+                        id: Submitted,
+                        generated_id: Generated
+                      }
     ),
     (   var(Witness)
     ->  fail

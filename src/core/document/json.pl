@@ -8605,7 +8605,10 @@ test(incompatible_key_change,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([json{'@type':lexical_key_changed,predicate:'http://somewhere.for.now/schema#f2',subject:'http://somewhere.for.now/document/Thing/foo'}]))
+         error(schema_check_failure(
+                   [json{'@type':key_change_invalid,
+                         generated_id:'http://somewhere.for.now/document/Thing/bar',
+                         id:'http://somewhere.for.now/document/Thing/foo'}]),_)
      ]) :-
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
@@ -8646,8 +8649,7 @@ test(compatible_key_change_same_value,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(schema_check_failure([json{'@type':lexical_key_changed,predicate:'http://somewhere.for.now/schema#f2',subject:'http://somewhere.for.now/document/Thing/foo'}]))
+         )
      ]) :-
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
