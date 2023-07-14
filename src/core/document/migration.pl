@@ -70,8 +70,8 @@ Op := delete_class(Name)
            [property_default(Property1,Default1),
             ...,
             property_default(PropertyN,DefaultN)])
-%----- Not yet implemented
     | move_class(Old_Name,New_Name)
+%----- Not yet implemented
     | change_key(Class, KeyType, [Property1, ..., PropertyN])
 
 */
@@ -148,6 +148,24 @@ move_class(Before_Class, After_Class, Before, After) :-
         ),
         Pairs),
     dict_create(After, json, Pairs).
+
+change_key(Class, Key_Type, Properties, Before, After) :-
+    atom_string(Class_Key, Class),
+    atom_string(Key_Type_Key, Key_Type),
+    do_or_die(
+        get_dict(Class_Key, Before, Before_Class_Document),
+        error(class_does_not_exist(Class), _)
+    ),
+    (   memberchk(Key_Type_Key, ['Random', 'ValueHash'])
+    ->  put_dict('@key', Before_Class_Document,
+                 _{ '@type' : Key_Type }, After_Class_Document)
+    ;   memberchk(Key_Type_Key, ['Lexical', 'Hash'])
+    ->  put_dict('@key', Before_Class_Document,
+                 _{ '@type' : Key_Type,
+                    '@fields' : Properties }, After_Class_Document)
+    ;   throw(error(bad_key_type(Key_Type), _))
+    ),
+    put_dict(Class_Key, Before, After_Class_Document, After).
 
 expand_enum(Class, Values, Before, After) :-
     atom_string(Class_Key, Class),
@@ -937,6 +955,29 @@ rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO) :-
     rewrite_uri(Old_Context,New_Context,P,NP),
     rewrite_uri(Old_Context,New_Context,O,NO).
 
+delete_document_ids_key_value('@id',_,_,_) =>
+    fail.
+delete_document_ids_key_value(P,V,Key,Value) =>
+    P = Key,
+    rewrite_document_ids(V,Value).
+
+delete_document_ids(Document, New_Document),
+is_dict(Document) =>
+    findall(
+        Key-Value,
+        (   get_dict(K, Document, V),
+            delete_document_ids_key_value(K,V,Key,Value)
+        ),
+        Pairs
+    ),
+    dict_create(New_Document, json, Pairs).
+delete_document_ids(Document, New_Document),
+is_list(Document) =>
+    maplist([D0,D1]>>delete_document_ids(D0,D1),
+            Document, New_Document).
+rewrite_document_ids(Value, New_Value) =>
+    Value = New_Value.
+
 delete_value(base_class(_),_,_) => true.
 delete_value(unit,_,_) => true.
 delete_value(enum(_,_),_,_) => true.
@@ -1118,6 +1159,37 @@ interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, C
         ),
         Count
     ).
+interpret_instance_operation_(change_key(Class, _Type, _Properties), Before, After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    findall(
+        New_Uri,
+        (   ask(Before,
+                t(Uri, rdf:type, Class_Ex)),
+            once(
+                (   get_document(Before, Uri, Document),
+                    delete_document(Before, Uri),
+                    delete_document_ids(Document, Final_Document),
+                    insert_document(After, Final_Document, New_Uri),
+                    forall(
+                        ask(After,
+                            (   t(X, P, Uri),
+                                delete(X, P, Uri),
+                                insert(X, P, New_Uri))),
+                        true)
+                )
+            )
+        ),
+        Uris
+    ),
+
+    (   has_duplicates(Uris, Duplicates)
+    ->  throw(error(id_overlap_after_key_change(Duplicates)))
+    ;   true
+    ),
+
+    length(Uris, Count).
+
 interpret_instance_operation_(delete_class_property(Class, Property), Before, _After, Count) :-
     % Todo: Tagged Union
     database_prefixes(Before, Prefixes),
@@ -2816,6 +2888,52 @@ test(move_class_property_which_doesnt_exist,
                                _,
                                []).
 
+test(change_key,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
 
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "A", '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@type' : "B", '@id' : 'B/2', a : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_key("B", "Lexical", ["a"])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:1,schema_operations:1},
+
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+
+    A_Docs = [ json{ '@id':'A/1',
+					 '@type':'A',
+					 a:"foo"
+				   },
+			   json{ '@id':'B/bar',
+					 '@type':'B',
+					 a:"bar"
+				   }
+			 ].
 
 :- end_tests(migration).
