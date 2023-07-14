@@ -71,7 +71,6 @@ Op := delete_class(Name)
             ...,
             property_default(PropertyN,DefaultN)])
     | move_class(Old_Name,New_Name)
-%----- Not yet implemented
     | change_key(Class, KeyType, [Property1, ..., PropertyN])
 
 */
