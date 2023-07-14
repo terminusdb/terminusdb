@@ -127,6 +127,7 @@ fn add_arguments<'r>(
 ) -> Field<'r, DefaultScalarValue> {
     field = field.argument(registry.arg::<Option<ID>>("id", &()));
     field = field.argument(registry.arg::<Option<Vec<ID>>>("ids", &()));
+    field = field.argument(registry.arg::<Option<bool>>("include_children", &()));
     field = field.argument(
         registry
             .arg::<Option<i32>>("offset", &())
