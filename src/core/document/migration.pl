@@ -1285,7 +1285,8 @@ interpret_instance_operation_(change_parents(Class,_,Property_Defaults), Before,
             ;   member(P-T, Added),
                 atom_string(P, PString),
                 (   memberchk(property_default(PString,Default), Property_Defaults)
-                ->  create_class_property_default_operation(C, P, T, Default, After, Count)         ;   create_class_property_operation(C, P, T, After, Count)
+                ->  create_class_property_default_operation(C, P, T, Default, After, Count)
+                ;   create_class_property_operation(C, P, T, After, Count)
                 )
             )
         ),
