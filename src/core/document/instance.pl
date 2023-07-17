@@ -4,7 +4,7 @@
               refute_existing_object_keys/3,
               refute_referential_integrity/2,
               is_instance/3,
-              is_instance2/3,
+              is_instance_class/3,
               instance_of/3
           ]).
 
@@ -64,11 +64,6 @@ is_instance(_, Literal, _) :-
     ;   Literal = _@_),
     !,
     fail.
-is_instance(Validation_Object, X, C) :-
-    database_instance(Validation_Object, Instance),
-    xrdf(Instance, X, rdf:type, Class),
-    is_simple_class(Validation_Object, Class),
-    class_subsumed(Validation_Object, Class, C).
 % NOTE: Need a clause here for enumerated types!
 is_instance(Validation_Object, X, C) :-
     ground(C),
@@ -79,12 +74,23 @@ is_instance(Validation_Object, X, C) :-
     database_schema(Validation_Object, Schema),
     xrdf(Schema, C, sys:value, Cons),
     graph_member_list(Schema, X, Cons).
+is_instance(Validation_Object, X, C) :-
+    is_instance_class(Validation_Object, X, C).
 
-is_instance2(Validation_Object, X, C) :-
+is_instance_class(Validation_Object, X, C) :-
+    nonvar(X),
+    ground(C),
+    !,
+    database_instance(Validation_Object, Instance),
+    is_simple_class(Validation_Object, C),
+    class_subsumed(Validation_Object, Class, C),
+    xrdf(Instance, X, rdf:type, Class).
+is_instance_class(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
     xrdf(Instance, X, rdf:type, Class),
     is_simple_class(Validation_Object, Class),
     class_subsumed(Validation_Object, Class,C).
+
 
 instance_of(Validation_Object, X, C) :-
     database_instance(Validation_Object, Instance),
@@ -438,18 +444,27 @@ refute_existing_object_keys(Validation_Object,Class,Witness) :-
     global_prefix_expand(rdf:type, Rdf_Type),
     terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
     terminus_store:object_id(Layer, node(Class), Class_Id),
-    distinct(S_Id-P_Id,
-             (   terminus_store:id_triple(Layer, S_Id,Rdf_Type_Id,Class_Id),
-                 terminus_store:id_triple(Layer, S_Id,P_Id,_))),
+    distinct(
+        S_Id,
+        terminus_store:id_triple(Layer, S_Id,Rdf_Type_Id,Class_Id)
+    ),
 
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject_String, S_Id),
-    atom_string(Subject, Subject_String),
-    terminus_store:predicate_id(Layer, Predicate_String, P_Id),
-    atom_string(Predicate, Predicate_String),
 
-    refute_key_(Desc,Subject,Predicate,Witness).
-
+    memberchk(Desc, [lexical(_,_), hash(_,_), value_hash]),
+    'document/json':get_document(Validation_Object, Subject_String, Document),
+    catch(
+        'document/json':json_elaborate(Validation_Object, Document, _),
+        error(submitted_id_does_not_match_generated_id(Submitted,Generated),_),
+        Witness = json{ '@type' : key_change_invalid,
+                        id: Submitted,
+                        generated_id: Generated
+                      }
+    ),
+    (   var(Witness)
+    ->  fail
+    ;   true).
 
 refute_subject_deletion(Validation_Object, S_Id, Witness) :-
     subject_deleted(Validation_Object, S_Id),
