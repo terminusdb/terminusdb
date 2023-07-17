@@ -30,7 +30,7 @@ services:
       - ./vector_storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT:-1200000}"]
   change-request-api:
-    image: terminusdb/terminusdb-change-request-api:v0.0.2
+    image: terminusdb/terminusdb-change-request-api:v0.0.3
     ports:
       - 3035:3035
     environment:
