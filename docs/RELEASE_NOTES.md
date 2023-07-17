@@ -1,4 +1,25 @@
+# TerminusDB Server v11.1.0 Release Notes
+
+## Bug fixes
+
+* Fix ordering of graphql stringy numbers
+* Adding type information to decimals
+* Adding a correct diff using out of band value
+* Prevent reserved words in GraphQL from being used
+* Fix loading of triples
+
+## New
+
+* Add support for the TerminusDB semantic indexer for AI search capabilities
+* Add ability to merge base layers with the `concat` command
+
+## Enhancement
+
+* Reduced memory usage
+* Remove Google Analytics in Dashboard
+
 # TerminusDB Server v11.0.6 Release Notes
+
 ## Bug fixes
 * Unused optional properties would cause GraphQL to fail
 * Enums were not working properly for collection types in GraphQL

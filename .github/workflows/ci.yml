@@ -7,7 +7,7 @@ on:
 
 env:
   LAST_RELEASED_VERSION: 11.0.6
-  CURRENT_REPO_VERSION: 11.0.7
+  CURRENT_REPO_VERSION: 11.1.0
 
 jobs:
   openapi_lint:

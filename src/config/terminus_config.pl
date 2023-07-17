@@ -35,8 +35,7 @@
               parallelize_enabled/0,
               grpc_label_endpoint/1,
               crypto_password_cost/1,
-              lru_cache_size/1,
-              fetch_timeout/1
+              lru_cache_size/1
           ]).
 
 :- use_module(library(pcre)).
@@ -49,7 +48,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.0.7').
+terminusdb_version('11.1.0').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -142,13 +141,6 @@ tmp_path(Value) :-
 :- table file_upload_storage_path/1 as shared.
 file_upload_storage_path(Path) :-
     getenv('TERMINUSDB_FILE_STORAGE_PATH', Path).
-
-:- table fetch_timeout/1 as shared.
-fetch_timeout(Timeout) :-
-    (   getenv('TERMINUSDB_FETCH_TIMEOUT', TimeOutEnv)
-    ->  atom_number(TimeOutEnv, Timeout)
-    ;   Timeout = inf
-    ).
 
 server(Server) :-
     server_protocol(Protocol),
