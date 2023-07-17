@@ -65,7 +65,8 @@
               schema_document_exists/2,
               document_exists/2,
               compress_schema_uri/4,
-              compress_dict_uri/4
+              compress_dict_uri/4,
+              pairs_satisfying_diamond_property/4
           ]).
 
 :- use_module(instance).
@@ -2090,7 +2091,7 @@ get_document_uri_by_type(DB, Type, Uri) :-
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
     prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
 
-    is_instance2(DB, Uri, Type_Ex).
+    is_instance_class(DB, Uri, Type_Ex).
 
 get_document_by_type(Query_Context, Type, Document) :-
     is_query_context(Query_Context),
@@ -2109,7 +2110,7 @@ get_document_by_type(DB, Type, Document) :-
     ;   atomic_list_concat(['@schema', ':', Type], Prefixed_Type)),
     prefix_expand(Prefixed_Type,Prefixes,Type_Ex),
 
-    is_instance2(DB, Document_Uri, Type_Ex),
+    is_instance_class(DB, Document_Uri, Type_Ex),
 
     get_document(DB, Document_Uri, Document).
 
@@ -8604,7 +8605,10 @@ test(incompatible_key_change,
          cleanup(
              teardown_temp_store(State)
          ),
-         error(schema_check_failure([json{'@type':lexical_key_changed,predicate:'http://somewhere.for.now/schema#f2',subject:'http://somewhere.for.now/document/Thing/foo'}]))
+         error(schema_check_failure(
+                   [json{'@type':key_change_invalid,
+                         generated_id:'http://somewhere.for.now/document/Thing/bar',
+                         id:'http://somewhere.for.now/document/Thing/foo'}]),_)
      ]) :-
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
@@ -8645,8 +8649,7 @@ test(compatible_key_change_same_value,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(schema_check_failure([json{'@type':lexical_key_changed,predicate:'http://somewhere.for.now/schema#f2',subject:'http://somewhere.for.now/document/Thing/foo'}]))
+         )
      ]) :-
 
     create_context(Desc, commit_info{author: "test", message: "test"}, Context1),
