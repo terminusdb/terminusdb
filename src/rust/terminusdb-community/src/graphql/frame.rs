@@ -747,11 +747,13 @@ impl PreAllFrames {
         let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
         for (class, typedef) in &self.frames {
             if typedef.is_document_type() {
-                let supers = typedef
+                let mut supers = typedef
                     .as_class_definition()
                     .inherits
                     .clone()
-                    .unwrap_or_else(|| vec![class.to_string()]);
+                    .unwrap_or_else(|| Vec::new());
+
+                supers.push(class.to_owned());
 
                 for superclass in supers {
                     if let Some(v) = subsumption_rel.get_mut(&superclass) {
