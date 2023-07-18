@@ -49,6 +49,7 @@ jobs:
           github.repository == 'terminusdb/terminusdb' &&
           github.event_name == 'push' && (
             github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/add_vectorlink' ||
             startsWith(github.ref, 'refs/tags/v')
           )
         }}
