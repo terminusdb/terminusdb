@@ -5,4 +5,4 @@ members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib"
 debug = 1
 
 [patch.crates-io]
-terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}
+#terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}
