@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 swipl = {version="0.3.13", features=["serde"]}
-terminus-store = {version="0.21.0", features=[]}
+terminus-store = {version="0.21.1", features=[]}
 sha-1 = "0.9.1"
 hex = "0.4.2"
 encoding_rs = "0.8.24"

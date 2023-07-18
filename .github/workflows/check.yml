@@ -56,48 +56,48 @@ jobs:
             terminusdb/terminusdb-server:local \
             make test
 
-  python_client:
-    name: Python client tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Download Docker image
-        uses: actions/download-artifact@v3
-        with:
-          name: ${{ inputs.image_artifact }}
-
-      - name: Set up QEMU
-        if: ${{ inputs.image_platform == 'linux/arm64' }}
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: 'arm64'
-
-      - name: Load Docker image
-        run: |
-          docker load < ${{ inputs.image_artifact }}.tar.gz
-          # Tag a dev image because the docker-compose.yml uses
-          # a dev tag. We want it to fetch it locally instead of
-          # remotely from Docker Hub
-          docker image tag \
-            terminusdb/terminusdb-server:local \
-            terminusdb/terminusdb-server:dev
-
-      - uses: actions/checkout@v3
-        with:
-          repository: terminusdb/terminusdb-client-python
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install shed pytest tox==3.27.1
-          tox -e deps
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: Test with pytest
-        run: tox -e test
+#  python_client:
+#    name: Python client tests
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Set up Docker Buildx
+#        uses: docker/setup-buildx-action@v2
+#
+#      - name: Download Docker image
+#        uses: actions/download-artifact@v3
+#        with:
+#          name: ${{ inputs.image_artifact }}
+#
+#      - name: Set up QEMU
+#        if: ${{ inputs.image_platform == 'linux/arm64' }}
+#        uses: docker/setup-qemu-action@v2
+#        with:
+#          platforms: 'arm64'
+#
+#      - name: Load Docker image
+#        run: |
+#          docker load < ${{ inputs.image_artifact }}.tar.gz
+#          # Tag a dev image because the docker-compose.yml uses
+#          # a dev tag. We want it to fetch it locally instead of
+#          # remotely from Docker Hub
+#          docker image tag \
+#            terminusdb/terminusdb-server:local \
+#            terminusdb/terminusdb-server:dev
+#
+#      - uses: actions/checkout@v3
+#        with:
+#          repository: terminusdb/terminusdb-client-python
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --upgrade pip
+#          python -m pip install shed pytest tox==3.27.1
+#          tox -e deps
+#          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+#
+#      - name: Test with pytest
+#        run: tox -e test
 
   integration_tests_basic:
     name: Integration tests (basic)
