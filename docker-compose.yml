@@ -21,14 +21,14 @@ services:
   vectorlink:
     image: terminusdb/vectorlink:v0.0.5-1
     environment:
-      - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363
+      - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
       - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
       # Add your OpenAI key in a .env file
       - OPENAI_KEY=${OPENAI_KEY}
-      - BUFFER_AMOUNT=1200000
+      - BUFFER_AMOUNT=120000
     volumes:
       - ./vector_storage:/app/storage
-    command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT:-1200000}"]
+    command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT:-120000}"]
   change-request-api:
     image: terminusdb/terminusdb-change-request-api:v0.0.4
     ports:
