@@ -19,3 +19,4 @@ terminusdb
 **/*.so
 **/*.dylib
 terminusdb-enterprise
+.env

@@ -3,18 +3,21 @@
               perform_instance_migration_on_transaction/4,
               infer_weakening_migration/3,
               infer_arbitrary_migration/3,
-              operations_are_weakening/1
+              operations_are_weakening/1,
+              type_weaken/3
           ]).
 
 :- use_module(instance).
 :- use_module(schema).
 :- use_module(json).
+:- use_module(core(triple/base_type)).
 
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
 :- use_module(library(uri)).
 :- use_module(library(when)).
 :- use_module(library(option)).
+:- use_module(library(lists)).
 
 % performance
 :- use_module(library(apply)).
@@ -54,7 +57,6 @@ Default_Or_Error := error
 Op := delete_class(Name)
     | replace_context(Context)
     | create_class(ClassDocument)
-    | move_class(Old_Name,New_Name)
     | expand_enum(Class,Values)
     | replace_class_metadata(Class,Metadata)
     | replace_class_documentation(Class,Documentation)
@@ -64,12 +66,13 @@ Op := delete_class(Name)
     | move_class_property(Class, Old_Property, New_Property)
     | upcast_class_property(Class, Property, New_Type)
     | cast_class_property(Class, Property, New_Type, Default_Or_Error)
-    | change_key(Class, KeyType, [Property1, ..., PropertyN])
     | change_parents(Class,
            [Parent1,...ParentN],
            [property_default(Property1,Default1),
             ...,
             property_default(PropertyN,DefaultN)])
+    | move_class(Old_Name,New_Name)
+    | change_key(Class, KeyType, [Property1, ..., PropertyN])
 
 */
 
@@ -146,6 +149,24 @@ move_class(Before_Class, After_Class, Before, After) :-
         Pairs),
     dict_create(After, json, Pairs).
 
+change_key(Class, Key_Type, Properties, Before, After) :-
+    atom_string(Class_Key, Class),
+    atom_string(Key_Type_Key, Key_Type),
+    do_or_die(
+        get_dict(Class_Key, Before, Before_Class_Document),
+        error(class_does_not_exist(Class), _)
+    ),
+    (   memberchk(Key_Type_Key, ['Random', 'ValueHash'])
+    ->  put_dict('@key', Before_Class_Document,
+                 _{ '@type' : Key_Type }, After_Class_Document)
+    ;   memberchk(Key_Type_Key, ['Lexical', 'Hash'])
+    ->  put_dict('@key', Before_Class_Document,
+                 _{ '@type' : Key_Type,
+                    '@fields' : Properties }, After_Class_Document)
+    ;   throw(error(bad_key_type(Key_Type), _))
+    ),
+    put_dict(Class_Key, Before, After_Class_Document, After).
+
 expand_enum(Class, Values, Before, After) :-
     atom_string(Class_Key, Class),
     get_dict(Class_Key, Before, Class_Document),
@@ -185,7 +206,6 @@ delete_class_property(Class, Property, Before, After) :-
     del_dict(Property_Key, Class_Document, _, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
-
 /* create_class_property(Class,Property,Type) */
 create_class_property(Class, Property, Type, Before, After) :-
     atom_string(Class_Key, Class),
@@ -193,7 +213,8 @@ create_class_property(Class, Property, Type, Before, After) :-
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
     put_dict(Property_Key, Class_Document, Type, Final_Document),
-    put_dict(Class_Key, Before, Final_Document, After).
+    put_dict(Class_Key, Before, Final_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* create_class_property(Class,Property,Type,Default) */
 create_class_property(Class, Property, Type, _Default, Before, After) :-
@@ -202,7 +223,8 @@ create_class_property(Class, Property, Type, _Default, Before, After) :-
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
     put_dict(Property_Key, Class_Document, Type, Final_Document),
-    put_dict(Class_Key, Before, Final_Document, After).
+    put_dict(Class_Key, Before, Final_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* move_class_property(Class, Old_Property, New_Property) */
 move_class_property(Class, Old_Property, New_Property, Before, After) :-
@@ -212,37 +234,68 @@ move_class_property(Class, Old_Property, New_Property, Before, After) :-
     get_dict(Class_Key, Before, Before_Class_Document),
     del_dict(Old_Property_Key, Before_Class_Document, Type_Definition, Class_Document0),
     put_dict(New_Property_Key, Class_Document0, Type_Definition, After_Class_Document),
-    put_dict(Class_Key, Before, After_Class_Document, After).
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    class_children_valid_properties(Class_Key, After),
+    ensure_properties_not_defined_elsewhere(Class_Key, Old_Property_Key, After).
 
-family_weaken("List","List").
-family_weaken("Set","Set").
-family_weaken("Optional", "Optional").
-family_weaken("Cardinality", "Set").
-family_weaken("Optional", "Set").
+ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, After) :-
+    frame_supermap(After, Supermap),
+    invert_supermap(Supermap, Childmap),
+    ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, Supermap, Childmap, After).
 
-class_weaken(Class, Class) :-
+ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, Supermap, Childmap, After) :-
+    class_properties_valid_properties(Class_Key, Supermap, After, Properties),
+    die_if(
+        get_dict(Old_Property,Properties, _),
+        error(immovable_property(Old_Property, Class_Key), _)
+    ),
+    (   get_dict(Class_Key, Childmap, Children)
+    ->  maplist({Old_Property, Supermap, Childmap, After}/[Child]>>(
+                    atom_string(Child_Key, Child),
+                    ensure_properties_not_defined_elsewhere(Child_Key, Old_Property, Supermap, Childmap, After)
+                ), Children)
+    ;   true
+    ).
+
+family_weaken('List','List').
+family_weaken('Set','Set').
+family_weaken('Optional', 'Optional').
+family_weaken('Cardinality', 'Set').
+family_weaken('Optional', 'Set').
+
+class_weaken(Class, Class, _Supermap) :-
     !.
-class_weaken(ClassA, ClassB) :-
+class_weaken(ClassA, ClassB, _Supermap) :-
+    base_type(ClassA),
+    !,
+    base_type(ClassB),
     basetype_subsumption_of(ClassA, ClassB).
+class_weaken(ClassA, ClassB, Supermap) :-
+    atom_string(ClassA_Atom,ClassA),
+    atom_string(ClassB_Atom,ClassB),
+    get_dict(ClassA_Atom, Supermap, Supers),
+    memberchk(ClassB_Atom, Supers).
 
-type_weaken(Type1, Type2) :-
+type_weaken(Type1, Type2, SuperMap) :-
     is_dict(Type1),
     is_dict(Type2),
     !,
-    get_dict('@type', Type1, Family1),
-    get_dict('@type', Type2, Family2),
+    get_dict('@type', Type1, FamilyString1),
+    get_dict('@type', Type2, FamilyString2),
+    atom_string(Family1,FamilyString1),
+    atom_string(Family2,FamilyString2),
     (   family_weaken(Family1, Family2)
     ->  true
-    ;   Family1 = "Cardinality",
-        Family2 = "Cardinality"
+    ;   Family1 = 'Cardinality',
+        Family2 = 'Cardinality'
     ->  get_dict('@min_cardinality', Type1, Min1),
         get_dict('@max_cardinality', Type1, Max1),
         get_dict('@min_cardinality', Type2, Min2),
         get_dict('@max_cardinality', Type2, Max2),
         Min2 =< Min1,
         Max2 >= Max1
-    ;   Family1 = "Array",
-        Family2 = "Array"
+    ;   Family1 = 'Array',
+        Family2 = 'Array'
     ->  get_dict('@dimensions', Type1, Dim1),
         get_dict('@dimensions', Type2, Dim2),
         Dim1 = Dim2
@@ -251,8 +304,8 @@ type_weaken(Type1, Type2) :-
     get_dict('@class', Type2, Class2Text),
     atom_string(Class1, Class1Text),
     atom_string(Class2, Class2Text),
-    class_weaken(Class1, Class2).
-type_weaken(Type1Text, Type2) :-
+    class_weaken(Class1, Class2, SuperMap).
+type_weaken(Type1Text, Type2, SuperMap) :-
     is_dict(Type2),
     text(Type1Text),
     !,
@@ -260,23 +313,33 @@ type_weaken(Type1Text, Type2) :-
     type_is_optional(Type2),
     get_dict('@class', Type2, Class2Text),
     atom_string(Class2, Class2Text),
-    class_weaken(Type1, Class2).
-type_weaken(Type1, Type2) :-
+    class_weaken(Type1, Class2, SuperMap).
+type_weaken(Type1Text, Type2Text, Supermap) :-
+    text(Type1Text),
+    text(Type2Text),
+    !,
+    atom_string(Type1, Type1Text),
+    atom_string(Type2, Type2Text),
+    supermap_class_subsumes(Supermap, Type1, Type2).
+type_weaken(Type1, Type2, _) :-
     is_dict(Type1),
     text(Type2),
     !,
     fail.
-type_weaken(Type1Text, Type2Text) :-
-    atom_string(Type, Type1Text),
-    atom_string(Type, Type2Text).
+
+supermap_class_subsumes(_, Type,Type) :-
+    !.
+supermap_class_subsumes(Supermap, Type1, Type2) :-
+    get_dict(Type1, Supermap, Supers),
+    memberchk(Type2, Supers).
 
 type_is_optional(Type) :-
     is_dict(Type),
     get_dict('@type', Type, FamilyElt),
-    atom_string(FamilyElt, Family),
-    (   memberchk(Family, ["Set", "Optional"])
+    atom_string(Family, FamilyElt),
+    (   memberchk(Family, ['Set', 'Optional'])
     ->  true
-    ;   Family = "Cardinality"
+    ;   Family = 'Cardinality'
     ->  get_dict('@min_cardinality', Type, Min),
         get_dict('@max_cardinality', Type, Max),
         Min =< 1,
@@ -296,13 +359,13 @@ one_of_subsumed(OriginalOneOf, WeakeningOneOf) :-
 
 class_property_weakened(+,+,+,-) is semidet  + error
 */
-class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 memberchk(Property,['@type','@key','@subdocument','@inherits','@id','@unfoldable']),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
-class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
+class_property_weakened('@oneOf', Original, Weakening, Class, _SuperMap, _Operation) =>
     get_dict('@oneOf', Original, OriginalOneOf),
     get_dict('@oneOf', Weakening, WeakeningOneOf),
     do_or_die(
@@ -314,22 +377,22 @@ class_property_weakened('@oneOf', Original, Weakening, Class, _Operation) =>
                                      new: WeakeningOneOf}), _)
     ),
     fail.
-class_property_weakened('@metadata', Original, Weakening, Class, Operation) =>
+class_property_weakened('@metadata', Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@metadata',Original, Old_Metadata),
     get_dict('@metadata',Weakening, New_Metadata),
     \+ Old_Metadata = New_Metadata,
     Operation = replace_class_metadata(Class,New_Metadata).
-class_property_weakened('@documentation', Original, Weakening, Class, Operation) =>
+class_property_weakened('@documentation', Original, Weakening, Class, _SuperMap, Operation) =>
     get_dict('@documentation',Original, Old_Docs),
     get_dict('@documentation',Weakening, New_Docs),
     \+ Old_Docs = New_Docs,
     Operation = replace_class_documentation(Class,New_Docs).
-class_property_weakened(Property, Original, Weakening, _Class, _Operation),
+class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
     fail.
-class_property_weakened('@value', Original, Weakening, Class, Operation),
+class_property_weakened('@value', Original, Weakening, Class, _SuperMap, Operation),
 get_dict('@value',Weakening,New_Value),
 get_dict('@value',Original,Old_Value) =>
     list_to_ord_set(New_Value,New_Set),
@@ -343,10 +406,10 @@ get_dict('@value',Original,Old_Value) =>
                                            old: Old_Set,
                                            new: New_Set}), _))
     ).
-class_property_weakened(Property, Original, Weakening, Class, Operation),
+class_property_weakened(Property, Original, Weakening, Class, SuperMap, Operation),
 get_dict(Property, Original, Original_Type),
 get_dict(Property, Weakening, Weakening_Type) =>
-    do_or_die(type_weaken(Original_Type, Weakening_Type),
+    do_or_die(type_weaken(Original_Type, Weakening_Type, SuperMap),
               error(weakening_failure(json{ reason: class_property_change_not_a_weakening,
                                             message: "The class property was changed to a type which was not weaker",
                                             class: Class,
@@ -354,7 +417,7 @@ get_dict(Property, Weakening, Weakening_Type) =>
                                             original: Original,
                                             candidate: Weakening}),_)),
     Operation = upcast_class_property(Class,Property,Weakening_Type).
-class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
+class_property_weakened(Property, Value, Weakening, Class, _SuperMap, _Operation) =>
     throw(error(weakening_failure(json{ reason: class_definition_not_a_weakening,
                                         message: "The class definition was not a weakening of the original",
                                         class: Class,
@@ -362,7 +425,7 @@ class_property_weakened(Property, Value, Weakening, Class, _Operation) =>
                                         value: Value,
                                         candidate: Weakening}),_)).
 
-class_property_optional('@oneOf',Weakening,Class,_) :-
+class_property_optional('@oneOf', Weakening, Class, _) :-
     throw(error(weakening_failure(json{ reason: class_property_addition_not_optional,
                                         message: "@oneOf can not include optionals",
                                         class: Class,
@@ -379,7 +442,7 @@ class_property_optional(Property,Weakening,Class,Operation) :-
                                       candidate: Weakening}),_)),
     Operation = create_class_property(Class,Property,Type).
 
-class_weakened(Class, Definition, Weakening, Operations) :-
+class_weakened(Class, Definition, Weakening, Supermap, Operations) :-
     dict_keys(Weakening, New),
     dict_keys(Definition, Old),
     ord_subtract(Old,New,Dropped),
@@ -403,10 +466,33 @@ class_weakened(Class, Definition, Weakening, Operations) :-
     ord_intersection(New,Old,Shared),
     findall(Operation1,
             (   member(Property,Shared),
-                class_property_weakened(Property,Definition,Weakening,Class,Operation1)
+                class_property_weakened(Property,Definition,Weakening,Class,Supermap,Operation1)
             ),
             Operations1),
     append(Operations0,Operations1,Operations).
+
+immediate_class_supers(Class, Schema, Immediate) :-
+    get_dict(Class, Schema, Record),
+    (   get_dict('@inherits', Record, Immediate_Parents)
+    ->  maplist(atom_string, Immediate, Immediate_Parents)
+    ;   Immediate = []
+    ).
+
+class_supers(Class, Schema, Supers) :-
+    immediate_class_supers(Class, Schema, Immediate),
+    maplist({Schema}/[I,Sups]>>class_supers(I,Schema,Sups), Immediate, Transitive),
+    append(Transitive, Upper),
+    append(Immediate, Upper, Supers).
+
+frame_supermap(Schema,Supermap) :-
+    dict_keys(Schema, Classes),
+    findall(
+        Class_Key-Supers,
+        (   member(Class, Classes),
+            atom_string(Class_Key, Class),
+            class_supers(Class_Key, Schema, Supers)),
+        Class_Supers),
+    dict_create(Supermap, supermap, Class_Supers).
 
 schema_weakening(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
@@ -429,6 +515,10 @@ schema_weakening(Schema,Weakened,Operations) :-
             Added,
             Operations0),
     ord_intersection(Old,New,Shared),
+    (   Shared \= []
+    ->  frame_supermap(Schema,Supermap)
+    ;   Supermap = supermap{}
+    ),
     findall(Intermediate_Operations,
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
@@ -439,19 +529,19 @@ schema_weakening(Schema,Weakened,Operations) :-
                     ;   throw(error(
                                   weakening_failure(json{ reason: not_a_weakening_context_changed,
                                                           message: "The change of context may cause changes of instance data"}), _)))
-                ;   class_weakened(Key,Old_Class,New_Class,Intermediate_Operations)
+                ;   class_weakened(Key,Old_Class,New_Class,Supermap,Intermediate_Operations)
                 )
             ),
             Operations_List),
     append(Operations_List, Operations1),
     append(Operations0,Operations1,Operations).
 
-class_strengthened('@context',Old_Class,New_Class,Operations) :-
+class_strengthened('@context',Old_Class,New_Class,_Supermap,Operations) :-
     !,
     \+ Old_Class = New_Class,
     Operations = [replace_context(New_Class)].
-class_strengthened(Key,Old_Class,New_Class,Operations) :-
-    class_weakened(Key,Old_Class,New_Class,Operations).
+class_strengthened(Key,Old_Class,New_Class,Supermap,Operations) :-
+    class_weakened(Key,Old_Class,New_Class,Supermap,Operations).
 
 schema_strengthening(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
@@ -470,12 +560,16 @@ schema_strengthening(Schema,Weakened,Operations) :-
             Added,
             Operations1),
     ord_intersection(Old,New,Shared),
+    (   Shared \= []
+    ->  frame_supermap(Schema,Supermap)
+    ;   Supermap = supermap{}
+    ),
     % We can do more here! Dropped properties should be accepted
     findall(Intermediate_Operations,
             (   member(Key, Shared),
                 get_dict(Key,Schema,Old_Class),
                 get_dict(Key,Weakened,New_Class),
-                class_strengthened(Key,Old_Class,New_Class,Intermediate_Operations)
+                class_strengthened(Key,Old_Class,New_Class,Supermap,Intermediate_Operations)
             ),
             Operations_List),
     append(Operations_List, Operations2),
@@ -574,8 +668,9 @@ upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
 
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, Type_Definition),
+    frame_supermap(Before, Supermap),
     do_or_die(
-        type_weaken(Type_Definition, New_Type),
+        type_weaken(Type_Definition, New_Type, Supermap),
         error(not_an_irrefutable_weakening_operation(
                   upcast_class_property,
                   Class,
@@ -584,7 +679,8 @@ upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
               _)
     ),
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
-    put_dict(Class_Key, Before, After_Class_Document, After).
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    class_children_valid_properties(Class_Key, After).
 
 /* cast_class_property(Class, Property, New_Type, Default_Or_Error) */
 cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After) :-
@@ -594,7 +690,156 @@ cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After)
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, _Type_Definition),
     put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
-    put_dict(Class_Key, Before, After_Class_Document, After).
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    class_children_valid_properties(Class_Key, After).
+
+/* change_parents(Class, [Parent1,...ParentN], [property_default(Property1, Default1)])
+ */
+change_parents(Class, Parent_List, Property_Defaults, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Before_Class_Document),
+    put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
+    put_dict(Class_Key, Before, After_Class_Document, After),
+    check_children_property_defaults(Before, After, Class_Key, Property_Defaults).
+
+check_children_property_defaults(Before, After, Class_Key, Property_Defaults) :-
+    frame_supermap(After, After_Supermap),
+    frame_supermap(Before, Before_Supermap),
+    invert_supermap(After_Supermap, Childmap),
+    check_children_property_defaults(Before, After, Class_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults).
+
+check_children_property_defaults(Before, After, Class_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults) :-
+    class_properties_valid_properties(Class_Key, After_Supermap, After, After_Properties),
+    class_properties_valid_properties(Class_Key, Before_Supermap, Before, Before_Properties),
+    findall(
+        Property-Type,
+        (   get_dict(Property, After_Properties, Type),
+            \+ get_dict(Property, Before_Properties, _)
+        ),
+        Added
+    ),
+    forall(
+        member(Property-Type, Added),
+        (   type_is_optional(Type)
+        ;   is_dict(Type),
+            get_dict('@type', Type, "List")
+        ->  true
+        ;   atom_string(Property, Property_String),
+            do_or_die(
+                member(property_default(Property_String, _), Property_Defaults),
+                error(required_property_has_no_default(Class_Key,Property_String), _)
+            )
+        )
+    ),
+    forall(
+        (   get_dict(Property, After_Properties, Type2),
+            get_dict(Property, Before_Properties, Type1)
+        ),
+        (   do_or_die(
+                Type1 = Type2,
+                error(property_type_changed_due_to_parent_change(Class_Key, Property, Type1, Type2), _)
+            )
+        )
+    ),
+    forall(
+        member(property_default(Property_String, _), Property_Defaults),
+        (   atom_string(Property, Property_String),
+            do_or_die(
+                memberchk(Property-_, Added),
+                error(unused_property_default(Class_Key, Property), _)
+            )
+        )
+    ),
+    (   get_dict(Class_Key, Childmap, Child_Classes)
+    ->  forall(
+            member(Child, Child_Classes),
+            (   atom_string(Child_Key, Child),
+                check_children_property_defaults(Before, After, Child_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults)
+            )
+        )
+    ;   true
+    ).
+
+check_property_defaults([], _Properties).
+check_property_defaults([property_default(Property, _Default)|Rest], Properties) :-
+    atom_string(Prop_Key, Property),
+    % The actual data should probably be checked to be of the appropriate type here.
+    get_dict(Prop_Key, Properties, _),
+    check_property_defaults(Rest, Properties).
+
+invert_supermap(Supermap, Childmap) :-
+    findall(
+        Parent-Child,
+        (   get_dict(Child, Supermap, Parents),
+            member(Parent, Parents)
+        ),
+        Pairs
+    ),
+    sort(Pairs, Sorted_Pairs),
+    create_childmap(Sorted_Pairs, Childmap).
+
+create_childmap(Pairs, Childmap) :-
+    maplist([Key-Value,Key-[Value]]>>true, Pairs, List_Pairs),
+    create_child_lists(List_Pairs, Lists),
+    dict_create(Childmap, children, Lists).
+
+create_child_lists([], []).
+create_child_lists([Key-Value], [Key-Value]).
+create_child_lists([Key-Value1, Key-Value2|Rest], Result) :-
+    !,
+    append(Value1,Value2,Value),
+    create_child_lists([Key-Value|Rest], Result).
+create_child_lists([Key-Value|Rest], [Key-Value|Result]) :-
+    create_child_lists(Rest, Result).
+
+class_children_valid_properties(Class_Key, After) :-
+    class_children_valid_properties(Class_Key, After, _).
+
+class_children_valid_properties(Class_Key, After, Properties) :-
+    frame_supermap(After, Supermap),
+    invert_supermap(Supermap, Childmap),
+    class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties).
+
+class_children_valid_properties(Class_Key, Supermap, Childmap, After, Properties) :-
+    class_properties_valid_properties(Class_Key, Supermap, After, Properties),
+    (   get_dict(Class_Key, Childmap, Children)
+    ->  maplist({Supermap, Childmap, After}/[Child]>>(
+                    atom_string(Child_Key, Child),
+                    class_children_valid_properties(Child_Key, Supermap, Childmap, After, _)
+                ), Children)
+    ;   true
+    ).
+
+class_properties_valid_properties(Class_Key, Supermap, After, Valid) :-
+    get_dict(Class_Key, Supermap, Parents),
+    findall(
+        Property-Range,
+        (   (   Current_Class = Class_Key
+            ;   member(Parent, Parents),
+                atom_string(Current_Class, Parent)
+            ),
+            get_dict(Current_Class, After, Class_Document),
+            get_dict(Property, Class_Document, Range),
+            \+ has_at(Property)
+        ),
+        Pairs
+    ),
+    pairs_satisfying_diamond_property(Pairs, Class_Key, Supermap, Collapsed_Pairs),
+    get_dict(Class_Key, After, Class_Document),
+    check_class_document_pairs(Class_Document, Collapsed_Pairs),
+    dict_create(Valid, frame, Collapsed_Pairs).
+
+check_class_document_pairs(Class_Document, Pairs) :-
+    get_dict('@id', Class_Document, Class),
+    forall(
+        (   get_dict(Property, Class_Document, Range),
+            \+ has_at(Property)
+        ),
+        do_or_die(
+            member(Property-Range, Pairs),
+            error(violation_of_diamond_property(Class, Property), _)
+        )
+    ).
 
 /***********************************
  *                                 *
@@ -710,6 +955,29 @@ rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO) :-
     rewrite_uri(Old_Context,New_Context,P,NP),
     rewrite_uri(Old_Context,New_Context,O,NO).
 
+delete_document_ids_key_value('@id',_,_,_) =>
+    fail.
+delete_document_ids_key_value(P,V,Key,Value) =>
+    P = Key,
+    rewrite_document_ids(V,Value).
+
+delete_document_ids(Document, New_Document),
+is_dict(Document) =>
+    findall(
+        Key-Value,
+        (   get_dict(K, Document, V),
+            delete_document_ids_key_value(K,V,Key,Value)
+        ),
+        Pairs
+    ),
+    dict_create(New_Document, json, Pairs).
+delete_document_ids(Document, New_Document),
+is_list(Document) =>
+    maplist([D0,D1]>>delete_document_ids(D0,D1),
+            Document, New_Document).
+rewrite_document_ids(Value, New_Value) =>
+    Value = New_Value.
+
 delete_value(base_class(_),_,_) => true.
 delete_value(unit,_,_) => true.
 delete_value(enum(_,_),_,_) => true.
@@ -717,69 +985,8 @@ delete_value(_, Before, Value) =>
     database_prefixes(Before, Prefixes),
     delete_subdocument(Before, Prefixes, Value).
 
-interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
-    count_solutions(
-        (   get_document_uri_by_type(Before, Class, Uri),
-            delete_document(After, Uri)
-        ),
-        Count
-    ).
-interpret_instance_operation_(create_class(_), _Before, _After, 0).
-interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
-interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
-interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
-    (   database_context_object(Before,Old_Context)
-    ->  count_solutions(
-            (   ask(Before,
-                    (   t(S, P, O),
-                        delete(S, P, O)),
-                    [compress_prefixes(false)]),
-                rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO),
-                ask(After,
-                    insert(NS,NP,NO))),
-            Count
-        )
-    ;   Count = 0
-    ).
-interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
-interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
-    database_prefixes(Before, Prefixes),
-    prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
-    count_solutions(
-        (   ask(Before,
-                t(Uri, rdf:type, Old_Class_Ex)),
-            once(
-                (   get_document(Before, Uri, Document),
-                    delete_document(Before, Uri),
-                    rewrite_document_ids(Document, Old_Class, New_Class, Final_Document),
-                    insert_document(After, Final_Document, New_Uri),
-                    forall(
-                        ask(After,
-                            (   t(X, P, Uri),
-                                delete(X, P, Uri),
-                                insert(X, P, New_Uri))),
-                        true)
-                )
-            )
-        ),
-        Count
-    ).
-interpret_instance_operation_(delete_class_property(Class, Property), Before, _After, Count) :-
-    % Todo: Tagged Union
-    database_prefixes(Before, Prefixes),
-    prefix_expand_schema(Class, Prefixes, Class_Ex),
-    prefix_expand_schema(Property, Prefixes, P),
-    once(class_predicate_type(Before,Class_Ex, P, Type)),
-    count_solutions(
-        (   ask(Before,
-                (   isa(X, Class_Ex),
-                    t(X, P, Value),
-                    delete(X, P, Value))),
-            delete_value(Type,Before,Value)
-        ),
-        Count
-    ).
-interpret_instance_operation_(create_class_property(Class, Property, Type, Default), _Before, After, Count) :-
+
+create_class_property_default_operation(Class, Property, Type, Default, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
     ->  database_prefixes(After, Prefixes),
@@ -856,7 +1063,8 @@ interpret_instance_operation_(create_class_property(Class, Property, Type, Defau
             error(
                 not_irrefutable_property_creation(Class,Property,Type)))
     ).
-interpret_instance_operation_(create_class_property(Class, Property, Type), _Before, After, Count) :-
+
+create_class_property_operation(Class, Property, Type, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
     ->  count_solutions(
@@ -872,6 +1080,127 @@ interpret_instance_operation_(create_class_property(Class, Property, Type), _Bef
             error(
                 unknown_irrefutable_property_creation(Class,Property,Type)))
     ).
+
+delete_class_property_operation(Before, Class, Property, Type, Count) :-
+    count_solutions(
+        (   ask(Before,
+                (   isa(X, Class),
+                    t(X, Property, Value),
+                    delete(X, Property, Value))),
+            delete_value(Type,Before,Value)
+        ),
+        Count
+    ).
+
+class_properties_deleted_and_added(Before, After, C, Deleted, Added) :-
+    class_frame(Before, C, Before_Frame),
+    class_frame(After, C, After_Frame),
+    findall(
+        Prop-Type,
+        (   get_dict(Prop, Before_Frame, Type),
+            \+ has_at(Prop),
+            \+ get_dict(Prop, After_Frame, _)
+        ),
+        Deleted
+    ),
+    findall(
+        Prop-Type,
+        (   get_dict(Prop, After_Frame, Type),
+            \+ has_at(Prop),
+            \+ get_dict(Prop, Before_Frame, _)
+        ),
+        Added
+    ).
+
+interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
+    count_solutions(
+        (   get_document_uri_by_type(Before, Class, Uri),
+            delete_document(After, Uri)
+        ),
+        Count
+    ).
+interpret_instance_operation_(create_class(_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
+    (   database_context_object(Before,Old_Context)
+    ->  count_solutions(
+            (   ask(Before,
+                    (   t(S, P, O),
+                        delete(S, P, O)),
+                    [compress_prefixes(false)]),
+                rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO),
+                ask(After,
+                    insert(NS,NP,NO))),
+            Count
+        )
+    ;   Count = 0
+    ).
+interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
+interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
+    count_solutions(
+        (   ask(Before,
+                t(Uri, rdf:type, Old_Class_Ex)),
+            once(
+                (   get_document(Before, Uri, Document),
+                    delete_document(Before, Uri),
+                    rewrite_document_ids(Document, Old_Class, New_Class, Final_Document),
+                    insert_document(After, Final_Document, New_Uri),
+                    forall(
+                        ask(After,
+                            (   t(X, P, Uri),
+                                delete(X, P, Uri),
+                                insert(X, P, New_Uri))),
+                        true)
+                )
+            )
+        ),
+        Count
+    ).
+interpret_instance_operation_(change_key(Class, _Type, _Properties), Before, After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    findall(
+        New_Uri,
+        (   ask(Before,
+                t(Uri, rdf:type, Class_Ex)),
+            once(
+                (   get_document(Before, Uri, Document),
+                    delete_document(Before, Uri),
+                    delete_document_ids(Document, Final_Document),
+                    insert_document(After, Final_Document, New_Uri),
+                    forall(
+                        ask(After,
+                            (   t(X, P, Uri),
+                                delete(X, P, Uri),
+                                insert(X, P, New_Uri))),
+                        true)
+                )
+            )
+        ),
+        Uris
+    ),
+
+    (   has_duplicates(Uris, Duplicates)
+    ->  throw(error(id_overlap_after_key_change(Duplicates)))
+    ;   true
+    ),
+
+    length(Uris, Count).
+
+interpret_instance_operation_(delete_class_property(Class, Property), Before, _After, Count) :-
+    % Todo: Tagged Union
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    prefix_expand_schema(Property, Prefixes, P),
+    once(class_predicate_type(Before,Class_Ex, P, Type)),
+    delete_class_property_operation(Before, Class_Ex, P, Type, Count).
+interpret_instance_operation_(create_class_property(Class, Property, Type, Default), _Before, After, Count) :-
+    create_class_property_default_operation(Class, Property, Type, Default, After, Count).
+interpret_instance_operation_(create_class_property(Class, Property, Type), _Before, After, Count) :-
+    create_class_property_operation(Class, Property, Type, After, Count).
 interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Candidate), _Before, After, Count) :-
     % Backward compatible fix for bug https://github.com/terminusdb/terminusdb/issues/1853
     (   is_dict(New_Type_Candidate),
@@ -930,9 +1259,41 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
         operation_string(cast_class_property(Class, Property, New_Type, Default_or_Error), Op_String),
         throw(error(not_implemented(Op_String), _))
     ).
-interpret_instance_operation_(change_parents(Class,Parents,Property_Defaults), _Before, _After,_Count) :-
-    operation_string(change_parents(Class,Parents,Property_Defaults), Op_String),
-    throw(error(not_implemented(Op_String), _)).
+interpret_instance_operation_(move_class_property(Class,Old_Property,New_Property), _Before, After, Count) :-
+    count_solutions(
+        ask(After,
+            (   isa(X, Class),
+                t(X, Old_Property, Y),
+                delete(X, Old_Property, Y),
+                insert(X, New_Property, Y))),
+        Count
+    ).
+interpret_instance_operation_(change_parents(Class,_,Property_Defaults), Before, After, Count) :-
+    findall(C,
+            class_subsumed(Before, C, Class),
+            Before_Classes),
+    findall(C,
+            class_subsumed(After, C, Class),
+            After_Classes),
+    append(Before_Classes, After_Classes, Changed_Classes_Unsorted),
+    sort(Changed_Classes_Unsorted, Changed_Classes),
+    findall(
+        Count,
+        (   member(C, Changed_Classes),
+            class_properties_deleted_and_added(Before, After, C, Deleted, Added),
+            (   member(P-T, Deleted),
+                delete_class_property_operation(Before, C, P, T, Count)
+            ;   member(P-T, Added),
+                atom_string(P, PString),
+                (   memberchk(property_default(PString,Default), Property_Defaults)
+                ->  create_class_property_default_operation(C, P, T, Default, After, Count)
+                ;   create_class_property_operation(C, P, T, After, Count)
+                )
+            )
+        ),
+        Counts
+    ),
+    sum_list(Counts, Count).
 
 interpret_instance_operation(Op, Before, After, Count) :-
     interpret_instance_operation_(Op, Before, After, Count),
@@ -1155,8 +1516,9 @@ test(property_weakening, []) :-
            d,
            json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
            json{'@id':'D', '@type':'Class', d:json{'@class':'xsd:string', '@type':'List'}},
-           'D', _Weakened).
-
+           'D',
+           json{'D' : []},
+           _Weakened).
 
 test(weaken_enum_failure, [
          error(weakening_failure(json{class:'Team',message:"An enum was changed to include a set of values which is not a superset",new:['Amazing Marketing','Information Technology'],old:['IT','Marketing'],reason:class_enum_value_change_not_a_weakening}), _)
@@ -2165,7 +2527,27 @@ test(weaken_oneof, [
      ]) :-
     Before = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, void:'sys:Unit', yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
     After = json{'@id':'Definition', '@inherits':'Documented', '@oneOf':[json{parameters:json{'@class':'Parameter', '@type':'List'}, receives:json{'@class':'Parameter', '@type':'List'}}, json{returns:'Returns', returns_multiple:json{'@class':'Returns', '@type':'List'}, yields:'Returns'}], '@type':'Class', examples:json{'@class':'xsd:string', '@dimensions':1, '@type':'Array'}, extendedSummary:json{'@class':'xsd:string', '@type':'Optional'}, index:json{'@class':'xsd:integer', '@type':'Optional'}, notes:json{'@class':'xsd:string', '@type':'Optional'}, raises:json{'@class':'Exception', '@type':'Set'}, references:json{'@class':'xsd:string', '@type':'Optional'}, section:json{'@class':'xsd:string', '@type':'Optional'}, seeAlso:json{'@class':'Definition', '@type':'Set'}, signature:json{'@class':'xsd:string', '@type':'Optional'}},
-    class_weakened('Definition', Before, After, _5762).
+    class_weakened('Definition', Before, After, supermap{}, _5762).
+
+test(weaken_subsumed_range, []) :-
+    Before = json{'@id':'A', '@type':'Class', b : 'B1'},
+    After = json{'@id':'A', '@type':'Class', b : 'B2'},
+    class_weakened('A', Before, After, supermap{'B1' : ['B2']}, Result),
+    Result = [ upcast_class_property('A',b,'B2')].
+
+test(double_type_weaken, []) :-
+    type_weaken('B1', json{'@type':'Optional', '@class':'B2'}, supermap{'B1':['B2']}).
+
+test(weaken_subsumed_and_optional_range, []) :-
+    Before = json{'@id':'A', '@type':'Class', b : 'B1'},
+    After = json{'@id':'A', '@type':'Class', b : json{'@type' : 'Optional', '@class' : 'B2'}},
+    class_weakened('A', Before, After, supermap{'B1' : ['B2']}, Result),
+    Result = [ upcast_class_property('A',
+									 b,
+									 json{ '@class':'B2',
+										   '@type':'Optional'
+										 })
+			 ].
 
 
 test(same_metadata,
@@ -2203,5 +2585,364 @@ test(same_metadata,
         Operations
     ),
     Operations = [].
+
+test(change_a_parent,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'D/1', d : ["foo"] },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'D/2', d : ["bar"] },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("D", ["A"], [property_default("a", "Some data")])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+    Result = metadata{
+                 instance_operations:2,
+				 schema_operations:1
+			 },
+
+    findall(
+        DocD,
+        get_document_by_type(Descriptor, "D", DocD),
+        D_Docs),
+    D_Docs = [ json{ '@id':'D/1',
+					 '@type':'D',
+					 a:"Some data",
+					 d:["foo"]
+				   },
+			   json{ '@id':'D/2',
+					 '@type':'D',
+					 a:"Some data",
+					 d:["bar"]
+				   }
+			 ].
+
+test(change_a_parent_with_optional,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'C/1', c : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'C/2', c : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("C", ["F"], [])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+    Result = metadata{
+                 instance_operations:0,
+				 schema_operations:1
+			 },
+
+    findall(
+        DocC,
+        get_document_by_type(Descriptor, "C", DocC),
+        C_Docs),
+    C_Docs = [ json{ '@id':'C/1',
+					 '@type':'C',
+					 c:"foo"
+				   },
+			   json{ '@id':'C/2',
+					 '@type':'C',
+					 c:"bar"
+				   }
+			 ].
+
+test(change_a_parent_with_unused_default,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(unused_property_default('C',d), _)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'C/1', c : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'C/2', c : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("C", ["F"], [property_default("d", "foo")])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []).
+
+test(change_a_parent_with_default_for_existing_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(unused_property_default('C',c), _)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'C/1', c : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'C/2', c : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_parents("C", ["F"], [property_default("c", "baz")])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []).
+
+test(move_class_property,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        move_class_property("A", "a", "b")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _Result,
+                               []).
+
+before3('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Sub",
+  "@inherits" : ["A", "B"] }
+').
+
+test(move_class_property_inheritance_conflict,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before3,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(immovable_property(a,'Sub'), _)
+     ]) :-
+
+    Term_Ops = [
+        move_class_property("B", "a", "b")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _,
+                               []).
+
+before4('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "@inherits" : "A" }
+').
+
+test(move_class_property_inheritance_no_conflict,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "A", '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@type' : "B", '@id' : 'B/2', a : "bar" },
+                            _)
+        )
+    ),
+
+
+    Term_Ops = [
+        move_class_property("A", "a", "b")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+
+    Result = metadata{ instance_operations:2,
+					   schema_operations:1
+					 },
+
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+
+    A_Docs = [ json{ '@id':'A/1',
+					 '@type':'A',
+					 b:"foo"
+				   },
+			   json{ '@id':'B/2',
+					 '@type':'B',
+					 b:"bar"
+				   }
+			 ].
+
+
+test(move_class_property_which_doesnt_exist,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_operation_failed(
+                '{"@type":"MoveClassProperty", "class":"A", "from":"b", "to":"c"}',
+                json{'@context':_{'@base':"terminusdb:///data/",'@schema':"terminusdb:///schema#",'@type':'Context'},
+                     'A':json{'@id':'A','@type':'Class',a:'xsd:string'},
+                     'B':json{'@id':'B','@inherits':'A','@type':'Class'}}), _)
+     ]) :-
+
+    Term_Ops = [
+        move_class_property("A", "b", "c")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               _,
+                               []).
+
+test(change_key,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "A", '@id' : 'A/1', a : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@type' : "B", '@id' : 'B/2', a : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        change_key("B", "Lexical", ["a"])
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:1,schema_operations:1},
+
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+
+    A_Docs = [ json{ '@id':'A/1',
+					 '@type':'A',
+					 a:"foo"
+				   },
+			   json{ '@id':'B/bar',
+					 '@type':'B',
+					 a:"bar"
+				   }
+			 ].
 
 :- end_tests(migration).

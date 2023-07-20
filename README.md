@@ -35,7 +35,20 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 
 The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB.
 
-For deployments, you can install as a [Docker Container](https://terminusdb.com/docs/install-terminusdb-as-a-docker-container). This uses [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap), our Docker wrapper script that makes it easy to set up the container.
+For deployments, or if you want to use the local dashboard:
+
+1. Add the following to a .env file in the source directory:
+
+```shell
+OPENAI_KEY=YOUR_OPENAI_KEY_HERE
+# And optionally specify number of pages for the vector database
+# for instance
+BUFFER_AMOUNT=120000
+```
+
+2. `docker compose up`
+
+You should be able to view TerminusDB running by default at `localhost:6363`
 
 > If you're installing TerminusDB on Windows with Docker, our friends at DFRNT wrote this [comprehensive guide](https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/).
 

@@ -7,7 +7,7 @@ on:
 
 env:
   LAST_RELEASED_VERSION: 11.0.6
-  CURRENT_REPO_VERSION: 11.0.7
+  CURRENT_REPO_VERSION: 11.1.0
 
 jobs:
   openapi_lint:
@@ -49,6 +49,7 @@ jobs:
           github.repository == 'terminusdb/terminusdb' &&
           github.event_name == 'push' && (
             github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/add_vectorlink' ||
             startsWith(github.ref, 'refs/tags/v')
           )
         }}
