@@ -3,6 +3,7 @@
               perform_instance_migration_on_transaction/4,
               infer_weakening_migration/3,
               infer_arbitrary_migration/3,
+              operations_are_weakening/1,
               type_weaken/3
           ]).
 
@@ -1482,6 +1483,14 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
     ;   Result = metadata{ schema_operations: Op_Count,
                            instance_operations: Count }
     ).
+
+
+operation_is_weakening(create_class(_)).
+operation_is_weakening(create_class_property(_,_,_)).
+operation_is_weakening(upcast_class_property(_,_,_)).
+
+operations_are_weakening(L) :-
+    maplist(operation_is_weakening, L).
 
 :- begin_tests(migration).
 
