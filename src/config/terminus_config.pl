@@ -36,9 +36,8 @@
               grpc_label_endpoint/1,
               crypto_password_cost/1,
               lru_cache_size/1,
-              trust_migrations/0,
-              fetch_timeout/1
-          ]).
+              trust_migrations/0
+]).
 
 :- use_module(library(pcre)).
 
