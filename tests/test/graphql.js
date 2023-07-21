@@ -966,7 +966,7 @@ query EverythingQuery {
       expect(result).to.equal(undefined)
     })
 
-    it('queries a prefix', async function () {
+    it('graphql queries a prefix', async function () {
       const instance = {
         'prefix:foo': 'baz',
       }
