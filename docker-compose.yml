@@ -24,7 +24,6 @@ services:
       - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
       - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
       # Add your OpenAI key in a .env file
-      - OPENAI_KEY=${OPENAI_KEY}
       - BUFFER_AMOUNT=120000
     volumes:
       - ./vector_storage:/app/storage
@@ -36,6 +35,7 @@ services:
     environment:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
       - USE_CHANGE_REQUEST=true
+      - OPENAI_KEY=${OPENAI_KEY}
       - USER_KEY=${TERMINUSDB_USER_KEY}
       - USER_NAME=${TERMINUSDB_USER_NAME}
       - OPENAI_SERVER_URL=http://vectorlink:8080
