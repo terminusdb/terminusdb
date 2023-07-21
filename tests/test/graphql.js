@@ -11,10 +11,10 @@ describe('GraphQL', function () {
   let client
 
   const schema = [{
-    '@type' : '@context',
-    '@base' : 'iri://i/',
-    '@schema' : 'iri://s#',
-    'prefix' : 'http://prefix.com/',
+    '@type': '@context',
+    '@base': 'iri://i/',
+    '@schema': 'iri://s#',
+    prefix: 'http://prefix.com/',
   }, {
     '@id': 'Person',
     '@type': 'Class',
@@ -170,10 +170,10 @@ describe('GraphQL', function () {
     bigfloat: 'xsd:decimal',
   },
   {
-    '@id' : 'Prefix',
-    '@type' : 'Class',
-    'prefix:foo' : 'xsd:string'
-  }
+    '@id': 'Prefix',
+    '@type': 'Class',
+    'prefix:foo': 'xsd:string',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -233,7 +233,7 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    await document.insert(agent, { schema, fullReplace: true})
+    await document.insert(agent, { schema, fullReplace: true })
 
     await document.insert(agent, { instance: instances })
   })
@@ -983,6 +983,5 @@ query EverythingQuery {
       console.log(result)
       expect(result.data).to.equal(['baz'])
     })
-
   })
 })
