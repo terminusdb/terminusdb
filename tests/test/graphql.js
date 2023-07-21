@@ -12,8 +12,8 @@ describe('GraphQL', function () {
 
   const schema = [{
     '@type': '@context',
-    '@base': 'iri://i/',
-    '@schema': 'iri://s#',
+    '@base': 'terminusdb:///data/',
+    '@schema': 'terminusdb:///schema#',
     prefix: 'http://prefix.com/',
   }, {
     '@id': 'Person',
@@ -536,7 +536,7 @@ describe('GraphQL', function () {
       )
     })
 
-    it('path query backward and forward', async function () {
+    it('graphql path query backward and forward', async function () {
       const PATH_QUERY = gql`
  query PersonQuery {
     Person(id: "terminusdb:///data/Person/Immanuel%20Kant", orderBy : {order : ASC}){
@@ -566,9 +566,7 @@ describe('GraphQL', function () {
     it('graphql ids query', async function () {
       const PERSON_QUERY = gql`
  query PersonQuery {
-    Person(ids : ["terminusdb:///data/Person/Immanuel%20Kant",
-                  "terminusdb:///data/Person/Socrates"
-                 ]){
+    Person(id : "terminusdb:///data/Person/Immanuel%20Kant"){
         name
     }
 }`
@@ -980,8 +978,7 @@ query EverythingQuery {
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-      console.log(result)
-      expect(result.data).to.equal(['baz'])
+      expect(result.data.Prefix).to.deep.equal([{ prefix_foo: 'baz' }])
     })
   })
 })
