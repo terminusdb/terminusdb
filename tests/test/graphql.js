@@ -11,6 +11,11 @@ describe('GraphQL', function () {
   let client
 
   const schema = [{
+    '@type' : '@context',
+    '@base' : 'iri://i/',
+    '@schema' : 'iri://s#',
+    'prefix' : 'http://prefix.com/',
+  }, {
     '@id': 'Person',
     '@type': 'Class',
     '@key': {
@@ -164,6 +169,11 @@ describe('GraphQL', function () {
     '@type': 'Class',
     bigfloat: 'xsd:decimal',
   },
+  {
+    '@id' : 'Prefix',
+    '@type' : 'Class',
+    'prefix:foo' : 'xsd:string'
+  }
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -223,7 +233,7 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    await document.insert(agent, { schema })
+    await document.insert(agent, { schema, fullReplace: true})
 
     await document.insert(agent, { instance: instances })
   })
@@ -955,5 +965,24 @@ query EverythingQuery {
         })
       expect(result).to.equal(undefined)
     })
+
+    it('queries a prefix', async function () {
+      const instance = {
+        'prefix:foo': 'baz',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    Prefix{
+        prefix_foo
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      console.log(result)
+      expect(result.data).to.equal(['baz'])
+    })
+
   })
 })
