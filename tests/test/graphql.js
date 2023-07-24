@@ -177,7 +177,7 @@ describe('GraphQL', function () {
   {
     '@id': 'Node',
     '@type': 'Class',
-    'prefix:node': { '@type' : 'Optional', '@class' : 'Node'},
+    'prefix:node': { '@type': 'Optional', '@class': 'Node' },
     'prefix:string': 'xsd:string',
   },
   ]
@@ -970,7 +970,7 @@ query EverythingQuery {
     it('graphql queries reversable', async function () {
       const instance = {
         'prefix:string': 'Bar',
-        'prefix:node': { 'prefix:string': 'Baz' }
+        'prefix:node': { 'prefix:string': 'Baz' },
       }
       await document.insert(agent, { instance })
 
@@ -988,13 +988,13 @@ query EverythingQuery {
 
       expect(result.data.Node).to.deep.equal([
         {
-          "_prefix_node_of_Node": [
+          _prefix_node_of_Node: [
             {
-              "prefix_string": "Bar"
-            }
+              prefix_string: 'Bar',
+            },
           ],
-          "prefix_string": "Baz"
-        }
+          prefix_string: 'Baz',
+        },
       ])
     })
 
