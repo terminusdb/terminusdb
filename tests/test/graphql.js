@@ -11,6 +11,11 @@ describe('GraphQL', function () {
   let client
 
   const schema = [{
+    '@type': '@context',
+    '@base': 'terminusdb:///data/',
+    '@schema': 'terminusdb:///schema#',
+    prefix: 'http://prefix.com/',
+  }, {
     '@id': 'Person',
     '@type': 'Class',
     '@key': {
@@ -164,6 +169,11 @@ describe('GraphQL', function () {
     '@type': 'Class',
     bigfloat: 'xsd:decimal',
   },
+  {
+    '@id': 'Prefix',
+    '@type': 'Class',
+    'prefix:foo': 'xsd:string',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -223,7 +233,7 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    await document.insert(agent, { schema })
+    await document.insert(agent, { schema, fullReplace: true })
 
     await document.insert(agent, { instance: instances })
   })
@@ -526,7 +536,7 @@ describe('GraphQL', function () {
       )
     })
 
-    it('path query backward and forward', async function () {
+    it('graphql path query backward and forward', async function () {
       const PATH_QUERY = gql`
  query PersonQuery {
     Person(id: "terminusdb:///data/Person/Immanuel%20Kant", orderBy : {order : ASC}){
@@ -556,9 +566,10 @@ describe('GraphQL', function () {
     it('graphql ids query', async function () {
       const PERSON_QUERY = gql`
  query PersonQuery {
-    Person(ids : ["terminusdb:///data/Person/Immanuel%20Kant",
-                  "terminusdb:///data/Person/Socrates"
-                 ]){
+    Person(ids : [
+           "terminusdb:///data/Person/Immanuel%20Kant",
+           "terminusdb:///data/Person/Socrates"
+           ] ){
         name
     }
 }`
@@ -931,6 +942,23 @@ query EverythingQuery {
       expect(result.data.BadlyNamedOptional).to.deep.equal([
         { is_it_ok: 'something' },
       ])
+    })
+
+    it('graphql queries a prefix', async function () {
+      const instance = {
+        'prefix:foo': 'baz',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    Prefix{
+        prefix_foo
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.Prefix).to.deep.equal([{ prefix_foo: 'baz' }])
     })
 
     it('shadows a graphql type and fails', async function () {
