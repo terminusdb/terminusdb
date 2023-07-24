@@ -925,6 +925,7 @@ pub struct InvertedTypeDefinition {
 }
 
 pub fn inverse_field_name(property: &str, class: &str) -> String {
+    let property = graphql_sanitize(property);
     format!("_{property}_of_{class}")
 }
 
