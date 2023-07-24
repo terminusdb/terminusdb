@@ -944,6 +944,23 @@ query EverythingQuery {
       ])
     })
 
+    it('graphql queries a prefix', async function () {
+      const instance = {
+        'prefix:foo': 'baz',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    Prefix{
+        prefix_foo
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.Prefix).to.deep.equal([{ prefix_foo: 'baz' }])
+    })
+
     it('shadows a graphql type and fails', async function () {
       const collision = {
         '@type': 'Class',
@@ -965,23 +982,6 @@ query EverythingQuery {
           expect(nwe.statusCode).to.equal(500)
         })
       expect(result).to.equal(undefined)
-    })
-
-    it('graphql queries a prefix', async function () {
-      const instance = {
-        'prefix:foo': 'baz',
-      }
-      await document.insert(agent, { instance })
-
-      const TEST_QUERY = gql`
- query TEST {
-    Prefix{
-        prefix_foo
-    }
-}`
-
-      const result = await client.query({ query: TEST_QUERY })
-      expect(result.data.Prefix).to.deep.equal([{ prefix_foo: 'baz' }])
     })
   })
 })
