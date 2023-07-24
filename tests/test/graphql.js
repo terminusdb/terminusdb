@@ -174,6 +174,12 @@ describe('GraphQL', function () {
     '@type': 'Class',
     'prefix:foo': 'xsd:string',
   },
+  {
+    '@id': 'Node',
+    '@type': 'Class',
+    'prefix:node': { '@type': 'Optional', '@class': 'Node' },
+    'prefix:string': 'xsd:string',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -959,6 +965,37 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.Prefix).to.deep.equal([{ prefix_foo: 'baz' }])
+    })
+
+    it('graphql queries reversable', async function () {
+      const instance = {
+        'prefix:string': 'Bar',
+        'prefix:node': { 'prefix:string': 'Baz' },
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    Node(filter: { prefix_string : { eq : "Baz" }}){
+        prefix_string
+        _prefix_node_of_Node{
+            prefix_string
+        }
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+
+      expect(result.data.Node).to.deep.equal([
+        {
+          _prefix_node_of_Node: [
+            {
+              prefix_string: 'Bar',
+            },
+          ],
+          prefix_string: 'Baz',
+        },
+      ])
     })
 
     it('shadows a graphql type and fails', async function () {
