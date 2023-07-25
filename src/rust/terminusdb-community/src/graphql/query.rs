@@ -403,7 +403,13 @@ fn compile_edges_to_filter(
                 .expect("restriction value in filter was not a string");
             restriction = Some(expected.value);
         } else if field_name == "_id" {
-            ids.push(spanning_input_value.item.as_string_value().expect("id to match on should have been a stringy value").to_owned());
+            ids.push(
+                spanning_input_value
+                    .item
+                    .as_string_value()
+                    .expect("id to match on should have been a stringy value")
+                    .to_owned(),
+            );
         } else {
             let field = class_definition.resolve_field(field_name);
             let prefixes = &all_frames.context;
@@ -662,9 +668,7 @@ fn compile_query<'a, C: QueryableContextType>(
     let mut iter = iter;
     if !filter.ids.is_empty() {
         let resolved_ids: Vec<_> = filter.ids.iter().flat_map(|s| g.subject_id(s)).collect();
-        iter = ClonableIterator::new(iter.filter(move |id| {
-            resolved_ids.contains(id)
-        }));
+        iter = ClonableIterator::new(iter.filter(move |id| resolved_ids.contains(id)));
     }
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
