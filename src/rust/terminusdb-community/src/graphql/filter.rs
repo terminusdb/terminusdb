@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use juniper::{
     DefaultScalarValue, FromInputValue, GraphQLInputObject, GraphQLType, GraphQLValue, InputValue,
-    Registry,
+    Registry, ID,
 };
 
 use crate::value::{base_type_kind, BaseTypeKind};
@@ -150,6 +150,8 @@ impl GraphQLType for FilterInputObject {
 
                 args.push(registry.arg::<Option<GeneratedEnum>>("_restriction", &type_info));
             }
+
+            args.push(registry.arg::<Option<ID>>("_id", &()));
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",
