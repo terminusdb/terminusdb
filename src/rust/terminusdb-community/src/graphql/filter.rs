@@ -152,6 +152,7 @@ impl GraphQLType for FilterInputObject {
             }
 
             args.push(registry.arg::<Option<ID>>("_id", &()));
+            args.push(registry.arg::<Option<Vec<ID>>>("_ids", &()));
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",

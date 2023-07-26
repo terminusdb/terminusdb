@@ -403,14 +403,32 @@ fn compile_edges_to_filter(
             let expected: GeneratedEnum = GeneratedEnum::from_input_value(input_value)
                 .expect("restriction value in filter was not a string");
             restriction = Some(expected.value);
-        } else if field_name == "_id" {
-            ids.push(
-                spanning_input_value
-                    .item
+        } else if field_name == "_ids" {
+            if !ids.is_empty() {
+                panic!("You must not specify '_id' and '_ids' simultaneously");
+            }
+            for id_span in spanning_input_value
+                .item
+                .to_list_value()
+                .into_iter()
+                .flatten()
+            {
+                let id = id_span
                     .as_string_value()
                     .expect("id to match on should have been a stringy value")
-                    .to_owned(),
-            );
+                    .to_owned();
+                ids.push(id);
+            }
+        } else if field_name == "_id" {
+            if !ids.is_empty() {
+                panic!("You must not specify '_id' and '_ids' simultaneously");
+            }
+            let id = spanning_input_value
+                .item
+                .as_string_value()
+                .expect("id to match on should have been a stringy value")
+                .to_owned();
+            ids.push(id);
         } else {
             let field = class_definition.resolve_field(field_name);
             let prefixes = &all_frames.context;
@@ -836,11 +854,8 @@ fn generate_iterator_from_filter<'a>(
                 .map(|component| Path::Negative(Pred::Named(component.to_string())))
                 .collect();
             let path = Some(Path::Seq(components));
-            iter = Some(compile_path(
-                g,
-                all_frames.context.clone(),
-                path.unwrap(),
-                id_iter,
+            iter = Some(ClonableIterator::new(
+                compile_path(g, all_frames.context.clone(), path.unwrap(), id_iter).unique(),
             ));
             break;
         } else {
@@ -857,6 +872,7 @@ fn generate_iterator_from_filter<'a>(
                         FilterObjectType::Node(next_f, _),
                     ) => visit_next.push_back((path, &next_f)),
                     FilterValue::And(next_fs) => {
+                        path.pop().unwrap();
                         for next_f in next_fs.iter() {
                             visit_next.push_back((path.clone(), next_f));
                         }
