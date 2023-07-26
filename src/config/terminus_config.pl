@@ -35,8 +35,9 @@
               parallelize_enabled/0,
               grpc_label_endpoint/1,
               crypto_password_cost/1,
-              lru_cache_size/1
-          ]).
+              lru_cache_size/1,
+              trust_migrations/0
+]).
 
 :- use_module(library(pcre)).
 
@@ -320,6 +321,10 @@ crypto_password_cost(10).
 :- table lru_cache_size/1.
 lru_cache_size(Cache_Size) :-
     getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).
+
+:- table trust_migrations/0.
+trust_migrations :-
+    getenv('TERMINUSDB_TRUST_MIGRATIONS', true).
 
 :- table semantic_indexer_endpoint/1.
 semantic_indexer_endpoint(Endpoint) :-

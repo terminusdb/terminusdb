@@ -1,4 +1,6 @@
 use bimap::BiMap;
+use lazy_static::lazy_static;
+use regex::Regex;
 use serde::{self, Deserialize};
 use std::collections::{BTreeMap, HashMap};
 
@@ -93,10 +95,69 @@ pub struct Prefixes {
     pub extra_prefixes: BTreeMap<String, String>,
 }
 
+fn has_protocol(s: &str) -> bool {
+    lazy_static! {
+        static ref HAS_PROTOCOL: Regex = Regex::new(r"^\p{L}(\p{L}|\p{N})*://.+").unwrap();
+    }
+    HAS_PROTOCOL.is_match(s)
+}
+
+fn has_prefix_if_no_protocol(s: &str) -> Option<(String, String)> {
+    lazy_static! {
+        static ref HAS_PREFIX: Regex = Regex::new(
+            r"^(?<prefix>(\p{L}|@)((\p{L}|\p{N}|-|\.)*(\p{L}|\p{N}|_|-))?):(?<suffix>.*)$"
+        )
+        .unwrap();
+    }
+    let captures = HAS_PREFIX.captures(s);
+    if let Some(captures) = captures {
+        Some((
+            captures
+                .name("prefix")
+                .expect("This must exist")
+                .as_str()
+                .to_string(),
+            captures
+                .name("suffix")
+                .expect("This has a suffix")
+                .as_str()
+                .to_string(),
+        ))
+    } else {
+        None
+    }
+}
+
+enum NodeVariety {
+    Base(String),
+    Prefixed(String, String),
+    URL(String),
+}
+
+fn node_variety(s: &str) -> NodeVariety {
+    if has_protocol(s) {
+        NodeVariety::URL(s.to_string())
+    } else if let Some((prefix, suffix)) = has_prefix_if_no_protocol(s) {
+        NodeVariety::Prefixed(prefix, suffix)
+    } else {
+        NodeVariety::Base(s.to_string())
+    }
+}
+
 impl Prefixes {
     pub fn expand_schema(&self, s: &str) -> String {
-        // this is dumb but will work for now
-        format!("{}{}", self.schema, s)
+        match node_variety(s) {
+            // this is dumb but will work for now
+            NodeVariety::Base(s) => format!("{}{}", self.schema, s),
+            NodeVariety::Prefixed(prefix, suffix) => {
+                if let Some(expanded) = self.extra_prefixes.get(&prefix) {
+                    format!("{}{}", expanded, suffix)
+                } else {
+                    panic!("Unable to find prefix {prefix}!");
+                }
+            }
+            NodeVariety::URL(s) => s,
+        }
     }
 
     pub fn compress_schema(&self, s: &str) -> String {
@@ -426,7 +487,7 @@ pub struct ClassDefinition {
 static RESERVED_CLASSES: [&str; 5] = ["BigFloat", "BigFloat", "DateTime", "BigInt", "JSON"];
 
 impl ClassDefinition {
-    pub fn sanitize(self) -> ClassDefinition {
+    pub fn sanitize(self, prefixes: &Prefixes) -> ClassDefinition {
         let mut field_map: HashMap<String, String> = HashMap::new();
         let mut fields: BTreeMap<String, _> = BTreeMap::new();
         for (field, fd) in self.fields.into_iter() {
@@ -464,7 +525,8 @@ impl ClassDefinition {
         let key = self.key.map(|k| k.sanitize());
         let mut field_renaming: HashMap<String, String> = HashMap::new();
         for (s, t) in field_map.iter() {
-            field_renaming.insert(s.to_string(), t.to_string());
+            let expanded = prefixes.expand_schema(t);
+            field_renaming.insert(s.to_string(), expanded);
         }
         let inherits = if let Some(inherits_val) = &self.inherits {
             let mut result = vec![];
@@ -525,14 +587,15 @@ impl ClassDefinition {
         fields
     }
 
-    pub fn fully_qualified_property_name(&self, prefixes: &Prefixes, property: &String) -> String {
+    pub fn fully_qualified_property_name(&self, _prefixes: &Prefixes, property: &String) -> String {
         self.field_renaming
             .as_ref()
             .map(|map| {
-                let db_name = map.get(property).unwrap_or_else(|| {
-                    panic!("The fully qualified property name for {property:?} *should* exist")
-                });
-                prefixes.expand_schema(db_name)
+                map.get(property)
+                    .unwrap_or_else(|| {
+                        panic!("The fully qualified property name for {property:?} *should* exist")
+                    })
+                    .to_string()
             })
             .expect("The field renaming was never built!")
     }
@@ -718,7 +781,7 @@ impl PreAllFrames {
                 panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]' and which do not overlap with reserved type names. Please rename your classes to remove the following duplicate pair: ({left},{right}) == ({sanitized_class},{class_name})")
             }
             let new_typedef = match typedef {
-                TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize()),
+                TypeDefinition::Class(cd) => TypeDefinition::Class(cd.sanitize(&self.context)),
                 TypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
             };
             frames.insert(sanitized_class.clone(), new_typedef);
@@ -862,6 +925,7 @@ pub struct InvertedTypeDefinition {
 }
 
 pub fn inverse_field_name(property: &str, class: &str) -> String {
+    let property = graphql_sanitize(property);
     format!("_{property}_of_{class}")
 }
 
