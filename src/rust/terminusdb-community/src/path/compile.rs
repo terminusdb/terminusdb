@@ -29,7 +29,7 @@ pub fn path_to_class<'a, 'b>(
     )
 }
 
-fn compile_path<'a>(
+pub fn compile_path<'a>(
     g: &'a SyncStoreLayer,
     prefixes: Prefixes,
     path: Path,
