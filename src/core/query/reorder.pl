@@ -96,6 +96,12 @@ Vars = [] =>
 po(Term, t(_X, _P, _Y)),
 term_vars(Term, Vars) =>
     Vars = [].
+po(TermA, _TermB),
+violates_static_mode(TermA) =>
+    false.
+po(_TermA, TermB),
+violates_static_mode(TermB) =>
+    true.
 po(TermA, TermB),
 term_vars(TermA, VarsA),
 term_vars(TermB, VarsB),
@@ -105,6 +111,10 @@ NA < NB =>
     true.
 po(TermA, TermB) =>
     compare((<), TermA, TermB).
+
+violates_static_mode(TermA) :-
+    mode_for_compound(TermA, Modes),
+    memberchk(v(_)-ground, Modes).
 
 po_comp(Op, X, Y) :-
     (   po(X, Y)

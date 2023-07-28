@@ -6,7 +6,10 @@
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,
-              not_literal/1
+              not_literal/1,
+              mode_for/1,
+              mode_for_compound/2,
+              mode_for_predicate/2
           ]).
 
 /** <module> WOQL Compile
@@ -1420,6 +1423,14 @@ mode_for(insert(ground,ground,ground)).
 mode_for(join(ground,ground,any)).
 mode_for(sum(ground, any)).
 mode_for(length(ground, any)).
+
+mode_for_compound(Compound, Combined_Modes) :-
+    Compound =.. [Pred|Rest],
+    length(Rest, N),
+    length(Modes, N),
+    Mode_Record =.. [Pred|Modes],
+    mode_for(Mode_Record),
+    zip(Rest, Modes, Combined_Modes).
 
 mode_for_predicate(Predicate/Arity, Modes) :-
     length(Modes, Arity),
