@@ -1311,7 +1311,9 @@ compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
 compile_wf(length(L,N),Length) -->
     resolve(L,LE),
     resolve(N,NE),
-    { marshall_args(length(LE,NE), Length) }.
+    { marshall_args(length(LE,NE), Length_1),
+      Length = (ensure_static_mode(length/2, [LE, NE], [L, N]),
+                Length_1)}.
 compile_wf(member(X,Y),member(XE,YE)) -->
     resolve(X,XE),
     resolve(Y,YE).
@@ -1413,6 +1415,43 @@ typeof(_^^T,T) :-
 typeof(A,T) :-
     atom(A),
     T = 'http://terminusdb.com/schema/sys#Top'.
+
+mode_for(insert(ground,ground,ground)).
+mode_for(join(ground,ground,any)).
+mode_for(sum(ground, any)).
+mode_for(length(ground, any)).
+
+mode_for_predicate(Predicate/Arity, Modes) :-
+    length(Modes, Arity),
+    Spec =.. [Predicate|Modes],
+    (   mode_for(Spec)
+    ->  true
+    ;   maplist([any]>>true, Modes)).
+
+ensure_static_mode(Predicate, Vars, Terms) :-
+    (   mode_for_predicate(Predicate, Modes)
+    ->  ensure_static_mode_(Predicate, Modes, Vars, Terms)
+    ;   true).
+
+ensure_static_mode_(Predicate, Modes, Vars, Terms) :-
+    maplist([Mode, Var, Term, Violation]>> (
+                (   Mode = ground,
+                    ground(Var)
+                ->  Violation=none
+                ;   Mode = any
+                ->  Violation=none
+                ;   Term = v(Name),
+                    Violation=vio(Mode-Name))
+            ),
+            Modes,
+            Vars,
+            Terms,
+            Violations_1),
+    convlist([vio(X), X]>>true,
+             Violations_1,
+             Violations),
+    do_or_die(length(Violations, 0),
+              error(woql_instantiation_error(Predicate, Violations),_)).
 
 :- meta_predicate ensure_mode(0,+,+,+).
 ensure_mode(Goal,Mode,Args,Names) :-
