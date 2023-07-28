@@ -11,10 +11,28 @@ non_var(X) :- \+ is_var(X).
 
 term_vars(v(X), Vars) =>
     Vars = [X].
+term_vars(List, Vars),
+is_list(List) =>
+    maplist(term_vars, List, Var_List),
+    append(Var_List, Vars_Unsorted),
+    sort(Vars_Unsorted, Vars).
+term_vars(not(_), Vars) =>
+    Vars = [].
+term_vars(select(VL, Query), Vars) =>
+    term_vars(VL, VLVars),
+    term_vars(Query, V),
+    intersection(V,VLVars,Vars).
+term_vars(group_by(Unique,_Template,Query,Result), Vars) =>
+    term_vars(Unique, UVars),
+    term_vars(Query, QVars),
+    intersection(UVars, QVars, Both_Vars),
+    term_vars(Result, RVars),
+    union(Both_Vars, RVars, Vars).
 term_vars(Term, Vars) =>
     Term =.. [_|Rest],
     maplist(term_vars, Rest, Vars_Lists),
-    append(Vars_Lists, Vars).
+    append(Vars_Lists, Vars_Unsorted),
+    sort(Vars_Unsorted,Vars).
 
 po(t(X, P, Y), t(_A, _Q, _B)),
 non_var(X), non_var(P), non_var(Y) =>
@@ -88,9 +106,7 @@ sort_definedness(Terms, Sorted) :-
 
 order_conjuncts(Terms, Sorted) :-
     sort_definedness(Terms, Def_Sort),
-    sort_bound(Def_Sort, Bound),
-    !,
-    undummy_bind(Bound, Sorted).
+    sort_bound(Def_Sort, Sorted).
 
 metasub(v(X), Vars, XO),
 memberchk(X, Vars) =>
@@ -141,9 +157,39 @@ deep_order((A;B), Deep) =>
 deep_order(group_by(Selection,Template,Query,Result),Deep) =>
     deep_order(Query, DQuery),
     Deep = group_by(Selection,Template,DQuery,Result).
+deep_order(order_by(L,Query), Deep) =>
+    deep_order(Query, DQuery),
+    Deep = order_by(L, DQuery).
+deep_order(into(G, Query), Deep) =>
+    deep_order(Query, DQuery),
+    Deep = into(G, DQuery).
+deep_order(count(Query, N), Deep) =>
+    deep_order(Query, DQuery),
+    Deep = count(DQuery, N).
+deep_order(not(Query), Deep) =>
+    deep_order(Query, DQuery),
+    Deep = not(DQuery).
+deep_order(select(Vars,Query),Deep) =>
+    deep_order(Query, DQuery),
+    Deep = select(Vars,DQuery).
+deep_order(limit(N,Query),Deep) =>
+    deep_order(Query, DQuery),
+    Deep = limit(N,DQuery).
+deep_order(using(G,Query),Deep) =>
+    deep_order(Query, DQuery),
+    Deep = using(G,DQuery).
+deep_order(from(G,Query),Deep) =>
+    deep_order(Query, DQuery),
+    Deep = from(G,DQuery).
+deep_order(start(N,Query),Deep) =>
+    deep_order(Query, DQuery),
+    Deep = start(N,DQuery).
+deep_order(distinct(X,Query),Deep) =>
+    deep_order(Query, DQuery),
+    Deep = distinct(X,DQuery).
 deep_order((A,B),Deep) =>
     flatten_conjuncts((A,B), Flat),
-    order_conjuncts(Flat, Ordered),
+    optimize_conjuncts(Flat, Ordered),
     xfy_list(',', Deep, Ordered).
 deep_order(Term, Deep) =>
     Term = Deep.
@@ -153,10 +199,34 @@ sort_bound([Term|Terms], [Deep|Sorted]) :-
     deep_order(Term, Deep),
     term_vars(Deep, Vars),
     dummy_bind(Terms, Vars, Bound),
-    sort_bound(Bound, Sorted).
+    order_conjuncts(Bound, Sorted).
+
+optimize_conjuncts(Read, Ordered) :-
+    commutative_partitions(Read, Partitions),
+    maplist(order_conjuncts, Partitions, Ordered_Partitions),
+    append(Ordered_Partitions, Ordered).
 
 optimize_read_order(Read, Ordered) :-
-    order_conjuncts(Read, Ordered).
+    optimize_conjuncts(Read, Ordered_Bound),
+    undummy_bind(Ordered_Bound, Ordered).
+
+non_commutative(start(_,_)) =>
+    true.
+non_commutative(limit(_,_)) =>
+    true.
+non_commutative(once(_)) =>
+    true.
+non_commutative(_) =>
+    false.
+
+commutative_partitions([], [[]]).
+commutative_partitions([ReadHead|Rest], Partitions) :-
+    (   non_commutative(ReadHead)
+    ->  commutative_partitions(Rest,New_Partitions),
+        Partitions = [[],[ReadHead]|New_Partitions]
+    ;   commutative_partitions(Rest,[H|New_Partitions]),
+        Partitions = [[ReadHead|H]|New_Partitions]
+    ).
 
 :- begin_tests(reorder_query).
 
@@ -210,8 +280,8 @@ test(reorder_partitioned_backwards, []) :-
     Prog = (
         t(a,b,v(c)),
         t(v(c),f,v(b)),
-        t(v(c),f,v(a)),
-        t(v(b),h,v(c))
+        t(v(b),h,v(c)),
+        t(v(c),f,v(a))
     ).
 
 test(reorder_ors, []) :-
@@ -229,13 +299,14 @@ test(reorder_ors, []) :-
     ),
     partition(Term,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, Reads),
+
     xfy_list(',', Prog, Reads),
 
     Prog = (
         t(a,b,v(c)),
         t(v(c),f,v(b)),
-        t(v(c),f,v(a)),
         t(v(b),h,v(c)),
+        t(v(c),f,v(a)),
         (   t(c,f,v(a)),
             t(v(e),f,v(a))
         ;   t(d,f,v(a)),
@@ -243,5 +314,69 @@ test(reorder_ors, []) :-
 		)
     ).
 
+test(select, []) :-
+
+    Term = select(
+               [v(a), v(b)],
+               (   t(v(a),f,g),
+                   t(a,b,v(b))
+               )
+           ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    Prog = select(
+               [v(a), v(b)],
+               (   t(a,b,v(b)),
+                   t(v(a),f,g)
+               )
+           ).
+
+test(limit, []) :-
+
+    Term = limit(
+               3,
+               (   t(v(a),f,g),
+                   t(a,b,v(b))
+               )
+           ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    Prog = limit(
+               3,
+               (   t(a,b,v(b)),
+                   t(v(a),f,g)
+               )
+           ).
+
+test(internal_cuts, []) :-
+
+    Term = (
+        t(v(a),p,v(d)),
+        t(x,p,v(a)),
+        once(t(v(b),g,v(a))),
+        t(v(b),q,v(d)),
+        limit(
+            10,
+            t(v(b),r,v(e))),
+        t(v(f), s, v(e)),
+        t(v(e), s, t)
+    ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    Prog = (
+        t(x,p,v(a)),
+        t(v(a),p,v(d)),
+        once(t(v(b),g,v(a))),
+        t(v(b),q,v(d)),
+        limit(10,t(v(b),r,v(e))),
+        t(v(e),s,t),
+        t(v(f),s,v(e))
+    ).
 
 :- end_tests(reorder_query).
