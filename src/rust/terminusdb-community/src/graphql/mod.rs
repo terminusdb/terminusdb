@@ -4,9 +4,15 @@ use juniper::{
     DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, ExecutionError, GraphQLError,
     InputValue, RootNode, Value,
 };
+use terminusdb_store_prolog::terminus_store::Layer;
 
-use std::sync::Arc;
+use lazy_static::lazy_static;
+use lru::LruCache;
 use std::{collections::HashMap, io::Read};
+use std::{
+    num::NonZeroUsize,
+    sync::{Arc, Mutex},
+};
 use swipl::prelude::*;
 
 mod filter;
@@ -15,6 +21,8 @@ pub mod query;
 mod sanitize;
 pub mod schema;
 mod top;
+
+use crate::types::transaction_schema_layer;
 
 use self::{
     frame::{AllFrames, PreAllFrames},
@@ -114,9 +122,55 @@ impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
     }
 }
 
+lazy_static! {
+    static ref GRAPHQL_CONTEXT_CACHE: Arc<Mutex<LruCache<[u32; 5], TerminusTypeCollectionInfo>>> =
+        Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap())));
+}
+
+fn get_graphql_context_from_cache<C: QueryableContextType>(
+    context: &Context<C>,
+    transaction_term: &Term,
+) -> PrologResult<Option<TerminusTypeCollectionInfo>> {
+    if let Some(layer) = transaction_schema_layer(context, transaction_term)? {
+        let mut cache = GRAPHQL_CONTEXT_CACHE.lock().unwrap();
+        if let Some(context) = cache.get(&layer.name()) {
+            return Ok(Some(context.clone()));
+        }
+    }
+
+    Ok(None)
+}
+
+fn cache_graphql_context<C: QueryableContextType>(
+    context: &Context<C>,
+    transaction_term: &Term,
+    graphql_context: TerminusTypeCollectionInfo,
+) -> PrologResult<()> {
+    if let Some(layer) = transaction_schema_layer(context, transaction_term)? {
+        let mut cache = GRAPHQL_CONTEXT_CACHE.lock().unwrap();
+        cache.put(layer.name(), graphql_context);
+    }
+
+    Ok(())
+}
+
 predicates! {
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, frame_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term) {
+    semidet fn get_cached_graphql_context(context, transaction_term, graphql_context_term) {
+        if let Some(graphql_context) = get_graphql_context_from_cache(context, transaction_term)? {
+            graphql_context_term.unify(graphql_context)
+        } else {
+            fail()
+        }
+    }
+    #[module("$graphql")]
+    semidet fn get_graphql_context(context, transaction_term, frame_term, graphql_context_term) {
+        let type_collection = type_collection_from_term(context, frame_term)?;
+        cache_graphql_context(context, transaction_term, type_collection.clone())?;
+        graphql_context_term.unify(type_collection)
+    }
+    #[module("$graphql")]
+    semidet fn handle_request(context, _method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -128,7 +182,7 @@ predicates! {
                 Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
             };
 
-        let type_collection = type_collection_from_term(context, frame_term)?;
+        let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
         let execution_context = GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term)?;
         execution_context.execute_query(request,
                                         |response| {
@@ -141,5 +195,7 @@ predicates! {
 }
 
 pub fn register() {
+    register_get_cached_graphql_context();
+    register_get_graphql_context();
     register_handle_request();
 }
