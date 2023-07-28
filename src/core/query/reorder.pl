@@ -3,7 +3,8 @@
           ]).
 
 :- use_module(core(util)).
-:- use_module(core(query/partition), [partition/3]).
+:- use_module(partition, [partition/3]).
+:- use_module(woql_compile, [mode_for_compound/2]).
 
 is_var(v(_)).
 
