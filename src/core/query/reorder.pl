@@ -41,6 +41,37 @@ term_vars(Term, Vars) =>
     append(Vars_Lists, Vars_Unsorted),
     sort(Vars_Unsorted,Vars).
 
+term_mvars(mv(X), MVars) =>
+    MVars = [X].
+term_mvars(List, MVars),
+is_list(List) =>
+    maplist(term_mvars, List, MVar_List),
+    append(MVar_List, MVars_Unsorted),
+    sort(MVars_Unsorted, MVars).
+term_mvars(Dict, MVars),
+is_dict(Dict) =>
+    dict_pairs(Dict, _, Pairs),
+    maplist([_-MV,MVar]>>term_mvars(MV,MVar), Pairs, MVar_List),
+    append(MVar_List, MVars_Unsorted),
+    sort(MVars_Unsorted, MVars).
+term_mvars(not(_), MVars) =>
+    MVars = [].
+term_mvars(select(MVL, Query), MVars) =>
+    term_mvars(MVL, MVLMVars),
+    term_mvars(Query, MV),
+    intersection(MV,MVLMVars,MVars).
+term_mvars(group_by(Unique,_Template,Query,Result), MVars) =>
+    term_mvars(Unique, UMVars),
+    term_mvars(Query, QMVars),
+    intersection(UMVars, QMVars, Both_MVars),
+    term_mvars(Result, RMVars),
+    union(Both_MVars, RMVars, MVars).
+term_mvars(Term, MVars) =>
+    Term =.. [_|Rest],
+    maplist(term_mvars, Rest, MVars_Lists),
+    append(MVars_Lists, MVars_Unsorted),
+    sort(MVars_Unsorted,MVars).
+
 po(t(X, P, Y), t(_A, _Q, _B)),
 non_var(X), non_var(P), non_var(Y) =>
     true.
@@ -257,6 +288,30 @@ commutative_partitions([ReadHead|Rest], Partitions) :-
         Partitions = [[ReadHead|H]|New_Partitions]
     ).
 
+disconnected(T) :-
+    term_mvars(T, MVars),
+    MVars = [],
+    term_vars(T, Vars),
+    Vars \= [].
+
+split_at([], [], []).
+split_at([T|Rest], [], [T|Rest]) :-
+    disconnected(T),
+    !.
+split_at([T|Rest], [T|Start], End) :-
+    split_at(Rest,Start,End).
+
+split_disconnected([], [], []).
+split_disconnected([Head], [Head], []) :-
+    !.
+split_disconnected([Head|Rest], [Head|Start], End) :-
+    split_at(Rest,Start,End).
+
+disconnected_partitions([], []).
+disconnected_partitions(Conjunctions, [Start|Partitions]) :-
+    split_disconnected(Conjunctions, Start, Rest),
+    disconnected_partitions(Rest, Partitions).
+
 :- begin_tests(reorder_query).
 
 test(reorder, []) :-
@@ -423,5 +478,12 @@ test(order_type) :-
         t(v(x),name,"main"^^xsd:string),
 		t(v(x),rdf:type,'@schema':'Branch')
 	].
+
+test(disconnected_partitions) :-
+    disconnected_partitions(
+        [t(v(x), y, z), t(mv(x), w, y), t(v(y), z, w)],
+        [[t(v(x), y, z), t(mv(x), w, y)],
+         [t(v(y), z, w)]]
+    ).
 
 :- end_tests(reorder_query).
