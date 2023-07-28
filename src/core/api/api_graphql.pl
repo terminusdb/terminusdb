@@ -61,5 +61,8 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
         Meta_DB = none
     ),
     assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
-    all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-    '$graphql':handle_request(Method, Frames, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response).
+    (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
+    ->  true
+    ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
+        '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
+    '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response).

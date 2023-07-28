@@ -29,7 +29,7 @@ pub fn path_to_class<'a, 'b>(
     )
 }
 
-fn compile_path<'a>(
+pub fn compile_path<'a>(
     g: &'a SyncStoreLayer,
     prefixes: Prefixes,
     path: Path,
@@ -48,6 +48,58 @@ fn compile_path<'a>(
                 .into_iter()
                 .map(move |sub_path| compile_path(g, prefixes.clone(), sub_path, branch.clone()));
             ClonableIterator::new(result.flatten())
+        }
+        Path::Branch(vec) => {
+            let branch = iter.clone();
+            let result = vec
+                .into_iter()
+                .map(move |sub_path| compile_path(g, prefixes.clone(), sub_path, branch.clone()));
+            ClonableIterator::new(
+                std::iter::once_with(move || {
+                    let mut sets: Vec<_> =
+                        result.map(|iter| iter.collect::<HashSet<_>>()).collect();
+                    match sets.pop() {
+                        None => ClonableIterator::new(std::iter::empty()),
+                        Some(initial) => {
+                            let final_set = sets.into_iter().fold(initial, |prev, s| {
+                                prev.intersection(&s).copied().collect::<HashSet<_>>()
+                            });
+                            let final_list: Vec<_> = final_set.into_iter().collect();
+                            ClonableIterator::new(final_list.into_iter())
+                        }
+                    }
+                })
+                .flatten(),
+            )
+        }
+        Path::Collide(mut vec) => {
+            let first = vec.pop();
+            if first.is_none() {
+                return ClonableIterator::new(std::iter::empty());
+            }
+            let first = first.unwrap();
+            let mut iter = compile_path(g, prefixes.clone(), first, iter);
+            for path in vec {
+                let reversed = path.reverse();
+                let prefixes = prefixes.clone();
+                // annoyingly this compiles the path over and over
+                // again. It would have been better if we could have
+                // fed our initial iterator directly into
+                // compile_path. Unfortunately, this results in an
+                // iterator where we don't know what destination
+                // resulted from what origin.
+                iter = ClonableIterator::new(iter.filter(move |v| {
+                    compile_path(
+                        g,
+                        prefixes.clone(),
+                        reversed.clone(),
+                        ClonableIterator::new(std::iter::once(*v)),
+                    )
+                    .next()
+                    .is_some()
+                }));
+            }
+            iter
         }
         Path::Positive(p) => match p {
             Pred::Any => ClonableIterator::new(iter.flat_map(move |object| {

@@ -7,6 +7,7 @@ use swipl::prelude::QueryableContextType;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
+use crate::path::{Path, Pred};
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::value::{base_type_kind, value_to_bigint, value_to_string, BaseTypeKind};
@@ -23,10 +24,10 @@ use super::schema::{
     TerminusOrderBy, TerminusOrdering,
 };
 
-use crate::path::compile::path_to_class;
+use crate::path::compile::{compile_path, path_to_class};
 
 use std::cmp::*;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -53,7 +54,7 @@ enum TextOperation {
     AnyOfTerms(Vec<String>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum CollectionOperation {
     SomeHave,
     AllHave,
@@ -80,7 +81,7 @@ enum FilterType {
     Enum { op: EnumOperation, value: String },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum FilterValue {
     Required(FilterObjectType),
     // Optional(OptionalOperation),
@@ -94,6 +95,7 @@ enum FilterValue {
 struct FilterObject {
     restriction: Option<String>,
     edges: Vec<(String, FilterValue)>,
+    ids: Vec<String>,
 }
 
 fn ordering_matches_op(ord: Ordering, op: GenericOperation) -> bool {
@@ -333,6 +335,7 @@ fn compile_edges_to_filter(
 ) -> FilterObject {
     let mut result: Vec<(String, FilterValue)> = Vec::with_capacity(edges.len());
     let mut restriction = None;
+    let mut ids = Vec::new();
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = &spanning_string.item;
         if field_name == "_and" {
@@ -400,6 +403,32 @@ fn compile_edges_to_filter(
             let expected: GeneratedEnum = GeneratedEnum::from_input_value(input_value)
                 .expect("restriction value in filter was not a string");
             restriction = Some(expected.value);
+        } else if field_name == "_ids" {
+            if !ids.is_empty() {
+                panic!("You must not specify '_id' and '_ids' simultaneously");
+            }
+            for id_span in spanning_input_value
+                .item
+                .to_list_value()
+                .into_iter()
+                .flatten()
+            {
+                let id = id_span
+                    .as_string_value()
+                    .expect("id to match on should have been a stringy value")
+                    .to_owned();
+                ids.push(id);
+            }
+        } else if field_name == "_id" {
+            if !ids.is_empty() {
+                panic!("You must not specify '_id' and '_ids' simultaneously");
+            }
+            let id = spanning_input_value
+                .item
+                .as_string_value()
+                .expect("id to match on should have been a stringy value")
+                .to_owned();
+            ids.push(id);
         } else {
             let field = class_definition.resolve_field(field_name);
             let prefixes = &all_frames.context;
@@ -423,6 +452,7 @@ fn compile_edges_to_filter(
     FilterObject {
         restriction,
         edges: result,
+        ids,
     }
 }
 
@@ -655,6 +685,10 @@ fn compile_query<'a, C: QueryableContextType>(
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     let mut iter = iter;
+    if !filter.ids.is_empty() {
+        let resolved_ids: Vec<_> = filter.ids.iter().flat_map(|s| g.subject_id(s)).collect();
+        iter = ClonableIterator::new(iter.filter(move |id| resolved_ids.contains(id)));
+    }
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             id_matches_restriction(context, &restriction_name, *id)
@@ -793,6 +827,97 @@ fn compile_query<'a, C: QueryableContextType>(
     iter
 }
 
+fn generate_iterator_from_filter<'a>(
+    g: &'a SyncStoreLayer,
+    class_name: &'a str,
+    all_frames: &AllFrames,
+    filter_opt: Option<&FilterObject>,
+    includes_children: bool,
+) -> Option<ClonableIterator<'a, u64>> {
+    if filter_opt.is_none() {
+        return None;
+    }
+
+    let filter = filter_opt.unwrap();
+    let mut iter = None;
+    let mut visit_next: VecDeque<(Vec<&str>, &FilterObject)> = VecDeque::new();
+    visit_next.push_back((vec![], filter));
+    while let Some(mut next) = visit_next.pop_front() {
+        if !next.1.ids.is_empty() {
+            // amazing we found something.
+            let ids: Vec<_> = next.1.ids.iter().flat_map(|id| g.subject_id(id)).collect();
+            let id_iter = ClonableIterator::new(ids.into_iter());
+            next.0.reverse();
+            let components: Vec<_> = next
+                .0
+                .into_iter()
+                .map(|component| Path::Negative(Pred::Named(component.to_string())))
+                .collect();
+            let path = Some(Path::Seq(components));
+            iter = Some(ClonableIterator::new(
+                compile_path(g, all_frames.context.clone(), path.unwrap(), id_iter).unique(),
+            ));
+            break;
+        } else {
+            // nothing here :( push children.
+            for e in next.1.edges.iter() {
+                let mut path = next.0.clone();
+                path.push(&e.0);
+                match &e.1 {
+                    FilterValue::Required(FilterObjectType::Node(next_f, _)) => {
+                        visit_next.push_back((path, &next_f))
+                    }
+                    FilterValue::Collection(
+                        CollectionOperation::SomeHave,
+                        FilterObjectType::Node(next_f, _),
+                    ) => visit_next.push_back((path, &next_f)),
+                    FilterValue::And(next_fs) => {
+                        path.pop().unwrap();
+                        for next_f in next_fs.iter() {
+                            visit_next.push_back((path.clone(), next_f));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(iter) = iter {
+        // we have collected a path leading up to this point. Let's filter it down to the expected type.
+        let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+        if includes_children {
+            let correct_types: Vec<_> = all_frames
+                .subsumed(class_name)
+                .into_iter()
+                .map(|c| all_frames.fully_qualified_class_name(&c))
+                .flat_map(|id| g.subject_id(&id))
+                .collect();
+            let rdf_type_id = g.predicate_id(RDF_TYPE);
+            if rdf_type_id.is_none() {
+                // no types means nothing can be retrieved
+                return None;
+            }
+            let rdf_type_id = rdf_type_id.unwrap();
+            Some(ClonableIterator::new(iter.filter(move |id| {
+                match g.single_triple_sp(*id, rdf_type_id) {
+                    Some(t) => correct_types.contains(&t.object),
+                    None => false,
+                }
+            })))
+        } else {
+            Some(predicate_value_filter(
+                g,
+                RDF_TYPE,
+                &ObjectType::Node(expanded_type_name),
+                iter,
+            ))
+        }
+    } else {
+        // no path was found. we default to None
+        None
+    }
+}
+
 fn generate_initial_iterator<'a>(
     g: &'a SyncStoreLayer,
     class_name: &'a str,
@@ -804,18 +929,33 @@ fn generate_initial_iterator<'a>(
     match zero_iter {
         None => {
             // If we have a filter here, we probably need to use it.
-            let subsuming = if includes_children {
-                all_frames.subsumed(class_name)
-            } else {
-                vec![class_name.to_string()]
-            };
-            let mut iter = ClonableIterator::new(std::iter::empty());
-            for super_class in subsuming {
-                let super_class = all_frames.fully_qualified_class_name(&super_class);
-                let next = predicate_value_iter(g, RDF_TYPE, &ObjectType::Node(super_class));
-                iter = ClonableIterator::new(iter.chain(next))
+            match generate_iterator_from_filter(
+                g,
+                class_name,
+                all_frames,
+                filter_opt.as_ref(),
+                includes_children,
+            ) {
+                Some(zi) => (filter_opt, zi),
+                None => {
+                    let subsuming = if includes_children {
+                        all_frames.subsumed(class_name)
+                    } else {
+                        vec![class_name.to_string()]
+                    };
+                    let mut iter = ClonableIterator::new(std::iter::empty());
+                    for sub_class in subsuming {
+                        let sub_class_expanded = all_frames.fully_qualified_class_name(&sub_class);
+                        let next = predicate_value_iter(
+                            g,
+                            RDF_TYPE,
+                            &ObjectType::Node(sub_class_expanded),
+                        );
+                        iter = ClonableIterator::new(iter.chain(next))
+                    }
+                    (filter_opt, iter)
+                }
             }
-            (filter_opt, iter)
         }
         Some(zi) => (filter_opt, zi),
     }

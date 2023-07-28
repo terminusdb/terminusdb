@@ -32,3 +32,4 @@ nom = "7.1"
 chrono = { version="0.4", features=["serde"]}
 handlebars = "4.3"
 thiserror = "1.0"
+lru = "0.11"

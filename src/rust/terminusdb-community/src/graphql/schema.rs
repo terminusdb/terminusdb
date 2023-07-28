@@ -238,6 +238,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
 }
 
 #[derive(Clone)]
+#[clone_blob("terminus_type_collection_info", defaults)]
 pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
 }

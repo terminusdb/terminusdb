@@ -32,6 +32,29 @@ pub enum Path {
     Plus(Rc<Path>),
     Star(Rc<Path>),
     Times(Rc<Path>, usize, usize),
+    Branch(Vec<Path>),
+    Collide(Vec<Path>),
+}
+
+impl Path {
+    pub fn reverse(&self) -> Path {
+        match self {
+            Path::Positive(pred) => Path::Negative(pred.clone()),
+            Path::Negative(pred) => Path::Positive(pred.clone()),
+            Path::Seq(vec) => {
+                let mut result: Vec<_> = vec.iter().map(|v| v.reverse()).collect();
+                result.reverse();
+
+                Path::Seq(result)
+            }
+            Path::Plus(path) => Path::Plus(Rc::new(path.reverse())),
+            Path::Star(path) => Path::Star(Rc::new(path.reverse())),
+            Path::Times(path, m, n) => Path::Times(Rc::new(path.reverse()), *m, *n),
+            Path::Choice(vec) => Path::Choice(vec.iter().map(|p| p.reverse()).collect()),
+            Path::Branch(vec) => Path::Collide(vec.iter().map(|p| p.reverse()).collect()),
+            Path::Collide(vec) => Path::Branch(vec.iter().map(|p| p.reverse()).collect()),
+        }
+    }
 }
 
 fn is_property_char(c: char) -> bool {
