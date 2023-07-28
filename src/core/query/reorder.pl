@@ -16,6 +16,12 @@ is_list(List) =>
     maplist(term_vars, List, Var_List),
     append(Var_List, Vars_Unsorted),
     sort(Vars_Unsorted, Vars).
+term_vars(Dict, Vars),
+is_dict(Dict) =>
+    dict_pairs(Dict, _, Pairs),
+    maplist([_-V,Var]>>term_vars(V,Var), Pairs, Var_List),
+    append(Var_List, Vars_Unsorted),
+    sort(Vars_Unsorted, Vars).
 term_vars(not(_), Vars) =>
     Vars = [].
 term_vars(select(VL, Query), Vars) =>
@@ -41,6 +47,13 @@ po(t(X, P, _Y), t(_A, _Q, B)),
 non_var(X), non_var(P),
 is_var(B) =>
     true.
+po(t(_X, P, Y), t(A, Q, B)),
+non_var(P), non_var(Y),
+is_var(A), non_var(Q), non_var(B) =>
+    (   P = rdf:type
+    ->  Q = rdf:type
+    ;   false
+    ).
 po(t(_X, P, Y), t(A, Q, _B)),
 non_var(P), non_var(Y),
 (   is_var(A)
@@ -122,6 +135,11 @@ metasub(Term, Vars, Result) =>
 
 metaunsub(mv(X), XO) =>
     XO = v(X).
+metaunsub(Dict, X),
+is_dict(Dict) =>
+    dict_pairs(Dict, Functor, Pairs),
+    maplist([P-V,P-V2]>>metaunsub(V,V2), Pairs, New_Pairs),
+    dict_create(X, Functor, New_Pairs).
 metaunsub(Term, Result) =>
     Term =.. [F|Args],
     maplist([Arg,New]>>metaunsub(Arg, New),
@@ -378,5 +396,21 @@ test(internal_cuts, []) :-
         t(v(e),s,t),
         t(v(f),s,v(e))
     ).
+
+test(order_dicts) :-
+    order_conjuncts([_{a:1, b:v('X')}=_{a:v('Y'), b:2}],
+                    [_{a:1, b:v('X')}=_{a:v('Y'), b:2}]).
+
+
+test(order_type) :-
+    Reads = [
+        t(v(x), rdf:type, '@schema':'Branch'),
+        t(v(x), name, "main"^^xsd:string)
+    ],
+    optimize_read_order(Reads, Ordered),
+    Ordered = [
+        t(v(x),name,"main"^^xsd:string),
+		t(v(x),rdf:type,'@schema':'Branch')
+	].
 
 :- end_tests(reorder_query).
