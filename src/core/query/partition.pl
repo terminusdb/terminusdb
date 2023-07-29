@@ -7,6 +7,8 @@
 :- use_module(core(util)).
 :- use_module(core(query/reorder), [optimize_read_order/2]).
 
+:- use_module(library(lists)).
+
 /* This partitions a tree cleanly into two segments or fails:
    Reads:  read only
    Writes: write only
