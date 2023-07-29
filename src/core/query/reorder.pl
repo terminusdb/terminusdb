@@ -6,6 +6,12 @@
 :- use_module(partition, [partition/3]).
 :- use_module(woql_compile, [mode_for_compound/2]).
 
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(sort)).
+:- use_module(library(apply_macros)).
+
 is_var(v(_)).
 
 non_var(X) :- \+ is_var(X).
