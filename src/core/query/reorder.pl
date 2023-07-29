@@ -314,8 +314,8 @@ split_disconnected([Head|Rest], [Head|Start], End) :-
     split_at(Rest,Start,End).
 
 disconnected_partitions([], []).
-disconnected_partitions(Conjunctions, [Start|Partitions]) :-
-    split_disconnected(Conjunctions, Start, Rest),
+disconnected_partitions([H|Conjunctions], [Start|Partitions]) :-
+    split_disconnected([H|Conjunctions], Start, Rest),
     disconnected_partitions(Rest, Partitions).
 
 :- begin_tests(reorder_query).
