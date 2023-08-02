@@ -16,7 +16,7 @@
                 "${workspaceRoot}/.vscode/setup_shell.sh"
             ]
         },
-        test   },
+    },
     "terminal.integrated.defaultProfile.linux": "bash-swipl",
     "rust-analyzer.runnables.command": "cargo-swipl"
 }
