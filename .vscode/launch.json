@@ -1,0 +1,43 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug terminusdb (REPL)",
+            "program": "swipl",
+            "args": [
+                "-f",
+                "src/interactive.pl"
+            ],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust",
+                "c"
+            ],
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug terminusdb server (REPL)",
+            "program": "swipl",
+            "args": [
+                "-f",
+                "src/interactive.pl",
+                "-g",
+                "terminus_server([], false)"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "TERMINUSDB_SERVER_PORT": "6363"
+            },
+            "sourceLanguages": [
+                "rust",
+                "c"
+            ],
+        },
+    ]
+}
