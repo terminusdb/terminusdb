@@ -484,6 +484,14 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_json_optional(JSON, query, object, _, Query),
 
+            % if the user wants to submit multiple ids, they can
+            param_value_search_or_json_optional(Search, JSON, ids, list, _, Ids),
+            (   ground(Ids)
+            ->  do_or_die(forall(member(Single_Id, Ids),
+                                 (   atom(Single_Id)
+                                 ;   string(Single_Id))),
+                          error(malformed_parameter(ids), _))
+            ;   true),
             read_data_version_header(Request, Requested_Data_Version),
 
             Config = config{
@@ -497,9 +505,9 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             api_read_document_selector(
                 System_DB, Auth, Path, Graph_Type,
-                Id, Type, Query, Config,
+                Id, Ids, Type, Query, Config,
                 Requested_Data_Version, Actual_Data_Version,
-                cors_json_stream_write_headers_(Request, Actual_Data_Version)
+                routes:cors_json_stream_write_headers_(Request, Actual_Data_Version)
             )
         )).
 
