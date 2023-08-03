@@ -20,7 +20,10 @@ Beyond that, this verison brings various fixes and enhancements to our GraphQL s
 * properties can now be inherited from multiple superclasses, and even redefined in a subclass, as long as they form a type-compatible hierarchy. The strictest form is actually applied. If the subclass defines a property that is not at least as strict as what was defined in the supers, this results in a schema error.
 * graphql can now be made to not return subsumptions through the generated `include_children` argument.
 * new environment variable `TERMINUSDB_TRUST_MIGRATIONS` will ensure that instance data is not re-checked when schemas change due to migrations, as migrations should in principle not result in any errors. As the migration feature is still relatively new, the default here is false, meaning that without this environment variable, all schema changes result in a recheck of all existing instance data. In the future, this default will likely change.
-* graphql filters now experimentally support deep matches on IDs.
+
+## Experimental
+
+* graphql filters now support deep matches on IDs.
 * document API has a new parameter `ids` on GET allowing you to submit a list of documents to retrieve at once.
 
 ## Enhancements
