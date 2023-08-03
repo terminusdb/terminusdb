@@ -525,8 +525,8 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _
     get_dict(as_list, Config, As_List),
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
-
-    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started).
+    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+    json_stream_end(Config).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     ground(Ids),
     !,
