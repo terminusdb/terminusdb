@@ -461,7 +461,7 @@ paths:
         - name: ids
           in: query
           required: false
-          description: Multiple document IDs to look for, as a json list
+          description: Multiple document IDs to look for, as a json list (EXPERIMENTAL)
           schema:
             type: string
             example: Person/Robin_1991-02-01
