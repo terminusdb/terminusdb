@@ -486,14 +486,14 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             % if the user wants to submit multiple ids, they can
             param_value_search_or_json_optional(Search, JSON, ids, list, _, Ids_Param),
-            (   ground(Ids_Param)
+            (   ground(Id)
+            ->  Ids = [Id]
+            ;   ground(Ids_Param)
             ->  Ids = Ids_Param,
                 do_or_die(forall(member(Id, Ids),
                                  (   atom(Id)
                                  ;   string(Id))),
                           error(malformed_parameter(ids), _))
-            ;   ground(Id)
-            ->  Ids = [Id]
             ;   true),
             read_data_version_header(Request, Requested_Data_Version),
 
