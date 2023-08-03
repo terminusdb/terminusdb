@@ -3,9 +3,10 @@
 This release introduces a docker-compose deployment method which gets you all components of a fully-featured terminusdb setup:
 * TerminusDB - the main database.
 * VectorLink - a database sidecar dedicated to storing, indexing and retrieving vectors by similarity, used for AI-enhanced search.
-* terminusdb-change-request-api - an API for working with change requests, used by the dashboard.
+* terminusdb-change-request-api - an API for working with change requests.
+* Terminusdb-dashboard - our dashboard for managing terminusdb, which now supports AI search and change requests.
 
-Beyond that, various fixes and enhancements have happened around our GraphQL support, our schema checking and migrations, and the document interface. Please read the detailed list below.
+Beyond that, this verison brings various fixes and enhancements to our GraphQL support, our schema checking and migrations, and the document interface. Please read the detailed list below.
 
 ## Bug fixes
 * multi-level graphql hierarchies were not always returning all objects.
