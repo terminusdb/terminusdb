@@ -1,5 +1,12 @@
 # TerminusDB Server v11.1.1 Release Notes
 
+This release introduces a docker-compose deployment method which gets you all components of a fully-featured terminusdb setup:
+* TerminusDB - the main database.
+* VectorLink - a database sidecar dedicated to storing, indexing and retrieving vectors by similarity, used for AI-enhanced search.
+* terminusdb-change-request-api - an API for working with change requests, used by the dashboard.
+
+Beyond that, various fixes and enhancements have happened around our GraphQL support, our schema checking and migrations, and the document interface. Please read the detailed list below.
+
 ## Bug fixes
 * multi-level graphql hierarchies were not always returning all objects.
 * properties with prefixes didn't work properly in graphql.
