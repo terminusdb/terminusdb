@@ -413,6 +413,7 @@ paths:
       tags:
         - Document
       summary: Get a document
+      description: 'This endpoint is also usable through a POST with the header `X-HTTP-Method-Override: GET` submitted. This allows you to submit a JSON query document as post data instead of as query parameters. This can be useful for cases where your query parameters would be too long otherwise, or if you already have your data as JSON. In particular, this is useful for the `ids` field, which in the POST-ed query document can be submitted as a JSON list directly.'
       parameters:
         - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
@@ -453,7 +454,14 @@ paths:
         - name: id
           in: query
           required: false
-          description: Specific document ID to look for
+          description: Specific document ID to look for (takes precedence over ids field)
+          schema:
+            type: string
+            example: Person/Robin_1991-02-01
+        - name: ids
+          in: query
+          required: false
+          description: Multiple document IDs to look for, as a json list
           schema:
             type: string
             example: Person/Robin_1991-02-01
