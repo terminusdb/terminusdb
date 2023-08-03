@@ -21,15 +21,15 @@ Beyond that, this verison brings various fixes and enhancements to our GraphQL s
 * graphql can now be made to not return subsumptions through the generated `include_children` argument.
 * new environment variable `TERMINUSDB_TRUST_MIGRATIONS` will ensure that instance data is not re-checked when schemas change due to migrations, as migrations should in principle not result in any errors. As the migration feature is still relatively new, the default here is false, meaning that without this environment variable, all schema changes result in a recheck of all existing instance data. In the future, this default will likely change.
 
-## Experimental
-
-* graphql filters now support deep matches on IDs.
-* document API has a new parameter `ids` on GET allowing you to submit a list of documents to retrieve at once.
-
 ## Enhancements
 
 * schema migration scripts now support changes to class hierarchies and key strategies.
 * the graphql engine now keeps a small cache around of recent schemas to speed up repeated queries.
+
+## Experimental
+
+* graphql filters now support deep matches on IDs.
+* document API has a new parameter `ids` on GET allowing you to submit a list of documents to retrieve at once.
 
 # TerminusDB Server v11.1.0 Release Notes
 
