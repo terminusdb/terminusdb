@@ -522,7 +522,8 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     do_or_die(api_document_exists(Graph_Type, Transaction, Id),
               error(document_not_found(Id), _)),
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
     api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started).
@@ -533,7 +534,8 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Ids, _Type, _
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     do_or_die(api_document_exists(Graph_Type, Transaction, Id),
               error(document_not_found(Id), _)),
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
     api_print_documents_by_id(Graph_Type, Transaction, Config, Ids, Stream_Started),
@@ -543,7 +545,8 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
     (   ground(Type)
