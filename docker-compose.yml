@@ -19,7 +19,7 @@ services:
       #      - ./dashboard:/app/terminusdb/dashboard
       - ./storage:/app/terminusdb/storage
   vectorlink:
-    image: terminusdb/vectorlink:v0.0.6
+    image: terminusdb/vectorlink:v0.0.8
     environment:
       - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
       - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
