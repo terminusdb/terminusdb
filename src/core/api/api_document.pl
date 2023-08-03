@@ -148,6 +148,20 @@ api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started
     ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))
     ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
 
+api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
+    forall((member(Id, Ids),
+            api_get_document(schema, Transaction, Id, Config, Document)),
+           json_stream_write_dict(Config, Stream_Started, Document)).
+api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+            Ids,
+            Ids_Ex),
+    (   parallelize_enabled
+    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list))
+    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list))).
+
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
               error(document_not_found(Id), _)).
@@ -483,7 +497,7 @@ api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version,
 
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     nonvar(Query),
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
@@ -501,8 +515,8 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, 
     api_print_documents_by_query(Transaction, Type_Ex, Query_Ex, Config, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
-    ground(Id),
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    ground(Ids),
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
@@ -511,10 +525,10 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Type, _Query,
     call(Initial_Goal, Config.as_list),
     json_stream_start(Config, Stream_Started),
 
-    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+    api_print_documents_by_id(Graph_Type, Transaction, Config, Ids, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Ids, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.

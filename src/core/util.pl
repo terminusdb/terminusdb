@@ -257,6 +257,7 @@
               param_value_search_author/2,
               param_value_search_message/2,
               param_value_search_graph_type/2,
+              param_to_list/3,
 
               % data_version.pl
               compare_data_versions/2,

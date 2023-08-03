@@ -484,6 +484,15 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_json_optional(JSON, query, object, _, Query),
 
+            % if the user wants to submit multiple ids, they can
+            param_value_search_or_json_optional(Search, JSON, ids, non_empty_atom, _, Ids_Param),
+            (   param_to_list(ids, Ids_Param, Ids)
+            ->  do_or_die(forall(member(Id, Ids),
+                                 atom(Id)),
+                          error(malformed_parameter(id), _))
+            ;   ground(Id)
+            ->  Ids = [Id]
+            ;   true),
             read_data_version_header(Request, Requested_Data_Version),
 
             Config = config{

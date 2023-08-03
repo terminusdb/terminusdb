@@ -21,7 +21,9 @@
 
               param_value_search_author/2,
               param_value_search_message/2,
-              param_value_search_graph_type/2
+              param_value_search_graph_type/2,
+
+              param_to_list/3
           ]).
 
 :- use_module(utils).
@@ -183,3 +185,17 @@ param_value_search_or_json_optional(Search, JSON, Param, Type, Default, Value) :
     (   param_value_search_or_json(Search, JSON, Param, Type, Value)
     ->  true
     ;   Value = Default).
+
+param_to_list(Param_Name, Param, List) :-
+    (   var(Param)
+    ->  fail
+    ;   is_list(Param)
+    ->  List = Param
+    % if it came in as a query param, then at this stage it's still an atom
+    ;   atom(Param),
+        catch(atom_json_dict(Param, List, []),
+              _,
+              fail),
+        is_list(List)
+    ->  true
+    ;   throw(error(malformed_parameter(Param_Name), _))).
