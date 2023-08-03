@@ -2198,7 +2198,7 @@ run_command(doc,get, [Path], Opts) :-
         get_documents,
         api_read_document_selector(
             System_DB, Auth, Path, Graph_Type,
-            Ids, Type, Query, Config,
+            Id, Ids, Type, Query, Config,
             no_data_version, _Actual_Data_Version,
             [_L]>>true)
     ).

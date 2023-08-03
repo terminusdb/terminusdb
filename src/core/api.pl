@@ -126,7 +126,7 @@
               api_replace_documents/8,
               api_nuke_documents/6,
               api_generate_document_ids/4,
-              api_read_document_selector/11,
+              api_read_document_selector/12,
               api_generate_document_ids/4,
               api_get_documents/4,
               api_get_document/5,

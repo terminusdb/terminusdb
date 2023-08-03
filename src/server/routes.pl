@@ -490,9 +490,9 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             ->  Ids = [Id]
             ;   ground(Ids_Param)
             ->  Ids = Ids_Param,
-                do_or_die(forall(member(Id, Ids),
-                                 (   atom(Id)
-                                 ;   string(Id))),
+                do_or_die(forall(member(Single_Id, Ids),
+                                 (   atom(Single_Id)
+                                 ;   string(Single_Id))),
                           error(malformed_parameter(ids), _))
             ;   true),
             read_data_version_header(Request, Requested_Data_Version),
@@ -508,7 +508,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             api_read_document_selector(
                 System_DB, Auth, Path, Graph_Type,
-                Ids, Type, Query, Config,
+                Id, Ids, Type, Query, Config,
                 Requested_Data_Version, Actual_Data_Version,
                 cors_json_stream_write_headers_(Request, Actual_Data_Version)
             )
