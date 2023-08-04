@@ -14,7 +14,7 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 The last released version of TerminusDB is: <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v11.1.0`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.0)
+[`v11.1.1`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.1)
 <!-- [[[end]]] -->
 
 The current repository version is: <!--
@@ -24,7 +24,7 @@ The current repository version is: <!--
 
 1. Look at the changes to `main` since the last released version: <!--
    [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-   [`11.1.0...main`](https://github.com/terminusdb/terminusdb/compare/v11.1.0...main)
+   [`11.1.1...main`](https://github.com/terminusdb/terminusdb/compare/v11.1.1...main)
    <!-- [[[end]]] -->
 
 2. (_PR_) Update [`RELEASE_NOTES.md`](./RELEASE_NOTES.md) in `main`:
