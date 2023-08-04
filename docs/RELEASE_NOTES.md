@@ -1,3 +1,12 @@
+# TerminusDB Server v11.1.1-1 Release Notes
+
+Very minor hotpatch release to include the new local dashboard.
+
+## New
+
+* New dashboard version (v6.0.9) which includes various fixes and enhancements, like the ability
+  to properly close pull requests.
+
 # TerminusDB Server v11.1.1 Release Notes
 
 This release introduces a docker-compose deployment method which gets you all components of a fully-featured terminusdb setup:
