@@ -2,8 +2,9 @@ version: "3"
 
 services:
   terminusdb-server:
-    image: terminusdb/terminusdb-server:add_vectorlink
+    image: terminusdb/terminusdb-server:latest
     container_name: terminusdb-server
+    pull_policy: always
     hostname: terminusdb-server
     tty: true
     ports:
