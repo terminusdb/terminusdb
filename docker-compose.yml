@@ -2,8 +2,9 @@ version: "3"
 
 services:
   terminusdb-server:
-    image: terminusdb/terminusdb-server:add_vectorlink
+    image: terminusdb/terminusdb-server:latest
     container_name: terminusdb-server
+    pull_policy: always
     hostname: terminusdb-server
     tty: true
     ports:
@@ -28,7 +29,7 @@ services:
       - ./vector_storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT:-120000}"]
   change-request-api:
-    image: terminusdb/terminusdb-change-request-api:v0.0.6
+    image: terminusdb/terminusdb-change-request-api:v0.0.7
     ports:
       - 3035:3035
     environment:
