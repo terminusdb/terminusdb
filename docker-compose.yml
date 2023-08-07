@@ -34,7 +34,7 @@ services:
       - 3035:3035
     environment:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
-      - USE_CHANGE_REQUEST=true
+      - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
       # Add your OpenAI key in a .env file
       - OPENAI_KEY=${OPENAI_KEY}
       - USER_KEY=${TERMINUSDB_USER_KEY}
