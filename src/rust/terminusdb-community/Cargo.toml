@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 lcs = "0.2.0"
-swipl = {version="0.3.13", features=["serde"]}
+swipl = {version="0.3.14", features=["serde"]}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
 itertools = "0.10.3"
 serde_json = {version="1", features=["preserve_order", "arbitrary_precision"]}
@@ -26,7 +26,7 @@ aho-corasick = "0.7"
 bimap = "0.6.2"
 ordered-float = "3.0"
 rug = {version = "1.17", default-features = false, features=["integer","rational"]}
-gmp-mpfr-sys = {version = "1.4", default-features = false, features=["use-system-libs"]}
+gmp-mpfr-sys = {version = "~1.5", default-features = false, features=["use-system-libs"]}
 regex-lexer = "0.2"
 nom = "7.1"
 chrono = { version="0.4", features=["serde"]}

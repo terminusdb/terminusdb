@@ -38,6 +38,15 @@ api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(malformed_parameter(Param), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Malformed parameter: ~s", [Param]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MalformedParameter',
+                              'api:parameter' : Param },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     (   Expected_Type = boolean

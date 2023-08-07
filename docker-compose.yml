@@ -2,8 +2,9 @@ version: "3"
 
 services:
   terminusdb-server:
-    image: terminusdb/terminusdb-server:add_vectorlink
+    image: terminusdb/terminusdb-server:latest
     container_name: terminusdb-server
+    pull_policy: always
     hostname: terminusdb-server
     tty: true
     ports:
@@ -19,7 +20,7 @@ services:
       #      - ./dashboard:/app/terminusdb/dashboard
       - ./storage:/app/terminusdb/storage
   vectorlink:
-    image: terminusdb/vectorlink:v0.0.6
+    image: terminusdb/vectorlink:v0.0.8
     environment:
       - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
       - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
@@ -28,12 +29,12 @@ services:
       - ./vector_storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT:-120000}"]
   change-request-api:
-    image: terminusdb/terminusdb-change-request-api:v0.0.6
+    image: terminusdb/terminusdb-change-request-api:v0.0.7
     ports:
       - 3035:3035
     environment:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
-      - USE_CHANGE_REQUEST=true
+      - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
       # Add your OpenAI key in a .env file
       - OPENAI_KEY=${OPENAI_KEY}
       - USER_KEY=${TERMINUSDB_USER_KEY}

@@ -166,10 +166,6 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
     false
 }
 
-pub fn is_reserved_field_name(name: &String) -> bool {
-    name == "id"
-}
-
 impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a, C> {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
@@ -431,9 +427,6 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             .fields()
             .iter()
             .filter_map(|(field_name, field_definition)| {
-                if is_reserved_field_name(field_name) {
-                    return None;
-                }
                 Some(
                     if let Some(document_type) = field_definition.document_type(frames) {
                         let field = Self::register_field::<TerminusType<'a, C>>(

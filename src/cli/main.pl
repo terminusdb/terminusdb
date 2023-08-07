@@ -1077,6 +1077,12 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            shortflags([i]),
            default('_'),
            help('id of document to retrieve')],
+          [opt(ids),
+           % todo something something comma separated values
+           type(term),
+           longflags([ids]),
+           default('_'),
+           help('list of document ids to retrieve')],
           [opt(type),
            type(atom),
            longflags([type]),
@@ -2159,9 +2165,14 @@ run_command(doc,get, [Path], Opts) :-
     option(as_list(As_List), Opts),
     option(unfold(Unfold), Opts),
     option(id(Id), Opts),
+    option(ids(Ids_Param), Opts),
     option(type(Type), Opts),
     option(compress_ids(Compress_Ids), Opts),
     option(query(Query_Atom), Opts),
+
+    (   ground(Id)
+    ->  Ids = [Id]
+    ;   Ids = Ids_Param),
 
     (   var(Query_Atom)
     ->  Query = Query_Atom
@@ -2187,7 +2198,7 @@ run_command(doc,get, [Path], Opts) :-
         get_documents,
         api_read_document_selector(
             System_DB, Auth, Path, Graph_Type,
-            Id, Type, Query, Config,
+            Id, Ids, Type, Query, Config,
             no_data_version, _Actual_Data_Version,
             [_L]>>true)
     ).

@@ -15,5 +15,8 @@ ignore_predicate("print_all_documents_json/5").
 ignore_predicate("par_print_all_documents_json/5").
 ignore_predicate("print_all_documents_json_by_type/6").
 ignore_predicate("par_print_all_documents_json_by_type/6").
+ignore_predicate("print_documents_json_by_id/6").
+ignore_predicate("par_print_documents_json_by_id/6").
+
 
 ignore_file("./src/library").

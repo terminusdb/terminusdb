@@ -764,6 +764,9 @@ Query documents.
   * `-i`, `--id`=[value]:
   id of document to retrieve
 
+  * `--ids`=[value]:
+  list of document ids to retrieve
+
   * `-t`, `--type`=[value]:
   type of document to retrieve
 

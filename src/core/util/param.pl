@@ -80,7 +80,8 @@ param_check_search_(non_empty_atom, Value_In, Value_Out) :-
 param_check_search_(object, Value_In, Value_Out) :-
     atom_json_dict(Value_In, Value_Out, [default_tag(json)]).
 param_check_search_(list, Value_In, Value_Out) :-
-    atom_json_dict(Value_In, Value_Out, [default_tag(json)]).
+    atom_json_dict(Value_In, Value_Out, [default_tag(json)]),
+    is_list(Value_Out).
 
 /* Check parameters common to both JSON dicts and stream lists. */
 param_check_common_(boolean, false, false).
