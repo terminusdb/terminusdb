@@ -7,7 +7,7 @@
               api_nuke_documents/6,
               api_generate_document_ids/4,
               call_catch_document_mutation/2,
-              api_read_document_selector/11,
+              api_read_document_selector/12,
               api_generate_document_ids/4,
               api_get_documents/4,
               api_get_document/5,
@@ -147,6 +147,20 @@ api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started
     (   parallelize_enabled
     ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))
     ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
+
+api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
+    forall((member(Id, Ids),
+            api_get_document(schema, Transaction, Id, Config, Document)),
+           json_stream_write_dict(Config, Stream_Started, Document)).
+api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+            Ids,
+            Ids_Ex),
+    (   parallelize_enabled
+    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list))
+    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list))).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
@@ -326,7 +340,8 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          die_if(Duplicates \= [],
                                 error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
@@ -389,7 +404,8 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                              Ids
                          )
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Options) :-
@@ -401,7 +417,8 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_nuke_documents_(schema, Transaction) :-
@@ -424,7 +441,8 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Ids, Captures_Out):-
@@ -469,7 +487,8 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
                          die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
@@ -478,7 +497,7 @@ api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version,
 
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     nonvar(Query),
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
@@ -496,24 +515,38 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, 
     api_print_documents_by_query(Transaction, Type_Ex, Query_Ex, Config, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     ground(Id),
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     do_or_die(api_document_exists(Graph_Type, Transaction, Id),
               error(document_not_found(Id), _)),
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_stream_start(Config, Stream_Started),
+    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+    json_stream_end(Config).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    ground(Ids),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    do_or_die(api_document_exists(Graph_Type, Transaction, Id),
+              error(document_not_found(Id), _)),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
-    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+    api_print_documents_by_id(Graph_Type, Transaction, Config, Ids, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
     (   ground(Type)

@@ -11,6 +11,11 @@ describe('GraphQL', function () {
   let client
 
   const schema = [{
+    '@type': '@context',
+    '@base': 'terminusdb:///data/',
+    '@schema': 'terminusdb:///schema#',
+    prefix: 'http://prefix.com/',
+  }, {
     '@id': 'Person',
     '@type': 'Class',
     '@key': {
@@ -129,6 +134,52 @@ describe('GraphQL', function () {
     '@type': 'Class',
     rocks: { '@type': 'Set', '@class': 'Rocks' },
   },
+  {
+    '@id': 'OneOf',
+    '@type': 'Class',
+    '@oneOf': [
+      {
+        a: 'xsd:string',
+        b: 'xsd:string',
+      },
+    ],
+  },
+  {
+    '@id': 'Integer',
+    '@type': 'Class',
+    int: 'xsd:integer',
+  },
+  {
+    '@id': 'NonNegativeInteger',
+    '@type': 'Class',
+    nonnegint: 'xsd:nonNegativeInteger',
+  },
+  {
+    '@id': 'DateAndTime',
+    '@type': 'Class',
+    datetime: 'xsd:dateTime',
+  },
+  {
+    '@id': 'BadlyNamedOptional',
+    '@type': 'Class',
+    'is-it-ok': { '@type': 'Optional', '@class': 'xsd:string' },
+  },
+  {
+    '@id': 'MyBigFloat',
+    '@type': 'Class',
+    bigfloat: 'xsd:decimal',
+  },
+  {
+    '@id': 'Prefix',
+    '@type': 'Class',
+    'prefix:foo': 'xsd:string',
+  },
+  {
+    '@id': 'Node',
+    '@type': 'Class',
+    'prefix:node': { '@type': 'Optional', '@class': 'Node' },
+    'prefix:string': 'xsd:string',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -141,7 +192,19 @@ describe('GraphQL', function () {
   const pickles = { '@type': 'Cat', name: 'Pickles' }
   const toots = { '@type': 'Cat', name: 'Toots' }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots]
+  const int1 = { int: 1 }
+  const int2 = { int: 100 }
+  const int3 = { int: 11 }
+  const int4 = { int: 2 }
+
+  const nonnegint = { nonnegint: 300 }
+  const datetime = { datetime: '2021-03-05T23:34:43.0003Z' }
+
+  const bigfloat1 = { bigfloat: '0.0' }
+  const bigfloat2 = { bigfloat: '10096.757' }
+  const bigfloat3 = { bigfloat: '101.0' }
+
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, nonnegint, datetime, bigfloat1, bigfloat2, bigfloat3]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -176,7 +239,7 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    await document.insert(agent, { schema })
+    await document.insert(agent, { schema, fullReplace: true })
 
     await document.insert(agent, { instance: instances })
   })
@@ -223,6 +286,113 @@ describe('GraphQL', function () {
         { name: 'Karl Popper', age: '92', order: '5' },
         { name: 'Kurt Gödel', age: '71', order: '5' },
       ])
+    })
+
+    it('graphql order by stringy num', async function () {
+      const INTEGER_QUERY = gql`
+ query IntegerQuery {
+    Integer(orderBy: {int: ASC}) {
+        int
+    }
+}`
+      const result = await client.query({ query: INTEGER_QUERY })
+      expect(result.data.Integer).to.deep.equal(
+        [
+          {
+            int: '1',
+          },
+          {
+            int: '2',
+          },
+          {
+            int: '11',
+          },
+          {
+            int: '100',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter nonNegativeInteger', async function () {
+      const NON_NEGATIVE_INTEGER_QUERY = gql`
+ query NonNegativeIntegerQuery {
+    NonNegativeInteger(filter: {nonnegint: {ge: "4"}}, orderBy: {nonnegint: ASC}) {
+        nonnegint
+    }
+}`
+      const result = await client.query({ query: NON_NEGATIVE_INTEGER_QUERY })
+      expect(result.data.NonNegativeInteger).to.deep.equal(
+        [
+          {
+            nonnegint: '300',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter dateTime', async function () {
+      const DATETIME_QUERY = gql`
+ query dateTimeQuery {
+    DateAndTime(filter: {datetime: {ge: "2021-03-05T23:34:43.0003Z" }},
+                orderBy: {datetime: ASC}) {
+        datetime
+    }
+}`
+      const result = await client.query({ query: DATETIME_QUERY })
+      expect(result.data.DateAndTime).to.deep.equal(
+        [
+          {
+            datetime: '2021-03-05T23:34:43.000300Z',
+          },
+
+        ],
+      )
+    })
+
+    it('graphql filter stringy num', async function () {
+      const INTEGER_QUERY = gql`
+ query IntegerQuery {
+    Integer(filter: {int: {ge : "4"}}, orderBy: {int: ASC}) {
+        int
+    }
+}`
+      const result = await client.query({ query: INTEGER_QUERY })
+      expect(result.data.Integer).to.deep.equal(
+        [
+          {
+            int: '11',
+          },
+          {
+            int: '100',
+          },
+        ],
+      )
+    })
+
+    it('graphql order BigFloat', async function () {
+      const BIGFLOAT_QUERY = gql`
+ query BigFloat {
+    MyBigFloat(orderBy: {bigfloat: ASC}) {
+        bigfloat
+    }
+}`
+      const result = await client.query({ query: BIGFLOAT_QUERY })
+      expect(result.data.MyBigFloat).to.deep.equal(
+        [
+          {
+            bigfloat: '0.0',
+          },
+          {
+            bigfloat: '101.0',
+          },
+          {
+            bigfloat: '10096.757',
+          },
+        ],
+      )
     })
 
     it('back-link query', async function () {
@@ -372,7 +542,7 @@ describe('GraphQL', function () {
       )
     })
 
-    it('path query backward and forward', async function () {
+    it('graphql path query backward and forward', async function () {
       const PATH_QUERY = gql`
  query PersonQuery {
     Person(id: "terminusdb:///data/Person/Immanuel%20Kant", orderBy : {order : ASC}){
@@ -402,9 +572,10 @@ describe('GraphQL', function () {
     it('graphql ids query', async function () {
       const PERSON_QUERY = gql`
  query PersonQuery {
-    Person(ids : ["terminusdb:///data/Person/Immanuel%20Kant",
-                  "terminusdb:///data/Person/Socrates"
-                 ]){
+    Person(ids : [
+           "terminusdb:///data/Person/Immanuel%20Kant",
+           "terminusdb:///data/Person/Socrates"
+           ] ){
         name
     }
 }`
@@ -580,6 +751,24 @@ query EverythingQuery {
         ])
     })
 
+    it('graphql no subsumption', async function () {
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(include_children: false, orderBy: {name : ASC}){
+        _type
+        name
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            _type: 'Parent',
+            name: 'Dad',
+          },
+        ])
+    })
+
     it('graphql meta-tags', async function () {
       const testObj = {
         '@id': 'Test',
@@ -626,6 +815,31 @@ query EverythingQuery {
       expect(result.data.MaybeRocks).to.deep.equal([
         {
           rocks_opt: 'Big',
+        },
+      ])
+    })
+
+    it('graphql oneOf treated as optional', async function () {
+      const testObj = {
+        '@type': 'OneOf',
+        '@id': 'OneOf/1',
+        a: 'a',
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query  {
+    OneOf{
+        a,
+        b
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.OneOf).to.deep.equal([
+        {
+          a: 'a',
+          b: null,
         },
       ])
     })
@@ -714,6 +928,97 @@ query EverythingQuery {
           '{"this":{"is":{"a":{"json":[]}}}}',
         ],
       )
+    })
+
+    it('graphql optional rename', async function () {
+      const testObj = {
+        '@type': 'BadlyNamedOptional',
+        'is-it-ok': 'something',
+      }
+      await document.insert(agent, { instance: testObj })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    BadlyNamedOptional{
+        is_it_ok
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.BadlyNamedOptional).to.deep.equal([
+        { is_it_ok: 'something' },
+      ])
+    })
+
+    it('graphql queries a prefix', async function () {
+      const instance = {
+        'prefix:foo': 'baz',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    Prefix{
+        prefix_foo
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.Prefix).to.deep.equal([{ prefix_foo: 'baz' }])
+    })
+
+    it('graphql queries reversable', async function () {
+      const instance = {
+        'prefix:string': 'Bar',
+        'prefix:node': { 'prefix:string': 'Baz' },
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    Node(filter: { prefix_string : { eq : "Baz" }}){
+        prefix_string
+        _prefix_node_of_Node{
+            prefix_string
+        }
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+
+      expect(result.data.Node).to.deep.equal([
+        {
+          _prefix_node_of_Node: [
+            {
+              prefix_string: 'Bar',
+            },
+          ],
+          prefix_string: 'Baz',
+        },
+      ])
+    })
+
+    it('shadows a graphql type and fails', async function () {
+      const collision = {
+        '@type': 'Class',
+        '@id': 'BigInt',
+        bigint: 'xsd:integer',
+      }
+      await document.insert(agent, { schema: collision })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    BigInt{
+        bigint
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+        .catch((error) => {
+          const nwe = error.networkError
+          expect(nwe.statusCode).to.equal(500)
+        })
+      expect(result).to.equal(undefined)
     })
   })
 })

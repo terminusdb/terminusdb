@@ -297,6 +297,141 @@ describe('diff-id', function () {
       ])
     })
 
+    it('diff with paging', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      const r0 = await document
+        .insert(agent, {
+          schema: [{ '@type': 'Class', '@id': class1, a: 'xsd:string' },
+            { '@type': 'Class', '@id': class2, b: 'xsd:string' },
+          ],
+        })
+      const dv0 = r0.header['terminusdb-data-version']
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@type': class1, a: 'pickles and eggs' },
+        })
+      const [docId1Long] = r1.body
+      const docId1 = docId1Long.split('terminusdb:///data/')[1]
+      const r2 = await document
+        .insert(agent, {
+          instance: { '@type': class2, b: 'frog legs' },
+        })
+      const [docId2Long] = r2.body
+      const docId2 = docId2Long.split('terminusdb:///data/')[1]
+      const r3 = await document
+        .insert(agent, {
+          instance: { '@type': class2, b: 'duck soup' },
+        })
+      const dv3 = r3.header['terminusdb-data-version']
+      const [docId3Long] = r3.body
+      const docId3 = docId3Long.split('terminusdb:///data/')[1]
+
+      const path = api.path.versionDiff(agent)
+
+      const diff03 = await agent.post(path).send(
+        {
+          before_data_version: dv0,
+          after_data_version: dv3,
+        })
+      expect(diff03.status).to.equal(200)
+      expect(diff03.body).to.deep.equal(
+        [
+          {
+            '@insert': {
+              '@id': docId1,
+              '@type': class1,
+              a: 'pickles and eggs',
+            },
+            '@op': 'Insert',
+          },
+          {
+            '@insert': {
+              '@id': docId2,
+              '@type': class2,
+              b: 'frog legs',
+            },
+            '@op': 'Insert',
+          },
+          {
+            '@insert': {
+              '@id': docId3,
+              '@type': class2,
+              b: 'duck soup',
+            },
+            '@op': 'Insert',
+          },
+        ])
+
+      const diff03Start0Count1 = await agent.post(path).send(
+        {
+          before_data_version: dv0,
+          after_data_version: dv3,
+          start: 0,
+          count: 1,
+        })
+      expect(diff03Start0Count1.status).to.equal(200)
+      expect(diff03Start0Count1.body).to.deep.equal(
+        [
+          {
+            '@insert': {
+              '@id': docId1,
+              '@type': class1,
+              a: 'pickles and eggs',
+            },
+            '@op': 'Insert',
+          },
+        ])
+
+      const diff03Start1Count1 = await agent.post(path).send(
+        {
+          before_data_version: dv0,
+          after_data_version: dv3,
+          start: 1,
+          count: 1,
+        })
+      expect(diff03Start1Count1.status).to.equal(200)
+      expect(diff03Start1Count1.body).to.deep.equal(
+        [
+          {
+            '@insert': {
+              '@id': docId2,
+              '@type': class2,
+              b: 'frog legs',
+            },
+            '@op': 'Insert',
+          },
+        ])
+
+      const diff03Start1Count3 = await agent.post(path).send(
+        {
+          before_data_version: dv0,
+          after_data_version: dv3,
+          start: 1,
+          count: 3,
+        })
+      expect(diff03Start1Count3.status).to.equal(200)
+      expect(diff03Start1Count3.body).to.deep.equal(
+        [
+          {
+            '@insert': {
+              '@id': docId2,
+              '@type': class2,
+              b: 'frog legs',
+            },
+            '@op': 'Insert',
+          },
+          {
+            '@insert': {
+              '@id': docId3,
+              '@type': class2,
+              b: 'duck soup',
+            },
+            '@op': 'Insert',
+          },
+        ])
+    })
+
     it('apply squash commit', async function () {
       const class1 = util.randomString()
       const class2 = util.randomString()

@@ -126,7 +126,7 @@
               api_replace_documents/8,
               api_nuke_documents/6,
               api_generate_document_ids/4,
-              api_read_document_selector/11,
+              api_read_document_selector/12,
               api_generate_document_ids/4,
               api_get_documents/4,
               api_get_document/5,
@@ -187,9 +187,15 @@
               % api_history.pl
               api_document_history/6,
 
-              % api_migration
+              % api_migration.pl
               api_migrate_resource/7,
-              api_migrate_resource_to/7
+              api_migrate_resource_to/7,
+
+              % api_merge.pl
+              api_concat/6,
+
+              % api_indexer
+              api_index_jobs/8
           ]).
 
 :- use_module(api/api_init).
@@ -228,3 +234,5 @@
 :- use_module(api/api_graphql).
 :- use_module(api/api_history).
 :- use_module(api/api_migration).
+:- use_module(api/api_indexer).
+:- use_module(api/api_merge).

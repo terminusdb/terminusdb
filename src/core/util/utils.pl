@@ -6,6 +6,7 @@
               zip/3,
               intersperse/3,
               interpolate/2,
+              alternate/2,
               interpolate_string/2,
               unique_solutions/3,
               repeat_term/3,
@@ -87,6 +88,7 @@
               terminal_slash/2,
               dict_field_verifier/3,
               count_solutions/2,
+              negative_to_infinity/2,
 
               %%% From the rust module
               random_string/1
@@ -229,6 +231,11 @@ intersperse(Item, List, Output) :-
 intersperse_([], X, _, [X]).
 intersperse_([Y| Xs], X, Item, [X, Item| Tail]) :-
     intersperse_(Xs, Y, Item, Tail).
+
+
+alternate([X], [X]).
+alternate([X,_|Rest], [X|Tail]) :-
+    alternate(Rest, Tail).
 
 /**
  * interpolate(L:list,A:atom) is det.
@@ -1277,3 +1284,9 @@ dict_field_verifier(DictIn, Field_Verifier, DictOut) :-
 :- meta_predicate field_verifier(+,1).
 field_verifier(Field,Verifier) :-
     call(Verifier, Field).
+
+negative_to_infinity(Z,P) :-
+    (   Z < 0
+    ->  P = inf
+    ;   Z = P
+    ).

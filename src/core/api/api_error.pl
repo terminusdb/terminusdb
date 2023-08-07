@@ -38,6 +38,15 @@ api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(malformed_parameter(Param), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Malformed parameter: ~s", [Param]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MalformedParameter',
+                              'api:parameter' : Param },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     (   Expected_Type = boolean
@@ -899,6 +908,15 @@ api_error_jsonld_(unpack,error(not_a_repository_descriptor(Descriptor),_), JSON)
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
+api_error_jsonld_(push,error(push_has_no_repository_head(Descriptor),_), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following repository has no head: ~q", [Path]),
+    JSON = _{'@type' : 'api:PushErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:RepositoryHasNoRepositoryHeadError',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(push,error(push_requires_branch(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following absolute resource descriptor string does not specify a branch: ~q", [Path]),
@@ -1597,6 +1615,42 @@ api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation)
                               'api:operation' : Operation
                             }
             }.
+api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)), JSON) :-
+    JSON = _{'@type' : 'api:IndexErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:HandlebarsTemplateError",
+                              'api:line' : Line,
+                              'api:character': Character
+                            }
+            }.
+api_error_jsonld_(index, error(indexing_requires_superuser), JSON) :-
+    JSON = _{'@type' : 'api:IndexErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : "Indexing requires superuser authority",
+             'api:error' : _{ '@type' : "api:IndexingRequiresSuperuserAuthorityError"}
+            }.
+api_error_jsonld_(concat, error(instance_layer_missing_in_merged_data(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(String, Descriptor),
+    format(string(Msg), "One of the descriptors used in the merge operation did not have an associated instance layer: ~s", [String]),
+    JSON = _{'@type' : 'api:ConcatErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InstanceLayerMissingInConcat",
+                              'api:descriptor' : String
+                            }
+            }.
+api_error_jsonld_(concat, error(not_a_base_layer(Layer, Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(String, Descriptor),
+    format(string(Msg), "One of the descriptors (~s) used in the merge operation had an instance layer which is not a base layer: ~s", [String, Layer]),
+    JSON = _{'@type' : 'api:ConcatErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NotABaseLayer",
+                              'api:descriptor' : String,
+                              'api:layer' : Layer
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
@@ -1646,6 +1700,7 @@ error_type_(apply, 'api:ApplyErrorResponse').
 error_type_(toplevel, 'api:TopLevelResponse').
 error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
+error_type_(concat, 'api:ConcatErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-

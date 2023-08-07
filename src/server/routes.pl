@@ -484,6 +484,14 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_json_optional(JSON, query, object, _, Query),
 
+            % if the user wants to submit multiple ids, they can
+            param_value_search_or_json_optional(Search, JSON, ids, list, _, Ids),
+            (   ground(Ids)
+            ->  do_or_die(forall(member(Single_Id, Ids),
+                                 (   atom(Single_Id)
+                                 ;   string(Single_Id))),
+                          error(malformed_parameter(ids), _))
+            ;   true),
             read_data_version_header(Request, Requested_Data_Version),
 
             Config = config{
@@ -497,9 +505,9 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             api_read_document_selector(
                 System_DB, Auth, Path, Graph_Type,
-                Id, Type, Query, Config,
+                Id, Ids, Type, Query, Config,
                 Requested_Data_Version, Actual_Data_Version,
-                cors_json_stream_write_headers_(Request, Actual_Data_Version)
+                routes:cors_json_stream_write_headers_(Request, Actual_Data_Version)
             )
         )).
 
@@ -522,6 +530,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, full_replace, boolean, false, Full_Replace),
             param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
+            param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
+            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -530,7 +540,9 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           author : Author,
                           message : Message,
                           full_replace : Full_Replace,
-                          raw_json : Raw_JSON
+                          raw_json : Raw_JSON,
+                          require_migration: Require_Migration,
+                          allow_destructive_migration: Allow_Destructive_Migration
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -554,12 +566,16 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, nuke, boolean, false, Nuke),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
+            param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
+            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
                           author : Author,
                           message : Message,
-                          graph_type : Graph_Type
+                          graph_type : Graph_Type,
+                          require_migration: Require_Migration,
+                          allow_destructive_migration: Allow_Destructive_Migration
                       },
 
             (   Nuke = true
@@ -591,6 +607,8 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, create, boolean, false, Create),
             param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
+            param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
+            param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -598,7 +616,9 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 message : Message,
                 graph_type : Graph_Type,
                 create : Create,
-                raw_json : Raw_JSON
+                raw_json : Raw_JSON,
+                require_migration: Require_Migration,
+                allow_destructive_migration: Allow_Destructive_Migration
             },
             api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -2620,7 +2640,10 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
             ->  api_diff_id(System_DB, Auth, Path, Before_Version,
                             After_Version, Doc_ID, Patch, Options)
             ;   Operation = all_documents
-            ->  api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Patch, Options)
+            ->  param_value_json_optional(Document, start, integer, 0, Start),
+                param_value_json_optional(Document, count, integer, inf, Count),
+                put_dict(_{ count: Count, start: Start}, Options, Options_Merged),
+                api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Patch, Options_Merged)
             ;   api_diff_id_document(System_DB, Auth, Path,
                                      Before_Version, After_Document,
                                      Doc_ID, Patch, Options)
@@ -3041,6 +3064,45 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+:- http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,get,post,put])]).
+
+index_handler(get,Path,Request,System_DB,Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+
+    api_report_errors(
+        index,
+        Request,
+        (
+            param_value_search_required(Search, commit_id, text, Commit_Id),
+            param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
+            (   Previous_Commit_Id = none
+            ->  Maybe_Previous_Commit_Id = Previous_Commit_Id
+            ;   Maybe_Previous_Commit_Id = some(Previous_Commit_Id)
+            ),
+            api_index_jobs(
+                System_DB,
+                Auth,
+                current_output,
+                [Stream]>>(
+                    write(Stream,'Status: 200'),nl(Stream),
+                    write(Stream,'Content-Type: application/json'),nl(Stream),
+                    format("Transfer-Encoding: chunked~n"),
+                    nl(Stream)),
+                Path,
+                Commit_Id,
+                Maybe_Previous_Commit_Id,
+                [])
+        )
+    ).
+
+
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
 :- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),
@@ -3169,6 +3231,7 @@ cors_handler(Method, Goal, Options, R) :-
                                    'api:message' : 'Incorrect authentication information'
                                   },
                                  [width(0), status(401)]))))),
+    abolish_private_tables,
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
@@ -3598,8 +3661,9 @@ read_json_dict(AtomOrText, JSON) :-
 http_read_utf8(stream(Stream), Request) :-
     (   content_encoded(Request, Encoding)
     ->  memberchk(input(Input_Stream), Request),
-        zopen(Input_Stream, Uncompressed_Stream, [format(Encoding), multi_part(false)]),
+        zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
         read_string(Uncompressed_Stream, _, S1),
+        close(Uncompressed_Stream),
         open_string(S1, Stream)
     ;   http_read_data(Request, String, [to(string), input_encoding(utf8)]),
         open_string(String, Stream)

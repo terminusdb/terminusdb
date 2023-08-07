@@ -76,6 +76,7 @@
               zip/3,
               intersperse/3,
               interpolate/2,
+              alternate/2,
               interpolate_string/2,
               unique_solutions/3,
               repeat_term/3,
@@ -150,6 +151,7 @@
               terminal_slash/2,
               dict_field_verifier/3,
               count_solutions/2,
+              negative_to_infinity/2,
 
               % speculative_parse.pl
               %guess_date/2,

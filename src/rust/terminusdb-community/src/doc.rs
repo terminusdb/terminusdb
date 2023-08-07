@@ -487,6 +487,22 @@ impl<L: Layer> GetDocumentContext<L> {
 
         types
     }
+
+    fn id_document_exists(&self, id: u64) -> bool {
+        self.rdf_type_id
+            .map(|rdf_type_id| self.layer().single_triple_sp(id, rdf_type_id).is_some())
+            .unwrap_or(false)
+    }
+
+    pub fn document_exists(&self, iri: &str) -> bool {
+        match self.layer.as_ref() {
+            None => false,
+            Some(l) => match l.subject_id(iri) {
+                Some(id) => self.id_document_exists(id),
+                None => false,
+            },
+        }
+    }
 }
 
 pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
@@ -827,7 +843,8 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let count: Option<u64> = attempt_opt(count_term.get())?;
     let as_list: bool = as_list_term.get_ex()?;
 
-    let (sender, receiver) = mpsc::channel();
+    let channel_size = rayon::current_num_threads() * 2;
+    let (sender, receiver) = mpsc::sync_channel(channel_size);
 
     // cloning here cause we need to use the doc context from two places.
     // Since we are dealing with an arc, the clone is cheap.
@@ -896,6 +913,130 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
 
     assert!(result.is_empty());
 
+    Ok(())
+}
+
+fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
+    context: &Context<C>,
+    doc_context: &Arc<GetDocumentContext<L>>,
+    stream_term: &Term,
+    skip_term: &Term,
+    count_term: &Term,
+    as_list_term: &Term,
+    iris_term: &Term,
+) -> PrologResult<()> {
+    let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+    let minimized = doc_context.minimized;
+    let mut skip: u64 = skip_term.get_ex()?;
+    let mut count: Option<u64> = attempt_opt(count_term.get())?;
+    let as_list: bool = as_list_term.get_ex()?;
+
+    let mut started = false;
+    for iri_term in context.term_list_iter(iris_term) {
+        let iri: PrologText = iri_term.get_ex()?;
+        if let Some(doc) = doc_context.get_document(&iri) {
+            if skip > 0 {
+                skip -= 1;
+                continue;
+            }
+            if let Some(count) = count.as_mut() {
+                if *count == 0 {
+                    break;
+                }
+                *count -= 1;
+            }
+            print_document(context, &mut stream, doc, as_list, minimized, &mut started)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
+    context: &Context<C>,
+    doc_context: &Arc<GetDocumentContext<L>>,
+    stream_term: &Term,
+    skip_term: &Term,
+    count_term: &Term,
+    as_list_term: &Term,
+    iris_term: &Term,
+) -> PrologResult<()> {
+    let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+    let minimized = doc_context.minimized;
+    let skip: u64 = skip_term.get_ex()?;
+    let count: Option<u64> = attempt_opt(count_term.get())?;
+    let as_list: bool = as_list_term.get_ex()?;
+
+    let channel_size = rayon::current_num_threads() * 2;
+    let (sender, receiver) = mpsc::sync_channel(channel_size);
+
+    let doc_context2 = doc_context.clone();
+    let doc_context3 = doc_context.clone();
+    // for the par version, we pre-scan for existence to handle skip and count more efficiently
+    let iris: Vec<String> = context
+        .term_list_iter(iris_term)
+        .map(|iri_term| iri_term.get_ex::<PrologText>().map(|t| t.to_string()))
+        .collect::<Result<_, _>>()?;
+    let iter = iris
+        .into_iter()
+        .filter(move |iri| doc_context3.document_exists(&iri))
+        .skip(skip as usize);
+    let iter = match count {
+        Some(count) => itertools::Either::Left(iter.take(count as usize)),
+        None => itertools::Either::Right(iter),
+    };
+    rayon::spawn(move || {
+        let _result =
+            iter.enumerate()
+                .par_bridge()
+                .try_for_each_with(sender, |sender, (ix, iri)| {
+                    let map = doc_context2
+                        .get_document(&iri)
+                        .expect("expected document to exist");
+                    sender.send((ix, map)) // failure will kill the task
+                });
+    });
+
+    let mut started = false;
+    let mut result = BinaryHeap::new();
+    let mut cur = 0;
+    while let Ok((ix, map)) = receiver.recv() {
+        if ix == cur {
+            print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
+
+            cur += 1;
+            while result
+                .peek()
+                .map(|HeapEntry { index, .. }| index == &cur)
+                .unwrap_or(false)
+            {
+                let HeapEntry {
+                    index: _index,
+                    value,
+                } = result.pop().unwrap();
+
+                print_document(
+                    context,
+                    &mut stream,
+                    value,
+                    as_list,
+                    minimized,
+                    &mut started,
+                )?;
+
+                cur += 1;
+            }
+        } else {
+            result.push(HeapEntry {
+                index: ix,
+                value: map,
+            });
+        }
+    }
+
+    assert!(result.is_empty());
     Ok(())
 }
 
@@ -1010,6 +1151,26 @@ predicates! {
 
         par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types)
     }
+
+    #[module("$doc")]
+    semidet fn print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term) {
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
+        print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term)
+    }
+
+    #[module("$doc")]
+    semidet fn par_print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term) {
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
+        par_print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term)
+    }
 }
 
 struct HeapEntry {
@@ -1044,6 +1205,8 @@ pub fn register() {
     register_par_print_all_documents_json();
     register_print_all_documents_json_by_type();
     register_par_print_all_documents_json_by_type();
+    register_print_documents_json_by_id();
+    register_par_print_documents_json_by_id();
 }
 
 #[cfg(test)]

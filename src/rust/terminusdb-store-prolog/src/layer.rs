@@ -290,6 +290,16 @@ predicates! {
         count_term.unify(count)
     }
 
+    pub semidet fn op_card(_context, layer_term, object_id_term, predicate_id_term, count_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let object_id: u64 = object_id_term.get_ex()?;
+        let predicate_id: u64 = predicate_id_term.get_ex()?;
+        let count = layer.triples_o(object_id)
+            .filter(|t| t.predicate == predicate_id)
+            .count() as u64;
+        count_term.unify(count)
+    }
+
     pub nondet fn id_triple_addition<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, subject_id_term, predicate_id_term, object_id_term) {
         setup => {
             let layer: WrappedLayer = layer_term.get_ex()?;

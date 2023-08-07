@@ -110,6 +110,20 @@ describe('cli-clone-push-pull', function () {
     await db.delete(agent)
   })
 
+  it('catches push has no head', async function () {
+    this.timeout(200000)
+    const agent = new Agent().auth()
+    const dbSpec = agent.orgName + '/' + agent.dbName
+    // Create the db
+    await execEnv(`./terminusdb.sh db create ${dbSpec}`)
+    // Add remote
+    await execEnv(`./terminusdb.sh remote add ${dbSpec} testremote example.org`)
+    await execEnv(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec} --remote testremote`)
+      .catch((r) => {
+        expect(r.stderr).to.match(/^Error: The following repository has no head:/)
+      })
+  })
+
   it('passes push twice', async function () {
     this.timeout(200000)
     const agent = new Agent().auth()

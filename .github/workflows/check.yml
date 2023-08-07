@@ -39,7 +39,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -65,7 +65,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -93,8 +93,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install shed pytest tox==3.27.1
-          tox -e deps
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Test with pytest
         run: tox -e test
@@ -113,7 +111,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -166,7 +164,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -219,7 +217,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -274,7 +272,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 
@@ -335,7 +333,7 @@ jobs:
           platforms: 'arm64'
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.image_artifact }}
 

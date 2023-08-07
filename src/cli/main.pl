@@ -23,7 +23,10 @@
 :- use_module(core(util),
               [do_or_die/2, token_authorization/2,
                basic_authorization/3, intersperse/3,
-               with_memory_file/1, with_memory_file_stream/3]).
+               negative_to_infinity/2,
+               with_memory_file/1,
+               alternate/2,
+               with_memory_file_stream/3]).
 :- use_module(core(plugins)).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
@@ -464,7 +467,19 @@ or two commits (path required).',
            longflags([after_commit,'after-commit']),
            shortflags([s]),
            default('_'),
-           help('Commit or branch of the *after* document(s)')]
+           help('Commit or branch of the *after* document(s)')],
+          [opt(start),
+           type(integer),
+           longflags([start]),
+           shortflags([n]),
+           default(0),
+           help('How many diff results to skip before returning (ignored if not comparing resources)')],
+          [opt(count),
+           type(integer),
+           longflags([count]),
+           shortflags([l]),
+           default(-1),
+           help('Number of results to return (ignored if not comparing resources)')]
          ]).
 opt_spec(apply,'terminusdb apply [Path] OPTIONS',
          'Apply a diff to path which is obtained from the differences between two commits',
@@ -652,6 +667,33 @@ opt_spec(migration,'terminusdb migration BRANCH_SPEC',
            shortflags([d]),
            default(false),
            help('provide information about what would occur if the operations were performed')]
+         ]).
+opt_spec(concat,'terminusdb concat DB_SPEC',
+         'Concatenate any number of space-separated COMMIT_SPEC or BRANCH_SPEC (provided they are base layers only) passed on standard-input into a commit on DB_SPEC',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `concat` command')],
+          [opt(author),
+           type(atom),
+           longflags([author]),
+           shortflags([a]),
+           default(admin),
+           help('author to place on the commit')],
+          [opt(message),
+           type(atom),
+           longflags([message]),
+           shortflags([m]),
+           default('cli: concat'),
+           help('message to associate with the commit')],
+          [opt(json),
+           type(boolean),
+           shortflags([j]),
+           longflags([json]),
+           default(false),
+           help('Return a JSON readable commit identifier')]
          ]).
 
 % subcommands
@@ -843,6 +885,18 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            shortflags([g]),
            default(instance),
            help('graph type (instance or schema)')],
+          [opt(require_migration),
+           type(boolean),
+           longflags(['require-migration']),
+           shortflags([r]),
+           default(false),
+           help('require an inferred migration (assuming this is a schema change)')],
+          [opt(allow_destructive_migration),
+           type(boolean),
+           longflags(['allow-destructive-migration']),
+           shortflags([x]),
+           default(false),
+           help('allow inferred migration to be destructive (assuming this is a schema change)')],
           [opt(data),
            type(atom),
            longflags([data]),
@@ -887,6 +941,18 @@ opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
            shortflags([g]),
            default(instance),
            help('graph type (instance or schema)')],
+          [opt(require_migration),
+           type(boolean),
+           longflags(['require-migration']),
+           shortflags([r]),
+           default(false),
+           help('require an inferred migration (assuming this is a schema change)')],
+          [opt(allow_destructive_migration),
+           type(boolean),
+           longflags(['allow-destructive-migration']),
+           shortflags([x]),
+           default(false),
+           help('allow inferred migration to be destructive (assuming this is a schema change)')],
           [opt(id),
            type(atom),
            longflags([id]),
@@ -931,6 +997,18 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            shortflags([g]),
            default(instance),
            help('graph type (instance or schema)')],
+          [opt(require_migration),
+           type(boolean),
+           longflags(['require-migration']),
+           shortflags([r]),
+           default(false),
+           help('require an inferred migration (assuming this is a schema change)')],
+          [opt(allow_destructive_migration),
+           type(boolean),
+           longflags(['allow-destructive-migration']),
+           shortflags([x]),
+           default(false),
+           help('allow inferred migration to be destructive (assuming this is a schema change)')],
           [opt(data),
            type(atom),
            longflags([data]),
@@ -999,6 +1077,12 @@ opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
            shortflags([i]),
            default('_'),
            help('id of document to retrieve')],
+          [opt(ids),
+           % todo something something comma separated values
+           type(term),
+           longflags([ids]),
+           default('_'),
+           help('list of document ids to retrieve')],
           [opt(type),
            type(atom),
            longflags([type]),
@@ -1757,7 +1841,13 @@ run_command(diff, Args, Opts) :-
         ;   \+ var(After_Commit), \+ var(Before_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            Options = [keep(Keep),copy_value(Copy_Value)],
+            option(start(Start), Opts),
+            option(count(Count_With_Neg), Opts),
+            negative_to_infinity(Count_With_Neg,Count),
+            Options = [keep(Keep),
+                       copy_value(Copy_Value),
+                       start(Start),
+                       count(Count)],
             api_diff_all_documents(System_DB, Auth, Path,
                                    Before_Commit, After_Commit,
                                    Patch, Options)
@@ -1869,6 +1959,26 @@ run_command(migration,[Path], Opts) :-
             json_write_dict(current_output, Result),
             nl
         ;   throw(error(missing_parameter(operations), _)))
+    ).
+run_command(concat,[Target], Opts) :-
+    opt_authority(Opts, Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        concat,
+        (   read_string(current_input, _, Source_String),
+            re_split('\\s+', Source_String, Splits),
+            alternate(Splits,Sources_Candidates),
+            reverse(Sources_Candidates, [First|Sources_Tail]),
+            (   First = ""
+            ->  Sources = Sources_Tail
+            ;   Sources = [First|Sources_Tail]
+            ),
+            api_concat(System_DB, Auth, Sources, Target, Commit_Id, Opts),
+            (   option(json(true), Opts)
+            ->  json_write(current_output, Commit_Id)
+            ;   format(current_output, '~nSuccessfully concatenated layers into commit_id: ~q~n', [Commit_Id])
+            )
+        )
     ).
 run_command(Command,_Args, Opts) :-
     terminusdb_help(Command,Opts).
@@ -2055,9 +2165,14 @@ run_command(doc,get, [Path], Opts) :-
     option(as_list(As_List), Opts),
     option(unfold(Unfold), Opts),
     option(id(Id), Opts),
+    option(ids(Ids_Param), Opts),
     option(type(Type), Opts),
     option(compress_ids(Compress_Ids), Opts),
     option(query(Query_Atom), Opts),
+
+    (   ground(Id)
+    ->  Ids = [Id]
+    ;   Ids = Ids_Param),
 
     (   var(Query_Atom)
     ->  Query = Query_Atom
@@ -2083,7 +2198,7 @@ run_command(doc,get, [Path], Opts) :-
         get_documents,
         api_read_document_selector(
             System_DB, Auth, Path, Graph_Type,
-            Id, Type, Query, Config,
+            Id, Ids, Type, Query, Config,
             no_data_version, _Actual_Data_Version,
             [_L]>>true)
     ).
@@ -2544,7 +2659,10 @@ api_error_cli(API, Error) :-
     (   api_error_jsonld(API,Error,JSON)
     ;   Error=error(Inner_Error,_), generic_exception_jsonld(Inner_Error, JSON)),
     json_cli_code(JSON,Status),
-    Msg = (JSON.'api:message'),
+    (   get_dict('api:message', JSON, Msg)
+    ->  true
+    ;   atom_json_term(Msg, JSON, [width(0)])
+    ),
     format(user_error,"Error: ~s~n",[Msg]),
     json_write_dict(user_error,JSON, [serialize_unknown(true)]),
     halt(Status).

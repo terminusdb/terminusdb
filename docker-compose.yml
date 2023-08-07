@@ -1,18 +1,45 @@
 version: "3"
 
-volumes:
-  terminusdb_storage:
-
 services:
   terminusdb-server:
     image: terminusdb/terminusdb-server:latest
     container_name: terminusdb-server
+    pull_policy: always
     hostname: terminusdb-server
     tty: true
     ports:
       - 6363:6363
     environment:
       - TERMINUSDB_SERVER_PORT=6363
+      # DISABLE THESE ENV VARIABLES WHEN RUNNING TERMINUSDB IN PRODUCTION
+      # OR PUT AN AUTHENTICATION GATEWAY IN FRONT OF TERMINUSDB
+      - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
+      - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
+    volumes:
+      # For the use of a local dashboard
+      #      - ./dashboard:/app/terminusdb/dashboard
+      - ./storage:/app/terminusdb/storage
+  vectorlink:
+    image: terminusdb/vectorlink:v0.0.8
+    environment:
+      - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
+      - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
+      - BUFFER_AMOUNT=120000
+    volumes:
+      - ./vector_storage:/app/storage
+    command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage", "--size", "${BUFFER_AMOUNT:-120000}"]
+  change-request-api:
+    image: terminusdb/terminusdb-change-request-api:v0.0.7
+    ports:
+      - 3035:3035
+    environment:
+      - SERVER_ENDPOINT=http://terminusdb-server:6363
+      - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
+      # Add your OpenAI key in a .env file
+      - OPENAI_KEY=${OPENAI_KEY}
+      - USER_KEY=${TERMINUSDB_USER_KEY}
+      - USER_NAME=${TERMINUSDB_USER_NAME}
+      - OPENAI_SERVER_URL=http://vectorlink:8080
 
       # There are multiple ways to configure TerminusDB security through
       # environment variables. Several reasonable options are included below.

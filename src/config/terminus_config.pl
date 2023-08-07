@@ -35,8 +35,9 @@
               parallelize_enabled/0,
               grpc_label_endpoint/1,
               crypto_password_cost/1,
-              lru_cache_size/1
-          ]).
+              lru_cache_size/1,
+              trust_migrations/0
+]).
 
 :- use_module(library(pcre)).
 
@@ -48,7 +49,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.0.6').
+terminusdb_version('11.1.1-1').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -134,6 +135,7 @@ registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
     getenv_default('TERMINUSDB_SERVER_REGISTRY_PATH', Path, Value).
 
+:- table tmp_path/1 as shared.
 tmp_path(Value) :-
     getenv_default('TERMINUSDB_SERVER_TMP_PATH', '/tmp', Value).
 
@@ -319,3 +321,11 @@ crypto_password_cost(10).
 :- table lru_cache_size/1.
 lru_cache_size(Cache_Size) :-
     getenv_default_number('TERMINUSDB_LRU_CACHE_SIZE', 512, Cache_Size).
+
+:- table trust_migrations/0.
+trust_migrations :-
+    getenv('TERMINUSDB_TRUST_MIGRATIONS', true).
+
+:- table semantic_indexer_endpoint/1.
+semantic_indexer_endpoint(Endpoint) :-
+    getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).

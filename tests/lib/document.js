@@ -106,6 +106,8 @@ function insert (agent, params) {
   const schema = params.object('schema')
   const instance = params.object('instance')
   const rawJSON = params.boolean('raw_json')
+  const requireMigration = params.boolean('require_migration')
+  const allowDestructiveMigration = params.boolean('allow_destructive_migration')
   params.assertEmpty()
 
   const request = agent.post(path)
@@ -118,6 +120,8 @@ function insert (agent, params) {
       author,
       message,
       raw_json: rawJSON,
+      require_migration: requireMigration,
+      allow_destructive_migration: allowDestructiveMigration,
     })
   }
 
@@ -166,6 +170,8 @@ function replace (agent, params) {
   const schema = params.object('schema')
   const instance = params.object('instance')
   const create = params.boolean('create')
+  const requireMigration = params.boolean('require_migration')
+  const allowDestructiveMigration = params.boolean('allow_destructive_migration')
   params.assertEmpty()
 
   const request = agent.put(path)
@@ -177,6 +183,8 @@ function replace (agent, params) {
       graph_type: schema ? 'schema' : 'instance',
       author,
       message,
+      require_migration: requireMigration,
+      allow_destructive_migration: allowDestructiveMigration,
     })
     if (util.isDefined(create)) {
       request.query({ create })
@@ -223,6 +231,8 @@ function delete_ (agent, params) {
   query.message = queryParams.string('message', 'default_message')
   query.graph_type = queryParams.string('graph_type')
   query.id = queryParams.string('id')
+  query.require_migration = queryParams.boolean('require_migration')
+  query.allow_destructive_migration = queryParams.boolean('allow_destructive_migration')
   queryParams.assertEmpty()
   const bodyString = params.string('bodyString')
   const body = params.stringOrArray('body')

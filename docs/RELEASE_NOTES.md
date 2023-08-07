@@ -1,3 +1,89 @@
+# TerminusDB Server v11.1.1-1 Release Notes
+
+Very minor hotpatch release to include the new local dashboard.
+
+## New
+
+* New dashboard version (v6.0.9) which includes various fixes and enhancements, like the ability
+  to properly close pull requests.
+
+# TerminusDB Server v11.1.1 Release Notes
+
+This release introduces a docker-compose deployment method which gets you all components of a fully-featured terminusdb setup:
+* TerminusDB - the main database.
+* VectorLink (experimental) - a database sidecar dedicated to storing, indexing and retrieving vectors by similarity, used for AI-enhanced search.
+* terminusdb-change-request-api - an API for working with change requests.
+* Terminusdb-dashboard - our dashboard for managing terminusdb, which now experimentally supports AI search and change requests.
+
+Beyond that, this version brings various fixes and enhancements to our GraphQL support, our schema checking and migrations, and the document interface. Please read the detailed list below.
+
+## Bug fixes
+* multi-level graphql hierarchies were not always returning all objects.
+* properties with prefixes didn't work properly in graphql.
+* graphql reverse links did not work with sanitized names.
+* graphql incorrectly filtered out 'id' from user-defined types.
+
+## New
+
+* docker-compose now comes bundled with vectorlink, local dashboard and pull request API.
+* properties can now be inherited from multiple superclasses, and even redefined in a subclass, as long as they form a type-compatible hierarchy. The strictest form is actually applied. If the subclass defines a property that is not at least as strict as what was defined in the supers, this results in a schema error.
+* graphql can now be made to not return subsumptions through the generated `include_children` argument.
+* new environment variable `TERMINUSDB_TRUST_MIGRATIONS` will ensure that instance data is not re-checked when schemas change due to migrations, as migrations should in principle not result in any errors. As the migration feature is still relatively new, the default here is false, meaning that without this environment variable, all schema changes result in a recheck of all existing instance data. In the future, this default will likely change.
+
+## Enhancements
+
+* schema migration scripts now support changes to class hierarchies and key strategies.
+* the graphql engine now keeps a small cache around of recent schemas to speed up repeated queries.
+
+## Experimental
+
+* graphql filters now support deep matches on IDs.
+* document API has a new parameter `ids` on GET allowing you to submit a list of documents to retrieve at once.
+
+# TerminusDB Server v11.1.0 Release Notes
+
+## Bug fixes
+
+* Fix ordering of graphql stringy numbers
+* Adding type information to decimals
+* Adding a correct diff using out of band value
+* Prevent reserved words in GraphQL from being used
+* Fix loading of triples
+
+## New
+
+* Add support for the TerminusDB semantic indexer for AI search capabilities
+* Add ability to merge base layers with the `concat` command
+
+## Enhancement
+
+* Reduced memory usage
+* Remove Google Analytics in Dashboard
+
+# TerminusDB Server v11.0.6 Release Notes
+
+## Bug fixes
+* Unused optional properties would cause GraphQL to fail
+* Enums were not working properly for collection types in GraphQL
+* Incorrect version checking on system graphs caused superfluous graph updates on startup
+* Modifications of classes with `@oneOf` would leave stale objects in the schema graph
+* Diffing sets now works
+* Fix error reporting when pushing nonexistent remotes
+* GraphQL did not work properly with `@oneOf` properties
+* Memory leak in document API
+* Crash when processing several compressed requests in the same session
+
+## New
+* On schema modifications, a migration will be inferred when possible.
+* New options added to document interface
+** `allow_destructive_migration`: Allow for inference of migrations that will also modify instance data. If set, the schema modification will also automatically transform any instance objects already in the database.
+** `require_migration`: This will cause the request to fail for schema changes for which no migration can be inferred.
+
+## Enhancement
+* diff endpoint now has `start` and `count` options for paged results
+* Improve memory footprint when retrieving lots of documents through the document API
+* Support JSON objects in GraphQL
+
 # TerminusDB Server v11.0.5 Release Notes
 ## Bug fixes
 * diff endpoint was mishandling subdocuments
