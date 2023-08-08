@@ -42,99 +42,71 @@ make_edge(X,P,Y,
                 'http://terminusdb.com/schema/woql#predicate' : P,
                 'http://terminusdb.com/schema/woql#object' : Y}).
 
+invert_path(p(P), n(P)).
+invert_path(n(P), p(P)).
+invert_path((P,Q), (QN,PN)) :-
+    invert_path(Q,QN),
+    invert_path(P,PN).
+invert_path(plus(P), plus(Q)) :-
+    invert_path(P,Q).
+invert_path(star(P), star(Q)) :-
+    invert_path(P,Q).
+invert_path(times(P, M, N), times(Q, M, N)) :-
+    invert_path(P,Q).
+invert_path((P;Q), (PN;QN)) :-
+    invert_path(Q,QN),
+    invert_path(P,PN).
+
 run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     ground(Y),
     var(X),
     !,
-    run_pattern_backward(P,X,Y,Rev,Rev-[],Filter,Transaction_Object),
-    reverse(Rev,Path).
+    invert_path(P, Q),
+    run_pattern_(Q,Y,X,Path,Path-[],Filter,Transaction_Object).
 run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
-    run_pattern_forward(P,X,Y,Path,Path-[],Filter,Transaction_Object).
+    run_pattern_(P,X,Y,Path,Path-[],Filter,Transaction_Object).
 
-run_pattern_forward(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
+run_pattern_(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_forward(n(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+run_pattern_(n(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     hop(Filter,Y,P,X,Transaction_Object).
-run_pattern_forward(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
+run_pattern_(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_forward(p(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+run_pattern_(p(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
     make_edge(X,P,Y,Edge),
     hop(Filter,X,P,Y,Transaction_Object).
-run_pattern_forward((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_forward(P,X,Z,Open_Set,Path-Path_M,Filter,Transaction_Object),
-    run_pattern_forward(Q,Z,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object).
-run_pattern_forward((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    (   run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
-    ;   run_pattern_forward(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
-run_pattern_forward(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+run_pattern_((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    run_pattern_(P,X,Z,Open_Set,Path-Path_M,Filter,Transaction_Object),
+    run_pattern_(Q,Z,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object).
+run_pattern_((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    (   run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
+    ;   run_pattern_(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
+run_pattern_(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     (   X = Y,
         Path = Tail
-    ;   run_pattern_n_m_forward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
-run_pattern_forward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_forward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_forward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
+    ;   run_pattern_n_m_(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
+run_pattern_(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    run_pattern_n_m_(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
+run_pattern_(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
-run_pattern_n_m_forward(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+run_pattern_n_m_(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     !,
-    run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_n_m_forward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
+run_pattern_n_m_(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
+run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     Np is max(1,N-1),
     Mp is M-1,
-    run_pattern_forward(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object),
-    run_pattern_n_m_forward(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
-
-run_pattern_backward(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
-    in_open_set(Edge,Open_Set),
-    !,
-    fail.
-run_pattern_backward(n(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
-    hop(Filter,Y,P,X,Transaction_Object).
-run_pattern_backward(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
-    in_open_set(Edge,Open_Set),
-    !,
-    fail.
-run_pattern_backward(p(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
-    hop(Filter,X,P,Y,Transaction_Object).
-run_pattern_backward((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_backward(Q,ZE,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object),
-    run_pattern_backward(P,X,ZE,Open_Set,Path-Path_M,Filter,Transaction_Object).
-run_pattern_backward((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    (   run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
-    ;   run_pattern_backward(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
-run_pattern_backward(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    (   X = Y,
-        Path = Tail
-    ;   run_pattern_n_m_forward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
-run_pattern_backward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_backward(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_backward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-
-run_pattern_n_m_backward(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    !,
-    run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_n_m_backward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    \+ M = 1, % M=1 is finished! M<1 is infinite.
-    Np is max(1,N-1),
-    Mp is M-1,
-    run_pattern_backward(P,Z,Y,Open_Set,Path-Path_IM,Filter,Transaction_Object),
-    run_pattern_n_m_backward(P,Np,Mp,X,Z,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
+    run_pattern_(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object),
+    run_pattern_n_m_(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
 
 /*
  * patterns have the following syntax:
@@ -247,5 +219,59 @@ test(n_m_loop, [
 
     % test that we aren't going in circles
     length(Bindings, 4).
+
+test(n_m_loop_reverse, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(c,d,e),
+           insert(e,f,g),
+           insert(g,h,a)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    AST2 = path(v(x), times((p(b);p(d);p(f);p(h)),1,5), a, v(p)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings,Result,Bindings),
+
+    % test that we aren't going in circles
+    length(Bindings, 4).
+
+test(star_follows_reverse, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(c,f,e),
+           insert(h,b,e),
+           insert(e,f,g)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    AST2 = path(v(x), (p(b),star(p(f))), g, v(p)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings,Result,Bindings),
+
+    % test that we aren't going in circles
+    length(Bindings, 2).
 
 :- end_tests(path).
