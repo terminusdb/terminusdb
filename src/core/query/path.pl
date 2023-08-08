@@ -82,10 +82,12 @@ run_pattern_forward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
 run_pattern_forward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
+run_pattern_n_m_forward(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    !,
+    run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_forward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_forward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_forward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    \+ M = 1, % M=1 is finished! M<1 is infinite.
     Np is max(1,N-1),
     Mp is M-1,
     run_pattern_forward(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object),
@@ -122,6 +124,9 @@ run_pattern_backward(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :
 run_pattern_backward(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 
+run_pattern_n_m_backward(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    !,
+    run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_backward(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_backward(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
 run_pattern_n_m_backward(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
