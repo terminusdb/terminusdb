@@ -152,6 +152,8 @@
               dict_field_verifier/3,
               count_solutions/2,
               negative_to_infinity/2,
+              init_local_memoize/1,
+              local_memoize/3,
 
               % speculative_parse.pl
               %guess_date/2,

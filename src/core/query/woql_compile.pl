@@ -6,7 +6,10 @@
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,
-              not_literal/1
+              not_literal/1,
+              mode_for/1,
+              mode_for_compound/2,
+              mode_for_predicate/2
           ]).
 
 /** <module> WOQL Compile
@@ -31,6 +34,9 @@
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(api), [call_catch_document_mutation/2]).
+:- use_module(core(query/reorder)).
+:- use_module(core(query/partition)).
+
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
@@ -392,262 +398,6 @@ var_record_pl_var(Var_Name,
 
 var_compare(Op, Left, Right) :-
     compare(Op, Left.var_name, Right.var_name).
-
-/* This partitions a tree cleanly into two segments or fails:
-   Reads:  read only
-   Writes: write only
-*/
-partition((A,B), Reads, Writes) :-
-    partition(A, A_Reads, []),
-    !,
-    partition(B, B_Reads, Writes),
-    append(A_Reads, B_Reads, Reads).
-partition((A,B), Reads, Writes) :-
-    partition(B, [], B_Writes),
-    !,
-    partition(A, Reads, A_Writes),
-    append(A_Writes, B_Writes, Writes).
-partition((A;B), [(A;B)], []) :-
-    /* just fail if we are doing disjunctive writes */
-    !,
-    partition(A, _, []),
-    partition(B, _, []).
-partition(not(Q), [not(Q)], []) :-
-    /* just fail if we have a write in a not. */
-    !,
-    partition(Q, _, []).
-partition(once(Q), [once(Q)], []) :-
-    !,
-    partition(Q, _, []).
-partition(once(Q), [], [once(Q)]) :-
-    partition(Q, [], _),
-    !.
-partition(limit(N,Q), [limit(N,Q)], []) :-
-    /* just fail if we have a limit on a write */
-    !,
-    partition(Q, _, []).
-partition(select(V,Q), [select(V,Q)], []) :-
-    /* just fail if we have a select on a write */
-    !,
-    partition(Q, _, []).
-partition(opt(P), [opt(P)], []) :-
-    /* just fail if we have an opt on a write */
-    !,
-    partition(P, _, []).
-partition(when(A,B), Reads, Writes) :-
-    /* assume "when"s have a read only head */
-    !,
-    partition(A, A_Reads, []),
-    partition(B, B_Reads, Writes),
-    append(A_Reads, B_Reads, Reads).
-partition(using(C,P), Reads, Writes) :-
-    !,
-    partition(P, P_Reads, P_Writes),
-    (   P_Reads = []
-    ->  Reads = [],
-        xfy_list(',', Q, P_Writes),
-        Writes = [using(C,Q)]
-    ;   P_Writes = []
-    ->  Writes = [],
-        xfy_list(',', Q, P_Reads),
-        Reads = [using(C,Q)]
-    ->  xfy_list(',', A, P_Reads),
-        xfy_list(',', B, P_Writes),
-        Reads = [using(C,A)],
-        Writes = [using(C,B)]
-    ).
-partition(from(C,P), Reads, Writes) :-
-    partition(P, P_Reads, P_Writes),
-    !,
-    (   P_Reads = []
-    ->  Reads = [],
-        xfy_list(',', Q, P_Writes),
-        Writes = [from(C,Q)]
-    ;   P_Writes = []
-    ->  Writes = [],
-        xfy_list(',', Q, P_Reads),
-        Reads = [from(C,Q)]
-    ->  xfy_list(',', A, P_Reads),
-        xfy_list(',', B, P_Writes),
-        Reads = [from(C,A)],
-        Writes = [from(C,B)]
-    ).
-partition(start(N,P), [start(N,P)], []) :-
-    partition(P, _, []),
-    !.
-partition(count(P,N), [count(P,N)], []) :-
-    partition(P, _, []),
-    !.
-partition(where(P), Reads, Writes) :-
-    % where means nothing
-    partition(P, Reads, Writes),
-    !.
-partition(order_by(L,S), [order_by(L,S)], []) :-
-    partition(S, _, []),
-    !.
-partition(into(C,P), Reads, Writes) :-
-    partition(P, P_Reads, P_Writes),
-    !,
-    (   P_Reads = []
-    ->  Reads = [],
-        xfy_list(',', Q, P_Writes),
-        Writes = [into(C,Q)]
-    ;   P_Writes = []
-    ->  Writes = [],
-        xfy_list(',', Q, P_Reads),
-        Reads = [into(C,Q)]
-    ->  xfy_list(',', A, P_Reads),
-        xfy_list(',', B, P_Writes),
-        Reads = [into(C,A)],
-        Writes = [into(C,B)]
-    ).
-partition(group_by(G,T,Q,A), [group_by(G,T,Q,A)], []) :-
-    partition(Q, _, []),
-    !.
-partition(insert(A,B,C), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [insert(A,B,C)].
-partition(insert(A,B,C,D), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [insert(A,B,C,D)].
-partition(delete(A,B,C), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [delete(A,B,C)].
-partition(delete(A,B,C,D), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [delete(A,B,C,D)].
-partition(replace_document(A,B), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [replace_document(A,B)].
-partition(replace_document(A,B,C), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [replace_document(A,B,C)].
-partition(delete_document(A), Reads, Writes) :-
-    !,
-    Reads = [],
-    Writes = [delete_document(A)].
-partition(T,[T],[]) :-
-    /* Everything else should be read only
-     * Note: A bit more energy here would remove the default case and need for cuts.
-     */
-    !.
-
-/*
- * safe_guard_removal(Term, NewTerm) is det.
- */
-safe_guard_removal(Term, Prog) :-
-    partition(Term,Reads,Writes),
-    (   Writes = []
-    ->  xfy_list(',', Prog, Reads)
-    ;   Reads = []
-    ->  xfy_list(',', Write_Term, Writes),
-        Prog = immediately(Write_Term)
-    ;   xfy_list(',', A, Reads),
-        xfy_list(',', B, Writes),
-        Prog = (A,immediately(B))
-    ),
-    !.
-safe_guard_removal(Term, Term).
-
-:- begin_tests(guards).
-
-test(guard_removal_is_impossible, []) :-
-
-    AST = (
-        t(a,b,c),
-        insert(a,b,c)
-    ;   t(e,f,g),
-        insert(d,b,c)),
-
-    safe_guard_removal(AST, AST).
-
-test(guard_removal_is_safe, []) :-
-
-    AST = (
-        t(a,b,c),
-        t(e,f,g),
-        insert(a,b,c),
-        insert(d,b,c),
-        insert(e,f,g)
-    ),
-
-    safe_guard_removal(AST, AST2),
-
-    AST2 = ((
-                   t(a,b,c),
-                   t(e,f,g)),
-            immediately(
-                (
-                    insert(a,b,c),
-                    insert(d,b,c),
-                    insert(e,f,g)))).
-
-test(alternating_inserts, []) :-
-
-    AST = (
-        t(a,b,c),
-        insert(a,b,c),
-        t(e,f,g),
-        insert(d,b,c),
-        insert(e,f,g)
-    ),
-
-    safe_guard_removal(AST, AST).
-
-test(guard_removal_with_deep_inserts, []) :-
-
-    AST = (
-        t(a,b,c),
-        (   t(e,f,g),
-            (   insert(a,b,c),
-                insert(d,b,c),
-                (   insert(e,f,g),
-                    insert(f,g,h))))),
-
-    safe_guard_removal(AST, AST2),
-
-    AST2 = ((t(a,b,c),
-             t(e,f,g)),
-            immediately(
-                (insert(a,b,c),
-                 insert(d,b,c),
-                 insert(e,f,g),
-                 insert(f,g,h)))).
-
-test(guard_single_query, []) :-
-
-    AST = t(a,b,c),
-
-    safe_guard_removal(AST, (t(a,b,c))).
-
-
-test(guard_single_insertion, []) :-
-
-    AST = insert(a,b,c),
-
-    safe_guard_removal(AST, immediately(insert(a,b,c))).
-
-test(guard_single_deletion, []) :-
-
-    AST = delete(a,b,c),
-
-    safe_guard_removal(AST, immediately(delete(a,b,c))).
-
-test(guard_double_insertion, []) :-
-
-    AST = (insert(a,b,c),insert(d,e,f)),
-
-    safe_guard_removal(AST, (immediately((insert(a,b,c),insert(d,e,f))))).
-
-:- end_tests(guards).
-
-
 
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
@@ -1564,7 +1314,9 @@ compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
 compile_wf(length(L,N),Length) -->
     resolve(L,LE),
     resolve(N,NE),
-    { marshall_args(length(LE,NE), Length) }.
+    { marshall_args(length(LE,NE), Length_1),
+      Length = (ensure_static_mode(length/2, [LE, NE], [L, N]),
+                Length_1)}.
 compile_wf(member(X,Y),member(XE,YE)) -->
     resolve(X,XE),
     resolve(Y,YE).
@@ -1666,6 +1418,51 @@ typeof(_^^T,T) :-
 typeof(A,T) :-
     atom(A),
     T = 'http://terminusdb.com/schema/sys#Top'.
+
+mode_for(insert(ground,ground,ground)).
+mode_for(join(ground,ground,any)).
+mode_for(sum(ground, any)).
+mode_for(length(ground, any)).
+
+mode_for_compound(Compound, Combined_Modes) :-
+    Compound =.. [Pred|Rest],
+    length(Rest, N),
+    length(Modes, N),
+    Mode_Record =.. [Pred|Modes],
+    mode_for(Mode_Record),
+    zip(Rest, Modes, Combined_Modes).
+
+mode_for_predicate(Predicate/Arity, Modes) :-
+    length(Modes, Arity),
+    Spec =.. [Predicate|Modes],
+    (   mode_for(Spec)
+    ->  true
+    ;   maplist([any]>>true, Modes)).
+
+ensure_static_mode(Predicate, Vars, Terms) :-
+    (   mode_for_predicate(Predicate, Modes)
+    ->  ensure_static_mode_(Predicate, Modes, Vars, Terms)
+    ;   true).
+
+ensure_static_mode_(Predicate, Modes, Vars, Terms) :-
+    maplist([Mode, Var, Term, Violation]>> (
+                (   Mode = ground,
+                    ground(Var)
+                ->  Violation=none
+                ;   Mode = any
+                ->  Violation=none
+                ;   Term = v(Name),
+                    Violation=vio(Mode-Name))
+            ),
+            Modes,
+            Vars,
+            Terms,
+            Violations_1),
+    convlist([vio(X), X]>>true,
+             Violations_1,
+             Violations),
+    do_or_die(length(Violations, 0),
+              error(woql_instantiation_error(Predicate, Violations),_)).
 
 :- meta_predicate ensure_mode(0,+,+,+).
 ensure_mode(Goal,Mode,Args,Names) :-
