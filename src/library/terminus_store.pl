@@ -440,7 +440,6 @@ subject_id(Layer, Subject, Id) :-
     ground(Subject),
     !,
     subject_to_id(Layer, Subject, Id).
-
 subject_id(Layer, Subject, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
@@ -452,16 +451,15 @@ subject_id(Layer, Subject, Id) :-
  *
  * Get the ID from a predicate
  */
+:- table predicate_id/3 as private.
 predicate_id(Layer, Predicate, Id) :-
     ground(Id),
     !,
     id_to_predicate(Layer, Id, Predicate).
-
 predicate_id(Layer, Predicate, Id) :-
     ground(Predicate),
     !,
     predicate_to_id(Layer, Predicate, Id).
-
 predicate_id(Layer, Predicate, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),

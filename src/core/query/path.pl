@@ -51,7 +51,6 @@ make_edge(X,P,Y,
                 'http://terminusdb.com/schema/woql#predicate' : P,
                 'http://terminusdb.com/schema/woql#object' : Y}).
 
-:- table resolve_p/5 as private.
 resolve_p(P,PI,PS,Transaction_Object,PR) :-
     (   ground(P)
     ->  PR = P
