@@ -141,13 +141,19 @@ filtered_predicate_ids(Pred, type_filter{ types : Types}, Transaction_Object, Id
     (   memberchk(instance, Types)
     ->  database_instance(Transaction_Object, [Instance_RWO]),
         read_write_obj_reader(Instance_RWO, Layer),
-        predicate_id(Layer, Pred, IdI)
+        (   predicate_id(Layer, Pred, IdI)
+        ->  true
+        ;   IdI = 0 % impossible predicate
+        )
     ;   true
     ),
     (   memberchk(schema, Types)
     ->  database_schema(Transaction_Object, [Schema_RWO]),
         read_write_obj_reader(Schema_RWO, Layer),
-        predicate_id(Layer, Pred, IdS)
+        (   predicate_id(Layer, Pred, IdS)
+        ->  true
+        ;   IdS = 0 % impossible predicate
+        )
     ;   true
     ).
 
