@@ -539,11 +539,11 @@ triple(Layer, Subject, Predicate, Object) :-
         )
     ;   true),
 
-    (   nonvar(Object)
-    ->  (   Object = id(O_Id)
-        ->  true
-        ;   object_id(Layer, Object, O_Id)
-        )
+    (   nonvar(Object),
+        Object = id(O_Id)
+    ->  true
+    ;   ground(Object)
+    ->  object_id(Layer, Object, O_Id)
     ;   true),
 
     id_triple(Layer, S_Id, P_Id, O_Id),
