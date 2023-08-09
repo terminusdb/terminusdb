@@ -373,7 +373,10 @@ unlink_object(Gs, ID) :-
 
 pre_convert_node(X,A) :-
     (   nonvar(X)
-    ->  atom_string(X,A)
+    ->  (   X = id(_)
+        ->  A = X
+        ;   atom_string(X,A)
+        )
     ;   true).
 
 post_convert_node(A,X) :-

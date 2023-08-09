@@ -1,5 +1,5 @@
 :- module(path,[
-              compile_pattern/4,
+              compile_pattern/5,
               calculate_path_solutions/6
           ]).
 
@@ -7,17 +7,26 @@
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query), [run_context_ast_jsonld_response/5]).
-
+:- use_module(core(transaction), [read_write_obj_reader/2]).
+:- use_module(library(terminus_store)).
 :- use_module(library(lists)).
 
-hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
+hop(type_filter{ types : [instance]}, X, PI, _PS, Y, Transaction_Object) :-
+    !,
+    not_literal(X),
+    xrdf(Transaction_Object.instance_objects,X, id(PI), Y).
+hop(type_filter{ types : [schema]}, X, _PI, PS, Y, Transaction_Object) :-
+    !,
+    not_literal(X),
+    xrdf(Transaction_Object.schema_objects, X, id(PS), Y).
+hop(type_filter{ types : Types}, X, PI, _PS, Y, Transaction_Object) :-
     memberchk(instance,Types),
     not_literal(X),
-    xrdf(Transaction_Object.instance_objects,X,P,Y).
-hop(type_filter{ types : Types}, X, P, Y, Transaction_Object) :-
+    xrdf(Transaction_Object.instance_objects,X, id(PI), Y).
+hop(type_filter{ types : Types}, X, _PI, PS, Y, Transaction_Object) :-
     memberchk(schema,Types),
     not_literal(X),
-    xrdf(Transaction_Object.schema_objects, X, P, Y).
+    xrdf(Transaction_Object.schema_objects, X, id(PS), Y).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-
     run_pattern(Pattern,XE,YE,Path,Filter,Transaction_Object).
@@ -42,8 +51,22 @@ make_edge(X,P,Y,
                 'http://terminusdb.com/schema/woql#predicate' : P,
                 'http://terminusdb.com/schema/woql#object' : Y}).
 
-invert_path(p(P), n(P)).
-invert_path(n(P), p(P)).
+:- table resolve_p/5 as private.
+resolve_p(P,PI,PS,Transaction_Object,PR) :-
+    (   ground(P)
+    ->  PR = P
+    ;   ground(PI)
+    ->  database_instance(Transaction_Object, [G]),
+        read_write_obj_reader(G, Layer),
+        predicate_id(Layer, PR, PI)
+    ;   ground(PS)
+    ->  database_instance(Transaction_Object, [G]),
+        read_write_obj_reader(G, Layer),
+        predicate_id(Layer, PR, PS)
+    ).
+
+invert_path(p(P,PI,PS), n(P,PI,PS)).
+invert_path(n(P,PI,PS), p(P,PI,PS)).
 invert_path((P,Q), (QN,PN)) :-
     invert_path(Q,QN),
     invert_path(P,PN).
@@ -62,26 +85,30 @@ run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     var(X),
     !,
     invert_path(P, Q),
-    run_pattern_(Q,Y,X,Path,Path-[],Filter,Transaction_Object).
+    run_pattern(Q,Y,X,Path,Filter,Transaction_Object).
 run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
     run_pattern_(P,X,Y,Path,Path-[],Filter,Transaction_Object).
 
-run_pattern_(n(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
+run_pattern_(n(P,PI,PS),X,Y,Open_Set,_Path,_Filter,Transaction_Object) :-
+    resolve_p(P,PI,PS,Transaction_Object,PR),
+    make_edge(X,PR,Y,Edge),
     in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_(n(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
-    hop(Filter,Y,P,X,Transaction_Object).
-run_pattern_(p(P),X,Y,Open_Set,_Path,_Filter,_Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
+run_pattern_(n(P,PI,PS),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    resolve_p(P,PI,PS,Transaction_Object,PR),
+    make_edge(X,PR,Y,Edge),
+    hop(Filter,Y,PI,PS,X,Transaction_Object).
+run_pattern_(p(P,PI,PS),X,Y,Open_Set,_Path,_Filter,Transaction_Object) :-
+    resolve_p(P,PI,PS,Transaction_Object,PR),
+    make_edge(X,PR,Y,Edge),
     in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_(p(P),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
-    make_edge(X,P,Y,Edge),
-    hop(Filter,X,P,Y,Transaction_Object).
+run_pattern_(p(P,PI,PS),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
+    resolve_p(P,PI,PS,Transaction_Object,PR),
+    make_edge(X,PR,Y,Edge),
+    hop(Filter,X,PI,PS,Y,Transaction_Object).
 run_pattern_((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_(P,X,Z,Open_Set,Path-Path_M,Filter,Transaction_Object),
     run_pattern_(Q,Z,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object).
@@ -109,18 +136,37 @@ run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
     run_pattern_n_m_(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
 
 /*
+ * Generate ids for the predicate based on filter (one for each graph)
+ */
+filtered_predicate_ids(Pred, type_filter{ types : Types}, Transaction_Object, IdI, IdS) :-
+    (   memberchk(instance, Types)
+    ->  database_instance(Transaction_Object, [Instance_RWO]),
+        read_write_obj_reader(Instance_RWO, Layer),
+        predicate_id(Layer, Pred, IdI)
+    ;   true
+    ),
+    (   memberchk(schema, Types)
+    ->  database_schema(Transaction_Object, [Schema_RWO]),
+        read_write_obj_reader(Schema_RWO, Layer),
+        predicate_id(Layer, Pred, IdS)
+    ;   true
+    ).
+
+/*
  * patterns have the following syntax:
  *
  * P,Q,R := p | n | p(P) | n(P) | P,Q | P;Q | plus(P) | star(P) | times(P,N,M)
  *
  * foo>,<baz,bar>
  */
-compile_pattern(n, n(_), _Prefixes, _Transaction_Object).
-compile_pattern(p, p(_), _Prefixes, _Transaction_Object).
-compile_pattern(n(Pred), n(Pred_Expanded), Prefixes, _Transaction_Object) :-
-    prefixed_to_property(Pred,Prefixes,Pred_Expanded).
-compile_pattern(p(Pred), p(Pred_Expanded), Prefixes, _Transaction_Object) :-
-    prefixed_to_property(Pred,Prefixes,Pred_Expanded).
+compile_pattern(n, n(_,_), _Prefixes, _Filter, _Transaction_Object).
+compile_pattern(p, p(_,_), _Prefixes, _Filter, _Transaction_Object).
+compile_pattern(n(Pred), n(Pred_Expanded,PredI,PredS), Prefixes, Filter, Transaction_Object) :-
+    prefixed_to_property(Pred,Prefixes,Pred_Expanded),
+    filtered_predicate_ids(Pred_Expanded,Filter,Transaction_Object, PredI, PredS).
+compile_pattern(p(Pred), p(Pred_Expanded,PredI,PredS), Prefixes, Filter, Transaction_Object) :-
+    prefixed_to_property(Pred,Prefixes,Pred_Expanded),
+    filtered_predicate_ids(Pred_Expanded,Filter,Transaction_Object, PredI, PredS).
 compile_pattern((X,Y), (XC,YC), Prefixes, Transaction_Object) :-
     compile_pattern(X,XC,Prefixes,Transaction_Object),
     compile_pattern(Y,YC,Prefixes,Transaction_Object).

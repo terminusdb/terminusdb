@@ -531,8 +531,11 @@ triple(Layer, Subject, Predicate, Object) :-
     ->  subject_id(Layer, Subject, S_Id)
     ;   true),
 
-    (   ground(Predicate)
-    ->  predicate_id(Layer, Predicate, P_Id)
+    (   nonvar(Predicate)
+    ->  (   Predicate = id(P_Id)
+        ->  true
+        ;   predicate_id(Layer, Predicate, P_Id)
+        )
     ;   true),
 
     (   ground(Object)
