@@ -1,6 +1,8 @@
 :- module(path,[
               compile_pattern/5,
-              calculate_path_solutions/6
+              calculate_path_solutions/6,
+              schema_predicate_id/3,
+              instance_predicate_id/3
           ]).
 
 :- use_module(woql_compile, [not_literal/1]).
@@ -138,23 +140,31 @@ run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
 /*
  * Generate ids for the predicate based on filter (one for each graph)
  */
+instance_predicate_id(Pred, Transaction_Object, IdI) :-
+    database_instance(Transaction_Object, [Instance_RWO]),
+    (   read_write_obj_reader(Instance_RWO, Layer),
+        ground(Layer),
+        predicate_id(Layer, Pred, IdI)
+    ->  true
+    ;   IdI = 0 % impossible predicate
+    ).
+
+schema_predicate_id(Pred, Transaction_Object, IdS) :-
+    database_schema(Transaction_Object, [Schema_RWO]),
+    (   read_write_obj_reader(Schema_RWO, Layer),
+        ground(Layer),
+        predicate_id(Layer, Pred, IdS)
+    ->  true
+    ;   IdS = 0 % impossible predicate
+    ).
+
 filtered_predicate_ids(Pred, type_filter{ types : Types}, Transaction_Object, IdI, IdS) :-
     (   memberchk(instance, Types)
-    ->  database_instance(Transaction_Object, [Instance_RWO]),
-        read_write_obj_reader(Instance_RWO, Layer),
-        (   predicate_id(Layer, Pred, IdI)
-        ->  true
-        ;   IdI = 0 % impossible predicate
-        )
+    ->  instance_predicate_id(Pred, Transaction_Object, IdI)
     ;   true
     ),
     (   memberchk(schema, Types)
-    ->  database_schema(Transaction_Object, [Schema_RWO]),
-        read_write_obj_reader(Schema_RWO, Layer),
-        (   predicate_id(Layer, Pred, IdS)
-        ->  true
-        ;   IdS = 0 % impossible predicate
-        )
+    ->  schema_predicate_id(Pred, Transaction_Object, IdS)
     ;   true
     ).
 

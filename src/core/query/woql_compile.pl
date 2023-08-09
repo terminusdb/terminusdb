@@ -1702,19 +1702,37 @@ filter_transaction_object_read_write_objects(type_name_filter{ type : Type}, Tra
     ;   Type = schema
     ->  Objs = Transaction_Object.schema_objects).
 
+compile_instance_predicate(PE, Transaction_Object, PI) :-
+    (   atom(PE)
+    ->  instance_predicate_id(PE, Transaction_Object, PI_Id),
+        PI = id(PI_Id)
+    ;   PI = PE
+    ).
+
+compile_schema_predicate(PE, Transaction_Object, PS) :-
+    (   atom(PE)
+    ->  schema_predicate_id(PE, Transaction_Object, PS_Id),
+        PS = id(PS_Id)
+    ;   PS = PE
+    ).
+
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, t(XE, PE, YE), Goal) :-
     (   memberchk(instance,Types)
-    ->  Search_1 = [xrdf(Transaction_Object.instance_objects, XE, PE, YE)]
+    ->  compile_instance_predicate(PE, Transaction_Object, PI),
+        Search_1 = [xrdf(Transaction_Object.instance_objects, XE, PI, YE)]
     ;   Search_1 = []),
     (   memberchk(schema,Types)
-    ->  Search_2 = [xrdf(Transaction_Object.schema_objects, XE, PE, YE)]
+    ->  compile_schema_predicate(PE, Transaction_Object, PS),
+        Search_2 = [xrdf(Transaction_Object.schema_objects, XE, PS, YE)]
     ;   Search_2 = []),
     append([Search_1,Search_2], Searches),
     list_disjunction(Searches,Goal).
 filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    Goal = xrdf((Transaction_Object.instance_objects), XE, PE, YE).
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = xrdf((Transaction_Object.instance_objects), XE, PI, YE).
 filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    Goal = xrdf((Transaction_Object.schema_objects), XE, PE, YE).
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = xrdf((Transaction_Object.schema_objects), XE, PS, YE).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance
