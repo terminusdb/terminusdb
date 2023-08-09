@@ -159,26 +159,26 @@ filtered_predicate_ids(Pred, type_filter{ types : Types}, Transaction_Object, Id
  *
  * foo>,<baz,bar>
  */
-compile_pattern(n, n(_,_), _Prefixes, _Filter, _Transaction_Object).
-compile_pattern(p, p(_,_), _Prefixes, _Filter, _Transaction_Object).
+compile_pattern(n, n(_,_,_), _Prefixes, _Filter, _Transaction_Object).
+compile_pattern(p, p(_,_,_), _Prefixes, _Filter, _Transaction_Object).
 compile_pattern(n(Pred), n(Pred_Expanded,PredI,PredS), Prefixes, Filter, Transaction_Object) :-
     prefixed_to_property(Pred,Prefixes,Pred_Expanded),
     filtered_predicate_ids(Pred_Expanded,Filter,Transaction_Object, PredI, PredS).
 compile_pattern(p(Pred), p(Pred_Expanded,PredI,PredS), Prefixes, Filter, Transaction_Object) :-
     prefixed_to_property(Pred,Prefixes,Pred_Expanded),
     filtered_predicate_ids(Pred_Expanded,Filter,Transaction_Object, PredI, PredS).
-compile_pattern((X,Y), (XC,YC), Prefixes, Transaction_Object) :-
-    compile_pattern(X,XC,Prefixes,Transaction_Object),
-    compile_pattern(Y,YC,Prefixes,Transaction_Object).
-compile_pattern((X;Y), (XC;YC), Prefixes, Transaction_Object) :-
-    compile_pattern(X,XC,Prefixes,Transaction_Object),
-    compile_pattern(Y,YC,Prefixes,Transaction_Object).
-compile_pattern(star(X), star(XC), Prefixes, Transaction_Object) :-
-    compile_pattern(X,XC,Prefixes,Transaction_Object).
-compile_pattern(plus(X), plus(XC), Prefixes, Transaction_Object) :-
-    compile_pattern(X,XC,Prefixes,Transaction_Object).
-compile_pattern(times(X,N,M), times(XC,N,M), Prefixes, Transaction_Object) :-
-    compile_pattern(X,XC,Prefixes,Transaction_Object).
+compile_pattern((X,Y), (XC,YC), Prefixes, Filter, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Filter,Transaction_Object),
+    compile_pattern(Y,YC,Prefixes,Filter,Transaction_Object).
+compile_pattern((X;Y), (XC;YC), Prefixes, Filter, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Filter,Transaction_Object),
+    compile_pattern(Y,YC,Prefixes,Filter,Transaction_Object).
+compile_pattern(star(X), star(XC), Prefixes, Filter, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Filter,Transaction_Object).
+compile_pattern(plus(X), plus(XC), Prefixes, Filter, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Filter,Transaction_Object).
+compile_pattern(times(X,N,M), times(XC,N,M), Prefixes, Filter, Transaction_Object) :-
+    compile_pattern(X,XC,Prefixes,Filter,Transaction_Object).
 
 right_edges(p(P),[P]).
 right_edges(plus(P),Ps) :-

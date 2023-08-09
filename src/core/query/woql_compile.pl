@@ -1063,7 +1063,7 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,New_Transaction_Object)
+        (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,Filter,New_Transaction_Object)
         ->  true
         ;   throw(error(woql_syntax_error(bad_path_pattern(Pattern)),_))),
         Goal = (
