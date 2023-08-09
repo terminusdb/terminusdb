@@ -62,6 +62,7 @@ resolve_p(P,PI,PS,Transaction_Object,PR) :-
     ->  database_instance(Transaction_Object, [G]),
         read_write_obj_reader(G, Layer),
         predicate_id(Layer, PR, PS)
+    ;   true
     ).
 
 invert_path(p(P,PI,PS), n(P,PI,PS)).
