@@ -1050,7 +1050,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
     compile_wf(t(X,P,Y), Goal),
     update(filter, _Filter, Old_Filter).
 compile_wf(path(X,Pattern,Y),Goal) -->
-    compile_wf(path(X,Pattern,Y,_),Goal).
+    compile_wf(path(X,Pattern,Y,false),Goal).
 compile_wf(path(X,Pattern,Y,Path),Goal) -->
     resolve(X,XE),
     resolve(Y,YE),
@@ -1066,10 +1066,13 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
         (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,Filter,New_Transaction_Object)
         ->  true
         ;   throw(error(woql_syntax_error(bad_path_pattern(Pattern)),_))),
-        Goal = (
-            calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
-            % Don't bind PathE until we're done with the full query (for constraints)
-            Full_Path = PathE
+        (   ground(PathE)
+        ->  Goal = calculate_path_solutions(Compiled_Pattern,XE,YE,Filter,New_Transaction_Object)
+        ;   Goal = (
+                calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
+                % Don't bind PathE until we're done with the full query (for constraints)
+                Full_Path = PathE
+            )
         )
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->

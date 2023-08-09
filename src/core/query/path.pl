@@ -1,5 +1,6 @@
 :- module(path,[
               compile_pattern/5,
+              calculate_path_solutions/5,
               calculate_path_solutions/6,
               schema_subject_id/3,
               instance_subject_id/3,
@@ -17,25 +18,24 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
 
-hop(type_filter{ types : [instance]}, X, PI, _PS, Y, Transaction_Object) :-
+hop(type_filter{ types : [instance]}, XI, _XS, PI, _PS, YI, _YS, Transaction_Object) :-
     !,
-    not_literal(X),
-    xrdf(Transaction_Object.instance_objects,X, id(PI), Y).
-hop(type_filter{ types : [schema]}, X, _PI, PS, Y, Transaction_Object) :-
+    xrdf(Transaction_Object.instance_objects, id(XI), id(PI), id(YI)).
+hop(type_filter{ types : [schema]}, _XI, XS, _PI, PS, _YI, YS, Transaction_Object) :-
     !,
-    not_literal(X),
-    xrdf(Transaction_Object.schema_objects, X, id(PS), Y).
-hop(type_filter{ types : Types}, X, PI, _PS, Y, Transaction_Object) :-
+    xrdf(Transaction_Object.schema_objects, id(XS), id(PS), id(YS)).
+hop(type_filter{ types : Types}, XI, _XS, PI, _PS, YI, _YS, Transaction_Object) :-
     memberchk(instance,Types),
-    not_literal(X),
-    xrdf(Transaction_Object.instance_objects,X, id(PI), Y).
-hop(type_filter{ types : Types}, X, _PI, PS, Y, Transaction_Object) :-
+    xrdf(Transaction_Object.instance_objects, id(XI), id(PI), id(YI)).
+hop(type_filter{ types : Types}, _XI, XS, _PI, PS, _YI, YS, Transaction_Object) :-
     memberchk(schema,Types),
-    not_literal(X),
-    xrdf(Transaction_Object.schema_objects, X, id(PS), Y).
+    xrdf(Transaction_Object.schema_objects, id(XS), id(PS), id(YS)).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-
-    run_pattern(Pattern,XE,YE,Path,Filter,Transaction_Object).
+    run_pattern(Pattern,XE,YE,Path,Filter,Transaction_Object, true).
+
+calculate_path_solutions(Pattern,XE,YE,Filter,Transaction_Object) :-
+    run_pattern(Pattern,XE,YE,_Path,Filter,Transaction_Object, false).
 
 /**
  * in_open_set(+Elt,+Set) is semidet.
@@ -57,6 +57,25 @@ make_edge(X,P,Y,
                 'http://terminusdb.com/schema/woql#predicate' : P,
                 'http://terminusdb.com/schema/woql#object' : Y}).
 
+resolve_s(S,SI,SS,Transaction_Object,SR) :-
+    (   ground(S)
+    ->  SR = S
+    ;   ground(SI)
+    ->  database_instance(Transaction_Object, [G]),
+        read_write_obj_reader(G, Layer),
+        subject_id(Layer, SR, SI)
+    ;   ground(SS)
+    ->  database_instance(Transaction_Object, [G]),
+        read_write_obj_reader(G, Layer),
+        predicate_id(Layer, SR, SS)
+    ;   true
+    ).
+
+resolve_p(true,P,PI,PS,Transaction_Pbject,PR) :-
+    resolve_p(P,PI,PS,Transaction_Pbject,PR).
+resolve_p(false,P,PI,PS,_Transaction_Pbject,PR) :-
+    PR = P-PI-PS.
+
 resolve_p(P,PI,PS,Transaction_Object,PR) :-
     (   ground(P)
     ->  PR = P
@@ -68,6 +87,27 @@ resolve_p(P,PI,PS,Transaction_Object,PR) :-
     ->  database_instance(Transaction_Object, [G]),
         read_write_obj_reader(G, Layer),
         predicate_id(Layer, PR, PS)
+    ;   true
+    ).
+
+resolve_o(true,O,OI,OS,Transaction_Object,OR) :-
+    resolve_o(O,OI,OS,Transaction_Object,OR).
+resolve_o(false,O,OI,OS,_Transaction_Object,OR) :-
+    OR = O-OI-OS.
+
+resolve_o(O,OI,OS,Transaction_Object,OR) :-
+    (   ground(O)
+    ->  OR = O
+    ;   ground(OI)
+    ->  database_instance(Transaction_Object, [G]),
+        read_write_obj_reader(G, Layer),
+        object_id(Layer, Storage, OI),
+        storage_object(Storage, OR)
+    ;   ground(OS)
+    ->  database_instance(Transaction_Object, [G]),
+        read_write_obj_reader(G, Layer),
+        object_id(Layer, Storage, OS),
+        storage_object(Storage, OR)
     ;   true
     ).
 
@@ -86,60 +126,78 @@ invert_path((P;Q), (PN;QN)) :-
     invert_path(Q,QN),
     invert_path(P,PN).
 
-run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
+run_pattern(P,X,Y,Path,Filter,Transaction_Object, Save_Path) :-
     ground(Y),
     var(X),
     !,
     invert_path(P, Q),
-    run_pattern(Q,Y,X,Path,Filter,Transaction_Object).
-run_pattern(P,X,Y,Path,Filter,Transaction_Object) :-
-    run_pattern_(P,X,Y,Path,Path-[],Filter,Transaction_Object).
+    run_pattern(Q,Y,X,Path,Filter,Transaction_Object, Save_Path).
+run_pattern(P,X,Y,Path,Filter,Transaction_Object, Save_Path) :-
+    filtered_object_ids(X, Filter, Transaction_Object, XI, XS),
+    filtered_object_ids(Y, Filter, Transaction_Object, YI, YS),
+    run_pattern_(P,node(X,XI,XS),node(Y,YI,YS),Path,Path-[],Filter,Transaction_Object, Save_Path),
+    resolve_o(X,XI,XS,Transaction_Object,X),
+    resolve_o(Y,YI,YS,Transaction_Object,Y).
 
-run_pattern_(n(P,PI,PS),X,Y,Open_Set,_Path,_Filter,Transaction_Object) :-
-    resolve_p(P,PI,PS,Transaction_Object,PR),
-    make_edge(X,PR,Y,Edge),
+run_pattern_(n(P,PI,PS),node(X,XI,XS),node(Y,YI,YS),Open_Set,_Path,_Filter,Transaction_Object,Save_Path) :-
+    resolve_o(Save_Path,X,XI,XS,Transaction_Object,XR),
+    resolve_p(Save_Path,P,PI,PS,Transaction_Object,PR),
+    resolve_o(Save_Path,Y,YI,YS,Transaction_Object,YR),
+    make_edge(XR,PR,YR,Edge),
     in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_(n(P,PI,PS),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
-    resolve_p(P,PI,PS,Transaction_Object,PR),
-    make_edge(X,PR,Y,Edge),
-    hop(Filter,Y,PI,PS,X,Transaction_Object).
-run_pattern_(p(P,PI,PS),X,Y,Open_Set,_Path,_Filter,Transaction_Object) :-
-    resolve_p(P,PI,PS,Transaction_Object,PR),
-    make_edge(X,PR,Y,Edge),
+run_pattern_(n(P,PI,PS),node(X,XI,XS),node(Y,YI,YS),_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object,Save_Path) :-
+    resolve_o(Save_Path,X,XI,XS,Transaction_Object,XR),
+    resolve_p(Save_Path,P,PI,PS,Transaction_Object,PR),
+    resolve_o(Save_Path,Y,YI,YS,Transaction_Object,YR),
+    hop(Filter,YI,YS,PI,PS,XI,XS,Transaction_Object),
+    resolve_o(Save_Path,X,XI,XS,Transaction_Object,XR),
+    resolve_p(Save_Path,P,PI,PS,Transaction_Object,PR),
+    resolve_o(Save_Path,Y,YI,YS,Transaction_Object,YR),
+    make_edge(XR,PR,YR,Edge).
+run_pattern_(p(P,PI,PS),node(X,XI,XS),node(Y,YI,YS),Open_Set,_Path,_Filter,Transaction_Object,Save_Path) :-
+    resolve_o(Save_Path,X,XI,XS,Transaction_Object,XR),
+    resolve_p(Save_Path,P,PI,PS,Transaction_Object,PR),
+    resolve_o(Save_Path,Y,YI,YS,Transaction_Object,YR),
+    make_edge(XR,PR,YR,Edge),
     in_open_set(Edge,Open_Set),
     !,
     fail.
-run_pattern_(p(P,PI,PS),X,Y,_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object) :-
-    resolve_p(P,PI,PS,Transaction_Object,PR),
-    make_edge(X,PR,Y,Edge),
-    hop(Filter,X,PI,PS,Y,Transaction_Object).
-run_pattern_((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_(P,X,Z,Open_Set,Path-Path_M,Filter,Transaction_Object),
-    run_pattern_(Q,Z,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object).
-run_pattern_((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    (   run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)
-    ;   run_pattern_(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
-run_pattern_(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+run_pattern_(p(P,PI,PS),node(X,XI,XS),node(Y,YI,YS),_Open_Set,[Edge|Tail]-Tail,Filter,Transaction_Object,Save_Path) :-
+    resolve_o(Save_Path,X,XI,XS,Transaction_Object,XR),
+    resolve_p(Save_Path,P,PI,PS,Transaction_Object,PR),
+    resolve_o(Save_Path,Y,YI,YS,Transaction_Object,YR),
+    hop(Filter,XI,XS,PI,PS,YI,YS,Transaction_Object),
+    resolve_o(Save_Path,X,XI,XS,Transaction_Object,XR),
+    resolve_p(Save_Path,P,PI,PS,Transaction_Object,PR),
+    resolve_o(Save_Path,Y,YI,YS,Transaction_Object,YR),
+    make_edge(XR,PR,YR,Edge).
+run_pattern_((P,Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
+    run_pattern_(P,X,Z,Open_Set,Path-Path_M,Filter,Transaction_Object,Save_Path),
+    run_pattern_(Q,Z,Y,Open_Set,Path_M-Tail,Filter,Transaction_Object,Save_Path).
+run_pattern_((P;Q),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
+    (   run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path)
+    ;   run_pattern_(Q,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path)).
+run_pattern_(star(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     (   X = Y,
         Path = Tail
-    ;   run_pattern_n_m_(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object)).
-run_pattern_(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
+    ;   run_pattern_n_m_(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path)).
+run_pattern_(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
+    run_pattern_n_m_(P,1,-1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+run_pattern_(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
+    run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
 
-run_pattern_n_m_(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+run_pattern_n_m_(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     !,
-    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_n_m_(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
-    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object).
-run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object) :-
+    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+run_pattern_n_m_(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
+    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     Np is max(1,N-1),
     Mp is M-1,
-    run_pattern_(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object),
-    run_pattern_n_m_(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object).
+    run_pattern_(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object,Save_Path),
+    run_pattern_n_m_(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object,Save_Path).
 
 /*
  * Generate ids for the predicate based on filter (one for each graph)
@@ -150,6 +208,8 @@ instance_predicate_id(Pred, Transaction_Object, IdI) :-
         ground(Layer),
         predicate_id(Layer, Pred, IdI)
     ->  true
+    ;   var(Pred)
+    ->  true
     ;   IdI = 0 % impossible predicate
     ).
 
@@ -159,23 +219,31 @@ schema_predicate_id(Pred, Transaction_Object, IdS) :-
         ground(Layer),
         predicate_id(Layer, Pred, IdS)
     ->  true
+    ;   var(Pred)
+    ->  true
     ;   IdS = 0 % impossible predicate
     ).
 
 instance_subject_id(Subject, Transaction_Object, IdI) :-
     database_instance(Transaction_Object, [Instance_RWO]),
-    (   read_write_obj_reader(Instance_RWO, Layer),
+    (   ground(Subject),
+        read_write_obj_reader(Instance_RWO, Layer),
         ground(Layer),
         subject_id(Layer, Subject, IdI)
+    ->  true
+    ;   var(Subject)
     ->  true
     ;   IdI = 0 % impossible subject
     ).
 
 schema_subject_id(Subject, Transaction_Object, IdS) :-
     database_schema(Transaction_Object, [Schema_RWO]),
-    (   read_write_obj_reader(Schema_RWO, Layer),
+    (   ground(Subject),
+        read_write_obj_reader(Schema_RWO, Layer),
         ground(Layer),
         subject_id(Layer, Subject, IdS)
+    ->  true
+    ;   var(Subject)
     ->  true
     ;   IdS = 0 % impossible subject
     ).
@@ -188,6 +256,8 @@ instance_object_id(Object, Transaction_Object, IdI) :-
         object_storage(Object,Storage),
         object_id(Layer, Storage, IdI)
     ->  true
+    ;   var(Object)
+    ->  true
     ;   IdI = 0 % impossible object
     ).
 
@@ -199,7 +269,19 @@ schema_object_id(Object, Transaction_Object, IdS) :-
         object_storage(Object,Storage),
         object_id(Layer, Storage, IdS)
     ->  true
+    ;   var(Object)
+    ->  true
     ;   IdS = 0 % impossible object
+    ).
+
+filtered_object_ids(Object, type_filter{ types : Types}, Transaction_Object, IdI, IdS) :-
+    (   memberchk(instance, Types)
+    ->  instance_object_id(Object, Transaction_Object, IdI)
+    ;   true
+    ),
+    (   memberchk(schema, Types)
+    ->  schema_object_id(Object, Transaction_Object, IdS)
+    ;   true
     ).
 
 filtered_predicate_ids(Pred, type_filter{ types : Types}, Transaction_Object, IdI, IdS) :-
@@ -274,6 +356,31 @@ left_edges((X;Y),Rs) :-
 :- use_module(ask).
 :- use_module(resolve_query_resource).
 
+test(p, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,b,c),
+           insert(a,b,e),
+           insert(a,b,g),
+           insert(a,b,h)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    AST2 = path(a, p(b), v(x)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings,Result,Bindings),
+    Bindings = [_{x:c},_{x:e},_{x:g},_{x:h}].
+
 test(n_m, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -297,6 +404,7 @@ test(n_m, [
     create_context(Descriptor,Commit_Info, Context2),
     run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
     get_dict(bindings,Result,Bindings),
+
     length(Bindings, 3).
 
 test(n_m_loop, [
