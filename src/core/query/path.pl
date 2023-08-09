@@ -250,28 +250,28 @@ schema_subject_id(Subject, Transaction_Object, IdS) :-
 
 instance_object_id(Object, Transaction_Object, IdI) :-
     database_instance(Transaction_Object, [Instance_RWO]),
-    (   ground(Object),
-        read_write_obj_reader(Instance_RWO, Layer),
-        ground(Layer),
-        object_storage(Object,Storage),
-        object_id(Layer, Storage, IdI)
-    ->  true
-    ;   var(Object)
-    ->  true
-    ;   IdI = 0 % impossible object
+    (   ground(Object)
+    ->  (   read_write_obj_reader(Instance_RWO, Layer),
+            ground(Layer),
+            object_storage(Object,Storage),
+            object_id(Layer, Storage, IdI)
+        ->  true
+        ;   IdI = 0
+        )
+    ;   true
     ).
 
 schema_object_id(Object, Transaction_Object, IdS) :-
     database_schema(Transaction_Object, [Schema_RWO]),
-    (   ground(Object),
-        read_write_obj_reader(Schema_RWO, Layer),
-        ground(Layer),
-        object_storage(Object,Storage),
-        object_id(Layer, Storage, IdS)
-    ->  true
-    ;   var(Object)
-    ->  true
-    ;   IdS = 0 % impossible object
+    (   ground(Object)
+    ->  (   read_write_obj_reader(Schema_RWO, Layer),
+            ground(Layer),
+            object_storage(Object,Storage),
+            object_id(Layer, Storage, IdS)
+        ->  true
+        ;   IdS = 0
+        )
+    ;   true
     ).
 
 filtered_object_ids(Object, type_filter{ types : Types}, Transaction_Object, IdI, IdS) :-
@@ -487,5 +487,56 @@ test(star_follows_reverse, [
 
     % test that we aren't going in circles
     length(Bindings, 2).
+
+test(chained_data, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (insert(a,identifier, "a"^^xsd:string),
+           insert(a,parent,b),
+           insert(b,identifier, "b"^^xsd:string),
+           insert(b,parent,c),
+           insert(c,identifier, "c"^^xsd:string)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor,Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    AST2 = path(a, (star(p(parent)),p(identifier)), v(y), v(p)),
+
+    create_context(Descriptor,Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings,Result,Bindings),
+
+    length(Bindings, 3),
+
+    % backwards
+    AST3 = path(v(x), (star(p(parent)),p(identifier)), "c"^^xsd:string, v(p)),
+
+    run_context_ast_jsonld_response(Context2, AST3, no_data_version, _, Result2),
+    get_dict(bindings,Result2,Bindings2),
+
+    length(Bindings2, 3),
+
+    % path free
+    AST4 = path(a, (star(p(parent)),p(identifier)), v(y)),
+
+    run_context_ast_jsonld_response(Context2, AST4, no_data_version, _, Result3),
+    get_dict(bindings,Result3,Bindings3),
+
+    length(Bindings3, 3),
+
+    % path free backwards
+    AST5 = path(v(x), (star(p(parent)),p(identifier)), "c"^^xsd:string),
+
+    run_context_ast_jsonld_response(Context2, AST5, no_data_version, _, Result4),
+    get_dict(bindings,Result4,Bindings4),
+
+    Bindings4 = [_{x:c},_{x:b},_{x:a}].
 
 :- end_tests(path).
