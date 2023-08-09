@@ -1,8 +1,12 @@
 :- module(path,[
               compile_pattern/5,
               calculate_path_solutions/6,
+              schema_subject_id/3,
+              instance_subject_id/3,
               schema_predicate_id/3,
-              instance_predicate_id/3
+              instance_predicate_id/3,
+              schema_object_id/3,
+              instance_object_id/3
           ]).
 
 :- use_module(woql_compile, [not_literal/1]).
@@ -156,6 +160,46 @@ schema_predicate_id(Pred, Transaction_Object, IdS) :-
         predicate_id(Layer, Pred, IdS)
     ->  true
     ;   IdS = 0 % impossible predicate
+    ).
+
+instance_subject_id(Subject, Transaction_Object, IdI) :-
+    database_instance(Transaction_Object, [Instance_RWO]),
+    (   read_write_obj_reader(Instance_RWO, Layer),
+        ground(Layer),
+        subject_id(Layer, Subject, IdI)
+    ->  true
+    ;   IdI = 0 % impossible subject
+    ).
+
+schema_subject_id(Subject, Transaction_Object, IdS) :-
+    database_schema(Transaction_Object, [Schema_RWO]),
+    (   read_write_obj_reader(Schema_RWO, Layer),
+        ground(Layer),
+        subject_id(Layer, Subject, IdS)
+    ->  true
+    ;   IdS = 0 % impossible subject
+    ).
+
+instance_object_id(Object, Transaction_Object, IdI) :-
+    database_instance(Transaction_Object, [Instance_RWO]),
+    (   ground(Object),
+        read_write_obj_reader(Instance_RWO, Layer),
+        ground(Layer),
+        object_storage(Object,Storage),
+        object_id(Layer, Storage, IdI)
+    ->  true
+    ;   IdI = 0 % impossible object
+    ).
+
+schema_object_id(Object, Transaction_Object, IdS) :-
+    database_schema(Transaction_Object, [Schema_RWO]),
+    (   ground(Object),
+        read_write_obj_reader(Schema_RWO, Layer),
+        ground(Layer),
+        object_storage(Object,Storage),
+        object_id(Layer, Storage, IdS)
+    ->  true
+    ;   IdS = 0 % impossible object
     ).
 
 filtered_predicate_ids(Pred, type_filter{ types : Types}, Transaction_Object, IdI, IdS) :-

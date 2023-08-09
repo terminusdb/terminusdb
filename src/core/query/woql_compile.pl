@@ -1702,6 +1702,20 @@ filter_transaction_object_read_write_objects(type_name_filter{ type : Type}, Tra
     ;   Type = schema
     ->  Objs = Transaction_Object.schema_objects).
 
+compile_instance_subject(SE, Transaction_Object, SI) :-
+    (   atom(SE)
+    ->  instance_subject_id(SE, Transaction_Object, SI_Id),
+        SI = id(SI_Id)
+    ;   SI = SE
+    ).
+
+compile_schema_subject(SE, Transaction_Object, SS) :-
+    (   atom(SE)
+    ->  schema_subject_id(SE, Transaction_Object, SS_Id),
+        SS = id(SS_Id)
+    ;   SS = SE
+    ).
+
 compile_instance_predicate(PE, Transaction_Object, PI) :-
     (   atom(PE)
     ->  instance_predicate_id(PE, Transaction_Object, PI_Id),
@@ -1716,23 +1730,45 @@ compile_schema_predicate(PE, Transaction_Object, PS) :-
     ;   PS = PE
     ).
 
+compile_instance_object(OE, Transaction_Object, OI) :-
+    (   ground(OE)
+    ->  instance_object_id(OE, Transaction_Object, OI_Id),
+        OI = id(OI_Id)
+    ;   OI = OE
+    ).
+
+compile_schema_object(OE, Transaction_Object, OS) :-
+    (   ground(OE)
+    ->  schema_object_id(OE, Transaction_Object, OS_Id),
+        OS = id(OS_Id)
+    ;   OS = OE
+    ).
+
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, t(XE, PE, YE), Goal) :-
     (   memberchk(instance,Types)
-    ->  compile_instance_predicate(PE, Transaction_Object, PI),
-        Search_1 = [xrdf(Transaction_Object.instance_objects, XE, PI, YE)]
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        compile_instance_object(YE, Transaction_Object, YI),
+        Search_1 = [xrdf(Transaction_Object.instance_objects, XI, PI, YI)]
     ;   Search_1 = []),
     (   memberchk(schema,Types)
-    ->  compile_schema_predicate(PE, Transaction_Object, PS),
-        Search_2 = [xrdf(Transaction_Object.schema_objects, XE, PS, YE)]
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        compile_schema_object(YE, Transaction_Object, YS),
+        Search_2 = [xrdf(Transaction_Object.schema_objects, XS, PS, YS)]
     ;   Search_2 = []),
     append([Search_1,Search_2], Searches),
     list_disjunction(Searches,Goal).
 filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, t(XE, PE, YE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
     compile_instance_predicate(PE, Transaction_Object, PI),
-    Goal = xrdf((Transaction_Object.instance_objects), XE, PI, YE).
+    compile_instance_object(YE, Transaction_Object, YI),
+    Goal = xrdf((Transaction_Object.instance_objects), XI, PI, YI).
 filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, t(XE, PE, YE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
     compile_schema_predicate(PE, Transaction_Object, PS),
-    Goal = xrdf((Transaction_Object.schema_objects), XE, PS, YE).
+    compile_schema_object(YE, Transaction_Object, YS),
+    Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance
