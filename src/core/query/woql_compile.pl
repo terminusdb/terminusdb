@@ -1050,7 +1050,7 @@ compile_wf(t(X,P,Y,G),Goal) -->
     compile_wf(t(X,P,Y), Goal),
     update(filter, _Filter, Old_Filter).
 compile_wf(path(X,Pattern,Y),Goal) -->
-    compile_wf(path(X,Pattern,Y,_),Goal).
+    compile_wf(path(X,Pattern,Y,false),Goal).
 compile_wf(path(X,Pattern,Y,Path),Goal) -->
     resolve(X,XE),
     resolve(Y,YE),
@@ -1063,13 +1063,16 @@ compile_wf(path(X,Pattern,Y,Path),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         filter_transaction(Filter, Transaction_Object, New_Transaction_Object),
-        (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,New_Transaction_Object)
+        (   compile_pattern(Pattern,Compiled_Pattern,Prefixes,Filter,New_Transaction_Object)
         ->  true
         ;   throw(error(woql_syntax_error(bad_path_pattern(Pattern)),_))),
-        Goal = (
-            calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
-            % Don't bind PathE until we're done with the full query (for constraints)
-            Full_Path = PathE
+        (   ground(PathE)
+        ->  Goal = calculate_path_solutions(Compiled_Pattern,XE,YE,Filter,New_Transaction_Object)
+        ;   Goal = (
+                calculate_path_solutions(Compiled_Pattern,XE,YE,Full_Path,Filter,New_Transaction_Object),
+                % Don't bind PathE until we're done with the full query (for constraints)
+                Full_Path = PathE
+            )
         )
     }.
 compile_wf((A;B),(ProgA;ProgB)) -->
@@ -1702,19 +1705,73 @@ filter_transaction_object_read_write_objects(type_name_filter{ type : Type}, Tra
     ;   Type = schema
     ->  Objs = Transaction_Object.schema_objects).
 
+compile_instance_subject(SE, Transaction_Object, SI) :-
+    (   atom(SE)
+    ->  instance_subject_id(SE, Transaction_Object, SI_Id),
+        SI = id(SI_Id)
+    ;   SI = SE
+    ).
+
+compile_schema_subject(SE, Transaction_Object, SS) :-
+    (   atom(SE)
+    ->  schema_subject_id(SE, Transaction_Object, SS_Id),
+        SS = id(SS_Id)
+    ;   SS = SE
+    ).
+
+compile_instance_predicate(PE, Transaction_Object, PI) :-
+    (   atom(PE)
+    ->  instance_predicate_id(PE, Transaction_Object, PI_Id),
+        PI = id(PI_Id)
+    ;   PI = PE
+    ).
+
+compile_schema_predicate(PE, Transaction_Object, PS) :-
+    (   atom(PE)
+    ->  schema_predicate_id(PE, Transaction_Object, PS_Id),
+        PS = id(PS_Id)
+    ;   PS = PE
+    ).
+
+compile_instance_object(OE, Transaction_Object, OI) :-
+    (   ground(OE)
+    ->  instance_object_id(OE, Transaction_Object, OI_Id),
+        OI = id(OI_Id)
+    ;   OI = OE
+    ).
+
+compile_schema_object(OE, Transaction_Object, OS) :-
+    (   ground(OE)
+    ->  schema_object_id(OE, Transaction_Object, OS_Id),
+        OS = id(OS_Id)
+    ;   OS = OE
+    ).
+
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, t(XE, PE, YE), Goal) :-
     (   memberchk(instance,Types)
-    ->  Search_1 = [xrdf(Transaction_Object.instance_objects, XE, PE, YE)]
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        compile_instance_object(YE, Transaction_Object, YI),
+        Search_1 = [xrdf(Transaction_Object.instance_objects, XI, PI, YI)]
     ;   Search_1 = []),
     (   memberchk(schema,Types)
-    ->  Search_2 = [xrdf(Transaction_Object.schema_objects, XE, PE, YE)]
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        compile_schema_object(YE, Transaction_Object, YS),
+        Search_2 = [xrdf(Transaction_Object.schema_objects, XS, PS, YS)]
     ;   Search_2 = []),
     append([Search_1,Search_2], Searches),
     list_disjunction(Searches,Goal).
 filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    Goal = xrdf((Transaction_Object.instance_objects), XE, PE, YE).
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    compile_instance_object(YE, Transaction_Object, YI),
+    Goal = xrdf((Transaction_Object.instance_objects), XI, PI, YI).
 filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, t(XE, PE, YE), Goal) :-
-    Goal = xrdf((Transaction_Object.schema_objects), XE, PE, YE).
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    compile_schema_object(YE, Transaction_Object, YS),
+    Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance

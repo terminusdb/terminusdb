@@ -68,7 +68,7 @@
               resolve_absolute_string_descriptor_and_default_graph/3,
               resolve_absolute_or_relative_string_descriptor/3,
               resolve_filter/2,
-	      descriptor_organization/2,
+	          descriptor_organization/2,
 
               % woql_compile.pl
               lookup/3,
@@ -81,7 +81,7 @@
               not_literal/1,
 
               % path.pl
-              compile_pattern/4,
+              compile_pattern/5,
               calculate_path_solutions/6,
 
               % metadata.pl
