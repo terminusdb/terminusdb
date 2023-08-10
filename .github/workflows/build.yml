@@ -26,6 +26,16 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          image-ref: terminusdb/terminusdb-server:local
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
       - name: Compress image
         run: gzip terminusdb-server-docker-image.tar
 
