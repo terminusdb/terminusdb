@@ -29,7 +29,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.11.2
         with:
-          image-ref: terminusdb/terminusdb-server:local
+          input: /github/workspace/terminusdb-server-docker-image.tar
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
