@@ -5,6 +5,8 @@
               refute_schema/2,
               is_enum/2,
               is_simple_class/2,
+              is_frame_class/2,
+              is_json_class/2,
               is_tagged_union/2,
               is_base_type/1,
               is_built_in/1,
@@ -33,8 +35,11 @@
               concrete_subclass/3,
               is_abstract/2,
               is_subdocument/2,
+              is_unfoldable/2,
               schema_is_subdocument/2,
-              schema_class_predicate_conjunctive_type/4
+              schema_class_predicate_conjunctive_type/4,
+              class_super/3,
+              supermap/3
           ]).
 
 /*
@@ -117,6 +122,19 @@ is_system_class(Class) :-
         ], List),
     memberchk(Class,List).
 
+system_class(Class) :-
+    prefix_list(
+        [
+            sys:'Foreign',
+            sys:'Class',
+            sys:'TaggedUnion',
+            sys:'Enum',
+            sys:'Unit',
+            sys:'JSON',
+            sys:'JSONDocument'
+        ], List),
+    member(Class,List).
+
 is_simple_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_simple_class(Schema, Class).
@@ -129,12 +147,39 @@ is_schema_json_class(Schema,Class) :-
     global_prefix_expand(sys:'JSON',JSON),
     xrdf(Schema,Class,rdf:type,JSON).
 
+is_system_frame_class(Class) :-
+    prefix_list(
+        [
+            sys:'Class',
+            sys:'TaggedUnion',
+            sys:'Enum'
+        ], List),
+    memberchk(Class,List).
+
+system_frame_class(Class) :-
+    prefix_list(
+        [
+            sys:'Class',
+            sys:'TaggedUnion',
+            sys:'Enum'
+        ], List),
+    member(Class,List).
+
+is_frame_class(Validation_Object,Class) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_frame_class(Schema, Class).
+
+:- table is_schema_frame_class/2 as private.
+is_schema_frame_class(Schema, Class) :-
+    system_frame_class(C),
+    xrdf(Schema,Class, rdf:type, C).
+
 % NOTE
 % This generator is no longer stable under ordering!
 :- table is_schema_simple_class/2 as private.
 is_schema_simple_class(Schema, Class) :-
-    xrdf(Schema,Class, rdf:type, C),
-    is_system_class(C).
+    system_class(C),
+    xrdf(Schema,Class, rdf:type, C).
 
 is_base_type(Type) :-
     base_type(Type).
@@ -155,11 +200,34 @@ class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
     schema_class_super(Schema,Class,Super).
 
+:- table schema_class_super/2 as private.
 schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Super).
 schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Intermediate),
     schema_class_super(Schema,Intermediate,Super).
+
+schema_all_class_supers(Schema,Class,Prefixes,Supers,Options) :-
+    findall(
+        S,
+        (   schema_class_super(Schema, Class, Super),
+            compress_schema_uri(Super,Prefixes,S,Options)),
+        Supers
+    ).
+
+supermap(Transaction, Supermap, Options) :-
+    database_schema(Transaction, Schema),
+    database_prefixes(Transaction, Prefixes),
+    schema_supermap(Schema, Prefixes, Supermap, Options).
+
+:- table schema_supermap/4 as private.
+schema_supermap(Schema, Prefixes, Supermap, Options) :-
+    findall(C-Supers,
+            (   is_schema_simple_class(Schema,Class),
+                compress_schema_uri(Class,Prefixes,C,Options),
+                schema_all_class_supers(Schema,Class,Prefixes,Supers,Options)),
+            Pairs),
+    dict_create(Supermap, supermap, Pairs).
 
 class_predicate_conjunctive_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
@@ -499,7 +567,8 @@ is_built_in(P) :-
             sys:class,
             sys:abstract,
             sys:subdocument,
-            sys:unfoldable
+            sys:unfoldable,
+            sys:metadata
         ],
         List),
     memberchk(P,List).
@@ -549,7 +618,8 @@ type_family_constructor(Type) :-
             sys:'Array',
             sys:'Table',
             sys:'Cardinality',
-            sys:'Optional'
+            sys:'Optional',
+            sys:'Choice'
         ],
         List),
     memberchk(Type,List).
@@ -651,7 +721,8 @@ is_key(Type) :-
     memberchk(Type, List).
 
 is_documentation(Type) :-
-    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation'], List),
+    prefix_list([sys:'SchemaDocumentation', sys:'PropertyDocumentation', sys:'Documentation',
+                 sys:'DocumentationLabelComment'], List),
     memberchk(Type, List).
 
 refute_class_key(Validation_Object,Class,Witness) :-
@@ -1118,16 +1189,25 @@ merge_documentation_language_records([],[]).
 merge_documentation_language_records([Record],[Record]) :-
     !.
 merge_documentation_language_records([Record|Rest],[MergedRecord|Merged]) :-
-    get_dict('@language', Record, Lang),
-    partition({Lang}/[R]>>get_dict('@language',R,Lang),Rest,Same,Different),
-    foldl([R1,R2,Result]>>(
-              (   get_dict('@properties', R2, Properties2)
-              ->  (   get_dict('@properties', R1, Properties1)
-                  ->  put_dict(Properties2, Properties1, Properties),
-                      put_dict(_{'@properties' : Properties}, R2, Result)
-                  ;   put_dict(_{'@properties' : Properties2}, R2, Result)
+    (   get_dict('@language', Record, Lang)
+    ->  true
+    ;   Lang = no(lang) % out of band
+    ),
+    !,
+    partition({Lang}/[R]>>
+              (   Lang = no(lang)
+              ->  \+ get_dict('@language', R, Lang)
+              ;   get_dict('@language',R,Lang)
+              ),
+              Rest,Same,Different),
+    foldl([New,Kernel,Result]>>(
+              (   get_dict('@properties', New, Properties2)
+              ->  (   get_dict('@properties', Kernel, Properties1)
+                  ->  put_dict(Properties1, Properties2, Properties),
+                      put_dict(_{'@properties' : Properties}, Kernel, Result)
+                  ;   put_dict(_{'@properties' : Properties2}, Kernel, Result)
                   )
-              ;   R1 = R2
+              ;   Result = Kernel
               )
           ),Same,Record,MergedRecord),
     merge_documentation_language_records(Different,Merged).
@@ -1176,7 +1256,7 @@ oneof_descriptor(Validation_Object, Type, Descriptor) :-
 
 refute_diamond_property(Validation_Object, Prefixes, Class, Witness) :-
     catch(
-        (   class_property_dictionary(Validation_Object, Prefixes, Class, _),
+        (   class_property_dictionary(Validation_Object, Prefixes, Class, _Frame),
             fail
         ),
         error(violation_of_diamond_property(Class,Predicate),_),

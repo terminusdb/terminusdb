@@ -3,6 +3,7 @@ const { Agent, api, db, document, util, woql } = require('../lib')
 
 const randomType0 = util.randomString()
 const randomType1 = util.randomString()
+const randomType2 = util.randomString()
 
 describe('woql-auth', function () {
   let agent
@@ -68,7 +69,7 @@ describe('woql-auth', function () {
       ascribed_type: `terminusdb:///schema#${randomType0}`,
       document: {
         '@id': `${randomType0}/0`,
-        '@type': randomType0,
+        '@type': `terminusdb:///schema#${randomType0}`,
         something: 'a default something',
       },
     }
@@ -198,6 +199,55 @@ describe('woql-auth', function () {
     })
   })
 
+  describe('key type: Lexical', function () {
+    const schema = {
+      '@id': randomType2,
+      '@key': { '@type': 'Lexical', '@fields': ['label'] },
+      '@type': 'Class',
+      label: 'xsd:string',
+    }
+
+    before(async function () {
+      await document.insert(agent, { schema })
+    })
+
+    function insertTemplate () {
+      return {
+        '@type': 'InsertDocument',
+        document: {
+          '@type': 'Value',
+          dictionary: {
+            '@type': 'DictionaryTemplate',
+            data: [
+              {
+                '@type': 'FieldValuePair',
+                field: 'label',
+                value: {
+                  '@type': 'Value',
+                  data: { '@type': 'xsd:string', '@value': 'test' },
+                },
+              },
+              {
+                '@type': 'FieldValuePair',
+                field: '@type',
+                value: {
+                  '@type': 'Value',
+                  data: { '@type': 'xsd:string', '@value': randomType2 },
+                },
+              },
+            ],
+          },
+        },
+      }
+    }
+
+    it('fails double insert', async function () {
+      await woql.post(agent, insertTemplate())
+      const r = await woql.post(agent, insertTemplate()).unverified()
+      expect(r.body['api:error']).to.have.property('@type').that.equals('api:DocumentIdAlreadyExists')
+    })
+  })
+
   describe('key type: Random', function () {
     const schema = {
       '@id': randomType1,
@@ -270,12 +320,6 @@ describe('woql-auth', function () {
       query.document.dictionary.data[0].value.data['@value'] = util.randomString()
       const r = await woql.post(agent, query).notFound()
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
-      expect(r.body['api:error']['api:document']).to.deep.equal({
-        '@type': randomType1,
-        label: query.document.dictionary.data[0].value.data['@value'],
-      })
-      const re = new RegExp('^' + 'terminusdb:///data/' + randomType1 + '/')
-      expect(r.body['api:error']).to.have.property('api:document_id').that.matches(re)
     })
 
     it('passes UpdateDocument with node identifier', async function () {

@@ -1,14 +1,23 @@
+#[macro_use]
+mod log;
+
+mod changes;
 mod consts;
 mod doc;
+mod embedding;
+mod graphql;
+mod path;
 mod prefix;
 mod schema;
+mod template;
 mod types;
 mod value;
 
-use lcs;
 pub use swipl;
 use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
+
+use rand::{thread_rng, Rng};
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -42,9 +51,69 @@ predicates! {
 
         diff.unify(vec.as_slice())
     }
+
+    #[module("utils")]
+    semidet fn random_string(_context, s_term) {
+        let mut buf = [0_u8;31];
+        let mut rng = thread_rng();
+
+        for item in &mut buf {
+            let r = rng.gen_range(0..36);
+            if r < 10 {
+                *item = b'0' + r;
+            }
+            else {
+                *item = b'a' - 10 + r;
+            }
+        }
+
+        let s = unsafe { std::str::from_utf8_unchecked(&buf) };
+
+        s_term.unify(s)
+    }
+
+    #[module("utils")]
+    semidet fn random_base64(_context, size_term, s_term) {
+        let size: u64 = size_term.get()?;
+        let mut buf = Vec::with_capacity(size as usize);
+        let mut rng = thread_rng();
+
+        for _ in 0..size {
+            let r = rng.gen_range(0..64);
+            let item = base64char(r);
+            buf.push(item)
+        }
+
+        let s = unsafe { std::str::from_utf8_unchecked(&buf) };
+
+        s_term.unify(s)
+    }
+
+}
+
+// implements RFC4648 encoding
+#[inline]
+fn base64char(r: u8) -> u8 {
+    if r < 26 {
+        b'A' + r
+    } else if r < 52 {
+        b'a' + (r - 26)
+    } else if r < 62 {
+        b'0' + (r - 52)
+    } else if r == 62 {
+        b'-'
+    } else {
+        b'_'
+    }
 }
 
 pub fn install() {
     register_list_diff();
+    register_random_string();
+    register_random_base64();
     doc::register();
+    graphql::register();
+    template::register();
+    changes::register();
+    embedding::register();
 }

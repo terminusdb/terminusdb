@@ -51,12 +51,11 @@ impl<L: Layer> GetDocumentContext<L> {
         minimized: bool,
     ) -> GetDocumentContext<L> {
         let schema_query_context = SchemaQueryContext::new(schema);
-        let prefixes;
-        if compress {
-            prefixes = prefix_contracter_from_schema_layer(schema);
+        let prefixes = if compress {
+            prefix_contracter_from_schema_layer(schema)
         } else {
-            prefixes = PrefixContracter::new(std::iter::empty());
-        }
+            PrefixContracter::new(std::iter::empty())
+        };
 
         let mut rdf_type_id = None;
         let mut rdf_first_id = None;
@@ -71,7 +70,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let unfoldables: HashSet<u64>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
-        let mut sys_index_ids: Vec<u64>;
+        let sys_index_ids: Vec<u64>;
         let mut sys_array_id = None;
         let mut sys_value_id = None;
 
@@ -99,10 +98,9 @@ impl<L: Layer> GetDocumentContext<L> {
 
                 let subs: HashSet<u64> = schema_subs
                     .into_iter()
-                    .map(|schema_sub| {
+                    .filter_map(|schema_sub| {
                         schema_query_context.translate_subject_id(instance, schema_sub)
                     })
-                    .flatten()
                     .collect();
 
                 subtypes.insert(sup_name, subs);
@@ -147,22 +145,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 document_types.insert(sys_json_document_type_id);
             }
 
-            sys_index_ids = Vec::new();
-            let mut index_str = SYS_INDEX.to_string();
-            let orig_len = index_str.len();
-            let mut ix = 1;
-
-            loop {
-                if let Some(index_id) = instance.predicate_id(&index_str) {
-                    sys_index_ids.push(index_id);
-                    ix += 1;
-                    let ix_s = ix.to_string();
-                    index_str.truncate(orig_len);
-                    index_str.push_str(&ix_s);
-                } else {
-                    break;
-                }
-            }
+            sys_index_ids = retrieve_all_index_ids(instance);
 
             sys_array_id = instance.object_node_id(SYS_ARRAY);
             sys_value_id = instance.predicate_id(SYS_VALUE);
@@ -202,20 +185,64 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
+    pub fn new_json(instance: Option<L>, unfold: bool, minimized: bool) -> GetDocumentContext<L> {
+        let rdf_type_id;
+        let rdf_first_id;
+        let rdf_rest_id;
+        let rdf_nil_id;
+        let rdf_list_id;
+        let sys_json_type_id;
+        let sys_json_document_type_id;
+        if let Some(instance) = instance.as_ref() {
+            rdf_type_id = instance.predicate_id(RDF_TYPE);
+            rdf_first_id = instance.predicate_id(RDF_FIRST);
+            rdf_rest_id = instance.predicate_id(RDF_REST);
+            rdf_nil_id = instance.object_node_id(RDF_NIL);
+            rdf_list_id = instance.object_node_id(RDF_LIST);
+            sys_json_type_id = instance.object_node_id(SYS_JSON);
+            sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+        } else {
+            rdf_type_id = None;
+            rdf_first_id = None;
+            rdf_rest_id = None;
+            rdf_nil_id = None;
+            rdf_list_id = None;
+            sys_json_type_id = None;
+            sys_json_document_type_id = None;
+        }
+        Self {
+            layer: instance,
+
+            prefixes: PrefixContracter::new([]),
+            types: HashSet::with_capacity(0),
+            subtypes: HashMap::with_capacity(0),
+            document_types: HashSet::with_capacity(0),
+            unfoldables: HashSet::with_capacity(0),
+            enums: HashMap::with_capacity(0),
+            set_pairs: HashSet::with_capacity(0),
+            rdf_type_id,
+            rdf_first_id,
+            rdf_rest_id,
+            rdf_nil_id,
+            rdf_list_id,
+            sys_json_type_id,
+            sys_json_document_type_id,
+            sys_index_ids: Vec::with_capacity(0),
+            sys_array_id: None,
+            sys_value_id: None,
+            unfold,
+            minimized,
+        }
+    }
+
     fn layer(&self) -> &L {
         self.layer.as_ref().unwrap()
     }
 
     pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
-        if self.layer.is_some() {
-            if let Some(id) = self.layer().subject_id(iri) {
-                Some(self.get_id_document(id))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        self.layer
+            .as_ref()
+            .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
     }
 
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
@@ -248,7 +275,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
             }
             map::Entry::Occupied(mut e) => {
-                let mut v = e.get_mut();
+                let v = e.get_mut();
                 match v {
                     Value::Array(a) => {
                         a.push(value);
@@ -256,7 +283,7 @@ impl<L: Layer> GetDocumentContext<L> {
                     _ => {
                         let mut a = Vec::new();
                         let mut old_v = Value::Null;
-                        std::mem::swap(&mut old_v, &mut v);
+                        std::mem::swap(&mut old_v, v);
                         a.push(old_v);
                         a.push(value);
                         *v = Value::Array(a);
@@ -315,7 +342,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let id_name = self.layer().id_object(id).unwrap();
         if let Some(v) = id_name.value_ref() {
             // this is not actually a document but a value
-            return Err(value_string_to_json(v));
+            return Err(value_to_json(v));
         }
 
         // we know id_name is properly a node
@@ -447,6 +474,55 @@ impl<L: Layer> GetDocumentContext<L> {
             }
         }
     }
+
+    fn get_subtypes_for(&self, type_name: &str) -> Vec<u64> {
+        let mut types: Vec<u64> = Vec::new();
+        if let Some(type_id) = self.layer().object_node_id(type_name) {
+            // always at least search for the type itself
+            types.push(type_id);
+        }
+        if let Some(subtypes) = self.subtypes.get(type_name) {
+            types.extend(subtypes.iter().cloned());
+        }
+
+        types
+    }
+
+    fn id_document_exists(&self, id: u64) -> bool {
+        self.rdf_type_id
+            .map(|rdf_type_id| self.layer().single_triple_sp(id, rdf_type_id).is_some())
+            .unwrap_or(false)
+    }
+
+    pub fn document_exists(&self, iri: &str) -> bool {
+        match self.layer.as_ref() {
+            None => false,
+            Some(l) => match l.subject_id(iri) {
+                Some(id) => self.id_document_exists(id),
+                None => false,
+            },
+        }
+    }
+}
+
+pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
+    let mut sys_index_ids = Vec::new();
+    let mut index_str = SYS_INDEX.to_string();
+    let orig_len = index_str.len();
+    let mut ix = 1;
+    loop {
+        if let Some(index_id) = instance.predicate_id(&index_str) {
+            sys_index_ids.push(index_id);
+            ix += 1;
+            let ix_s = ix.to_string();
+            index_str.truncate(orig_len);
+            index_str.push_str(&ix_s);
+        } else {
+            break;
+        }
+    }
+
+    sys_index_ids
 }
 
 enum StackEntry<'a, L: Layer> {
@@ -466,10 +542,7 @@ enum StackEntry<'a, L: Layer> {
 
 impl<'a, L: Layer> StackEntry<'a, L> {
     fn is_document(&self) -> bool {
-        match self {
-            Self::Document { .. } => true,
-            _ => false,
-        }
+        matches!(self, Self::Document { .. })
     }
 
     fn is_json(&self) -> bool {
@@ -486,14 +559,14 @@ struct ArrayStackEntry<'a, L: Layer> {
     entries: ArrayIterator<'a, L>,
 }
 
-struct ArrayIterator<'a, L: Layer> {
-    layer: &'a L,
-    it: Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
-    subject: u64,
-    predicate: u64,
-    last_index: Option<Vec<usize>>,
-    sys_index_ids: &'a [u64],
-    sys_value_id: Option<u64>,
+pub struct ArrayIterator<'a, L: Layer> {
+    pub layer: &'a L,
+    pub it: Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>,
+    pub subject: u64,
+    pub predicate: u64,
+    pub last_index: Option<Vec<usize>>,
+    pub sys_index_ids: &'a [u64],
+    pub sys_value_id: Option<u64>,
 }
 
 impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
@@ -506,7 +579,7 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
                 for index_id in self.sys_index_ids {
                     if let Some(index_triple) = self.layer.single_triple_sp(t.object, *index_id) {
                         let index_value = self.layer.id_object_value(index_triple.object).unwrap();
-                        let index = value_string_to_usize(&index_value);
+                        let index = value_to_array_index(&index_value);
                         indexes.push(index);
                     } else {
                         // no more indexes to come
@@ -536,7 +609,7 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     fn peek(&mut self) -> Option<u64> {
         match self {
             Self::Document { fields, .. } => fields.as_mut().unwrap().peek().map(|t| t.object),
-            Self::List { entries, .. } => entries.peek().map(|x| *x),
+            Self::List { entries, .. } => entries.peek().copied(),
             Self::Array(a) => a.entries.next(),
         }
     }
@@ -616,7 +689,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
 
     let dimensions = elements[0].0.len();
     let mut collect: Vec<Vec<Value>> = Vec::with_capacity(dimensions);
-    collect.resize_with(dimensions, || Vec::new());
+    collect.resize_with(dimensions, Vec::new);
 
     for (index, value) in elements {
         assert!(
@@ -650,7 +723,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
     // Finally, gather up everything
     for d in (0..dimensions - 1).rev() {
         let x = collect.pop().unwrap();
-        if x.len() != 0 {
+        if !x.is_empty() {
             collect[d].push(Value::Array(x));
         }
     }
@@ -770,7 +843,8 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let count: Option<u64> = attempt_opt(count_term.get())?;
     let as_list: bool = as_list_term.get_ex()?;
 
-    let (sender, receiver) = mpsc::channel();
+    let channel_size = rayon::current_num_threads() * 2;
+    let (sender, receiver) = mpsc::sync_channel(channel_size);
 
     // cloning here cause we need to use the doc context from two places.
     // Since we are dealing with an arc, the clone is cheap.
@@ -842,6 +916,130 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     Ok(())
 }
 
+fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
+    context: &Context<C>,
+    doc_context: &Arc<GetDocumentContext<L>>,
+    stream_term: &Term,
+    skip_term: &Term,
+    count_term: &Term,
+    as_list_term: &Term,
+    iris_term: &Term,
+) -> PrologResult<()> {
+    let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+    let minimized = doc_context.minimized;
+    let mut skip: u64 = skip_term.get_ex()?;
+    let mut count: Option<u64> = attempt_opt(count_term.get())?;
+    let as_list: bool = as_list_term.get_ex()?;
+
+    let mut started = false;
+    for iri_term in context.term_list_iter(iris_term) {
+        let iri: PrologText = iri_term.get_ex()?;
+        if let Some(doc) = doc_context.get_document(&iri) {
+            if skip > 0 {
+                skip -= 1;
+                continue;
+            }
+            if let Some(count) = count.as_mut() {
+                if *count == 0 {
+                    break;
+                }
+                *count -= 1;
+            }
+            print_document(context, &mut stream, doc, as_list, minimized, &mut started)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
+    context: &Context<C>,
+    doc_context: &Arc<GetDocumentContext<L>>,
+    stream_term: &Term,
+    skip_term: &Term,
+    count_term: &Term,
+    as_list_term: &Term,
+    iris_term: &Term,
+) -> PrologResult<()> {
+    let mut stream: WritablePrologStream = stream_term.get_ex()?;
+
+    let minimized = doc_context.minimized;
+    let skip: u64 = skip_term.get_ex()?;
+    let count: Option<u64> = attempt_opt(count_term.get())?;
+    let as_list: bool = as_list_term.get_ex()?;
+
+    let channel_size = rayon::current_num_threads() * 2;
+    let (sender, receiver) = mpsc::sync_channel(channel_size);
+
+    let doc_context2 = doc_context.clone();
+    let doc_context3 = doc_context.clone();
+    // for the par version, we pre-scan for existence to handle skip and count more efficiently
+    let iris: Vec<String> = context
+        .term_list_iter(iris_term)
+        .map(|iri_term| iri_term.get_ex::<PrologText>().map(|t| t.to_string()))
+        .collect::<Result<_, _>>()?;
+    let iter = iris
+        .into_iter()
+        .filter(move |iri| doc_context3.document_exists(&iri))
+        .skip(skip as usize);
+    let iter = match count {
+        Some(count) => itertools::Either::Left(iter.take(count as usize)),
+        None => itertools::Either::Right(iter),
+    };
+    rayon::spawn(move || {
+        let _result =
+            iter.enumerate()
+                .par_bridge()
+                .try_for_each_with(sender, |sender, (ix, iri)| {
+                    let map = doc_context2
+                        .get_document(&iri)
+                        .expect("expected document to exist");
+                    sender.send((ix, map)) // failure will kill the task
+                });
+    });
+
+    let mut started = false;
+    let mut result = BinaryHeap::new();
+    let mut cur = 0;
+    while let Ok((ix, map)) = receiver.recv() {
+        if ix == cur {
+            print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
+
+            cur += 1;
+            while result
+                .peek()
+                .map(|HeapEntry { index, .. }| index == &cur)
+                .unwrap_or(false)
+            {
+                let HeapEntry {
+                    index: _index,
+                    value,
+                } = result.pop().unwrap();
+
+                print_document(
+                    context,
+                    &mut stream,
+                    value,
+                    as_list,
+                    minimized,
+                    &mut started,
+                )?;
+
+                cur += 1;
+            }
+        } else {
+            result.push(HeapEntry {
+                index: ix,
+                value: map,
+            });
+        }
+    }
+
+    assert!(result.is_empty());
+    Ok(())
+}
+
 use super::types::*;
 predicates! {
     #[module("$doc")]
@@ -893,21 +1091,11 @@ predicates! {
         }
 
         let type_name: PrologText = type_term.get()?;
-        let found_types = &doc_context.subtypes.get(&*type_name);
-        let types: Vec<u64>;
-        if found_types.is_none() {
-            // it could be that type doesn't appear in the subtype map but is still a valid type. lets check.
-            let type_id = doc_context.layer().object_node_id(&*type_name);
-            if type_id.is_some() {
-                types = vec![type_id.unwrap()];
-            }
-            else {
-                // type not found, so no objects of that type
-                return Ok(())
-            }
-        }
-        else {
-            types = found_types.unwrap().into_iter().cloned().collect();
+        let types = doc_context.get_subtypes_for(&type_name);
+
+        if types.is_empty() {
+            // no type found that is subsumed by the given type, so we're done
+            return Ok(())
         }
 
         print_documents_of_types(context, &doc_context, stream_term, skip_term, count_term, as_list_term, types.as_slice())
@@ -921,21 +1109,11 @@ predicates! {
         }
 
         let type_name: PrologText = type_term.get()?;
-        let found_types = &doc_context.subtypes.get(&*type_name);
-        let types: Vec<u64>;
-        if found_types.is_none() {
-            // it could be that type doesn't appear in the subtype map but is still a valid type. lets check.
-            let type_id = doc_context.layer().object_node_id(&*type_name);
-            if type_id.is_some() {
-                types = vec![type_id.unwrap()];
-            }
-            else {
-                // type not found, so no objects of that type
-                return Ok(())
-            }
-        }
-        else {
-            types = found_types.unwrap().into_iter().cloned().collect();
+        let types = doc_context.get_subtypes_for(&type_name);
+
+        if types.is_empty() {
+            // no type found that is subsumed by the given type, so we're done
+            return Ok(())
         }
 
         par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types)
@@ -973,6 +1151,26 @@ predicates! {
 
         par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types)
     }
+
+    #[module("$doc")]
+    semidet fn print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term) {
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
+        print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term)
+    }
+
+    #[module("$doc")]
+    semidet fn par_print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term) {
+        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+
+        par_print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term)
+    }
 }
 
 struct HeapEntry {
@@ -1007,6 +1205,8 @@ pub fn register() {
     register_par_print_all_documents_json();
     register_print_all_documents_json_by_type();
     register_par_print_all_documents_json_by_type();
+    register_print_documents_json_by_id();
+    register_par_print_documents_json_by_id();
 }
 
 #[cfg(test)]

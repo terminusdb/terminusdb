@@ -38,6 +38,15 @@ api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(malformed_parameter(Param), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Malformed parameter: ~s", [Param]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:MalformedParameter',
+                              'api:parameter' : Param },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     (   Expected_Type = boolean
@@ -201,10 +210,18 @@ api_global_error_jsonld(error(remote_connection_failure(Status, Response), _), T
     ->  Opening_Msg = "Remote authentication failed"
     ;   Opening_Msg = "Remote connection failed"
     ),
-
-    (   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response,
-        _{'@type' : "api:NotALinearHistory"} :< Error
-    ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
+    % Needs more options....
+    (   \+ is_dict(Response)
+    ->  format(string(Msg), "~s: ~q", [Opening_Msg,Response])
+    ;   _{'@type': "api:UnpackErrorResponse", 'api:error' : Error} :< Response
+    ->  (   \+ is_dict(Error)
+        ->  format(string(Msg), "~s: ~q", [Opening_Msg, Error])
+        ;   _{'@type' : "api:NotALinearHistory"} :< Error
+        ->  format(string(Msg), "~s: Remote history has diverged", [Opening_Msg])
+        ;   get_dict('api:message', Response, Response_Msg)
+        ->  format(string(Msg), "~s: ~s", [Opening_Msg, Response_Msg])
+        ;   format(string(Msg), "~s for an unknown reason", [Opening_Msg])
+        )
     ;   get_dict('api:message', Response, Response_Msg)
     ->  format(string(Msg), "~s: ~s", [Opening_Msg, Response_Msg])
     ;   format(string(Msg), "~s for an unknown reason", [Opening_Msg])
@@ -309,6 +326,65 @@ api_global_error_jsonld(error(branch_does_not_exist(Descriptor), _), Type, JSON)
              'api:error' : _{ '@type' : "api:UnresolvableAbsoluteDescriptor",
                               'api:absolute_descriptor' : Path}
             }.
+api_global_error_jsonld(error(not_a_valid_commit_or_branch(Ref),_), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The specified commit or branch ~q is not valid.", [Ref]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NotValidRefError',
+                              'api:ref' : Ref},
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(server_outdated(Store_Version,Server_Version), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The storage directory contains a store newer than this server supports. This server expects store version ~q but version ~q is in place.", [Server_Version, Store_Version]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ServerOutdated',
+                              'api:store_version': Store_Version,
+                              'api:server_version': Server_Version
+                            },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The storage directory contains an outdated store. Please upgrade your store. This server expects store version ~q but version ~q is in place.", [Server_Version, Store_Version]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:ServerOutdated',
+                              'api:store_version': Store_Version,
+                              'api:server_version': Server_Version
+                            },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store has no defined database version and so can not be opened.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(invalid_path(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Resource path invalid: ~q", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:InvalidResourcePath',
+                              'api:resource_path' : Path },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(unexpected_descriptor_type(Descriptor, Desc_Type), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    format(string(Msg), "Unexpected resource type, with resource: ~q and type: ~q", [Path, Desc_Type]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:UnexpectedResourceType',
+                              'api:resource_type' : Desc_Type,
+                              'api:resource_path' : Path },
+             'api:message' : Msg
+            }.
 
 :- multifile api_error_jsonld_/3.
 %% DB Exists
@@ -349,6 +425,14 @@ api_error_jsonld_(create_db, error(invalid_uri_prefix(Prefix_Name, Prefix_Value)
                              'api:prefix_name' : Prefix_Name,
                              'api:prefix_value' : Prefix_Value},
              'api:message' : Msg}.
+api_error_jsonld_(create_db, error(database_name_too_long(Organization, Database), _), JSON) :-
+    format(string(Msg), "The combination of organization ~s and database ~s results in a database name that is too long.", [Organization, Database]),
+    JSON = _{'@type' : 'api:DbCreateErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:DatabaseNameTooLong',
+                             'api:organization_name' : Organization,
+                             'api:database_value' : Database},
+             'api:message' : Msg}.
 %% DB Delete
 api_error_jsonld_(delete_db,error(database_not_finalized(Organization,Database), _),JSON) :-
     format(string(Msg), "Database ~s/~s is not in a deletable state.", [Organization, Database]),
@@ -365,6 +449,13 @@ api_error_jsonld_(delete_db,error(database_files_do_not_exist(Organization,Datab
              'api:error' : _{'@type' : 'api:DatabaseFilesDoNotExist',
                              'api:database_name' : Database,
                              'api:organization_name' : Organization},
+             'api:message' : Msg}.
+api_error_jsonld_(update_db,error(schema_check_failure([Witness|_]), _), JSON) :-
+    format(string(Msg), "Schema did not validate after turning schema checking on", []),
+    JSON = _{'@type' : 'api:UpdateDBErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:SchemaValidationError',
+                             'api:witness' : Witness},
              'api:message' : Msg}.
 % CSV
 api_error_jsonld_(csv,error(unknown_encoding(Enc), _), JSON) :-
@@ -673,6 +764,15 @@ api_error_jsonld_(fetch,error(fetch_remote_has_no_url(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:RemoteHasNoURL",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(fetch,error(fetch_requires_repository(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The remote being fetched has no repository specified ~q", [Path]),
+    JSON = _{'@type' : 'api:FetchErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownRemoteRepository",
+                              'api:absolute_descriptor' : Path}
+            }.
 api_error_jsonld_(rebase,error(invalid_target_absolute_path(Path),_), JSON) :-
     format(string(Msg), "The following rebase target absolute resource descriptor string is invalid: ~q", [Path]),
     JSON = _{'@type' : 'api:RebaseErrorResponse',
@@ -805,6 +905,15 @@ api_error_jsonld_(unpack,error(not_a_repository_descriptor(Descriptor),_), JSON)
     JSON = _{'@type' : 'api:UnpackErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:NotARepositoryDescriptorError',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
+api_error_jsonld_(push,error(push_has_no_repository_head(Descriptor),_), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "The following repository has no head: ~q", [Path]),
+    JSON = _{'@type' : 'api:PushErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:RepositoryHasNoRepositoryHeadError',
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
@@ -1173,12 +1282,15 @@ api_error_jsonld_(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
                               'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
-api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key),_), JSON) :-
-    format(string(Msg), "The explicitly copied key ~q is not the same in both documents.", [Key]),
+api_error_jsonld_(diff,error(explicitly_copied_key_has_changed(Key,Before,After),_), JSON) :-
+    format(string(Msg), "The explicitly copied key ~q is not the same in both documents. Before: ~q, After~q", [Key,Before,After]),
     JSON = _{'@type' : 'api:DiffErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:ExplicitlyCopiedKeyError',
-                              'api:key' : Key},
+                              'api:key' : Key,
+                              'api:before' : Before,
+                              'api:after' : After
+                            },
              'api:message' : Msg
             }.
 api_error_jsonld_(role,error(no_unique_id_for_role_name(Name),_), JSON) :-
@@ -1351,7 +1463,18 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
                               'api:user' : User,
                               'api:scope' : Scope }
             }.
-
+api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
+    format(string(Msg), "The patch did not apply cleanly because of the attached conflicts", []),
+    JSON = _{'@type' : 'api:PatchResponse',
+             'api:status' : "api:conflict",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:PatchConflict",
+                              'api:conflicts' : Conflicts }
+            }.
+api_error_jsonld_(woql, Error, JSON) :-
+    api_document_error_jsonld(woql, Error, JSON).
+api_error_jsonld_(access_documents, Error, JSON) :-
+    api_document_error_jsonld(access_documents, Error, JSON).
 api_error_jsonld_(get_documents, Error, JSON) :-
     api_document_error_jsonld(get_documents, Error, JSON).
 api_error_jsonld_(insert_documents, Error, JSON) :-
@@ -1362,6 +1485,172 @@ api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
 api_error_jsonld_(diff, Error, JSON) :-
     api_document_error_jsonld(diff, Error, JSON).
+api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    format(string(Msg), "Resource has no history, so log unavailable: ~s", [Path]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:ResourceHasNoHistory",
+                              'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld_(migration, error(no_migration_at_commit(Commit_Id), _), JSON) :-
+    format(string(Msg), "Unable to find a migration for schema change at commit id: ~q", [Commit_Id]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoMigrationAtCommit",
+                              'api:commit_id' : Commit_Id}
+            }.
+api_error_jsonld_(migration, error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _), JSON) :-
+    format(string(Msg), "Unable to cast value from ~q to ~q in class ~q on property ~q", [Old_Type,New_Type,Class,Property]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:MigrationCastFailure",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : New_Type,
+                              'api:old_type' : Old_Type }
+            }.
+api_error_jsonld_(migration, error(no_common_history, _), JSON) :-
+    format(string(Msg), "Unable to find a common history between these two resources", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoCommonHistory"}
+            }.
+api_error_jsonld_(migration, error(no_common_migration_prefix(Our_Migration,Their_Migration), _), JSON) :-
+    format(string(Msg), "No common prefix between migrations", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoCommonMigrationPrefix",
+                              'api:their_migration' : Their_Migration,
+                              'api:our_migration' : Our_Migration
+                            }
+            }.
+api_error_jsonld_(migration, error(schema_operation_failed(Op, Before), _), JSON) :-
+    format(string(Msg), "The schema operation '~q' failed and could not be performed", [Op]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:SchemaOperationFailed",
+                              'api:schema_operation' : Op,
+                              'api:schema' : Before
+                            }
+            }.
+api_error_jsonld_(migration, error(class_already_exists(Class), _), JSON) :-
+    format(string(Msg), "It is impossible to move to the class ~q as it already exists", [Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:ClassExists",
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(not_an_irrefutable_weakening_operation(
+                                      upcast_class_property,
+                                      Class,
+                                      Property,
+                                      New_Type), _), JSON) :-
+    atom_json_dict(Type, New_Type, []),
+    format(string(Msg), "It is impossible to upcast the property ~q on class ~q to a stricter type ~q", [Class,Property,Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UpcastNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : New_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(not_irrefutable_property_creation(Class, Property, Type), _), JSON) :-
+    atom_json_dict(Type_Atom, Type, []),
+    format(string(Msg), "It is impossible to prove that the creation of the property ~q on the class ~q with type ~q will be valid, as it may not match user data", [Class, Property, Type_Atom]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:PropertyCreationNotASchemaWeakening",
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : Type
+                            }
+            }.
+api_error_jsonld_(migration, error(not_implemented(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q is not yet implemented", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:OperationNotImplemented",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(instance_operation_failed(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q failed for an unknown reason", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InstanceOperationFailure",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(weakening_failure(Witness), _), JSON) :-
+    get_dict(message,Witness,Message),
+    format(string(Msg), "Weakening failure: ~s", [Message]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:WeakeningFailure",
+                              'api:witness' : Witness
+                            }
+            }.
+api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation), _), JSON) :-
+    atom_json_dict(OpString, Operation, []),
+    format(string(Msg), "Unknown or poorly formed schema migration operation: ~s", [OpString]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:UnknownSchemaMigrationOperation",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)), JSON) :-
+    JSON = _{'@type' : 'api:IndexErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:HandlebarsTemplateError",
+                              'api:line' : Line,
+                              'api:character': Character
+                            }
+            }.
+api_error_jsonld_(index, error(indexing_requires_superuser), JSON) :-
+    JSON = _{'@type' : 'api:IndexErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : "Indexing requires superuser authority",
+             'api:error' : _{ '@type' : "api:IndexingRequiresSuperuserAuthorityError"}
+            }.
+api_error_jsonld_(concat, error(instance_layer_missing_in_merged_data(Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(String, Descriptor),
+    format(string(Msg), "One of the descriptors used in the merge operation did not have an associated instance layer: ~s", [String]),
+    JSON = _{'@type' : 'api:ConcatErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InstanceLayerMissingInConcat",
+                              'api:descriptor' : String
+                            }
+            }.
+api_error_jsonld_(concat, error(not_a_base_layer(Layer, Descriptor), _), JSON) :-
+    resolve_absolute_string_descriptor(String, Descriptor),
+    format(string(Msg), "One of the descriptors (~s) used in the merge operation had an instance layer which is not a base layer: ~s", [String, Layer]),
+    JSON = _{'@type' : 'api:ConcatErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NotABaseLayer",
+                              'api:descriptor' : String,
+                              'api:layer' : Layer
+                            }
+            }.
 
 error_type(API, Type) :-
     do_or_die(
@@ -1381,6 +1670,7 @@ error_type_(delete_documents, 'api:DeleteDocumentErrorResponse').
 error_type_(delete_organization, 'api:DeleteOrganizationErrorResponse').
 error_type_(fetch, 'api:FetchErrorResponse').
 error_type_(frame, 'api:FrameErrorResponse').
+error_type_(access_documents, 'api:AccessDocumentErrorResponse').
 error_type_(get_documents, 'api:GetDocumentErrorResponse').
 error_type_(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type_(optimize, 'api:OptimizeErrorResponse').
@@ -1401,9 +1691,16 @@ error_type_(organization, 'api:OrganizationErrorResponse').
 error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
+error_type_(history, 'api:HistoryErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
+error_type_(diff, 'api:DiffErrorResponse').
+error_type_(apply, 'api:ApplyErrorResponse').
+error_type_(toplevel, 'api:TopLevelResponse').
+error_type_(patch, 'api:PatchErrorResponse').
+error_type_(migration, 'api:MigrationErrorResponse').
+error_type_(concat, 'api:ConcatErrorResponse').
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
@@ -1452,12 +1749,15 @@ api_error_jsonld(graph,error(graph_already_exists(Descriptor,Graph_Name), _), Ty
                               'api:absolute_descriptor' : Path}
             }.
 
+document_error_type(access_documents, 'api:AccessDocumentErrorResponse').
 document_error_type(get_documents, 'api:GetDocumentErrorResponse').
 document_error_type(insert_documents, 'api:InsertDocumentErrorResponse').
 document_error_type(replace_documents, 'api:ReplaceDocumentErrorResponse').
 document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 document_error_type(diff, 'api:DiffErrorResponse').
 document_error_type(apply, 'api:ApplyErrorResponse').
+document_error_type(woql, 'api:WoqlErrorResponse').
+%document_error_type(patch, 'api:PatchErrorResponse').
 
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),
@@ -1528,6 +1828,14 @@ api_document_error_jsonld(Type, error(syntax_error(json(What)), _), JSON) :-
              'api:message' : Msg,
              'api:what': What
             }.
+api_document_error_jsonld(Type, error(inserting_context(Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Inserting contexts is not allowed without using a 'full replace'.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:InsertingContext',
+                              'api:document' : Document},
+             'api:message' : Msg}.
 api_document_error_jsonld(Type, error(missing_field(Field, Document), _), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Missing '~s' field in submitted document.", [Field]),
@@ -1647,209 +1955,237 @@ api_document_error_jsonld(Type, error(can_not_replace_at_hashed_id(Document), _)
                               'api:document' : Document },
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_is_only_supported_for_instance_graphs,_), JSON) :-
+api_document_error_jsonld(Type,error(query_is_only_supported_for_instance_graphs,_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query documents are currently only supported for instance graphs", []),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(unknown_prefix(_Query)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(unknown_prefix(_Query)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query document used an undefined prefix", []),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryDocumentHasUndefinedPrefix'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(unrecognized_query_document(_Query)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(unrecognized_query_document(_Query)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query document has an unrecognised form", []),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryUnrecognized'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(missing_type(Query)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(missing_type(Query)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Missing type for query: ~q", [Query]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryMissingType'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(unknown_property_for_type(Type, Prop)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(unknown_property_for_type(Type, Prop)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query contains an unrecognised property ~q for type ~q", [Prop, Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryUnrecognizedPropertyForType'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(casting_error(Query, Type)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(casting_error(Query, Type)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query contains a value ~q which can not be cast to the given type ~q", [Query, Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryCastingError'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(regex_not_a_string(Regex)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(regex_not_a_string(Regex)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query contains a regex ~q which is not a string", [Regex]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryRegexNotString'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(regex_not_valid(Regex)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(regex_not_valid(Regex)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query contains a regex ~q which is not valid syntax", [Regex]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryRegexInvalid'},
              'api:message' : Msg
             }.
 api_document_error_jsonld(get_documents,error(query_error(regex_against_non_string(Type, Regex)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query contains a regex ~q which is attempting to match a ~q", [Regex,Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryRegexNotAString'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(unknown_query_format_for_datatype(Type, Query)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(unknown_query_format_for_datatype(Type, Query)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query format ~q is invalid for type ~q", [Query,Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryInvalidFormat'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(unknown_type(Type)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(unknown_type(Type)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query has an unknown type ~q", [Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryUnknownType'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(not_a_query_document_list(Documents)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(not_a_query_document_list(Documents)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query did not specify a list of documents in '@one-of': ~q", [Documents]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryOneOfNotDocumentList'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(not_a_subclass(Type, Query_Type_Ex)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(not_a_subclass(Type, Query_Type_Ex)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query provided a type ~q which was not subsumed by documents of type ~q.", [Query_Type_Ex, Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryTypeNotSubsumed'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(type_not_found(Query_Type)),_), JSON) :-
+api_document_error_jsonld(Type, error(query_error(type_not_found(Query_Type)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query provided a type ~q which was not found in the schema.", [Query_Type]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryTypeNotFound'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(not_a_dict(Query)),_), JSON) :-
+api_document_error_jsonld(Type, error(query_error(not_a_dict(Query)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query provided is not a dict: ~q", [Query]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryNotADict'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(get_documents,error(query_error(not_a_dict(Query)),_), JSON) :-
+api_document_error_jsonld(Type,error(query_error(not_a_dict(Query)),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query provided is not a dict: ~q", [Query]),
-    JSON = _{'@type' : 'api:GetDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryNotADict'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
+api_document_error_jsonld(Type, error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Document insertion failed unexpectedly", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:server_error',
              'api:error' : _{ '@type' : 'api:DocumentInsertionFailedUnexpectedly',
                               'api:document': Document},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(raw_json_and_schema_disallowed,_), JSON) :-
+api_document_error_jsonld(Type, error(raw_json_and_schema_disallowed,_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Document insertion of raw JSON documents is not possible for the schema graph", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:DocumentInsertionRawJSONSchemaDisallowed'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(not_a_valid_json_object_id(Id),_), JSON) :-
+api_document_error_jsonld(Type, error(not_a_valid_json_object_id(Id),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Document insertion of raw JSON documents is not possible for the schema graph", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:DocumentInsertionInvalidJSONDocumentId',
                               'api:id' : Id},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(can_not_insert_class_with_reserve_name(Id),_), JSON) :-
+api_document_error_jsonld(Type, error(can_not_insert_class_with_reserve_name(Id),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Document for class can not be inserted due to use of reserved name", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:DocumentInsertionReservedName',
                               'api:id': Id},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents,error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
+api_document_error_jsonld(Type, error(document_insertion_failed_unexpectedly(Document),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Query documents are currently only supported for instance graphs", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:DocumentInsertionFailedUnexpectedly',
                               'api:document': Document},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents, error(can_not_insert_existing_object_with_id(Id, Document), _), JSON) :-
+api_document_error_jsonld(Type, error(can_not_insert_existing_object_with_id(Id, Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Tried to insert a new document with id ~q, but an object with that id already exists", [Id]),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:DocumentIdAlreadyExists',
                               'api:document_id' : Id,
                               'api:document' : Document},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents, error(unknown_language_tag(Tag,Document), _), JSON) :-
+api_document_error_jsonld(Type, error(unknown_language_tag(Tag,Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Unknown language tag used ~q", [Tag]),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:UnknownLanguageTag',
                               'api:language' : Tag,
                               'api:document' : Document},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents, error(no_language_tag_for_multilingual(Document), _), JSON) :-
+api_document_error_jsonld(Type, error(no_language_tag_for_multilingual(Document), _), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Multiple languages are used, but not all with language tags", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoLanguageTagForMultilingual',
                               'api:document' : Document},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents, error(language_tags_repeated(Tags,Document),_), JSON) :-
+api_document_error_jsonld(Type, error(language_tags_repeated(Tags,Document),_), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "The same language tags ~q were used repeatedly", [Tags]),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:LanguageTagsRepeated',
                               'api:languages' : Tags,
                               'api:document' : Document},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents, error(no_context_found_in_schema, _), JSON) :-
+api_document_error_jsonld(Type, error(no_context_found_in_schema, _), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "No context found in submitted schema", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoContextFoundInSchema'},
              'api:message' : Msg
             }.
-api_document_error_jsonld(insert_documents, error(invalid_enum_values(Values), _), JSON) :-
+api_document_error_jsonld(Type, error(invalid_enum_values(Values), _), JSON) :-
+    document_error_type(Type, JSON_Type),
     format(string(Msg), "Enum values are not valid", []),
-    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:InvalidEnumValues',
                               'api:document' : Values },
              'api:message' : Msg
             }.
-api_document_error_jsonld(delete_documents, error(missing_targets, _), JSON) :-
-    JSON = _{'@type' : 'api:DeleteDocumentErrorResponse',
+api_document_error_jsonld(Type, error(missing_targets, _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:MissingTargets' },
              'api:message' : "Missing target(s) for deletion"
@@ -1972,7 +2308,7 @@ api_document_error_jsonld(Type, error(not_all_captures_found(Refs),_),JSON) :-
             }.
 api_document_error_jsonld(Type, error(inserted_subdocument_as_document(Document), _),JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Tried to insert a subdocument as a document.", []),
+    format(string(Msg), "Tried to insert a subdocument as a document without specifying backlinks.", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:InsertedSubdocumentAsDocument',
@@ -2039,6 +2375,89 @@ api_document_error_jsonld(Type,error(casting_error(Elt,Type),_), JSON) :-
                               'api:type' : Type
                             }
             }.
+api_document_error_jsonld(Type,error(no_property_specified_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no property specified.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoPropertySpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(no_ref_or_id_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no ref or id.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRefOrIdSpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(no_ref_in_link(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "Back links were used with no ref.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NoRefSpecified",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(link_id_specified_but_not_valid(Parent,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "The link Id did not have a valid form.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:LinkIdNotValid",
+                              'api:parent' : Parent,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type,error(not_one_parent_of_subdocument(Parents,Document),_), JSON) :-
+    document_error_type(Type, Type_Displayed),
+    format(string(Msg), "A sub-document has parent cardinality other than one.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:NotOneParentForSubdocument",
+                              'api:parent' : Parents,
+                              'api:document' : Document
+                            }
+            }.
+api_document_error_jsonld(Type, error(embedded_subdocument_has_linked_by(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a subdocument as part of a larger document, while also specifying an '@linked-by'. A subdocument can only have one parent.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddedSubdocumentHasLinkedBy',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(back_links_not_supported_in_replace(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LinksInReplaceError',
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(prefix_does_not_resolve(Prefix,Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The prefix ~q used in the context does not resolve to a URI.", [Prefix]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:PrefixDoesNotResolveError',
+                              'api:prefix' : Prefix,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
@@ -2070,6 +2489,14 @@ generic_exception_jsonld(bad_api_document(Document,Expected),JSON) :-
     JSON = _{'@type' : 'api:BadAPIDocumentErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:RequiredFieldsMissing',
+                             'api:expected' : Expected,
+                             'api:document' : Document},
+             'api:message' : Msg}.
+generic_exception_jsonld(bad_api_document_choices(Document,Expected),JSON) :-
+    format(string(Msg), "The input API document was missing required fields from one of the following lists: ~q", [Expected]),
+    JSON = _{'@type' : 'api:BadAPIDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:RequiredFieldsChoiceMissing',
                              'api:expected' : Expected,
                              'api:document' : Document},
              'api:message' : Msg}.

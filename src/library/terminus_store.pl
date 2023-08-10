@@ -2,6 +2,10 @@
               terminus_store_version/1,
               open_memory_store/1,
               open_directory_store/2,
+              open_raw_archive_store/2,
+              open_archive_store/2,
+              open_archive_store/3,
+              open_grpc_store/5,
 
               create_named_graph/3,
               open_named_graph/3,
@@ -14,6 +18,7 @@
               nb_force_set_head/3,
 
               open_write/2,
+              merge_base_layers/4,
 
               nb_add_triple/4,
               nb_remove_triple/4,
@@ -38,9 +43,11 @@
               triple_removal/4,
 
               sp_card/4,
+              op_card/4,
 
               parent/2,
               squash/2,
+              squash_upto/3,
 
               layer_addition_count/2,
               layer_removal_count/2,
@@ -54,11 +61,6 @@
               pack_export/3,
               pack_layerids_and_parents/2,
               pack_import/3,
-
-              csv_builder/3,
-              csv_builder/4,
-              csv_builder/5,
-              csv_iri/3,
 
               count_layer_stack_size/2,
 
@@ -109,7 +111,7 @@ terminus_store_version('0.19.8').
 %
 % @arg Store the returned in-memory store.
 
-%! open_directory_store(+Path:text, -Store:store) is det.
+%! open_archive_store(+Path:text, -Store:store) is det.
 %
 % Opens a store backed by a directory, and unifies it with Store.
 %
@@ -220,20 +222,7 @@ terminus_store_version('0.19.8').
 % @arg Predicate_Id the id of the triple predicate.
 % @arg Object_Id the id of the triple object.
 
-%! nb_add_string_node_triple(+Builder:layer_builder, +Subject:text, +Predicate:text, +Object:text) is semidet.
-%
-% Add the given subject, predicate, and object as a triple to the
-% builder object. The object is interpreted as pointing at a node,
-% rather than being a literal value.
-%
-% This fails if the triple already exists in this builder object or a parent layer.
-%
-% @arg Builder the builder object to add this triple to.
-% @arg Subject the triple subject.
-% @arg Predicate the triple predicate.
-% @arg Object the triple object, which is interpreted as a node.
-
-%! nb_add_string_value_triple(+Builder:layer_builder, +Subject:text, +Predicate:text, +Object:text) is semidet.
+%! nb_add_object_triple(+Builder:layer_builder, +Subject:text, +Predicate:text, +Object:text) is semidet.
 %
 % Add the given subject, predicate, and object as a triple to the
 % builder object. The object is interpreted as a value, rather than a node.
@@ -243,7 +232,7 @@ terminus_store_version('0.19.8').
 % @arg Builder the builder object to add this triple to.
 % @arg Subject the triple subject.
 % @arg Predicate the triple predicate.
-% @arg Object the triple object, which is interpreted as a value.
+% @arg Object the triple object, which is interpreted as a node or value.
 
 %! nb_remove_id_triple(+Builder:layer_builder, +Subject_Id:integer, +Predicate_Id:integer, +Object_Id: integer) is semidet.
 %
@@ -258,21 +247,7 @@ terminus_store_version('0.19.8').
 % @arg Predicate_Id the id of the triple predicate.
 % @arg Object_Id the id of the triple object.
 
-%! nb_remove_string_node_triple(+Builder:layer_builder, +Subject:text, +Predicate:text, +Object:text) is semidet.
-%
-% Add the given subject, predicate, and object as a triple removal to the
-% builder object. The object is interpreted as pointing at a node,
-% rather than being a literal value.
-%
-% This fails if the triple does not exist in a parent layer, or if the
-% removal has already been registered in this builder.
-%
-% @arg Builder the builder object to add this triple removal to.
-% @arg Subject the triple subject.
-% @arg Predicate the triple predicate.
-% @arg Object the triple object, which is interpreted as a node.
-
-%! nb_remove_string_value_triple(+Builder:layer_builder, +Subject:text, +Predicate:text, +Object:text) is semidet.
+%! nb_remove_object_triple(+Builder:layer_builder, +Subject:text, +Predicate:text, +Object:text) is semidet.
 %
 % Add the given subject, predicate, and object as a triple removal to
 % the builder object. The object is interpreted as a value, rather
@@ -284,7 +259,7 @@ terminus_store_version('0.19.8').
 % @arg Builder the builder object to add this triple removal to.
 % @arg Subject the triple subject.
 % @arg Predicate the triple predicate.
-% @arg Object the triple object, which is interpreted as a node.
+% @arg Object the triple object, which is interpreted as a value or node.
 
 %! nb_apply_delta(+Builder:layer_builder, +Layer:layer) is det.
 %
@@ -412,34 +387,6 @@ terminus_store_version('0.19.8').
 % @arg Layer the layer for which to do the parent lookup.
 % @arg Upto the layer at which to stop the rollup.
 
-%! csv_builder(+Name:string, +Csv:path, +Builder:builder, +Options:options) is det
-%
-% Creates a layer with the contents of a csv as triples
-%
-% @arg Name Name of the CSV object
-% @arg Csv The path to the csv to be loaded
-% @arg Builder The builder into which to place the CSV
-% @arg Layer The returned Layer
-% @arg Options A list containing any of the following:
-%     * data_prefix(Prefix) (default is "csv:///data#")
-%     * predicate_prefix(Prefix) (default is "csv:///schema#")
-%     * header(Bool) (Boolean to read a header, default true)
-%     * skip_header(Bool) (Skip the header regardless of presence,
-%                          default false)
-
-%! csv_builder(+Name:string, +Csv:path, +Builder:builder) is det
-%
-% Creates a layer with the contents of a csv as triples. Options are defaults.
-%
-% @arg Name Name of the CSV object
-% @arg Csv The path to the csv to be loaded
-% @arg Builder The builder into which to place the CSV
-% @arg Layer The returned Layer
-
-%! csv_iri(Name, Prefix, IRI) is det.
-%
-% Creates a CSV IRI from a name and prefix
-
 %! layer_stack_names(+Layer:layer, -Stack:list) is det.
 %
 % Creates a layer-id stack from a layer which contains all ancestor
@@ -461,15 +408,14 @@ nb_add_triple(Builder, Subject, Predicate, Object) :-
     integer(Object),
     !,
     nb_add_id_triple(Builder, Subject, Predicate, Object).
-
 nb_add_triple(Builder, Subject, Predicate, Object) :-
     !,
-    nb_add_string_triple(Builder, Subject, Predicate, Object).
+    nb_add_object_triple(Builder, Subject, Predicate, Object).
 
 /*
  * nb_add_triple(+Builder, +Subject, +Predicate, +Object) is semidet
  *
- * Remove a trible from the builder
+ * Remove a triple from the builder
  */
 nb_remove_triple(Builder, Subject, Predicate, Object) :-
     integer(Subject),
@@ -477,10 +423,9 @@ nb_remove_triple(Builder, Subject, Predicate, Object) :-
     integer(Object),
     !,
     nb_remove_id_triple(Builder, Subject, Predicate, Object).
-
 nb_remove_triple(Builder, Subject, Predicate, Object) :-
     !,
-    nb_remove_string_triple(Builder, Subject, Predicate, Object).
+    nb_remove_object_triple(Builder, Subject, Predicate, Object).
 
 /*
  * subject_id(+Layer, +Subject, -Id) is semidet
@@ -491,12 +436,10 @@ subject_id(Layer, Subject, Id) :-
     ground(Id),
     !,
     id_to_subject(Layer, Id, Subject).
-
 subject_id(Layer, Subject, Id) :-
     ground(Subject),
     !,
     subject_to_id(Layer, Subject, Id).
-
 subject_id(Layer, Subject, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
@@ -508,16 +451,15 @@ subject_id(Layer, Subject, Id) :-
  *
  * Get the ID from a predicate
  */
+:- table predicate_id/3 as private.
 predicate_id(Layer, Predicate, Id) :-
     ground(Id),
     !,
     id_to_predicate(Layer, Id, Predicate).
-
 predicate_id(Layer, Predicate, Id) :-
     ground(Predicate),
     !,
     predicate_to_id(Layer, Predicate, Id).
-
 predicate_id(Layer, Predicate, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
@@ -533,32 +475,74 @@ object_id(Layer, Object, Id) :-
     ground(Id),
     !,
     id_to_object(Layer, Id, Object).
-
 object_id(Layer, node(Object), Id) :-
     ground(Object),
     !,
     object_to_id(Layer, node(Object), Id).
-
-object_id(Layer, value(Object), Id) :-
+object_id(Layer, value(Object,Type), Id) :-
     ground(Object),
+    ground(Type),
     !,
-    object_to_id(Layer, value(Object), Id).
-
+    object_to_id(Layer, value(Object,Type), Id).
+object_id(Layer, lang(Object,Type), Id) :-
+    ground(Object),
+    ground(Type),
+    !,
+    object_to_id(Layer, lang(Object,Type), Id).
+object_id(_Layer, Object, _Id) :-
+    % This clause is a final check before we fall through to a very
+    % expensive case.  It never succeeds, and can only fail or throw.
+    % It will fail if we do intend to fall through, and throw if we
+    % are here due to an error in the call.
+    %
+    % The intention is to prevent callers from accidentally and
+    % erroneously reaching the final clause due to having called this
+    % predicate wrongly (namely, with an Object which is not of the
+    % form _, node(_) or value(_,_) or lang(_,_)).
+    (   var(Object)
+    ->  fail
+    ;   nonvar(Object),
+        (   functor(Object, node, 1, compound),
+            arg(1, Object, Arg),
+            var(Arg)
+        ->  fail
+        ;   functor(Object, value, 2, compound),
+            arg(1, Object, Arg),
+            arg(2, Object, Arg2),
+            var(Arg),
+            var(Arg2)
+        ->  fail
+        ;   functor(Object, lang, 2, compound),
+            arg(1, Object, Arg),
+            arg(2, Object, Arg2),
+            var(Arg),
+            var(Arg2)
+        ->  fail
+        ;   throw(error(object_id_called_with_invalid_object(Object),_)))).
 object_id(Layer, Object, Id) :-
     node_and_value_count(Layer, Count),
     between(1, Count, Id),
     id_to_object(Layer, Id, Object).
 
 triple(Layer, Subject, Predicate, Object) :-
-    (   ground(Subject)
-    ->  subject_id(Layer, Subject, S_Id)
+    (   nonvar(Subject)
+    ->  (   Subject = id(S_Id)
+        ->  true
+        ;   subject_id(Layer, Subject, S_Id)
+        )
     ;   true),
 
-    (   ground(Predicate)
-    ->  predicate_id(Layer, Predicate, P_Id)
+    (   nonvar(Predicate)
+    ->  (   Predicate = id(P_Id)
+        ->  true
+        ;   predicate_id(Layer, Predicate, P_Id)
+        )
     ;   true),
 
-    (   ground(Object)
+    (   nonvar(Object),
+        Object = id(O_Id)
+    ->  true
+    ;   ground(Object)
     ->  object_id(Layer, Object, O_Id)
     ;   true),
 
@@ -577,23 +561,6 @@ triple(Layer, Subject, Predicate, Object) :-
     (   ground(Object)
     ->  true
     ;   object_id(Layer,Object, O_Id)).
-
-csv_builder(Name, Csv, Builder) :-
-    csv_builder(Name, Csv,Builder,[]).
-
-csv_builder(Name, Csv, Builder, Options) :-
-    option(data_prefix(Data), Options, 'csv:///data/'),
-    option(schema_prefix(Schema), Options, 'csv:///schema#'),
-    option(header(Header), Options, true),
-    option(skip_header(Skip), Options, false),
-    csv_builder(Name, Csv, Builder, Data, Schema, Header, Skip).
-
-csv_builder(Name, Csv, Builder, Schema_Builder, Options) :-
-    option(data_prefix(Data), Options, 'csv:///data/'),
-    option(schema_prefix(Schema), Options, 'csv:///schema#'),
-    option(header(Header), Options, true),
-    option(skip_header(Skip), Options, false),
-    csv_builder(Name, Csv, Builder, Schema_Builder, Data, Schema, Header, Skip).
 
 triple_addition(Layer, Subject, Predicate, Object) :-
     (   ground(Subject)
@@ -672,6 +639,10 @@ layer_stack_names(Layer, Stack) :-
 layer_stack_names(_Layer, _Stack) :-
     throw(error(domain_error('Layer not bound in layer_stack_names/2'),_)).
 
+open_archive_store(Path, Store) :-
+    % default to 512mb
+    open_archive_store(Path, 512, Store).
+
 :- begin_tests(terminus_store).
 
 :- use_module(library(filesex)).
@@ -695,7 +666,7 @@ createng(TestDir) :-
     random_string(RandomString),
     atomic_list_concat(["testdir", RandomString], TestDir),
     make_directory(TestDir),
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     create_named_graph(X, "sometestdb", _).
 
 create_memory_ng(DB) :-
@@ -705,19 +676,19 @@ create_memory_ng(DB) :-
 test(open_memory_store) :-
     open_memory_store(_).
 
-test(open_directory_store_atom) :-
-    open_directory_store(this_is_an_atom, _),
-    open_directory_store("this is a string", _).
+test(open_archive_store_atom) :-
+    open_archive_store(this_is_an_atom, _),
+    open_archive_store("this is a string", _).
 
-test(open_directory_store_atom_exception, [
+test(open_archive_store_atom_exception, [
          throws(error(type_error(text,234), _))
      ]) :-
-    open_directory_store(234, _).
+    open_archive_store(234, _).
 
 test(create_db, [cleanup(clean(TestDir))]) :-
     make_directory("testdir"),
     TestDir = 'testdir',
-    open_directory_store("testdir", X),
+    open_archive_store("testdir", X),
     create_named_graph(X, "sometestdb", _).
 
 
@@ -726,7 +697,7 @@ test(create_db_on_memory) :-
     create_named_graph(X, "sometestdb", _).
 
 test(open_named_graph, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     open_named_graph(X, "sometestdb", _).
 
 test(open_named_graph_memory) :-
@@ -741,11 +712,11 @@ test(delete_named_graph_memory) :-
     \+ open_named_graph(X, "sometestdb", _).
 
 test(delete_named_graph_directory, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     \+ delete_named_graph(X, "unknowndb").
 
 test(head_from_empty_db, [fail, cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     open_named_graph(X, "sometestdb", DB),
     head(DB, _). % should be false because we have no HEAD yet
 
@@ -758,7 +729,7 @@ test(open_write_from_db_without_head, [
     throws(
         error(cannot_open_named_graph_without_base_layer, _)
     )]) :-
-    open_directory_store(TestDir, X),
+    open_archive_store(TestDir, X),
     open_named_graph(X, "sometestdb", DB),
     open_write(DB, _).
 
@@ -766,7 +737,7 @@ test(open_write_from_db_with_head, [
          cleanup(clean(TestDir)),
          setup(createng(TestDir))
      ]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_commit(Builder, Layer),
     open_named_graph(Store, "sometestdb", DB),
@@ -782,7 +753,7 @@ test(open_write_from_memory_ng_without_head, [
     open_write(DB, _).
 
 test(create_base_layer, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, _).
 
 
@@ -791,53 +762,53 @@ test(create_base_layer_memory) :-
     open_write(Store, _).
 
 test(write_value_triple, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_string_triple(Builder, "Subject", "Predicate", value("Object")).
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')).
 
 test(write_value_triple_memory) :-
     open_memory_store(Store),
     open_write(Store, Builder),
-    nb_add_string_triple(Builder, "Subject", "Predicate", value("Object")).
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')).
 
 test(commit_and_set_header, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_set_head(DB, Layer).
 
 
 test(commit_and_set_header_version_first, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_force_set_head(DB, Layer, 0).
 
 
 test(commit_and_set_header_version_first_wrong_version, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     \+ nb_force_set_head(DB, Layer, 1).
 
 test(commit_and_set_header_version_multiple_commits, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_force_set_head(DB, Layer, 0),
 
     head(DB, _, 1),
 
     open_write(Store, Builder2),
-    nb_add_triple(Builder2, "Subject2", "Predicate2", value("Object2")),
+    nb_add_triple(Builder2, "Subject2", "Predicate2", value("Object2",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder2, Layer2),
     nb_force_set_head(DB, Layer2, 1),
 
@@ -846,26 +817,26 @@ test(commit_and_set_header_version_multiple_commits, [cleanup(clean(TestDir)), s
 
 
 test(commit_and_set_header_version_incorrect, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     \+ nb_force_set_head(DB, Layer, 1).
 
 
 test(commit_and_set_header_version_multiples_incorrect, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     open_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_force_set_head(DB, Layer, 0),
 
     head(DB, _, 1),
 
     open_write(Store, Builder2),
-    nb_add_triple(Builder2, "Subject2", "Predicate2", value("Object2")),
+    nb_add_triple(Builder2, "Subject2", "Predicate2", value("Object2",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder2, Layer2),
     \+ nb_force_set_head(DB, Layer2, 0).
 
@@ -874,24 +845,24 @@ test(commit_and_set_header_memory) :-
     open_memory_store(Store),
     open_write(Store, Builder),
     create_named_graph(Store, "sometestdb", DB),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_set_head(DB, Layer).
 
 test(head_after_first_commit, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_named_graph(Store, "sometestdb", DB),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_set_head(DB, Layer),
     head(DB, _).
 
 test(predicate_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_named_graph(Store, "sometestdb", DB),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_set_head(DB, Layer),
     head(DB, LayerHead),
@@ -899,60 +870,60 @@ test(predicate_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Count == 1.
 
 test(node_and_value_count, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     node_and_value_count(Layer, Count),
     Count == 2.
 
 test(predicate_count_2, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_named_graph(Store, "sometestdb", DB),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
-    nb_add_triple(Builder, "Subject2", "Predicate2", value("Object2")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "Subject2", "Predicate2", value("Object2",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     nb_set_head(DB, Layer),
     predicate_count(Layer, Count),
     Count == 2.
 
 test(remove_triple, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
     open_write(Layer, LayerBuilder),
-    nb_remove_triple(LayerBuilder, "Subject", "Predicate", value("Object")).
+    nb_remove_triple(LayerBuilder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')).
 
 test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
-    setof(X, triple(Layer, "Subject", "Predicate", value(X)), Bag),
+    setof(X, triple(Layer, "Subject", "Predicate", value(X,'http://www.w3.org/2001/XMLSchema#string')), Bag),
     Bag == ["Object"].
 
 
 test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
-    setof(Y-X, triple(Layer, "Subject", Y, value(X)), Bag),
+    setof(Y-X, triple(Layer, "Subject", Y, value(X,'http://www.w3.org/2001/XMLSchema#string')), Bag),
     Bag == ["Predicate"-"Object"].
 
 
 test(triple_search_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "Subject", "Predicate", value("Object")),
+    nb_add_triple(Builder, "Subject", "Predicate", value("Object",'http://www.w3.org/2001/XMLSchema#string')),
     nb_commit(Builder, Layer),
-    setof(X-Y-Z, triple(Layer, X, Y, value(Z)), Bag),
+    setof(X-Y-Z, triple(Layer, X, Y, value(Z,'http://www.w3.org/2001/XMLSchema#string')), Bag),
     Bag == ["Subject"-"Predicate"-"Object"].
 
 test(backtracking_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     create_named_graph(Store, "testdb", DB),
     nb_add_triple(Builder, "A", "B", node("C")),
@@ -967,7 +938,7 @@ test(backtracking_test, [cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Ps = ["D", "E"].
 
 test(query_builder_for_committed, [cleanup(clean(TestDir)),setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
 
     \+ builder_committed(Builder),
@@ -977,7 +948,7 @@ test(query_builder_for_committed, [cleanup(clean(TestDir)),setup(createng(TestDi
     builder_committed(Builder).
 
 test(squash_a_tower,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     create_named_graph(Store, "testdb", DB),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
@@ -1003,7 +974,7 @@ test(squash_a_tower,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
 
 
 test(force_set_head,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder1),
     create_named_graph(Store, "testdb", DB1),
     nb_add_triple(Builder1, "joe", "eats", node("urchin")),
@@ -1023,7 +994,7 @@ test(force_set_head,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     \+ parent(Layer3,_).
 
 test(apply_a_delta,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
     nb_commit(Builder, Layer),
@@ -1047,7 +1018,7 @@ test(apply_a_delta,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
               ].
 
 test(apply_a_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
     nb_add_triple(Builder, "jill", "eats", node("caviar")),
@@ -1081,7 +1052,7 @@ test(apply_a_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     ].
 
 test(apply_empty_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "joe", "eats", node("urchin")),
     nb_add_triple(Builder, "jill", "eats", node("caviar")),
@@ -1105,167 +1076,8 @@ test(apply_empty_diff,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     findall(X-P-Y, triple_removal(Final_Layer, X, P, Y), Triple_Removals),
     Triple_Removals = [].
 
-test(add_csv,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "some,header~n", []),
-    format(Stream, "1,2~n", []),
-    format(Stream, "3,4~n", []),
-    close(Stream),
-    csv_builder("csv",Filename, Builder, []),
-    nb_commit(Builder, Layer),
-    findall(X-P-Y, triple(Layer, X, P, Y), Triples),
-
-    Triples = [
-        X-"csv:///schema#csv_column_header"-value("\"2\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        X-"csv:///schema#csv_column_some"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        X-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row1),
-        Y-"csv:///schema#csv_column_header"-value("\"4\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Y-"csv:///schema#csv_column_some"-value("\"3\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Y-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row1),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_header"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_some"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(X),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(Y),
-        "csv:///data/CSV_csv"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#CSV"),
-        "csv:///data/CSV_csv"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv\"@en"),
-        "csv:///data/ColumnObject_csv_header"-"csv:///schema#csv_column_index"-value("1^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_header"-"csv:///schema#csv_column_name"-value("\"header\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_header"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column"),
-        "csv:///data/ColumnObject_csv_some"-"csv:///schema#csv_column_index"-value("0^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_some"-"csv:///schema#csv_column_name"-value("\"some\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_some"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column")
-    ].
-
-test(add_csv_skip_header,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "1,2~n", []),
-    format(Stream, "3,4~n", []),
-    close(Stream),
-    csv_builder("csv",Filename, Builder, [skip_header(true)]),
-    nb_commit(Builder, Layer),
-    findall(X-P-Y, triple(Layer, X, P, Y), Triples),
-    Triples = [
-        Row1-"csv:///schema#csv_column_0"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row1-"csv:///schema#csv_column_1"-value("\"2\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row1-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row_Type),
-        Row2-"csv:///schema#csv_column_0"-value("\"3\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row2-"csv:///schema#csv_column_1"-value("\"4\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row2-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(Row_Type),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_0"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_column"-node("csv:///data/ColumnObject_csv_1"),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(Row1),
-        "csv:///data/CSV_csv"-"csv:///schema#csv_row"-node(Row2),
-        "csv:///data/CSV_csv"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#CSV"),
-        "csv:///data/CSV_csv"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv\"@en"),
-        "csv:///data/ColumnObject_csv_0"-"csv:///schema#csv_column_index"-value("0^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_0"-"csv:///schema#csv_column_name"-value("\"0\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_0"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column"),
-        "csv:///data/ColumnObject_csv_1"-"csv:///schema#csv_column_index"-value("1^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "csv:///data/ColumnObject_csv_1"-"csv:///schema#csv_column_name"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "csv:///data/ColumnObject_csv_1"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("csv:///schema#Column")
-    ].
-
-test(csv_prefixes,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "some,header~n", []),
-    format(Stream, "1,2~n", []),
-    close(Stream),
-
-    csv_builder("csv",Filename, Builder, [data_prefix('that/'),
-                                          schema_prefix('this#')]),
-    nb_commit(Builder, Layer),
-    findall(X-P-Y, triple(Layer, X, P, Y), Triples),
-
-    Triples = [
-        Row1-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node(_),
-        Row1-"this#csv_column_header"-value("\"2\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        Row1-"this#csv_column_some"-value("\"1\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "that/CSV_csv"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("this#CSV"),
-        "that/CSV_csv"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv\"@en"),
-        "that/CSV_csv"-"this#csv_column"-node("that/ColumnObject_csv_header"),
-        "that/CSV_csv"-"this#csv_column"-node("that/ColumnObject_csv_some"),
-        "that/CSV_csv"-"this#csv_row"-node(Row1),
-        "that/ColumnObject_csv_header"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("this#Column"),
-        "that/ColumnObject_csv_header"-"this#csv_column_index"-value("1^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "that/ColumnObject_csv_header"-"this#csv_column_name"-value("\"header\"^^'http://www.w3.org/2001/XMLSchema#string'"),
-        "that/ColumnObject_csv_some"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("this#Column"),
-        "that/ColumnObject_csv_some"-"this#csv_column_index"-value("0^^'http://www.w3.org/2001/XMLSchema#integer'"),
-        "that/ColumnObject_csv_some"-"this#csv_column_name"-value("\"some\"^^'http://www.w3.org/2001/XMLSchema#string'")
-    ].
-
-test(csv_with_schema,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
-    open_write(Store, Builder),
-    open_write(Store, Schema_Builder),
-    tmp_file_stream(Filename, Stream, [encoding(utf8)]),
-    format(Stream, "some,header~n", []),
-    format(Stream, "1,2~n", []),
-    format(Stream, "3,4~n", []),
-    close(Stream),
-    csv_builder("csv",Filename, Builder, Schema_Builder,
-                [data_prefix('data/'),
-                 schema_prefix('')]),
-    nb_commit(Schema_Builder, Schema_Layer),
-    findall(X-P-Y, triple(Schema_Layer, X, P, Y), Schema_Triples),
-
-    Schema_Expected = [
-        "CSV"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        "CSV"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV object\"@en"),
-        "CSV"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"CSV\"@en"),
-        "CSV"-"http://www.w3.org/2000/01/rdf-schema#subClassOf"-node("http://terminusdb.com/schema/system#Document"),
-        "CSVRow"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        "CSVRow"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Generic Row of a CSV file\"@en"),
-        "CSVRow"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"CSV Row\"@en"),
-        Row_Type-"http://terminusdb.com/schema/system#csv_name"-value("\"csv\"@en"),
-        Row_Type-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        Row_Type-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV Row object for columns [\\\"header\\\", \\\"some\\\"]\"@en"),
-        Row_Type-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"CSV Row from csv\"@en"),
-        Row_Type-"http://www.w3.org/2000/01/rdf-schema#subClassOf"-node("CSVRow"),
-        "Column"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#Class"),
-        "Column"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Column information object for a CSV\"@en"),
-        "Column"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"Column\"@en"),
-        "csv_column_header"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV Column for header name header\"@en"),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#domain"-node(Row_Type),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"Column header\"@en"),
-        "csv_column_header"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#string"),
-        "csv_column_some"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"CSV Column for header name some\"@en"),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#domain"-node(Row_Type),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"Column some\"@en"),
-        "csv_column_some"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#string"),
-        "csv_column"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#ObjectProperty"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Associates a CSV with a column object\"@en"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("CSV"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv column\"@en"),
-        "csv_column"-"http://www.w3.org/2000/01/rdf-schema#range"-node("Column"),
-        "csv_column_index"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"The ordering index for a column in a csv\"@en"),"csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("Column"),
-        "csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv column index\"@en"),"csv_column_index"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#integer"),
-        "csv_column_name"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#DatatypeProperty"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"The name of the column as it was verbatim in the CSV\"@en"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("Column"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv column name\"@en"),
-        "csv_column_name"-"http://www.w3.org/2000/01/rdf-schema#range"-node("http://www.w3.org/2001/XMLSchema#string"),
-        "csv_row"-"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"-node("http://www.w3.org/2002/07/owl#ObjectProperty"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#comment"-value("\"Connects a CSV to its rows\"@en"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#domain"-node("CSV"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#label"-value("\"csv row\"@en"),
-        "csv_row"-"http://www.w3.org/2000/01/rdf-schema#range"-node("CSVRow")
-    ],
-
-    forall(member(Triple,Schema_Triples),
-           (   member(Triple,Schema_Expected))).
-
 test(so_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("C")),
     nb_add_triple(Builder, "A", "B", node("D")),
@@ -1275,7 +1087,7 @@ test(so_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
           "A"-node("D")].
 
 test(sp_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1285,7 +1097,7 @@ test(sp_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
           "C"-"B"].
 
 test(op_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1294,7 +1106,7 @@ test(op_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Ps = ["A","C"].
 
 test(p_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1303,7 +1115,7 @@ test(p_mode,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Ps = ["B"].
 
 test(rollup,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1321,7 +1133,7 @@ test(rollup,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Triples = ["A"-"B"-"D","E"-"F"-"G"].
 
 test(rollup_upto,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1346,7 +1158,7 @@ test(rollup_upto,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Triples = ["E"-"F"-"G","G"-"H"-"I"].
 
 test(layer_stack_names,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("D")),
     nb_add_triple(Builder, "C", "B", node("D")),
@@ -1372,15 +1184,15 @@ test(layer_stack_names,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     Expected = Layers.
 
 test(precise_rollup_rolls_up_precisely,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "a", "a", value("a")),
-    nb_add_triple(Builder, "a", "b", value("a")),
+    nb_add_triple(Builder, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "a", "b", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder, "c", "c", node("a")),
     nb_commit(Builder, Layer),
 
     open_write(Layer, Builder2),
-    nb_remove_triple(Builder2, "a", "a", value("a")),
+    nb_remove_triple(Builder2, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder2, "c", "b", node("d")),
     nb_commit(Builder2, Layer2),
 
@@ -1390,7 +1202,7 @@ test(precise_rollup_rolls_up_precisely,[cleanup(clean(TestDir)), setup(createng(
     nb_commit(Builder3, Layer3),
 
     open_write(Layer3, Builder4),
-    nb_add_triple(Builder4, "a", "a", value("a")),
+    nb_add_triple(Builder4, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder4, "x", "y", node("z")),
     nb_commit(Builder4, Layer4),
 
@@ -1405,12 +1217,12 @@ test(precise_rollup_rolls_up_precisely,[cleanup(clean(TestDir)), setup(createng(
 
     % and reload again!
     store_id_layer(Store, Layer4_Id, Layer4_Reloaded_Again),
-    
+
     findall(t(S,P,O), triple(Layer4_Reloaded_Again, S, P, O), Triples),
 
     Expected = [
-        t("a", "a", value("a")),
-        t("a", "b", value("a")),
+        t("a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
+        t("a", "b", value("a",'http://www.w3.org/2001/XMLSchema#string')),
         t("c", "c", node("a")),
         t("c", "c", node("c")),
         t("x", "y", node("z"))
@@ -1419,15 +1231,15 @@ test(precise_rollup_rolls_up_precisely,[cleanup(clean(TestDir)), setup(createng(
     Triples = Expected.
 
 test(imprecise_rollup_rolls_up_imprecisely,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
-    nb_add_triple(Builder, "a", "a", value("a")),
-    nb_add_triple(Builder, "a", "b", value("a")),
+    nb_add_triple(Builder, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "a", "b", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder, "c", "c", node("a")),
     nb_commit(Builder, Layer),
 
     open_write(Layer, Builder2),
-    nb_remove_triple(Builder2, "a", "a", value("a")),
+    nb_remove_triple(Builder2, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder2, "c", "b", node("d")),
     nb_commit(Builder2, Layer2),
 
@@ -1437,7 +1249,7 @@ test(imprecise_rollup_rolls_up_imprecisely,[cleanup(clean(TestDir)), setup(creat
     nb_commit(Builder3, Layer3),
 
     open_write(Layer3, Builder4),
-    nb_add_triple(Builder4, "a", "a", value("a")),
+    nb_add_triple(Builder4, "a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
     nb_add_triple(Builder4, "x", "y", node("z")),
     nb_commit(Builder4, Layer4),
 
@@ -1456,8 +1268,8 @@ test(imprecise_rollup_rolls_up_imprecisely,[cleanup(clean(TestDir)), setup(creat
     findall(t(S,P,O), triple(Layer4_Reloaded_Again, S, P, O), Triples),
 
     Expected = [
-        t("a", "a", value("a")),
-        t("a", "b", value("a")),
+        t("a", "a", value("a",'http://www.w3.org/2001/XMLSchema#string')),
+        t("a", "b", value("a",'http://www.w3.org/2001/XMLSchema#string')),
         t("c", "c", node("a")),
         t("c", "c", node("c")),
         t("x", "y", node("z"))
@@ -1466,7 +1278,7 @@ test(imprecise_rollup_rolls_up_imprecisely,[cleanup(clean(TestDir)), setup(creat
     Triples = Expected.
 
 test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
-    open_directory_store(TestDir, Store),
+    open_archive_store(TestDir, Store),
     open_write(Store, Builder),
     nb_add_triple(Builder, "A", "B", node("C")),
     nb_add_triple(Builder, "A", "B", node("D")),
@@ -1475,5 +1287,177 @@ test(sp_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
     predicate_id(Layer, "B", B_Id),
     sp_card(Layer, A_Id, B_Id, Count),
     Count = 2.
+
+test(op_card,[cleanup(clean(TestDir)), setup(createng(TestDir))]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "1", "B", node("C")),
+    nb_add_triple(Builder, "2", "B", node("C")),
+    nb_commit(Builder, Layer),
+    object_id(Layer, node("C"), C_Id),
+    predicate_id(Layer, "B", B_Id),
+    op_card(Layer, C_Id, B_Id, Count),
+    Count = 2.
+
+setup_object_id_test_layer(TestDir, Layer) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "A", "B", node("C")),
+    nb_add_triple(Builder, "A", "B", node("D")),
+    nb_add_triple(Builder, "A", "B", value("E",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "A", "B", value("F",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer).
+
+test(object_id_throws_when_called_with_wrong_functor,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(not_a_functor), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, not_a_functor, _Id).
+
+test(object_id_throws_when_called_with_wrong_functor,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(wrong_functor(_)), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, wrong_functor(_), _Id).
+
+test(object_id_throws_when_called_with_functor_with_wrong_arity,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(node(_,_)), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, node(_,_), _Id).
+
+test(object_id_throws_when_called_with_functor_with_weird_nonground_arg,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir)),
+         throws(error(object_id_called_with_invalid_object(node(weirdness(_))), _))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    object_id(Layer, node(weirdness(_)), _Id).
+
+test(object_id_iterates_when_called_with_correct_functor,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    setup_object_id_test_layer(TestDir, Layer),
+    findall(true,
+            object_id(Layer, node(_), _Id1),
+            L1),
+    length(L1, 3),
+    findall(true,
+            object_id(Layer, value(_,_), _Id2),
+            L2),
+    length(L2, 2),
+    findall(true,
+            object_id(Layer, _Object, _Id3),
+            L3),
+    length(L3, 5).
+
+test(merge_single_base_layer,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "foo", "bar", node("baz")),
+    nb_add_triple(Builder, "foo", "bar", value("baz", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    layer_to_id(Layer, Id),
+    config:tmp_path(Tmp),
+    merge_base_layers(Store, Tmp, [Id], Result_Id),
+    store_id_layer(Store, Result_Id, Result_Layer),
+
+    findall(t(S,P,O),
+            triple(Result_Layer, S, P, O),
+            Triples),
+    Expected = [ t("foo","bar",node("baz")),
+                 t("foo",
+                   "bar",
+                   value("baz",
+                         'http://www.w3.org/2001/XMLSchema#string'))
+               ],
+
+    Expected = Triples.
+
+test(merge_same_base_layer_several_times,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "foo", "bar", node("baz")),
+    nb_add_triple(Builder, "foo", "bar", value("baz", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    layer_to_id(Layer, Id),
+    config:tmp_path(Tmp),
+    merge_base_layers(Store, Tmp, [Id, Id, Id, Id, Id, Id, Id, Id, Id, Id], Result_Id),
+    store_id_layer(Store, Result_Id, Result_Layer),
+    findall(t(S,P,O),
+            triple(Result_Layer, S, P, O),
+            Triples),
+
+    Expected = [ t("foo","bar",node("baz")),
+                 t("foo",
+                   "bar",
+                   value("baz",
+                         'http://www.w3.org/2001/XMLSchema#string'))
+               ],
+
+    Expected = Triples.
+
+test(merge_two_base_layers,
+     [
+         cleanup(clean(TestDir)),
+         setup(createng(TestDir))
+     ]) :-
+    open_archive_store(TestDir, Store),
+    open_write(Store, Builder1),
+    nb_add_triple(Builder1, "foo", "bar", node("baz")),
+    nb_add_triple(Builder1, "foo", "bar", value("baz", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder1, Layer1),
+    layer_to_id(Layer1, Id1),
+    open_write(Store, Builder2),
+    nb_add_triple(Builder2, "foo", "baa", node("baz")),
+    nb_add_triple(Builder2, "foo", "bar", value("aaa", 'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder2, "foo", "bar", value(42, 'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder2, Layer2),
+    layer_to_id(Layer2, Id2),
+    config:tmp_path(Tmp),
+    merge_base_layers(Store, Tmp, [Id1, Id2], Result_Id),
+    store_id_layer(Store, Result_Id, Result_Layer),
+
+    findall(t(S,P,O),
+            triple(Result_Layer, S, P, O),
+            Triples),
+
+    Expected = [ t("foo","baa",node("baz")),
+                 t("foo","bar",node("baz")),
+                 t("foo",
+                   "bar",
+                   value("aaa",
+                         'http://www.w3.org/2001/XMLSchema#string')),
+                 t("foo",
+                   "bar",
+                   value("baz",
+                         'http://www.w3.org/2001/XMLSchema#string')),
+                 t("foo",
+                   "bar",
+                   value(42,
+                         'http://www.w3.org/2001/XMLSchema#int'))
+               ],
+
+    Expected = Triples.
 
 :- end_tests(terminus_store).

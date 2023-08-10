@@ -40,7 +40,8 @@
                        url//0,
                        normalizedString//0,
                        nmtoken//0,
-                       ncname//0
+                       ncname//0,
+                       name//0
                        ]).
 
 /** <module> XSD Parser

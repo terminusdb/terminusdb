@@ -5,19 +5,23 @@
 
 :- use_module(core(util)).
 :- use_module(core(query)).
-:- use_module(library(terminus_store)).
 :- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+:- use_module(core(util)).
+:- use_module(config(terminus_config), [terminusdb_version/1]).
+:- use_module(core(triple)).
+
 :- use_module(db_pack).
 :- use_module(db_rebase).
 :- use_module(db_create).
-:- use_module(core(account)).
+
 :- use_module(library(http/http_client)).
-:- use_module(core(document)).
+:- use_module(library(terminus_store)).
 
 :- use_module(library(tus)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
-
 % error conditions:
 % - branch to push does not exist
 % - repository does not exist
@@ -33,7 +37,8 @@
 
 :- meta_predicate push(+, +, +, +, +, +, 2, -).
 push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
-     Push_Predicate, Result) :-
+     Authorized_Push_Predicate,
+     Result) :-
 
     do_or_die(
         resolve_absolute_string_descriptor(Branch, Branch_Descriptor),
@@ -60,7 +65,10 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
         Type = remote,
         error(push_attempted_on_non_remote(Database_Descriptor,Remote_Name),_)),
 
-    repository_remote_url(Database_Descriptor, Remote_Name, Remote_URL),
+    (   repository_remote_url(Database_Descriptor, Remote_Name, Remote_Details)
+    ->  true
+    ;   repository_remote_path(Database_Descriptor, Remote_Name, Remote_Details)
+    ),
 
     % Begin hypothetical rebase for pack
     askable_context(Repository_Descriptor, System_DB, Auth, Repository_Context_With_Prefixes),
@@ -122,17 +130,33 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
     ),
 
     cycle_context(Remote_Repository_Context, Final_Context, Remote_Transaction_Object, _),
-    pack_from_context(Final_Context, some(Last_Head_Id), Payload_Option),
 
+    (   string(Remote_Details)
+    % We are a remote repository
+    ->  Remote_Details = Remote_URL,
+        pack_from_context(Final_Context, some(Last_Head_Id), Payload_Option),
+        (   Payload_Option = none % Last_Head_Id = Current_Head_Id
+        ->  Result = same(Last_Head_Id)
+        ;   Payload_Option = some(Payload),
+            call(Authorized_Push_Predicate, Remote_URL, Payload),
+            Database_Transaction_Object = (Remote_Transaction_Object.parent),
+            [Read_Obj] = (Remote_Transaction_Object.instance_objects),
+            Layer = (Read_Obj.read),
+            layer_to_id(Layer, Current_Head_Id),
+            update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
+            run_transactions([Database_Transaction_Object], true, _),
+            Result = new(Current_Head_Id)
+        )
+    % We are using a shared store
+    ;   get_dict(database,Remote_Details, DB),
+        get_dict(organization, Remote_Details, Organization),
 
-    (   Payload_Option = none % Last_Head_Id = Current_Head_Id
-    ->  Result = same(Last_Head_Id)
-    ;   Payload_Option = some(Payload),
-        call(Push_Predicate, Remote_URL, Payload),
         Database_Transaction_Object = (Remote_Transaction_Object.parent),
         [Read_Obj] = (Remote_Transaction_Object.instance_objects),
         Layer = (Read_Obj.read),
         layer_to_id(Layer, Current_Head_Id),
+
+        local_push(System_DB, Auth, Organization, DB, Current_Head_Id),
         update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
         run_transactions([Database_Transaction_Object], true, _),
         Result = new(Current_Head_Id)
@@ -154,10 +178,12 @@ remote_tus_url(URL, TUS_URL) :-
 
 % NOTE: What do we do with the remote branch? How do we send it?
 authorized_push(Authorization, Remote_URL, Payload) :-
+    terminusdb_version(Version),
     catch(
         (   % Try TUS protocol (we could check resulting options too for create etc...)
             remote_tus_url(Remote_URL, TUS_URL),
-            tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization)]),
+            tus_options(TUS_URL, _TUS_Options, [request_header('Authorization'=Authorization),
+                                                request_header('TerminusDB-Version'=Version)]),
             Using_TUS = true,
 
             % We use a random string as a file extension, because
@@ -171,7 +197,8 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                 close(Stream)
             ),
 
-            tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization)]),
+            tus_upload(Tmp_File, TUS_URL, Resource_URL, [request_header('Authorization'=Authorization),
+                                                         request_header('TerminusDB-Version'=Version)]),
             Data = json(_{resource_uri : Resource_URL})
         ),
         error(Err, _),
@@ -189,6 +216,7 @@ authorized_push(Authorization, Remote_URL, Payload) :-
                     Data,
                     Result,
                     [request_header('Authorization'=Authorization),
+                     request_header('TerminusDB-Version'=Version),
                      json_object(dict),
                      timeout(infinite),
                      status_code(Status_Code)
@@ -200,10 +228,53 @@ authorized_push(Authorization, Remote_URL, Payload) :-
     ->  (   Using_TUS = true
         ->  tus_delete(Resource_URL, [tus_extension([termination])],
                        % assume extension to avoid pointless pre-flight
-                       [request_header('Authorization'=Authorization)])
+                       [request_header('Authorization'=Authorization),
+                        request_header('TerminusDB-Version'=Version)])
         ;   true)
     ;   throw(error(remote_connection_failure(Status_Code, Result), _))
     ).
+
+local_push(System_DB, Auth, Organization, DB, New_Head_Id) :-
+    Repository_Path = [Organization, DB, "local", "_commits"],
+    intersperse('/',Repository_Path, Repository_Path_Elements),
+    atomic_list_concat(Repository_Path_Elements, Repository_Path_Atom),
+    do_or_die(
+        resolve_absolute_descriptor(Repository_Path, Repository_Descriptor),
+        error(invalid_absolute_path(Repository_Path_Atom),_)),
+    do_or_die(
+        (repository_descriptor{} :< Repository_Descriptor),
+        error(not_a_repository_descriptor(Repository_Descriptor))),
+
+    check_descriptor_auth(System_DB, Repository_Descriptor,
+                          '@schema':'Action/commit_write_access',
+                          Auth),
+
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    do_or_die(create_context(Database_Descriptor, Database_Context),
+              error(unresolvable_absolute_descriptor(Database_Descriptor))),
+
+    with_transaction(
+        Database_Context,
+        (
+            repository_head(Database_Context,
+                            (Repository_Descriptor.repository_name),
+                            Repository_Head_Layer_Id),
+
+            % check to make sure New_Head_Id newer than Repository_Head_Layer_Id
+            do_or_die(
+                parent_child_ids(Repository_Head_Layer_Id, New_Head_Id),
+                error(push_does_not_advance_local_remote(Repository_Head_Layer_Id, New_Head_Id), _)
+            ),
+            update_repository_head(Database_Context, "local", New_Head_Id)
+        ),
+        _),
+    true.
+
+parent_child_ids(Parent_Id, Child_Id) :-
+    triple_store(Store),
+    store_id_layer(Store, Child_Id, Child_Layer),
+    parent(Child_Layer, Parent_Layer),
+    layer_to_id(Parent_Layer, Parent_Id).
 
 :- begin_tests(push, [concurrent(true)]).
 :- use_module(core(util/test_utils)).

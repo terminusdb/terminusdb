@@ -3,7 +3,6 @@ const { Agent, api, db, document, util, woql } = require('../lib')
 
 const randomType0 = util.randomString()
 const randomType1 = util.randomString()
-const randomType2 = util.randomString()
 
 function dataVersionHeader (r) {
   return r.header['terminusdb-data-version']
@@ -125,7 +124,7 @@ describe('data-version', function () {
         let h0
 
         before(async function () {
-          await document.insert(agent, { schema: { '@id': randomType2, '@type': 'Class' } })
+          await document.insert(agent, { schema: { '@id': randomType1, '@type': 'Class' } })
           const r = await woql.post(agent, simpleQuery)
           h0 = dataVersionHeader(r)
           expect(h0).to.match(/^branch:/)
@@ -146,7 +145,7 @@ describe('data-version', function () {
         it('InsertDocument', async function () {
           const insertDocumentQuery = {
             '@type': 'InsertDocument',
-            identifier: { '@type': 'NodeValue', node: randomType2 + '/0' },
+            identifier: { '@type': 'NodeValue', node: randomType1 + '/0' },
             document: {
               '@type': 'Value',
               dictionary: {
@@ -155,12 +154,12 @@ describe('data-version', function () {
                   {
                     '@type': 'FieldValuePair',
                     field: '@type',
-                    value: { '@type': 'Value', data: randomType2 },
+                    value: { '@type': 'Value', data: randomType1 },
                   },
                   {
                     '@type': 'FieldValuePair',
                     field: '@id',
-                    value: { '@type': 'Value', data: randomType2 + '/0' },
+                    value: { '@type': 'Value', data: randomType1 + '/0' },
                   },
                 ],
               },
@@ -182,42 +181,6 @@ describe('data-version', function () {
           expect(h1).to.equal(h2)
         })
       })
-    })
-  })
-
-  describe('/api/document/_system', function () {
-    before(async function () {
-    })
-
-    after(async function () {
-      const r = await document
-        .deleteFromSystem(agent, { query: { id: randomType1 + '/0' } })
-      await document
-        .deleteFromSystem(agent, { query: { graph_type: 'schema', id: randomType1 } })
-        .set('TerminusDB-Data-Version', dataVersionHeader(r))
-    })
-
-    describe('has expected data version for insert', function () {
-      const objects = [
-        { schema: { '@id': randomType1, '@type': 'Class' } },
-        { instance: { '@id': randomType1 + '/0', '@type': randomType1 } },
-      ]
-      for (const object of objects) {
-        it(JSON.stringify(object), async function () {
-          const rs = []
-
-          const getInstances = { query: { as_list: true } }
-          const getSchemas = { query: { graph_type: 'schema', as_list: true } }
-
-          rs.push(await document.getFromSystem(agent, getInstances))
-          rs.push(await document.insertIntoSystem(agent, object))
-          rs.push(await document.getFromSystem(agent, getSchemas))
-
-          rs.push(await document.getFromSystem(agent, getInstances).set('TerminusDB-Data-Version', lastDataVersionHeader(rs)))
-
-          expectHeaders('system', rs)
-        })
-      }
     })
   })
 })

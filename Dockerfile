@@ -3,7 +3,7 @@
 ARG DIST=community
 
 # Install the SWI-Prolog pack dependencies.
-FROM terminusdb/swipl:v8.4.2 AS pack_installer
+FROM terminusdb/swipl:v9.0.3 AS pack_installer
 RUN set -eux; \
     BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
     apt-get update; \
@@ -14,23 +14,25 @@ COPY distribution/Makefile.deps Makefile
 RUN make
 
 # Install Rust. Prepare to build the Rust code.
-FROM terminusdb/swipl:v8.4.2 AS rust_builder_base
+FROM terminusdb/swipl:v9.0.3 AS rust_builder_base
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
-    BUILD_DEPS="git build-essential curl clang ca-certificates"; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 # Initialize the crates.io index git repo to cache it.
-RUN cargo install lazy_static 2> /dev/null || true
+RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swipl || true)
 WORKDIR /app/rust
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
-RUN make DIST=community
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
+RUN make DIST=community && cd src/rust && cargo swipl test --release
 
 # Build the enterprise dylib.
 FROM rust_builder_base AS rust_builder_enterprise
@@ -41,9 +43,9 @@ RUN make DIST=enterprise
 FROM rust_builder_${DIST} AS rust_builder
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
-FROM terminusdb/swipl:v8.4.2 AS base
+FROM terminusdb/swipl:v9.0.3 AS base
 RUN set -eux; \
-    RUNTIME_DEPS="libjwt0 make openssl"; \
+    RUNTIME_DEPS="libjwt0 make openssl binutils"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
     rm -rf /var/cache/apt/*; \

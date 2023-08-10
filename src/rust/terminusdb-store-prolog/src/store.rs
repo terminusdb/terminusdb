@@ -2,9 +2,18 @@ use crate::builder::*;
 use crate::layer::*;
 use crate::named_graph::*;
 use std::io::{self, Cursor};
+use std::path::PathBuf;
 use swipl::prelude::*;
-use terminus_store::storage::{name_to_string, pack_layer_parents, string_to_name, PackError};
-use terminus_store::store::sync::*;
+use terminus_store::storage::archive::DirectoryArchiveBackend;
+use terminus_store::storage::archive::LruArchiveBackend;
+use terminus_store::storage::CachedLayerStore;
+use terminus_store::storage::LockingHashMapLayerCache;
+use terminus_store::storage::{
+    archive::ArchiveLayerStore, name_to_string, pack_layer_parents, string_to_name, PackError,
+};
+use terminus_store::store::{sync::*, Store};
+
+use terminusdb_grpc_labelstore_client::GrpcLabelStore;
 
 predicates! {
     pub semidet fn open_memory_store(_context, term) {
@@ -15,6 +24,35 @@ predicates! {
     pub semidet fn open_directory_store(_context, dir_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let store = open_sync_directory_store(&*dir);
+        out_term.unify(&WrappedStore(store))
+    }
+
+    pub semidet fn open_raw_archive_store(_context, dir_term, out_term) {
+        let dir: PrologText = dir_term.get_ex()?;
+        let store = open_sync_raw_archive_store(&*dir);
+        out_term.unify(&WrappedStore(store))
+    }
+
+    pub semidet fn open_archive_store(_context, dir_term, cache_size_term, out_term) {
+        let dir: PrologText = dir_term.get_ex()?;
+        let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;
+        let store = open_sync_archive_store(&*dir, cache_size);
+        out_term.unify(&WrappedStore(store))
+    }
+
+    pub semidet fn open_grpc_store(context, dir_term, address_term, initial_pool_term, cache_size_term, out_term) {
+        let dir: PrologText = dir_term.get_ex()?;
+        let address: PrologText = address_term.get_ex()?;
+        let pool_size: u64 = initial_pool_term.get_ex()?;
+        let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;
+        let directory_layer_backend = DirectoryArchiveBackend::new((&*dir).into());
+        let layer_backend = LruArchiveBackend::new(directory_layer_backend.clone(), directory_layer_backend, cache_size);
+        let layer_store = CachedLayerStore::new(ArchiveLayerStore::new(layer_backend.clone(), layer_backend), LockingHashMapLayerCache::new());
+
+        let label_store = context.try_or_die_generic(task_sync(GrpcLabelStore::new(address.to_string(), pool_size as usize)))?;
+
+        let store = SyncStore::wrap(Store::new(label_store, layer_store));
+
         out_term.unify(&WrappedStore(store))
     }
 
@@ -73,13 +111,13 @@ predicates! {
         let mut result_terms = Vec::with_capacity(layer_parent_map.len());
         for (layer, parent) in layer_parent_map {
             let term = context.new_term_ref();
-            term.unify(&pair_functor)?;
-            term.unify_arg(1, &name_to_string(layer))?;
+            term.unify(pair_functor)?;
+            term.unify_arg(1, name_to_string(layer))?;
             match parent {
                 Some(parent) => {
                     let parent_term = context.new_term_ref();
                     parent_term.unify(some_functor)?;
-                    parent_term.unify_arg(1, &name_to_string(parent))?;
+                    parent_term.unify_arg(1, name_to_string(parent))?;
                     term.unify_arg(2, &parent_term)?;
                 },
                 None => {
@@ -106,6 +144,24 @@ predicates! {
         let pack: Vec<u8> = pack_term.get_ex()?;
 
         context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))
+    }
+
+    pub semidet fn merge_base_layers(context, store_term, temp_dir_term, layer_ids_term, output_id_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let temp_dir: PrologText = temp_dir_term.get_ex()?;
+        let temp_dir_path: PathBuf = (&*temp_dir).into();
+
+        let layer_id_strings: Vec<String> = layer_ids_term.get_ex()?;
+        let mut layer_ids = Vec::with_capacity(layer_id_strings.len());
+        for layer_id_string in layer_id_strings {
+            let name = context.try_or_die(string_to_name(&layer_id_string))?;
+            layer_ids.push(name);
+        }
+
+        let result = context.try_or_die(store.merge_base_layers(&layer_ids, &temp_dir_path))?;
+        let result_string = name_to_string(result);
+
+        output_id_term.unify(result_string)
     }
 }
 

@@ -1,6 +1,6 @@
-TUS_VERSION := v0.0.10
-JWT_VERSION := v0.0.5
-DASHBOARD_VERSION := v0.0.6
+TUS_VERSION := v0.0.14
+JWT_VERSION := v1.0.3
+DASHBOARD_VERSION := v6.0.9
 DASHBOARD_GITHUB_REPO := terminusdb/terminusdb-dashboard
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
@@ -35,8 +35,7 @@ install-dashboard:
 .PHONY: install-pack
 install-pack:
 	mkdir -p .deps/$(PACK_NAME)
-	git clone --depth 1 $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
-	(cd .deps/$(PACK_NAME); git checkout --quiet $(BRANCH))
+	git clone --depth 1 --branch $(BRANCH) $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
 	$(SWIPL) \
 	  --on-error=halt \
 	  --on-warning=halt \
@@ -46,8 +45,12 @@ install-pack:
 	  -g halt
 
 .PHONY: clean
-clean: clean-dashboard
+clean: clean-dashboard clean-deps
 
 .PHONY: clean-dashboard
 clean-dashboard:
 	rm -rf dashboard
+
+.PHONY: clean-deps
+clean-deps:
+	rm -rf .deps

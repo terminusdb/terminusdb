@@ -1,3 +1,306 @@
+# TerminusDB Server v11.1.1-1 Release Notes
+
+Very minor hotpatch release to include the new local dashboard.
+
+## New
+
+* New dashboard version (v6.0.9) which includes various fixes and enhancements, like the ability
+  to properly close pull requests.
+
+# TerminusDB Server v11.1.1 Release Notes
+
+This release introduces a docker-compose deployment method which gets you all components of a fully-featured terminusdb setup:
+* TerminusDB - the main database.
+* VectorLink (experimental) - a database sidecar dedicated to storing, indexing and retrieving vectors by similarity, used for AI-enhanced search.
+* terminusdb-change-request-api - an API for working with change requests.
+* Terminusdb-dashboard - our dashboard for managing terminusdb, which now experimentally supports AI search and change requests.
+
+Beyond that, this version brings various fixes and enhancements to our GraphQL support, our schema checking and migrations, and the document interface. Please read the detailed list below.
+
+## Bug fixes
+* multi-level graphql hierarchies were not always returning all objects.
+* properties with prefixes didn't work properly in graphql.
+* graphql reverse links did not work with sanitized names.
+* graphql incorrectly filtered out 'id' from user-defined types.
+
+## New
+
+* docker-compose now comes bundled with vectorlink, local dashboard and pull request API.
+* properties can now be inherited from multiple superclasses, and even redefined in a subclass, as long as they form a type-compatible hierarchy. The strictest form is actually applied. If the subclass defines a property that is not at least as strict as what was defined in the supers, this results in a schema error.
+* graphql can now be made to not return subsumptions through the generated `include_children` argument.
+* new environment variable `TERMINUSDB_TRUST_MIGRATIONS` will ensure that instance data is not re-checked when schemas change due to migrations, as migrations should in principle not result in any errors. As the migration feature is still relatively new, the default here is false, meaning that without this environment variable, all schema changes result in a recheck of all existing instance data. In the future, this default will likely change.
+
+## Enhancements
+
+* schema migration scripts now support changes to class hierarchies and key strategies.
+* the graphql engine now keeps a small cache around of recent schemas to speed up repeated queries.
+
+## Experimental
+
+* graphql filters now support deep matches on IDs.
+* document API has a new parameter `ids` on GET allowing you to submit a list of documents to retrieve at once.
+
+# TerminusDB Server v11.1.0 Release Notes
+
+## Bug fixes
+
+* Fix ordering of graphql stringy numbers
+* Adding type information to decimals
+* Adding a correct diff using out of band value
+* Prevent reserved words in GraphQL from being used
+* Fix loading of triples
+
+## New
+
+* Add support for the TerminusDB semantic indexer for AI search capabilities
+* Add ability to merge base layers with the `concat` command
+
+## Enhancement
+
+* Reduced memory usage
+* Remove Google Analytics in Dashboard
+
+# TerminusDB Server v11.0.6 Release Notes
+
+## Bug fixes
+* Unused optional properties would cause GraphQL to fail
+* Enums were not working properly for collection types in GraphQL
+* Incorrect version checking on system graphs caused superfluous graph updates on startup
+* Modifications of classes with `@oneOf` would leave stale objects in the schema graph
+* Diffing sets now works
+* Fix error reporting when pushing nonexistent remotes
+* GraphQL did not work properly with `@oneOf` properties
+* Memory leak in document API
+* Crash when processing several compressed requests in the same session
+
+## New
+* On schema modifications, a migration will be inferred when possible.
+* New options added to document interface
+** `allow_destructive_migration`: Allow for inference of migrations that will also modify instance data. If set, the schema modification will also automatically transform any instance objects already in the database.
+** `require_migration`: This will cause the request to fail for schema changes for which no migration can be inferred.
+
+## Enhancement
+* diff endpoint now has `start` and `count` options for paged results
+* Improve memory footprint when retrieving lots of documents through the document API
+* Support JSON objects in GraphQL
+
+# TerminusDB Server v11.0.5 Release Notes
+## Bug fixes
+* diff endpoint was mishandling subdocuments
+
+# TerminusDB Server v11.0.4 Release Notes
+## New
+* New history API to find out when an object changed
+
+## Enhancement
+* Keep loaded layers in an LRU cache for faster repeated queries
+* Optimize will now also optimize schema layers
+* Improved memory use during commits and squashes
+
+## Experimental
+* New endpoint for schema migrations which also transforms existing data
+* Support updating a schema from a target branch as long as there is a migration
+
+# TerminusDB Server v11.0.3 Release Notes
+
+## Bug fixes
+
+* Prevent early failure on full schema replace where id is missing
+* Support stringy filters on all stringy types, not just strings
+* Return 204 on doc delete (and disable chunking for non-gets)
+* Fix inversion naming issue. This causes issues when using non-standard GraphQL class names
+
+## New
+
+* Adding Patch Endpoint for Resources
+* Implement pinned organization ENV variable to keep data products of whole organizations/teams in memory
+
+# TerminusDB Server v11.0.2 Release Notes
+
+## Bug fixes
+* On replace, schema documentation entities were not cleaned up properly
+* Fix support for ne (not equal) operator in graphql
+
+# TerminusDB Server v11.0.1 Release Notes
+
+## Backwards-incompatible changes
+* Document replacement allowed insertion of nested documents, even
+  without the create option specified. We decided that this was a bug,
+  and made it so that this now errors, unless the create option is
+  specified. This is backwards-incompatible, but we believe that this
+  is the correct behavior. If your code relies on nested documents
+  being inserted, make sure you specify the create option. Note that
+  this is just about nested documents which are top-level
+  types. Subdocuments are not affected.
+
+## New
+
+* Introduced support for a grpc label store as an alternative to file-based label lookup [terminusdb-labs/terminusdb-grpc-labelstore](https://github.com/terminusdb-labs/terminusdb-grpc-labelstore)
+* Implemented local clone
+* Implement user impersionation in the CLI tool
+* Added a pre-commit hook to allow implementation of custom schema validations
+
+## Enhancements
+
+* Pinned system schema graph so it is only loaded once
+* Reduced amount of hash roundtrips for newly generated passwords to speed up login
+* Disabled authentication on the ok endpoint for faster roundtrip
+* Removed default SWI-Prolog HTTP server welcome message
+* Improved db list speed
+
+## Bug fixes
+* Fixed startup message when no store is present
+* Ensured that all users automatically have all capabilities of anonymous
+* Delete the stale database if a clone fails
+* Fix SSL issues in fetch and push: newer version of openssl errors when a connection is closed unexpectedly
+* Fix accidental insertion of duplicate nested documents
+* Fixed GYear support
+
+# TerminusDB Server v11.0.0 Release Notes
+
+## Backwards-Incompatible Changes
+
+* This release changes the storage format of TerminusDB. After
+  installing this version, you will also need to upgrade your storage
+  directory, or the server will not start. A conversion tool is
+  provided at
+  [terminusdb-10-to-11](https://github.com/terminusdb/terminusdb-10-to-11). This
+  is also bundled with
+  [terminusdb-bootstrap](https://github.com/terminusdb/terminusdb-bootstrap).
+* TerminusDB 11 now responds to `xsd:integer`, `xsd:decimal`, and all
+  of the unbounded sub-types of these two objects in the document
+  interface with strings. This is because many (even most) JSON
+  libraries can not handle arbitrary precision integers, and (few if
+  any) can handle arbitrary precision floats. It should still be
+  possible to submit documents using integers or floats, but when
+  returned they will be strings.
+
+## Enhancements
+
+* New Storage backend
+  - Added typed storage for a wide variety of XSD types, reducing
+    storage overhead and improving search performance
+  - Introduce a layer archive format reducing storage use and latency
+    and simplifying interchange.
+* GraphQL `_type` added to objects to return the exact rather than subsumed type
+* Added `@unfoldable` document flag to frames
+* Add `@metadata` to frames
+
+## Bug fixes
+
+* Fixed a bug in inverse fields in GraphQL
+* Removed extraneous system objects from GraphQL schema
+* Improved completeness of GraphQL schema handling
+* Added x-method-override header to CORS
+* Fixed GraphQL naming bug leading to GraphQL schema crashes
+
+# TerminusDB Server v10.1.11 Release Notes
+
+## Enhancements
+
+* GraphQL now deals with more TerminusDB schemata
+* Add JSON formatted logs for welcome message
+* Consumer role now has expanded privileges enabling public access for clones
+* Context insert/replace now gives a more understandable error
+* We now check the store version before startup to prevent version mismatch between server and store during upgrades
+
+## Bug fixes
+
+* Fix JWT lib build
+* Expanded error handling for fetch
+* WOQL AST was incorrect for some WOQL words which specify the graph
+* Fix subsumption in document retrieval
+* Fix subsumption in GraphQL retrieval
+
+# TerminusDB Server v10.1.10 Release Notes
+
+## Enhancements
++ Add ability to filter by multiple IDs in GraphQL
+* Collections over base types
+* Add Graphql backlinks
+* Prevent exhaustive list comparisons in diff
+* Path queries added to GraphQL
+
+## Bug fixes
+
+* Fix dangling reference check, improves performance on deletion
+* Remove TERMINUSDB_LOG_PATH ENV as it caused a crash
+* Graphiql is not hardcoded to localhost:6363 anymore
+* Avoid framing json metadata
+
+# TerminusDB Server v10.1.9 Release Notes
+
+## Enhancements
++ Add new ENV variable called `TERMINUSDB_DASHBOARD_PATH` to set
+  the dashboard path at compile time.
+
+## Bug fixes
++ Fix crash when using some special unicode characters because
+  the length of those characters were wrongly calculated.
++ Fix set property inheritance in doc retrieval.
+
+# TerminusDB Server v10.1.8 Release Notes
+
+## Enhancements
++ GraphQL endpoint at localhost:6363/api/graphql/ORG/DB
++ GraphiQL endpoint for testing available at localhost:6363/graphiql/ORG/DB
++ GraphQL automatic loading of Schema in GraphQL schema
++ GraphQL search and retrieval
++ New HEAD call for document endpoint, which makes it easy to check for existence
++ Add ARM64 support
++ New dashboard version: 0.0.10
+
+## Bug fixes
++ Anonymous users now results in an auth with an explicit URI in the systemDB
++ Triple load interface now has better error reporting and is more robust
++ `@metadata` bugs on ingest / exgest fixed for classes.
++ Diff no longer returns explicit IDs for subdocuments, and does not compare IDs
++ sys:Unit now interacts correctly with Option
+
+# TerminusDB Server v10.1.7 Release Notes
+
+## Bug fixes
++ Better serialization/deserialization of Prolog strings, prevents
+  crashes on unexpected characters
++ Fix group\_by query in dashboard
++ Fix time travel in dashboard
++ Fix bad parsing of xsd:Name
++ Fix corrupted data products on wrong prefixes
+
+## Enhancements
++ Add new Dashboard version
++ Add xsd:Name and xsd:anyUri property type support in dashboard
++ Use new terminusdb-client version in dashboard
+
+# TerminusDB Server v10.1.6 Release Notes
+
+## Bug fixes
++ Escaped characters in json documents were escaped twice
+
+# TerminusDB Server v10.1.5 Release Notes
+
+## Enhancements
++ Trig files can now be loaded directly
++ Improved speed of document retrieval through new rust backend
++ Json responses are now a single line
++ Triple endpoint will now return turtle files if the right Accept header is specified
++ Grant endpoint improved to take names rather than IRIs
++ Squash added to CLI
++ Improve performance of forward references during document insert
++ Document interface can now handle 'reverse links' where subdocuments specify how they link back to their document, rather than the other way around
+
+## Bug fixes
++ Fixed inheritance of multi-language documentation
++ Fixed handling of literals with language tags
++ Db name length is now validated properly before database creation is attempted
++ Document interface errors from woql are now properly reported
++ Frame endpoint now reports oneof properties properly
++ Fix woql typeof
++ Prefixes are now more properly recognized, allowing use of colons in contracted IRIs
++ Proper error reporting on diff
++ Better error handling for log
++ Captures didn't work in full replace
+
 # TerminusDB Server v10.1.4 Release Notes
 
 ## Enhancements

@@ -31,6 +31,9 @@ Display help regarding terminusdb.
 
 Run internal TerminusDB tests.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for `test` command
 
@@ -58,6 +61,9 @@ Run the TerminusDB server.
 
 List available databases. [DEPRECATED]
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `list` command
 
@@ -73,6 +79,9 @@ List available databases. [DEPRECATED]
 
 Optimize a database (including _system and _meta).
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `optimize` command
 
@@ -81,6 +90,9 @@ Optimize a database (including _system and _meta).
 `terminusdb query DB_SPEC QUERY OPTIONS`
 
 Query a database.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `query` command
@@ -99,6 +111,9 @@ Query a database.
 `terminusdb push DB_SPEC`
 
 Push a branch.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `push` command
@@ -130,6 +145,9 @@ Push a branch.
 
 Clone a database (into DB_SPEC).
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `clone` command
 
@@ -148,6 +166,9 @@ Clone a database (into DB_SPEC).
   * `-l`, `--label`=[value]:
   label to use for this database
 
+  * `-r`, `--remote`=[value]:
+  remote to use for this database
+
   * `-c`, `--comment`=[value]:
   long description of the cloned database
 
@@ -159,6 +180,9 @@ Clone a database (into DB_SPEC).
 `terminusdb pull BRANCH_SPEC`
 
 Pull a branch from a database.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `pull` command
@@ -184,6 +208,9 @@ Pull a branch from a database.
 
 fetch data from a remote.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `fetch` command
 
@@ -205,17 +232,44 @@ fetch data from a remote.
 
 Rebase a database with commits from FROM_DATABASE_SPEC into TO_DATABASE_SPEC.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `rebase` command
 
   * `-a`, `--author`=[value]:
   The author of the rebase
 
+### squash
+
+`terminusdb squash DATABASE_SPEC OPTIONS`
+
+Squash a commit.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `squash` command
+
+  * `-j`, `--json`=[value]:
+  output result status as JSON
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
 ### rollup
 
 `terminusdb rollup DATABASE_SPEC OPTIONS`
 
 Creates an optimisation layer for queries on the given commit.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `rollup` command
@@ -224,7 +278,10 @@ Creates an optimisation layer for queries on the given commit.
 
 `terminusdb bundle DATABASE_SPEC OPTIONS`
 
-Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unpack`.
+Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `terminusdb unbundle`.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `bundle` command
@@ -238,6 +295,9 @@ Create a pack for a given DATABASE_SPEC that can then be reconsistuted with `ter
 
 Unbundle a bundle file.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `unbundle` command
 
@@ -247,6 +307,9 @@ Unbundle a bundle file.
 
 Create a diff between two JSONs, a JSON and a commit (path required),
 or two commits (path required).
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `diff` command
@@ -272,11 +335,20 @@ or two commits (path required).
   * `-s`, `--after_commit`, `--after-commit`=[value]:
   Commit or branch of the *after* document(s)
 
+  * `-n`, `--start`=[value]:
+  How many diff results to skip before returning (ignored if not comparing resources)
+
+  * `-l`, `--count`=[value]:
+  Number of results to return (ignored if not comparing resources)
+
 ### apply
 
 `terminusdb apply [Path] OPTIONS`
 
 Apply a diff to path which is obtained from the differences between two commits
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `apply` command
@@ -308,6 +380,9 @@ Apply a diff to path which is obtained from the differences between two commits
 
 Get the log for a branch given by DB_SPEC.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `log` command
 
@@ -320,20 +395,113 @@ Get the log for a branch given by DB_SPEC.
   * `-c`, `--count`=[value]:
   Number of results to return
 
+  * `-v`, `--verbose`=[value]:
+  Give back additional information on commits
+
+### history
+
+`terminusdb history DB_SPEC`
+
+Get the history for a given document by id in DB_SPEC.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `history` command
+
+  * `-i`, `--id`=[value]:
+  The id of the document to provide history for
+
+  * `-j`, `--json`=[value]:
+  return history as JSON
+
+  * `-s`, `--start`=[value]:
+  How far back in commit history to start giving results
+
+  * `-k`, `--created`=[value]:
+  return time of creation (does not report all history)
+
+  * `-u`, `--updated`=[value]:
+  return time of last update (does not report all history)
+
+  * `-c`, `--count`=[value]:
+  Number of results to return
+
+  * `-v`, `--verbose`=[value]:
+  give back schema update information
+
 ### reset
 
 `terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC`
 
 Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `reset` command
+
+### migration
+
+`terminusdb migration BRANCH_SPEC`
+
+Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `migration` command
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-o`, `--operations`=[value]:
+  operations to perform on the schema
+
+  * `-t`, `--target`=[value]:
+  resource with a schema as migration target
+
+  * `-v`, `--verbose`=[value]:
+  give back schema update information
+
+  * `-d`, `--dry_run`=[value]:
+  provide information about what would occur if the operations were performed
+
+### concat
+
+`terminusdb concat DB_SPEC`
+
+Concatenate any number of space-separated COMMIT_SPEC or BRANCH_SPEC (provided they are base layers only) passed on standard-input into a commit on DB_SPEC
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
+  * `-h`, `--help`=[value]:
+  print help for the `concat` command
+
+  * `-a`, `--author`=[value]:
+  author to place on the commit
+
+  * `-m`, `--message`=[value]:
+  message to associate with the commit
+
+  * `-j`, `--json`=[value]:
+  Return a JSON readable commit identifier
 
 ### branch create
 
 `terminusdb branch create BRANCH_SPEC OPTIONS`
 
 Create a branch.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `branch create` sub command
@@ -347,6 +515,9 @@ Create a branch.
 
 Delete a branch.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `branch delete` sub command
 
@@ -355,6 +526,9 @@ Delete a branch.
 `terminusdb list DB_SPEC [.. DB_SPECN] OPTIONS`
 
 List available databases.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `list` command
@@ -373,6 +547,9 @@ List available databases.
 `terminusdb db create DATABASE_SPEC OPTIONS`
 
 Create a database.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `db create` sub command
@@ -407,6 +584,9 @@ Create a database.
 
 Delete a database.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `db delete` sub command
 
@@ -421,6 +601,9 @@ Delete a database.
 `terminusdb db update DATABASE_SPEC OPTIONS`
 
 Update a database setting the OPTIONS in an existing database.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `db update` sub command
@@ -446,6 +629,9 @@ Update a database setting the OPTIONS in an existing database.
 
 Insert documents.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `doc insert` sub command
 
@@ -457,6 +643,12 @@ Insert documents.
 
   * `-g`, `--graph_type`, `--graph-type`=[value]:
   graph type (instance or schema)
+
+  * `-r`, `--require-migration`=[value]:
+  require an inferred migration (assuming this is a schema change)
+
+  * `-x`, `--allow-destructive-migration`=[value]:
+  allow inferred migration to be destructive (assuming this is a schema change)
 
   * `-d`, `--data`=[value]:
   document data
@@ -473,6 +665,9 @@ Insert documents.
 
 Delete documents.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `doc delete` sub command
 
@@ -484,6 +679,12 @@ Delete documents.
 
   * `-g`, `--graph_type`, `--graph-type`=[value]:
   graph type (instance or schema)
+
+  * `-r`, `--require-migration`=[value]:
+  require an inferred migration (assuming this is a schema change)
+
+  * `-x`, `--allow-destructive-migration`=[value]:
+  allow inferred migration to be destructive (assuming this is a schema change)
 
   * `-i`, `--id`=[value]:
   document id to delete
@@ -500,6 +701,9 @@ Delete documents.
 
 Replace documents.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `doc replace` sub command
 
@@ -511,6 +715,12 @@ Replace documents.
 
   * `-g`, `--graph_type`, `--graph-type`=[value]:
   graph type (instance or schema)
+
+  * `-r`, `--require-migration`=[value]:
+  require an inferred migration (assuming this is a schema change)
+
+  * `-x`, `--allow-destructive-migration`=[value]:
+  allow inferred migration to be destructive (assuming this is a schema change)
 
   * `-d`, `--data`=[value]:
   document data
@@ -526,6 +736,9 @@ Replace documents.
 `terminusdb doc get DATABASE_SPEC OPTIONS`
 
 Query documents.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `doc get` sub command
@@ -551,6 +764,9 @@ Query documents.
   * `-i`, `--id`=[value]:
   id of document to retrieve
 
+  * `--ids`=[value]:
+  list of document ids to retrieve
+
   * `-t`, `--type`=[value]:
   type of document to retrieve
 
@@ -572,6 +788,9 @@ Create a new role with the listed actions. Actions may be any of:
  "meta_write_access", "commit_read_access", "commit_write_access",
  "manage_capabilities"
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `role create` sub command
 
@@ -580,6 +799,9 @@ Create a new role with the listed actions. Actions may be any of:
 `terminusdb role create ROLE_ID_OR_ROLE_NAME`
 
 Delete a role from the system database
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `role delete` sub command
@@ -593,6 +815,9 @@ Delete a role from the system database
 
 Update a role from the system database
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `role update` sub command
 
@@ -604,6 +829,9 @@ Update a role from the system database
 `terminusdb role get <ROLE_ID_OR_ROLE_NAME>`
 
 Get a role description from name or id, or all roles if unspecified.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `role get` sub command
@@ -620,6 +848,9 @@ Get a role description from name or id, or all roles if unspecified.
 
 Create an organization with a given name.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `organization create` sub command
 
@@ -628,6 +859,9 @@ Create an organization with a given name.
 `terminusdb organization delete ORGANIZATION_NAME_OR_ID`
 
 Create an organization with a given name or id.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `organization delete` sub command
@@ -640,6 +874,9 @@ Create an organization with a given name or id.
 `terminusdb organization get <ORGANIZATION_NAME_OR_ID>`
 
 Get an organization from its name or id, or list all if unspecified.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `organization get` sub command
@@ -656,6 +893,9 @@ Get an organization from its name or id, or list all if unspecified.
 
 Create a user with a given name USER
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `user create` sub command
 
@@ -668,6 +908,9 @@ Create a user with a given name USER
 
 Delete a user with a given name or ID.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `user delete` sub command
 
@@ -679,6 +922,9 @@ Delete a user with a given name or ID.
 `terminusdb user get <USER_NAME_OR_ID>`
 
 Get a user from its name or id, or list all if unspecified.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `organization get` sub command
@@ -696,7 +942,10 @@ Get a user from its name or id, or list all if unspecified.
 
 `terminusdb user password USER`
 
-Change passowrd for user USER
+Change password for user USER
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `user create` sub command
@@ -710,14 +959,14 @@ Change passowrd for user USER
 
 Grant ROLE1 ... ROLEN over SCOPE to USER
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
-  * `-i`, `--ids`=[value]:
-  Should the User, Scope and Role be treated as IDs or names
-
   * `-s`, `--scope_type`, `--scope-type`=[value]:
-  Should the scope be interpreted as a `database` (default) or an `organization`
+  Should the scope be interpreted as a `database` (default) or an `organization`. If `ids` is specified then the parameters are assumed to be ids rather than names.
 
 ### capability revoke
 
@@ -725,20 +974,23 @@ Grant ROLE1 ... ROLEN over SCOPE to USER
 
 Revoke ROLE1 ... ROLEN over SCOPE from USER
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
 
-  * `-i`, `--ids`=[value]:
-  Should the User, Scope and Role be treated as IDs or names
-
   * `-s`, `--scope_type`, `--scope-type`=[value]:
-  Should the scope be interpreted as a `database` (default) or an `organization`
+  Should the scope be interpreted as a `database` (default) or an `organization`. If `ids` is specified then the parameters are assumed to be ids rather than names.
 
 ### store init
 
 `terminusdb store init OPTIONS`
 
 Initialize a store for TerminusDB.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `store init` sub command
@@ -755,6 +1007,9 @@ Initialize a store for TerminusDB.
 
 Dump an RDF string.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `triples dump` sub command
 
@@ -766,6 +1021,9 @@ Dump an RDF string.
 `terminusdb triples update GRAPH_SPEC FILE`
 
 Update from an RDF file (replaces current content).
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `triples update` sub command
@@ -785,6 +1043,9 @@ Update from an RDF file (replaces current content).
 
 Load triples from RDF file (Appending new).
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `triples load` sub command
 
@@ -803,14 +1064,20 @@ Load triples from RDF file (Appending new).
 
 Add a remote.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `remote add` sub command
 
 ### remote remove
 
-`terminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS`
+`terminusdb remote remove DATABASE_SPEC REMOTE_NAME OPTIONS`
 
 Remove a remote.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `remote remove` sub command
@@ -821,6 +1088,9 @@ Remove a remote.
 
 Set the URL of a remote.
 
+  * `--impersonate`=[value]:
+  impersonate a particular user
+
   * `-h`, `--help`=[value]:
   print help for the `remote set-url` sub command
 
@@ -829,6 +1099,9 @@ Set the URL of a remote.
 `terminusdb remote get-url DATABASE_SPEC REMOTE_NAME OPTIONS`
 
 Get the URL of a remote.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `remote get-url` sub command
@@ -841,6 +1114,9 @@ Get the URL of a remote.
 `terminusdb remote list DATABASE_SPEC OPTIONS`
 
 List remotes.
+
+  * `--impersonate`=[value]:
+  impersonate a particular user
 
   * `-h`, `--help`=[value]:
   print help for the `remote list` sub command

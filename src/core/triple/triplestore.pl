@@ -1,4 +1,5 @@
 :- module(triplestore, [
+              safe_graph_name_length_ok/1,
               safe_create_named_graph/3,
               safe_named_graph_exists/2,
               safe_open_named_graph/3,
@@ -32,7 +33,7 @@
 
 :- use_module(core(transaction)).
 
-:- use_module(config(terminus_config), [db_path/1]).
+:- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1, lru_cache_size/1]).
 
 :- use_module(library(apply)).
 :- use_module(library(debug)).
@@ -41,6 +42,8 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(lists)).
 :- use_module(library(url)).
+
+:- use_module(check_db).
 
 :- reexport(library(terminus_store)).
 
@@ -69,8 +72,17 @@ checkpoint(_DB_ID,_Graph_ID) :-
  * Opens the default triple store, a directory store with the path retrieved from file_utils:db_path/1.
  */
 default_triple_store(Triple_Store) :-
+    grpc_label_endpoint(Endpoint),
+    !,
     db_path(Path),
-    open_directory_store(Path,Triple_Store).
+    assert_database_version_is_current(Path),
+    lru_cache_size(Cache_Size),
+    open_grpc_store(Path, Endpoint, 1, Cache_Size, Triple_Store).
+default_triple_store(Triple_Store) :-
+    db_path(Path),
+    assert_database_version_is_current(Path),
+    lru_cache_size(Cache_Size),
+    open_archive_store(Path,Cache_Size,Triple_Store).
 
 /**
  * memory_triple_store(-Triple_Store) is det.
@@ -190,6 +202,18 @@ safe_create_named_graph(Store,Graph_ID,Graph_Obj) :-
     create_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
 /*
+ * graph_name_valid(+Graph_ID) is semidet.
+ *
+ * Succeeds if the given name for a graph can be used, and fails otherwise.
+ * A graph name is bad if it is too long, cause we cannot create a
+ * label file in that case.
+ */
+safe_graph_name_length_ok(Graph_ID) :-
+    www_form_encode(Graph_ID,Safe_Graph_ID),
+    atom_length(Safe_Graph_ID, Len),
+    Len < 250.
+
+/*
  * safe_named_graph_exists(+Store,+Graph_ID) is semidet.
  *
  * succeeds if the graph exists, and fails otherwise
@@ -206,8 +230,8 @@ safe_open_named_graph(Store, Graph_ID, Graph_Obj) :-
     www_form_encode(Graph_ID,Safe_Graph_ID),
     open_named_graph(Store,Safe_Graph_ID,Graph_Obj).
 
-%pinned_graph_label(X) :-
-%    system_schema_name(X).
+pinned_graph_label(X) :-
+    system_schema_name(X).
 pinned_graph_label(X) :-
     repository_ontology(X).
 pinned_graph_label(X) :-
@@ -349,7 +373,10 @@ unlink_object(Gs, ID) :-
 
 pre_convert_node(X,A) :-
     (   nonvar(X)
-    ->  atom_string(X,A)
+    ->  (   X = id(_)
+        ->  A = X
+        ;   atom_string(X,A)
+        )
     ;   true).
 
 post_convert_node(A,X) :-

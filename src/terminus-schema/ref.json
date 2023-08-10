@@ -4,6 +4,7 @@
       "@description" : "This is the Ref schema. It gives a specification for storage of references, branches and commits in our commit graph.",
       "@authors" : ["Gavin Mendel-Gleason", "Matthijs van Otterdijk"]
   },
+  "@metadata" : { "schema_version" : "v1.0.1" },
   "@base" : "terminusdb://ref/data/",
   "@schema" : "http://terminusdb.com/schema/ref#",
   "layer" : "http://terminusdb.com/schema/layer#",
@@ -43,7 +44,9 @@
                         "message" : "The message associated with the commit.",
                         "identifier" : "The identifier of the commit.",
                         "timestamp" : "The timestamp for the commit.",
-                        "parent" : "The previous commit (if one exists)."
+                        "metadata" : "User supplied metadata for commit as JSON.",
+                        "parent" : "The previous commit (if one exists).",
+                        "migration" : "The schema migration script (if one exists)."
                       }
   },
   "@key" : { "@type" : "Lexical",
@@ -55,8 +58,12 @@
   "message" : "xsd:string",
   "identifier" : "xsd:string",
   "timestamp" : "xsd:decimal",
+  "metadata" : { "@type" : "Optional",
+                 "@class" : "sys:JSON"},
   "parent" : { "@type" : "Optional",
-               "@class" : "Commit" } }
+               "@class" : "Commit" },
+  "migration": { "@type": "Optional",
+                 "@class": "xsd:string" } }
 
 { "@id" : "InitialCommit",
   "@type" : "Class",

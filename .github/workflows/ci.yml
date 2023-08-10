@@ -6,10 +6,18 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 10.1.4
-  CURRENT_REPO_VERSION: 10.1.5
+  LAST_RELEASED_VERSION: 11.1.1
+  CURRENT_REPO_VERSION: 11.1.1-1
 
 jobs:
+  openapi_lint:
+    name: OpenAPI linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - run: npx @redocly/cli lint docs/openapi.yaml
+
 
   is_duplicate_run:
     name: Duplicate run?
@@ -41,12 +49,13 @@ jobs:
           github.repository == 'terminusdb/terminusdb' &&
           github.event_name == 'push' && (
             github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/add_vectorlink' ||
             startsWith(github.ref, 'refs/tags/v')
           )
         }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: dorny/paths-filter@v2
         id: filter
@@ -70,7 +79,7 @@ jobs:
       )
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Run Cog to update versions in files
         run: |
@@ -97,6 +106,13 @@ jobs:
     needs: versions
     uses: ./.github/workflows/build.yml
 
+  arm64_docker:
+    name: Trigger arm64 build
+    needs:
+      - is_build_required
+    uses: ./.github/workflows/arm.yml
+    if: needs.is_build_required.outputs.push_docker_required == 'true'
+
   check:
     name: Check
     needs: build
@@ -105,13 +121,7 @@ jobs:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}
 
-  benchmark:
-    name: Benchmark
-    needs: build
-    uses: ./.github/workflows/benchmark.yml
-
-
-  # This is required for status checks.
+ # This is required for status checks.
   all_checks_pass_with_build:
     name: All checks pass
     runs-on: ubuntu-latest
@@ -125,10 +135,10 @@ jobs:
     needs: all_checks_pass_with_build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: terminusdb-server-docker-image
 
@@ -164,25 +174,48 @@ jobs:
     needs:
       - is_build_required
       - all_checks_pass_with_build
+      - arm64_docker
     if: needs.is_build_required.outputs.push_docker_required == 'true'
 
     steps:
+      - uses: actions/checkout@v3
+
       - name: Download Docker image
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: terminusdb-server-docker-image
 
-      - name: Push image to Docker Container Registry
-        run: |
-          echo '${{ secrets.DOCKER_PASS }}' | docker login -u terminusdb --password-stdin
+      - name: Download Docker image arm64
+        uses: actions/download-artifact@v3
+        with:
+          name: terminusdb-server-docker-image-arm64
 
-          # Strip git ref prefix from version
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: terminusdb
+          password: ${{ secrets.DOCKER_PASS }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Load images
+        run: |
+          docker load < terminusdb-server-docker-image.tar.gz
+          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
+          docker push terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
+          docker rmi terminusdb/terminusdb-server:local
+          docker load < terminusdb-server-docker-image-arm64.tar.gz
+          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          docker rmi terminusdb/terminusdb-server:local
+
+      - name: Determine image tags to push
+        run: |
           VERSION=$(echo "$GITHUB_REF" | sed -e 's,.*/\(.*\),\1,')
 
           # Use Docker `dev` tag convention for main branch
           [ "$VERSION" == "main" ] && VERSION=dev
-
-          docker load < terminusdb-server-docker-image.tar.gz
 
           # Image identifiers
           LOCAL_IMAGE=terminusdb/terminusdb-server:local
@@ -190,21 +223,29 @@ jobs:
           DEV_COMMIT_IMAGE=terminusdb/terminusdb-server:$VERSION-$GITHUB_SHA
           LATEST_IMAGE=terminusdb/terminusdb-server:latest
 
-          # Tag and push the version image
-          docker tag $LOCAL_IMAGE $VERSION_IMAGE
-          docker push $VERSION_IMAGE
+          TAGS="$VERSION_IMAGE"
 
-          # Tag and push the dev-commit image. This is removed later.
           if [ "$VERSION" == "dev" ]; then
-            docker tag $LOCAL_IMAGE $DEV_COMMIT_IMAGE
-            docker push $DEV_COMMIT_IMAGE
+            TAGS="${TAGS},${DEV_COMMIT_IMAGE}"
           fi
 
           # Tag and push the latest image when a version tag is pushed
-          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v") ]; then
-             docker tag $LOCAL_IMAGE $LATEST_IMAGE
-             docker push $LATEST_IMAGE
+          # We also make sure that rc and beta are not pushed to the latest tag!
+          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v" | grep -v "rc" | grep -v "beta") ]; then
+            # Get the major tag, for instance v11 if the version is v11.0.4
+            VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
+            TAGS="${TAGS},${LATEST_IMAGE},terminusdb/terminusdb-server:${VERSION_MAJOR}"
           fi
+
+          echo "docker_tags=${TAGS}" >> $GITHUB_ENV
+
+      - name: Create new image manifest
+        run: |
+          TAGS="${{ env.docker_tags }}"
+          for TAG in ${TAGS//,/ }
+          do
+              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          done
 
   trigger_enterprise_build:
     name: Trigger enterprise build

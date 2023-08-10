@@ -1,5 +1,9 @@
 [workspace]
 members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib"]
+resolver = "1"
 
 [profile.release]
 debug = 1
+
+[patch.crates-io]
+#terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}

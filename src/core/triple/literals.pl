@@ -38,7 +38,6 @@
 :- use_module(core(triple/casting), [typecast/4]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
-:- use_module(library(plunit)).
 /*
  * date_time_string(-Date_Time,+String) is det.
  * date_time_string(+Date_Time,-String) is det.
@@ -145,7 +144,7 @@ gyear_string(GYear, String) :-
     (   Offset =:= 0
     ->  format(string(String), '~|~`0t~d~4+', [Year])
     ;   offset_to_sign_hour_minute(Offset,Sign,Hour,Minute),
-        format(string(String), '~|~`0t~d~4+~|~`0t~d~2+:~|~`0t~d~2+', [Year,Sign,Hour,Minute])
+        format(string(String), '~|~`0t~d~4+~w~|~`0t~d~2+:~|~`0t~d~2+', [Year,Sign,Hour,Minute])
     ).
 gyear_string(gyear(Year,Offset), String) :-
     nonvar(String),
@@ -270,7 +269,7 @@ duration_string(Duration,String) :-
     (   D \= 0
     ->  format(atom(DP),'~wD',[D])
     ;   DP = ''),
-    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0)
+    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0.0)
     ->  TP = 'T'
     ;   TP = ''),
     (   HH \= 0
@@ -279,7 +278,7 @@ duration_string(Duration,String) :-
     (   MM \= 0
     ->  format(atom(MMP),'~wM',[MM])
     ;   MMP = ''),
-    (   SS \= 0
+    (   SS \= 0.0
     ->  format(atom(SSP),'~wS',[SS])
     ;   SSP = ''),
     atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom),
@@ -366,56 +365,33 @@ normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
     %   Otherwise walk on by...
     ;   Y = YF).
 
-ground_object_storage(String@Lang, value(S)) :-
-    !,
-    format(string(S), '~q@~q', [String,Lang]).
-ground_object_storage(Val^^Type, value(S)) :-
-    !,
-    (   is_number_type(Type)
-    ->  format(string(S), '~q^^~q', [Val,Type])
-    ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], Cast^^_)
-    ->  format(string(S), '~q^^~q', [Cast,Type])
-    ;   format(string(S), '~q^^~q', [Val,Type])).
+ground_object_storage(String@Lang, lang(String,Lang)) :-
+    !.
+ground_object_storage(Val^^Type, value(Val,Type)) :-
+    !.
 ground_object_storage(O, node(O)).
 
 /*
  * We can only make a concrete referrent if all parts are bound.
  */
-nonvar_literal(Atom@Lang, Literal) :-
-    atom(Atom),
-    !,
-    atom_string(Atom, String),
-    nonvar_literal(String@Lang, Literal).
-nonvar_literal(Atom^^Type, Literal) :-
-    atom(Atom),
-    !,
-    atom_string(Atom, String),
-    nonvar_literal(String^^Type, Literal).
-nonvar_literal(String@Lang, value(S)) :-
+nonvar_literal(String@Lang, lang(String,Lang)) :-
     nonvar(Lang),
     nonvar(String),
-    !,
-    format(string(S), '~q@~q', [String,Lang]).
-nonvar_literal(Val^^Type, value(S)) :-
+    !.
+nonvar_literal(Term^^Type, value(Term,Type)) :-
     nonvar(Type),
-    nonvar(Val),
-    !,
-    (   is_number_type(Type)
-    ->  format(string(S), '~q^^~q', [Val,Type])
-    ;   typecast(Val^^Type, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], Cast^^_)
-    ->  format(string(S), '~q^^~q', [Cast,Type])
-    ;   format(string(S), '~q^^~q', [Val,Type])).
+    nonvar(Term),
+    !.
 nonvar_literal(Val^^Type, _) :-
     once(var(Val) ; var(Type)),
     !.
 nonvar_literal(Val@Lang, _) :-
     once(var(Val) ; var(Lang)),
     !.
+nonvar_literal(id(Id), id(Id)) :-
+    !.
 nonvar_literal(O, node(S)) :-
     nonvar(O),
-
     atom_string(O,S).
 
 object_storage(O,V) :-
@@ -462,25 +438,15 @@ storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),
     storage_value(X1,X2).
 
-/*
- * Too much unnecessary marshalling...
- */
-storage_object(value(S),O) :-
-    (   term_string(Term,S)
-    ->  (   Term = X^^T
-        ->  storage_literal(X^^T,O)
-        ;   Term = X@Lang
-        ->  storage_literal(X@Lang,O)
-        ;   throw(error(storage_unknown_type_error(Term),_)))
-    ;   throw(error(storage_bad_value(S),_))).
+storage_object(lang(S,L),S@L).
+storage_object(value(S,T),S^^T).
+storage_object(id(Id),id(Id)).
 storage_object(node(S),O) :-
     (   nonvar(O)
     ->  (   atom(O)
         ->  atom_string(O,S)
         ;   O = S)
     ;   atom_string(O,S)).
-
-
 
 try_prefix_uri(X,_,X) :-
     nonvar(X),

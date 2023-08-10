@@ -34,7 +34,6 @@
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
 :- use_module(library(dicts)).
-:- use_module(library(plunit)).
 
 % Currently a bug in groundedness checking.
 %:- use_module(library(mavis)).
@@ -171,10 +170,10 @@ context_prefix_expand(K,Context,Key) :-
     (   uri_has_protocol(K)
     ->  K = Key
     %   Prefixed URI
-    ;   re_match('^[^:]*:[^:]*',K) % uri_has_prefix(K)
-    ->  split_atom(K,':',[Prefix,Suffix]),
-        (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,Suffix,Key)
+    ;   uri_has_prefix_unsafe(K, Groups)
+    ->  atom_string(Prefix, Groups.prefix),
+        (   get_dict(Prefix, Context, Expanded)
+        ->  atom_concat(Expanded,(Groups.suffix),Key)
         ;   throw(error(key_has_unknown_prefix(K),_)))
     %   Keyword
     ;   is_at(K)
@@ -206,11 +205,11 @@ prefix_expand(K,Context,Key) :-
     %   Is already qualified
     (   uri_has_protocol(K)
     ->  K = Key
-    %   Is prefixed
-    ;   re_match('^[^:]*:[^:]*',K) % uri_has_prefix(K)
-    ->  split_atom(K,':',[Prefix,Suffix]),
+    %   Is prefixed (but does not check for protocol)
+    ;   uri_has_prefix_unsafe(K, Groups)
+    ->  atom_string(Prefix, Groups.prefix),
         (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,Suffix,Key)
+        ->  atom_concat(Expanded,(Groups.suffix),Key)
         ;   throw(error(key_has_unknown_prefix(K), _)))
     ;   is_at(K)
     ->  K = Key
@@ -288,6 +287,15 @@ test(expand_path, [])
     Result = (JSON_LD.'@context'),
 
     json{ '@base':'terminusdb:///system/data/'} :< Result.
+
+test(expand_prefix_with_colon, []) :-
+    Prefixes = _{'@base': "terminusdb:///data/",
+                 '@schema': "terminusdb:///schema#",
+                 'a': "http://example.org/a/"},
+
+    prefix_expand("@base:foo:bar", Prefixes, 'terminusdb:///data/foo:bar'),
+    prefix_expand("@schema:foo:bar", Prefixes, 'terminusdb:///schema#foo:bar'),
+    prefix_expand("a:foo:bar", Prefixes, 'http://example.org/a/foo:bar').
 
 :- end_tests(jsonld_expand).
 

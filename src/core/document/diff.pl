@@ -47,7 +47,6 @@ simple_diff(Before,After,Keep,Cost,Diff,Options) :-
     (   simple_diff(Before,After,Keep,New_Diff,State,0,New_Cost,Options),
         nb_setarg(1,State,New_Cost),
         nb_setarg(2,State,New_Diff),
-        %format(user_error,'~nNew_Cost: ~q', [New_Cost]),
         fail
     ;   best_cost(State, Cost),
         best_diff(State, Diff)
@@ -79,12 +78,11 @@ simple_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     !,
     is_list(After),
     simple_list_diff(Before,After,Keep,Diff,State,Cost,New_Cost,Options).
-simple_diff(Before,After,_,_,_,_,_,_) :-
+simple_diff(Before,After,_Keep,matches,_State,Cost,Cost,_Options) :-
     % Copy is implicit
     string_normalise(Before, Value),
     string_normalise(After, Value),
-    !,
-    fail.
+    !.
 simple_diff(Before,After,_Keep,Diff,_State,Cost,New_Cost,_Options) :-
     Diff = json{ '@op' : "SwapValue",
                  '@before' : Before,
@@ -98,7 +96,22 @@ string_normalise(Value, Norm) :-
     ).
 
 simple_key_diff([],_Before,_After,_Keep,[],_State,Cost,Cost,_Options).
+simple_key_diff(['@id'|Keys],Before,After,Keep,Output_Keys,State,Cost,New_Cost,Options) :-
+    !, % Ids must be treated specially
+    (   option(subdocument(true), Options)
+    ->  Output_Keys = Rest
+    ;   do_or_die(
+            (   get_dict('@id',Before,Before_Value),
+                string_normalise(Before_Value, Value),
+                get_dict('@id',After,After_Value),
+                string_normalise(After_Value, Value)
+            ),
+            error(explicitly_copied_key_has_changed('@id',Before,After),_)),
+        Output_Keys = ['@id'-Value|Rest]
+    ),
+    simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cost,Options) :-
+    % This is part of a "keep" strategy
     get_dict(Key,Keep,true),
     !,
     do_or_die(
@@ -107,9 +120,10 @@ simple_key_diff([Key|Keys],Before,After,Keep,[Key-Value|Rest],State,Cost,New_Cos
             get_dict(Key,After,After_Value),
             string_normalise(After_Value, Value)
         ),
-        error(explicitly_copied_key_has_changed(Key),_)),
+        error(explicitly_copied_key_has_changed(Key,Before,After),_)),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Options) :-
+    % here we have to check the sub element diff
     get_dict(Key,Before,Sub_Before),
     get_dict(Key,After,Sub_After),
     !,
@@ -119,14 +133,14 @@ simple_key_diff([Key|Keys],Before,After,Keep,New_Keys,State,Cost,New_Cost,Option
     best_cost(State,Best_Cost),
     Cost_LB is Cost + 1,
     Cost_LB < Best_Cost,
-    (   simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,Options)
-    *-> (   \+ (is_dict(Sub_Diff),
-                get_dict('@op', Sub_Diff, "KeepList"))
-        ->  New_Keys = [Key-Sub_Diff|Rest]
-        ;   New_Keys = Rest
-        )
-    ;   New_Keys = Rest,
-        Cost = Cost1
+    merge_options(_{subdocument:true}, Options, New_Options),
+    simple_diff(Sub_Before,Sub_After,Sub_Keep,Sub_Diff,State,Cost,Cost1,New_Options),
+    (   \+ (   is_dict(Sub_Diff),
+               get_dict('@op', Sub_Diff, "KeepList")
+           ;   Sub_Diff = matches
+           )
+    ->  New_Keys = [Key-Sub_Diff|Rest]
+    ;   New_Keys = Rest
     ),
     simple_key_diff(Keys,Before,After,Keep,Rest,State,Cost1,New_Cost,Options).
 simple_key_diff([Key|Keys],Before,After,Keep,[Key-Sub_Diff|Rest],State,Cost,New_Cost,Options) :-
@@ -204,7 +218,10 @@ deep_list_diff_base(Before,After,Keep,Diff,State,Cost,New_Cost,Options) :-
     length(Before, Length),
     length(After, Length),
     mapm({State,Keep,Options}/
-         [B,A,D,Cost,New_Cost]>>simple_diff(B,A,Keep,D,State,Cost,New_Cost,Options),
+         [B,A,D,Cost,New_Cost]>>(
+             simple_diff(B,A,Keep,D,State,Cost,New_Cost,Options),
+             D \= matches
+         ),
          Before,
          After,
          Diff,
@@ -358,13 +375,18 @@ create_patch([deleted|Operations],[Head|List1],List2,Patch,Options) :-
     create_patch(Operations,List1,List2,deleted,[Head],Patch,Options).
 
 lcs_list_diff(Before,After,_Keep,Patch,State,Cost,New_Cost,Options) :-
-    hash_terms(Before,Before_Hash),
-    hash_terms(After,After_Hash),
-    '$lcs':list_diff(Before_Hash,After_Hash,Changed),
-    create_patch(Changed,Before,After,Patch,Options),
-    patch_cost(Patch,Patch_Cost),
-    New_Cost is Cost + Patch_Cost,
-    cost_bounded(State,New_Cost).
+    length(Before, N),
+    length(After, M),
+    (   N * M > 1000000
+    ->  fail
+    ;   hash_terms(Before,Before_Hash),
+        hash_terms(After,After_Hash),
+        '$lcs':list_diff(Before_Hash,After_Hash,Changed),
+        create_patch(Changed,Before,After,Patch,Options),
+        patch_cost(Patch,Patch_Cost),
+        New_Cost is Cost + Patch_Cost,
+        cost_bounded(State,New_Cost)
+    ).
 
 % Attempts to estimate a cost for a patch
 patch_cost(Patch,Cost) :-
@@ -513,7 +535,8 @@ test(simple_diff, []) :-
                  name:"Ludo"
                 },
     simple_diff(Before,After,Patch,[keep(json{})]),
-    Patch = json{name:json{'@after':"Ludo",
+    Patch = json{'@id':"Person/Ludwig",
+                 name:json{'@after':"Ludo",
                            '@before':"Ludwig",
                            '@op':"SwapValue"}
                 }.
@@ -558,14 +581,15 @@ test(simple_diff_deep_value, []) :-
                                  country : "Austria"}
                 },
     simple_diff(Before,After,Patch,[keep(json{address : json{ city: true }})]),
-    Patch = json{ name:json{'@after':"Ludo",
+    Patch = json{ '@id':"Person/Ludwig",
+                  name:json{'@after':"Ludo",
                             '@before':"Ludwig",
                             '@op':"SwapValue"},
                   address: json{ city : "Vienna" }
                 }.
 
 test(simple_diff_error, [
-         error(explicitly_copied_key_has_changed('@id'),
+         error(explicitly_copied_key_has_changed('@id',_,_),
                _)
      ]) :-
 
@@ -660,7 +684,8 @@ test(deep_list_diff_append, []) :-
 
     simple_diff(Before,After,Patch,[keep(json{})]),
 
-    Patch = json{addresses:
+    Patch = json{'@id' : "Person/Ludwig",
+                 addresses:
                  json{'@op':"CopyList",
                       '@to':1,
                       '@rest':
@@ -765,5 +790,198 @@ test(deep_list_patch, []) :-
     After = json{ asdf: json{ bar: [json{ baz: 'quuz' }] } },
     simple_diff(Before,After,Diff,[keep(json{})]),
     simple_patch(Diff,Before,success(After),[]).
+
+:- use_module(library(http/json)).
+
+test(deep_list_id_patch, []) :-
+    OldAtom = '{
+  "@id": "TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+  "@type": "TEST",
+  "lives_at": [{
+      "@id": "Person/4444bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+      "@type": "Address",
+      "AddressLine1": "same to test",
+      "City": "Somwhere",
+      "Country": "New Zeeland",
+      "postalCode": "99"
+    }]}',
+    NewAtom = '{
+  "@id": "TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+  "@type": "TEST",
+  "lives_at": [{
+      "@id": "Person/9addd78bafbc4290f59ca851e0307c6918f7205207d93ac1b2a1f796a94587/permanentAddress/Address/5879ec85b65bb0caaa03f48e99073a9d4302c31ec3c3a382889a12980899e95f",
+      "@type": "Address",
+      "AddressLine1": "original second address",
+      "City": "Same",
+      "Country": "New Zeeland",
+      "postalCode": "PGD"
+    }]}',
+    atom_json_dict(OldAtom, Old, []),
+    atom_json_dict(NewAtom, New, []),
+    simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
+
+    Result = json{ '@id':"TEST/4489199036b83dbf79a6e7527a1594fbd416d11b9dde2f8a67fe6fa495dae433",
+				   lives_at:[ json{ 'AddressLine1':json{ '@after':"same to test",
+										                 '@before':"original second address",
+										                 '@op':"SwapValue"
+									                   },
+							        'City':json{ '@after':"Somwhere",
+									             '@before':"Same",
+									             '@op':"SwapValue"
+								               },
+							        postalCode:json{ '@after':"99",
+									                 '@before':"PGD",
+									                 '@op':"SwapValue"
+									               }
+							      }
+						    ]
+				 }.
+
+test(subdocument_patch, []) :-
+    Old = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244',
+         '@type':'1d43d0276b25d0bf77843843c407f8ec',
+         a:"pickles and eggs",
+         b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/3',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:3}},
+    New = json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244', '@type':'1d43d0276b25d0bf77843843c407f8ec',
+         a:"pickles and eggs",
+         b:json{'@id':'1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244/b/de28157020c151124517685fdeaa108f/4',
+                '@type':de28157020c151124517685fdeaa108f,
+                c:4}},
+    simple_diff(New, Old, Result, [keep(json{'@id' : true})]),
+    Result = json{'@id':"1d43d0276b25d0bf77843843c407f8ec/dec81f1900882d8c2fee9c8a8a644643fa46a8a96dc13c92adaa1ab899fd5244", b:json{c:json{'@after':3, '@before':4, '@op':"SwapValue"}}}.
+
+test(simple_key_diff_type, []) :-
+    Keys = ['@id', '@type', desc, vehicle],
+    Before = json{'@id':"People/1", '@type':"People", desc:["In 2015.", "Luke Skywalker"], vehicle:["Vehicle/14", "Vehicle/30"]},
+    After = json{'@id':"People/1", '@type':"People", desc:["In 2015.", "Luke Skywalker"], vehicle:["Vehicle/14", "Vehicle/24", "Vehicle/30"]},
+    simple_key_diff(Keys, Before, After,
+                    json{'@id':true},
+                    Result,
+                    best(inf, json{}),
+                    0,
+                    Cost,
+                    [keep(json{'@id':true})]),
+    !,
+    Cost = 6,
+    Result = [ '@id'-"People/1",
+		       vehicle - json{ '@op':"CopyList",
+				               '@rest':json{ '@after':["Vehicle/24"],
+						                     '@before':[],
+						                     '@op':"SwapList",
+						                     '@rest':json{'@op':"KeepList"}
+					                       },
+				               '@to':1
+				             }
+		     ].
+
+test(basetype_set, []) :-
+    Old  = _{
+               '@id': "People/1",
+               '@type': "People",
+               desc: [
+                   "In 2015.",
+                   "Luke Skywalker"
+               ],
+               vehicle: [
+                   "Vehicle/14",
+                   "Vehicle/30"
+               ]
+           },
+    New = _{
+              '@id': "People/1",
+              '@type': "People",
+              desc: [
+                  "In 2015.",
+                  "Luke Skywalker"
+              ],
+              vehicle: [
+                  "Vehicle/14",
+                  "Vehicle/24",
+                  "Vehicle/30"
+              ]
+          },
+    simple_diff(Old, New, Result, [keep(json{'@id' : true})]),
+
+    Result = json{'@id':"People/1",
+                  vehicle:json{'@op':"CopyList",
+                               '@rest':json{'@after':["Vehicle/24"],
+                                            '@before':[],
+                                            '@op':"SwapList",
+                                            '@rest':json{'@op':"KeepList"}},
+                               '@to':1}}.
+
+
+
+
+test(mixed, []) :-
+    OldVal = json{
+                 '@id': "People/1",
+                 '@type': "People",
+                 desc: [
+                     "In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+                     "Luke Skywalker is a fictional character and the main protagonist of the original film trilogy of the Star Wars franchise created by George Lucas. The character, portrayed by Mark Hamill, is an important figure in the Rebel Alliance's struggle against the Galactic Empire. He is the twin brother of Rebellion leader Princess Leia Organa of Alderaan, a friend and brother-in-law of smuggler Han Solo, an apprentice to Jedi Masters Obi-Wan \"Ben\" Kenobi and Yoda, the son of fallen Jedi Anakin Skywalker (Darth Vader) and Queen of Naboo/Republic Senator Padmé Amidala and maternal uncle of Kylo Ren / Ben Solo. The now non-canon Star Wars expanded universe depicts him as a powerful Jedi Master, husband of Mara Jade, the father of Ben Skywalker and maternal uncle of Jaina, Jacen and Anakin Solo.\n\nHappy go lucky."
+                 ],
+                 vehicle: [
+                     "Vehicle/14",
+                     "Vehicle/30"
+                 ]
+             },
+    NewVal = json{
+                 '@id': "People/1",
+                 '@type': "People",
+                 desc: [
+                     "KITTY In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+                     "Luke Skywalker is a fictional character and the main protagonist of the original film trilogy of the Star Wars franchise created by George Lucas. The character, portrayed by Mark Hamill, is an important figure in the Rebel Alliance's struggle against the Galactic Empire. He is the twin brother of Rebellion leader Princess Leia Organa of Alderaan, a friend and brother-in-law of smuggler Han Solo, an apprentice to Jedi Masters Obi-Wan \"Ben\" Kenobi and Yoda, the son of fallen Jedi Anakin Skywalker (Darth Vader) and Queen of Naboo/Republic Senator Padmé Amidala and maternal uncle of Kylo Ren / Ben Solo. The now non-canon Star Wars expanded universe depicts him as a powerful Jedi Master, husband of Mara Jade, the father of Ben Skywalker and maternal uncle of Jaina, Jacen and Anakin Solo.\n\nHappy go lucky."
+                 ],
+                 vehicle: [
+                     "Vehicle/14",
+                     "Vehicle/24",
+                     "Vehicle/30"
+                 ]
+             },
+    simple_diff(OldVal, NewVal, Result, [keep(json{'@id' : true})]),
+
+    Result = json{ '@id':"People/1",
+				   desc:json{ '@op':"PatchList",
+					      '@patch':[ json{ '@after':"KITTY In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+							       '@before':"In 2015, the character was selected by Empire magazine as the 50th greatest movie character of all time.[2] On their list of the 100 Greatest Fictional Characters, Fandomania.com ranked the character at number 14.[3]\n\nIn his younger years, Luke used to be called Lukey and it annoyed him very much.\n\n54 43 That's My Number.",
+							       '@op':"SwapValue"
+							     }
+						       ],
+					      '@rest':json{'@op':"KeepList"}
+					    },
+				   vehicle:json{ '@op':"CopyList",
+						 '@rest':json{ '@after':[ "Vehicle/24"
+									],
+							       '@before':[],
+							       '@op':"SwapList",
+							       '@rest':json{ '@op':"KeepList"
+									   }
+							     },
+						 '@to':1
+					       }
+				 }.
+
+
+test(simple_list_diff_strings, []) :-
+    State = best(6, something),
+    Before = ["In 2015","Luke Skywalker"],
+    After = ["KITTY In 2015", "Luke Skywalker"],
+    simple_list_diff(Before, After, json{}, Result, State, 0, New_Cost,
+                     [keep(json{'@id':true}),
+                      subdocument(true)]),
+    New_Cost = 4,
+    Result = json{ '@op':"PatchList",
+		           '@patch':[ json{ '@after':"KITTY In 2015",
+									'@before':"In 2015",
+									'@op':"SwapValue"
+								  }
+							],
+				   '@rest':json{ '@op':"KeepList"
+							   }
+				 }.
+
 
 :- end_tests(simple_diff).

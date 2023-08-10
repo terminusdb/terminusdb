@@ -7,10 +7,10 @@ jobs:
 
   build:
     name: Docker image
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
 
       - name: Set up Docker Buildx
@@ -25,6 +25,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          input: /github/workspace/terminusdb-server-docker-image.tar
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
       - name: Compress image
         run: gzip terminusdb-server-docker-image.tar

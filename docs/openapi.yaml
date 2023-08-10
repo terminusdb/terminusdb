@@ -12,7 +12,7 @@ externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.com/docs/
 servers:
-- url: http://localhost:6363/api/
+- url: http://localhost:6363/api
 security:
 - basicAuth: []
 tags:
@@ -24,6 +24,8 @@ tags:
 paths:
   /:
     get:
+      x-python-client: Client::get_databases
+      x-js-client: Client.getDatabases
       tags:
         - Connection
       summary: Get a list of databases for the authenticated user
@@ -40,6 +42,8 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
   /info:
     get:
+      x-python-client: not_implemented
+      x-js-client: Client.info
       tags:
         - Connection
       summary: Get information about the TerminusDB version
@@ -83,6 +87,8 @@ paths:
                     example: api:success
   /ok:
     get:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       tags:
         - Connection
       summary: Simple status update
@@ -91,6 +97,8 @@ paths:
           description: Succeeded
   /db:
     get:
+      x-python-client: Client::get_databases
+      x-js-client: Client.getDatabases
       tags:
         - Database
       summary: List details of all databases available to the authorized user.
@@ -125,6 +133,8 @@ paths:
 
   /db/{organization}/{database}:
     get:
+      x-python-client: Client::get_database
+      x-js-client: not_implemented
       tags:
         - Database
       summary: List details of the database under the given organization.
@@ -162,6 +172,8 @@ paths:
               schema:
                 type: object
     head:
+      x-python-client: Client::has_database
+      x-js-client: Client.hasDatabase
       tags:
         - Database
       summary: Check that a db exists
@@ -183,6 +195,8 @@ paths:
                 type: object
 
     post:
+      x-python-client: Client::create_database
+      x-js-client: Client.createDatabase
       tags:
         - Database
       summary: Create a database
@@ -259,6 +273,8 @@ paths:
         401:
           $ref: '#/components/responses/UnauthorizedError'
     delete:
+      x-python-client: Client::delete_database
+      x-js-client: Client.deleteDatabase
       tags:
         - Database
       summary: Delete a database
@@ -311,6 +327,8 @@ paths:
                         type: string
                         example: admin
     put:
+      x-python-client: not_implemented
+      x-js-client: Client.updateDatabase
       tags:
         - Database
       summary: Change qualities of a database (label, comment, etc.)
@@ -390,11 +408,14 @@ paths:
 
   /document/{path}:
     get:
+      x-python-client: Client::get_document
+      x-js-client: Client.getDocument
       tags:
         - Document
       summary: Get a document
+      description: 'This endpoint is also usable through a POST with the header `X-HTTP-Method-Override: GET` submitted. This allows you to submit a JSON query document as post data instead of as query parameters. This can be useful for cases where your query parameters would be too long otherwise, or if you already have your data as JSON. In particular, this is useful for the `ids` field, which in the POST-ed query document can be submitted as a JSON list directly.'
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
         - name: skip
           in: query
@@ -405,7 +426,7 @@ paths:
             default: 0
         - name: count
           in: query
-          description: Number of entries to show
+          description: Number of documents to retrieve
           required: false
           schema:
             type: integer
@@ -419,7 +440,7 @@ paths:
             default: true
         - name: as_list
           in: query
-          description: Return the JSONs as list instead of concatenated json
+          description: Return the JSONs as list instead of as a json stream
           required: false
           schema:
             type: boolean
@@ -433,10 +454,17 @@ paths:
         - name: id
           in: query
           required: false
-          description: Specific document ID to look for
+          description: Specific document ID to look for (takes precedence over ids field)
           schema:
             type: string
-            example: Person_Robin_1991-02-01
+            example: Person/Robin_1991-02-01
+        - name: ids
+          in: query
+          required: false
+          description: Multiple document IDs to look for, as a json list (EXPERIMENTAL)
+          schema:
+            type: string
+            example: Person/Robin_1991-02-01
         - name: type
           in: query
           required: false
@@ -454,7 +482,7 @@ paths:
 
       responses:
         200:
-          description: List of documents
+          description: List or stream of documents
           content:
             application/json:
               schema:
@@ -463,18 +491,20 @@ paths:
                 example: {"@id":"Organization/admin", "@type":"Organization", "database": ["SystemDatabase/system", "UserDatabase/60c35164e937174bbf4dd814c78153d660edc55b3d799c534c1e2d872a3d2dd6" ], "name":"admin"}
 
     post:
+      x-python-client: Client::insert_document
+      x-js-client: Client.addDocument
       tags:
         - Document
       summary: Insert a new document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
         - name: full_replace
           in: query
           required: false
-          description: Fully replace a document
+          description: Replace the existing data in the graph with the submitted documents. All existing data will be deleted.
           schema:
             type: boolean
             default: false
@@ -495,36 +525,40 @@ paths:
                 description: Added documents
 
     delete:
+      x-python-client: Client::delete_document
+      x-js-client: Client.deleteDocument
       tags:
         - Document
       summary: Delete one or multiple documents
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
         - name: nuke
           in: query
-          description: Totally nuke the document(s)
+          description: Remove all data from the graph
           schema:
             type: boolean
             default: false
         - name: id
           in: query
-          description: ID of document(s)
+          description: ID of document
           schema:
             type: string
-            example: admin/SomeDocument
+            example: Person/Bert
       responses:
         200:
           description: Succesfully deleted document(s)
           # TODO: Need the proper JSON resposne!
     put:
+      x-python-client: Client::replace_document
+      x-js-client: Client.updateDocument
       tags:
         - Document
       summary: Replace a document
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
@@ -545,13 +579,26 @@ paths:
       responses:
         200:
           description: Succesfully replaced documents
-  /schema:
+  /schema/{path}:
     get:
+      x-python-client: Client::get_class_frame
+      x-js-client: Client.getSchemaFrame
       tags:
         - Frame
       summary: Get the full class frame for a class or all classes for a schema
       parameters:
-        - $ref: '#/components/parameters/document_path'
+        - name: path
+          description: Path to a specific data product
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          description: Class type to get specific frame for
+          schema:
+            type: string
         - name: compress_ids
           in: query
           description: Compress the URLs returned using prefixes
@@ -580,6 +627,9 @@ paths:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
   /woql:
     post:
+      summary: Execute a WOQL query
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       tags:
         - WOQL
       requestBody:
@@ -593,6 +643,9 @@ paths:
           description: Query result
   /woql/{path}:
     post:
+      summary: Execute a WOQL query on a specific path
+      x-python-client: Client::query
+      x-js-client: Client.query
       tags:
         - WOQL
       parameters:
@@ -614,6 +667,9 @@ paths:
           description: Query result
   /clone/{organization}/{database}:
     post:
+      summary: Clone a database
+      x-python-client: Client::clonedb
+      x-js-client: Client.clonedb
       tags:
         - Collaboration
       parameters:
@@ -654,6 +710,8 @@ paths:
                 type: object
   /fetch/{path}:
     post:
+      x-python-client: Client::fetch
+      x-js-client: Client.fetch
       tags:
         - Collaboration
       summary: Fetch the remote repository for the given path (default is origin)
@@ -689,6 +747,8 @@ paths:
                     example: 194822f8942286517e151817d38acca4c9ac7d01
   /push/{path}:
     post:
+      x-python-client: Client::push
+      x-js-client: Client.push
       summary: Push the branch to the remote
       tags:
         - Collaboration
@@ -760,6 +820,8 @@ paths:
 
   /pull/{path}:
     post:
+      x-python-client: Client::pull
+      x-js-client: Client.pull
       summary: Pull to a branch from a remote
       tags:
         - Collaboration
@@ -801,6 +863,8 @@ paths:
                       - "api:success"
   /remote/{path}:
     post:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Create a new remote
       tags:
         - Collaboration
@@ -841,6 +905,8 @@ paths:
                     enum:
                       - "api:success"
     delete:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Delete a remote
       tags:
         - Collaboration
@@ -869,6 +935,8 @@ paths:
                     enum:
                       - "api:success"
     put:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Update a remote with a new location
       tags:
         - Collaboration
@@ -909,6 +977,8 @@ paths:
                     enum:
                       - "api:success"
     get:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       summary: Get the url for a given remote
       tags:
         - Collaboration
@@ -943,6 +1013,9 @@ paths:
                       - "api:success"
   /branch/{path}:
     post:
+      summary: Create a new branch
+      x-python-client: Client::create_branch
+      x-js-client: Client.branch
       tags:
         - Branches
       parameters:
@@ -970,6 +1043,9 @@ paths:
                     enum:
                       - "api:success"
     delete:
+      summary: Delete a branch
+      x-python-client: Client::delete_branch
+      x-js-client: Client.deleteBranch
       tags:
         - Branches
       parameters:
@@ -992,14 +1068,29 @@ paths:
                       - "api:success"
 
   /squash/{path}:
+    x-python-client: Client::squash
+    x-js-client: Client.squashBranch
     parameters:
-        - $ref: '#/components/parameters/branch_path'
-    get:
+        - $ref: '#/components/parameters/commit_path'
+    post:
+      summary: Squash a commit history into a new commit
+      description: This squashes a commit history into a single commit. The commit will not be attached to any particular branch.
       tags:
         - Branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "commit_info"
+              properties:
+                "commit_info":
+                  $ref: "#/components/schemas/CommitInfo"
       responses:
         200:
-          description: "Succesfully squashed the branch"
+          description: "Succesfully created a new unattached commit containing the squashed data. This commit can be queried directly, or be assigned to a particular branch using the reset endpoint."
           content:
             application/json:
               schema:
@@ -1011,9 +1102,11 @@ paths:
                       - "api:SquashResponse"
                   "api:commit":
                     type: string
+                    description: the newly generated commit
                     example: admin/test/local/commit/apgatilsa03g4lsa9ra5698wom5wcv7
                   "api:old_commit":
                     type: string
+                    description: the commit that was squashed
                     example: admin/test/local/commit/5jndjh9lexe62q9u1q2vofyjemfnmyt
                   "api:status":
                     type: string
@@ -1023,6 +1116,10 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      summary: Reset branch to a specific commit
+      description: This will set the branch to the submitted commit. The commit is specified as a resource path to either a specific commit, or to a branch, in which case the commit this branch will be set to is going to be the head of that branch.
+      x-python-client: Client::reset
+      x-js-client: Client.resetBranch
       tags:
         - Branches
       requestBody:
@@ -1034,6 +1131,7 @@ paths:
               properties:
                 commit_descriptor:
                   type: string
+                  description: path to a specific commit or to a branch
                   example: admin/test/local/commit/5jndjh9lexe62q9u1q2vofyjemfnmyt
       responses:
         200:
@@ -1051,8 +1149,101 @@ paths:
                     type: string
                     enum:
                       - api:success
+  /rebase/{path}:
+    parameters:
+      - $ref: '#/components/parameters/branch_path'
+    post:
+      summary: Rebase all commits from a source onto this branch
+      description: Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
+
+        If there is no common history, the rebase will take all commits into account.
+      x-python-client: Client::rebase
+      x-js-client: Client.rebase
+      tags:
+        - Branches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                author:
+                  type: string
+                  example: Lightning McQueen
+                rebase_from:
+                  type: string
+                  example: admin/test/local/branch/bar
+      responses:
+        200:
+          description: "Succesfully rebased commits"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    enum:
+                      - api:RebaseResponse
+                  "api:forwarded_commits":
+                    type: array
+                    items:
+                      type: string
+                    description: the list of ids that are taken from source
+                    example:
+                      - q0r08e1hjy123tkf0urzjiov7rrnmp7
+                      - 71oqhojpu24a1doftlo9szjkmf22yhy
+                  "api:rebase_report":
+                    description: a report for each rebased commit on how it was reapplied
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        "@type":
+                          type: string
+                          enum:
+                            - api:RebaseReport
+                        "api:origin_commit":
+                          type: string
+                          description: the original commit ID
+                        "api:applied":
+                          type: array
+                          items:
+                            type: string
+                          description: the new commit IDs this commit turned into
+                        "api:commit_type":
+                          type: string
+                          enum:
+                            - api:valid_commit
+                    example:
+                      - '@type': api:RebaseReport
+                        api:applied:
+                          - 1q7oa1tq79w2hbn21b6bp7gojryqdes
+                        api:commit_type: api:valid_commit
+                        api:origin_commit: wguh7angj0wyc7zmolzf8r9p80s6wz6
+                      - '@type': api:RebaseReport
+                        api:applied:
+                          - i2e1wv5pagftoguf70yrk66ufogrejf
+                        api:commit_type: api:valid_commit
+                        api:origin_commit: w1akvg7nvbzgkqj4ycugftk9g1d1ydy
+                      - '@type': api:RebaseReport
+                        api:applied:
+                          - ams38vxkl0yphl9ni0hgkb4802arm3s
+                        api:commit_type: api:valid_commit
+                        api:origin_commit: opk0hv1qk6j0q7auaexlkisd6mf28s9
+                  "api:common_commit_id":
+                    type: string
+                    example: h9m7xx0c4lyhpp6kf728yfcotyxmodn
+                  "api:status":
+                    type: string
+                    enum:
+                      - api:success
   /optimize/{path}:
     post:
+      summary: Optimize a specific graph
+      x-python-client: Client::optimize
+      x-js-client: Client.optimizeBranch
       tags:
         - Optimize
       parameters:
@@ -1081,6 +1272,9 @@ paths:
                       - api:success
   /prefixes/{path}:
     get:
+      summary: Get prefixes
+      x-python-client: Client::_get_prefixes
+      x-js-client: Client.getPrefixes
       tags:
         - Prefixes
       parameters:
@@ -1100,6 +1294,9 @@ paths:
                 type: object
   /diff:
     post:
+      summary: Diff a specific object or data version
+      x-python-client: Client::diff
+      x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
       tags:
         - Change management
       requestBody:
@@ -1124,6 +1321,12 @@ paths:
                 "document_id":
                   type: string
                   example: Person/Jane
+                "start":
+                  type: integer
+                  example: 0
+                "count":
+                  type: integer
+                  example: 10
                 "keep":
                   type: object
                   example: { "@id" : true, "_id" : true }
@@ -1141,6 +1344,9 @@ paths:
 
   /patch:
     post:
+      summary: Apply a patch object to another object
+      x-python-client: Client::patch
+      x-js-client: Client.patch
       tags:
         - Change management
       requestBody:
@@ -1171,10 +1377,69 @@ paths:
               schema:
                 type: object
                 example: { "name" : { "@op" : "ValueSwap", "@before" : "Doug", "@after": "Jane" }}
+  /patch/{path}:
+    parameters:
+      - $ref: '#/components/parameters/branch_path'
+    post:
+      summary: Apply a patch object to a resource
+      x-python-client: Client::patch_resource
+      x-js-client: Client.patchResource
+      tags:
+        - Change management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: 
+                - "patch"
+                - "author"
+                - "message"
+              properties:
+                "patch":
+                  type: object
+                  example:
+                    - '@id': Obj/id1
+                      name:
+                        '@op': SwapValue
+                        '@before': foo
+                        '@after': bar
+                    - '@id': Obj/id2
+                      name:
+                        '@op': SwapValue
+                        '@before': foo
+                        '@after': bar
+                "author": 
+                  type: string
+                  example: me
+                "message": 
+                  type: string
+                  example: message
+      responses:
+        200:
+          description: "Patch applied cleanly"
+          content:
+            application/json:
+              schema:
+                type: array
+                items: 
+                  type: string
+                example: ["Obj/id1", "Obj/id2"]
+        409:
+          description: "Failed to apply patch: returning conflict patch"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: { "@type" : "api:PatchError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /apply/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      summary: Apply a specific diff
+      x-python-client: Client::apply
+      x-js-client: Client.apply
       tags:
         - Change management
       requestBody:
@@ -1219,6 +1484,8 @@ paths:
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /log/{organization}/{database}:
     get:
+      x-python-client: Client::log
+      x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
       tags:
         - Change management
@@ -1271,8 +1538,76 @@ paths:
                       type: number
                       example: 1660919664.9129035
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+  /history/{organization}/{database}:
+    get:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Get commits from a specific database or branch"
+      tags:
+        - Change management
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: id
+          description: id of document to report histry of
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "A/0"
+        - name: start
+          description: Index to start from
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 0
+        - name: updated
+          description: Last updated time (excludes history, but can be combined with created)
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: created
+          description: Created date of object (excludes history, but can be combined with updated)
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: count
+          description: Amount of commits to show
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 10
+      responses:
+        200:
+          description: "Successful history request"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    "author":
+                      type: string
+                      example: admin
+                    "identifier":
+                      type: string
+                      example: hpl18q42dbnab4vzq8me4bg1xn8p2a0
+                    "message":
+                      type: string
+                      example: create initial schema
+                    "timestamp":
+                      type: number
+                      example: 1660919664.9129035
+                  example: [{"author":"admin","identifier":"tbn15yq6rw1l4e9bgboyu3vwcoxgri5","message":"cli: document replace","timestamp":1680808874.324928},{"author":"admin","identifier":"3v3naa8jrt8612dg5zryu4vjqwa2w9s","message":"cli: document insert","timestamp":1680808847.4063878}]
   /roles:
     post:
+      x-python-client: Client::add_role
+      x-js-client: AccessControl.createRole
       tags:
         - Account management
       summary: Adding a new role
@@ -1308,6 +1643,8 @@ paths:
         400:
           description: Bad Request
     put:
+      x-python-client: Client::change_role
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Changing actions for a role
@@ -1345,6 +1682,8 @@ paths:
         400:
           description: Bad Request
     get:
+      x-python-client: Client::get_available_roles
+      x-js-client: AccessControl.getAccessRoles
       tags:
         - Account management
       summary: Get all roles available with the current authority
@@ -1358,6 +1697,9 @@ paths:
                 example: [{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"Admin Role"},{"@id":"Role/consumer","@type":"Role","action":["class_frame","instance_read_access","schema_read_access"],"name":"ConsumerRole"}]
   /roles/{roleName}:
     delete:
+      x-python-client: not_implemented
+      x-js-client: AccessControl.deleteRole
+      summary: Delete a role
       tags:
         - Account management
       parameters:
@@ -1383,6 +1725,8 @@ paths:
                 type: object
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
     get:
+      x-python-client: not_implemented
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get the role object by role name
@@ -1410,6 +1754,8 @@ paths:
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
   /organizations:
     get:
+      x-python-client: Client::get_organizations
+      x-js-client: AccessControl.getAllOrganizations
       tags:
         - Account management
       summary: Get all organizations according to the capabilities of the user
@@ -1432,6 +1778,8 @@ paths:
           type: string
           example: admin
     get:
+      x-python-client: Client::get_organization
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get the organization object by name
@@ -1453,6 +1801,8 @@ paths:
         403:
           description: Forbidden
     post:
+      x-python-client: Client::create_organization
+      x-js-client: AccessControl.createOrganization
       tags:
         - Account management
       summary: Add an organization with the given name
@@ -1472,6 +1822,8 @@ paths:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
     delete:
+      x-python-client: Client::delete_organization
+      x-js-client: AccessControl.deleteOrganization
       tags:
         - Account management
       summary: Delete the organization of the given name
@@ -1499,6 +1851,8 @@ paths:
           type: string
           example: admin
     get:
+      x-python-client: Client::get_organization_users
+      x-js-client: AccessControl.getOrgUsers
       tags:
         - Account management
       summary: Get all available users according to capabilities within an organization
@@ -1519,6 +1873,8 @@ paths:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}:
     get:
+      x-python-client: Client::get_organization_user
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get a user record for a given organization
@@ -1549,6 +1905,8 @@ paths:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}/databases:
     get:
+      x-python-client: Client::get_organization_user_databases
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Get the databases available to a user which are inside an organization
@@ -1582,6 +1940,8 @@ paths:
           description: Bad Request
   /users:
     get:
+      x-python-client: Client::get_users
+      x-js-client: AccessControl.getAllUsers
       tags:
         - Account Management
       summary: Get all users
@@ -1605,6 +1965,8 @@ paths:
         403:
           description: Forbidden
     put:
+      x-python-client: Client::change_user_password
+      x-js-client: not_implemented
       tags:
         - Account management
       summary: Update a user's password
@@ -1639,6 +2001,8 @@ paths:
               schema:
                 type: object
     post:
+      x-python-client: Client::add_user
+      x-js-client: AccessControl.createUser
       tags:
         - Account management
       summary: Create a new user
@@ -1680,6 +2044,8 @@ paths:
           type: string
           example: Bob
     get:
+      x-python-client: Client::get_user
+      x-js-client: not_implemented
       tags:
         - Account Management
       summary: Get a user by name
@@ -1701,6 +2067,8 @@ paths:
         403:
           description: Forbidden
     delete:
+      x-python-client: Client::delete_user
+      x-js-client: AccessControl.deleteUser
       tags:
         - Account Management
       summary: Delete a user
@@ -1714,8 +2082,61 @@ paths:
                 example: {'@type':"api:UsersResponse",'api:status' :"api:success"}
         403:
           description: Forbidden
+  /migration/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          example: admin/MyDB
+    post:
+      tags:
+        - Change management
+      summary: Schema migration either by explicit operation, or implicit schema targetting
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "author":
+                  type: string
+                  example: "Jimbo"
+                "message":
+                  type: string
+                  example: "updating schema"
+                "operations":
+                  type: object
+                  example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
+                "dry_run":
+                  type: boolean
+                  example: true
+                "verbose":
+                  type: boolean
+                  example: true
+                "target":
+                  type: string
+                  example: "admin/foo"
+      responses:
+        200:
+          description: "Successfully migrated schema"
+          content:
+            application/json:
+              schema:
+                type: object
+                example: {"@type":"api:MigrationResponse","api:status":"api:success"}
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
   /capabilities:
     post:
+      x-python-client: Client::change_capabilities
+      x-js-client: AccessControl.manageCapability
       tags:
         - Account management
       summary: Grant or remove capabilities over a resource to a user
@@ -1739,6 +2160,11 @@ paths:
                 "scope":
                   type: string
                   example: "UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"
+                "scope_type":
+                  type: string
+                  enum:
+                    - "organization"
+                    - "database"
                 "user":
                   type: string
                   example: "User/admin"
@@ -1801,14 +2227,50 @@ components:
       schema:
         type: string
         example: admin/test/local/branch/foo
-    document_path:
+    commit_path:
       name: path
       in: path
-      description: Path for document
+      description: Path for a commit or branch
       required: true
       schema:
         type: string
-        example: admin/foo
+      examples:
+        branch:
+          value: admin/test/local/branch/foo
+        commit:
+          value: admin/test/local/commit/q0r08e1hjy123tkf0urzjiov7rrnmp7
+    resource_path:
+      name: path
+      in: path
+      description: Path for a resource (a branch, a commit, one of the metadata graphs, or the _system graph)
+      required: true
+      schema:
+        type: string
+      examples:
+        default_branch:
+          value: admin/foo
+          summary: branch 'main' of admin/foo (autocompleted to admin/foo/local/branch/main)
+        branch:
+          value: admin/foo/local/branch/bar
+          summary: branch 'bar' of data product 'admin/foo'
+        remote_branch:
+          value: admin/foo/upstream/branch/bar
+          summary: branch 'bar' of the data product 'admin/foo' as it is in the 'upstream' remote
+        commit:
+          value: admin/foo/local/commit/66smtj9j45bho1vpztzwpi4fbbj8bwa
+          summary: a specific commit in data product 'admin/foo'
+        local_commits:
+          value: admin/foo/local/_commits
+          summary: the local commit graph for data product 'admin/foo'
+        remote_commits:
+          value: admin/foo/upstream/_commits
+          summary: the commit graph that of the 'upstream' remote for data product 'admin/foo'
+        meta:
+          value: admin/foo/_meta
+          summary: the metadata graph of data product 'admin/foo'
+        system:
+          value: _system
+          summary: the system graph
     organization:
       name: organization
       in: path
@@ -1862,7 +2324,7 @@ components:
           example: A comment for my database
         creation_date:
           type: string
-          example: 2021-12-13T14:27:46.202Z
+          example: '2021-12-13T14:27:46.202Z'
         label:
           type: string
           example: MyDatabaseLabel

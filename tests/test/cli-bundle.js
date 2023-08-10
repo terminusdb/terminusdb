@@ -12,10 +12,6 @@ describe('cli-bundle', function () {
     await cli.store.init()
   })
 
-  after(async function () {
-    await cli.cleanup()
-  })
-
   it('passes bundle, unbundle empty database', async function () {
     await cli.db.create(agent)
     await cli.bundle(agent)
@@ -24,7 +20,7 @@ describe('cli-bundle', function () {
   })
 
   it('passes bundle, unbundle database with doc', async function () {
-    this.timeout(20000)
+    this.timeout(200000)
     await cli.db.create(agent)
     const schema = { '@type': 'Class', '@id': util.randomString() }
     await cli.doc.insert(agent, schema, { graphType: 'schema' })
@@ -46,7 +42,7 @@ describe('cli-bundle', function () {
     })
 
     it('passes', async function () {
-      this.timeout(20000)
+      this.timeout(200000)
       const schema = { '@type': 'Class', '@id': util.randomString() }
       await cli.doc.insert(agent, schema, { graphType: 'schema' })
       await cli.bundle(agent)

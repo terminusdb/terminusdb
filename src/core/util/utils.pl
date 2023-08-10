@@ -6,6 +6,7 @@
               zip/3,
               intersperse/3,
               interpolate/2,
+              alternate/2,
               interpolate_string/2,
               unique_solutions/3,
               repeat_term/3,
@@ -53,9 +54,10 @@
               option_or_die/2,
               die_if/2,
               whole_arg/2,
-              random_string/1,
               uri_has_protocol/1,
               uri_has_prefix/1,
+              uri_has_prefix/2,
+              uri_has_prefix_unsafe/2,
               choice_points/1,
               sol_set/2,
               sol_bag/2,
@@ -84,7 +86,15 @@
               with_memory_file_stream/3,
               with_memory_file_stream/4,
               terminal_slash/2,
-              dict_field_verifier/3
+              dict_field_verifier/3,
+              count_solutions/2,
+              negative_to_infinity/2,
+
+              init_local_memoize/1,
+              local_memoize/3,
+
+              %%% From the rust module
+              random_string/1
           ]).
 
 /** <module> Utils
@@ -224,6 +234,11 @@ intersperse(Item, List, Output) :-
 intersperse_([], X, _, [X]).
 intersperse_([Y| Xs], X, Item, [X, Item| Tail]) :-
     intersperse_(Xs, Y, Item, Tail).
+
+
+alternate([X], [X]).
+alternate([X,_|Rest], [X|Tail]) :-
+    alternate(Rest, Tail).
 
 /**
  * interpolate(L:list,A:atom) is det.
@@ -425,6 +440,20 @@ sfoldr(Pred,Generator,Zero,Result) :-
     ;  arg(1, State, R),
        nonvar(R),
        R=Result
+    ).
+
+/**
+ * count_solutions(Goal,Count) is det.
+ *
+ * Counts the number of solutions of Goal
+ */
+:- meta_predicate count_solutions(0,-).
+count_solutions(Goal,Count) :-
+    sfoldr(
+        plus,
+        {Goal}/[1]>>call(Goal),
+        0,
+        Count
     ).
 
 /*
@@ -785,14 +814,6 @@ whole_arg(N, Var) :-
 whole_arg(_, _) :-
     throw(error(system_error, context(utils:whole_arg/2, 'whole arg failed while trying to get its parents arity'))).
 
-/**
- * random_string(String) is det.
- */
-random_string(String) :-
-    Size is 2 ** (20 * 8),
-    random(0, Size, Num),
-    format(string(String), '~36r', [Num]).
-
 /*
  * uri_has_protocol(K) is semidet.
  *
@@ -810,8 +831,16 @@ uri_has_protocol(K) :-
  * Tests to see if a URI has a prefix.
  */
 uri_has_prefix(K) :-
+    uri_has_prefix(K,_).
+
+uri_has_prefix(K,Match) :-
     \+ uri_has_protocol(K),
-    re_match('^[^:]*:[^:]*',K).
+    uri_has_prefix_unsafe(K,Match).
+
+uri_has_prefix_unsafe(K,Match) :-
+    re_matchsub('^(?<prefix>(\\p{L}|@)((\\p{Xwd}|-|\\.)*(\\p{Xwd}|-))?):(?<suffix>.*)$',
+                K,
+                Match, [auto_capture(false)]).
 
 /*
  * getenv_number(+Name, +Value) is semidet.
@@ -1130,7 +1159,9 @@ skip_generate_nsols(Goal, Skip, Count) :-
  * Instead, we just fail and interpret failure as a type error.
  */
 input_to_integer(Atom, Integer) :-
-    (   integer(Atom)
+    (   Atom = inf
+    ->  Integer = inf
+    ;   integer(Atom)
     ->  Integer = Atom
     ;   text(Atom)
     ->  catch(atom_number(Atom, Integer), _, fail),
@@ -1256,3 +1287,37 @@ dict_field_verifier(DictIn, Field_Verifier, DictOut) :-
 :- meta_predicate field_verifier(+,1).
 field_verifier(Field,Verifier) :-
     call(Verifier, Field).
+
+negative_to_infinity(Z,P) :-
+    (   Z < 0
+    ->  P = inf
+    ;   Z = P
+    ).
+
+init_local_memoize(state(_,[])).
+
+is_first_run(State) :-
+    State = state(Memoized, _List),
+    var(Memoized).
+
+finalize_memoization(State) :-
+    State = state(_, List),
+    reverse(List, Reversed),
+    nb_setarg(1, State, memoized),
+    nb_setarg(2, State, Reversed).
+
+do_local_memoize(State, Val) :-
+    State = state(_, List),
+    NewList = [Val|List],
+    nb_setarg(2, State, NewList).
+
+get_local_memoized(state(_, List), Val) :-
+    member(Val, List).
+
+local_memoize(State, Template, Goal) :-
+    (   is_first_run(State)
+    ->  setup_call_cleanup(true,
+                           (   call(Goal),
+                               do_local_memoize(State, Template)),
+                           finalize_memoization(State))
+    ;   get_local_memoized(State, Template)).

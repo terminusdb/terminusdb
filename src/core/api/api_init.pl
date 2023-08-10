@@ -4,14 +4,17 @@
               initialize_database/2,
               initialize_database_with_store/2,
               index_template/1,
-              world_ontology_json/1
+              world_ontology_json/1,
+              graphiql_template/1,
+              update_system_graphs/0
           ]).
 
 :- use_module(core(triple)).
 :- use_module(core(util)).
 :- use_module(core(document)).
-:- use_module(core(query), [expand/2, default_prefixes/1]).
+:- use_module(core(query), [expand/2, default_prefixes/1, create_context/3]).
 :- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(account), [generate_password_hash/2]).
 
 :- use_module(config(terminus_config)).
 
@@ -22,7 +25,6 @@
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
 :- use_module(library(filesex)).
-:- use_module(library(crypto)).
 :- use_module(library(git), [git_hash/2]).
 
 /**
@@ -70,6 +72,7 @@ create_graph_from_turtle(Store, Graph_ID, TTL_Path) :-
 :- dynamic woql_schema/1.
 :- dynamic index_template/1.
 :- dynamic world_ontology_json/1.
+:- dynamic graphiql_template/1.
 bootstrap_files :-
     template_system_instance_json(InstancePath),
     file_to_predicate(InstancePath, template_system_instance),
@@ -84,7 +87,9 @@ bootstrap_files :-
     index_template_path(IndexTemplatePath),
     file_to_predicate(IndexTemplatePath, index_template),
     world_ontology_json_path(OntJsonPath),
-    file_to_predicate(OntJsonPath, world_ontology_json).
+    file_to_predicate(OntJsonPath, world_ontology_json),
+    graphiql_template_path(GraphIQLTemplatePath),
+    file_to_predicate(GraphIQLTemplatePath, graphiql_template).
 
 template_system_instance_json(Path) :-
     once(expand_file_search_path(ontology('system_instance_template.json'), Path)).
@@ -107,6 +112,9 @@ index_template_path(Path) :-
 world_ontology_json_path(Path) :-
     once(expand_file_search_path(test('worldOnt.json'), Path)).
 
+graphiql_template_path(Path) :-
+    once(expand_file_search_path(server('templates/graphiql.tpl'), Path)).
+
 config_path(Path) :-
     once(expand_file_search_path(config('terminus_config.pl'), Path)).
 
@@ -126,15 +134,9 @@ initialize_database_with_path(_, DB_Path, false) :-
 initialize_database_with_path(Key, DB_Path, _) :-
     make_directory_path(DB_Path),
     delete_directory_contents(DB_Path),
-    initialize_storage_version(DB_Path),
-    open_directory_store(DB_Path, Store),
+    set_db_version(DB_Path),
+    open_archive_store(DB_Path, Store),
     initialize_database_with_store(Key, Store).
-
-initialize_storage_version(DB_Path) :-
-    storage_version_path(DB_Path,Path),
-    open(Path, write, FileStream),
-    writeq(FileStream, 1),
-    close(FileStream).
 
 initialize_schema_graph(Simple_Graph_Name, Store, Graph_Name, Graph_String, Force, Layer) :-
     (   Force = true
@@ -178,7 +180,7 @@ initialize_system_instance(Store, Schema_Layer, Key, Force) :-
     open_descriptor(Descriptor, Transaction_Object),
 
     template_system_instance(Template_Instance_String),
-    crypto_password_hash(Key,Hash, [cost(15)]),
+    generate_password_hash(Key,Hash),
     format(string(Instance_String), Template_Instance_String, [Hash]),
     open_string(Instance_String, Instance_Stream),
     create_graph_from_json(Store,Instance_Name,Instance_Stream,
@@ -193,6 +195,69 @@ initialize_database_with_store(Key, Store, Force) :-
     initialize_woql_schema(Store, Force),
 
     initialize_system_instance(Store, System_Schema, Key, Force).
+
+current_repository_version("v1.0.1").
+current_ref_version("v1.0.1").
+
+has_no_store :-
+    catch(
+        (   triple_store(_),
+            fail),
+        error(no_database_store_version, _),
+        true
+    ).
+
+current_schema_version(repo_schema, Version) :-
+    current_repository_version(Version).
+current_schema_version(ref_schema, Version) :-
+    current_ref_version(Version).
+
+update_system_graph(Label, Path, Predicate, Initialization) :-
+    Descriptor = label_descriptor{
+                     schema:Label,
+                     variety:repository_descriptor
+                 },
+
+    open_descriptor(Descriptor, Transaction_Object),
+    Commit_Info = commit_info{author:"test",message:"test"},
+    create_context(Transaction_Object, Commit_Info, Context),
+
+    (   database_context_object(Context, Obj),
+        get_dict('@metadata', Obj, Metadata),
+        get_dict('schema_version', Metadata, Version),
+        current_schema_version(Predicate, Version)
+    % already current
+    ->  true
+    % needs an upgrade
+    ;   json_log_notice_formatted("Upgrading ~s",[Label]),
+        file_to_predicate(Path, Predicate),
+        triple_store(Store),
+        call(Initialization, Store, true),
+        % remove anything already pinned
+        abolish_all_tables
+    ).
+
+update_repository_graph :-
+    repository_ontology(Repo_Label),
+    api_init:repository_schema_json(Repo_Path),
+    update_system_graph(Repo_Label,
+                        Repo_Path,
+                        repo_schema,
+                        api_init:initialize_repo_schema).
+
+update_commit_graph :-
+    ref_ontology(Ref_Label),
+    api_init:ref_schema_json(Ref_Path),
+    update_system_graph(Ref_Label,
+                        Ref_Path,
+                        ref_schema,
+                        api_init:initialize_ref_schema).
+
+update_system_graphs :-
+    (   has_no_store
+    ->  true
+    ;   update_repository_graph,
+        update_commit_graph).
 
 % FIXME! These tests should go into `src/config/terminus_config.pl`, but I
 % couldn't run them when they were there.

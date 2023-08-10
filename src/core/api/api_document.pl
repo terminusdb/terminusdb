@@ -1,4 +1,5 @@
 :- module(api_document, [
+              api_can_read_document/6,
               api_insert_documents/8,
               api_delete_documents/8,
               api_delete_document/7,
@@ -6,9 +7,13 @@
               api_nuke_documents/6,
               api_generate_document_ids/4,
               call_catch_document_mutation/2,
-              api_read_document_selector/11,
+              api_read_document_selector/12,
               api_generate_document_ids/4,
-              api_get_document/5
+              api_get_documents/4,
+              api_get_document/5,
+              api_full_replace_schema/2,
+              idlists_duplicates_toplevel/3,
+              nonground_captures/2
           ]).
 
 :- use_module(core(util)).
@@ -24,6 +29,7 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(apply)).
 :- use_module(library(pprint), [print_term/2]).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
@@ -134,14 +140,27 @@ api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
     '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
-
-    database_prefixes(Transaction, Prefixes),
+    database_and_default_prefixes(Transaction,Prefixes),
     % TODO errors on unknown prefix
     prefix_expand_schema(Type, Prefixes, Type_Ex),
 
     (   parallelize_enabled
     ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))
     ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
+
+api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
+    forall((member(Id, Ids),
+            api_get_document(schema, Transaction, Id, Config, Document)),
+           json_stream_write_dict(Config, Stream_Started, Document)).
+api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+            Ids,
+            Ids_Ex),
+    (   parallelize_enabled
+    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list))
+    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list))).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
@@ -179,79 +198,107 @@ known_document_error(not_a_unit_type(_)).
 known_document_error(unknown_language_tag(_)).
 known_document_error(no_language_tag_for_multilingual).
 known_document_error(language_tags_repeated(_)).
+known_document_error(no_property_specified_in_link(_)).
+known_document_error(no_ref_or_id_in_link(_)).
+known_document_error(no_ref_in_link(_)).
+known_document_error(link_id_specified_but_not_valid(_)).
+known_document_error(not_one_parent_of_subdocument(_)).
+known_document_error(embedded_subdocument_has_linked_by).
+known_document_error(back_links_not_supported_in_replace).
+known_document_error(prefix_does_not_resolve(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
-    catch(Goal,
+    catch_with_backtrace(Goal,
           error(E, Context),
           (   known_document_error(E)
           ->  embed_document_in_error(E, Document, New_E),
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, Transaction, Document, state(Captures), Id, Captures) :-
+api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Raw_JSON, Transaction, Document, state(Captures_In), Id, Captures_Out) :-
+api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, _Dependencies, Captures_Out),
+        do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
-api_insert_document_unsafe_(schema, _, Transaction, Context, Document, state(Captures), Id, Captures) :-
-    do_or_die(
-        insert_schema_document_unsafe(Transaction, Context, Document),
-        error(document_insertion_failed_unexpectedly(Document), _)),
-    do_or_die(
-        Id = (Document.get('@id')),
-        error(document_has_no_id_somehow, _)).
-api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Context, Document, state(Captures_In), Id, Captures_Out) :-
-    do_or_die(
-        insert_document_unsafe(Transaction, Context, Document, Raw_JSON, Captures_In, Id, Captures_Out),
-        error(document_insertion_failed_unexpectedly(Document), _)).
+api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
+    call_catch_document_mutation(
+        Document,
+        (   do_or_die(
+                insert_schema_document_unsafe(Transaction, Prefixes, Document),
+                error(document_insertion_failed_unexpectedly(Document), _)),
+            do_or_die(
+                get_dict('@id', Document, Id),
+                error(document_has_no_id_somehow, _)))
+    ).
+api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Id, Captures_Out, SH-ST) :-
+    call_catch_document_mutation(
+        Document,
+        do_or_die(
+            insert_document_unsafe(Transaction, Prefixes, Document, Raw_JSON, Captures_In, Id, SH-ST, Captures_Out),
+            error(document_insertion_failed_unexpectedly(Document), _))
+    ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
-        json_read_required_context(Stream, Context, Tail_Stream),
+        do_or_die(
+            (   stream_to_lazy_docs(Stream,Result),
+                Result = [Prefixes|Lazy_List],
+                is_dict(Prefixes),
+                get_dict('@type', Prefixes, "@context")
+            ),
+            error(no_context_found_in_schema, _)),
         call_catch_document_mutation(
-            Context,
-            replace_context_document(Transaction, Context)
+            Prefixes,
+            replace_context_document(Transaction, Prefixes)
         )
-    ;   % Otherwise, do nothing. Tail_Stream is effectively just Stream.
-        database_prefixes(Transaction, Context),
-        json_init_tail_stream(Stream, Tail_Stream)
+    ;   % Otherwise, do nothing
+        database_prefixes(Transaction, Prefixes),
+        stream_to_lazy_docs(Stream, Lazy_List)
     ),
-    findall(
-        Id,
-        (   json_read_tail_stream(Tail_Stream, Document),
-            nb_thread_var(
-                {Graph_Type, Raw_JSON, Transaction, Context, Document, Id}/[State, Captures_Out]>>(
-                    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Context, Document, State, Id, Captures_Out)
-                ),
-                Captures_Var
-            )
-        ),
-        Ids
-    ).
-insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var, Ids) :-
-    findall(
-        Id,
-        (   json_read_list_stream(Stream, Document),
-            nb_thread_var(
-                {Graph_Type, Raw_JSON, Transaction, Document, Id}/[State, Captures_Out]>>(
-                    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, State, Id, Captures_Out)
-                ),
-                Captures_Var
-            )
-        ),
-        Ids
-    ).
+    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
+insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    stream_to_lazy_docs(Stream, Lazy_List),
+    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+
+api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+    !,
+    api_insert_document_unsafe_(Graph_Type, Raw_JSON, Transaction, Prefixes, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
+api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-T, []).
+
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+    !,
+    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
+api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, T-T, []).
+
+api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
+                                    Captures_In, Captures_Out, [Ids|New_Ids]) :-
+    !,
+    call_catch_document_mutation(
+        Document,
+        api_replace_document_(Graph_Type,
+                              Raw_JSON,
+                              Transaction,
+                              Document,
+                              Create,
+                              Captures_In,
+                              Ids,
+                              Captures_Mid)
+    ),
+    api_replace_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Create, Captures_Mid, Captures_Out, New_Ids).
+api_replace_document_from_lazy_list([], _, _, _, _, Captures, Captures, []).
 
 xor(true,false).
 xor(false,true).
@@ -282,19 +329,41 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         empty_assoc(Captures),
-                         nb_thread_var_init(Captures, Captures_Var),
+                         empty_assoc(Captures_In),
                          ensure_transaction_has_builder(Graph_Type, Transaction),
-                         insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_Var, Ids),
-                         die_if(nonground_captures(Captures_Var, Nonground),
+                         insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
+                         die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
-                         die_if(has_duplicates(Ids, Duplicates),
+                         database_instance(Transaction, [Instance]),
+                         insert_backlinks(BackLinks, Instance),
+                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+                         die_if(Duplicates \= [],
                                 error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-nonground_captures(state(Captures), Nonground) :-
+idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
+    append(Ids,All_Ids),
+    length(All_Ids, N),
+    sort(All_Ids, Sorted),
+    (   length(Sorted, N)
+    ->  Duplicates = []
+    ;   has_duplicates(All_Ids, Duplicates)
+    ),
+    maplist([[Id|_],Id]>>true, Ids, Toplevel).
+
+insert_backlinks(Links, Graph) :-
+    nb_link_dict(backlinks,Graph,Links),
+    insert_backlinks_(Links, Graph).
+
+insert_backlinks_([], _).
+insert_backlinks_([link(S,P,O)|T], Instance) :-
+    insert(Instance, S, P, O, _),
+    insert_backlinks_(T, Instance).
+
+nonground_captures(Captures, Nonground) :-
     findall(Ref,
             (   gen_assoc(Ref, Captures, Var),
                 var(Var)),
@@ -335,7 +404,8 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                              Ids
                          )
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Options) :-
@@ -347,7 +417,8 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
 api_nuke_documents_(schema, Transaction) :-
@@ -370,12 +441,13 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, state(Captures_In), Id, Captures_Out):-
-    replace_document(Transaction, Document, Create, Raw_JSON, Captures_In, Id, _Dependencies, Captures_Out).
-api_replace_document_(schema, _Raw_JSON, Transaction, Document, Create, state(Captures_In), Id, Captures_In):-
+api_replace_document_(instance, Raw_JSON, Transaction, Document, Create, Captures_In, Ids, Captures_Out):-
+    replace_document(Transaction, Document, Create, Raw_JSON, Captures_In, Ids, _Dependencies, Captures_Out).
+api_replace_document_(schema, _Raw_JSON, Transaction, Document, Create, Captures_In, [Id], Captures_In):-
     replace_schema_document(Transaction, Document, Create, Id).
 
 
@@ -400,34 +472,32 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          empty_assoc(Captures),
-                         nb_thread_var_init(Captures, Captures_Var),
                          ensure_transaction_has_builder(Graph_Type, Transaction),
-                         findall(Id,
-                                 nb_thread_var(
-                                     {Graph_Type,Raw_JSON,Transaction,Stream,Id}/[State,Captures_Out]>>
-                                     (   json_read_list_stream(Stream, Document),
-                                         call_catch_document_mutation(
-                                             Document,
-                                             api_replace_document_(Graph_Type,
-                                                                   Raw_JSON,
-                                                                   Transaction,
-                                                                   Document,
-                                                                   Create,
-                                                                   State,
-                                                                   Id,
-                                                                   Captures_Out))
-                                     ),
-                                     Captures_Var),
-                                 Ids),
-                         die_if(nonground_captures(Captures_Var, Nonground),
+                         stream_to_lazy_docs(Stream, Lazy_List),
+                         api_replace_document_from_lazy_list(Lazy_List,
+                                                             Graph_Type,
+                                                             Raw_JSON,
+                                                             Transaction,
+                                                             Create,
+                                                             Captures,
+                                                             Captures_Out,
+                                                             Ids_List),
+                         die_if(nonground_captures(Captures_Out, Nonground),
                                 error(not_all_captures_found(Nonground), _)),
-                         die_if(has_duplicates(Ids, Duplicates), error(same_ids_in_one_transaction(Duplicates), _))
+                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+                         die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
                      ),
-                     Meta_Data),
+                     Meta_Data,
+                     Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
+api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, _).
+
+
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     nonvar(Query),
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
@@ -445,24 +515,38 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, Query, 
     api_print_documents_by_query(Transaction, Type_Ex, Query_Ex, Config, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     ground(Id),
     !,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     do_or_die(api_document_exists(Graph_Type, Transaction, Id),
               error(document_not_found(Id), _)),
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_stream_start(Config, Stream_Started),
+    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+    json_stream_end(Config).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Ids, _Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    ground(Ids),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    do_or_die(api_document_exists(Graph_Type, Transaction, Id),
+              error(document_not_found(Id), _)),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
-    api_print_document(Graph_Type, Transaction, Id, Config, Stream_Started),
+    api_print_documents_by_id(Graph_Type, Transaction, Config, Ids, Stream_Started),
 
     json_stream_end(Config).
-api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     % At this point we know we can open the stream. Any exit conditions have triggered by now.
-    call(Initial_Goal, Config.as_list),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
     (   ground(Type)
@@ -472,6 +556,16 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, Type, _Query,
 
     json_stream_end(Config).
 
+api_full_replace_schema(Transaction, Schema) :-
+    empty_assoc(Captures_In),
+    nuke_schema_documents(Transaction),
+    Schema = [Context|Classes],
+    call_catch_document_mutation(
+        Context,
+        replace_context_document(Transaction, Context)
+    ),
+    api_insert_document_from_lazy_list_unsafe(Classes, schema, false, Transaction, Context,
+                                             Captures_In, _Captures_Out, _BackLinks-[], _Ids).
 
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).

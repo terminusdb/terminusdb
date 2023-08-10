@@ -4,13 +4,16 @@
               resolve_relative_descriptor//2,
               resolve_relative_descriptor/3,
               resolve_absolute_string_descriptor/2,
+              resolve_absolute_string_descriptor_ex/2,
+              resolve_absolute_typed_string_descriptor_ex/3,
               resolve_relative_string_descriptor/3,
               resolve_absolute_graph_descriptor/2,
               resolve_absolute_string_graph_descriptor/2,
               resolve_absolute_string_descriptor_and_graph/3,
               resolve_absolute_string_descriptor_and_default_graph/3,
               resolve_absolute_or_relative_string_descriptor/3,
-              resolve_filter/2
+              resolve_filter/2,
+	      descriptor_organization/2
           ]).
 
 /** <module> Resolve Query Resource
@@ -23,7 +26,6 @@
 :- use_module(library(pcre)).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
-:- use_module(library(plunit)).
 
 resolve_string_descriptor(Default_Descriptor, String, Descriptor) :-
     (   resolve_relative_string_descriptor(Default_Descriptor,
@@ -614,6 +616,16 @@ test(commit_descriptor) :-
 
 resolve_relative_descriptor(Context, Path, Descriptor) :-
     resolve_relative_descriptor(Context, Descriptor, Path, []).
+
+resolve_absolute_string_descriptor_ex(String, Descriptor) :-
+    do_or_die(resolve_absolute_string_descriptor(String, Descriptor),
+              error(invalid_path(String), _)).
+
+resolve_absolute_typed_string_descriptor_ex(String, Type, Descriptor) :-
+    do_or_die(resolve_absolute_string_descriptor(String, Descriptor),
+              error(invalid_path(String), _)),
+    do_or_die(is_dict(Descriptor, Type),
+              error(unexpected_descriptor_type(Descriptor, Type), _)).
 
 resolve_absolute_string_descriptor(String, Descriptor) :-
     var(String),

@@ -1,5 +1,4 @@
 use crate::terminus_store::layer::*;
-use itertools;
 use lazy_init::Lazy;
 
 use std::collections::{HashMap, HashSet};
@@ -26,9 +25,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
             let mut result = HashMap::new();
             for triple in self.layer.triples_p(inherits_id) {
-                let entry = result
-                    .entry(triple.subject)
-                    .or_insert_with(|| HashSet::new());
+                let entry = result.entry(triple.subject).or_insert_with(HashSet::new);
                 entry.insert(triple.object);
             }
 
@@ -47,9 +44,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
             let mut result = HashMap::new();
             for triple in self.layer.triples_p(inherits_id) {
-                let entry = result
-                    .entry(triple.object)
-                    .or_insert_with(|| HashSet::new());
+                let entry = result.entry(triple.object).or_insert_with(HashSet::new);
                 entry.insert(triple.subject);
             }
 
@@ -68,18 +63,14 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
         let mut work: Vec<_> = get_direct_subdocument_ids_from_schema(self.layer).collect();
-        loop {
-            if let Some(cur) = work.pop() {
-                if !result.insert(cur) {
-                    // we already found this type.
-                    continue;
-                }
+        while let Some(cur) = work.pop() {
+            if !result.insert(cur) {
+                // we already found this type.
+                continue;
+            }
 
-                if let Some(children) = inheritance.get(&cur) {
-                    work.extend(children);
-                }
-            } else {
-                break;
+            if let Some(children) = inheritance.get(&cur) {
+                work.extend(children);
             }
         }
 
@@ -90,25 +81,21 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
         let mut work: Vec<_> = get_direct_unfoldable_ids_from_schema(self.layer).collect();
-        loop {
-            if let Some(cur) = work.pop() {
-                if !result.insert(cur) {
-                    // we already found this type.
-                    continue;
-                }
+        while let Some(cur) = work.pop() {
+            if !result.insert(cur) {
+                // we already found this type.
+                continue;
+            }
 
-                if let Some(children) = inheritance.get(&cur) {
-                    work.extend(children);
-                }
-            } else {
-                break;
+            if let Some(children) = inheritance.get(&cur) {
+                work.extend(children);
             }
         }
 
         result
     }
 
-    pub fn get_set_pairs_from_schema<'b>(&'b self) -> impl Iterator<Item = (u64, u64)> + 'b {
+    pub fn get_set_pairs_from_schema(&'_ self) -> impl Iterator<Item = (u64, u64)> + '_ {
         let sys_set_id = self.layer.object_node_id(SYS_SET);
         if sys_set_id.is_none() {
             return itertools::Either::Left(std::iter::empty());
@@ -121,12 +108,12 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         }
         let rdf_type_id = rdf_type_id.unwrap();
 
-        let inheritance_graph = self.get_inheritance_graph();
+        let inheritance_graph = self.get_reverse_inheritance_graph();
         itertools::Either::Right(
             self.layer
                 .triples_o(sys_set_id)
                 .filter(move |t| t.predicate == rdf_type_id)
-                .map(move |t| {
+                .flat_map(move |t| {
                     let set_origin = self
                         .layer
                         .triples_o(t.subject)
@@ -145,8 +132,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
                     }
 
                     r.into_iter()
-                })
-                .flatten(),
+                }),
         )
     }
 
@@ -224,19 +210,14 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
         let mut result = HashMap::new();
 
         for (sub, supers) in inheritance.iter() {
-            // every type is a subtype of itself
-            let entry = result.entry(*sub).or_insert_with(|| HashSet::new());
-            entry.insert(*sub);
-
-            // next, find all super types
             let mut visited = HashSet::new();
             let mut supers: Vec<&u64> = supers.iter().collect();
             while let Some(sup) = supers.pop() {
                 if !visited.contains(&sup) {
                     visited.insert(sup);
-                    let entry = result.entry(*sup).or_insert_with(|| HashSet::new());
+                    let entry = result.entry(*sup).or_insert_with(HashSet::new);
                     entry.insert(*sub);
-                    if let Some(more_supers) = inheritance.get(&sup) {
+                    if let Some(more_supers) = inheritance.get(sup) {
                         supers.extend(more_supers.iter());
                     }
                 }
@@ -311,7 +292,7 @@ impl<'a, L: Layer> Iterator for RdfListIterator<'a, L> {
                 .expect("expected cons cell to have a first but id not found");
             let rdf_rest_id = self
                 .rdf_rest_id
-                .expect("expected cons cell to have a first but id not found");
+                .expect("expected cons cell to have a rest but id not found");
             let first_id = self
                 .layer
                 .single_triple_sp(self.cur, rdf_first_id)
@@ -327,7 +308,9 @@ impl<'a, L: Layer> Iterator for RdfListIterator<'a, L> {
     }
 }
 
+#[derive(Debug)]
 pub struct InheritanceGraph(HashMap<u64, HashSet<u64>>);
+#[derive(Debug)]
 pub struct ReverseInheritanceGraph(HashMap<u64, HashSet<u64>>);
 
 impl std::ops::Deref for InheritanceGraph {
@@ -344,12 +327,6 @@ impl std::ops::Deref for ReverseInheritanceGraph {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
-}
-
-fn triple_str_to_string(input: &str) -> &str {
-    // this is incredibly lazy and assumes no escaping is done in the target string. This is true for schema prefixes though.
-    let end = input.len() - "\"^^'http://www.w3.org/2001/XMLSchema#string'".len();
-    &input[1..end]
 }
 
 pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContracter {
@@ -370,15 +347,15 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
             .object;
 
         if let ObjectType::Value(base_expansion) = schema.id_object(base_expansion_id).unwrap() {
-            let base_expansion_sub = triple_str_to_string(&base_expansion);
-            prefixes.push(Prefix::base(base_expansion_sub));
+            let base_expansion_sub = base_expansion.as_val::<String, String>();
+            prefixes.push(Prefix::base(&base_expansion_sub));
         } else {
             panic!("unexpected node type for base");
         }
         if let ObjectType::Value(schema_expansion) = schema.id_object(schema_expansion_id).unwrap()
         {
-            let schema_expansion_sub = triple_str_to_string(&schema_expansion);
-            prefixes.push(Prefix::schema(schema_expansion_sub));
+            let schema_expansion_sub = schema_expansion.as_val::<String, String>();
+            prefixes.push(Prefix::schema(&schema_expansion_sub));
         } else {
             panic!("unexpected node type for schema");
         }
@@ -396,9 +373,9 @@ pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContra
                     schema.id_object(contraction_id).unwrap(),
                     schema.id_object(expansion_id).unwrap(),
                 ) {
-                    let contraction_sub = triple_str_to_string(&contraction);
-                    let expansion_sub = triple_str_to_string(&expansion);
-                    prefixes.push(Prefix::other(contraction_sub, expansion_sub));
+                    let contraction_sub = contraction.as_val::<String, String>();
+                    let expansion_sub = expansion.as_val::<String, String>();
+                    prefixes.push(Prefix::other(&contraction_sub, &expansion_sub));
                 }
             }
         }

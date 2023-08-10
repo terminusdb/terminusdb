@@ -20,12 +20,12 @@ describe('document-get', function () {
     order: 'xsd:integer',
   }
 
-  const aristotle = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3 }
-  const plato = { '@type': 'Person', name: 'Plato', age: 80, order: 2 }
-  const socrates = { '@type': 'Person', name: 'Socrates', age: 71, order: 1 }
-  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: 79, order: 3 }
-  const popper = { '@type': 'Person', name: 'Karl Popper', age: 92, order: 5 }
-  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5 }
+  const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3' }
+  const plato = { '@type': 'Person', name: 'Plato', age: '80', order: '2' }
+  const socrates = { '@type': 'Person', name: 'Socrates', age: '71', order: '1' }
+  const kant = { '@type': 'Person', name: 'Immanuel Kant', age: '79', order: '3' }
+  const popper = { '@type': 'Person', name: 'Karl Popper', age: '92', order: '5' }
+  const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: '71', order: '5' }
 
   const instances = [aristotle, plato, socrates]
 
@@ -318,7 +318,7 @@ describe('document-get', function () {
   describe('succeeds query for @type and field', function () {
     const queries = [
       [{ name: 'Plato' }, 1],
-      [{ age: 71 }, 2],
+      [{ age: '71' }, 2],
       [{ order: 3 }, 0],
     ]
     for (const [query, index] of queries) {
@@ -381,7 +381,7 @@ describe('document-get', function () {
       expect(r.body).to.have.deep.members(myInstances)
     })
 
-    const q2 = { '@type': 'Person', age: 71 }
+    const q2 = { '@type': 'Person', age: '71' }
 
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
@@ -430,7 +430,7 @@ describe('document-get', function () {
       expect(r.body).to.have.deep.members(expectedInstances)
     })
 
-    const q2 = { '@type': 'Person', age: 71 }
+    const q2 = { '@type': 'Person', age: '71' }
 
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
@@ -441,40 +441,46 @@ describe('document-get', function () {
   describe('empty local database', function () {
     let dbSpec
     let url
+    let dbPath
+    let envs
+
+    async function execEnv (command) {
+      return exec(command, { env: envs })
+    }
 
     before(async function () {
-      process.env.TERMINUSDB_SERVER_DB_PATH = './storage/' + util.randomString()
-      const r = await exec('./terminusdb.sh store init --force')
+      dbPath = './storage/' + util.randomString()
+      envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
+      const r = await execEnv('./terminusdb.sh store init --force')
       expect(r.stdout).to.match(/^Successfully initialised database/)
       dbSpec = agent.orgName + '/' + agent.dbName
       url = agent.baseUrl + '/' + dbSpec
     })
 
     after(async function () {
-      await fs.rm(process.env.TERMINUSDB_SERVER_DB_PATH, { recursive: true })
-      delete process.env.TERMINUSDB_SERVER_DB_PATH
+      await fs.rm(dbPath, { recursive: true })
     })
 
     describe('clone remote', function () {
       before(async function () {
-        this.timeout(20000) // Cloning this database is slow on macOS.
-        const r = await exec(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
+        this.timeout(90000) // Cloning this database is slow on macOS.
+        const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
         expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
         expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
       })
 
       after(async function () {
-        const r = await exec(`./terminusdb.sh db delete ${dbSpec}`)
+        const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
         expect(r.stdout).to.match(new RegExp(`Database deleted: ${dbSpec}`))
       })
 
       it('passes doc get with expected schema', async function () {
-        const r = await exec(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
+        const r = await execEnv(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
         expectSchemaJsonl(stream.Readable.from(r.stdout).pipe(new JsonlParser()))
       })
 
       it('passes doc get with expected instances', async function () {
-        const r = await exec(`./terminusdb.sh doc get ${dbSpec}`)
+        const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
         expectInstancesJsonl(stream.Readable.from(r.stdout).pipe(new JsonlParser()))
       })
     })

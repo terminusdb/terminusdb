@@ -16,6 +16,7 @@ info(_System_DB, Auth, Info) :-
     terminus_store_version(TerminusDB_Store_Version),
     current_prolog_flag(terminusdb_git_hash, Git_Hash),
     get_db_version(Storage_Version),
+    number_string(Storage_Version, Storage_Version_String),
 
     Info = _{
                authority: Auth,
@@ -30,6 +31,6 @@ info(_System_DB, Auth, Info) :-
                },
                storage :
                _{
-                   version: Storage_Version
+                   version: Storage_Version_String
                }
            }.

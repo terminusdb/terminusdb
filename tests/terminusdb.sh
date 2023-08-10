@@ -9,35 +9,33 @@
 
 # Determine whether the $TERMINUSDB_DOCKER_IMAGE_TAG was passed and we should
 # use Docker or whether we have a valid executable path and we should use it.
-[[ "${TERMINUSDB_DOCKER_IMAGE_TAG:-x}" == "x" ]] && use_docker=1 || use_docker=0
+[[ "${TERMINUSDB_DOCKER_CONTAINER:-x}" == "x" ]] && use_docker=1 || use_docker=0
 [[ -x "${TERMINUSDB_EXEC_PATH:="../terminusdb"}" ]] && use_exec=0 || use_exec=1
 
 # If neither Docker nor executable, error.
 if [[ $use_docker -ne 0 && $use_exec -ne 0 ]]; then
-  echo "Error! Missing \$TERMINUSDB_DOCKER_IMAGE_TAG or executable ($TERMINUSDB_EXEC_PATH)."
+  echo "Error! Missing \$TERMINUSDB_DOCKER_CONTAINER or executable ($TERMINUSDB_EXEC_PATH)."
   exit -1
 fi
 
 if [[ $use_docker -eq 0 ]]; then
   # Use the Docker image.
-  if docker image inspect "$TERMINUSDB_DOCKER_IMAGE_TAG" &> /dev/null; then
+  if docker inspect "$TERMINUSDB_DOCKER_CONTAINER" &> /dev/null; then
     user="$(id -u):$(id -g)"
     set -e
     if [ -t 1 ]; then
       set -x
     fi
-    docker run \
-      --rm \
+    docker exec -i \
       --user $user \
-      --network host \
-      --volume "$PWD:/app/terminusdb/tests" \
       --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
+      --env TERMINUSDB_LOG_LEVEL="ERROR" \
       --workdir /app/terminusdb/tests \
-      "$TERMINUSDB_DOCKER_IMAGE_TAG" \
+      "$TERMINUSDB_DOCKER_CONTAINER" \
       /app/terminusdb/terminusdb \
       "$@"
   else
-    echo "Error! \$TERMINUSDB_DOCKER_IMAGE_TAG does not have a valid image: $TERMINUSDB_DOCKER_IMAGE_TAG"
+    echo "Error! \$TERMINUSDB_DOCKER_CONTAINER does not have a valid name: $TERMINUSDB_DOCKER_CONTAINER"
     exit -1
   fi
 elif [[ $use_exec -eq 0 ]]; then
@@ -46,5 +44,5 @@ elif [[ $use_exec -eq 0 ]]; then
   if [ -t 1 ]; then
     set -x
   fi
-  "$TERMINUSDB_EXEC_PATH" "$@"
+  TERMINUSDB_LOG_LEVEL="ERROR" "$TERMINUSDB_EXEC_PATH" "$@"
 fi
