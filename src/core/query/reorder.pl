@@ -469,6 +469,22 @@ test(internal_cuts, []) :-
         t(v(f),s,v(e))
     ).
 
+test(order_chains) :-
+    Term = (t(v(x1), 'P1082', v(x2)),
+            t(v(x1), 'P17', v(x3)),
+            t(v(x3), 'P31', 'Q6256'),
+            t(v(x3), 'P463', v(x4))),
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    Prog = (
+        t(v(x3),'P31','Q6256'),
+        t(v(x3),'P463',v(x4)),
+        t(v(x1),'P17',v(x3)),
+        t(v(x1),'P1082',v(x2))
+    ).
+
 test(order_dicts) :-
     order_conjuncts([_{a:1, b:v('X')}=_{a:v('Y'), b:2}],
                     [_{a:1, b:v('X')}=_{a:v('Y'), b:2}]).
