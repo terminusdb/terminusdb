@@ -1,0 +1,10 @@
+version: "3"
+
+services:
+  terminusdb-server:
+    volumes:
+      - terminusdb_storage:/app/terminusdb/storage
+volumes:
+  terminusdb_storage:
+    external: true
+    name: terminusdb_storage
