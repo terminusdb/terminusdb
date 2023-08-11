@@ -21,7 +21,11 @@
               merge_base_layers/4,
 
               nb_add_triple/4,
+              nb_add_id_triple/4,
+              nb_add_object_triple/4,
               nb_remove_triple/4,
+              nb_remove_id_triple/4,
+              nb_remove_object_triple/4,
               nb_commit/2,
               builder_committed/1,
               nb_apply_delta/2,

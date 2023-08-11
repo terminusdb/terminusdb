@@ -99,7 +99,20 @@
               conjunct/3,
 
               % restriction.pl
-              ids_for_restriction/4
+              ids_for_restriction/4,
+
+              % ids.pl
+              ids/2,
+              ids/3,
+              realise_value/2,
+              realise_id/3,
+              fix/1,
+              fix_term/1,
+              op(700, xfx, ∈),
+
+              % lit_type.pl
+              lit_type/2,
+              lit_lang/2
           ]).
 
 :- use_module(query/expansions).
@@ -115,3 +128,5 @@
 :- use_module(query/constraints).
 :- use_module(query/algebra).
 :- use_module(query/restrictions).
+:- use_module(query/ids).
+:- use_module(query/lit_type).

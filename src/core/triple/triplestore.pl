@@ -6,10 +6,13 @@
               safe_open_graph_head/3,
               safe_delete_named_graph/2,
               xrdf/4,
+              crdf/4,
               xquad/5,
               xrdf_db/4,
               xrdf_deleted/4,
+              crdf_deleted/4,
               xrdf_added/4,
+              crdf_added/4,
               insert/5,
               delete/5,
               delete_all/1,
@@ -282,11 +285,14 @@ import_graph(_File, _DB_ID, _Graph_ID) :-
  * Insert triple into transaction layer, record changed as 1 or 0
  */
 insert(G,X,Y,Z,Changed) :-
-    do_or_die(ground(Z),
+    realise_value(X,XV),
+    realise_value(Y,YV),
+    realise_value(Z,ZV),
+    do_or_die(ground(ZV),
               error(instantiation_error, _)),
-    ground_object_storage(Z,S),
+    object_storage(ZV, ZS),
     read_write_obj_builder(G, Builder),
-    (   nb_add_triple(Builder, X, Y, S)
+    (   nb_add_object_triple(Builder, XV, YV, ZS)
     ->  Changed = 1
     ;   Changed = 0).
 
@@ -296,9 +302,14 @@ insert(G,X,Y,Z,Changed) :-
  * Delete quad from transaction predicates, record changed as 1 or 0
  */
 delete(G,X,Y,Z,Changed) :-
-    ground_object_storage(Z,S),
+    realise_value(X,XV),
+    realise_value(Y,YV),
+    realise_value(Z,ZV),
+    do_or_die(ground(ZV),
+              error(instantiation_error, _)),
+    object_storage(ZV, ZS),
     read_write_obj_builder(G, Builder),
-    (   nb_remove_triple(Builder, X, Y, S)
+    (   nb_remove_object_triple(Builder, XV, YV, ZS)
     ->  Changed = 1
     ;   Changed = 0).
 
@@ -314,13 +325,27 @@ delete_all(G) :-
 xrdf_added(Gs,X,Y,Z) :-
     member(G,Gs),
     read_write_obj_reader(G, Layer),
-    pre_convert_node(X,A),
-    pre_convert_node(Y,B),
-    object_storage(Z,S),
-    triple_addition(Layer,A,B,S),
-    post_convert_node(A,X),
-    post_convert_node(B,Y),
-    storage_object(S,Z).
+    pre_convert_object(Z,ZC),
+    xrdf_added_db(Layer, X, Y, ZC),
+    Z = ZC,
+    fix(X), fix(Y), fix(Z).
+
+crdf_added(Gs,X,Y,Z) :-
+    member(G,Gs),
+    read_write_obj_reader(G, Layer),
+    xrdf_added_db(Layer, X, Y, Z).
+
+xrdf_added_db(Layer, X, Y, Z) :-
+    realise_id(X, Layer, o(XI)),
+    realise_id(Y, Layer, p(YI)),
+    realise_id(Z, Layer, o(ZI)),
+    id_triple_addition(Layer, XI, YI, ZI),
+    ids(X2, Layer, o(XI)),
+    X = X2,
+    ids(Y2, Layer, p(YI)),
+    Y = Y2,
+    ids(Z2, Layer, o(ZI)),
+    Z = Z2.
 
 /*
  * xrdf_deleted(+Gs:list(read_write_obj),+X,+Y,+Z) is nondet.
@@ -330,13 +355,27 @@ xrdf_added(Gs,X,Y,Z) :-
 xrdf_deleted(Gs,X,Y,Z) :-
     member(G,Gs),
     read_write_obj_reader(G, Layer),
-    pre_convert_node(X,A),
-    pre_convert_node(Y,B),
-    object_storage(Z,S),
-    triple_removal(Layer,A,B,S),
-    post_convert_node(A,X),
-    post_convert_node(B,Y),
-    storage_object(S,Z).
+    pre_convert_object(Z,ZC),
+    xrdf_deleted_db(Layer, X, Y, ZC),
+    Z = ZC,
+    fix(X), fix(Y), fix(Z).
+
+crdf_deleted(Gs,X,Y,Z) :-
+    member(G,Gs),
+    read_write_obj_reader(G, Layer),
+    xrdf_delete_db(Layer, X, Y, Z).
+
+xrdf_deleted_db(Layer, X, Y, Z) :-
+    realise_id(X, Layer, o(XI)),
+    realise_id(Y, Layer, p(YI)),
+    realise_id(Z, Layer, o(ZI)),
+    id_triple_removal(Layer, XI, YI, ZI),
+    ids(X2, Layer, o(XI)),
+    X = X2,
+    ids(Y2, Layer, p(YI)),
+    Y = Y2,
+    ids(Z2, Layer, o(ZI)),
+    Z = Z2.
 
 /**
  * xrdf(+Gs,?Subject,?Predicate,?Object) is nondet.
@@ -345,11 +384,44 @@ xrdf_deleted(Gs,X,Y,Z) :-
  * This layer has the transaction updates included.
  *
  */
-xrdf(Gs,X,Y,Z) :-
-    assertion(is_list(Gs)), % take out for production? This gets called a *lot*
-    member(G,Gs),
-    read_write_obj_reader(G, Layer),
-    xrdf_db(Layer,X,Y,Z).
+xrdf(Graphs, X, Y, Z) :-
+    member(Graph, Graphs),
+    read_write_obj_reader(Graph, Layer),
+    pre_convert_object(Z,ZC),
+    xrdf_db(Layer, X, Y, ZC),
+    Z = ZC,
+    fix(X), fix(Y), fix(Z).
+
+pre_convert_object(Z, Z) :-
+    ground(Z),
+    !.
+pre_convert_object(Z, ZC) :-
+    nonvar(Z),
+    !,
+    (   Z = _^^ZT
+    ->  lit_type(ZC,ZT)
+    ;   Z = _@ZL
+    ->  lit_type(ZC,ZL)
+    ).
+pre_convert_object(Z, Z).
+
+% maintain constraints instead of bindings.
+crdf(Graphs, X, Y, Z) :-
+    member(Graph, Graphs),
+    read_write_obj_reader(Graph, Layer),
+    xrdf_db(Layer, X, Y, Z).
+
+xrdf_db(Layer, X, Y, Z) :-
+    realise_id(X, Layer, o(XI)),
+    realise_id(Y, Layer, p(YI)),
+    realise_id(Z, Layer, o(ZI)),
+    id_triple(Layer, XI, YI, ZI),
+    ids(X2, Layer, o(XI)),
+    X = X2,
+    ids(Y2, Layer, p(YI)),
+    Y = Y2,
+    ids(Z2, Layer, o(ZI)),
+    Z = Z2.
 
 /**
  * xquad(Gs:list(graph),?G:graph,?Subject,?Predicate,?Object) is nondet.
@@ -358,10 +430,10 @@ xrdf(Gs,X,Y,Z) :-
  * we found a result in.
  */
 xquad(Gs,G,X,Y,Z) :-
-    assertion(is_list(Gs)),
     memberchk(G,Gs),
     read_write_obj_reader(G, Layer),
-    xrdf_db(Layer,X,Y,Z).
+    xrdf_db(Layer,X,Y,Z),
+    fix(X), fix(Y), fix(Z).
 
 unlink_object(Gs, ID) :-
     global_prefix_expand(rdf:first, First),
@@ -386,16 +458,11 @@ post_convert_node(A,X) :-
         ;   X = A)
     ;   atom_string(X,A)).
 
-/*
- * xrdf_db(Layer,X,Y,Z) is nondet.
- *
- * Marshalls types appropriately for terminus-store
- */
-xrdf_db(Layer,X,Y,Z) :-
-    pre_convert_node(X,A),
-    pre_convert_node(Y,B),
-    object_storage(Z,S),
-    triple(Layer,A,B,S),
-    post_convert_node(A,X),
-    post_convert_node(B,Y),
-    storage_object(S,Z).
+:- begin_tests(xrdf).
+
+test(search_half_bound_literal) :-
+    ask(system_descriptor{},
+        t(_, sys:prefix, Prefix^^xsd:string, schema)),
+    Prefix = "xsd".
+
+:- end_tests(xrdf).

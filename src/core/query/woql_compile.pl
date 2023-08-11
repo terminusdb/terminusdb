@@ -36,6 +36,8 @@
 :- use_module(core(api), [call_catch_document_mutation/2]).
 :- use_module(core(query/reorder)).
 :- use_module(core(query/partition)).
+:- use_module(core(query/lit_type)).
+:- use_module(core(query/ids)).
 
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
@@ -327,14 +329,17 @@ resolve(X,XEx) -->
         !
     },
     resolve_dictionary(X, XEx).
-resolve(X@L,XS@L) -->
+resolve(X@L,Lit) -->
     resolve(X,XE),
     {
         (   ground(XE),
             atom(XE)
-        ->  atom_string(XE,XS)
-        ;   XE = XS),
-        !
+        ->  atom_string(XE,XS),
+            Lit = XS@L
+        ;   lit_lang(Lit, L),
+            when(ground(Lit),
+                 Lit = XE@L)
+        )
     }.
 resolve(X^^T,Lit) -->
     resolve_variable(X,XE),
@@ -346,8 +351,10 @@ resolve(X^^T,Lit) -->
             ->  atom_string(XE,XS)
             ;   XE=XS),
             Lit = XS^^TE
-        ;   Lit = XE^^TE),
-        !
+        ;   lit_type(Lit,TE),
+            when(ground(Lit),
+                 Lit = XE^^TE)
+        )
     }.
 resolve(L,Le) -->
     {
@@ -998,7 +1005,7 @@ compile_wf(addition(X,P,Y),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         filter_transaction_object_read_write_objects(Filter, Transaction_Object, RWOs),
-        Goal = (not_literal(XE),not_literal(PE),xrdf_added(RWOs, XE, PE, YE))
+        Goal = (not_literal(XE),not_literal(PE),crdf_added(RWOs, XE, PE, YE))
     }.
 compile_wf(addition(X,P,Y,G),Goal) -->
     {
@@ -1018,7 +1025,7 @@ compile_wf(removal(X,P,Y),Goal) -->
         collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
                                                  Transaction_Object),
         filter_transaction_object_read_write_objects(Filter, Transaction_Object, RWOs),
-        Goal = (not_literal(XE),not_literal(PE),xrdf_deleted(RWOs, XE, PE, YE))
+        Goal = (not_literal(XE),not_literal(PE),crdf_deleted(RWOs, XE, PE, YE))
     }.
 compile_wf(removal(X,P,Y,G),Goal) -->
     {
@@ -1306,12 +1313,15 @@ compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
     resolve(Dict,DictE),
     {atom_string(KeyE,Key)},
     resolve(Value,ValueE).
-compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
+compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,
+                                                           (Query,
+                                                            fix_term(Query)),
+                                                           Acc)) -->
     resolve(WGroup,Group),
     resolve(WTemplate,Template),
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
-compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
+compile_wf(distinct(X,WQuery), distinct(XE,(Query, fix_term(Query)))) -->
     resolve(X,XE),
     compile_wf(WQuery,Query).
 compile_wf(length(L,N),Length) -->
@@ -1752,13 +1762,13 @@ filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object,
     ->  compile_instance_subject(XE, Transaction_Object, XI),
         compile_instance_predicate(PE, Transaction_Object, PI),
         compile_instance_object(YE, Transaction_Object, YI),
-        Search_1 = [xrdf(Transaction_Object.instance_objects, XI, PI, YI)]
+        Search_1 = [crdf(Transaction_Object.instance_objects, XI, PI, YI)]
     ;   Search_1 = []),
     (   memberchk(schema,Types)
     ->  compile_schema_subject(XE, Transaction_Object, XS),
         compile_schema_predicate(PE, Transaction_Object, PS),
         compile_schema_object(YE, Transaction_Object, YS),
-        Search_2 = [xrdf(Transaction_Object.schema_objects, XS, PS, YS)]
+        Search_2 = [crdf(Transaction_Object.schema_objects, XS, PS, YS)]
     ;   Search_2 = []),
     append([Search_1,Search_2], Searches),
     list_disjunction(Searches,Goal).
@@ -1766,12 +1776,12 @@ filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_O
     compile_instance_subject(XE, Transaction_Object, XI),
     compile_instance_predicate(PE, Transaction_Object, PI),
     compile_instance_object(YE, Transaction_Object, YI),
-    Goal = xrdf((Transaction_Object.instance_objects), XI, PI, YI).
+    Goal = crdf((Transaction_Object.instance_objects), XI, PI, YI).
 filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, t(XE, PE, YE), Goal) :-
     compile_schema_subject(XE, Transaction_Object, XS),
     compile_schema_predicate(PE, Transaction_Object, PS),
     compile_schema_object(YE, Transaction_Object, YS),
-    Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
+    Goal = crdf((Transaction_Object.schema_objects), XS, PS, YS).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance
@@ -1821,7 +1831,7 @@ save_and_retrieve_woql(Query_In, Query_Out) :-
                     query: Query_In},
     run_insert_document(Descriptor, commit_object{ author : "automated test framework",
                                                    message : "testing"}, Document_In, Id),
-    * print_all_triples(Descriptor),
+
     get_document(Descriptor, Id, Document_Out),
     Query_Out = (Document_Out.query).
 
@@ -2025,6 +2035,7 @@ test(added_quad, [
 
     save_and_retrieve_woql(Query_Added, Query_Added_Out),
     query_test_response(Descriptor, Query_Added_Out, JSON_Added),
+
     (JSON_Added.bindings) = [_{}].
 
 test(upper, [

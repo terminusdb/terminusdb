@@ -11,6 +11,7 @@
 :- use_module(core(util)).
 :- use_module(core(transaction)).
 :- use_module(core(triple/literals)).
+:- use_module(core(query/ids)).
 
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -64,6 +65,7 @@ json_transform_binding_set(Context, Binding, JSON) :-
     maplist({Prefixes}/[Record,Var_Name=Term]>>(
                 get_dict(var_name, Record, Var_Name),
                 get_dict(woql_var, Record, Prolog_Var),
+                fix(Prolog_Var),
                 (   var(Prolog_Var)
                 ->  Term = null
                 ;   term_jsonld(Prolog_Var, Prefixes, Term))),

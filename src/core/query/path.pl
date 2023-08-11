@@ -17,6 +17,7 @@
 :- use_module(core(transaction), [read_write_obj_reader/2]).
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
+:- use_module(core(query/ids)).
 
 hop(type_filter{ types : [instance]}, XI, _XS, PI, _PS, YI, _YS, Transaction_Object) :-
     !,
@@ -32,9 +33,11 @@ hop(type_filter{ types : Types}, _XI, XS, _PI, PS, _YI, YS, Transaction_Object) 
     xrdf(Transaction_Object.schema_objects, id(XS), id(PS), id(YS)).
 
 calculate_path_solutions(Pattern,XE,YE,Path,Filter,Transaction_Object) :-
+    fix(XE), fix(YE),
     run_pattern(Pattern,XE,YE,Path,Filter,Transaction_Object, true).
 
 calculate_path_solutions(Pattern,XE,YE,Filter,Transaction_Object) :-
+    fix(XE), fix(YE),
     run_pattern(Pattern,XE,YE,_Path,Filter,Transaction_Object, false).
 
 /**

@@ -547,8 +547,8 @@ database_schema_context_object(Schema, Context) :-
     database_schema_prefixes(Schema, Prefixes),
     % This should always exist according to schema correctness criteria?
     xrdf(Schema, ID, rdf:type, sys:'Context'),
-    xrdf(Schema, ID, sys:base, Base_String^^_),
-    xrdf(Schema, ID, sys:schema, Schema_String^^_),
+    xrdf(Schema, ID, sys:base, Base_String^^xsd:string),
+    xrdf(Schema, ID, sys:schema, Schema_String^^xsd:string),
     (   get_schema_context_documentation(Schema, ID, Documentation)
     ->  put_dict(
             _{ '@base' : Base_String,
@@ -592,8 +592,8 @@ database_schema_prefixes(Schema,Context) :-
             findall(
                 Key-URI,
                 (   xrdf(Schema, ID, sys:prefix_pair, Prefix_Pair),
-                    xrdf(Schema, Prefix_Pair, sys:prefix, Key_String^^_),
-                    xrdf(Schema, Prefix_Pair, sys:url, URI^^_),
+                    xrdf(Schema, Prefix_Pair, sys:prefix, Key_String^^xsd:string),
+                    xrdf(Schema, Prefix_Pair, sys:url, URI^^xsd:string),
                     atom_string(Key,Key_String)
                 ),
                 Pairs),
@@ -2837,7 +2837,8 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     forall(
         json_triple_(Elaborated, Prefixes, t(S,P,O)),
         (   json_to_database_type(O,OC),
-            insert(Instance, S, P, OC, _))
+            insert(Instance, S, P, OC, _)
+        )
     ).
 
 run_insert_document(Desc, Commit, Document, Id) :-

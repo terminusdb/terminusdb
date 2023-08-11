@@ -26,6 +26,7 @@
 :- reexport(core(util/syntax)).
 :- use_module(woql_compile).
 :- use_module(global_prefixes).
+:- use_module(ids).
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
@@ -348,7 +349,9 @@ ask_ast(Context, Ast, Output_Context) :-
     compile_query(Ast,Prog, Context, Output_Context),
     debug(terminus(sdk),'Program: ~q~n', [Prog]),
 
-    woql_compile:Prog.
+    woql_compile:Prog,
+    % force realisation of id constraints
+    fix_term(Prog).
 
 /*
  * query_default_collection(Query_Context, Collection) is semidet.
