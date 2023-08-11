@@ -318,6 +318,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option_or_die(message(Message), Options),
     option(full_replace(Full_Replace), Options),
     option(raw_json(Raw_JSON), Options),
+    option(merge_repeats(Doc_Merge), Options),
     die_if(
         (   Graph_Type = schema,
             Raw_JSON = true
@@ -337,8 +338,11 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          database_instance(Transaction, [Instance]),
                          insert_backlinks(BackLinks, Instance),
                          idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-                         die_if(Duplicates \= [],
-                                error(same_ids_in_one_transaction(Duplicates), _))
+                         (   Doc_Merge = true
+                         ->  true
+                         ;   die_if(Duplicates \= [],
+                                    error(same_ids_in_one_transaction(Duplicates), _))
+                         )
                      ),
                      Meta_Data,
                      Options),
