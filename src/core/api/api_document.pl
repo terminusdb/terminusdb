@@ -592,7 +592,7 @@ insert_some_cities(System, Path) :-
                message("message"),
                full_replace(false),
                raw_json(false),
-               merge_repeats(true)
+               merge_repeats(false)
               ],
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
@@ -694,6 +694,7 @@ insert_some_cities(System, Path) :-
                author("author"),
                message("message"),
                full_replace(false),
+               merge_repeats(false),
                raw_json(false)],
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
@@ -827,6 +828,7 @@ test(basic_capture, [
                author("author"),
                message("message"),
                full_replace(false),
+               merge_repeats(false),
                raw_json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
@@ -873,6 +875,7 @@ test(capture_missing, [
                author("author"),
                message("message"),
                full_replace(false),
+               merge_repeats(false),
                raw_json(false)],
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
@@ -1276,6 +1279,7 @@ test(full_replace_schema, [
                author("test"),
                message("test"),
                full_replace(true),
+               merge_repeats(false),
                raw_json(false)],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
 
@@ -1294,6 +1298,7 @@ test(full_replace_instance, [
 {"@type": "City", "name": "Utrecht"}
 ', Stream),
     Options = [author("test"),
+               merge_repeats(false),
                message("test")],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, [Id], Options),
 
