@@ -183,13 +183,13 @@ describe('GraphQL', function () {
   {
     '@id': 'EnumPointer',
     '@type': 'Class',
-    pointer: 'an-enum'
+    pointer: 'an-enum',
   },
   {
     '@id': 'an-enum',
     '@type': 'Enum',
-    '@value': ['enum-one','enum-two']
-  }
+    '@value': ['enum-one', 'enum-two'],
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -1046,8 +1046,7 @@ query EverythingQuery {
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-      expect(result.data.EnumPointer).to.deep.equal([ { pointer: 'enum_one' } ])
+      expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
     })
-
   })
 })
