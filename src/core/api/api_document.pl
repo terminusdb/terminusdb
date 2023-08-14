@@ -501,7 +501,7 @@ api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version,
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, _).
 
 
-:- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,1).
+:- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     nonvar(Query),
     !,
