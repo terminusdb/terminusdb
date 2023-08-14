@@ -1048,6 +1048,5 @@ query EverythingQuery {
         })
       expect(result).to.equal(undefined)
     })
-
   })
 })
