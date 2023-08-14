@@ -656,6 +656,9 @@ Insert documents.
   * `-j`, `--raw_json`, `--raw-json`=[value]:
   inserts as raw json
 
+  * `-s`, `--merge_repeats`, `--merge-repeats`=[value]:
+  merge repeated documents into a single document record
+
   * `-f`, `--full_replace`, `--full-replace`=[value]:
   delete all previous documents and substitute these
 
