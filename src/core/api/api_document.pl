@@ -1274,6 +1274,7 @@ test(full_replace_instance, [
     open_string('
 {"@type": "City", "name": "Utrecht"}
 ', Stream),
+
     Options = [author("test"),
                graph_type(instance),
                full_replace(true),
