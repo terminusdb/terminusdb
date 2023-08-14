@@ -307,7 +307,8 @@ insert_documents_default_options(
     options{
         graph_type: instance,
         full_replace: false,
-        raw_json: false
+        raw_json: false,
+        merge_repeats: false
     }).
 
 api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
@@ -318,6 +319,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option_or_die(message(Message), Options),
     option(full_replace(Full_Replace), Options),
     option(raw_json(Raw_JSON), Options),
+    option(merge_repeats(Doc_Merge), Options),
     die_if(
         (   Graph_Type = schema,
             Raw_JSON = true
@@ -337,8 +339,11 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          database_instance(Transaction, [Instance]),
                          insert_backlinks(BackLinks, Instance),
                          idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-                         die_if(Duplicates \= [],
-                                error(same_ids_in_one_transaction(Duplicates), _))
+                         (   Doc_Merge = true
+                         ->  true
+                         ;   die_if(Duplicates \= [],
+                                    error(same_ids_in_one_transaction(Duplicates), _))
+                         )
                      ),
                      Meta_Data,
                      Options),
@@ -567,6 +572,24 @@ api_full_replace_schema(Transaction, Schema) :-
     api_insert_document_from_lazy_list_unsafe(Classes, schema, false, Transaction, Context,
                                              Captures_In, _Captures_Out, _BackLinks-[], _Ids).
 
+default_insert_options(Options) :-
+    Options = [graph_type(instance),
+               author("author"),
+               message("message"),
+               full_replace(false),
+               raw_json(false),
+               merge_repeats(false)
+              ].
+
+default_schema_insert_options(Options) :-
+    Options = [graph_type(schema),
+               author("author"),
+               message("message"),
+               full_replace(false),
+               raw_json(false),
+               merge_repeats(false)
+              ].
+
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -583,12 +606,7 @@ insert_some_cities(System, Path) :-
   "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)
-              ],
+    default_insert_options(Options),
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(delete_objects_with_stream,
@@ -685,11 +703,7 @@ insert_some_cities(System, Path) :-
   "@id" : "City/Utrecht",
   "name" : "Utrecht" }',
                 Stream),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(replace_objects_with_stream,
@@ -818,11 +832,7 @@ test(basic_capture, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     open_descriptor(Desc, T),
@@ -864,11 +874,7 @@ test(capture_missing, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(double_capture, [
@@ -909,11 +915,7 @@ test(double_capture, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(basic_capture_list, [
@@ -952,11 +954,7 @@ test(basic_capture_list, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options),
 
     open_descriptor(Desc, T),
@@ -999,11 +997,7 @@ test(basic_capture_replace, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _Ids_1, Options),
 
     open_string('
@@ -1065,11 +1059,7 @@ test(basic_capture_list_replace, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version, _New_Data_Version_1, _Ids_1, Options),
 
     open_string('
@@ -1134,11 +1124,7 @@ test(insert_subdocument_as_document, [
 
     open_descriptor(system_descriptor{}, SystemDB),
     super_user_authority(Auth),
-    Options = [graph_type(instance),
-               author("author"),
-               message("message"),
-               full_replace(false),
-               raw_json(false)],
+    default_insert_options(Options),
     api_insert_documents(SystemDB, Auth, "admin/testdb", Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 test(replace_nonexisting_subdocument_as_document, [
@@ -1267,17 +1253,17 @@ test(full_replace_schema, [
 { "@type": "Class",
   "@id": "Thing"
 }', Stream),
-    Options = [graph_type(schema),
-               author("test"),
-               message("test"),
+    Options = [author("test"),
                full_replace(true),
-               raw_json(false)],
+               graph_type(schema),
+               message("test")],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
     open_descriptor(TestDB, T),
 
     get_schema_document(T, "Thing", _Document).
+
 test(full_replace_instance, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "testdb"))),
@@ -1288,7 +1274,10 @@ test(full_replace_instance, [
     open_string('
 {"@type": "City", "name": "Utrecht"}
 ', Stream),
+
     Options = [author("test"),
+               graph_type(instance),
+               full_replace(true),
                message("test")],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, [Id], Options),
 
