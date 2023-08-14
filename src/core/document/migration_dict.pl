@@ -27,7 +27,19 @@ migration_dict_to_ast(json{ '@type' : "MoveClass", from : From, to: To },
                       move_class(From, To)).
 migration_dict_to_ast(json{ '@type' : "ReplaceClassMetadata", class : Class, metadata: Metadata },
                       replace_class_metadata(Class, Metadata)).
-migration_dict_to_ast(json{ '@type' : "ReplaceClassDocumentation",
+migration_dict_to_ast(json{ '@type' : "NotAbstract",
+                            class: Class},
+                      not_abstract(Class)).
+migration_dict_to_ast(json{ '@type' : "Abstract",
+                            class: Class},
+                      abstract(Class)).
+migration_dict_to_ast(json{ '@type' : "Unfoldable",
+                            class: Class},
+                      unfoldable(Class)).
+migration_dict_to_ast(json{ '@type' : "NotUnfoldable",
+                            class: Class},
+                      not_unfoldable(Class)).
+gration_dict_to_ast(json{ '@type' : "ReplaceClassDocumentation",
                             class: Class,
                             documentation: Documentation},
                       replace_class_documentation(Class, Documentation)).

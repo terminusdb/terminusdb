@@ -73,7 +73,10 @@ Op := delete_class(Name)
             property_default(PropertyN,DefaultN)])
     | move_class(Old_Name,New_Name)
     | change_key(Class, KeyType, [Property1, ..., PropertyN])
-
+    | unfoldable(Class)
+    | not_unfoldable(Class)
+    | abstract(Class)
+    | not_abstract(Class)
 */
 
 operation_string(Term,String) :-
@@ -189,6 +192,20 @@ replace_class_documentation(Class, Documentation, Before, After) :-
     atom_string(Class_Key, Class),
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@documentation', Class_Document, Documentation, Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* replace_class_documentation(Class,Documentation) */
+abstract(Class, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@abstract', Class_Document, [], Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* replace_class_documentation(Class,Documentation) */
+not_abstract(Class, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@abstrct', Class_Document, [], Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 
