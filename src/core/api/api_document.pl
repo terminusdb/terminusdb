@@ -1253,13 +1253,17 @@ test(full_replace_schema, [
 { "@type": "Class",
   "@id": "Thing"
 }', Stream),
-    default_schema_insert_options(Options),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
     open_descriptor(TestDB, T),
 
     get_schema_document(T, "Thing", _Document).
+
 test(full_replace_instance, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "testdb"))),
@@ -1271,7 +1275,8 @@ test(full_replace_instance, [
 {"@type": "City", "name": "Utrecht"}
 ', Stream),
     Options = [author("test"),
-               merge_repeats(false),
+               graph_type(instance),
+               full_replace(true),
                message("test")],
     api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, [Id], Options),
 
