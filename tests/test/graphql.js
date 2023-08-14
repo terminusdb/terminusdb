@@ -180,6 +180,16 @@ describe('GraphQL', function () {
     'prefix:node': { '@type': 'Optional', '@class': 'Node' },
     'prefix:string': 'xsd:string',
   },
+  {
+    '@id': 'EnumPointer',
+    '@type': 'Class',
+    pointer: 'an-enum',
+  },
+  {
+    '@id': 'an-enum',
+    '@type': 'Enum',
+    '@value': ['enum-one', 'enum-two'],
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -996,6 +1006,24 @@ query EverythingQuery {
           prefix_string: 'Baz',
         },
       ])
+    })
+
+    it('has a renamed enum type', async function () {
+      const instance = {
+        '@type': 'EnumPointer',
+        pointer: 'enum-one',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    EnumPointer{
+        pointer
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
     })
 
     it('shadows a graphql type and fails', async function () {
