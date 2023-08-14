@@ -73,7 +73,10 @@ Op := delete_class(Name)
             property_default(PropertyN,DefaultN)])
     | move_class(Old_Name,New_Name)
     | change_key(Class, KeyType, [Property1, ..., PropertyN])
-
+    | unfoldable(Class)
+    | not_unfoldable(Class)
+    | abstract(Class)
+    | not_abstract(Class)
 */
 
 operation_string(Term,String) :-
@@ -189,6 +192,34 @@ replace_class_documentation(Class, Documentation, Before, After) :-
     atom_string(Class_Key, Class),
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@documentation', Class_Document, Documentation, Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* abstract(Class) */
+abstract(Class, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@abstract', Class_Document, [], Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* not_abstract(Class) */
+not_abstract(Class, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    del_dict('@abstract', Class_Document, [], Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* unfoldable(Class) */
+unfoldable(Class, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@unfoldable', Class_Document, [], Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* not_unfoldable(Class) */
+not_unfoldable(Class, Before, After) :-
+    atom_string(Class_Key, Class),
+    get_dict(Class_Key, Before, Class_Document),
+    del_dict('@unfoldable', Class_Document, [], Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 
@@ -359,8 +390,16 @@ one_of_subsumed(OriginalOneOf, WeakeningOneOf) :-
 
 class_property_weakened(+,+,+,-) is semidet  + error
 */
+class_property_weakened('@abstract', Original, Weakening, Class, _SuperMap, Operation) =>
+    get_dict(Property,Original,[]),
+    \+ get_dict(Property,Weakening,[]),
+    Operation = not_abstract(Class).
+class_property_weakened('@unfoldable', Original, Weakening, Class, _SuperMap, Operation) =>
+    get_dict(Property,Original,[]),
+    \+ get_dict(Property,Weakening,[]),
+    Operation = not_unfoldable(Class).
 class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
-memberchk(Property,['@type','@key','@subdocument','@inherits','@id','@unfoldable']),
+memberchk(Property,['@type','@key','@subdocument','@inherits','@id']),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
 New_Value = Old_Value =>
@@ -1120,6 +1159,19 @@ interpret_instance_operation_(delete_class(Class), Before, After, Count) :-
         Count
     ).
 interpret_instance_operation_(create_class(_), _Before, _After, 0).
+interpret_instance_operation_(abstract(Class), Before, _After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    count_solutions(
+        (   ask(Before,
+                t(Uri, rdf:type, Class_Ex)),
+            once(delete_document(Before, Uri))
+        ),
+        Count
+    ).
+interpret_instance_operation_(not_abstract(_), _Before, _After, 0).
+interpret_instance_operation_(unfoldable(_), _Before, _After, 0).
+interpret_instance_operation_(not_unfoldable(_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
 interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
@@ -2944,5 +2996,197 @@ test(change_key,
 					 a:"bar"
 				   }
 			 ].
+
+
+before5('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "b" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "C",
+  "@abstract" : [],
+  "c" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "D",
+  "@unfoldable" : [],
+  "d" : "xsd:string" }
+').
+
+test(abstract,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before4,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "A", '@id' : 'A/2', a : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        abstract("A")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:1,schema_operations:1},
+
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+    A_Docs = [],
+    get_schema_document(Descriptor, "A", Document),
+
+    Document = json{ '@abstract':[],
+				    '@id':'A',
+				    '@type':'Class',
+                     a : 'xsd:string'
+				  }.
+
+test(unfoldable,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before5,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "B", '@id' : 'B/2', b : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        unfoldable("B")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:0,schema_operations:1},
+
+    findall(
+        DocB,
+        get_document_by_type(Descriptor, "B", DocB),
+        B_Docs),
+
+    B_Docs = [json{'@id':'B/2','@type':'B',b:"bar"}],
+    get_schema_document(Descriptor, "B", Document),
+
+    Document = json{ '@id':'B',
+					 '@type':'Class',
+					 '@unfoldable':[],
+					 b:'xsd:string'
+				   }.
+
+test(not_abstract,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before5,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        not_abstract("C")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+
+    Results = metadata{instance_operations:0,schema_operations:1},
+
+    findall(
+        DocC,
+        get_document_by_type(Descriptor, "C", DocC),
+        C_Docs),
+
+    C_Docs = [],
+    get_schema_document(Descriptor, "C", Document),
+
+    Document = json{
+                   '@id':'C',
+				   '@type':'Class',
+                   c : 'xsd:string'
+			   }.
+
+test(not_unfoldable,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before5,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "D", '@id' : 'D/2', d : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        not_unfoldable("D")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:0,schema_operations:1},
+
+    findall(
+        DocD,
+        get_document_by_type(Descriptor, "D", DocD),
+        D_Docs),
+
+    D_Docs = [_{ '@type' : 'D', '@id' : 'D/2', d : "bar" }],
+    get_schema_document(Descriptor, "D", Document),
+
+    Document = json{'@id':'D',
+				    '@type':'Class',
+                    d : 'xsd:string'
+				   }.
+
 
 :- end_tests(migration).
