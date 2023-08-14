@@ -2998,6 +2998,30 @@ test(change_key,
 			 ].
 
 
+before5('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "a" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "b" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "C",
+  "@abstract" : [],
+  "c" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "D",
+  "@unfoldable" : [],
+  "d" : "xsd:string" }
+').
+
 test(abstract,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
@@ -3010,16 +3034,13 @@ test(abstract,
         Descriptor,
         C1,
         (   insert_document(C1,
-                            _{ '@type' : "A", '@id' : 'A/1', a : "foo" },
-                            _),
-            insert_document(C1,
-                            _{ '@type' : "B", '@id' : 'B/2', a : "bar" },
+                            _{ '@type' : "A", '@id' : 'A/2', a : "bar" },
                             _)
         )
     ),
 
     Term_Ops = [
-        abstract("B")
+        abstract("A")
     ],
     migration_list_to_ast_list(Ops,Term_Ops),
 
@@ -3029,6 +3050,143 @@ test(abstract,
                                Results,
                                []),
 
-    Results = metadata{instance_operations:1,schema_operations:1}.
+    Results = metadata{instance_operations:1,schema_operations:1},
+
+    findall(
+        DocA,
+        get_document_by_type(Descriptor, "A", DocA),
+        A_Docs),
+    A_Docs = [],
+    get_schema_document(Descriptor, "A", Document),
+
+    Document = json{ '@abstract':[],
+				    '@id':'A',
+				    '@type':'Class',
+                     a : 'xsd:string'
+				  }.
+
+test(unfoldable,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before5,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "B", '@id' : 'B/2', b : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        unfoldable("B")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:0,schema_operations:1},
+
+    findall(
+        DocB,
+        get_document_by_type(Descriptor, "B", DocB),
+        B_Docs),
+
+    B_Docs = [json{'@id':'B/2','@type':'B',b:"bar"}],
+    get_schema_document(Descriptor, "B", Document),
+
+    Document = json{ '@id':'B',
+					 '@type':'Class',
+					 '@unfoldable':[],
+					 b:'xsd:string'
+				   }.
+
+test(not_abstract,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before5,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        not_abstract("C")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+
+    Results = metadata{instance_operations:0,schema_operations:1},
+
+    findall(
+        DocC,
+        get_document_by_type(Descriptor, "C", DocC),
+        C_Docs),
+
+    C_Docs = [],
+    get_schema_document(Descriptor, "C", Document),
+
+    Document = json{
+                   '@id':'C',
+				   '@type':'Class',
+                   c : 'xsd:string'
+			   }.
+
+test(not_unfoldable,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before5,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@type' : "D", '@id' : 'D/2', d : "bar" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        not_unfoldable("D")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Results,
+                               []),
+
+    Results = metadata{instance_operations:0,schema_operations:1},
+
+    findall(
+        DocD,
+        get_document_by_type(Descriptor, "D", DocD),
+        D_Docs),
+
+    D_Docs = [_{ '@type' : 'D', '@id' : 'D/2', d : "bar" }],
+    get_schema_document(Descriptor, "D", Document),
+
+    Document = json{'@id':'D',
+				    '@type':'Class',
+                    d : 'xsd:string'
+				   }.
+
 
 :- end_tests(migration).
