@@ -591,7 +591,8 @@ insert_some_cities(System, Path) :-
                author("author"),
                message("message"),
                full_replace(false),
-               raw_json(false)
+               raw_json(false),
+               merge_repeats(true)
               ],
     api_insert_documents(System, 'User/admin', Path, Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
