@@ -39,10 +39,10 @@ migration_dict_to_ast(json{ '@type' : "Unfoldable",
 migration_dict_to_ast(json{ '@type' : "NotUnfoldable",
                             class: Class},
                       not_unfoldable(Class)).
-gration_dict_to_ast(json{ '@type' : "ReplaceClassDocumentation",
+migration_dict_to_ast(json{ '@type' : "ReplaceClassDocumentation",
                             class: Class,
                             documentation: Documentation},
-                      replace_class_documentation(Class, Documentation)).
+                    replace_class_documentation(Class, Documentation)).
 migration_dict_to_ast(json{ '@type' : "ExpandEnum",
                             enum: Enum,
                             values: Values},
