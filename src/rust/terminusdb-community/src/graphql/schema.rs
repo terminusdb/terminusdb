@@ -993,7 +993,8 @@ fn extract_enum_fragment(
     enum_type: &str,
 ) -> juniper::Value {
     let enum_uri = instance.id_object_node(object_id).unwrap();
-    let enum_value = enum_node_to_value(enum_type, &enum_uri);
+    let qualified_enum_type = info.allframes.fully_qualified_class_name(enum_type);
+    let enum_value = enum_node_to_value(&qualified_enum_type, &enum_uri);
     let enum_definition = info.allframes.frames[enum_type].as_enum_definition();
     juniper::Value::Scalar(DefaultScalarValue::String(
         enum_definition.name_value(&enum_value).to_string(),
