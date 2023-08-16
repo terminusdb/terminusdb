@@ -9,7 +9,7 @@ on:
 
 jobs:
   arm64_docker:
-    runs-on: buildjet-2vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
