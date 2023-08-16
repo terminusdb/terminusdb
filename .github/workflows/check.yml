@@ -20,7 +20,7 @@ on:
         default: "ubuntu-latest"
       mocha_jobs:
         type: string
-        default: "4"
+        default: "2"
       mocha_parallel:
         type: boolean
         default: true
