@@ -532,7 +532,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, raw_json, boolean, false, Raw_JSON),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
-            param_value_search_optional(Search, merge_repeats, boolean, false, Merge_repeats),
+            param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
 
             read_data_version_header(Request, Requested_Data_Version),
 
