@@ -14696,3 +14696,98 @@ test(class_weakens,
 
 
 :- end_tests(diamond_property).
+
+:- begin_tests(jsonld_contexts).
+
+:- use_module(core(util/test_utils)).
+
+contextful_schema('
+{ "@type" : "@context",
+  "crm": "http://www.cidoc-crm.org/cidoc-crm/",
+  "sci": "http://www.ics.forth.gr/isl/CRMsci/",
+  "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+  "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+  "dc": "http://purl.org/dc/elements/1.1/",
+  "dcterms": "http://purl.org/dc/terms/",
+  "schema": "http://schema.org/",
+  "skos": "http://www.w3.org/2004/02/skos/core#",
+  "foaf": "http://xmlns.com/foaf/0.1/",
+  "xsd": "http://www.w3.org/2001/XMLSchema#",
+  "dig": "http://www.ics.forth.gr/isl/CRMdig/",
+  "la": "https://linked.art/ns/terms/",
+  "archaeo": "http://www.cidoc-crm.org/cidoc-crm/CRMarchaeo/",
+  "id": "@id",
+  "type": "@type",
+  "HumanMadeObject": {
+    "@id": "crm:E22_Human-Made_Object",
+    "@context": {
+      "part": {
+        "@id": "crm:P46_is_composed_of",
+        "@type": "@id",
+        "@container": "@set"
+      },
+      "part_of": {
+        "@id": "crm:P46i_forms_part_of",
+        "@type": "@id",
+        "@container": "@set"
+      },
+      "member_of": {
+        "@id": "la:member_of",
+        "@type": "@id",
+        "@container": "@set"
+      }
+    }
+  },
+  "_label": {
+    "@id": "rdfs:label"
+  }
+}
+
+{ "@type" : "Class",
+  "@id" : "HumanMadeObject",
+  "_label" : "rdf:langString",
+  "member_of" : "Collection"
+}
+
+{ "@type" : "Class",
+  "@id" : "Collection",
+  "_label" : "rdf:langString"
+}
+').
+
+test(load_extensive_jsonld_context,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(contextful_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Document = _{'id':"https://lux.collections.yale.edu/data/object/f9e5082e-4346-4946-9146-5084f1049612",
+                 'type':"HumanMadeObject",
+                 '_label':"Gilbertsocrinus sp USA Indiana Montgomery County Crawfordsville Early Mississippian Edwardsville Fm Crawfordsville crinoid beds",
+                 'member_of':[
+                     _{'id':"https://lux.collections.yale.edu/data/set/3eeb2ec0-cd90-4ccc-b7bf-2672bdfbc442",
+                       'type':"Set",
+                       '_label':"Invertebrate Paleontology Collection, Yale Peabody Museum"}]
+                },
+
+    open_descriptor(Desc, DB),
+
+    database_prefixes(DB,Context),
+    empty_assoc(In),
+    writeq(foo),nl,
+    json_elaborate(DB,
+                   Document,
+                   Context,
+                   In,
+                   Elaborated,
+                   _,
+                   _Dependencies_1,
+                   _,
+                   Out_1),
+
+    print_term(Elaborated, []),nl,
+    writeq(Out_1), nl.
+
+
+:- end_tests(jsonld_contexts).
