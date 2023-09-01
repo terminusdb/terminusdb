@@ -1,4 +1,5 @@
 use chrono::{NaiveDateTime, NaiveTime};
+use dec::Decimal128;
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
@@ -227,6 +228,13 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
         Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
         Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
+        Datatype::Decimal128 => Value::String(tde.as_val::<Decimal128, Decimal128>().to_string()),
+        Datatype::BSONObjectId => todo!(),
+        Datatype::TimeStamp64 => todo!(),
+        Datatype::BSONTimeStamp => todo!(),
+        Datatype::Regex => todo!(),
+        Datatype::Javascript => todo!(),
+        Datatype::BSONBinary => todo!(),
     }
 }
 
@@ -373,6 +381,15 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
             tde.as_val::<AnySimpleType, String>(),
         )),
+        Datatype::Decimal128 => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<Decimal128, Decimal128>().to_string(),
+        )),
+        Datatype::BSONObjectId => todo!(),
+        Datatype::TimeStamp64 => todo!(),
+        Datatype::BSONTimeStamp => todo!(),
+        Datatype::Regex => todo!(),
+        Datatype::Javascript => todo!(),
+        Datatype::BSONBinary => todo!(),
     }
 }
 

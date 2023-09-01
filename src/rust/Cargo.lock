@@ -458,6 +458,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "dec"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbdeb628adfc427c3f926528cf76daf4418453e103151739d48f79b8182cb41f"
+dependencies = [
+ "decnumber-sys",
+ "libc",
+ "static_assertions",
+]
+
+[[package]]
+name = "decnumber-sys"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76a99b958f19724bc0a2202086d135c2e7ed098e95cdae778546e965648fa47b"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "derive_utils"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1927,8 +1948,7 @@ dependencies = [
 [[package]]
 name = "terminus-store"
 version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a13409b42451ed3e3affa17d98110f44c51b13cea25db17ad5c0a909b21ee90"
+source = "git+https://github.com/terminusdb/terminusdb-store?branch=bson#ba925210a3bf30bf9b6f7155d57e4067df602384"
 dependencies = [
  "async-trait",
  "base64",
@@ -1936,6 +1956,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "chrono",
+ "dec",
  "flate2",
  "fs2",
  "futures",
@@ -1964,6 +1985,7 @@ dependencies = [
  "aho-corasick 0.7.20",
  "bimap",
  "chrono",
+ "dec",
  "float-ord",
  "gmp-mpfr-sys",
  "handlebars",
@@ -2026,6 +2048,7 @@ dependencies = [
  "base64",
  "chardetng",
  "chrono",
+ "dec",
  "encoding_rs",
  "hex",
  "rug",

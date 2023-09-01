@@ -6,4 +6,4 @@ resolver = "1"
 debug = 1
 
 [patch.crates-io]
-#terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}
+terminus-store = {git="https://github.com/terminusdb/terminusdb-store",branch="bson"}

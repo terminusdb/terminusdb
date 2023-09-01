@@ -20,3 +20,4 @@ terminusdb
 **/*.dylib
 terminusdb-enterprise
 .env
+dashboard

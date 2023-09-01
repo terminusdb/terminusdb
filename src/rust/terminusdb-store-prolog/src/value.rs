@@ -1,8 +1,10 @@
 use base64;
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use dec::Decimal128;
 use rug::Integer;
 use std::io::Cursor;
 use std::io::Read;
+use std::str::FromStr;
 use swipl::prelude::*;
 use swipl::term::Term;
 use terminus_store::structure::*;
@@ -266,6 +268,11 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(HexBinary::make_entry(&HexBinary(
             hex::decode(hexstring).unwrap(),
         )))
+    } else if atom!("http://bsonspec.org#decimal128") == ty {
+        let val: String = inner_term.get_ex()?;
+        Ok(Decimal128::make_entry(
+            &Decimal128::from_str(&val).expect("not a decimal128"),
+        ))
     } else {
         Err(PrologError::Exception)
     }
@@ -743,5 +750,17 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#hexBinary"))
         }
         Datatype::LangString => panic!("Unreachable"),
+        Datatype::Decimal128 => {
+            let val = entry.as_val::<Decimal128, Decimal128>();
+            object_term.unify_arg(1, val.to_string())?;
+            object_term.unify_arg(2, atom!("http://bsonspec.org#decimal128"))?;
+            Ok(())
+        }
+        Datatype::BSONObjectId => todo!(),
+        Datatype::TimeStamp64 => todo!(),
+        Datatype::BSONTimeStamp => todo!(),
+        Datatype::Regex => todo!(),
+        Datatype::Javascript => todo!(),
+        Datatype::BSONBinary => todo!(),
     }
 }
