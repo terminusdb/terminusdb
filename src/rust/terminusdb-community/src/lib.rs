@@ -1,6 +1,7 @@
 #[macro_use]
 mod log;
 
+mod bson;
 mod changes;
 mod consts;
 mod doc;
@@ -116,4 +117,5 @@ pub fn install() {
     template::register();
     changes::register();
     embedding::register();
+    bson::register(Some("bson"));
 }
