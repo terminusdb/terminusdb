@@ -84,7 +84,7 @@ describe('cli-db', function () {
     await execEnv(`./terminusdb.sh db delete admin/${db}`)
   })
 
-  it('puts database a database in public and returns it', async function () {
+  it('puts database in public and returns it', async function () {
     const db = util.randomString()
     await execEnv(`./terminusdb.sh db create admin/${db}`)
     // turn off schema
@@ -96,11 +96,11 @@ describe('cli-db', function () {
             t('User/anonymous', capability, Cap_Id)"`
     // demonstrate success
     const r3 = await execEnv(q)
-    expect(r3.stdout).to.match(/^DB_Uri\s+Cap_Id\n.*\n$/)
+    expect(r3.stdout).to.match(/^Cap_Id\s+DB_Uri\n.*\n$/)
     await execEnv(`./terminusdb.sh db update admin/${db} --public false`)
     // demonstrate success
     const r4 = await execEnv(q)
-    expect(r4.stdout).to.match(/^DB_Uri\s+Cap_Id\n$/)
+    expect(r4.stdout).to.match(/^Cap_Id\s+DB_Uri\n$/)
     await execEnv(`./terminusdb.sh db delete admin/${db}`)
   })
 

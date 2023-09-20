@@ -388,6 +388,8 @@ nonvar_literal(Val^^Type, _) :-
 nonvar_literal(Val@Lang, _) :-
     once(var(Val) ; var(Lang)),
     !.
+nonvar_literal(id(Id), id(Id)) :-
+    !.
 nonvar_literal(O, node(S)) :-
     nonvar(O),
     atom_string(O,S).
@@ -438,6 +440,7 @@ storage_literal(X1@L1,X2@L2) :-
 
 storage_object(lang(S,L),S@L).
 storage_object(value(S,T),S^^T).
+storage_object(id(Id),id(Id)).
 storage_object(node(S),O) :-
     (   nonvar(O)
     ->  (   atom(O)

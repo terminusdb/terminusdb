@@ -542,7 +542,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           full_replace : Full_Replace,
                           raw_json : Raw_JSON,
                           require_migration: Require_Migration,
-                          allow_destructive_migration: Allow_Destructive_Migration
+                          allow_destructive_migration: Allow_Destructive_Migration,
+                          merge_repeats: false
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 

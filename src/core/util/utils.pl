@@ -90,6 +90,9 @@
               count_solutions/2,
               negative_to_infinity/2,
 
+              init_local_memoize/1,
+              local_memoize/3,
+
               %%% From the rust module
               random_string/1
           ]).
@@ -1290,3 +1293,31 @@ negative_to_infinity(Z,P) :-
     ->  P = inf
     ;   Z = P
     ).
+
+init_local_memoize(state(_,[])).
+
+is_first_run(State) :-
+    State = state(Memoized, _List),
+    var(Memoized).
+
+finalize_memoization(State) :-
+    State = state(_, List),
+    reverse(List, Reversed),
+    nb_setarg(1, State, memoized),
+    nb_setarg(2, State, Reversed).
+
+do_local_memoize(State, Val) :-
+    State = state(_, List),
+    NewList = [Val|List],
+    nb_setarg(2, State, NewList).
+
+get_local_memoized(state(_, List), Val) :-
+    member(Val, List).
+
+local_memoize(State, Template, Goal) :-
+    (   is_first_run(State)
+    ->  setup_call_cleanup(true,
+                           (   call(Goal),
+                               do_local_memoize(State, Template)),
+                           finalize_memoization(State))
+    ;   get_local_memoized(State, Template)).
