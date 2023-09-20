@@ -1,4 +1,4 @@
-# TerminusDB Server v11.2 Release Notes
+# TerminusDB Server v11.2.0 Release Notes
 
 ## Bug fixes
 * GraphQL enum names were not mapped to their proper IRI format in some cases
