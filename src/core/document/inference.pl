@@ -109,6 +109,20 @@ update_document_links(Value, ValueOut, _Database, _Prefixes, _Type, captures(In,
     SubH = SubT,
     In = Out.
 
+foreign_class(Foreign,Class) :-
+    is_dict(Foreign),
+    _{ '@type' : 'http://terminusdb.com/schema/sys#Foreign',
+       '@class' : Class} :< Foreign.
+
+expand_type(Type, Prefixes, Type_Ex),
+text(Type) =>
+    prefix_expand_schema(Type, Prefixes, Type_Ex).
+expand_type(Type, Prefixes, Type_Ex),
+foreign_class(Type,Class) =>
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    Type_Ex = _{ '@type' : 'http://terminusdb.com/schema/sys#Foreign',
+                 '@class' : Class_Ex}.
+
 % DB, Prefixes |- Value <= Type
 check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
     \+ is_abstract(Database, Type),
@@ -265,8 +279,9 @@ Type = 'http://terminusdb.com/schema/sys#Unit' =>
                                   document : Dictionary })
     ).
 check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Captures),
-atom(Type) =>
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+(   atom(Type)
+;   foreign_class(Type, _)) =>
+    expand_type(Type, Prefixes, Type_Ex),
     (   get_dict_not_null(Key,Dictionary,Value)
     ->  (   check_value_type(Database, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
         ->  (   Annotated_Value = success(Success_Value)
@@ -303,27 +318,6 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
     ;   Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                   document : Dictionary,
                                   field : Key })
-    ).
-check_type_pair(Key,Range,_Database,Prefixes,success(Dictionary),Annotated,Captures),
-_{ '@type' : 'http://terminusdb.com/schema/sys#Foreign',
-   '@class' : Type_Ex} :< Range  =>
-    no_captures(Captures),
-    (   get_dict_not_null(Key,Dictionary,Value)
-    ->  (   text(Value)
-        ->  prefix_expand(Value, Prefixes, Value_Ex),
-            Result = json{ '@type' : "@id",
-                           '@id' : Value_Ex,
-                           '@foreign' : Type_Ex},
-            put_dict(Key, Dictionary, Result, Dict),
-            Annotated = success(Dict)
-        ;   put_dict(Key, _{}, Error, Dict),
-            Error = json{ '@type' : foreign_type_not_id,
-                          value : Value },
-            Annotated = witness(Dict)
-        )
-    ;   put_dict(Key, json{}, Error, Dict),
-        Error = json{ '@type' : required_foreign_type_missing},
-        Annotated = witness(Dict)
     ).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
@@ -464,13 +458,16 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< Range =>
     (   get_dict_not_null(Key, Dictionary, Value)
-    ->  check_simple_or_compound_type(Database, Prefixes, Value, Class, Annotated_Value,Captures),
-        (   Annotated_Value = success(Success_Value)
-        ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
-            Annotated = success(Annotated_Success)
-        ;   Annotated_Value = witness(Witness_Value)
-        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-            Annotated = witness(Witness)
+    ->  (   foreign_class(Range,Type)
+        ->  check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Captures)
+        ;   check_simple_or_compound_type(Database, Prefixes, Value, Class, Annotated_Value,Captures),
+            (   Annotated_Value = success(Success_Value)
+            ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
+                Annotated = success(Annotated_Success)
+            ;   Annotated_Value = witness(Witness_Value)
+            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            )
         )
     ;   no_captures(Captures),
         drop_key(Key,Dictionary,New),
@@ -542,6 +539,9 @@ is_dict(Type),
 _{ '@subdocument' : [], '@class' : Class} :< Type =>
     presentation_type(Class, Presentation).
 presentation_type(Type, Presentation),
+foreign_class(Type, Class) =>
+    presentation_type(Class, Presentation).
+presentation_type(Type, Presentation),
 atom(Type) =>
     Presentation = Type.
 
@@ -601,8 +601,9 @@ check_n_dim_array_([Value|Values], N, Database, Prefixes, Type, [Exp|Expanded],
                        captures(Mid,MT-T,SMT-ST,Out)).
 
 check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
-atom(Type) =>
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+(   atom(Type)
+;   foreign_class(Type,_)) =>
+    expand_type(Type, Prefixes, Type_Ex),
     check_value_type(Database,Prefixes,Value,Type_Ex,Annotated,Captures).
 check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
 _{ '@subdocument' : _, '@class' : Class} :< Type =>
@@ -619,6 +620,19 @@ get_dict('@ref', Value, Ref) =>
     put_dict(_{'@id' : Capture_Var, '@type': "@id"},Value, Result),
     Dep = [Capture_Var|DepT],
     Annotated = success(Result).
+check_value_type(_Database,Prefixes,Value,Type,Annotated,Captures),
+foreign_class(Type,Class) =>
+    no_captures(Captures),
+    (   text(Value)
+    ->  prefix_expand(Value, Prefixes, Value_Ex),
+        Result = json{ '@type' : "@id",
+                       '@id' : Value_Ex,
+                       '@foreign' : Class},
+        Annotated = success(Result)
+    ;   Error = json{ '@type' : foreign_type_not_id,
+                      value : Value },
+        Annotated = witness(Error)
+    ).
 check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
     infer_type(Database, Prefixes, Type, Value, _, Annotated, Captures).
