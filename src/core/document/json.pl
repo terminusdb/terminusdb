@@ -6527,6 +6527,70 @@ test(oneof_unfoldable,
          _
      ).
 
+bad_unfoldable_col_schema(ColType, Schema) :-
+    format(atom(Schema),
+           '
+{"@type": "@context",
+ "@base": "terminusdb:///base/",
+ "@schema": "terminusdb:///schema#"}
+{"@type": "Class",
+ "@id": "Foo",
+ "@unfoldable": [],
+ "link": {"@type": "~s",
+          "@class": "Foo"}
+}',
+           [ColType]).
+
+test(bad_unfoldable_col,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         forall(member(Col, ['Optional', 'Set', 'List', 'Array'])),
+         error(
+             schema_check_failure(
+                 [witness{'@type':property_path_cycle_detected,
+                          class:'terminusdb:///schema#Foo',
+                          path:['terminusdb:///schema#link','terminusdb:///schema#Foo']}]),
+             _)
+     ]) :-
+    write_schema(bad_unfoldable_col_schema(Col),Desc).
+
+bad_unfoldable_card_schema('
+{"@type": "@context",
+ "@base": "terminusdb:///base/",
+ "@schema": "terminusdb:///schema#"}
+{"@type": "Class",
+ "@id": "Foo",
+ "@unfoldable": [],
+ "link": {"@type": "Cardinality",
+          "@class": "Foo",
+          "@minCardinality": "3",
+          "@maxCardinality": "5"}
+}').
+
+test(bad_unfoldable_card,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         ),
+         error(
+             schema_check_failure(
+                 [witness{'@type':property_path_cycle_detected,
+                          class:'terminusdb:///schema#Foo',
+                          path:['terminusdb:///schema#link','terminusdb:///schema#Foo']}]),
+             _)
+     ]) :-
+    write_schema(bad_unfoldable_card_schema,Desc).
+
 test(always_smaller_unfoldable,
      [
          setup(

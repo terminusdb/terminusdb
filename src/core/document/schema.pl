@@ -478,10 +478,16 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
                   path : Path
               }.
 
+type_to_reachable_class(_Schema, class(C), C) :- !.
+type_to_reachable_class(Schema, Type, C) :-
+    type_descriptor_inner_type(Type, C),
+    is_schema_simple_class(Schema, C).
+
 reachable_unfoldable(Schema,A,P,B) :-
     distinct(B,
              (   schema_class_subsumed(Schema,A,C),
-                 schema_class_predicate_type(Schema,C,P,class(B)),
+                 schema_class_predicate_type(Schema,C,P,Type),
+                 type_to_reachable_class(Schema, Type, B),
                  schema_is_unfoldable(Schema,B)
              )).
 
@@ -1034,6 +1040,14 @@ schema_type_descriptor(Schema, Type, optional(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
     xrdf(Schema, Type, sys:class, Class).
+
+type_descriptor_inner_type(class(C), C).
+type_descriptor_inner_type(set(C), C).
+type_descriptor_inner_type(cardinality(C, _, _), C).
+type_descriptor_inner_type(optional(C), C).
+type_descriptor_inner_type(list(C), C).
+type_descriptor_inner_type(array(C,_), C).
+type_descriptor_inner_type(table(C), C).
 
 key_base(Validation_Object, Context, Type, Base) :-
     database_schema(Validation_Object, Schema),
