@@ -479,7 +479,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
             } else {
                 // done!
-                visited.pop().unwrap();
+                visited.pop();
                 let cur = stack.pop().unwrap();
                 if let Some(parent) = stack.last_mut() {
                     parent.integrate(self, cur);
