@@ -1,3 +1,14 @@
+# TerminusDB Server v11.1.3 Release Notes
+## Bug fixes
+* Foreign types interact properly with collections now
+* Document retrieval now always cycle detects
+
+## Enhancements
+* Unfoldable can now be used with cyclical types
+
+## New
+* Flag `merge_repeats` on document insert merges all inserts for the same id into a single document.
+
 # TerminusDB Server v11.1.2 Release Notes
 
 ## Bug fixes
