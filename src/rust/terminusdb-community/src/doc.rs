@@ -245,7 +245,7 @@ impl<L: Layer> GetDocumentContext<L> {
             .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
     }
 
-    fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
+    fn get_field<'a, 'b>(&'a self, object: u64) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         } else if Some(object) == self.rdf_nil_id {
@@ -254,6 +254,7 @@ impl<L: Layer> GetDocumentContext<L> {
             match self.get_doc_stub(object, true) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
                 Ok((doc, type_id, fields, json)) => Err(StackEntry::Document {
+                    id: object,
                     doc,
                     type_id,
                     fields: Some(fields),
@@ -415,11 +416,15 @@ impl<L: Layer> GetDocumentContext<L> {
 
         let (doc, type_id, fields, json) = self.get_doc_stub(id, false).unwrap();
         stack.push(StackEntry::Document {
+            id,
             doc,
             type_id,
             fields: Some(fields),
             json,
         });
+
+        let mut visited: Vec<u64> = Vec::new();
+        visited.push(id);
 
         loop {
             let cur = stack.last_mut().unwrap();
@@ -455,12 +460,26 @@ impl<L: Layer> GetDocumentContext<L> {
                         cur.integrate_value(self, val);
                     }
                     Err(entry) => {
-                        // We need to iterate deeper, so add it to the stack without iterating past the field.
-                        stack.push(entry);
+                        // this is a bit of a silly setup.
+                        // we pretty much know for sure that get_field will have returned the stub of a subdocument by now. We could either use the documnet id contained in that stub, or we could use the next_obj id that we already had.
+                        // I chose to use document_id() here just in case a future refactor suddenly changes what kind of things come back as field entries here.
+                        if entry
+                            .document_id()
+                            .map(|id| visited.contains(&id))
+                            .unwrap_or(false)
+                        {
+                            // This entry is already visited. We only have to provide a name.
+                            cur.integrate_value(self, entry.document_iri().unwrap().clone());
+                        } else {
+                            // We need to iterate deeper, so add it to the stack without iterating past the field.
+                            visited.push(next_obj);
+                            stack.push(entry);
+                        }
                     }
                 }
             } else {
                 // done!
+                visited.pop();
                 let cur = stack.pop().unwrap();
                 if let Some(parent) = stack.last_mut() {
                     parent.integrate(self, cur);
@@ -527,6 +546,7 @@ pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
 
 enum StackEntry<'a, L: Layer> {
     Document {
+        id: u64,
         doc: Map<String, Value>,
         type_id: Option<u64>,
         fields: Option<Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>>,
@@ -550,6 +570,19 @@ impl<'a, L: Layer> StackEntry<'a, L> {
             Self::Document { json, .. } => *json,
             Self::List { json, .. } => *json,
             _ => false,
+        }
+    }
+
+    fn document_id(&self) -> Option<u64> {
+        match self {
+            Self::Document { id, .. } => Some(*id),
+            _ => None,
+        }
+    }
+    fn document_iri(&self) -> Option<&Value> {
+        match self {
+            Self::Document { doc, .. } => doc.get("@id"),
+            _ => None,
         }
     }
 }

@@ -6333,7 +6333,7 @@ test(bad_documentation,
         _
     ).
 
-test(bad_unfoldable,
+test(loop_unfoldable,
      [
          setup(
              (   setup_temp_store(State),
@@ -6342,12 +6342,7 @@ test(bad_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure([witness{'@type':property_path_cycle_detected,
-                                           class:_,
-                                           path:_}]),
-             _)
+         )
      ]) :-
      DocumentA =
      _{ '@id' : "A",
@@ -6410,12 +6405,7 @@ test(sub_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure([witness{'@type':property_path_cycle_detected,
-                                           class:'http://s/A1',
-                                           path:['http://s/q','http://s/A']}]),
-             _)
+         )
      ]) :-
      DocumentA =
      _{ '@id' : "A",
@@ -6447,12 +6437,7 @@ test(trans_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(schema_check_failure(
-                   [witness{'@type':property_path_cycle_detected,
-                            class:_,
-                            path:_}]),
-               _)
+         )
      ]) :-
      DocumentA =
      _{ '@id' : "A",
@@ -6492,13 +6477,7 @@ test(oneof_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure(
-                 [witness{'@type':property_path_cycle_detected,
-                          class:'http://s/A',
-                          path:['http://s/q','http://s/A']}]),
-             _)
+         )
      ]) :-
 
      DocumentA =
