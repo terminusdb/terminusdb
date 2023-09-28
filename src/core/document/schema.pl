@@ -457,7 +457,6 @@ refute_schema(Validation_Object,Witness) :-
     is_simple_class(Validation_Object,Class),
     \+ is_json_class(Validation_Object, Class),
     (   refute_class_definition(Validation_Object,Class,Witness)
-    ;   refute_unfoldable_cycle(Validation_Object,Class,Witness)
     ;   refute_class_inherits(Validation_Object,Class,Witness)
     ;   refute_class_documentation(Validation_Object,Class,Witness)
     ;   refute_class_key(Validation_Object,Class,Witness)
@@ -484,28 +483,6 @@ reachable_unfoldable(Schema,A,P,B) :-
                  schema_class_predicate_type(Schema,C,P,class(B)),
                  schema_is_unfoldable(Schema,B)
              )).
-
-refute_unfoldable_cycle(DB, Original, Witness) :-
-    database_schema(DB,Schema),
-    schema_is_unfoldable(Schema, Original),
-    State = state([]),
-    unfoldable_property_cycle(Schema, Original, Original, [], Path, State),
-    Witness = witness{
-                  '@type' : property_path_cycle_detected,
-                  path : Path,
-                  class : Original
-              }.
-
-unfoldable_property_cycle(Schema, Original, A, Path, New_Path, State) :-
-    reachable_unfoldable(Schema, A, P, C),
-    arg(1,State,Set),
-    (   schema_class_subsumed(Schema, Original, C)
-    ->  reverse([C,P|Path],New_Path)
-    ;   member(C, Set)
-    ->  fail
-    ;   nb_setarg(1,State,[C|Set]),
-        unfoldable_property_cycle(Schema, Original, C, [C,P|Path], New_Path, State)
-    ).
 
 refute_class_inherits(DB,Class,Witness) :-
     database_schema(DB,Schema),

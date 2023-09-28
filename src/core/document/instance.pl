@@ -874,6 +874,8 @@ references_untyped_range(Validation_Object,S,P,O) :-
                         ->  type_descriptor(Validation_Object, E, Type)
                         ;   Pre_Type = optional(E)
                         ->  type_descriptor(Validation_Object, E, Type)
+                        ;   Pre_Type = cardinality(E,_,_)
+                        ->  type_descriptor(Validation_Object, E, Type)
                         ;   Pre_Type = Type
                         ),
                         (   Type = enum(_,_)
