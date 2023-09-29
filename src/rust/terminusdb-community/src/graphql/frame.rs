@@ -159,6 +159,20 @@ impl Prefixes {
             NodeVariety::URL(s) => s,
         }
     }
+    pub fn expand_instance(&self, s: &str) -> String {
+        match node_variety(s) {
+            // this is dumb but will work for now
+            NodeVariety::Base(s) => format!("{}{}", self.base, s),
+            NodeVariety::Prefixed(prefix, suffix) => {
+                if let Some(expanded) = self.extra_prefixes.get(&prefix) {
+                    format!("{}{}", expanded, suffix)
+                } else {
+                    panic!("Unable to find prefix {prefix}!");
+                }
+            }
+            NodeVariety::URL(s) => s,
+        }
+    }
 
     pub fn compress_schema(&self, s: &str) -> String {
         if s.starts_with(&self.schema) {

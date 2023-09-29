@@ -75,7 +75,7 @@ impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
         type_collection: TerminusTypeCollectionInfo,
         context: &'a Context<'a, C>,
         auth_term: &Term,
-        system_term: &Term,
+        system_term: &'a Term,
         meta_term: &Term,
         commit_term: &Term,
         transaction_term: &Term,
@@ -87,6 +87,7 @@ impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
             meta_term,
             commit_term,
             transaction_term,
+            type_collection.clone(),
         )?;
         Ok(Self::new(type_collection, graphql_context))
     }

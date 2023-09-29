@@ -22,7 +22,6 @@ use crate::value::{
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::query::run_filter_query;
-use super::top::System;
 
 #[derive(Clone)]
 pub struct SystemInfo {
@@ -35,20 +34,23 @@ pub struct SystemInfo {
 #[derive(Clone)]
 pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
+    pub system_transaction_term: Term<'a>,
     pub transaction_term: Term<'a>,
     pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
+    pub type_collection: TerminusTypeCollectionInfo,
 }
 
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
     pub fn new(
         context: &'a Context<'a, C>,
         _auth_term: &Term,
-        system_term: &Term,
+        system_term: &'a Term,
         meta_term: &Term,
         commit_term: &Term,
         transaction_term: &Term,
+        type_collection: TerminusTypeCollectionInfo,
     ) -> PrologResult<TerminusContext<'a, C>> {
         let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
         let user = if user_ == atom!("anonymous") {
@@ -83,10 +85,12 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
                 meta,
                 commit,
             },
+            system_transaction_term: system_term.clone(),
             transaction_term: new_transaction_term,
             context,
             schema,
             instance,
+            type_collection,
         })
     }
 }
@@ -224,6 +228,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
 
         fields.extend(restriction_fields);
 
+        fields.extend(standard_collection_operators(registry));
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
@@ -231,6 +237,15 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
             .build_object_type::<TerminusTypeCollection<'a, C>>(info, &fields)
             .into_meta()
     }
+}
+
+fn standard_collection_operators<'r>(
+    registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+) -> impl Iterator<Item = Field<'r, DefaultScalarValue>> {
+    vec![registry
+        .field::<GraphQLJSON>("_getDocument", &())
+        .argument(registry.arg::<String>("id", &()))]
+    .into_iter()
 }
 
 #[derive(Clone)]
@@ -340,43 +355,66 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
-        if field_name == "_system" {
-            executor.resolve_with_ctx(&(), &System {})
-        } else {
-            let zero_iter;
-            let type_name;
-            if let Some(restriction) = info.allframes.restrictions.get(field_name) {
-                // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
-                type_name = restriction.on.as_str();
-                let id_list = ids_from_restriction(executor.context(), restriction)?;
-                zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
-            } else {
-                type_name = field_name;
-                zero_iter = None;
-            }
-            let objects = match executor.context().instance.as_ref() {
-                Some(instance) => run_filter_query(
-                    executor.context(),
-                    instance,
-                    &info.allframes.context,
-                    arguments,
-                    type_name,
-                    &info.allframes,
-                    zero_iter,
-                )
-                .into_iter()
-                .map(|id| TerminusType::new(id))
-                .collect(),
-                None => vec![],
-            };
+        match field_name {
+            "_getDocument" => {
+                let context = executor.context();
+                let document_context = GetDocumentContext::new(
+                    &context.schema,
+                    context.instance.clone(),
+                    true,
+                    true,
+                    false,
+                );
+                let id: String = arguments.get("id").unwrap();
+                let expanded_id = context
+                    .type_collection
+                    .allframes
+                    .context
+                    .expand_instance(&id);
+                let doc = document_context
+                    .get_document(&expanded_id)
+                    .expect("no such document");
+                let json_string =
+                    serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
 
-            executor.resolve(
-                &TerminusTypeInfo {
-                    class: type_name.to_owned(),
-                    allframes: info.allframes.clone(),
-                },
-                &objects,
-            )
+                Ok(Value::Scalar(DefaultScalarValue::String(json_string)))
+            }
+            _ => {
+                let zero_iter;
+                let type_name;
+                if let Some(restriction) = info.allframes.restrictions.get(field_name) {
+                    // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
+                    type_name = restriction.on.as_str();
+                    let id_list = ids_from_restriction(executor.context(), restriction)?;
+                    zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
+                } else {
+                    type_name = field_name;
+                    zero_iter = None;
+                }
+                let objects = match executor.context().instance.as_ref() {
+                    Some(instance) => run_filter_query(
+                        executor.context(),
+                        instance,
+                        &info.allframes.context,
+                        arguments,
+                        type_name,
+                        &info.allframes,
+                        zero_iter,
+                    )
+                    .into_iter()
+                    .map(|id| TerminusType::new(id))
+                    .collect(),
+                    None => vec![],
+                };
+
+                executor.resolve(
+                    &TerminusTypeInfo {
+                        class: type_name.to_owned(),
+                        allframes: info.allframes.clone(),
+                    },
+                    &objects,
+                )
+            }
         }
     }
 }
