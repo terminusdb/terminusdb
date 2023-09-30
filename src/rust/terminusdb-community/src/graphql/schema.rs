@@ -1060,8 +1060,9 @@ fn extract_enum_fragment(
 }
 
 fn extract_json_fragment(instance: &SyncStoreLayer, object_id: u64) -> juniper::Value {
+    // TODO this should really not just recreate a context, but it's cheap enough since it is schema independent.
     let context = GetDocumentContext::new_json(Some(instance.clone()));
-    let json = serde_json::Value::Object(context.get_id_document(object_id, true, false));
+    let json = serde_json::Value::Object(context.get_id_document(object_id, true, true));
     juniper::Value::Scalar(DefaultScalarValue::String(json.to_string()))
 }
 
