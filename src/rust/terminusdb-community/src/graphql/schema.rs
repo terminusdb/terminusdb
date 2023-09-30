@@ -5,6 +5,7 @@ use juniper::{
     graphql_value, DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue,
     InputValue, Registry, Value, ID,
 };
+use lazy_init::Lazy;
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
@@ -40,6 +41,7 @@ pub struct TerminusContext<'a, C: QueryableContextType> {
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
     pub type_collection: TerminusTypeCollectionInfo,
+    pub document_context: Arc<Lazy<GetDocumentContext<SyncStoreLayer>>>,
 }
 
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
@@ -91,6 +93,13 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
             schema,
             instance,
             type_collection,
+            document_context: Arc::new(Lazy::new()),
+        })
+    }
+
+    pub fn document_context(&self) -> &GetDocumentContext<SyncStoreLayer> {
+        self.document_context.get_or_create(|| {
+            GetDocumentContext::new(&self.schema, self.instance.clone(), true, true, false)
         })
     }
 }
@@ -248,6 +257,17 @@ fn standard_collection_operators<'r>(
     .into_iter()
 }
 
+fn standard_type_operators<'r>(
+    registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+) -> impl Iterator<Item = Field<'r, DefaultScalarValue>> {
+    vec![
+        registry.field::<ID>("_id", &()),
+        registry.field::<ID>("_type", &()),
+        registry.field::<GraphQLJSON>("_json", &()),
+    ]
+    .into_iter()
+}
+
 #[derive(Clone)]
 #[clone_blob("terminus_type_collection_info", defaults)]
 pub struct TerminusTypeCollectionInfo {
@@ -358,13 +378,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         match field_name {
             "_getDocument" => {
                 let context = executor.context();
-                let document_context = GetDocumentContext::new(
-                    &context.schema,
-                    context.instance.clone(),
-                    true,
-                    true,
-                    false,
-                );
+                let document_context = context.document_context();
                 let id: String = arguments.get("id").unwrap();
                 let expanded_id = context
                     .type_collection
@@ -631,8 +645,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             fields.push(restriction_field);
         }
 
-        fields.push(registry.field::<ID>("_id", &()));
-        fields.push(registry.field::<ID>("_type", &()));
+        fields.extend(standard_type_operators(registry));
 
         registry
             .build_object_type::<TerminusType<'a, C>>(info, &fields)
@@ -720,6 +733,14 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
                 ))));
+            }
+            if field_name == "_json" {
+                let document_context = executor.context().document_context();
+                let doc = document_context.get_id_document(self.id);
+                let json_string =
+                    serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
+
+                return Some(Ok(Value::Scalar(DefaultScalarValue::String(json_string))));
             }
 
             let allframes = &info.allframes;
