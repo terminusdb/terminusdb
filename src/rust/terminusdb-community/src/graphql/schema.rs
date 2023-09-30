@@ -98,9 +98,8 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
     }
 
     pub fn document_context(&self) -> &GetDocumentContext<SyncStoreLayer> {
-        self.document_context.get_or_create(|| {
-            GetDocumentContext::new(&self.schema, self.instance.clone(), true, true, false)
-        })
+        self.document_context
+            .get_or_create(|| GetDocumentContext::new(self.schema.clone(), self.instance.clone()))
     }
 }
 
@@ -386,7 +385,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
                     .context
                     .expand_instance(&id);
                 let doc = document_context
-                    .get_document(&expanded_id)
+                    .get_document(&expanded_id, true, true)
                     .expect("no such document");
                 let json_string =
                     serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
@@ -736,7 +735,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             }
             if field_name == "_json" {
                 let document_context = executor.context().document_context();
-                let doc = document_context.get_id_document(self.id);
+                let doc = document_context.get_id_document(self.id, true, true);
                 let json_string =
                     serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
 
@@ -1061,8 +1060,8 @@ fn extract_enum_fragment(
 }
 
 fn extract_json_fragment(instance: &SyncStoreLayer, object_id: u64) -> juniper::Value {
-    let context = GetDocumentContext::new_json(Some(instance.clone()), true, false);
-    let json = serde_json::Value::Object(context.get_id_document(object_id));
+    let context = GetDocumentContext::new_json(Some(instance.clone()));
+    let json = serde_json::Value::Object(context.get_id_document(object_id, true, false));
     juniper::Value::Scalar(DefaultScalarValue::String(json.to_string()))
 }
 
