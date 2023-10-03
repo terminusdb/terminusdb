@@ -5160,6 +5160,48 @@ test(uri_casting, [
     URIs = ['http://somewhere.for.now/document/Capability/server_access',
             'http://somewhere.for.now/document/Role/admin'].
 
+test(doc_select_reorder, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    AST = (insert_document(json{'@type':'City',
+                                '@id' : "City/1",
+                                name:"Bill"}),
+           insert_document(json{'@type':'City',
+                                '@id' : "City/2",
+                                name:"Bob"})
+          ),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON),
+
+    AST2 = select(
+               [v('Document')],
+               (   member(v('Doc'), ['City/1','City/2']),
+                   t(v('Doc'), rdf:type, v('Type')),
+                   not((v('Type')=rdf:'List')),
+                   get_document(v('Doc'), v('Document'))
+               )
+           ),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, JSON),
+    JSON.bindings = [ _{ 'Document':_{ '@id':'City/1',
+								       '@type':'City',
+								       name:"Bill"
+								     }
+					   },
+					  _{ 'Document':_{ '@id':'City/2',
+								       '@type':'City',
+								       name:"Bob"
+								     }
+					   }
+					].
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
