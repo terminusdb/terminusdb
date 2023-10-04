@@ -164,7 +164,7 @@ opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
            shortflags([o]),
            longflags([optimize]),
            default(true),
-           help('allow query reordering')]
+           help('allow query reordering')],
           [opt(json),
            type(boolean),
            longflags([json]),

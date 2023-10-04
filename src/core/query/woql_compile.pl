@@ -1,8 +1,8 @@
 :- module(woql_compile,[
               lookup/3,
               lookup_backwards/3,
-              compile_query/3,
               compile_query/4,
+              compile_query/5,
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,

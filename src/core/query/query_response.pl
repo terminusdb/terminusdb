@@ -1,6 +1,6 @@
 :- module(query_response,[
+              run_context_ast_jsonld_response/5,
               run_context_ast_jsonld_response/6,
-              run_context_ast_jsonld_response/7,
               pretty_print_query_response/3
           ]).
 
