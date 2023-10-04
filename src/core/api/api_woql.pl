@@ -4,6 +4,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 
+:- use_module(library(option)).
+
 woql_query_json(System_DB, Auth, Path_Option, Query, Context, New_Data_Version, JSON, Options) :-
 
     option(commit_info(Commit_Info), Options),
