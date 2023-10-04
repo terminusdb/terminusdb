@@ -1,5 +1,6 @@
 :- module(query_response,[
-              run_context_ast_jsonld_response/5,
+              run_context_ast_jsonld_response/6,
+              run_context_ast_jsonld_response/7,
               pretty_print_query_response/3
           ]).
 
@@ -16,12 +17,16 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
+    Options = _{},
+    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options).
+
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD
  */
-run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
-    compile_query(AST,Prog,Context,Output_Context),
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options) :-
+    compile_query(AST,Prog,Context,Output_Context,Options),
     do_or_die(
         query_default_collection(Output_Context, Transaction),
         error(query_default_collection_failed_unexpectedly(Output_Context), _)),

@@ -51,7 +51,7 @@
               json_value_cast_type/3,
 
               % query_response.pl
-              run_context_ast_jsonld_response/5,
+              run_context_ast_jsonld_response/6,
               pretty_print_query_response/3,
 
               % resolve_query_resource.pl
@@ -73,8 +73,8 @@
               % woql_compile.pl
               lookup/3,
               lookup_backwards/3,
-              compile_query/3,
               compile_query/4,
+              compile_query/5,
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,

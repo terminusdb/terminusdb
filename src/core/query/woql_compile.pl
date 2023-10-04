@@ -402,12 +402,15 @@ var_compare(Op, Left, Right) :-
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
  */
-compile_query(Term, Prog, Ctx_Out) :-
+compile_query(Term, Prog, Ctx_Out, Options) :-
     empty_context(Ctx_In),
-    compile_query(Term,Prog,Ctx_In,Ctx_Out).
+    compile_query(Term,Prog,Ctx_In,Ctx_Out,Options).
 
-compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   safe_guard_removal(Term, Optimized),
+compile_query(Term, Prog, Ctx_In, Ctx_Out, Options) :-
+    (   (   option(optimize(true), Options)
+        ->  safe_guard_removal(Term, Optimized)
+        ;   Term = Optimized
+        ),
         assert_pre_flight_access(Ctx_In, Term),
         do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
@@ -4726,17 +4729,19 @@ test(less_than, [
 
     Commit_Info = commit_info{author: "TERMINUSQA", message: "less than"},
 
+    Options = _{
+                  commit_info: Commit_Info,
+                  all_witnesses: false,
+                  files: [],
+                  data_version: no_data_version
+              },
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
                     json_query(Query),
-                    Commit_Info,
-                    [],
-                    false,
-                    no_data_version,
                     _,
-                    _,
-                    JSON),
+                    JSON,
+                    Options),
     [_] = (JSON.bindings).
 
 
@@ -4780,17 +4785,20 @@ test(using_resource_works, [
 
     Commit_Info = commit_info{author: "TERMINUSQA", message: "less than"},
 
+    Options = _{
+                  commit_info: Commit_Info,
+                  all_witnesses: false,
+                  files: [],
+                  data_version: no_data_version
+              },
+
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
                     json_query(Query),
-                    Commit_Info,
-                    [],
-                    false,
-                    no_data_version,
                     _,
-                    _,
-                    _JSON).
+                    _JSON,
+                    Options).
 
 test(quad_compilation, [
          setup((setup_temp_store(State),
