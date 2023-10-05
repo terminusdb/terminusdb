@@ -1643,8 +1643,7 @@ json_triple_(JSON,Context,Triple) :-
     ;   Key = '@linked-by'
     ->  fail
     ;   Key = '@foreign'
-    ->  global_prefix_expand(sys:foreign_type, Foreign_Type),
-        Triple = t(ID,Foreign_Type,Value)
+    ->  fail
     ;   Key = '@type'
     ->  global_prefix_expand(rdf:type, RDF_Type),
         Triple = t(ID,RDF_Type,Value)
@@ -11126,9 +11125,6 @@ test(elaborate_foreign_type,
         t('http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://somewhere.for.now/schema#From'),
-        t('http://somewhere.for.now/document/To/george',
-          'http://terminusdb.com/schema/sys#foreign_type',
-          'http://somewhere.for.now/schema#To'),
         t('http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
           'http://somewhere.for.now/schema#to',
           'http://somewhere.for.now/document/To/george')].
@@ -11237,12 +11233,12 @@ test(foreign_type,
                        '@type':'PayRecord',
                        employee:'Employee/jane+1995-05-03',
                        pay:32.85,
-                              pay_period:"P1M"},
+                       pay_period:"P1M"},
                   json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe%2B2012-05-03',
                        '@type':'PayRecord',
                        employee:'Employee/joe+2012-05-03',
                        pay:12.3,
-                              pay_period:"P1M"}]}.
+                       pay_period:"P1M"}]}.
 
 :- end_tests(foreign_types).
 
