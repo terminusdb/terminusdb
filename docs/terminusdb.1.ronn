@@ -103,6 +103,9 @@ Query a database.
   * `-a`, `--author`=[value]:
   author to place on the commit
 
+  * `-o`, `--optimize`=[value]:
+  allow query reordering
+
   * `-j`, `--json`=[value]:
   return results as a json object
 

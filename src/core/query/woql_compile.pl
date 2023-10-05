@@ -1,8 +1,8 @@
 :- module(woql_compile,[
               lookup/3,
               lookup_backwards/3,
-              compile_query/3,
               compile_query/4,
+              compile_query/5,
               empty_context/1,
               empty_context/2,
               filter_transaction_object_read_write_objects/3,
@@ -402,12 +402,15 @@ var_compare(Op, Left, Right) :-
 /*
  * compile_query(+Term:any,-Prog:any,-Ctx_Out:context) is det.
  */
-compile_query(Term, Prog, Ctx_Out) :-
+compile_query(Term, Prog, Ctx_Out, Options) :-
     empty_context(Ctx_In),
-    compile_query(Term,Prog,Ctx_In,Ctx_Out).
+    compile_query(Term,Prog,Ctx_In,Ctx_Out,Options).
 
-compile_query(Term, Prog, Ctx_In, Ctx_Out) :-
-    (   safe_guard_removal(Term, Optimized),
+compile_query(Term, Prog, Ctx_In, Ctx_Out, Options) :-
+    (   (   option(optimize(true), Options)
+        ->  safe_guard_removal(Term, Optimized)
+        ;   Term = Optimized
+        ),
         assert_pre_flight_access(Ctx_In, Term),
         do_or_die(compile_wf(Optimized, Pre_Prog, Ctx_In, Ctx_Out),
                   error(woql_syntax_error(badly_formed_ast(Term)),_)),
@@ -4726,17 +4729,20 @@ test(less_than, [
 
     Commit_Info = commit_info{author: "TERMINUSQA", message: "less than"},
 
+    Options = _{
+                  commit_info: Commit_Info,
+                  all_witnesses: false,
+                  files: [],
+                  data_version: no_data_version
+              },
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
                     json_query(Query),
-                    Commit_Info,
-                    [],
-                    false,
-                    no_data_version,
                     _,
                     _,
-                    JSON),
+                    JSON,
+                    Options),
     [_] = (JSON.bindings).
 
 
@@ -4780,17 +4786,21 @@ test(using_resource_works, [
 
     Commit_Info = commit_info{author: "TERMINUSQA", message: "less than"},
 
+    Options = _{
+                  commit_info: Commit_Info,
+                  all_witnesses: false,
+                  files: [],
+                  data_version: no_data_version
+              },
+
     woql_query_json(system_descriptor{},
                     Auth,
                     some("TERMINUSQA/test"),
                     json_query(Query),
-                    Commit_Info,
-                    [],
-                    false,
-                    no_data_version,
                     _,
                     _,
-                    _JSON).
+                    _JSON,
+                    Options).
 
 test(quad_compilation, [
          setup((setup_temp_store(State),
@@ -4805,8 +4815,7 @@ test(quad_compilation, [
     Commit_Info = commit_info{author: "a", message: "m"},
     create_context(Descriptor, Commit_Info, Context),
     Ctx_In = (Context.put(authorization, Auth)),
-
-    compile_query(Term, _Prog, Ctx_In, _Ctx_Out).
+    compile_query(Term, _Prog, Ctx_In, _Ctx_Out, options{}).
 
 :- use_module(core(document)).
 test(document_path, [
@@ -5159,6 +5168,48 @@ test(uri_casting, [
 
     URIs = ['http://somewhere.for.now/document/Capability/server_access',
             'http://somewhere.for.now/document/Role/admin'].
+
+test(doc_select_reorder, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    AST = (insert_document(json{'@type':'City',
+                                '@id' : "City/1",
+                                name:"Bill"}),
+           insert_document(json{'@type':'City',
+                                '@id' : "City/2",
+                                name:"Bob"})
+          ),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON),
+
+    AST2 = select(
+               [v('Document')],
+               (   member(v('Doc'), ['City/1','City/2']),
+                   t(v('Doc'), rdf:type, v('Type')),
+                   not((v('Type')=rdf:'List')),
+                   get_document(v('Doc'), v('Document'))
+               )
+           ),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, JSON),
+    JSON.bindings = [ _{ 'Document':_{ '@id':'City/1',
+								       '@type':'City',
+								       name:"Bill"
+								     }
+					   },
+					  _{ 'Document':_{ '@id':'City/2',
+								       '@type':'City',
+								       name:"Bob"
+								     }
+					   }
+					].
 
 :- end_tests(woql).
 
