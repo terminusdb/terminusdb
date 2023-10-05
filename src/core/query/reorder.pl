@@ -29,8 +29,6 @@ is_dict(Dict) =>
     maplist([_-V,Var]>>term_vars(V,Var), Pairs, Var_List),
     append(Var_List, Vars_Unsorted),
     sort(Vars_Unsorted, Vars).
-term_vars(not(_), Vars) =>
-    Vars = [].
 term_vars(select(VL, Query), Vars) =>
     term_vars(VL, VLVars),
     term_vars(Query, V),
@@ -60,8 +58,6 @@ is_dict(Dict) =>
     maplist([_-MV,MVar]>>term_mvars(MV,MVar), Pairs, MVar_List),
     append(MVar_List, MVars_Unsorted),
     sort(MVars_Unsorted, MVars).
-term_mvars(not(_), MVars) =>
-    MVars = [].
 term_mvars(select(MVL, Query), MVars) =>
     term_mvars(MVL, MVLMVars),
     term_mvars(Query, MV),
@@ -139,6 +135,24 @@ violates_static_mode(TermA) =>
     false.
 po(_TermA, TermB),
 violates_static_mode(TermB) =>
+    true.
+po(not(Q), _),
+term_vars(Q, Vars) =>
+    Vars = [].
+po(_, not(Q)),
+term_vars(Q, Vars) =>
+    Vars \= [].
+po(Term1, Term2),
+Term1 = get_document(_, _),
+Term2 = get_document(_, _),
+term_vars(Term1, Vars1),
+term_vars(Term2, Vars2),
+length(Vars1, N1),
+length(Vars2, N2) =>
+    N1 < N2.
+po(get_document(_,_), _) =>
+    false.
+po(_, get_document(_,_)) =>
     true.
 po(TermA, TermB),
 term_vars(TermA, VarsA),
@@ -500,6 +514,28 @@ test(order_type) :-
         t(v(x),name,"main"^^xsd:string),
 		t(v(x),rdf:type,'@schema':'Branch')
 	].
+
+test(select_not, []) :-
+
+    Term = select(
+               [v(document)],
+               (   member(v(doc_id),[doc1,doc2]),
+                   t(v(doc_id), rdf:type, v(type)),
+                   not(eq(v(type), rdf:'List')),
+                   get_document(v(doc_id), v(document))
+               )
+           ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    Prog = select(
+               [v(document)],
+			   ( member(v(doc_id),[doc1,doc2]),
+				 t(v(doc_id),rdf:type,v(type)),
+				 not(eq(v(type),rdf:'List')),
+				 get_document(v(doc_id),v(document))
+			   )).
 
 test(disconnected_partitions) :-
     disconnected_partitions(

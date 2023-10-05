@@ -2297,6 +2297,10 @@ components:
           description: WOQL Query
         "commit_info":
           $ref: "#/components/schemas/CommitInfo"
+        "optimize":
+          type: boolean
+          description: Allow reordering of queries
+          default: true
         "all_witnesses":
           type: boolean
           description: Check for all errors
