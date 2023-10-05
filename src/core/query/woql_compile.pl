@@ -4815,8 +4815,7 @@ test(quad_compilation, [
     Commit_Info = commit_info{author: "a", message: "m"},
     create_context(Descriptor, Commit_Info, Context),
     Ctx_In = (Context.put(authorization, Auth)),
-
-    compile_query(Term, _Prog, Ctx_In, _Ctx_Out).
+    compile_query(Term, _Prog, Ctx_In, _Ctx_Out, options{}).
 
 :- use_module(core(document)).
 test(document_path, [
