@@ -4740,6 +4740,7 @@ test(less_than, [
                     some("TERMINUSQA/test"),
                     json_query(Query),
                     _,
+                    _,
                     JSON,
                     Options),
     [_] = (JSON.bindings).
@@ -4796,6 +4797,7 @@ test(using_resource_works, [
                     Auth,
                     some("TERMINUSQA/test"),
                     json_query(Query),
+                    _,
                     _,
                     _JSON,
                     Options).
