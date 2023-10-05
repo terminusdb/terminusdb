@@ -395,12 +395,11 @@ impl<L: Layer> GetDocumentContext<L> {
             }
         }
 
-        if type_id.is_none() && fields.peek().is_none() {
-            // we're actually dealing with a raw id here
-            Err(Value::String(id_name_contracted))
-        } else if type_id.is_none()
-            && fields.peek().map(|x| x.predicate) == self.sys_foreign_type_predicate_id
+        if type_id.is_none()
+            && (fields.peek().is_none()
+                || fields.peek().map(|x| x.predicate) == self.sys_foreign_type_predicate_id)
         {
+            // we're actually dealing with a raw id here
             Err(Value::String(id_name_contracted))
         } else {
             let mut result = Map::new();
