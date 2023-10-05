@@ -11129,6 +11129,55 @@ test(elaborate_foreign_type,
           'http://somewhere.for.now/schema#to',
           'http://somewhere.for.now/document/To/george')].
 
+test(legacy_foreign_type,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foreign"),
+             resolve_absolute_string_descriptor("admin/foreign", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    ID = 'http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
+    % Legacy database style:
+    Triples =[
+        t(ID,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://somewhere.for.now/schema#From'),
+        t('http://somewhere.for.now/document/To/george',
+          'http://terminusdb.com/schema/sys#foreign_type',
+          'http://somewhere.for.now/schema#To'),
+        t(ID,
+          'http://somewhere.for.now/schema#to',
+          'http://somewhere.for.now/document/To/george')],
+    with_test_transaction(Desc, C,
+                          forall(
+                              member(t(X,P,Y), Triples),
+                              ask(C,
+                                  insert(X, P, Y))
+                          )),
+
+    open_descriptor(Desc, Transaction),
+
+    Config = config{
+                 skip: 0,
+                 count: -1,
+                 as_list: true,
+                 compress: true,
+                 unfold: true,
+                 minimized: true
+             },
+
+    with_output_to(
+        string(S),
+        api_document:api_print_documents_by_id(instance, Transaction, Config, [ID], true)
+    ),
+
+    atom_json_dict(S, Dict, [default_tag(json)]),
+    Dict = json{ '@id':"From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge",
+				 '@type':"From",
+				 to:"To/george"
+			   }.
+
 test(foreign_type,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin","hr"),

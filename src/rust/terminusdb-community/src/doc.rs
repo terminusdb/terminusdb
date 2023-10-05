@@ -38,6 +38,7 @@ pub struct GetDocumentContext<L: Layer> {
     sys_value_id: Option<u64>,
     sys_json_type_id: Option<u64>,
     sys_json_document_type_id: Option<u64>,
+    sys_foreign_type_predicate_id: Option<u64>,
     unfold: bool,
     minimized: bool,
 }
@@ -64,6 +65,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut rdf_list_id = None;
         let mut sys_json_type_id = None;
         let mut sys_json_document_type_id = None;
+        let mut sys_foreign_type_predicate_id = None;
         let types: HashSet<u64>;
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
@@ -140,6 +142,7 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_list_id = instance.object_node_id(RDF_LIST);
             sys_json_type_id = instance.object_node_id(SYS_JSON);
             sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+            sys_foreign_type_predicate_id = instance.predicate_id(SYS_FOREIGN_TYPE_PREDICATE_ID);
 
             if let Some(sys_json_document_type_id) = sys_json_document_type_id {
                 document_types.insert(sys_json_document_type_id);
@@ -177,9 +180,11 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_index_ids,
             sys_array_id,
             sys_value_id,
+            sys_foreign_type_predicate_id,
 
             sys_json_type_id,
             sys_json_document_type_id,
+
             unfold,
             minimized,
         }
@@ -225,6 +230,8 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_rest_id,
             rdf_nil_id,
             rdf_list_id,
+            sys_foreign_type_predicate_id: None,
+
             sys_json_type_id,
             sys_json_document_type_id,
             sys_index_ids: Vec::with_capacity(0),
@@ -245,7 +252,7 @@ impl<L: Layer> GetDocumentContext<L> {
             .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
     }
 
-    fn get_field<'a, 'b>(&'a self, object: u64) -> Result<Value, StackEntry<L>> {
+    fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         } else if Some(object) == self.rdf_nil_id {
@@ -390,6 +397,10 @@ impl<L: Layer> GetDocumentContext<L> {
 
         if type_id.is_none() && fields.peek().is_none() {
             // we're actually dealing with a raw id here
+            Err(Value::String(id_name_contracted))
+        } else if type_id.is_none()
+            && fields.peek().map(|x| x.predicate) == self.sys_foreign_type_predicate_id
+        {
             Err(Value::String(id_name_contracted))
         } else {
             let mut result = Map::new();
