@@ -345,7 +345,7 @@ ask(Askable, Pre_Term, Options) :-
  * Ask a woql query and get back the resulting context.
  */
 ask_ast(Context, Ast, Output_Context) :-
-    compile_query(Ast,Prog, Context, Output_Context),
+    compile_query(Ast,Prog, Context, Output_Context, _{optimize: true}),
     debug(terminus(sdk),'Program: ~q~n', [Prog]),
 
     woql_compile:Prog.

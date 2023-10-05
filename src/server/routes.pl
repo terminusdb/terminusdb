@@ -751,10 +751,18 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             param_value_json_required(JSON, query, object, Query),
             param_value_json_optional(JSON, commit_info, object, commit_info{}, Commit_Info),
             param_value_json_optional(JSON, all_witnesses, boolean, false, All_Witnesses),
+            param_value_json_optional(JSON, optimize, boolean, true, Optimize),
 
             read_data_version_header(Request, Requested_Data_Version),
 
-            woql_query_json(System_DB, Auth, Path_Option, json_query(Query), Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, _Context, Response),
+            Options = _{
+                          files: Files,
+                          all_witnesses: All_Witnesses,
+                          data_version: Requested_Data_Version,
+                          commit_info: Commit_Info,
+                          optimize: Optimize
+                      },
+            woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Response, Options),
 
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
