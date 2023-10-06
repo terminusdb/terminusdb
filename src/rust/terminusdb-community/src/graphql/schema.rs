@@ -37,6 +37,8 @@ pub struct TerminusContext<'a, C: QueryableContextType> {
     pub context: &'a Context<'a, C>,
     pub system_transaction_term: Term<'a>,
     pub transaction_term: Term<'a>,
+    pub author_term: Term<'a>,
+    pub message_term: Term<'a>,
     pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
@@ -52,6 +54,8 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
         meta_term: &Term,
         commit_term: &Term,
         transaction_term: &Term,
+        author_term: &'a Term,
+        message_term: &'a Term,
         type_collection: TerminusTypeCollectionInfo,
     ) -> PrologResult<TerminusContext<'a, C>> {
         let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
@@ -89,6 +93,8 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
             },
             system_transaction_term: system_term.clone(),
             transaction_term: new_transaction_term,
+            author_term: author_term.clone(),
+            message_term: message_term.clone(),
             context,
             schema,
             instance,

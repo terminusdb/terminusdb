@@ -139,6 +139,8 @@ impl EmbeddingContext {
             &none_term,
             &none_term,
             &transaction_term,
+            &none_term,
+            &none_term,
         )?;
 
         for type_tuple_term in context.term_list_iter(queries_term) {
@@ -207,6 +209,8 @@ impl EmbeddingContext {
             &none_term,
             &none_term,
             transaction_term,
+            &none_term,
+            &none_term,
         )?;
         let document = self.get_query_document(&type_name);
         if document.is_none() {

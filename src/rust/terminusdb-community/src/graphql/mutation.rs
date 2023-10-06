@@ -3,7 +3,7 @@ use swipl::{
     atom, pred,
     prelude::{Atom, Context, QueryableContextType},
     result::PrologResult,
-    term::Term,
+    term::{Term, Unifiable},
 };
 
 use crate::graphql::schema::GraphQLJSON;
@@ -34,12 +34,19 @@ impl<'a, C: QueryableContextType> GraphQLType for TerminusMutationRoot<'a, C> {
     where
         DefaultScalarValue: 'r,
     {
-        let field = registry
+        let insert_documents_field = registry
             .field::<Vec<ID>>("_insertDocuments", &())
             .argument(registry.arg::<GraphQLJSON>("json", &()));
+        let commit_info_field = registry
+            .field::<bool>("_commitInfo", &())
+            .argument(registry.arg::<Option<String>>("author", &()))
+            .argument(registry.arg::<Option<String>>("message", &()));
 
         registry
-            .build_object_type::<TerminusMutationRoot<'a, C>>(&(), &[field])
+            .build_object_type::<TerminusMutationRoot<'a, C>>(
+                &(),
+                &[insert_documents_field, commit_info_field],
+            )
             .into_meta()
     }
 }
@@ -75,6 +82,23 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
                         &json,
                     ),
                 )
+            }
+            "_commitInfo" => {
+                let prolog_context = executor.context().context;
+                if let Some(author) = arguments.get::<String>("author") {
+                    result_to_execution_result(
+                        prolog_context,
+                        executor.context().author_term.unify(author),
+                    )?;
+                }
+                if let Some(message) = arguments.get::<String>("message") {
+                    result_to_execution_result(
+                        prolog_context,
+                        executor.context().message_term.unify(message),
+                    )?;
+                }
+
+                Ok(true.into())
             }
             _ => Err("uknown field".into()),
         }

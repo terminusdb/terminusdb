@@ -71,12 +71,20 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
             '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
         % make context
 
-        create_context(Transaction, commit_info{author: "graphql", message: "wow so cool a graphql commit"}, C),
+        create_context(Transaction, commit_info{author: Author, message: Message}, C),
         catch(
             with_transaction(C,
-                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response, Is_Error),
+                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response, Is_Error, Author, Message),
                                  die_if(Is_Error = true,
-                                        response(Response))),
+                                        response(Response)),
+                                 (   var(Author)
+                                 ->  user_name_uri(System_DB, Author, Auth)
+                                 ;   true),
+                                 (   var(Message)
+                                 ->  Message = "Mutation through GraphQL"
+                                 ;   true)
+                             ),
+
                              _),
             response(Response),
             json_log_info_formatted("intercepted a failing graphql, not committing", []))
