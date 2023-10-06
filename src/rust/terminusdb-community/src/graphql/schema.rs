@@ -273,7 +273,7 @@ pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
 }
 
-fn result_to_execution_result<C: QueryableContextType, T>(
+pub fn result_to_execution_result<C: QueryableContextType, T>(
     context: &Context<C>,
     result: PrologResult<T>,
 ) -> Result<T, juniper::FieldError> {

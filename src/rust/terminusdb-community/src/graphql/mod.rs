@@ -175,7 +175,7 @@ predicates! {
         graphql_context_term.unify(type_collection)
     }
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term) {
+    semidet fn handle_request(context, _method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term, is_error_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -190,7 +190,11 @@ predicates! {
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
         let execution_context = GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term)?;
         execution_context.execute_query(request,
-                                        |response| {
+                                        |response: &GraphQLResponse| {
+                                            let errored = response.inner_ref().as_ref()
+                                                .map(|(_, errors)|!errors.is_empty())
+                                                .unwrap_or(false);
+                                            is_error_term.unify(errored)?;
                                             match serde_json::to_string(&response){
                                                 Ok(r) => response_term.unify(r),
                                                 Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),

@@ -13,7 +13,9 @@
               api_get_document/5,
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
-              nonground_captures/2
+              nonground_captures/2,
+
+              api_insert_documents_core_string/7
           ]).
 
 :- use_module(core(util)).
@@ -331,23 +333,31 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         empty_assoc(Captures_In),
-                         ensure_transaction_has_builder(Graph_Type, Transaction),
-                         insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
-                         die_if(nonground_captures(Captures_Out, Nonground),
-                                error(not_all_captures_found(Nonground), _)),
-                         database_instance(Transaction, [Instance]),
-                         insert_backlinks(BackLinks, Instance),
-                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-                         (   Doc_Merge = true
-                         ->  true
-                         ;   die_if(Duplicates \= [],
-                                    error(same_ids_in_one_transaction(Duplicates), _))
-                         )
+                         api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+    empty_assoc(Captures_In),
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    database_instance(Transaction, [Instance]),
+    insert_backlinks(BackLinks, Instance),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+
+api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+    open_string(String, Stream),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids).
+
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
     append(Ids,All_Ids),
