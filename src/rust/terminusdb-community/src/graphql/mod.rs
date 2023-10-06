@@ -4,7 +4,7 @@ use juniper::{
     DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, ExecutionError, GraphQLError,
     InputValue, RootNode, Value,
 };
-use terminusdb_store_prolog::terminus_store::Layer;
+use terminusdb_store_prolog::{layer::WrappedLayer, terminus_store::Layer};
 
 use lazy_static::lazy_static;
 use lru::LruCache;
@@ -20,13 +20,16 @@ pub mod frame;
 pub mod query;
 mod sanitize;
 pub mod schema;
+mod system;
 mod top;
 
-use crate::types::transaction_schema_layer;
+use crate::types::{transaction_instance_layer, transaction_schema_layer};
 
 use self::{
     frame::{AllFrames, PreAllFrames},
-    schema::{TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
+    schema::{SystemInfo, TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
+    system::{SystemData, SystemRoot},
+    top::System,
 };
 
 pub fn type_collection_from_term<'a, C: QueryableContextType>(
@@ -193,10 +196,41 @@ predicates! {
                                             }
                                         })
     }
+
+    #[module("$graphql")]
+    semidet fn handle_system_request(context, _method_term, system_term, auth_term, content_length_term, input_stream_term, response_term) {
+        let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
+        let len = content_length_term.get_ex::<u64>()? as usize;
+        let mut buf = vec![0;len];
+        context.try_or_die_generic(input.read_exact(&mut buf))?;
+
+        let request =
+            match serde_json::from_slice::<GraphQLRequest>(&buf) {
+                Ok(r) => r,
+                Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
+            };
+
+        let user: Atom = auth_term.get_ex()?;
+        let system = transaction_instance_layer(context, system_term)?.unwrap();
+
+        let root_node = RootNode::new_with_info(SystemRoot::default(),
+                                                EmptyMutation::new(),
+                                                EmptySubscription::new(),
+                                                (),
+                                                (),
+                                                ());
+        let system_data = SystemData { user, system };
+        let response = request.execute_sync(&root_node, &system_data);
+        match serde_json::to_string(&response){
+            Ok(r) => response_term.unify(r),
+            Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
+        }
+    }
 }
 
 pub fn register() {
     register_get_cached_graphql_context();
     register_get_graphql_context();
     register_handle_request();
+    register_handle_system_request();
 }

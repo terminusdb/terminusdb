@@ -3107,7 +3107,7 @@ index_handler(get,Path,Request,System_DB,Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
-:- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),
+:- http_handler(graphql(.), cors_handler(Method, graphql_handler(""), [add_payload(false),skip_authentication(true)]),
                 [method(Method),
                  methods([options,get,post])]).
 :- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
@@ -3150,7 +3150,7 @@ handle_graphql_error(E, Request) :-
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).
-:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler("_system"), [add_payload(false)]),
+:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler(""), [add_payload(false)]),
                 [method(Method),
                  methods([options,get,post])]).
 :- http_handler(graphiql(Path), cors_handler(Method, graphiql_handler(Path), [add_payload(false)]),
