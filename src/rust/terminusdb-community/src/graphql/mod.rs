@@ -4,7 +4,7 @@ use juniper::{
     DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, ExecutionError, GraphQLError,
     InputValue, RootNode, Value,
 };
-use terminusdb_store_prolog::{layer::WrappedLayer, terminus_store::Layer};
+use terminusdb_store_prolog::terminus_store::Layer;
 
 use lazy_static::lazy_static;
 use lru::LruCache;
@@ -17,6 +17,7 @@ use swipl::prelude::*;
 
 mod filter;
 pub mod frame;
+mod mutation;
 pub mod query;
 mod sanitize;
 pub mod schema;
@@ -27,9 +28,9 @@ use crate::types::{transaction_instance_layer, transaction_schema_layer};
 
 use self::{
     frame::{AllFrames, PreAllFrames},
-    schema::{SystemInfo, TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
+    mutation::TerminusMutationRoot,
+    schema::{TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
     system::{SystemData, SystemRoot},
-    top::System,
 };
 
 pub fn type_collection_from_term<'a, C: QueryableContextType>(
@@ -51,7 +52,7 @@ pub struct GraphQLExecutionContext<'a, C: QueryableContextType> {
     pub(crate) root_node: RootNode<
         'a,
         TerminusTypeCollection<'a, C>,
-        EmptyMutation<TerminusContext<'a, C>>,
+        TerminusMutationRoot<'a, C>,
         EmptySubscription<TerminusContext<'a, C>>,
     >,
     context: TerminusContext<'a, C>,
@@ -64,7 +65,7 @@ impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
     ) -> Self {
         let root_node = RootNode::new_with_info(
             TerminusTypeCollection::new(),
-            EmptyMutation::<TerminusContext<'a, C>>::new(),
+            TerminusMutationRoot::new(),
             EmptySubscription::<TerminusContext<'a, C>>::new(),
             type_collection,
             (),
