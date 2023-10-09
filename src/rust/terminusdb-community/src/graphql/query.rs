@@ -3,7 +3,6 @@ use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
-use swipl::prelude::QueryableContextType;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -678,8 +677,8 @@ fn object_type_filter<'a>(
     }
 }
 
-fn compile_query<'a, C: QueryableContextType>(
-    context: &'a TerminusContext<'a, C>,
+fn compile_query<'a>(
+    context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
     filter: Rc<FilterObject>,
     iter: ClonableIterator<'a, u64>,
@@ -961,8 +960,8 @@ fn generate_initial_iterator<'a>(
     }
 }
 
-fn lookup_by_filter<'a, C: QueryableContextType>(
-    context: &'a TerminusContext<'a, C>,
+fn lookup_by_filter<'a>(
+    context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
     class_name: &'a str,
     all_frames: &AllFrames,
@@ -986,8 +985,8 @@ fn lookup_by_filter<'a, C: QueryableContextType>(
     }
 }
 
-pub fn run_filter_query<'a, C: QueryableContextType>(
-    context: &'a TerminusContext<'a, C>,
+pub fn run_filter_query<'a>(
+    context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
     prefixes: &'a Prefixes,
     arguments: &'a juniper::Arguments,

@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
@@ -33,8 +34,8 @@ pub struct SystemInfo {
 }
 
 #[derive(Clone)]
-pub struct TerminusContext<'a, C: QueryableContextType> {
-    pub context: &'a Context<'a, C>,
+pub struct TerminusContext<'a> {
+    pub context: Rc<GenericQueryableContext<'a>>,
     pub system_transaction_term: Term<'a>,
     pub transaction_term: Term<'a>,
     pub author_term: Term<'a>,
@@ -46,38 +47,37 @@ pub struct TerminusContext<'a, C: QueryableContextType> {
     pub document_context: Arc<Lazy<GetDocumentContext<SyncStoreLayer>>>,
 }
 
-impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
+impl<'a> TerminusContext<'a> {
     pub fn new(
-        context: &'a Context<'a, C>,
+        context: GenericQueryableContext<'a>,
         auth_term: &Term,
         system_term: &'a Term,
         meta_term: &Term,
         commit_term: &Term,
-        transaction_term: &Term,
+        transaction_term: &'a Term,
         author_term: &'a Term,
         message_term: &'a Term,
         type_collection: TerminusTypeCollectionInfo,
-    ) -> PrologResult<TerminusContext<'a, C>> {
+    ) -> PrologResult<TerminusContext<'a>> {
         let user: Atom = auth_term.get_ex()?;
         let system =
-            transaction_instance_layer(context, system_term)?.expect("system layer not found");
+            transaction_instance_layer(&context, system_term)?.expect("system layer not found");
         let meta = if meta_term.unify(atomable("none")).is_ok() {
             None
         } else {
-            transaction_instance_layer(context, meta_term).expect("Missing meta layer")
+            transaction_instance_layer(&context, meta_term).expect("Missing meta layer")
         };
         let commit = if commit_term.unify(atomable("none")).is_ok() {
             None
         } else {
-            transaction_instance_layer(context, commit_term).expect("Missing commit layer")
+            transaction_instance_layer(&context, commit_term).expect("Missing commit layer")
         };
 
         let schema =
-            transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
-        let instance = transaction_instance_layer(context, transaction_term)?;
+            transaction_schema_layer(&context, transaction_term)?.expect("missing schema layer");
+        let instance = transaction_instance_layer(&context, transaction_term)?;
 
-        let new_transaction_term = context.new_term_ref();
-        new_transaction_term.unify(transaction_term)?;
+        let context = Rc::new(context);
 
         Ok(TerminusContext {
             system_info: SystemInfo {
@@ -87,7 +87,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
                 commit,
             },
             system_transaction_term: system_term.clone(),
-            transaction_term: new_transaction_term,
+            transaction_term: transaction_term.clone(),
             author_term: author_term.clone(),
             message_term: message_term.clone(),
             context,
@@ -104,17 +104,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
     }
 }
 
-pub struct TerminusTypeCollection<'a, C: QueryableContextType> {
-    _c: std::marker::PhantomData<&'a Context<'a, C>>,
-}
-
-impl<'a, C: QueryableContextType> TerminusTypeCollection<'a, C> {
-    pub fn new() -> Self {
-        Self {
-            _c: Default::default(),
-        }
-    }
-}
+pub struct TerminusTypeCollection;
 
 pub struct TerminusOrderingInfo {
     ordering_name: String,
@@ -179,7 +169,7 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
     false
 }
 
-impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a, C> {
+impl GraphQLType for TerminusTypeCollection {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
     }
@@ -201,7 +191,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                         class: name.to_owned(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                    let field = registry.field::<Vec<TerminusType>>(name, &newinfo);
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -218,7 +208,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                let field = registry.field::<Vec<TerminusType>>(name, &newinfo);
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -243,7 +233,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
         fields.push(registry.field::<System>("_system", &()));
         */
         registry
-            .build_object_type::<TerminusTypeCollection<'a, C>>(info, &fields)
+            .build_object_type::<TerminusTypeCollection>(info, &fields)
             .into_meta()
     }
 }
@@ -284,8 +274,8 @@ pub fn result_to_execution_result<C: QueryableContextType, T>(
     })
 }
 
-fn pl_ids_from_restriction<C: QueryableContextType>(
-    context: &TerminusContext<C>,
+fn pl_ids_from_restriction(
+    context: &TerminusContext,
     restriction: &RestrictionDefinition,
 ) -> PrologResult<Vec<u64>> {
     let mut result = Vec::new();
@@ -310,21 +300,21 @@ fn pl_ids_from_restriction<C: QueryableContextType>(
     Ok(result)
 }
 
-fn ids_from_restriction<C: QueryableContextType>(
-    context: &TerminusContext<C>,
+fn ids_from_restriction(
+    context: &TerminusContext,
     restriction: &RestrictionDefinition,
 ) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
+    let result = pl_ids_from_restriction(&context, restriction).map(|mut r| {
         r.sort();
         r.dedup();
 
         r
     });
-    result_to_execution_result(context.context, result)
+    result_to_execution_result(&context.context, result)
 }
 
-fn pl_id_matches_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+fn pl_id_matches_restriction(
+    context: &TerminusContext,
     restriction: &str,
     id: u64,
 ) -> PrologResult<Option<String>> {
@@ -350,8 +340,8 @@ fn pl_id_matches_restriction<'a, C: QueryableContextType>(
     }
 }
 
-pub fn id_matches_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+pub fn id_matches_restriction(
+    context: &TerminusContext,
     restriction: &str,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
@@ -359,8 +349,8 @@ pub fn id_matches_restriction<'a, C: QueryableContextType>(
     result_to_execution_result(&context.context, result)
 }
 
-impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
-    type Context = TerminusContext<'a, C>;
+impl GraphQLValue for TerminusTypeCollection {
+    type Context = TerminusContext<'static>;
 
     type TypeInfo = TerminusTypeCollectionInfo;
 
@@ -438,17 +428,13 @@ pub struct TerminusTypeInfo {
     allframes: Arc<AllFrames>,
 }
 
-pub struct TerminusType<'a, C: QueryableContextType> {
+pub struct TerminusType {
     id: u64,
-    _x: std::marker::PhantomData<Context<'a, C>>,
 }
 
-impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
+impl TerminusType {
     fn new(id: u64) -> Self {
-        Self {
-            id,
-            _x: Default::default(),
-        }
+        Self { id }
     }
 
     fn register_field<'r, T: GraphQLType>(
@@ -481,7 +467,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             .filter_map(|(field_name, field_definition)| {
                 Some(
                     if let Some(document_type) = field_definition.document_type(frames) {
-                        let field = Self::register_field::<TerminusType<'a, C>>(
+                        let field = Self::register_field::<TerminusType>(
                             registry,
                             field_name,
                             &TerminusTypeInfo {
@@ -587,7 +573,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                     class: class.to_string(),
                     allframes: frames.clone(),
                 };
-                let field = Self::register_field::<TerminusType<'a, C>>(
+                let field = Self::register_field::<TerminusType>(
                     registry,
                     field_name,
                     &new_info,
@@ -611,7 +597,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                 class: class.to_string(),
                 allframes: frames.clone(),
             };
-            let field = Self::register_field::<TerminusType<'a, C>>(
+            let field = Self::register_field::<TerminusType>(
                 registry,
                 &field_name,
                 &new_info,
@@ -648,12 +634,12 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         fields.extend(standard_type_operators(registry));
 
         registry
-            .build_object_type::<TerminusType<'a, C>>(info, &fields)
+            .build_object_type::<TerminusType>(info, &fields)
             .into_meta()
     }
 }
 
-impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
+impl GraphQLType for TerminusType {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some(&info.class)
     }
@@ -708,8 +694,8 @@ fn subject_has_type(instance: &dyn Layer, subject_id: u64, class: &str) -> bool 
     }
 }
 
-impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
-    type Context = TerminusContext<'a, C>;
+impl GraphQLValue for TerminusType {
+    type Context = TerminusContext<'static>;
 
     type TypeInfo = TerminusTypeInfo;
 
@@ -1015,8 +1001,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
     }
 }
 
-fn extract_fragment<'a, C: QueryableContextType + 'a>(
-    executor: &juniper::Executor<TerminusContext<'a, C>, DefaultScalarValue>,
+fn extract_fragment(
+    executor: &juniper::Executor<TerminusContext<'static>, DefaultScalarValue>,
     info: &TerminusTypeInfo,
     instance: &SyncStoreLayer,
     object_id: u64,
@@ -1214,11 +1200,11 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-fn collect_into_graphql_list<'a, C: QueryableContextType>(
+fn collect_into_graphql_list<'a>(
     doc_type: Option<&'a str>,
     enum_type: Option<&'a str>,
     is_json: bool,
-    executor: &'a juniper::Executor<TerminusContext<C>>,
+    executor: &'a juniper::Executor<TerminusContext<'static>>,
     info: &'a TerminusTypeInfo,
     arguments: &'a juniper::Arguments,
     object_ids: ClonableIterator<'a, u64>,

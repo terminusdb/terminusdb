@@ -1,7 +1,7 @@
 use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ID};
 use swipl::{
     atom, pred,
-    prelude::{Atom, Context, QueryableContextType},
+    prelude::{Atom, GenericQueryableContext},
     result::{attempt, PrologResult},
     term::Term,
 };
@@ -10,19 +10,9 @@ use crate::graphql::schema::GraphQLJSON;
 
 use super::schema::{result_to_execution_result, TerminusContext};
 
-pub struct TerminusMutationRoot<'a, C: QueryableContextType> {
-    _c: std::marker::PhantomData<&'a Context<'a, C>>,
-}
+pub struct TerminusMutationRoot;
 
-impl<'a, C: QueryableContextType> TerminusMutationRoot<'a, C> {
-    pub fn new() -> Self {
-        Self {
-            _c: Default::default(),
-        }
-    }
-}
-
-impl<'a, C: QueryableContextType> GraphQLType for TerminusMutationRoot<'a, C> {
+impl GraphQLType for TerminusMutationRoot {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("TerminusMutation")
     }
@@ -43,7 +33,7 @@ impl<'a, C: QueryableContextType> GraphQLType for TerminusMutationRoot<'a, C> {
             .argument(registry.arg::<Option<String>>("message", &()));
 
         registry
-            .build_object_type::<TerminusMutationRoot<'a, C>>(
+            .build_object_type::<TerminusMutationRoot>(
                 &(),
                 &[insert_documents_field, commit_info_field],
             )
@@ -51,10 +41,10 @@ impl<'a, C: QueryableContextType> GraphQLType for TerminusMutationRoot<'a, C> {
     }
 }
 
-fn check_write_auth<C: QueryableContextType>(
-    executor: &juniper::Executor<TerminusContext<'_, C>, DefaultScalarValue>,
+fn check_write_auth(
+    executor: &juniper::Executor<TerminusContext<'static>, DefaultScalarValue>,
 ) -> PrologResult<bool> {
-    let prolog_context = executor.context().context;
+    let prolog_context = &executor.context().context;
     let system_transaction_term = &executor.context().system_transaction_term;
     let transaction_term = &executor.context().transaction_term;
     let auth = &executor.context().system_info.user;
@@ -66,8 +56,8 @@ fn check_write_auth<C: QueryableContextType>(
     ))?)
 }
 
-impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
-    type Context = TerminusContext<'a, C>;
+impl GraphQLValue for TerminusMutationRoot {
+    type Context = TerminusContext<'static>;
     type TypeInfo = ();
 
     fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
@@ -81,7 +71,7 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
         arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
-        let prolog_context = executor.context().context;
+        let prolog_context = &executor.context().context;
         let passes_write_auth =
             result_to_execution_result(prolog_context, check_write_auth(executor))?;
         if !passes_write_auth {
@@ -124,10 +114,10 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
     }
 }
 
-impl<'a, C: QueryableContextType> TerminusMutationRoot<'a, C> {
+impl TerminusMutationRoot {
     fn call_insert_doc(
         &self,
-        context: &Context<'a, C>,
+        context: &GenericQueryableContext<'static>,
         transaction_term: &Term,
         json: &str,
     ) -> PrologResult<juniper::Value> {

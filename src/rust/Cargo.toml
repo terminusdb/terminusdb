@@ -7,3 +7,4 @@ debug = 1
 
 [patch.crates-io]
 #terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}
+swipl = {git="https://github.com/terminusdb-labs/swipl-rs", branch="type_erased_contexts"}

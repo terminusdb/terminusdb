@@ -18,7 +18,7 @@ rayon = "1.5"
 lazy-init = "0.5"
 rand = "0.8.5"
 #juniper = "0.15.11"
-juniper = {git="https://github.com/terminusdb-labs/juniper.git", branch = "response_into_inner"}
+juniper = {git="https://github.com/terminusdb-labs/juniper.git", branch = "patches"}
 serde = {version="1.0", features=["derive"]}
 float-ord = "0.3"
 regex = "1"

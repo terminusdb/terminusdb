@@ -1000,7 +1000,7 @@ dependencies = [
 [[package]]
 name = "juniper"
 version = "0.15.11"
-source = "git+https://github.com/terminusdb-labs/juniper.git?branch=response_into_inner#56fb103baddb009d2ca29520fdd6defd3f13c6dd"
+source = "git+https://github.com/terminusdb-labs/juniper.git?branch=patches#d7bd466c516bada1de4eb33d150c2c2bea8515b1"
 dependencies = [
  "async-trait",
  "bson",
@@ -1021,7 +1021,7 @@ dependencies = [
 [[package]]
 name = "juniper_codegen"
 version = "0.15.9"
-source = "git+https://github.com/terminusdb-labs/juniper.git?branch=response_into_inner#56fb103baddb009d2ca29520fdd6defd3f13c6dd"
+source = "git+https://github.com/terminusdb-labs/juniper.git?branch=patches#d7bd466c516bada1de4eb33d150c2c2bea8515b1"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -1822,8 +1822,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "swipl"
 version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "833bc33697a27571008cfdaf23c056f3f51756ecf94dfa5b5c1e9b33ccb10cd0"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=type_erased_contexts#93559d24b906dac57a16e78de55ac25ce9ab1109"
 dependencies = [
  "convert_case",
  "lazy_static",
@@ -1836,8 +1835,7 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb6896f24b95791d43244183abff286790a7f2a5a38e08cda03f37551cc7b49d"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=type_erased_contexts#93559d24b906dac57a16e78de55ac25ce9ab1109"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -1846,8 +1844,7 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3c24ee13ef4f59cce23ccaff3006a861c7f8b02984c2a7821e7f1ced54b6c1a"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=type_erased_contexts#93559d24b906dac57a16e78de55ac25ce9ab1109"
 dependencies = [
  "regex",
 ]
@@ -1855,8 +1852,7 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b19bd1b4ca2234088d7e43502a69289552a18f603ec7ae4a09c741956005243"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=type_erased_contexts#93559d24b906dac57a16e78de55ac25ce9ab1109"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

@@ -4,14 +4,13 @@ use crate::terminus_store::Layer as TSLayer;
 use crate::value::*;
 use juniper::FromContext;
 use juniper::{self, graphql_interface, graphql_object, GraphQLEnum};
-use swipl::prelude::*;
 
 use super::schema::SystemInfo;
 use super::schema::TerminusContext;
 impl juniper::Context for SystemInfo {}
 
-impl<'a, C: QueryableContextType> FromContext<TerminusContext<'a, C>> for SystemInfo {
-    fn from<'b>(value: &'b TerminusContext<'a, C>) -> &'b SystemInfo {
+impl<'a> FromContext<TerminusContext<'a>> for SystemInfo {
+    fn from<'b>(value: &'b TerminusContext<'a>) -> &'b SystemInfo {
         &value.system_info
     }
 }

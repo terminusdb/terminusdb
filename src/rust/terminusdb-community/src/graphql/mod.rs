@@ -17,6 +17,7 @@ use swipl::prelude::*;
 
 mod filter;
 pub mod frame;
+mod main_graph;
 mod mutation;
 pub mod query;
 mod sanitize;
@@ -48,25 +49,25 @@ pub fn type_collection_from_term<'a, C: QueryableContextType>(
     })
 }
 
-pub struct GraphQLExecutionContext<'a, C: QueryableContextType> {
+pub struct GraphQLExecutionContext {
     pub(crate) root_node: RootNode<
-        'a,
-        TerminusTypeCollection<'a, C>,
-        TerminusMutationRoot<'a, C>,
-        EmptySubscription<TerminusContext<'a, C>>,
+        'static,
+        TerminusTypeCollection,
+        TerminusMutationRoot,
+        EmptySubscription<TerminusContext<'static>>,
     >,
-    context: TerminusContext<'a, C>,
+    context: TerminusContext<'static>,
 }
 
-impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
+impl GraphQLExecutionContext {
     pub fn new(
         type_collection: TerminusTypeCollectionInfo,
-        context: TerminusContext<'a, C>,
+        context: TerminusContext<'static>,
     ) -> Self {
         let root_node = RootNode::new_with_info(
-            TerminusTypeCollection::new(),
-            TerminusMutationRoot::new(),
-            EmptySubscription::<TerminusContext<'a, C>>::new(),
+            TerminusTypeCollection,
+            TerminusMutationRoot,
+            EmptySubscription::<TerminusContext<'static>>::new(),
             type_collection,
             (),
             (),
@@ -75,18 +76,19 @@ impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
         Self { root_node, context }
     }
 
-    pub fn new_from_context_terms(
+    pub unsafe fn new_from_context_terms<'a, C: QueryableContextType>(
         type_collection: TerminusTypeCollectionInfo,
-        context: &'a Context<'a, C>,
+        context: &'a Context<'_, C>,
         auth_term: &Term,
         system_term: &'a Term,
         meta_term: &Term,
         commit_term: &Term,
-        transaction_term: &Term,
+        transaction_term: &'a Term,
         author_term: &'a Term,
         message_term: &'a Term,
     ) -> PrologResult<Self> {
-        let graphql_context = TerminusContext::new(
+        let context: GenericQueryableContext<'a> = context.into_generic();
+        let graphql_context: TerminusContext<'a> = TerminusContext::new(
             context,
             auth_term,
             system_term,
@@ -97,7 +99,9 @@ impl<'a, C: QueryableContextType> GraphQLExecutionContext<'a, C> {
             message_term,
             type_collection.clone(),
         )?;
-        Ok(Self::new(type_collection, graphql_context))
+        let lifetime_erased_graphql_context: TerminusContext<'static> =
+            unsafe { std::mem::transmute(graphql_context) };
+        Ok(Self::new(type_collection, lifetime_erased_graphql_context))
     }
 
     pub fn execute_query<T, F: Fn(&GraphQLResponse) -> T>(
@@ -192,7 +196,7 @@ predicates! {
             };
 
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
-        let execution_context = GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term)?;
+        let execution_context = unsafe {GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term)? };
         execution_context.execute_query(request,
                                         |response: &GraphQLResponse| {
                                             let errored = response.inner_ref().as_ref()
