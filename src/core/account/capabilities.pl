@@ -287,6 +287,14 @@ assert_write_access(System, Auth, Collection, Filter) :-
 assert_write_access(_System, _Auth, Collection, _Filter) :-
     throw(error(write_access_malformed_collection(Collection))).
 
+auth_instance_write_access(System, Auth, Transaction) :-
+    Descriptor = (Transaction.descriptor),
+    catch(
+        assert_write_access(System, Auth, Descriptor, filter{type: instance}),
+        error(access_not_authorised(_,_,_), _),
+        fail
+    ).
+
 /**
  * assert_read_access(Filter,Context,Context) is det + error.
  *

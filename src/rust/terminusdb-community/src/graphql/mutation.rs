@@ -2,8 +2,8 @@ use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ID};
 use swipl::{
     atom, pred,
     prelude::{Atom, Context, QueryableContextType},
-    result::PrologResult,
-    term::{Term, Unifiable},
+    result::{attempt, PrologResult},
+    term::Term,
 };
 
 use crate::graphql::schema::GraphQLJSON;
@@ -51,6 +51,21 @@ impl<'a, C: QueryableContextType> GraphQLType for TerminusMutationRoot<'a, C> {
     }
 }
 
+fn check_write_auth<C: QueryableContextType>(
+    executor: &juniper::Executor<TerminusContext<'_, C>, DefaultScalarValue>,
+) -> PrologResult<bool> {
+    let prolog_context = executor.context().context;
+    let system_transaction_term = &executor.context().system_transaction_term;
+    let transaction_term = &executor.context().transaction_term;
+    let auth = &executor.context().system_info.user;
+    let auth_term = prolog_context.new_term_ref();
+    auth_term.unify(auth)?;
+    Ok(attempt(prolog_context.call_once(
+        pred!("capabilities:auth_instance_write_access/3"),
+        [system_transaction_term, &auth_term, transaction_term],
+    ))?)
+}
+
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
     type Context = TerminusContext<'a, C>;
     type TypeInfo = ();
@@ -66,6 +81,12 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
         arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        let prolog_context = executor.context().context;
+        let passes_write_auth =
+            result_to_execution_result(prolog_context, check_write_auth(executor))?;
+        if !passes_write_auth {
+            return Err("Not authorized for write".into());
+        };
         match field_name {
             "_insertDocuments" => {
                 let json = arguments.get::<String>("json");
@@ -73,18 +94,16 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusMutationRoot<'a, C> {
                     return Err("no documents specified".into());
                 }
                 let json = json.unwrap();
-                let prolog_context = executor.context().context;
                 result_to_execution_result(
                     prolog_context,
                     self.call_insert_doc(
-                        executor.context().context,
+                        prolog_context,
                         &executor.context().transaction_term,
                         &json,
                     ),
                 )
             }
             "_commitInfo" => {
-                let prolog_context = executor.context().context;
                 if let Some(author) = arguments.get::<String>("author") {
                     result_to_execution_result(
                         prolog_context,

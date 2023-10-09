@@ -49,7 +49,7 @@ pub struct TerminusContext<'a, C: QueryableContextType> {
 impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
     pub fn new(
         context: &'a Context<'a, C>,
-        _auth_term: &Term,
+        auth_term: &Term,
         system_term: &'a Term,
         meta_term: &Term,
         commit_term: &Term,
@@ -58,12 +58,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
         message_term: &'a Term,
         type_collection: TerminusTypeCollectionInfo,
     ) -> PrologResult<TerminusContext<'a, C>> {
-        let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
-        let user = if user_ == atom!("anonymous") {
-            atom!("terminusdb://system/data/User/anonymous")
-        } else {
-            user_
-        };
+        let user: Atom = auth_term.get_ex()?;
         let system =
             transaction_instance_layer(context, system_term)?.expect("system layer not found");
         let meta = if meta_term.unify(atomable("none")).is_ok() {
@@ -82,7 +77,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
         let instance = transaction_instance_layer(context, transaction_term)?;
 
         let new_transaction_term = context.new_term_ref();
-        new_transaction_term.unify(&transaction_term)?;
+        new_transaction_term.unify(transaction_term)?;
 
         Ok(TerminusContext {
             system_info: SystemInfo {
