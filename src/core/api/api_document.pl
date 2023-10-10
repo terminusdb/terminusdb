@@ -15,7 +15,9 @@
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
 
-              api_insert_documents_core_string/7
+              api_insert_documents_core_string/7,
+              api_replace_documents_core_string/6,
+              api_delete_documents_by_ids/3
           ]).
 
 :- use_module(core(util)).
@@ -410,18 +412,21 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         findall(
-                             Id,
-                             (   json_read_list_stream(Stream, ID_Unchecked),
-                                 param_check_json(non_empty_string, id, ID_Unchecked, Id),
-                                 api_delete_document_(Graph_Type, Transaction, Id)
-                             ),
-                             Ids
-                         )
+                         json_read_list_stream(Stream, ID_Unchecked),
+                         param_check_json(non_empty_string, id, ID_Unchecked, Id),
+                         api_delete_document_(Graph_Type, Transaction, Id)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_delete_documents_by_ids(Transaction, Graph_Type, Ids) :-
+    forall(
+        member(Id, Ids),
+        (   atom_string(Id_Atom, Id),
+            api_delete_document_(Graph_Type, Transaction, Id_Atom)
+        )
+    ).
 
 api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Options) :-
     option(graph_type(Graph_Type), Options),
@@ -486,25 +491,32 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         empty_assoc(Captures),
-                         ensure_transaction_has_builder(Graph_Type, Transaction),
-                         stream_to_lazy_docs(Stream, Lazy_List),
-                         api_replace_document_from_lazy_list(Lazy_List,
-                                                             Graph_Type,
-                                                             Raw_JSON,
-                                                             Transaction,
-                                                             Create,
-                                                             Captures,
-                                                             Captures_Out,
-                                                             Ids_List),
-                         die_if(nonground_captures(Captures_Out, Nonground),
-                                error(not_all_captures_found(Nonground), _)),
-                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-                         die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
+                         api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids) :-
+    empty_assoc(Captures),
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    stream_to_lazy_docs(Stream, Lazy_List),
+    api_replace_document_from_lazy_list(Lazy_List,
+                                        Graph_Type,
+                                        Raw_JSON,
+                                        Transaction,
+                                        Create,
+                                        Captures,
+                                        Captures_Out,
+                                        Ids_List),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _)).
+
+api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Ids) :-
+    open_string(String, Stream),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),

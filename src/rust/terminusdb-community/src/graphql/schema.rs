@@ -1429,3 +1429,9 @@ where
         <String as juniper::ParseScalarValue<S>>::from_str(value)
     }
 }
+
+#[derive(GraphQLEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GraphType {
+    InstanceGraph,
+    SchemaGraph,
+}

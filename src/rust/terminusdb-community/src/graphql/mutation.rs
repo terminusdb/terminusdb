@@ -8,7 +8,7 @@ use swipl::{
 
 use crate::graphql::schema::GraphQLJSON;
 
-use super::schema::{result_to_execution_result, TerminusContext};
+use super::schema::{result_to_execution_result, GraphType, TerminusContext};
 
 pub struct TerminusMutationRoot;
 
@@ -26,7 +26,19 @@ impl GraphQLType for TerminusMutationRoot {
     {
         let insert_documents_field = registry
             .field::<Vec<ID>>("_insertDocuments", &())
-            .argument(registry.arg::<GraphQLJSON>("json", &()));
+            .argument(registry.arg::<GraphQLJSON>("json", &()))
+            .argument(registry.arg::<Option<GraphType>>("graph_type", &()))
+            .argument(registry.arg::<Option<bool>>("raw_json", &()));
+        let replace_documents_field = registry
+            .field::<Vec<ID>>("_replaceDocuments", &())
+            .argument(registry.arg::<GraphQLJSON>("json", &()))
+            .argument(registry.arg::<Option<GraphType>>("graph_type", &()))
+            .argument(registry.arg::<Option<bool>>("raw_json", &()))
+            .argument(registry.arg::<Option<bool>>("create", &()));
+        let delete_documents_field = registry
+            .field::<Vec<ID>>("_deleteDocuments", &())
+            .argument(registry.arg::<Vec<ID>>("ids", &()))
+            .argument(registry.arg::<Option<GraphType>>("graph_type", &()));
         let commit_info_field = registry
             .field::<bool>("_commitInfo", &())
             .argument(registry.arg::<Option<String>>("author", &()))
@@ -35,7 +47,12 @@ impl GraphQLType for TerminusMutationRoot {
         registry
             .build_object_type::<TerminusMutationRoot>(
                 &(),
-                &[insert_documents_field, commit_info_field],
+                &[
+                    insert_documents_field,
+                    replace_documents_field,
+                    delete_documents_field,
+                    commit_info_field,
+                ],
             )
             .into_meta()
     }
@@ -84,12 +101,60 @@ impl GraphQLValue for TerminusMutationRoot {
                     return Err("no documents specified".into());
                 }
                 let json = json.unwrap();
+                let graph_type = arguments
+                    .get::<String>("graph_type")
+                    .unwrap_or("InstanceGraph".to_string());
+                let raw_json = arguments.get::<bool>("raw_json").unwrap_or(false);
                 result_to_execution_result(
                     prolog_context,
                     self.call_insert_doc(
                         prolog_context,
                         &executor.context().transaction_term,
                         &json,
+                        &graph_type,
+                        raw_json,
+                    ),
+                )
+            }
+            "_deleteDocuments" => {
+                let ids = arguments.get::<Vec<String>>("ids");
+                if ids.is_none() {
+                    return Err("no documents specified".into());
+                }
+                let ids = ids.unwrap();
+                let graph_type = arguments
+                    .get::<String>("graph_type")
+                    .unwrap_or("InstanceGraph".to_string());
+                result_to_execution_result(
+                    prolog_context,
+                    self.call_delete_doc(
+                        prolog_context,
+                        &executor.context().transaction_term,
+                        &ids,
+                        &graph_type,
+                    ),
+                )
+            }
+            "_replaceDocuments" => {
+                let json = arguments.get::<String>("json");
+                if json.is_none() {
+                    return Err("no documents specified".into());
+                }
+                let json = json.unwrap();
+                let graph_type = arguments
+                    .get::<String>("graph_type")
+                    .unwrap_or("InstanceGraph".to_string());
+                let raw_json = arguments.get::<bool>("raw_json").unwrap_or(false);
+                let create = arguments.get::<bool>("create").unwrap_or(false);
+                result_to_execution_result(
+                    prolog_context,
+                    self.call_replace_doc(
+                        prolog_context,
+                        &executor.context().transaction_term,
+                        &json,
+                        &graph_type,
+                        raw_json,
+                        create,
                     ),
                 )
             }
@@ -120,14 +185,20 @@ impl TerminusMutationRoot {
         context: &GenericQueryableContext<'static>,
         transaction_term: &Term,
         json: &str,
+        graph_type: &str,
+        raw_json: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
         let [string_term, graph_type_term, raw_json_term, full_replace_term, doc_merge_term, ids_term] =
             frame.new_term_refs();
-
+        let graph_type_atom = if graph_type == "SchemaGraph" {
+            atom!("schema")
+        } else {
+            atom!("instance")
+        };
         string_term.put(json)?;
-        graph_type_term.put(&atom!("instance"))?;
-        raw_json_term.put(&false)?;
+        graph_type_term.put(&graph_type_atom)?;
+        raw_json_term.put(&raw_json)?;
         full_replace_term.put(&false)?;
         doc_merge_term.put(&false)?;
 
@@ -144,8 +215,80 @@ impl TerminusMutationRoot {
                 &ids_term,
             ],
         )?;
+        let ids: Vec<String> = ids_term.get_ex()?;
+        eprintln!("{:?}", ids);
+        frame.close();
+        Ok(juniper::Value::List(
+            ids.into_iter().map(|id| id.to_string().into()).collect(),
+        ))
+    }
 
-        let ids: Vec<Atom> = ids_term.get_ex()?;
+    fn call_delete_doc(
+        &self,
+        context: &GenericQueryableContext<'static>,
+        transaction_term: &Term,
+        ids: &[String],
+        graph_type: &str,
+    ) -> PrologResult<juniper::Value> {
+        let frame = context.open_frame();
+        let [graph_type_term, ids_term] = frame.new_term_refs();
+
+        let graph_type_atom = if graph_type == "SchemaGraph" {
+            atom!("schema")
+        } else {
+            atom!("instance")
+        };
+
+        ids_term.unify(ids)?;
+        graph_type_term.put(&graph_type_atom)?;
+
+        let delete_doc = pred!("api_document:api_delete_documents_by_ids/3");
+        frame.call_once(delete_doc, [transaction_term, &graph_type_term, &ids_term])?;
+
+        frame.close();
+        Ok(juniper::Value::List(
+            ids.iter().map(|id| id.to_string().into()).collect(),
+        ))
+    }
+
+    fn call_replace_doc(
+        &self,
+        context: &GenericQueryableContext<'static>,
+        transaction_term: &Term,
+        json: &str,
+        graph_type: &str,
+        raw_json: bool,
+        create: bool,
+    ) -> PrologResult<juniper::Value> {
+        let frame = context.open_frame();
+        let [string_term, graph_type_term, raw_json_term, ids_term, create_term] =
+            frame.new_term_refs();
+
+        let graph_type_atom = if graph_type == "SchemaGraph" {
+            atom!("schema")
+        } else {
+            atom!("instance")
+        };
+
+        string_term.put(json)?;
+        graph_type_term.put(&graph_type_atom)?;
+        raw_json_term.put(&raw_json)?;
+        create_term.put(&create)?;
+
+        let replace_doc = pred!("api_document:api_replace_documents_core_string/6");
+        frame.call_once(
+            replace_doc,
+            [
+                transaction_term,
+                &string_term,
+                &graph_type_term,
+                &raw_json_term,
+                &create_term,
+                &ids_term,
+            ],
+        )?;
+
+        let ids: Vec<String> = ids_term.get_ex()?;
         frame.close();
         Ok(juniper::Value::List(
             ids.into_iter().map(|id| id.to_string().into()).collect(),
