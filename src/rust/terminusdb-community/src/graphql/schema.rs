@@ -524,7 +524,8 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             .collect();
 
         let mut inverted_fields: Vec<_> = Vec::new();
-        if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
+        let database_class_name = frames.graphql_to_class_name(&info.class);
+        if let Some(inverted_type) = &frames.inverted.classes.get(database_class_name) {
             for (field_name, ifd) in inverted_type.domain.iter() {
                 let class = &frames.graphql_class_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
@@ -703,8 +704,9 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 let property = &reverse_link.property;
                 let domain = &reverse_link.class;
                 let kind = &reverse_link.kind;
+                // TODO: We need to check that the domain uri is correct
                 let property_expanded = allframes.context.expand_schema(property);
-                let domain_uri = allframes.fully_qualified_class_name(domain);
+                let domain_uri = allframes.context.expand_schema(domain);
                 let field_id = instance.predicate_id(&property_expanded)?;
                 // List and array are special since they are *deep* objects
                 match kind {

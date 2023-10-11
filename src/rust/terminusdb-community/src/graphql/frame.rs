@@ -872,11 +872,14 @@ impl AllFrames {
         graphql_name.to_string()
     }
 
-    pub fn fully_qualified_class_name(&self, class_name: &str) -> String {
-        let db_name = self
-            .class_renaming
+    pub fn graphql_to_class_name(&self, class_name: &str) -> &str {
+        self.class_renaming
             .get_by_left(class_name)
-            .expect("This fully qualified class name *should* exist");
+            .expect("This fully qualified class name *should* exist")
+    }
+
+    pub fn fully_qualified_class_name(&self, class_name: &str) -> String {
+        let db_name = self.graphql_to_class_name(class_name);
         self.context.expand_schema(db_name)
     }
 
@@ -926,6 +929,7 @@ pub struct InvertedTypeDefinition {
 
 pub fn inverse_field_name(property: &str, class: &str) -> String {
     let property = graphql_sanitize(property);
+    let class = graphql_sanitize(class);
     format!("_{property}_of_{class}")
 }
 
