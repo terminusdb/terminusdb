@@ -527,7 +527,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         let database_class_name = frames.graphql_to_class_name(&info.class);
         if let Some(inverted_type) = &frames.inverted.classes.get(database_class_name) {
             for (field_name, ifd) in inverted_type.domain.iter() {
-                let class = &frames.graphql_class_name(&ifd.class);
+                let class = &frames.class_to_graphql_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
                     continue;
                 }
@@ -694,7 +694,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     .and_then(|pid| instance.single_triple_sp(self.id, pid))
                     .and_then(|t| instance.id_object_node(t.object))
                     .map(|ty| {
-                        let small_ty = allframes.graphql_class_name(&ty);
+                        let small_ty = allframes.class_to_graphql_name(&ty);
                         Ok(Value::Scalar(DefaultScalarValue::String(small_ty)))
                     });
                 return ty;
