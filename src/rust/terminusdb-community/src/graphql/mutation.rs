@@ -1,7 +1,7 @@
 use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ID};
 use swipl::{
     atom, pred,
-    prelude::{Atom, GenericQueryableContext},
+    prelude::GenericQueryableContext,
     result::{attempt, PrologResult},
     term::Term,
 };
