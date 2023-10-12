@@ -49,7 +49,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.1.1-1').
+terminusdb_version('11.1.4').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -329,3 +329,8 @@ trust_migrations :-
 :- table semantic_indexer_endpoint/1.
 semantic_indexer_endpoint(Endpoint) :-
     getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).
+
+:- table doc_work_limit/1.
+doc_work_limit(Limit) :-
+    % This env var is actually read from rust so this default is ignored
+    getenv_default('TERMINUSDB_DOC_WORK_LIMIT', Limit, 500_000).
