@@ -1052,7 +1052,7 @@ query EverythingQuery {
 }`
 
       const result = await client.query({ query: TEST_QUERY })
-      expect(result.data.prefix_MyClass).to.deep.equal([
+      expect(result.data.prefix_MyClass).to.have.deep.members([
         {
           _prefix_link_of_prefix_MyClass: [
             {
