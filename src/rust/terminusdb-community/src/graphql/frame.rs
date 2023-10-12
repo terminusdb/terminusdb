@@ -110,8 +110,8 @@ fn has_prefix_if_no_protocol(s: &str) -> Option<(String, String)> {
         .unwrap();
     }
     let captures = HAS_PREFIX.captures(s);
-    if let Some(captures) = captures {
-        Some((
+    captures.map(|captures| {
+        (
             captures
                 .name("prefix")
                 .expect("This must exist")
@@ -122,10 +122,8 @@ fn has_prefix_if_no_protocol(s: &str) -> Option<(String, String)> {
                 .expect("This has a suffix")
                 .as_str()
                 .to_string(),
-        ))
-    } else {
-        None
-    }
+        )
+    })
 }
 
 enum NodeVariety {
@@ -480,21 +478,24 @@ pub struct ClassDefinition {
     pub inherits: Option<Vec<String>>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
-    #[serde(skip_serializing)]
-    pub field_renaming: Option<HashMap<String, String>>,
+    #[serde(skip)]
+    pub graphql_to_fully_qualified: Option<BiMap<String, String>>,
+    #[serde(skip)]
+    pub graphql_to_db_name: Option<BiMap<String, String>>,
 }
 
 static RESERVED_CLASSES: [&str; 5] = ["BigFloat", "BigFloat", "DateTime", "BigInt", "JSON"];
 
 impl ClassDefinition {
     pub fn sanitize(self, prefixes: &Prefixes) -> ClassDefinition {
-        let mut field_map: HashMap<String, String> = HashMap::new();
+        let mut field_map: BiMap<String, String> = BiMap::new();
         let mut fields: BTreeMap<String, _> = BTreeMap::new();
         for (field, fd) in self.fields.into_iter() {
             let sanitized_field = graphql_sanitize(&field);
-            if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
-                if dup != *field {
-                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
+            let res = field_map.insert_no_overwrite(sanitized_field.clone(), field.clone());
+            if let Err((left, right)) = res {
+                if left != sanitized_field || right != *field {
+                    panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized_field},{field})")
                 }
             }
             fields.insert(sanitized_field, fd.sanitize());
@@ -505,9 +506,10 @@ impl ClassDefinition {
                     let mut choices = BTreeMap::new();
                     for (field,fd) in c.choices.into_iter() {
                         let sanitized_field = graphql_sanitize(&field);
-                        if let Some(dup) = field_map.insert(sanitized_field.clone(), field.clone()) {
-                            if dup != *field {
-                                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires field names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your fields to remove the following duplicate: {dup:?}")
+                        let res = field_map.insert_no_overwrite(sanitized_field.clone(), field.clone());
+                        if let Err((left, right)) = res {
+                            if left != sanitized_field || right != *field {
+                                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires enum value names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]'. Please rename your enum values to remove the following uninvertible pair: ({left},{right}) != ({sanitized_field},{field})")
                             }
                         }
                         choices.insert(sanitized_field.clone(), fd.sanitize().optionalize());
@@ -523,7 +525,7 @@ impl ClassDefinition {
             .map(move |d| d.sanitize())
             .collect();
         let key = self.key.map(|k| k.sanitize());
-        let mut field_renaming: HashMap<String, String> = HashMap::new();
+        let mut field_renaming: BiMap<String, String> = BiMap::new();
         for (s, t) in field_map.iter() {
             let expanded = prefixes.expand_schema(t);
             field_renaming.insert(s.to_string(), expanded);
@@ -548,7 +550,8 @@ impl ClassDefinition {
             inherits,
             one_of,
             fields,
-            field_renaming: Some(field_renaming),
+            graphql_to_fully_qualified: Some(field_renaming),
+            graphql_to_db_name: Some(field_map),
         }
     }
 
@@ -588,10 +591,11 @@ impl ClassDefinition {
     }
 
     pub fn fully_qualified_property_name(&self, _prefixes: &Prefixes, property: &String) -> String {
-        self.field_renaming
+        // is this really fully qualified, I don't see how????
+        self.graphql_to_fully_qualified
             .as_ref()
             .map(|map| {
-                map.get(property)
+                map.get_by_left(property)
                     .unwrap_or_else(|| {
                         panic!("The fully qualified property name for {property:?} *should* exist")
                     })
@@ -814,7 +818,7 @@ impl PreAllFrames {
                     .as_class_definition()
                     .inherits
                     .clone()
-                    .unwrap_or_else(|| Vec::new());
+                    .unwrap_or(Vec::new());
 
                 supers.push(class.to_owned());
 
@@ -863,20 +867,31 @@ impl AllFrames {
         }
     }
 
-    pub fn graphql_class_name(&self, db_name: &str) -> String {
+    pub fn class_to_graphql_name_opt(&self, db_name: &str) -> Option<String> {
         let db_short_name = self.context.compress_schema(db_name);
-        let graphql_name = self
-            .class_renaming
+        self.class_renaming
             .get_by_right(&db_short_name)
-            .expect("This class name {db_short_name} *should* exist");
-        graphql_name.to_string()
+            .map(|s| s.to_string())
+    }
+
+    pub fn class_to_graphql_name(&self, db_name: &str) -> String {
+        self.class_to_graphql_name_opt(db_name)
+            .expect("This class name {db_short_name} *should* exist")
+    }
+
+    pub fn graphql_to_class_name_opt(&self, class_name: &str) -> Option<&str> {
+        self.class_renaming
+            .get_by_left(class_name)
+            .map(|x| x.as_str())
+    }
+
+    pub fn graphql_to_class_name(&self, class_name: &str) -> &str {
+        self.graphql_to_class_name_opt(class_name)
+            .expect("This frame class name *should* exist")
     }
 
     pub fn fully_qualified_class_name(&self, class_name: &str) -> String {
-        let db_name = self
-            .class_renaming
-            .get_by_left(class_name)
-            .expect("This fully qualified class name *should* exist");
+        let db_name = self.graphql_to_class_name(class_name);
         self.context.expand_schema(db_name)
     }
 
@@ -890,13 +905,11 @@ impl AllFrames {
     }
 
     pub fn reverse_link(&self, class: &str, field: &str) -> Option<&InvertedFieldDefinition> {
-        if self.inverted.classes.contains_key(class)
-            && self.inverted.classes[class].domain.contains_key(field)
-        {
-            Some(&self.inverted.classes[class].domain[field])
-        } else {
-            None
-        }
+        let class = self.graphql_to_class_name(class);
+        self.inverted
+            .classes
+            .get(class)
+            .and_then(|inverted| inverted.domain.get(field))
     }
 
     pub fn subsumed(&self, class: &str) -> Vec<String> {
@@ -926,6 +939,7 @@ pub struct InvertedTypeDefinition {
 
 pub fn inverse_field_name(property: &str, class: &str) -> String {
     let property = graphql_sanitize(property);
+    let class = graphql_sanitize(class);
     format!("_{property}_of_{class}")
 }
 
@@ -1070,7 +1084,8 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
         let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
         assert_eq!(
             TypeDefinition::Class(ClassDefinition {
-                field_renaming: None,
+                graphql_to_fully_qualified: None,
+                graphql_to_db_name: None,
                 documentation: OneOrMore::More(vec![]),
                 metadata: None,
                 key: None,
