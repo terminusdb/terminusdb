@@ -74,7 +74,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
         let instance = transaction_instance_layer(context, transaction_term)?;
 
         let new_transaction_term = context.new_term_ref();
-        new_transaction_term.unify(&transaction_term)?;
+        new_transaction_term.unify(transaction_term)?;
 
         Ok(TerminusContext {
             system_info: SystemInfo {
@@ -288,8 +288,8 @@ fn ids_from_restriction<C: QueryableContextType>(
     result_to_execution_result(context.context, result)
 }
 
-fn pl_id_matches_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+fn pl_id_matches_restriction<C: QueryableContextType>(
+    context: &TerminusContext<C>,
     restriction: &str,
     id: u64,
 ) -> PrologResult<Option<String>> {
@@ -315,13 +315,13 @@ fn pl_id_matches_restriction<'a, C: QueryableContextType>(
     }
 }
 
-pub fn id_matches_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+pub fn id_matches_restriction<C: QueryableContextType>(
+    context: &TerminusContext<C>,
     restriction: &str,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
     let result = pl_id_matches_restriction(context, restriction, id);
-    result_to_execution_result(&context.context, result)
+    result_to_execution_result(context.context, result)
 }
 
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
@@ -524,9 +524,10 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             .collect();
 
         let mut inverted_fields: Vec<_> = Vec::new();
-        if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
+        let database_class_name = frames.graphql_to_class_name(&info.class);
+        if let Some(inverted_type) = &frames.inverted.classes.get(database_class_name) {
             for (field_name, ifd) in inverted_type.domain.iter() {
-                let class = &frames.graphql_class_name(&ifd.class);
+                let class = &frames.class_to_graphql_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
                     continue;
                 }
@@ -618,7 +619,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
         let allframes = &info.allframes;
         let frame = &allframes.frames[class];
         match frame {
-            TypeDefinition::Class(d) => Self::generate_class_type(&class, d, info, registry),
+            TypeDefinition::Class(d) => Self::generate_class_type(class, d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
         }
     }
@@ -693,7 +694,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                     .and_then(|pid| instance.single_triple_sp(self.id, pid))
                     .and_then(|t| instance.id_object_node(t.object))
                     .map(|ty| {
-                        let small_ty = allframes.graphql_class_name(&ty);
+                        let small_ty = allframes.class_to_graphql_name(&ty);
                         Ok(Value::Scalar(DefaultScalarValue::String(small_ty)))
                     });
                 return ty;
@@ -702,9 +703,11 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
                 let property = &reverse_link.property;
                 let domain = &reverse_link.class;
+                let graphql_domain = allframes.class_to_graphql_name(domain);
                 let kind = &reverse_link.kind;
+                // TODO: We need to check that the domain uri is correct
                 let property_expanded = allframes.context.expand_schema(property);
-                let domain_uri = allframes.fully_qualified_class_name(domain);
+                let domain_uri = allframes.context.expand_schema(domain);
                 let field_id = instance.predicate_id(&property_expanded)?;
                 // List and array are special since they are *deep* objects
                 match kind {
@@ -732,7 +735,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -765,7 +768,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -785,7 +788,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -978,7 +981,7 @@ fn extract_fragment<'a, C: QueryableContextType + 'a>(
         Some(Ok(value))
     } else if is_json {
         let val = extract_json_fragment(instance, object_id);
-        Some(Ok(val))
+        Some(val)
     } else {
         let obj = instance.id_object(object_id)?;
         let val = obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
@@ -1001,10 +1004,15 @@ fn extract_enum_fragment(
     ))
 }
 
-fn extract_json_fragment(instance: &SyncStoreLayer, object_id: u64) -> juniper::Value {
+fn extract_json_fragment(
+    instance: &SyncStoreLayer,
+    object_id: u64,
+) -> Result<juniper::Value, juniper::FieldError> {
     let context = GetDocumentContext::new_json(Some(instance.clone()), true, false);
-    let json = serde_json::Value::Object(context.get_id_document(object_id));
-    juniper::Value::Scalar(DefaultScalarValue::String(json.to_string()))
+    let json = serde_json::Value::Object(context.get_id_document(object_id)?);
+    Ok(juniper::Value::Scalar(DefaultScalarValue::String(
+        json.to_string(),
+    )))
 }
 
 fn is_path_field_name(field_name: &str) -> bool {
@@ -1191,9 +1199,15 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
             .collect();
         Some(Ok(Value::List(vals)))
     } else if is_json {
-        let vals: Vec<_> = object_ids
-            .map(|o| extract_json_fragment(instance, o))
-            .collect();
+        let mut vals: Vec<_> = Vec::new();
+        for o in object_ids {
+            let fragment = extract_json_fragment(instance, o);
+            if fragment.is_err() {
+                return Some(fragment);
+            }
+            let fragment = fragment.unwrap();
+            vals.push(fragment);
+        }
         Some(Ok(Value::List(vals)))
     } else {
         let vals: Vec<_> = object_ids

@@ -9,6 +9,7 @@ use crate::terminus_store::*;
 
 use serde_json::map;
 use serde_json::{Map, Value};
+use thiserror::Error;
 use urlencoding;
 
 use super::consts::*;
@@ -16,6 +17,7 @@ use super::prefix::PrefixContracter;
 use super::schema::*;
 use super::value::*;
 
+use lazy_static::lazy_static;
 use rayon::prelude::*;
 use swipl::prelude::*;
 
@@ -246,10 +248,16 @@ impl<L: Layer> GetDocumentContext<L> {
         self.layer.as_ref().unwrap()
     }
 
-    pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
-        self.layer
+    pub fn get_document(&self, iri: &str) -> Result<Option<Map<String, Value>>, DocRetrievalError> {
+        match self
+            .layer
             .as_ref()
             .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
+        {
+            Some(Ok(x)) => Ok(Some(x)),
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
+        }
     }
 
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
@@ -417,7 +425,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
+    pub fn get_id_document(&self, id: u64) -> Result<Map<String, Value>, DocRetrievalError> {
         if self.layer.is_none() {
             panic!("expected id to point at document: {}", id);
         }
@@ -436,7 +444,20 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut visited: Vec<u64> = Vec::new();
         visited.push(id);
 
+        lazy_static! {
+            static ref LIMIT: usize = {
+                std::env::var("TERMINUSDB_DOC_WORK_LIMIT")
+                    .ok()
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(500_000)
+            };
+        }
+        let mut work = 0;
         loop {
+            work += 1;
+            if work >= *LIMIT {
+                break;
+            }
             let cur = stack.last_mut().unwrap();
             let is_json = cur.is_json();
             if let Some(next_obj) = cur.peek() {
@@ -496,12 +517,22 @@ impl<L: Layer> GetDocumentContext<L> {
                 } else {
                     // we're done, this was the root, time to return!
                     match cur {
-                        StackEntry::Document { doc, .. } => return doc,
+                        StackEntry::Document { doc, .. } => return Ok(doc),
                         _ => panic!("unexpected element at stack top"),
                     }
                 }
             }
         }
+
+        // if we are here, it is because doc retrieval got too expensive
+        let iri = if let Some(StackEntry::Document { doc, .. }) = stack.first() {
+            doc.get("@id")
+                .map(|j| j.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        } else {
+            "unknown".to_string()
+        };
+        Err(DocRetrievalError::LimitExceeded(iri))
     }
 
     fn get_subtypes_for(&self, type_name: &str) -> Vec<u64> {
@@ -530,6 +561,25 @@ impl<L: Layer> GetDocumentContext<L> {
                 Some(id) => self.id_document_exists(id),
                 None => false,
             },
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum DocRetrievalError {
+    #[error("Limit exceeded while trying to retrieve document with IRI {0}")]
+    LimitExceeded(String),
+}
+
+impl IntoPrologException for DocRetrievalError {
+    fn into_prolog_exception<'a, T: QueryableContextType>(
+        self,
+        context: &'a Context<'_, T>,
+    ) -> PrologResult<Term<'a>> {
+        match self {
+            DocRetrievalError::LimitExceeded(iri) => {
+                term! {context: error(doc_retrieval_limit_exceeded(#iri), _)}
+            }
         }
     }
 }
@@ -855,7 +905,7 @@ fn print_documents_of_types<
                 continue;
             }
 
-            let map = doc_context.get_id_document(t.subject);
+            let map = context.try_or_die(doc_context.get_id_document(t.subject))?;
             print_document(
                 context,
                 &mut stream,
@@ -921,6 +971,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
+        let map = context.try_or_die(map)?;
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
 
@@ -978,7 +1029,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut started = false;
     for iri_term in context.term_list_iter(iris_term) {
         let iri: PrologText = iri_term.get_ex()?;
-        if let Some(doc) = doc_context.get_document(&iri) {
+        if let Some(doc) = context.try_or_die(doc_context.get_document(&iri))? {
             if skip > 0 {
                 skip -= 1;
                 continue;
@@ -1035,9 +1086,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
             iter.enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, iri)| {
-                    let map = doc_context2
-                        .get_document(&iri)
-                        .expect("expected document to exist");
+                    let map = doc_context2.get_document(&iri);
                     sender.send((ix, map)) // failure will kill the task
                 });
     });
@@ -1046,6 +1095,9 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
+        let map = context
+            .try_or_die(map)?
+            .expect("expected document to exist");
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
 
@@ -1110,7 +1162,7 @@ predicates! {
         let as_list: bool = as_list_term.get()?;
         let started: bool = started_term.get()?;
 
-        if let Some(result) = doc_context.get_document(&s) {
+        if let Some(result) = context.try_or_die(doc_context.get_document(&s))? {
             if as_list && started {
                 context.try_or_die_generic(stream.write_all(b",\n"))?;
             }
