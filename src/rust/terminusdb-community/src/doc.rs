@@ -452,10 +452,10 @@ impl<L: Layer> GetDocumentContext<L> {
                     .unwrap_or(500_000)
             };
         }
-        let mut counter = 0;
+        let mut work = 0;
         loop {
-            counter += 1;
-            if counter >= *LIMIT {
+            work += 1;
+            if work >= *LIMIT {
                 break;
             }
             let cur = stack.last_mut().unwrap();
