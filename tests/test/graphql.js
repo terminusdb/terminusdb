@@ -190,6 +190,12 @@ describe('GraphQL', function () {
     '@type': 'Enum',
     '@value': ['enum-one', 'enum-two'],
   },
+  {
+    '@id': 'prefix:MyClass',
+    '@type': 'Class',
+    name: 'xsd:string',
+    'prefix:link': { '@type': 'Optional', '@class': 'prefix:MyClass' },
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -1024,6 +1030,43 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
+    })
+
+    it('has a renamed back link', async function () {
+      const instance = {
+        '@type': 'prefix:MyClass',
+        name: 'foo',
+        'prefix:link': {
+          '@type': 'prefix:MyClass',
+          name: 'bar',
+        },
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    prefix_MyClass{
+        name
+        _prefix_link_of_prefix_MyClass { name }
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.prefix_MyClass).to.have.deep.members([
+        {
+          _prefix_link_of_prefix_MyClass: [
+            {
+              name: 'foo',
+            },
+          ],
+          name: 'bar',
+        },
+        {
+          _prefix_link_of_prefix_MyClass: [],
+          name: 'foo',
+        },
+      ],
+      )
     })
 
     it('shadows a graphql type and fails', async function () {
